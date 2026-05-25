@@ -9,6 +9,8 @@ enum AdaptiveTrainingEngine {
         case reduce
         case swap
         case rest
+        case reschedule
+        case deloadWeek
     }
 
     struct AdjustedDay: Codable, Hashable, Identifiable {
@@ -81,6 +83,74 @@ enum AdaptiveTrainingEngine {
             adjustment: finalAdjustment,
             reason: finalReason,
             suggestedAlternative: finalAdjustment == .keep ? nil : alternative
+        )
+    }
+
+    /// Per-day adjustment using BodyInterpretation. Used by generateWeekAdjustments
+    /// to evaluate each future day independently against the body's current state.
+    static func adjust(
+        day: TrainingDay,
+        interpretation: BodyInterpretation
+    ) -> AdjustedDay? {
+        let recoveryScore = interpretation.readinessScore
+        let tsb = 0.0  // TSB is a current-state metric; for future days, use fatigue level
+        let fatigueLevel = interpretation.fatigueLevel
+
+        // Skip rest days — no adjustment needed
+        guard day.focus != "rest" else { return nil }
+
+        let adjustment: Adjustment
+        let reason: String
+        let alternative: String?
+
+        switch (fatigueLevel, interpretation.trainingWindow.isOpen) {
+        case (.none, true):
+            adjustment = .keep
+            reason = "All readiness indicators are optimal."
+            alternative = nil
+        case (.mild, true):
+            if day.intensity == "high" {
+                adjustment = .reduce
+                reason = "Mild fatigue detected. Reducing high-intensity session."
+                alternative = buildReducedVersion(of: day)
+            } else {
+                adjustment = .keep
+                reason = "Mild fatigue but session intensity is appropriate."
+                alternative = nil
+            }
+        case (.moderate, _):
+            if day.focus == "strength" || day.focus == "cardio" {
+                adjustment = .swap
+                reason = "Moderate fatigue. Swapping to active recovery."
+                alternative = buildRecoveryAlternative(for: day)
+            } else {
+                adjustment = .reduce
+                reason = "Moderate fatigue. Reducing intensity."
+                alternative = buildReducedVersion(of: day)
+            }
+        case (.significant, _):
+            adjustment = .rest
+            reason = "Significant fatigue. Rest day recommended."
+            alternative = nil
+        case (.severe, _):
+            adjustment = .deloadWeek
+            reason = "Severe fatigue detected. Deload week recommended."
+            alternative = "Light stretching or 20 min walk"
+        case (_, false) where !interpretation.trainingWindow.isOpen:
+            adjustment = .rest
+            reason = "Training window is closed."
+            alternative = nil
+        default:
+            adjustment = .keep
+            reason = "No significant issues detected."
+            alternative = nil
+        }
+
+        return AdjustedDay(
+            originalDay: day,
+            adjustment: adjustment,
+            reason: reason,
+            suggestedAlternative: adjustment == .keep ? nil : alternative
         )
     }
 

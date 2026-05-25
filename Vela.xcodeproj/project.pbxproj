@@ -125,6 +125,7 @@
 		6829963D454246609FA8E8EC /* PersonalResponseModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96D0A980BB50405EA1CFA4B8 /* PersonalResponseModel.swift */; };
 		CCE926745D694215843A40D4 /* AdaptiveTrainingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54074915D1CD439596F77AD1 /* AdaptiveTrainingManager.swift */; };
 		AEB2F547D6A04198821B3E0C /* DataCoverageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63AAF7BE44C44A87855807F0 /* DataCoverageView.swift */; };
+		5EAF240962A24A8B8D74158C /* PersonalResponseInsightService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C38F23741E2F4476BAEAD938 /* PersonalResponseInsightService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -260,6 +261,7 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 		96D0A980BB50405EA1CFA4B8 /* PersonalResponseModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Scoring/BodyInterpreter/PersonalResponseModel.swift; sourceTree = "<group>"; };
 		54074915D1CD439596F77AD1 /* AdaptiveTrainingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Scoring/Training/AdaptiveTrainingManager.swift; sourceTree = "<group>"; };
 		63AAF7BE44C44A87855807F0 /* DataCoverageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Features/Settings/DataCoverageView.swift; sourceTree = "<group>"; };
+		C38F23741E2F4476BAEAD938 /* PersonalResponseInsightService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/AI/Proactive/PersonalResponseInsightService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -302,7 +304,8 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 				359118EB7D9C43659D1C55C1 /* BodyInterpreterEngine.swift */,
 				96D0A980BB50405EA1CFA4B8 /* PersonalResponseModel.swift */,
 				54074915D1CD439596F77AD1 /* AdaptiveTrainingManager.swift */,
-				63AAF7BE44C44A87855807F0 /* DataCoverageView.swift */,);
+				63AAF7BE44C44A87855807F0 /* DataCoverageView.swift */,
+				C38F23741E2F4476BAEAD938 /* PersonalResponseInsightService.swift */,);
 			sourceTree = "<group>";
 		};
 		0B0000110000000000000011 /* VelaApp */ = {
@@ -314,9 +317,9 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 				0B1001A100000000000000A1 /* LocationManager.swift */,
 				0B1001A200000000000000A2 /* WeatherService.swift */,
 				0B1001A300000000000000A3 /* WorkoutDetailView.swift */,
-				0B1001900000000000000090 /* VelaQuickActionsSheet.swift */,
-				0B1001910000000000000091 /* WeightLogSheetView.swift */,
-				0B1001920000000000000092 /* NutritionDetailView.swift */,
+
+
+
 				0B1001010000000000000001 /* VelaApp.swift */,
 				0B1001020000000000000002 /* AppCoordinator.swift */,
 				0B1001030000000000000003 /* VelaRootView.swift */,
@@ -538,9 +541,9 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 				0B1000A100000000000000A1 /* LocationManager.swift in Sources */,
 				0B1000A200000000000000A2 /* WeatherService.swift in Sources */,
 				0B1000A300000000000000A3 /* WorkoutDetailView.swift in Sources */,
-				0B1000900000000000000090 /* VelaQuickActionsSheet.swift in Sources */,
-				0B1000910000000000000091 /* WeightLogSheetView.swift in Sources */,
-				0B1000920000000000000092 /* NutritionDetailView.swift in Sources */,
+
+
+
 				0B1000010000000000000001 /* VelaApp.swift in Sources */,
 				0B1000020000000000000002 /* AppCoordinator.swift in Sources */,
 				0B1000030000000000000003 /* VelaRootView.swift in Sources */,
@@ -641,7 +644,8 @@ tttt0B10004A000000000000004A /* WebSearchService.swift in Sources */,
 				3720F50DEC174172A094C392 /* BodyInterpreterEngine.swift in Sources */,
 				6829963D454246609FA8E8EC /* PersonalResponseModel.swift in Sources */,
 				CCE926745D694215843A40D4 /* AdaptiveTrainingManager.swift in Sources */,
-				AEB2F547D6A04198821B3E0C /* DataCoverageView.swift in Sources */,);
+				AEB2F547D6A04198821B3E0C /* DataCoverageView.swift in Sources */,
+				5EAF240962A24A8B8D74158C /* PersonalResponseInsightService.swift in Sources */,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		0B0000190000000000000019 /* Sources */ = {

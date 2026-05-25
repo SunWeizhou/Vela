@@ -76,6 +76,7 @@ struct DailyAction: Codable, Hashable, Identifiable {
     var subtitle: String
     var detailMarkdown: String
     var whyThis: [WhyThisItem]
+    var evidenceChain: [EvidenceChainItem] = []
     var priority: Int  // 0 = highest
     var iconName: String {
         switch type {
@@ -99,13 +100,14 @@ struct TodayPlan: Codable, Hashable, Identifiable {
     var id: UUID = UUID()
     var date: Date
     var state: DailyState
-    var headline: String       // 一句话总结，如 "今天适合高强度训练"
-    var subheadline: String    // 进一步解释，如 "恢复评分 85，能量充足，TSB 为正"
+    var headline: String
+    var subheadline: String
     var topActions: [DailyAction]
-    var confidenceNote: String // 数据置信度说明
+    var confidenceNote: String
     var generatedAt: Date
     var contextHash: String
     var schemaVersion: String
+    var bodyInterpretation: BodyInterpretation?
 }
 
 // MARK: - Daily Plan Builder
@@ -193,6 +195,133 @@ struct DailyPlanBuilder {
             generatedAt: generatedAt,
             contextHash: "",
             schemaVersion: Self.schemaVersion
+        )
+
+        var withHash = plan
+        if let data = try? JSONEncoder().encode(plan),
+           let json = String(data: data, encoding: .utf8) {
+            withHash.contextHash = ContentHash.hash(json)
+        }
+        return withHash
+    }
+
+    /// Builds a TodayPlan from a BodyInterpretation — the Vela 2.0 Beta path.
+    /// Uses the BodyInterpreterEngine's rich output (fatigue sources, limiter,
+    /// training window, risk flags, recovery tasks) instead of the old rule-based approach.
+    func build(
+        from interpretation: BodyInterpretation,
+        activePlan: TrainingPlanRecord? = nil,
+        pendingProposals: [MemoryEventRecord] = [],
+        wiki: [String: String] = [:]
+    ) -> TodayPlan {
+        let lang = AppLanguage.stored
+        var actions: [DailyAction] = []
+
+        // Primary action from the interpretation's recommendation
+        let primaryEvidence = interpretation.recommendedAction.evidenceChain.map { item in
+            WhyThisItem(
+                metricName: item.metricName,
+                currentValue: item.currentValueFormatted,
+                baselineValue: item.baselineFormatted,
+                interpretation: item.interpretation,
+                confidence: item.confidence,
+                source: item.source
+            )
+        }
+
+        actions.append(DailyAction(
+            type: interpretation.recommendedAction.type,
+            title: interpretation.recommendedAction.title,
+            subtitle: interpretation.recommendedAction.subtitle,
+            detailMarkdown: interpretation.recommendedAction.detailMarkdown,
+            whyThis: primaryEvidence,
+            priority: 0
+        ))
+
+        // Alternative actions
+        for (i, alt) in interpretation.alternativeActions.enumerated() {
+            let altEvidence = alt.evidenceChain.map { item in
+                WhyThisItem(
+                    metricName: item.metricName,
+                    currentValue: item.currentValueFormatted,
+                    baselineValue: item.baselineFormatted,
+                    interpretation: item.interpretation,
+                    confidence: item.confidence,
+                    source: item.source
+                )
+            }
+            actions.append(DailyAction(
+                type: alt.type,
+                title: alt.title,
+                subtitle: alt.subtitle,
+                detailMarkdown: alt.detailMarkdown,
+                whyThis: altEvidence,
+                priority: i + 1
+            ))
+        }
+
+        // Recovery tasks as actions
+        for task in interpretation.recoveryTasks.prefix(2) {
+            actions.append(DailyAction(
+                type: task.category == "sleep" ? .sleepTip
+                    : task.category == "mobility" ? .mobilityTip
+                    : task.category == "hydration" ? .hydrationTip
+                    : task.category == "breathwork" ? .stressTip
+                    : .activeRecovery,
+                title: task.title,
+                subtitle: task.description,
+                detailMarkdown: task.description,
+                whyThis: [],
+                priority: 2 + task.priority
+            ))
+        }
+
+        // Risk flags as warnings
+        for flag in interpretation.riskFlags {
+            actions.append(DailyAction(
+                type: .rest,
+                title: (flag.level == .critical ? "⚠️ " : "ℹ️ ") + flag.message,
+                subtitle: flag.detail,
+                detailMarkdown: flag.detail,
+                whyThis: [],
+                priority: 5
+            ))
+        }
+
+        actions.sort { $0.priority < $1.priority }
+
+        // Build confidence note from interpretation
+        var confidenceParts: [String] = []
+        confidenceParts.append(lang.isChinese
+            ? "整体置信度：\(interpretation.overallConfidence == .high ? "高" : interpretation.overallConfidence == .medium ? "中" : "低")"
+            : "Overall confidence: \(interpretation.overallConfidence.rawValue)"
+        )
+        if !pendingProposals.isEmpty {
+            confidenceParts.append(lang.isChinese
+                ? "\(pendingProposals.count) 条待确认记忆"
+                : "\(pendingProposals.count) pending memories"
+            )
+        }
+
+        // Subheadline from limiter + training window
+        let subheadline: String
+        if lang.isChinese {
+            subheadline = "主要限制：\(interpretation.primaryLimiter.system) · 训练窗口：\(interpretation.trainingWindow.isOpen ? "开启" : "关闭") · 疲劳：\(interpretation.fatigueLevel.label)"
+        } else {
+            subheadline = "Limiter: \(interpretation.primaryLimiter.system) · Window: \(interpretation.trainingWindow.isOpen ? "Open" : "Closed") · Fatigue: \(interpretation.fatigueLevel.label)"
+        }
+
+        let plan = TodayPlan(
+            date: Date(),
+            state: interpretation.dailyState,
+            headline: interpretation.readinessNarrative.components(separatedBy: "\n").first ?? interpretation.readinessNarrative,
+            subheadline: subheadline,
+            topActions: Array(actions.prefix(5)),
+            confidenceNote: confidenceParts.joined(separator: " · "),
+            generatedAt: interpretation.generatedAt,
+            contextHash: interpretation.contextHash,
+            schemaVersion: BodyInterpreterEngine.schemaVersion,
+            bodyInterpretation: interpretation
         )
 
         var withHash = plan

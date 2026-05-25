@@ -193,8 +193,16 @@ struct WhyThisSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
 
-                    ForEach(action.whyThis) { item in
-                        whyThisCard(item)
+                    // Evidence Chain 2.0 (preferred)
+                    if !action.evidenceChain.isEmpty {
+                        ForEach(action.evidenceChain) { item in
+                            evidenceChainCard(item)
+                        }
+                    } else {
+                        // Legacy WhyThisItem fallback
+                        ForEach(action.whyThis) { item in
+                            whyThisCard(item)
+                        }
                     }
                 }
                 .padding()
@@ -204,13 +212,100 @@ struct WhyThisSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(AppLanguage.stored.isChinese ? "完成" : "Done") {
-                        dismiss()
-                    }
+                    Button(AppLanguage.stored.isChinese ? "完成" : "Done") { dismiss() }
                 }
             }
         }
     }
+
+    // MARK: - Evidence Chain Card (Vela 2.0 Beta)
+
+    private func evidenceChainCard(_ item: EvidenceChainItem) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Step 1: Metric name + current value + trend
+            HStack {
+                Image(systemName: iconForCategory(item.metricCategory))
+                    .font(.subheadline)
+                    .foregroundStyle(colorForCategory(item.metricCategory))
+                Text(item.metricName)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(VelaTheme.primaryText)
+                Spacer()
+                freshnessBadge(item.dataFreshness)
+            }
+
+            HStack(spacing: 20) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(AppLanguage.stored.isChinese ? "当前值" : "Current")
+                        .font(.caption2)
+                        .foregroundStyle(VelaTheme.mutedText)
+                    Text("\(item.currentValueFormatted) \(item.unit)")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(VelaTheme.accent)
+                }
+                if let baseline = item.baselineFormatted {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(AppLanguage.stored.isChinese ? "基线" : "Baseline")
+                            .font(.caption2)
+                            .foregroundStyle(VelaTheme.mutedText)
+                        Text("\(baseline) \(item.unit)")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(VelaTheme.secondaryText)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(AppLanguage.stored.isChinese ? "趋势" : "Trend")
+                        .font(.caption2)
+                        .foregroundStyle(VelaTheme.mutedText)
+                    HStack(spacing: 4) {
+                        Image(systemName: trendIcon(item.trend))
+                            .font(.caption)
+                        Text(trendLabel(item.trend))
+                            .font(.subheadline.weight(.medium))
+                    }
+                    .foregroundStyle(trendColor(item.trend))
+                }
+            }
+
+            // Step 2: Interpretation
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "arrow.turn.down.right")
+                    .font(.caption2)
+                    .foregroundStyle(VelaTheme.mutedText)
+                Text(item.interpretation)
+                    .font(.caption)
+                    .foregroundStyle(VelaTheme.secondaryText)
+            }
+
+            // Step 3: Action Impact
+            if !item.actionImpact.isEmpty {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "lightbulb.fill")
+                        .font(.caption2)
+                        .foregroundStyle(VelaTheme.energy)
+                    Text(item.actionImpact)
+                        .font(.caption)
+                        .foregroundStyle(VelaTheme.primaryText)
+                }
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 8).fill(VelaTheme.energy.opacity(0.08)))
+            }
+
+            // Meta: confidence + source
+            HStack(spacing: 8) {
+                confidenceBadge(item.confidence)
+                Text("·")
+                    .foregroundStyle(VelaTheme.mutedText)
+                Text(item.source == .healthKit ? "Apple Health" : item.source == .computed ? "Vela Engine" : "User Profile")
+                    .font(.caption2)
+                    .foregroundStyle(VelaTheme.mutedText)
+            }
+        }
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(VelaTheme.surface))
+    }
+
+    // MARK: - Legacy Why This Card
 
     private func whyThisCard(_ item: WhyThisItem) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -279,4 +374,73 @@ struct WhyThisSheet: View {
             .padding(.vertical, 2)
             .background(Capsule().fill(color.opacity(0.12)))
     }
+
+    // MARK: - Evidence Chain Helpers
+
+    private func trendIcon(_ trend: MetricTrend) -> String {
+        switch trend {
+        case .improving: return "arrow.up.right"
+        case .stable: return "arrow.right"
+        case .declining: return "arrow.down.right"
+        case .insufficientData: return "questionmark"
+        }
+    }
+
+    private func trendLabel(_ trend: MetricTrend) -> String {
+        switch trend {
+        case .improving: return AppLanguage.stored.isChinese ? "改善中" : "Improving"
+        case .stable: return AppLanguage.stored.isChinese ? "稳定" : "Stable"
+        case .declining: return AppLanguage.stored.isChinese ? "下降" : "Declining"
+        case .insufficientData: return AppLanguage.stored.isChinese ? "数据不足" : "N/A"
+        }
+    }
+
+    private func trendColor(_ trend: MetricTrend) -> Color {
+        switch trend {
+        case .improving: return VelaTheme.energy
+        case .stable: return VelaTheme.accent
+        case .declining: return VelaTheme.recovery
+        case .insufficientData: return VelaTheme.mutedText
+        }
+    }
+
+    private func freshnessBadge(_ freshness: DataFreshness) -> some View {
+        let label: String; let color: Color
+        switch freshness {
+        case .live: label = AppLanguage.stored.isChinese ? "实时" : "Live"; color = VelaTheme.energy
+        case .today: label = AppLanguage.stored.isChinese ? "今日" : "Today"; color = VelaTheme.accent
+        case .recent: label = AppLanguage.stored.isChinese ? "近期" : "Recent"; color = VelaTheme.secondaryText
+        case .stale: label = AppLanguage.stored.isChinese ? "陈旧" : "Stale"; color = VelaTheme.strain
+        case .missing: label = AppLanguage.stored.isChinese ? "缺失" : "Missing"; color = VelaTheme.mutedText
+        }
+        return Text(label).font(.caption2.weight(.medium)).foregroundStyle(color)
+            .padding(.horizontal, 6).padding(.vertical, 1)
+            .background(Capsule().fill(color.opacity(0.1)))
+    }
+
+    private func iconForCategory(_ category: String) -> String {
+        switch category {
+        case "recovery": return "heart.fill"
+        case "sleep": return "moon.zzz.fill"
+        case "strain": return "figure.run"
+        case "stress": return "brain.head.profile"
+        case "energy": return "bolt.fill"
+        case "gait": return "figure.walk"
+        case "cardio": return "lungs.fill"
+        default: return "chart.bar.fill"
+        }
+    }
+
+    private func colorForCategory(_ category: String) -> Color {
+        switch category {
+        case "recovery": return VelaTheme.recovery
+        case "sleep": return VelaTheme.sleep
+        case "strain": return VelaTheme.strain
+        case "stress": return VelaTheme.stress
+        case "energy": return VelaTheme.energy
+        case "gait": return VelaTheme.accent
+        default: return VelaTheme.accent
+        }
+    }
+
 }

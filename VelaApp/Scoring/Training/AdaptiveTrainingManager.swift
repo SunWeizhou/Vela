@@ -57,7 +57,31 @@ enum AdaptationStatus: String, Codable, Hashable, CaseIterable {
 
 struct AdaptiveTrainingManager {
 
-    /// Generates adjustments for all upcoming training days in the active plan.
+    /// Vela 2.0 Beta: Per-day adjustments using BodyInterpretation.
+    /// Each future day is evaluated against the body's current state.
+    func generateWeekAdjustments(
+        plan: TrainingPlanRecord,
+        interpretation: BodyInterpretation
+    ) -> [TrainingPlanAdaptationRecord] {
+        var records: [TrainingPlanAdaptationRecord] = []
+
+        let upcomingDays = plan.days.filter { !$0.isCompleted }
+        for day in upcomingDays.prefix(7) {
+            guard let adjusted = AdaptiveTrainingEngine.adjust(
+                day: day, interpretation: interpretation
+            ), adjusted.adjustment != .keep else { continue }
+
+            records.append(TrainingPlanAdaptationRecord(
+                planId: plan.id, dayId: adjusted.originalDay.id,
+                adjustment: adjusted.adjustment, reason: adjusted.reason,
+                suggestedAlternative: adjusted.suggestedAlternative,
+                status: .proposed, originalDayTitle: adjusted.originalDay.title
+            ))
+        }
+        return records
+    }
+
+    /// Legacy overload for backward compat — wraps adjustToday.
     func generateWeekAdjustments(
         plan: TrainingPlanRecord,
         recoveryScore: Double,
@@ -132,23 +156,17 @@ struct AdaptiveTrainingManager {
                 dayNumber: plan.days[dayIndex].dayNumber,
                 title: AppLanguage.stored.isChinese ? "休息日（调整后）" : "Rest Day (Adjusted)",
                 description: record.reason,
-                focus: "rest",
-                durationMinutes: 0,
-                intensity: "low",
+                focus: "rest", durationMinutes: 0, intensity: "low",
                 isCompleted: false
             )
         case "reduce":
             let halfDuration = max(15, plan.days[dayIndex].durationMinutes / 2)
             var modified = plan.days[dayIndex]
             modified = TrainingDay(
-                id: modified.id,
-                weekNumber: modified.weekNumber,
-                dayNumber: modified.dayNumber,
+                id: modified.id, weekNumber: modified.weekNumber, dayNumber: modified.dayNumber,
                 title: modified.title + (AppLanguage.stored.isChinese ? "（减量）" : " (Reduced)"),
                 description: record.suggestedAlternative ?? modified.description,
-                focus: modified.focus,
-                durationMinutes: halfDuration,
-                intensity: "moderate",
+                focus: modified.focus, durationMinutes: halfDuration, intensity: "moderate",
                 isCompleted: false
             )
             plan.days[dayIndex] = modified
@@ -159,11 +177,48 @@ struct AdaptiveTrainingManager {
                 dayNumber: plan.days[dayIndex].dayNumber,
                 title: AppLanguage.stored.isChinese ? "主动恢复（调整后）" : "Active Recovery (Adjusted)",
                 description: record.suggestedAlternative ?? plan.days[dayIndex].description,
-                focus: "flexibility",
-                durationMinutes: 30,
-                intensity: "low",
+                focus: "flexibility", durationMinutes: 30, intensity: "low",
                 isCompleted: false
             )
+        case "reschedule":
+            // Move the training day to the next available rest day
+            var moved = plan.days[dayIndex]
+            if let nextRestIndex = plan.days[moved.weekNumber..<plan.days.count]
+                .firstIndex(where: { $0.focus == "rest" || $0.focus == "flexibility" }) {
+                moved = TrainingDay(
+                    id: moved.id, weekNumber: plan.days[nextRestIndex].weekNumber,
+                    dayNumber: plan.days[nextRestIndex].dayNumber,
+                    title: moved.title + (AppLanguage.stored.isChinese ? "（改期）" : " (Rescheduled)"),
+                    description: moved.description, focus: moved.focus,
+                    durationMinutes: moved.durationMinutes, intensity: moved.intensity,
+                    isCompleted: false
+                )
+                // Mark original day as rest
+                plan.days[dayIndex] = TrainingDay(
+                    id: plan.days[dayIndex].id,
+                    weekNumber: plan.days[dayIndex].weekNumber,
+                    dayNumber: plan.days[dayIndex].dayNumber,
+                    title: AppLanguage.stored.isChinese ? "休息日" : "Rest Day",
+                    description: AppLanguage.stored.isChinese ? "训练已改期" : "Training rescheduled",
+                    focus: "rest", durationMinutes: 0, intensity: "low",
+                    isCompleted: false
+                )
+                plan.days[nextRestIndex] = moved
+            }
+        case "deloadWeek":
+            // Convert all remaining days this week to light recovery
+            let currentWeek = plan.days[dayIndex].weekNumber
+            for i in plan.days.indices where plan.days[i].weekNumber == currentWeek && plan.days[i].focus != "rest" {
+                plan.days[i] = TrainingDay(
+                    id: plan.days[i].id,
+                    weekNumber: plan.days[i].weekNumber,
+                    dayNumber: plan.days[i].dayNumber,
+                    title: AppLanguage.stored.isChinese ? "减载周（调整后）" : "Deload Week (Adjusted)",
+                    description: record.reason,
+                    focus: "flexibility", durationMinutes: 20, intensity: "low",
+                    isCompleted: false
+                )
+            }
         default:
             break
         }

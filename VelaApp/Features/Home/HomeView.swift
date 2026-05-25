@@ -485,13 +485,21 @@ struct HomeView: View {
             await viewModel.loadStrainTrend(modelContext: modelContext)
             await viewModel.loadRecoveryTrend(modelContext: modelContext)
             await viewModel.loadHeatmap(modelContext: modelContext)
-            // Build today's plan after all data is loaded
+            // Vela 2.0 Beta: BodyInterpreterEngine drives the home page
             let wiki = WikiFileService.loadDictionary()
             let activePlanFetch = FetchDescriptor<TrainingPlanRecord>(predicate: #Predicate { $0.isActive })
             let activePlan = (try? modelContext.fetch(activePlanFetch))?.first
-            todayPlan = DailyPlanBuilder().build(
+            let interpretation = BodyInterpreterEngine().interpret(
                 dashboard: viewModel.dashboard, wiki: wiki,
-                activePlan: activePlan, pendingProposals: Array(pendingProposals)
+                activePlan: activePlan,
+                weeklyTrends: (try? HealthSnapshotRepository(modelContext: modelContext).buildWeeklyTrendSummary()) ?? [:],
+                foodLogs: [],
+                journalEntries: Array(journalEntries),
+                healthSnapshots: (try? HealthSnapshotRepository(modelContext: modelContext).fetchSnapshots(days: 30)) ?? []
+            )
+            todayPlan = DailyPlanBuilder().build(
+                from: interpretation, activePlan: activePlan,
+                pendingProposals: Array(pendingProposals), wiki: wiki
             )
             await EveningWikiSyncAgent.shared.runIfNeeded(
                 modelContext: modelContext,
