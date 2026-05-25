@@ -235,6 +235,7 @@ struct DailyPlanBuilder {
             subtitle: interpretation.recommendedAction.subtitle,
             detailMarkdown: interpretation.recommendedAction.detailMarkdown,
             whyThis: primaryEvidence,
+            evidenceChain: interpretation.recommendedAction.evidenceChain,
             priority: 0
         ))
 
@@ -256,6 +257,7 @@ struct DailyPlanBuilder {
                 subtitle: alt.subtitle,
                 detailMarkdown: alt.detailMarkdown,
                 whyThis: altEvidence,
+                evidenceChain: alt.evidenceChain,
                 priority: i + 1
             ))
         }

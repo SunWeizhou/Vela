@@ -125,6 +125,29 @@ final class EveningWikiSyncAgent: ObservableObject {
             lastRunDate = Date()
             logger.info("Evening wiki sync complete. Updated \(appliedFiles.count) files.")
 
+            // ── Personal Response Pattern Scan ──
+            var personalRulesCreated = 0
+            let snapshots = (try? HealthSnapshotRepository(modelContext: modelContext).fetchSnapshots(days: 60)) ?? []
+            if !snapshots.isEmpty {
+                // Fetch existing rules for dedup
+                let existingDescriptor = FetchDescriptor<MemoryEventRecord>(
+                    predicate: #Predicate { $0.source == "personal_response_model" },
+                    sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+                )
+                let existingRules = (try? modelContext.fetch(existingDescriptor)) ?? []
+                let insightService = PersonalResponseInsightService()
+                personalRulesCreated = (try? insightService.scanAndPropose(
+                    modelContext: modelContext,
+                    snapshots: snapshots,
+                    journalEntries: [],
+                    foodLogs: [],
+                    existingRules: existingRules
+                )) ?? 0
+                if personalRulesCreated > 0 {
+                    logger.info("PersonalResponseModel: \(personalRulesCreated) new rules proposed")
+                }
+            }
+
             // Update run record
             runRecord.endedAt = Date()
             runRecord.status = AgentRunStatus.success.rawValue

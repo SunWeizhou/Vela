@@ -109,22 +109,32 @@ struct DataCoverageView: View {
 
             ForEach(group.signals) { signal in
                 HStack {
-                    Image(systemName: signal.isAvailable ? "checkmark.circle.fill" : "xmark.circle.fill")
+                    Image(systemName: signal.quality == .enough ? "checkmark.circle.fill"
+                         : signal.quality == .partial ? "circle.dotted"
+                         : "xmark.circle.fill")
                         .font(.caption)
-                        .foregroundStyle(signal.isAvailable ? VelaTheme.energy : VelaTheme.mutedText)
-                    Text(signal.name)
-                        .font(.caption)
-                        .foregroundStyle(VelaTheme.primaryText)
-                    Spacer()
-                    if signal.isAvailable {
-                        Text(AppLanguage.stored.isChinese ? "可用" : "Available")
-                            .font(.caption2)
-                            .foregroundStyle(VelaTheme.energy)
-                    } else {
-                        Text(AppLanguage.stored.isChinese ? "缺失" : "Missing")
+                        .foregroundStyle(signal.quality == .enough ? VelaTheme.energy
+                            : signal.quality == .partial ? VelaTheme.accent
+                            : VelaTheme.mutedText)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(signal.name)
+                            .font(.caption)
+                            .foregroundStyle(VelaTheme.primaryText)
+                        if signal.isAuthorized, let c7 = signal.sampleCount7d {
+                            Text(AppLanguage.stored.isChinese
+                                 ? "7天 \(c7) 条 · 质量 \(signal.quality.label)"
+                                 : "7d \(c7) samples · \(signal.quality.label)"
+                            )
                             .font(.caption2)
                             .foregroundStyle(VelaTheme.mutedText)
+                        } else if !signal.isAuthorized {
+                            Text(AppLanguage.stored.isChinese ? "未授权" : "Not authorized")
+                                .font(.caption2)
+                                .foregroundStyle(VelaTheme.mutedText)
+                        }
                     }
+                    Spacer()
+                    freshnessBadge(signal.freshness)
                 }
             }
         }
@@ -217,13 +227,20 @@ struct DataCoverageView: View {
             ),
         ]
 
-        // Check availability for each signal
+        // Check authorization + sample counts for each signal
         for i in 0..<groups.count {
             for j in groups[i].signals.indices {
-                groups[i].signals[j].isAvailable = await checkAvailability(
-                    groups[i].signals[j].type,
-                    store: store
-                )
+                var sig = groups[i].signals[j]
+                sig.isAuthorized = await checkAuthorization(sig.type, store: store)
+                sig.isAvailable = sig.isAuthorized
+                let (c7, c30) = await fetchSampleCounts(sig.type, store: store)
+                sig.sampleCount7d = c7; sig.sampleCount30d = c30
+                if let c = c7, c >= 7 { sig.freshness = .live; sig.quality = .enough }
+                else if let c = c7, c >= 3 { sig.freshness = .recent; sig.quality = .partial }
+                else if let c = c30, c ?? 0 >= 1 { sig.freshness = .stale; sig.quality = .insufficient }
+                else { sig.freshness = .missing; sig.quality = .insufficient }
+                if !sig.isAuthorized { sig.freshness = .missing; sig.quality = .insufficient }
+                groups[i].signals[j] = sig
             }
         }
 
@@ -231,10 +248,42 @@ struct DataCoverageView: View {
         isLoading = false
     }
 
-    private func checkAvailability(_ type: HKQuantityTypeIdentifier, store: HKHealthStore) async -> Bool {
+    private func checkAuthorization(_ type: HKQuantityTypeIdentifier, store: HKHealthStore) async -> Bool {
         guard let quantityType = HKQuantityType.quantityType(forIdentifier: type) else { return false }
-        let status = store.authorizationStatus(for: quantityType)
-        return status == .sharingAuthorized
+        return store.authorizationStatus(for: quantityType) == .sharingAuthorized
+    }
+
+    private func fetchSampleCounts(_ type: HKQuantityTypeIdentifier, store: HKHealthStore) async -> (Int?, Int?) {
+        guard let quantityType = HKQuantityType.quantityType(forIdentifier: type) else {
+            return (nil, nil)
+        }
+        guard store.authorizationStatus(for: quantityType) == .sharingAuthorized else {
+            return (nil, nil)
+        }
+        let now = Date()
+        let cal = Calendar.current
+        let d7 = cal.date(byAdding: .day, value: -7, to: now)!
+        let d30 = cal.date(byAdding: .day, value: -30, to: now)!
+        let pred7d = HKQuery.predicateForSamples(withStart: d7, end: now, options: .strictStartDate)
+        let pred30d = HKQuery.predicateForSamples(withStart: d30, end: now, options: .strictStartDate)
+        let count7d = await countSamples(for: quantityType, predicate: pred7d, store: store)
+        let count30d = await countSamples(for: quantityType, predicate: pred30d, store: store)
+        return (count7d, count30d)
+    }
+
+    private func countSamples(for type: HKQuantityType, predicate: NSPredicate, store: HKHealthStore) async -> Int? {
+        await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: type, predicate: predicate, limit: 0, sortDescriptors: nil
+            ) { _, samples, error in
+                guard error == nil, let samples = samples else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                continuation.resume(returning: samples.count)
+            }
+            store.execute(query)
+        }
     }
 
     // MARK: - Helpers
@@ -243,6 +292,20 @@ struct DataCoverageView: View {
         if pct >= 80 { return VelaTheme.energy }
         if pct >= 50 { return VelaTheme.accent }
         return VelaTheme.strain
+    }
+
+    private func freshnessBadge(_ freshness: DataFreshness) -> some View {
+        let label: String; let color: Color
+        switch freshness {
+        case .live: label = AppLanguage.stored.isChinese ? "实时" : "Live"; color = VelaTheme.energy
+        case .today: label = AppLanguage.stored.isChinese ? "今日" : "Today"; color = VelaTheme.accent
+        case .recent: label = AppLanguage.stored.isChinese ? "近期" : "Recent"; color = VelaTheme.secondaryText
+        case .stale: label = AppLanguage.stored.isChinese ? "陈旧" : "Stale"; color = VelaTheme.strain
+        case .missing: label = AppLanguage.stored.isChinese ? "缺失" : "Missing"; color = VelaTheme.mutedText
+        }
+        return Text(label).font(.caption2.weight(.medium)).foregroundStyle(color)
+            .padding(.horizontal, 6).padding(.vertical, 1)
+            .background(Capsule().fill(color.opacity(0.1)))
     }
 
     private func groupColor(_ group: CoverageGroup) -> Color {
@@ -274,5 +337,25 @@ struct CoverageSignal: Identifiable {
     var name: String
     var type: HKQuantityTypeIdentifier
     var isAvailable: Bool = false
+    var isAuthorized: Bool = false
+    var sampleCount7d: Int?
+    var sampleCount30d: Int?
+    var freshness: DataFreshness = .missing
+    var quality: SignalQuality = .insufficient
     var store: HKHealthStore
+}
+
+enum SignalQuality: String {
+    case enough
+    case partial
+    case insufficient
+
+    var label: String {
+        switch self {
+        case .enough: return AppLanguage.stored.isChinese ? "充足" : "Enough"
+        case .partial: return AppLanguage.stored.isChinese ? "部分" : "Partial"
+        case .insufficient: return AppLanguage.stored.isChinese ? "不足" : "Insufficient"
+        }
+    }
+
 }

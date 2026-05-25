@@ -145,9 +145,6 @@
 		0B1001A100000000000000A1 /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Services/LocationManager.swift; sourceTree = "<group>"; };
 		0B1001A200000000000000A2 /* WeatherService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Services/WeatherService.swift; sourceTree = "<group>"; };
 		0B1001A300000000000000A3 /* WorkoutDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Training/WorkoutDetailView.swift; sourceTree = "<group>"; };
-		0B1001900000000000000090 /* VelaQuickActionsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/SharedComponents/VelaQuickActionsSheet.swift; sourceTree = "<group>"; };
-		0B1001910000000000000091 /* WeightLogSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/SharedComponents/WeightLogSheetView.swift; sourceTree = "<group>"; };
-		0B1001920000000000000092 /* NutritionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Home/NutritionDetailView.swift; sourceTree = "<group>"; };
 		0B0000060000000000000006 /* Vela.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Vela.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0B0000070000000000000007 /* VelaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VelaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0B0000020000000000000002 /* VelaThemeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaThemeTests.swift; sourceTree = "<group>"; };
