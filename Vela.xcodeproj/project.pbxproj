@@ -116,6 +116,10 @@
 		1586C9ADAE4F4253BDE1C34C /* ContextBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D2B5FDE2C894A4E932CD4DB /* ContextBuilderTests.swift */; };
 		5357016B721440F7AA0D7EFF /* PromptComposerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06E296850D824F5484621DB7 /* PromptComposerTests.swift */; };
 		DD4356A314314464890D8B2D /* MemoryLedgerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC2F3B94AA064B1E83F71978 /* MemoryLedgerTests.swift */; };
+		75B10B74453B4E3985380BC2 /* DailyPlanBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFF4CA95248945C89D12DDB1 /* DailyPlanBuilder.swift */; };
+		1FED51D7B63E428283A91F52 /* TodayPlanHero.swift in Sources */ = {isa = PBXBuildFile; fileRef = 837555CBC1BE4843A8E11B9D /* TodayPlanHero.swift */; };
+		8A28AFF8B51B41BA99FD9521 /* AdaptiveTrainingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7992FEFB1A064B77A704975B /* AdaptiveTrainingEngine.swift */; };
+		5769DAD12DC24CCCA5AED73B /* TrustCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82C4D493FC3C40CCBF15B72B /* TrustCenterView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -242,6 +246,10 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 		8D2B5FDE2C894A4E932CD4DB /* ContextBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextBuilderTests.swift; sourceTree = "<group>"; };
 		06E296850D824F5484621DB7 /* PromptComposerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptComposerTests.swift; sourceTree = "<group>"; };
 		FC2F3B94AA064B1E83F71978 /* MemoryLedgerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryLedgerTests.swift; sourceTree = "<group>"; };
+		DFF4CA95248945C89D12DDB1 /* DailyPlanBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Scoring/DailyPlan/DailyPlanBuilder.swift; sourceTree = "<group>"; };
+		837555CBC1BE4843A8E11B9D /* TodayPlanHero.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Features/Home/TodayPlanHero.swift; sourceTree = "<group>"; };
+		7992FEFB1A064B77A704975B /* AdaptiveTrainingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Scoring/Training/AdaptiveTrainingEngine.swift; sourceTree = "<group>"; };
+		82C4D493FC3C40CCBF15B72B /* TrustCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Features/Settings/TrustCenterView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -275,7 +283,11 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 				53E4C9616A624711B40AD7F4 /* MemoryModels.swift */,
 				540A8976728D4342AB813647 /* CoachPromptComposer.swift */,
 				83AE10D45DA9421385D48088 /* AgentLoop.swift */,
-				4AC9EACC8099421CA872BDBF /* MemoryLedger.swift */,);
+				4AC9EACC8099421CA872BDBF /* MemoryLedger.swift */,
+				DFF4CA95248945C89D12DDB1 /* DailyPlanBuilder.swift */,
+				837555CBC1BE4843A8E11B9D /* TodayPlanHero.swift */,
+				7992FEFB1A064B77A704975B /* AdaptiveTrainingEngine.swift */,
+				82C4D493FC3C40CCBF15B72B /* TrustCenterView.swift */,);
 			sourceTree = "<group>";
 		};
 		0B0000110000000000000011 /* VelaApp */ = {
@@ -605,7 +617,11 @@ tttt0B10004A000000000000004A /* WebSearchService.swift in Sources */,
 				2628FAFD9A5E478C88FE7E4A /* MemoryModels.swift in Sources */,
 				1299F7AE0A664D63B6146337 /* CoachPromptComposer.swift in Sources */,
 				4A35595A791645EAB2547E0C /* AgentLoop.swift in Sources */,
-				FA5C51F575E749ED899FC496 /* MemoryLedger.swift in Sources */,);
+				FA5C51F575E749ED899FC496 /* MemoryLedger.swift in Sources */,
+				75B10B74453B4E3985380BC2 /* DailyPlanBuilder.swift in Sources */,
+				1FED51D7B63E428283A91F52 /* TodayPlanHero.swift in Sources */,
+				8A28AFF8B51B41BA99FD9521 /* AdaptiveTrainingEngine.swift in Sources */,
+				5769DAD12DC24CCCA5AED73B /* TrustCenterView.swift in Sources */,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		0B0000190000000000000019 /* Sources */ = {

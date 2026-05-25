@@ -348,6 +348,13 @@ struct HomeView: View {
     @State private var heroVisible = false
     @State private var columnsVisible = false
     @StateObject private var layoutStore = HomeCardLayoutStore()
+    @State private var todayPlan: TodayPlan?
+    @State private var selectedActionForWhy: DailyAction?
+    @Query(
+        filter: #Predicate<MemoryEventRecord> { $0.status == "proposed" },
+        sort: \MemoryEventRecord.createdAt,
+        order: .reverse
+    ) private var pendingProposals: [MemoryEventRecord]
     
     // CoreLocation & Weather
     @StateObject private var locationManager = LocationManager.shared
@@ -376,6 +383,15 @@ struct HomeView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         headerBar
+
+                        if let plan = todayPlan {
+                            TodayPlanHero(
+                                plan: plan,
+                                onActionTap: { _ in },
+                                onWhyThisTap: { selectedActionForWhy = $0 }
+                            )
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                        }
 
                         if viewModel.isLoading {
                             HStack(spacing: 10) {
@@ -469,6 +485,14 @@ struct HomeView: View {
             await viewModel.loadStrainTrend(modelContext: modelContext)
             await viewModel.loadRecoveryTrend(modelContext: modelContext)
             await viewModel.loadHeatmap(modelContext: modelContext)
+            // Build today's plan after all data is loaded
+            let wiki = WikiFileService.loadDictionary()
+            let activePlanFetch = FetchDescriptor<TrainingPlanRecord>(predicate: #Predicate { $0.isActive })
+            let activePlan = (try? modelContext.fetch(activePlanFetch))?.first
+            todayPlan = DailyPlanBuilder().build(
+                dashboard: viewModel.dashboard, wiki: wiki,
+                activePlan: activePlan, pendingProposals: Array(pendingProposals)
+            )
             await EveningWikiSyncAgent.shared.runIfNeeded(
                 modelContext: modelContext,
                 dashboard: viewModel.dashboard
@@ -504,6 +528,9 @@ struct HomeView: View {
                     conditionCode: 1
                 ))
             }
+        }
+        .sheet(item: $selectedActionForWhy) { action in
+            WhyThisSheet(action: action)
         }
         .sheet(isPresented: $showWorkoutsSheet) {
             recentWorkoutsDrawer

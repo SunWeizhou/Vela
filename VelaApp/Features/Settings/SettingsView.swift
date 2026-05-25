@@ -295,6 +295,30 @@ struct SettingsView: View {
                         title: language.isChinese ? "用户 Wiki" : "User Wiki",
                         bodyText: language.isChinese ? "Coach 会把对话中稳定的偏好和背景摘要追加到本地 notes.md，供后续分析读取。" : "Coach appends stable preferences and context from chat into local notes.md for future analysis."
                     )
+
+                    NavigationLink {
+                        TrustCenterView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "checkmark.shield.fill")
+                                .font(.title3)
+                                .foregroundStyle(VelaTheme.energy)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(language.isChinese ? "信任中心" : "Trust Center")
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundStyle(VelaTheme.primaryText)
+                                Text(language.isChinese ? "Agent 运行历史与状态" : "Agent run history and status")
+                                    .font(.caption)
+                                    .foregroundStyle(VelaTheme.secondaryText)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(VelaTheme.mutedText)
+                        }
+                        .padding(12)
+                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(VelaTheme.surface))
+                    }
                 }
                 .padding(VelaTheme.screenPadding)
             }
