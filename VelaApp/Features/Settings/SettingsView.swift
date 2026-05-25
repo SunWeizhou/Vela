@@ -297,6 +297,30 @@ struct SettingsView: View {
                     )
 
                     NavigationLink {
+                        DataCoverageView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "chart.pie.fill")
+                                .font(.title3)
+                                .foregroundStyle(VelaTheme.accent)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(language.isChinese ? "数据覆盖" : "Data Coverage")
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundStyle(VelaTheme.primaryText)
+                                Text(language.isChinese ? "Apple Health 信号读取状态" : "Apple Health signal status")
+                                    .font(.caption)
+                                    .foregroundStyle(VelaTheme.secondaryText)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(VelaTheme.mutedText)
+                        }
+                        .padding(12)
+                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(VelaTheme.surface))
+                    }
+
+                    NavigationLink {
                         TrustCenterView()
                     } label: {
                         HStack {

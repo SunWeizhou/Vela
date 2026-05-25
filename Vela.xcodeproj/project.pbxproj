@@ -120,6 +120,11 @@
 		1FED51D7B63E428283A91F52 /* TodayPlanHero.swift in Sources */ = {isa = PBXBuildFile; fileRef = 837555CBC1BE4843A8E11B9D /* TodayPlanHero.swift */; };
 		8A28AFF8B51B41BA99FD9521 /* AdaptiveTrainingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7992FEFB1A064B77A704975B /* AdaptiveTrainingEngine.swift */; };
 		5769DAD12DC24CCCA5AED73B /* TrustCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82C4D493FC3C40CCBF15B72B /* TrustCenterView.swift */; };
+		2EBA83E644634BF8BA4EC807 /* BodyInterpretationTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBA7A2EC2D864756B06DC78E /* BodyInterpretationTypes.swift */; };
+		3720F50DEC174172A094C392 /* BodyInterpreterEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 359118EB7D9C43659D1C55C1 /* BodyInterpreterEngine.swift */; };
+		6829963D454246609FA8E8EC /* PersonalResponseModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96D0A980BB50405EA1CFA4B8 /* PersonalResponseModel.swift */; };
+		CCE926745D694215843A40D4 /* AdaptiveTrainingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54074915D1CD439596F77AD1 /* AdaptiveTrainingManager.swift */; };
+		AEB2F547D6A04198821B3E0C /* DataCoverageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63AAF7BE44C44A87855807F0 /* DataCoverageView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -250,6 +255,11 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 		837555CBC1BE4843A8E11B9D /* TodayPlanHero.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Features/Home/TodayPlanHero.swift; sourceTree = "<group>"; };
 		7992FEFB1A064B77A704975B /* AdaptiveTrainingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Scoring/Training/AdaptiveTrainingEngine.swift; sourceTree = "<group>"; };
 		82C4D493FC3C40CCBF15B72B /* TrustCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Features/Settings/TrustCenterView.swift; sourceTree = "<group>"; };
+		EBA7A2EC2D864756B06DC78E /* BodyInterpretationTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Scoring/BodyInterpreter/BodyInterpretationTypes.swift; sourceTree = "<group>"; };
+		359118EB7D9C43659D1C55C1 /* BodyInterpreterEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Scoring/BodyInterpreter/BodyInterpreterEngine.swift; sourceTree = "<group>"; };
+		96D0A980BB50405EA1CFA4B8 /* PersonalResponseModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Scoring/BodyInterpreter/PersonalResponseModel.swift; sourceTree = "<group>"; };
+		54074915D1CD439596F77AD1 /* AdaptiveTrainingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Scoring/Training/AdaptiveTrainingManager.swift; sourceTree = "<group>"; };
+		63AAF7BE44C44A87855807F0 /* DataCoverageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Features/Settings/DataCoverageView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -287,7 +297,12 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 				DFF4CA95248945C89D12DDB1 /* DailyPlanBuilder.swift */,
 				837555CBC1BE4843A8E11B9D /* TodayPlanHero.swift */,
 				7992FEFB1A064B77A704975B /* AdaptiveTrainingEngine.swift */,
-				82C4D493FC3C40CCBF15B72B /* TrustCenterView.swift */,);
+				82C4D493FC3C40CCBF15B72B /* TrustCenterView.swift */,
+				EBA7A2EC2D864756B06DC78E /* BodyInterpretationTypes.swift */,
+				359118EB7D9C43659D1C55C1 /* BodyInterpreterEngine.swift */,
+				96D0A980BB50405EA1CFA4B8 /* PersonalResponseModel.swift */,
+				54074915D1CD439596F77AD1 /* AdaptiveTrainingManager.swift */,
+				63AAF7BE44C44A87855807F0 /* DataCoverageView.swift */,);
 			sourceTree = "<group>";
 		};
 		0B0000110000000000000011 /* VelaApp */ = {
@@ -621,7 +636,12 @@ tttt0B10004A000000000000004A /* WebSearchService.swift in Sources */,
 				75B10B74453B4E3985380BC2 /* DailyPlanBuilder.swift in Sources */,
 				1FED51D7B63E428283A91F52 /* TodayPlanHero.swift in Sources */,
 				8A28AFF8B51B41BA99FD9521 /* AdaptiveTrainingEngine.swift in Sources */,
-				5769DAD12DC24CCCA5AED73B /* TrustCenterView.swift in Sources */,);
+				5769DAD12DC24CCCA5AED73B /* TrustCenterView.swift in Sources */,
+				2EBA83E644634BF8BA4EC807 /* BodyInterpretationTypes.swift in Sources */,
+				3720F50DEC174172A094C392 /* BodyInterpreterEngine.swift in Sources */,
+				6829963D454246609FA8E8EC /* PersonalResponseModel.swift in Sources */,
+				CCE926745D694215843A40D4 /* AdaptiveTrainingManager.swift in Sources */,
+				AEB2F547D6A04198821B3E0C /* DataCoverageView.swift in Sources */,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		0B0000190000000000000019 /* Sources */ = {
