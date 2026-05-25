@@ -1,0 +1,19 @@
+.DS_Store
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.worktrees/
+
+# Claude / agent local config
+.claude/
+.agents/
+.playwright-mcp/
+.stitch/
+agent/
+skills-lock.json
+
+# Misc junk
+bevel-homepage.png
+*.bak
+scratch/

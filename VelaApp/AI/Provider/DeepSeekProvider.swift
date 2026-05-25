@@ -1,0 +1,270 @@
+import Foundation
+
+struct DeepSeekProvider: LLMProvider {
+    var apiKey: String
+    var model: String = "deepseek-v4-pro"
+    var endpoint: URL = URL(string: "https://api.deepseek.com/chat/completions")!
+
+    func complete(request: LLMRequest) async throws -> LLMResponse {
+        guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw LLMProviderError.missingAPIKey
+        }
+
+        let messages: [ChatMessage] = [
+            ChatMessage(role: .system, content: request.systemPrompt),
+            ChatMessage(role: .user, content: "\(request.userPrompt)\n\nContext:\n\(request.contextJSON)")
+        ]
+        return try await chat(messages: messages, tools: request.tools)
+    }
+
+    /// Non-streaming chat with optional tools. Returns content and/or tool_calls.
+    func chat(messages: [ChatMessage], tools: [[String: Value]]? = nil) async throws -> LLMResponse {
+        guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw LLMProviderError.missingAPIKey
+        }
+
+        var urlRequest = URLRequest(url: endpoint)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        urlRequest.timeoutInterval = 120
+
+        let body = DeepSeekChatRequest(
+            model: model,
+            messages: messages.map { msg in
+                DeepSeekChatRequest.Message(
+                    role: msg.role.apiValue,
+                    content: msg.content.isEmpty ? nil : msg.content,
+                    toolCalls: msg.toolCalls?.map { tc in
+                        DeepSeekChatRequest.ToolCall(id: tc.id, type: "function", function: .init(name: tc.name, arguments: tc.arguments))
+                    },
+                    toolCallId: msg.toolCallId
+                )
+            },
+            temperature: 0.4,
+            stream: false,
+            tools: tools?.map { ToolDef(from: $0) },
+            toolChoice: tools != nil ? "auto" : nil
+        )
+        urlRequest.httpBody = try JSONEncoder().encode(body)
+
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LLMProviderError.invalidResponse
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? ""
+            throw LLMProviderError.requestFailed("DeepSeek request failed with status \(httpResponse.statusCode): \(body.prefix(200))")
+        }
+
+        let decoded = try JSONDecoder().decode(DeepSeekChatResponse.self, from: data)
+        let choice = decoded.choices.first
+        let content = choice?.message.content ?? ""
+
+        var toolCalls: [ToolCall]? = nil
+        if let rawCalls = choice?.message.toolCalls, !rawCalls.isEmpty {
+            toolCalls = rawCalls.map { tc in
+                ToolCall(id: tc.id, name: tc.function.name, arguments: tc.function.arguments)
+            }
+        }
+
+        return LLMResponse(content: content, toolCalls: toolCalls)
+    }
+
+    func streamChat(messages: [ChatMessage]) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                        throw LLMProviderError.missingAPIKey
+                    }
+
+                    var urlRequest = URLRequest(url: endpoint)
+                    urlRequest.httpMethod = "POST"
+                    urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    urlRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+                    urlRequest.timeoutInterval = 180
+                    urlRequest.httpBody = try JSONEncoder().encode(
+                        DeepSeekChatRequest(
+                            model: model,
+                            messages: messages.map {
+                                DeepSeekChatRequest.Message(role: $0.role.apiValue, content: $0.content.isEmpty ? nil : $0.content, toolCalls: nil, toolCallId: $0.toolCallId)
+                            },
+                            temperature: 0.4,
+                            stream: true,
+                            tools: nil,
+                            toolChoice: nil
+                        )
+                    )
+
+                    let (bytes, response) = try await URLSession.shared.bytes(for: urlRequest)
+                    guard let httpResponse = response as? HTTPURLResponse else {
+                        throw LLMProviderError.invalidResponse
+                    }
+                    guard (200..<300).contains(httpResponse.statusCode) else {
+                        throw LLMProviderError.requestFailed("DeepSeek request failed with status \(httpResponse.statusCode).")
+                    }
+
+                    for try await line in bytes.lines {
+                        guard line.hasPrefix("data: "), !line.hasPrefix("data: [DONE]") else { continue }
+                        let json = String(line.dropFirst(6))
+                        guard let data = json.data(using: .utf8),
+                              let chunk = try? JSONDecoder().decode(DeepSeekStreamChunk.self, from: data),
+                              let delta = chunk.choices.first?.delta.content,
+                              !delta.isEmpty else { continue }
+                        continuation.yield(delta)
+                    }
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
+    }
+}
+
+// MARK: - Request/Response Codable Types
+
+private struct DeepSeekChatRequest: Encodable {
+    var model: String
+    var messages: [Message]
+    var temperature: Double
+    var stream: Bool
+    var tools: [ToolDef]?
+    var toolChoice: String?
+
+    enum CodingKeys: String, CodingKey {
+        case model, messages, temperature, stream, tools
+        case toolChoice = "tool_choice"
+    }
+
+    struct Message: Encodable {
+        var role: String
+        var content: String?
+        var toolCalls: [ToolCall]?
+        var toolCallId: String?
+
+        enum CodingKeys: String, CodingKey {
+            case role, content
+            case toolCalls = "tool_calls"
+            case toolCallId = "tool_call_id"
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(role, forKey: .role)
+            try container.encodeIfPresent(content, forKey: .content)
+            try container.encodeIfPresent(toolCalls, forKey: .toolCalls)
+            try container.encodeIfPresent(toolCallId, forKey: .toolCallId)
+        }
+    }
+
+    struct ToolCall: Encodable {
+        var id: String
+        var type: String
+        var function: FunctionDef
+
+        struct FunctionDef: Encodable {
+            var name: String
+            var arguments: String
+        }
+    }
+}
+
+private struct ToolDef: Encodable {
+    var type: String = "function"
+    var function: FunctionSchema
+
+    struct FunctionSchema: Encodable {
+        var name: String
+        var description: String
+        var parameters: [String: Value]
+    }
+
+    init(from dict: [String: Value]) {
+        let fnDict: [String: Value] = {
+            if case .object(let v) = dict["function"] { return v }
+            return [:]
+        }()
+        let nameStr: String = {
+            if case .string(let v) = fnDict["name"] { return v }
+            return ""
+        }()
+        let descStr: String = {
+            if case .string(let v) = fnDict["description"] { return v }
+            return ""
+        }()
+        let params: [String: Value] = {
+            if case .object(let v) = fnDict["parameters"] { return v }
+            return [:]
+        }()
+        self.function = FunctionSchema(
+            name: nameStr,
+            description: descStr,
+            parameters: params
+        )
+    }
+}
+
+private struct DeepSeekChatResponse: Decodable {
+    var choices: [Choice]
+
+    struct Choice: Decodable {
+        var message: ResponseMessage
+        var finishReason: String?
+
+        enum CodingKeys: String, CodingKey {
+            case message
+            case finishReason = "finish_reason"
+        }
+    }
+
+    struct ResponseMessage: Decodable {
+        var content: String?
+        var toolCalls: [ResponseToolCall]?
+
+        enum CodingKeys: String, CodingKey {
+            case content
+            case toolCalls = "tool_calls"
+        }
+    }
+
+    struct ResponseToolCall: Decodable {
+        var id: String
+        var type: String
+        var function: FunctionCall
+    }
+
+    struct FunctionCall: Decodable {
+        var name: String
+        var arguments: String
+    }
+}
+
+private struct DeepSeekStreamChunk: Decodable {
+    var choices: [Choice]
+
+    struct Choice: Decodable {
+        var delta: Delta
+    }
+
+    struct Delta: Decodable {
+        var content: String?
+    }
+}
+
+private extension ChatMessage.Role {
+    var apiValue: String {
+        switch self {
+        case .system: return "system"
+        case .user: return "user"
+        case .assistant: return "assistant"
+        case .tool: return "tool"
+        }
+    }
+}
