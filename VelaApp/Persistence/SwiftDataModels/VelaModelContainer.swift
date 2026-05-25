@@ -13,7 +13,9 @@ enum VelaModelContainer {
         CoachSessionRecord.self,
         FoodLogRecord.self,
         TrainingPlanRecord.self,
-        BiomarkerRecord.self
+        BiomarkerRecord.self,
+        MemoryEventRecord.self,
+        AgentRunRecord.self
     ])
 
     private static let storeURL: URL = {

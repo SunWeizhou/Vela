@@ -88,13 +88,25 @@ final class EveningWikiSyncAgent: ObservableObject {
                 contextJSON: (try? String(data: JSONEncoder().encode(context), encoding: .utf8)) ?? "{}"
             ))
 
-            // Parse and apply wiki actions
+            // Parse legacy [ACTION:update_wiki] and convert to MemoryProposals
             let parsed = AgentActionParser.parse(response.content)
             var appliedFiles: [String] = []
+            let ledger = MemoryLedger(modelContext: modelContext)
             for action in parsed.actions where action.type == .updateWiki {
-                try? WikiFileService.updateSection(filename: action.target, content: action.content, mode: .merge)
-                appliedFiles.append(action.target)
-                logger.info("Wiki auto-updated: \(action.target)")
+                let memType = WikiFileRole.memoryTypeFor(filename: action.target)
+                let record = try? ledger.createProposal(
+                    targetFile: action.target,
+                    memoryType: memType,
+                    content: action.content,
+                    evidence: "Evening wiki sync auto-detected pattern from daily data.",
+                    confidence: 0.6,
+                    source: "evening_wiki_sync",
+                    linkedAgentRunId: runRecord.id.uuidString
+                )
+                if record != nil {
+                    appliedFiles.append(action.target)
+                    logger.info("Memory proposal created: \(action.target)")
+                }
             }
 
             // Save daily summary report

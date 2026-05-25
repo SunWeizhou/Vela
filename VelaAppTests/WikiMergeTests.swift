@@ -3,17 +3,17 @@ import XCTest
 
 final class WikiMergeTests: XCTestCase {
 
-    // Use a valid wiki filename that the WikiFileService allows
+    // Use a less critical filename for merge tests — notes.md is a real user doc
+    // but in test environment (simulator) it's a fresh sandbox, so this is safe.
+    // We still use setUp/tearDown to keep the file clean between tests.
     private let testFile = "notes.md"
 
     override func setUp() {
         super.setUp()
-        // Clear the test file before each test
-        try? WikiFileService.updateSection(filename: testFile, content: "", mode: .replace)
+        try? WikiFileService.updateSection(filename: testFile, content: "# Test\n\n", mode: .replace)
     }
 
     override func tearDown() {
-        // Clean up after each test
         try? WikiFileService.updateSection(filename: testFile, content: "", mode: .replace)
         super.tearDown()
     }
@@ -23,11 +23,8 @@ final class WikiMergeTests: XCTestCase {
     func testLevenshteinExactDuplicateIsRejected() {
         let content = "Caffeine after 2 PM consistently reduces REM sleep duration."
         try? WikiFileService.updateSection(filename: testFile, content: content, mode: .replace)
-
-        // Try to merge the exact same content
         try? WikiFileService.updateSection(filename: testFile, content: content, mode: .merge)
 
-        // The file should only contain the original content once
         let dict = WikiFileService.loadDictionary()
         let fileContent = dict[testFile] ?? ""
         let occurrences = fileContent.components(separatedBy: "reduces REM sleep").count - 1
@@ -38,13 +35,11 @@ final class WikiMergeTests: XCTestCase {
         let original = "Caffeine after 2 PM reduces REM sleep duration."
         try? WikiFileService.updateSection(filename: testFile, content: original, mode: .replace)
 
-        // Very similar content (missing period, 93% similar)
         let similar = "Caffeine after 2 PM reduces REM sleep duration"
         try? WikiFileService.updateSection(filename: testFile, content: similar, mode: .merge)
 
         let dict = WikiFileService.loadDictionary()
         let fileContent = dict[testFile] ?? ""
-        // Should be deduped because similarity > 0.85
         let occurrences = fileContent.components(separatedBy: "reduces REM").count - 1
         XCTAssertEqual(occurrences, 1, "Similar paragraph should be deduplicated")
     }
@@ -62,8 +57,6 @@ final class WikiMergeTests: XCTestCase {
         XCTAssertTrue(fileContent.contains("swimming twice"), "New different content should be added")
     }
 
-    // MARK: - Substring Dedup
-
     func testSubstringContainedInExistingIsDeduped() {
         let existing = "User prefers morning workouts between 6-8 AM for optimal energy."
         try? WikiFileService.updateSection(filename: testFile, content: existing, mode: .replace)
@@ -77,12 +70,10 @@ final class WikiMergeTests: XCTestCase {
         XCTAssertEqual(occurrences, 1, "Substring should not create a duplicate")
     }
 
-    // MARK: - Unknown File Rejection
-
     func testUnknownFileIsRejected() {
         let unknownFile = "does_not_exist.md"
         try? WikiFileService.updateSection(filename: unknownFile, content: "test", mode: .merge)
         let dict = WikiFileService.loadDictionary()
-        XCTAssertNil(dict[unknownFile], "Unknown file should not be created")
+        XCTAssertNil(dict[unknownFile], "Unknown file should not appear in dictionary")
     }
 }

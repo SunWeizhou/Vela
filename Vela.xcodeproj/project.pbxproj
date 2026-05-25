@@ -114,6 +114,8 @@
 		FE760BA0280B448DB02489E4 /* WikiMergeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B3FF1E44A844CECACC8727E /* WikiMergeTests.swift */; };
 		BB4501256E114FAC859D914B /* AgentActionParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D3C95453E2F4CA38EF8BCC8 /* AgentActionParserTests.swift */; };
 		1586C9ADAE4F4253BDE1C34C /* ContextBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D2B5FDE2C894A4E932CD4DB /* ContextBuilderTests.swift */; };
+		5357016B721440F7AA0D7EFF /* PromptComposerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06E296850D824F5484621DB7 /* PromptComposerTests.swift */; };
+		DD4356A314314464890D8B2D /* MemoryLedgerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC2F3B94AA064B1E83F71978 /* MemoryLedgerTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -238,6 +240,8 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 		6B3FF1E44A844CECACC8727E /* WikiMergeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WikiMergeTests.swift; sourceTree = "<group>"; };
 		9D3C95453E2F4CA38EF8BCC8 /* AgentActionParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentActionParserTests.swift; sourceTree = "<group>"; };
 		8D2B5FDE2C894A4E932CD4DB /* ContextBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextBuilderTests.swift; sourceTree = "<group>"; };
+		06E296850D824F5484621DB7 /* PromptComposerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptComposerTests.swift; sourceTree = "<group>"; };
+		FC2F3B94AA064B1E83F71978 /* MemoryLedgerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryLedgerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -245,7 +249,9 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-			);
+			
+				5357016B721440F7AA0D7EFF /* PromptComposerTests.swift in Sources */,
+				DD4356A314314464890D8B2D /* MemoryLedgerTests.swift in Sources */,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		0B0000090000000000000009 /* Frameworks */ = {
@@ -331,7 +337,7 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 				0B1001470000000000000047 /* DeepSeekProvider.swift */,
 				0B1001480000000000000048 /* ReportGenerator.swift */,
 				0B1001490000000000000049 /* KeychainService.swift */,
-tttt0B10014A000000000000004A /* WebSearchService.swift */,
+0B10014A000000000000004A /* WebSearchService.swift */,
 				0B10014B000000000000004B /* AgentTool.swift */,
 				0B10014C000000000000004C /* FoodPhotoAnalyzer.swift */,
 				0B1001210000000000000021 /* JournalDraft.swift */,
@@ -385,7 +391,9 @@ tttt0B10014A000000000000004A /* WebSearchService.swift */,
 			
 				6B3FF1E44A844CECACC8727E /* WikiMergeTests.swift */,
 				9D3C95453E2F4CA38EF8BCC8 /* AgentActionParserTests.swift */,
-				8D2B5FDE2C894A4E932CD4DB /* ContextBuilderTests.swift */,);
+				8D2B5FDE2C894A4E932CD4DB /* ContextBuilderTests.swift */,
+				06E296850D824F5484621DB7 /* PromptComposerTests.swift */,
+				FC2F3B94AA064B1E83F71978 /* MemoryLedgerTests.swift */,);
 			path = VelaAppTests;
 			sourceTree = "<group>";
 		};

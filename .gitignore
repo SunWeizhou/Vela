@@ -10,7 +10,7 @@ xcuserdata/
 .agents/
 .playwright-mcp/
 .stitch/
-agent/
+/agent/
 skills-lock.json
 
 # Misc junk

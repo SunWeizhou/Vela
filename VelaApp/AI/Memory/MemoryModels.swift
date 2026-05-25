@@ -264,4 +264,9 @@ enum WikiFileRole: String, Codable, Hashable, CaseIterable {
         case .archive: return .fact
         }
     }
+
+    /// Maps a filename string to its memory type for proposal creation.
+    static func memoryTypeFor(filename: String) -> MemoryType {
+        WikiFileRole.allCases.first { $0.filename == filename }?.memoryType ?? .observation
+    }
 }
