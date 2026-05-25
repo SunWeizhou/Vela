@@ -1,6 +1,8 @@
 import Foundation
 
 struct AIContextBuilder {
+    static let schemaVersion = "v1.0"
+
     func build(
         dashboard: DashboardSummary,
         journalEntries: [JournalContextEntry],
@@ -9,7 +11,7 @@ struct AIContextBuilder {
         weeklyTrends: [String: String] = [:],
         foodLogs: [FoodLogRecord] = [],
         generatedAt: Date = Date()
-    ) -> AgentContextEnvelope {
+    ) -> (envelope: AgentContextEnvelope, metadata: ContextSnapshotMetadata) {
         // Calculate derived recovery values
         let hrvToday = dashboard.recoveryMetrics.hrvMilliseconds
         let hrvBaseline = dashboard.recoveryBaseline.hrvMilliseconds
@@ -30,7 +32,7 @@ struct AIContextBuilder {
         let remPct = sleepMetrics["rem_pct"].map { String(format: "%.1f%%", $0) } ?? "N/A"
         let deepPct = sleepMetrics["deep_pct"].map { String(format: "%.1f%%", $0) } ?? "N/A"
 
-        return AgentContextEnvelope(
+        let envelope = AgentContextEnvelope(
             metadata: AgentContextMetadata(generatedAt: generatedAt, contextWindow: "today"),
             todaySummary: [
                 "date": dashboard.date.formatted(date: .numeric, time: .omitted),
@@ -110,6 +112,21 @@ struct AIContextBuilder {
             ],
             extendedMetrics: buildExtendedMetricsDict(dashboard.extendedMetrics, body: dashboard.bodyMetrics)
         )
+
+        let contextJSON = (try? String(data: JSONEncoder().encode(envelope), encoding: .utf8)) ?? "{}"
+        let hash = ContentHash.hash(contextJSON)
+        let metadata = ContextSnapshotMetadata(
+            schemaVersion: AIContextBuilder.schemaVersion,
+            generatedAt: generatedAt,
+            hash: hash,
+            includedSections: [
+                "today_summary", "sleep", "recovery", "strain", "workouts",
+                "stress", "energy_bank", "health_age_trend", "nutrition",
+                "journal", "user_wiki", "extended_metrics"
+            ],
+            redactedFields: []
+        )
+        return (envelope: envelope, metadata: metadata)
     }
 
     private func buildNutritionDict(_ foodLogs: [FoodLogRecord]) -> [String: String] {

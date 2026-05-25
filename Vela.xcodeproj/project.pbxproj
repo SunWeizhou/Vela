@@ -106,6 +106,14 @@
 		0B10008A000000000000008A /* CorrelationArtifactView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B10018A000000000000008A /* CorrelationArtifactView.swift */; };
 		0B10008B000000000000008B /* CoachPersonality.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B10018B000000000000008B /* CoachPersonality.swift */; };
 		0B10008C000000000000008C /* BiologicalAgeEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B10018C000000000000008C /* BiologicalAgeEngine.swift */; };
+		9EEBD787BE2D414CB10076A7 /* TypedContextSchema.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6B6D7ADB8B84A4089793988 /* TypedContextSchema.swift */; };
+		2628FAFD9A5E478C88FE7E4A /* MemoryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53E4C9616A624711B40AD7F4 /* MemoryModels.swift */; };
+		1299F7AE0A664D63B6146337 /* CoachPromptComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 540A8976728D4342AB813647 /* CoachPromptComposer.swift */; };
+		4A35595A791645EAB2547E0C /* AgentLoop.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83AE10D45DA9421385D48088 /* AgentLoop.swift */; };
+		FA5C51F575E749ED899FC496 /* MemoryLedger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC9EACC8099421CA872BDBF /* MemoryLedger.swift */; };
+		FE760BA0280B448DB02489E4 /* WikiMergeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B3FF1E44A844CECACC8727E /* WikiMergeTests.swift */; };
+		BB4501256E114FAC859D914B /* AgentActionParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D3C95453E2F4CA38EF8BCC8 /* AgentActionParserTests.swift */; };
+		1586C9ADAE4F4253BDE1C34C /* ContextBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D2B5FDE2C894A4E932CD4DB /* ContextBuilderTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -222,6 +230,14 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 		0B10018A000000000000008A /* CorrelationArtifactView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/SharedComponents/CorrelationArtifactView.swift; sourceTree = "<group>"; };
 		0B10018B000000000000008B /* CoachPersonality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/CoachPersonality.swift; sourceTree = "<group>"; };
 		0B10018C000000000000008C /* BiologicalAgeEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/Biology/BiologicalAgeEngine.swift; sourceTree = "<group>"; };
+		A6B6D7ADB8B84A4089793988 /* TypedContextSchema.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/AI/Models/TypedContextSchema.swift; sourceTree = "<group>"; };
+		53E4C9616A624711B40AD7F4 /* MemoryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/AI/Memory/MemoryModels.swift; sourceTree = "<group>"; };
+		540A8976728D4342AB813647 /* CoachPromptComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/AI/Prompting/CoachPromptComposer.swift; sourceTree = "<group>"; };
+		83AE10D45DA9421385D48088 /* AgentLoop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/AI/Agent/AgentLoop.swift; sourceTree = "<group>"; };
+		4AC9EACC8099421CA872BDBF /* MemoryLedger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/AI/Memory/MemoryLedger.swift; sourceTree = "<group>"; };
+		6B3FF1E44A844CECACC8727E /* WikiMergeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WikiMergeTests.swift; sourceTree = "<group>"; };
+		9D3C95453E2F4CA38EF8BCC8 /* AgentActionParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentActionParserTests.swift; sourceTree = "<group>"; };
+		8D2B5FDE2C894A4E932CD4DB /* ContextBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextBuilderTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -248,7 +264,12 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 				0B0000110000000000000011 /* VelaApp */,
 				0B0000120000000000000012 /* VelaAppTests */,
 				0B0000130000000000000013 /* Products */,
-			);
+			
+				A6B6D7ADB8B84A4089793988 /* TypedContextSchema.swift */,
+				53E4C9616A624711B40AD7F4 /* MemoryModels.swift */,
+				540A8976728D4342AB813647 /* CoachPromptComposer.swift */,
+				83AE10D45DA9421385D48088 /* AgentLoop.swift */,
+				4AC9EACC8099421CA872BDBF /* MemoryLedger.swift */,);
 			sourceTree = "<group>";
 		};
 		0B0000110000000000000011 /* VelaApp */ = {
@@ -361,7 +382,10 @@ tttt0B10014A000000000000004A /* WebSearchService.swift */,
 				0B0000300000000000000030 /* HealthFoundationTests.swift */,
 				0B0000320000000000000032 /* PersistenceFoundationTests.swift */,
 				0B0000340000000000000034 /* ScoringEngineTests.swift */,
-			);
+			
+				6B3FF1E44A844CECACC8727E /* WikiMergeTests.swift */,
+				9D3C95453E2F4CA38EF8BCC8 /* AgentActionParserTests.swift */,
+				8D2B5FDE2C894A4E932CD4DB /* ContextBuilderTests.swift */,);
 			path = VelaAppTests;
 			sourceTree = "<group>";
 		};
@@ -568,7 +592,12 @@ tttt0B10004A000000000000004A /* WebSearchService.swift in Sources */,
 				0B10008A000000000000008A /* CorrelationArtifactView.swift in Sources */,
 				0B10008B000000000000008B /* CoachPersonality.swift in Sources */,
 				0B10008C000000000000008C /* BiologicalAgeEngine.swift in Sources */,
-			);
+			
+				9EEBD787BE2D414CB10076A7 /* TypedContextSchema.swift in Sources */,
+				2628FAFD9A5E478C88FE7E4A /* MemoryModels.swift in Sources */,
+				1299F7AE0A664D63B6146337 /* CoachPromptComposer.swift in Sources */,
+				4A35595A791645EAB2547E0C /* AgentLoop.swift in Sources */,
+				FA5C51F575E749ED899FC496 /* MemoryLedger.swift in Sources */,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		0B0000190000000000000019 /* Sources */ = {
@@ -579,7 +608,10 @@ tttt0B10004A000000000000004A /* WebSearchService.swift in Sources */,
 				0B0000290000000000000029 /* HealthFoundationTests.swift in Sources */,
 				0B0000310000000000000031 /* PersistenceFoundationTests.swift in Sources */,
 				0B0000330000000000000033 /* ScoringEngineTests.swift in Sources */,
-			);
+			
+				FE760BA0280B448DB02489E4 /* WikiMergeTests.swift in Sources */,
+				BB4501256E114FAC859D914B /* AgentActionParserTests.swift in Sources */,
+				1586C9ADAE4F4253BDE1C34C /* ContextBuilderTests.swift in Sources */,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */

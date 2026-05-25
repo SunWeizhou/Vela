@@ -23,36 +23,40 @@ struct MarkdownText: View {
             }
     }
 
-    /// Parse each line individually as inline markdown, then join with \n.
-    /// This preserves line breaks while still rendering **bold**, *italic*, `code`, etc.
-    /// This performs exceptionally well for both streaming and final responses.
+    /// Parse each line as inline markdown, join with paragraph breaks.
+    /// A single \n is invisible in AttributedString markdown, so we convert
+    /// consecutive non-empty lines to use \n\n (paragraph break) for visible separation.
     private var attributedContent: AttributedString {
         let normalized = markdown
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
-        
+
         let lines = normalized.components(separatedBy: "\n")
         var processedLines: [String] = []
         var inCodeBlock = false
-        
+
         for (index, line) in lines.enumerated() {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            // Preserve blank lines as paragraph separators
             if trimmed.isEmpty {
                 processedLines.append("")
                 continue
             }
-            
+
             if trimmed.hasPrefix("```") {
                 inCodeBlock.toggle()
                 processedLines.append(line)
                 continue
             }
-            
+
             if inCodeBlock {
                 processedLines.append(line)
                 continue
             }
-            
+
+            // For markdown structures that AttributedString handles natively,
+            // don't inject extra spacing
             let isHeader = trimmed.hasPrefix("#")
             let isList = trimmed.hasPrefix("-") || trimmed.hasPrefix("*") || trimmed.hasPrefix("+")
             let isOrderedList: Bool = {
@@ -61,10 +65,17 @@ struct MarkdownText: View {
                 return !prefix.isEmpty && prefix.allSatisfy { $0.isNumber }
             }()
             let isBlockquote = trimmed.hasPrefix(">")
-            
-            if isHeader || isList || isOrderedList || isBlockquote || trimmed.hasSuffix("  ") || trimmed.hasSuffix("\\") {
+            let isTable = trimmed.hasPrefix("|")
+            let isDivider = trimmed.hasPrefix("---") || trimmed.hasPrefix("***") || trimmed.hasPrefix("___")
+
+            if isHeader || isList || isOrderedList || isBlockquote || isTable || isDivider {
+                // Ensure blank line before headers for proper markdown parsing
+                if isHeader, index > 0, !processedLines.isEmpty, processedLines.last != "" {
+                    processedLines.append("")
+                }
                 processedLines.append(line)
             } else {
+                // Regular text: use two trailing spaces + newline = hard break in markdown
                 if index < lines.count - 1 {
                     processedLines.append(line + "  ")
                 } else {
@@ -72,16 +83,37 @@ struct MarkdownText: View {
                 }
             }
         }
-        
-        let processedMarkdown = processedLines.joined(separator: "\n")
-        var result = (try? AttributedString(markdown: processedMarkdown)) ?? AttributedString(markdown)
-        
+
+        // Post-process: collapse runs of blank lines (max 1 blank line)
+        var collapsed: [String] = []
+        for line in processedLines {
+            if line.isEmpty, collapsed.last == "" {
+                continue
+            }
+            collapsed.append(line)
+        }
+
+        let processedMarkdown = collapsed.joined(separator: "\n")
+
+        // Fallback: if AttributedString markdown parser fails, render raw with \n → \n\n
+        guard let parsed = try? AttributedString(markdown: processedMarkdown) else {
+            let fallback = normalized
+                .replacingOccurrences(of: "\n\n\n", with: "\n\n")
+            var result = (try? AttributedString(markdown: fallback)) ?? AttributedString(normalized)
+            appendStreamingCursor(to: &result)
+            return result
+        }
+
+        var result = parsed
+        appendStreamingCursor(to: &result)
+        return result
+    }
+
+    private func appendStreamingCursor(to result: inout AttributedString) {
         if isStreaming && blink {
             var cursor = AttributedString(" ▊")
             cursor.foregroundColor = VelaTheme.accent
             result.append(cursor)
         }
-        
-        return result
     }
 }

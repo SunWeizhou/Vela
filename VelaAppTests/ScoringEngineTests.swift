@@ -93,7 +93,7 @@ final class ScoringEngineTests: XCTestCase {
 
     func testAIContextBuilderIncludesRequiredBlocksWithoutRawSamples() throws {
         let dashboard = DashboardSummary.preview()
-        let context = AIContextBuilder().build(
+        let (context, _) = AIContextBuilder().build(
             dashboard: dashboard,
             journalEntries: [
                 JournalContextEntry(tags: ["Coffee"], text: "Late espresso")
@@ -115,7 +115,7 @@ final class ScoringEngineTests: XCTestCase {
 
     func testAIContextBuilderIncludesRecentStructuredFoodLogs() throws {
         let dashboard = DashboardSummary.preview()
-        let context = AIContextBuilder().build(
+        let (context, _) = AIContextBuilder().build(
             dashboard: dashboard,
             journalEntries: [],
             historicalReports: [],
@@ -332,7 +332,7 @@ final class ScoringEngineTests: XCTestCase {
                 journalEntries: [],
                 historicalReports: [],
                 userWiki: [:]
-            )
+            ).envelope
         )
 
         XCTAssertEqual(report.type, .morningBrief)

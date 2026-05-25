@@ -10,6 +10,7 @@ struct LLMRequest: Hashable, Sendable {
 struct LLMResponse: Hashable, Sendable {
     var content: String
     var toolCalls: [ToolCall]? = nil
+    var reasoningContent: String? = nil
 }
 
 struct ToolCall: Hashable, Sendable, Codable {
@@ -23,6 +24,7 @@ struct ChatMessage: Hashable, Sendable {
     var content: String
     var toolCalls: [ToolCall]? = nil
     var toolCallId: String? = nil
+    var reasoningContent: String? = nil
 
     enum Role: String, Hashable, Sendable {
         case system

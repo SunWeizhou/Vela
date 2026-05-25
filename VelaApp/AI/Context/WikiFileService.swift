@@ -15,11 +15,16 @@ enum WikiFileService {
     private static let filenames: [(filename: String, title: String)] = [
         ("profile.md", "个人档案"),
         ("goals.md", "健康目标"),
+        ("constraints.md", "个人约束"),
+        ("preferences.md", "个人偏好"),
         ("habits.md", "生活与训练习惯"),
         ("training_history.md", "训练历史"),
         ("health_context.md", "健康背景"),
+        ("baselines.md", "生理基线"),
+        ("observations.md", "AI 观察"),
+        ("strategies.md", "当前策略"),
         ("notes.md", "备注与发现"),
-        ("baselines.md", "生理基线")
+        ("archive.md", "历史归档")
     ]
 
     private static let allowedFilenames = Set(filenames.map(\.filename))
@@ -199,9 +204,9 @@ enum WikiFileService {
         """
     }
 
-    // MARK: - Private
+    // MARK: - Public URL Access (used by MemoryLedger)
 
-    private static func localURL(for filename: String) -> URL {
+    static func localURL(for filename: String) -> URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         return base
@@ -225,16 +230,26 @@ enum WikiFileService {
             return "# Profile\n\n- Age: \n- Activity level: \n- Primary sports: \n- Health goals: \n"
         case "goals.md":
             return "# Goals\n\n- Sleep: \n- Activity: \n- Recovery: \n- Other: \n"
+        case "constraints.md":
+            return "# Constraints\n\n- Injuries: \n- Equipment: \n- Time: \n- Dietary: \n"
+        case "preferences.md":
+            return "# Preferences\n\n- Training style: \n- Communication style: \n- Dietary preferences: \n"
         case "habits.md":
             return "# Habits\n\n- Caffeine: \n- Alcohol: \n- Evening routine: \n- Morning routine: \n"
         case "training_history.md":
             return "# Training History\n\n- Typical weekly volume: \n- Preferred training types: \n- Past injuries: \n"
         case "health_context.md":
             return "# Health Context\n\n- Known conditions: \n- Medications: \n- Recent changes: \n"
-        case "notes.md":
-            return "# Notes\n\n"
         case "baselines.md":
             return "# Personal Baselines\n\nYour physiological baselines will be computed automatically after 7+ days of data.\n"
+        case "observations.md":
+            return "# AI Observations\n\nPatterns observed from data but not yet user-confirmed.\n"
+        case "strategies.md":
+            return "# Active Strategies\n\nCurrent training/recovery strategies in use.\n"
+        case "archive.md":
+            return "# Archive\n\nSuperseded or expired memories.\n"
+        case "notes.md":
+            return "# Notes\n\n"
         default:
             return ""
         }

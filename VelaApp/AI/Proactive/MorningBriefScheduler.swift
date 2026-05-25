@@ -62,7 +62,18 @@ final class MorningBriefScheduler: ObservableObject {
         logger.info("Starting automated Morning Brief generation...")
         isGenerating = true
         defer { isGenerating = false }
-        
+
+        let runRecord = AgentRunRecord(
+            agentName: "morning_brief",
+            startedAt: Date(),
+            status: .running,
+            reason: force ? "forced" : "scheduled",
+            inputContextHash: "",
+            outputSummary: ""
+        )
+        modelContext.insert(runRecord)
+        try? modelContext.save()
+
         do {
             // 4. Fetch last 12 JournalEntryRecord
             let journalDescriptor = FetchDescriptor<JournalEntryRecord>(
@@ -99,7 +110,7 @@ final class MorningBriefScheduler: ObservableObject {
             
             // 8. Construct AgentContextEnvelope using AIContextBuilder
             let weeklyTrends = (try? HealthSnapshotRepository(modelContext: modelContext).buildWeeklyTrendSummary()) ?? [:]
-            let context = contextBuilder.build(
+            let (context, contextMeta) = contextBuilder.build(
                 dashboard: dashboard,
                 journalEntries: journalEntries,
                 historicalReports: historicalReports,
@@ -128,11 +139,22 @@ final class MorningBriefScheduler: ObservableObject {
             try modelContext.save()
             logger.info("Successfully generated and saved Morning Brief report!")
 
+            // Update the run record
+            runRecord.endedAt = Date()
+            runRecord.status = AgentRunStatus.success.rawValue
+            runRecord.inputContextHash = contextMeta.hash
+            runRecord.outputSummary = String(generatedReport.markdownContent.prefix(300))
+            try? modelContext.save()
+
             // Send notification that the morning brief is ready
             NotificationService.shared.scheduleMorningBriefCheck()
 
         } catch {
             logger.error("Failed to generate Morning Brief: \(error.localizedDescription)")
+            runRecord.endedAt = Date()
+            runRecord.status = AgentRunStatus.failed.rawValue
+            runRecord.errorMessage = error.localizedDescription
+            try? modelContext.save()
         }
     }
 }

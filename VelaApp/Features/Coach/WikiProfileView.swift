@@ -1,11 +1,19 @@
 import SwiftUI
+import SwiftData
 
 struct WikiProfileView: View {
+    @Environment(\.modelContext) private var modelContext
     @State private var documents: [WikiDocument] = []
     @State private var editingFileId: String?
     @State private var draftFields: [WikiField] = []
     @State private var baselineDoc: WikiDocument?
     @State private var isRefreshingBaselines = false
+
+    @Query(
+        filter: #Predicate<MemoryEventRecord> { $0.status == "proposed" },
+        sort: \MemoryEventRecord.createdAt,
+        order: .reverse
+    ) private var pendingProposals: [MemoryEventRecord]
 
     var body: some View {
         ZStack {
@@ -17,6 +25,10 @@ struct WikiProfileView: View {
 
                     if let baselineDoc {
                         baselineSummaryCard(baselineDoc)
+                    }
+
+                    if !pendingProposals.isEmpty {
+                        pendingMemoriesSection
                     }
 
                     ForEach(documents) { doc in
@@ -476,7 +488,10 @@ struct WikiProfileView: View {
         case "habits.md": return "leaf.fill"
         case "training_history.md": return "figure.run"
         case "health_context.md": return "heart.text.square.fill"
-        case "notes.md": return "note.text"
+        case "notes.md", "observations.md": return "note.text"
+        case "constraints.md": return "exclamationmark.shield.fill"
+        case "preferences.md": return "slider.horizontal.3"
+        case "strategies.md": return "lightbulb.fill"
         default: return "doc.fill"
         }
     }
@@ -488,8 +503,152 @@ struct WikiProfileView: View {
         case "habits.md": return VelaTheme.recovery
         case "training_history.md": return VelaTheme.strain
         case "health_context.md": return VelaTheme.sleep
-        case "notes.md": return VelaTheme.secondaryText
+        case "notes.md", "observations.md": return VelaTheme.secondaryText
+        case "constraints.md": return VelaTheme.stress
+        case "preferences.md": return VelaTheme.energy
+        case "strategies.md": return VelaTheme.accent
         default: return VelaTheme.accent
+        }
+    }
+
+    // MARK: - Pending Memories Section
+
+    @ViewBuilder
+    private var pendingMemoriesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "clock.badge.questionmark")
+                    .font(.title3)
+                    .foregroundStyle(VelaTheme.energy)
+                    .frame(width: 32, height: 32)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(AppLanguage.stored.isChinese ? "待确认记忆" : "Pending Memories")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(VelaTheme.primaryText)
+                    Text(AppLanguage.stored.isChinese
+                         ? "Vela 发现了 \(pendingProposals.count) 条可能需要你确认的长期记忆"
+                         : "Vela found \(pendingProposals.count) memories for your review"
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(VelaTheme.mutedText)
+                }
+                Spacer()
+            }
+
+            ForEach(pendingProposals) { proposal in
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Label(
+                            memoryTypeBadge(proposal.memoryType),
+                            systemImage: iconForFile(proposal.targetFile)
+                        )
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(tintForFile(proposal.targetFile))
+
+                        Spacer()
+
+                        Text(confidenceLabel(proposal.confidence))
+                            .font(.caption2)
+                            .foregroundStyle(VelaTheme.mutedText)
+                    }
+
+                    Text(proposal.content)
+                        .font(.footnote)
+                        .foregroundStyle(VelaTheme.primaryText)
+                        .lineLimit(4)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if !proposal.evidence.isEmpty {
+                        Text(proposal.evidence)
+                            .font(.caption2)
+                            .foregroundStyle(VelaTheme.secondaryText)
+                            .lineLimit(3)
+                    }
+
+                    HStack(spacing: 12) {
+                        Button {
+                            confirmProposal(proposal)
+                        } label: {
+                            Label(
+                                AppLanguage.stored.isChinese ? "保存" : "Save",
+                                systemImage: "checkmark.circle.fill"
+                            )
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
+                            .background(Capsule().fill(VelaTheme.accent))
+                        }
+
+                        Button {
+                            rejectProposal(proposal)
+                        } label: {
+                            Label(
+                                AppLanguage.stored.isChinese ? "忽略" : "Ignore",
+                                systemImage: "xmark.circle"
+                            )
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(VelaTheme.secondaryText)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
+                            .background(Capsule().fill(VelaTheme.elevatedSurface))
+                        }
+                    }
+                }
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(VelaTheme.elevatedSurface)
+                )
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(VelaTheme.surface)
+        )
+    }
+
+    private func memoryTypeBadge(_ type: MemoryType) -> String {
+        switch type {
+        case .fact: return AppLanguage.stored.isChinese ? "事实" : "Fact"
+        case .observation: return AppLanguage.stored.isChinese ? "观察" : "Observation"
+        case .hypothesis: return AppLanguage.stored.isChinese ? "推测" : "Hypothesis"
+        case .strategy: return AppLanguage.stored.isChinese ? "策略" : "Strategy"
+        case .preference: return AppLanguage.stored.isChinese ? "偏好" : "Preference"
+        case .constraint: return AppLanguage.stored.isChinese ? "约束" : "Constraint"
+        case .goalChange: return AppLanguage.stored.isChinese ? "目标变更" : "Goal Change"
+        case .baselineUpdate: return AppLanguage.stored.isChinese ? "基线更新" : "Baseline Update"
+        }
+    }
+
+    private func confidenceLabel(_ confidence: Double) -> String {
+        let pct = Int((confidence * 100).rounded())
+        if confidence >= 0.9 { return "High · \(pct)%" }
+        if confidence >= 0.7 { return "Medium · \(pct)%" }
+        return "Low · \(pct)%"
+    }
+
+    private func confirmProposal(_ proposal: MemoryEventRecord) {
+        do {
+            let ledger = MemoryLedger(modelContext: modelContext)
+            try ledger.confirmProposal(proposal.id)
+            // Refresh wiki documents
+            let allDocs = WikiFileService.loadAllDocuments()
+            documents = allDocs.filter { $0.filename != "baselines.md" }
+            baselineDoc = allDocs.first { $0.filename == "baselines.md" && $0.content.count > 100 }
+        } catch {
+            print("Failed to confirm proposal: \(error)")
+        }
+    }
+
+    private func rejectProposal(_ proposal: MemoryEventRecord) {
+        do {
+            let ledger = MemoryLedger(modelContext: modelContext)
+            try ledger.rejectProposal(proposal.id)
+        } catch {
+            print("Failed to reject proposal: \(error)")
         }
     }
 }

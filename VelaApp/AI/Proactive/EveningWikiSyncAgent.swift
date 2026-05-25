@@ -53,10 +53,21 @@ final class EveningWikiSyncAgent: ObservableObject {
         isRunning = true
         defer { isRunning = false }
 
+        let runRecord = AgentRunRecord(
+            agentName: "evening_wiki_sync",
+            startedAt: Date(),
+            status: .running,
+            reason: force ? "forced" : "scheduled",
+            inputContextHash: "",
+            outputSummary: ""
+        )
+        modelContext.insert(runRecord)
+        try? modelContext.save()
+
         do {
             let wiki = WikiFileService.loadDictionary()
 
-            let context = contextBuilder.build(
+            let (context, contextMeta) = contextBuilder.build(
                 dashboard: dashboard,
                 journalEntries: [],
                 historicalReports: [],
@@ -102,10 +113,23 @@ final class EveningWikiSyncAgent: ObservableObject {
             lastRunDate = Date()
             logger.info("Evening wiki sync complete. Updated \(appliedFiles.count) files.")
 
+            // Update run record
+            runRecord.endedAt = Date()
+            runRecord.status = AgentRunStatus.success.rawValue
+            runRecord.inputContextHash = contextMeta.hash
+            runRecord.outputSummary = String(parsed.displayText.prefix(300))
+            let toolCallsInfo: [[String: String]] = appliedFiles.map { ["file": $0, "action": "update_wiki"] }
+            runRecord.toolCallsJSON = (try? String(data: JSONEncoder().encode(toolCallsInfo), encoding: .utf8)) ?? "[]"
+            try? modelContext.save()
+
             // Reschedule tomorrow's background refresh
             scheduleBackgroundRefresh()
         } catch {
             logger.error("Evening wiki sync failed: \(error.localizedDescription)")
+            runRecord.endedAt = Date()
+            runRecord.status = AgentRunStatus.failed.rawValue
+            runRecord.errorMessage = error.localizedDescription
+            try? modelContext.save()
         }
     }
 

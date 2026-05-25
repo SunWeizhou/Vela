@@ -89,4 +89,16 @@ private struct EmptyHealthQueryService: HealthQueryService {
     func bodyMetrics(in range: DateRangeQuery) async throws -> BodyMetricsSummary {
         BodyMetricsSummary()
     }
+
+    func recentWorkouts(limit: Int) async throws -> [WorkoutSummary] {
+        []
+    }
+
+    func heartRateSamples(start: Date, end: Date) async throws -> [HeartRateSample] {
+        []
+    }
+
+    func workoutRoute(workoutId: UUID) async throws -> [RouteCoordinate] {
+        []
+    }
 }

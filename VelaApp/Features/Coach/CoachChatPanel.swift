@@ -402,7 +402,7 @@ final class CoachChatVM: ObservableObject {
             let provider = DeepSeekProvider(apiKey: apiKey)
             let toolRegistry = ToolRegistry(tools: [
                 WebSearchTool(),
-                UpdateWikiTool(),
+                UpdateWikiTool(modelContext: modelContext),
                 HealthDataTool(),
                 JournalCorrelationTool(),
                 FoodLogTool(modelContext: modelContext),
@@ -440,11 +440,12 @@ final class CoachChatVM: ObservableObject {
                         "🔧 正在调用工具: \(toolNames)..."
                     )
 
-                    // Append assistant message with tool_calls
+                    // Append assistant message with tool_calls and reasoning_content
                     agentMessages.append(ChatMessage(
                         role: .assistant,
-                        content: "",
-                        toolCalls: toolCalls
+                        content: response.content,
+                        toolCalls: toolCalls,
+                        reasoningContent: response.reasoningContent
                     ))
 
                     // Execute each tool and append results
@@ -745,7 +746,7 @@ final class CoachChatVM: ObservableObject {
                 sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
             )
         )) ?? []
-        let context = contextBuilder.build(
+        let (context, contextMeta) = contextBuilder.build(
             dashboard: dashboard,
             journalEntries: journalEntries.prefix(12).map { JournalContextEntry(tags: $0.tags, text: $0.note) },
             historicalReports: savedReports.filter { $0.type != "coach_thread" }.prefix(6).map { record in
@@ -862,7 +863,7 @@ final class CoachChatVM: ObservableObject {
            - **严禁主动展示长篇的今日状态概览、睡眠报告或数据依据，除非用户明确要求**（例如用户说“分析今天的数据”、“今天数据怎么样”、“今日总结”、“身体怎么样”等）。
            - 如果用户只是说简单的问候语（如“你好”、“在吗”、“Hi”）、进行随性闲聊或提出非常具体细微的小问题，你必须**以极简、温暖且高度聚焦的方式进行回复（限制在 2-3 句话以内）**。简单打个招呼，温柔提及“我已为你同步了今日的 30 多项生理指标”，然后主动询问他“今天想重点关注哪个方面？（例如优化睡眠、规划今日训练负荷、或是管理能量消耗）”。
            - **特定问题精准聚焦法则（Concise & Focus Rule）**：当用户向你询问一个非常明确且具体的健康或运动问题（例如：'今天适合训练吗？'，'如何改善我的深睡眠？'），你**必须**紧扣用户问题的核心，仅提取并交叉分析与该问题强相关的生理指标（如：问训练则只看恢复、能量、Strain 和 TSB；问深睡眠则只看睡眠分期与睡前暴露因子）。**严禁主动展示或罗列与问题无关的其它指标**（如问训练时不要主动总结睡眠微觉醒噪音或步行不对称性等），保持回复的高内聚与简洁性。
-           - **换行与分段规范（Double Newline Spacing Rule）**：为了提供极佳的排版视觉效果，当你需要进行换行或分段时，你**必须**使用连续的两个换行符 `\n\n` 来分隔不同的段落或条目。避免使用单个换行符以防止排版在界面中塌陷。
+           - **换行与分段规范（Double Newline Spacing Rule）**：为了提供极佳的排版视觉效果，当你需要进行换行或分段时，你**必须**使用连续的两个换行符来分隔不同的段落或条目。具体来说，在每段结束后加一个空行（即连续按两次回车）。避免使用单个换行符以防止排版在界面中塌陷。
            - 只有当用户确实在进行深度的健康咨询、学术讨论或明确要求分析数据时，才提供结构严密、多维展开的学术级咨询报告，多使用加粗、列表与 Markdown 排版，提升专业阅读体验。
 
         ## 本周对比分析 (Weekly Trend Comparison)
@@ -984,7 +985,7 @@ final class CoachChatVM: ObservableObject {
            - **NEVER spontaneously dump a long daily status overview, sleep analysis, or metric breakdown unless the user explicitly requests it** (e.g. saying "how is my data today?", "give me a daily summary", or "analyze my sleep").
            - If the user says a simple greeting (e.g. "Hi", "Hello", "Hola"), holds a casual chat, or asks a highly specific quick question, you MUST **reply in a highly concise, warm, and focused manner (limit to 2-3 sentences max)**. Acknowledge their greeting, briefly mention "I have loaded your 30+ health metrics in the background," and ask what they would like to focus on today (e.g. sleeping better, scheduling a workout load, or managing energy levels).
            - **Concise & Focus Rule**: When the user asks a highly specific and concrete health or training question (e.g., 'Is it suitable for me to train today?', 'How can I improve my deep sleep?'), you **must** focus strictly on the core of the user's question, extracting and analyzing only the physiological metrics highly relevant to that question. **Never spontaneously list, summarize, or detail unrelated metrics** (e.g., when asked about training, do not discuss environmental noise during sleep or walking asymmetry). Keep the response highly cohesive and concise.
-           - **Double Newline Spacing Rule**: To ensure premium readability and layout, when you need to write line breaks or paragraphs, you **must** use two consecutive newline characters `\n\n` to separate different paragraphs or bullet points. Avoid using a single newline character to prevent collapsing of formatting in the UI.
+           - **Double Newline Spacing Rule**: To ensure premium readability and layout, when you need to write line breaks or paragraphs, you **must** separate paragraphs with a blank line (i.e., press Enter twice). Use double newlines between paragraphs and single newlines between lines within the same paragraph. Avoid single newlines for paragraph separation as they collapse in the UI.
            - Reserve comprehensive multi-dimensional analytical reports with beautiful markdown tables and lists exclusively for deep health inquiries or explicit analysis requests.
 
         ## Weekly Trend Comparison

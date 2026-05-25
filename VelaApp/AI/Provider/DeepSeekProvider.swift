@@ -38,7 +38,8 @@ struct DeepSeekProvider: LLMProvider {
                     toolCalls: msg.toolCalls?.map { tc in
                         DeepSeekChatRequest.ToolCall(id: tc.id, type: "function", function: .init(name: tc.name, arguments: tc.arguments))
                     },
-                    toolCallId: msg.toolCallId
+                    toolCallId: msg.toolCallId,
+                    reasoningContent: msg.reasoningContent
                 )
             },
             temperature: 0.4,
@@ -60,6 +61,7 @@ struct DeepSeekProvider: LLMProvider {
         let decoded = try JSONDecoder().decode(DeepSeekChatResponse.self, from: data)
         let choice = decoded.choices.first
         let content = choice?.message.content ?? ""
+        let reasoningContent = choice?.message.reasoningContent
 
         var toolCalls: [ToolCall]? = nil
         if let rawCalls = choice?.message.toolCalls, !rawCalls.isEmpty {
@@ -68,7 +70,7 @@ struct DeepSeekProvider: LLMProvider {
             }
         }
 
-        return LLMResponse(content: content, toolCalls: toolCalls)
+        return LLMResponse(content: content, toolCalls: toolCalls, reasoningContent: reasoningContent)
     }
 
     func streamChat(messages: [ChatMessage]) -> AsyncThrowingStream<String, Error> {
@@ -148,11 +150,13 @@ private struct DeepSeekChatRequest: Encodable {
         var content: String?
         var toolCalls: [ToolCall]?
         var toolCallId: String?
+        var reasoningContent: String?
 
         enum CodingKeys: String, CodingKey {
             case role, content
             case toolCalls = "tool_calls"
             case toolCallId = "tool_call_id"
+            case reasoningContent = "reasoning_content"
         }
 
         func encode(to encoder: Encoder) throws {
@@ -161,6 +165,7 @@ private struct DeepSeekChatRequest: Encodable {
             try container.encodeIfPresent(content, forKey: .content)
             try container.encodeIfPresent(toolCalls, forKey: .toolCalls)
             try container.encodeIfPresent(toolCallId, forKey: .toolCallId)
+            try container.encodeIfPresent(reasoningContent, forKey: .reasoningContent)
         }
     }
 
@@ -227,10 +232,12 @@ private struct DeepSeekChatResponse: Decodable {
     struct ResponseMessage: Decodable {
         var content: String?
         var toolCalls: [ResponseToolCall]?
+        var reasoningContent: String?
 
         enum CodingKeys: String, CodingKey {
             case content
             case toolCalls = "tool_calls"
+            case reasoningContent = "reasoning_content"
         }
     }
 
