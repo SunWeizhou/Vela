@@ -23,6 +23,13 @@
 		0B1000010000000000000001 /* VelaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001010000000000000001 /* VelaApp.swift */; };
 		0B1000020000000000000002 /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001020000000000000002 /* AppCoordinator.swift */; };
 		0B1000030000000000000003 /* VelaRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001030000000000000003 /* VelaRootView.swift */; };
+		0B2000010000000000000001 /* VelaMinimalComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B2001010000000000000001 /* VelaMinimalComponents.swift */; };
+		0B2000020000000000000002 /* VelaMinimalShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B2001020000000000000002 /* VelaMinimalShell.swift */; };
+		0B2000030000000000000003 /* VelaMinimalTodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B2001030000000000000003 /* VelaMinimalTodayView.swift */; };
+		0B2000040000000000000004 /* VelaMinimalVitalsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B2001040000000000000004 /* VelaMinimalVitalsView.swift */; };
+		0B2000050000000000000005 /* VelaMinimalFitnessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B2001050000000000000005 /* VelaMinimalFitnessView.swift */; };
+		0B2000060000000000000006 /* VelaMinimalJournalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B2001060000000000000006 /* VelaMinimalJournalView.swift */; };
+		0B2000070000000000000007 /* VelaMinimalCoachView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B2001070000000000000007 /* VelaMinimalCoachView.swift */; };
 		0B1000040000000000000004 /* VelaAppMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001040000000000000004 /* VelaAppMetadata.swift */; };
 		0B1000050000000000000005 /* AppDocumentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001050000000000000005 /* AppDocumentation.swift */; };
 		0B1000060000000000000006 /* VelaTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001060000000000000006 /* VelaTheme.swift */; };
@@ -155,6 +162,13 @@
 		0B1001010000000000000001 /* VelaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/VelaApp.swift; sourceTree = "<group>"; };
 		0B1001020000000000000002 /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/AppCoordinator.swift; sourceTree = "<group>"; };
 		0B1001030000000000000003 /* VelaRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/VelaRootView.swift; sourceTree = "<group>"; };
+		0B2001010000000000000001 /* VelaMinimalComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/VelaMinimalComponents.swift; sourceTree = "<group>"; };
+		0B2001020000000000000002 /* VelaMinimalShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/VelaMinimalShell.swift; sourceTree = "<group>"; };
+		0B2001030000000000000003 /* VelaMinimalTodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/VelaMinimalTodayView.swift; sourceTree = "<group>"; };
+		0B2001040000000000000004 /* VelaMinimalVitalsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/VelaMinimalVitalsView.swift; sourceTree = "<group>"; };
+		0B2001050000000000000005 /* VelaMinimalFitnessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/VelaMinimalFitnessView.swift; sourceTree = "<group>"; };
+		0B2001060000000000000006 /* VelaMinimalJournalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/VelaMinimalJournalView.swift; sourceTree = "<group>"; };
+		0B2001070000000000000007 /* VelaMinimalCoachView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/VelaMinimalCoachView.swift; sourceTree = "<group>"; };
 		0B1001040000000000000004 /* VelaAppMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Constants/VelaAppMetadata.swift; sourceTree = "<group>"; };
 		0B1001050000000000000005 /* AppDocumentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Constants/AppDocumentation.swift; sourceTree = "<group>"; };
 		0B1001060000000000000006 /* VelaTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Theme/VelaTheme.swift; sourceTree = "<group>"; };
@@ -333,6 +347,13 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 				0B1001060000000000000006 /* VelaTheme.swift */,
 				0B21D1010000000000000001 /* VelaDesignSystem.swift */,
 				0B1001070000000000000007 /* VelaBackground.swift */,
+				0B2001010000000000000001 /* VelaMinimalComponents.swift */,
+				0B2001020000000000000002 /* VelaMinimalShell.swift */,
+				0B2001030000000000000003 /* VelaMinimalTodayView.swift */,
+				0B2001040000000000000004 /* VelaMinimalVitalsView.swift */,
+				0B2001050000000000000005 /* VelaMinimalFitnessView.swift */,
+				0B2001060000000000000006 /* VelaMinimalJournalView.swift */,
+				0B2001070000000000000007 /* VelaMinimalCoachView.swift */,
 				0B1001080000000000000008 /* HealthMetricCard.swift */,
 				0B1001090000000000000009 /* ScoreRingView.swift */,
 				0B1001590000000000000059 /* DateNavigationBar.swift */,
@@ -556,6 +577,13 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 				0B1000060000000000000006 /* VelaTheme.swift in Sources */,
 				0B21D0010000000000000001 /* VelaDesignSystem.swift in Sources */,
 				0B1000070000000000000007 /* VelaBackground.swift in Sources */,
+				0B2000010000000000000001 /* VelaMinimalComponents.swift in Sources */,
+				0B2000020000000000000002 /* VelaMinimalShell.swift in Sources */,
+				0B2000030000000000000003 /* VelaMinimalTodayView.swift in Sources */,
+				0B2000040000000000000004 /* VelaMinimalVitalsView.swift in Sources */,
+				0B2000050000000000000005 /* VelaMinimalFitnessView.swift in Sources */,
+				0B2000060000000000000006 /* VelaMinimalJournalView.swift in Sources */,
+				0B2000070000000000000007 /* VelaMinimalCoachView.swift in Sources */,
 				0B1000080000000000000008 /* HealthMetricCard.swift in Sources */,
 				0B1000090000000000000009 /* ScoreRingView.swift in Sources */,
 				0B1000100000000000000010 /* SectionHeader.swift in Sources */,

@@ -2,15 +2,24 @@ import SwiftUI
 
 struct VelaBackground: View {
     var body: some View {
-        LinearGradient(
-            colors: [
-                VelaTheme.background,
-                VelaTheme.backgroundSecondary,
-                VelaTheme.backgroundTertiary
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
+        ZStack(alignment: .top) {
+            LinearGradient(
+                colors: [
+                    VelaTheme.background,
+                    VelaTheme.backgroundSecondary,
+                    VelaTheme.backgroundTertiary
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            Circle()
+                .fill(VelaTheme.accent.opacity(0.055))
+                .frame(width: 420, height: 420)
+                .blur(radius: 72)
+                .offset(y: -260)
+                .allowsHitTesting(false)
+        }
         .ignoresSafeArea()
     }
 }
@@ -24,10 +33,12 @@ struct CardSurface: ViewModifier {
             .background(
                 ZStack {
                     RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard, style: .continuous)
-                        .fill(VelaTheme.surface)
-                        .shadow(color: VelaTheme.cardShadowColor, radius: 8, y: 3)
+                        .fill(.thinMaterial)
+                        .shadow(color: VelaTheme.cardShadowColor, radius: 18, y: 8)
                     RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard, style: .continuous)
-                        .stroke(VelaTheme.stroke, lineWidth: 0.85)
+                        .fill(VelaTheme.surface.opacity(0.35))
+                    RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard, style: .continuous)
+                        .stroke(VelaTheme.stroke, lineWidth: 0.8)
                 }
             )
     }
@@ -42,20 +53,12 @@ struct HeroCardSurface: ViewModifier {
             .background(
                 ZStack {
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    VelaTheme.elevatedSurface,
-                                    accentColor.opacity(0.085),
-                                    VelaTheme.elevatedSurface.opacity(0.16)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .shadow(color: VelaTheme.cardShadowColor, radius: 14, y: 5)
+                        .fill(.thinMaterial)
+                        .shadow(color: VelaTheme.cardShadowColor, radius: 22, y: 10)
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(VelaTheme.stroke, lineWidth: 0.9)
+                        .fill(accentColor.opacity(0.055))
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(VelaTheme.stroke, lineWidth: 0.85)
                 }
             )
     }
