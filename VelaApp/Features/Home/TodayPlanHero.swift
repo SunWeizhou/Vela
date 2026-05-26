@@ -22,30 +22,31 @@ struct TodayPlanHero: View {
 
     private var cockpitHeader: some View {
         VelaHeroSurface(tint: stateColor) {
-            VStack(alignment: .leading, spacing: 18) {
-                HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .center, spacing: 18) {
+                VStack(spacing: 8) {
+                    Text(AppLanguage.stored.isChinese ? "今日身体状态" : "Today's Body State")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(VelaTheme.mutedText)
+                        .textCase(.uppercase)
+                        .tracking(1.4)
+
                     readinessRing
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(AppLanguage.stored.isChinese ? "今日身体状态" : "Today's Body State")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(VelaTheme.mutedText)
-                            .textCase(.uppercase)
-
-                        HStack(spacing: 8) {
-                            Text(plan.state.label)
-                                .font(.title2.weight(.bold))
-                                .foregroundStyle(VelaTheme.primaryText)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.78)
-                            VelaStatusBadge(label: fatigueLabel, systemImage: "waveform.path.ecg", tint: stateColor)
-                        }
-
-                        Text(readinessNarrative)
-                            .font(.subheadline)
-                            .foregroundStyle(VelaTheme.secondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 8) {
+                        Text(plan.state.label)
+                            .font(.title2.weight(.semibold))
+                            .foregroundStyle(VelaTheme.primaryText)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.78)
+                        VelaStatusBadge(label: fatigueLabel, systemImage: "waveform.path.ecg", tint: stateColor)
                     }
+
+                    Text(readinessNarrative)
+                        .font(.title3.weight(.medium))
+                        .foregroundStyle(VelaTheme.primaryText)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 4)
                 }
 
                 if !riskFlags.isEmpty {
@@ -60,6 +61,8 @@ struct TodayPlanHero: View {
                             }
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 2)
                 }
             }
         }
@@ -87,7 +90,7 @@ struct TodayPlanHero: View {
                     .foregroundStyle(VelaTheme.mutedText)
             }
         }
-        .frame(width: 92, height: 92)
+        .frame(width: 112, height: 112)
         .accessibilityLabel(AppLanguage.stored.isChinese ? "今日准备度 \(readinessScoreText)" : "Today's readiness \(readinessScoreText)")
     }
 
@@ -201,29 +204,42 @@ struct TodayPlanHero: View {
             if isExpanded {
                 VStack(alignment: .leading, spacing: 10) {
                     MarkdownText(markdown: action.detailMarkdown, font: .caption, color: VelaTheme.secondaryText)
-
-                    if hasReasoning {
-                        Button {
-                            onWhyThisTap(action)
-                        } label: {
-                            Label(
-                                AppLanguage.stored.isChinese ? "查看判断依据" : "Why This?",
-                                systemImage: "info.circle"
-                            )
-                            .font(.caption2)
-                            .foregroundStyle(VelaTheme.accent)
-                        }
-                        .padding(.top, 4)
-                    }
                 }
                 .padding(.horizontal, 14)
-                .padding(.bottom, 14)
+                .padding(.bottom, hasReasoning ? 6 : 14)
+            }
+
+            if hasReasoning {
+                Button {
+                    onWhyThisTap(action)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "point.3.connected.trianglepath.dotted")
+                            .font(.caption2.weight(.semibold))
+                        Text(AppLanguage.stored.isChinese ? "查看判断依据" : "Why This?")
+                            .font(.caption.weight(.semibold))
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.bold))
+                    }
+                    .foregroundStyle(VelaTheme.accent)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(VelaTheme.accent.opacity(0.08))
+                }
+                .buttonStyle(.plain)
             }
         }
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(VelaTheme.elevatedSurface)
         )
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                .fill(hasReasoning ? VelaTheme.accent : VelaTheme.stroke)
+                .frame(width: 3)
+                .padding(.vertical, 12)
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(hasReasoning ? VelaTheme.accent.opacity(0.20) : VelaTheme.stroke, lineWidth: 0.7)

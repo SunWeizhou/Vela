@@ -146,23 +146,27 @@ struct VelaHeroSurface<Content: View>: View {
             .padding(VelaSpacing.lg)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: VelaRadius.hero, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                VelaTheme.elevatedSurface,
-                                tint.opacity(0.10),
-                                VelaTheme.surface
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+                ZStack {
+                    RoundedRectangle(cornerRadius: VelaRadius.hero, style: .continuous)
+                        .fill(VelaTheme.elevatedSurface)
+                    RoundedRectangle(cornerRadius: VelaRadius.hero, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    tint.opacity(0.085),
+                                    VelaTheme.elevatedSurface.opacity(0.16),
+                                    Color.clear
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    )
-                    .shadow(color: VelaTheme.cardShadowColor, radius: 24, y: 10)
+                }
+                .shadow(color: VelaTheme.cardShadowColor, radius: 14, y: 5)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: VelaRadius.hero, style: .continuous)
-                    .stroke(VelaTheme.stroke, lineWidth: 0.8)
+                    .stroke(VelaTheme.stroke, lineWidth: 0.9)
             )
     }
 }
@@ -179,10 +183,11 @@ struct VelaGlassCard<Content: View>: View {
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(VelaTheme.surface)
+                    .shadow(color: VelaTheme.cardShadowColor, radius: 8, y: 3)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(VelaTheme.stroke, lineWidth: 0.7)
+                    .stroke(VelaTheme.stroke, lineWidth: 0.85)
             )
     }
 }
@@ -218,6 +223,7 @@ struct VelaMetricPill: View {
         .padding(.horizontal, VelaSpacing.sm)
         .padding(.vertical, VelaSpacing.xs)
         .background(Capsule(style: .continuous).fill(tint.opacity(0.12)))
+        .overlay(Capsule(style: .continuous).stroke(tint.opacity(0.18), lineWidth: 0.7))
         .accessibilityElement(children: .combine)
     }
 }
@@ -243,6 +249,7 @@ struct VelaStatusBadge: View {
         .padding(.horizontal, VelaSpacing.xs)
         .padding(.vertical, 5)
         .background(Capsule(style: .continuous).fill(tint.opacity(0.12)))
+        .overlay(Capsule(style: .continuous).stroke(tint.opacity(0.18), lineWidth: 0.7))
     }
 }
 
@@ -326,10 +333,11 @@ struct VelaPrimaryActionButton: View {
         Button(action: action) {
             Label(title, systemImage: systemImage ?? "checkmark")
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color.black)
+                .foregroundStyle(VelaTheme.inverseText)
                 .frame(maxWidth: .infinity, minHeight: 44)
         }
         .background(Capsule(style: .continuous).fill(VelaTheme.accent))
+        .shadow(color: VelaTheme.accent.opacity(0.18), radius: 8, y: 3)
         .buttonStyle(.plain)
     }
 }
@@ -347,7 +355,7 @@ struct VelaSecondaryActionButton: View {
                 .frame(maxWidth: .infinity, minHeight: 44)
         }
         .background(Capsule(style: .continuous).fill(VelaTheme.elevatedSurface))
-        .overlay(Capsule(style: .continuous).stroke(VelaTheme.stroke, lineWidth: 0.7))
+        .overlay(Capsule(style: .continuous).stroke(VelaTheme.stroke, lineWidth: 0.85))
         .buttonStyle(.plain)
     }
 }
@@ -376,6 +384,7 @@ struct VelaInlineAlert: View {
         }
         .padding(VelaSpacing.sm)
         .background(RoundedRectangle(cornerRadius: VelaRadius.row, style: .continuous).fill(tint.opacity(0.10)))
+        .overlay(RoundedRectangle(cornerRadius: VelaRadius.row, style: .continuous).stroke(tint.opacity(0.14), lineWidth: 0.7))
     }
 }
 

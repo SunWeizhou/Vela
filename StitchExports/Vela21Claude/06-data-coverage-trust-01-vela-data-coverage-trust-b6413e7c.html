@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>Vela | Data Coverage</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        vela: {
+                            paper: "#F7F1E6",
+                            parchment: "#EFE6D8",
+                            surface: "#FFFDF8",
+                            elevated: "#FBF7EE",
+                            border: "#DED2C1",
+                            ink: "#2B241B",
+                            inkSecondary: "#665B4B",
+                            inkMuted: "#918576",
+                            clay: "#B76445",
+                            sage: "#5F8C73",
+                            amber: "#B9842E",
+                            rose: "#A95665",
+                            indigo: "#6F73A8"
+                        }
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                    fontFamily: {
+                        headline: ["Public Sans", "sans-serif"],
+                        display: ["Public Sans", "sans-serif"],
+                        body: ["Public Sans", "sans-serif"],
+                        label: ["Public Sans", "sans-serif"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #F7F1E6;
+            color: #2B241B;
+            font-family: 'Public Sans', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .gauge-svg {
+            transform: rotate(-90deg);
+        }
+        .glass-panel {
+            background: rgba(255, 253, 248, 0.7);
+            backdrop-filter: blur(8px);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="w-full top-0 sticky z-50 bg-[#F7F1E6] dark:bg-[#17130F] border-b border-[#DED2C1] dark:border-[#40362D] flex items-center justify-between px-5 h-16">
+<div class="flex items-center gap-4">
+<button class="active:scale-95 transition-transform text-[#2B241B] dark:text-[#F4EBDD]">
+<span class="material-symbols-outlined">arrow_back_ios</span>
+</button>
+<h1 class="font-headline text-lg font-semibold tracking-tight text-[#2B241B] dark:text-[#F4EBDD]">
+                Data Coverage <span class="text-vela-inkMuted font-normal ml-1">数据覆盖</span>
+</h1>
+</div>
+<button class="active:scale-95 transition-transform text-[#2B241B] dark:text-[#F4EBDD]">
+<span class="material-symbols-outlined">info</span>
+</button>
+</header>
+<main class="max-w-2xl mx-auto px-5 pt-8 space-y-8">
+<!-- Hero Section: Overall Reliability -->
+<section class="relative bg-vela-surface border border-vela-border rounded-[26px] p-8 overflow-hidden shadow-sm">
+<div class="flex flex-col md:flex-row items-center gap-8 relative z-10">
+<div class="relative flex items-center justify-center w-32 h-32">
+<svg class="gauge-svg w-32 h-32">
+<circle class="text-vela-border" cx="64" cy="64" fill="transparent" r="58" stroke="currentColor" stroke-width="8"></circle>
+<circle class="text-vela-sage" cx="64" cy="64" fill="transparent" r="58" stroke="currentColor" stroke-dasharray="364.4" stroke-dashoffset="21.8" stroke-linecap="round" stroke-width="8"></circle>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="text-3xl font-bold font-mono tracking-tighter">94%</span>
+<span class="text-[10px] uppercase tracking-widest text-vela-inkMuted font-bold">Reliable</span>
+</div>
+</div>
+<div class="flex-1 space-y-2 text-center md:text-left">
+<h2 class="text-2xl font-bold tracking-tight">Overall Reliability <span class="block md:inline text-vela-inkMuted text-lg font-medium">总可靠性</span></h2>
+<p class="text-vela-inkSecondary leading-relaxed">
+                        High Confidence: <span class="text-vela-sage font-semibold">12 of 14</span> signals are fresh and reporting valid ranges. Your body state modeling is currently highly accurate.
+                    </p>
+</div>
+</div>
+<div class="absolute -right-8 -bottom-8 w-48 h-48 bg-vela-sage/5 rounded-full blur-3xl"></div>
+</section>
+<!-- Signal Quality Groups -->
+<section class="space-y-4">
+<div class="flex items-end justify-between px-1">
+<h3 class="text-sm font-bold uppercase tracking-widest text-vela-inkMuted">Vital Signals <span class="font-normal normal-case">生命体征</span></h3>
+<span class="text-[11px] font-medium text-vela-sage flex items-center gap-1">
+<span class="w-1.5 h-1.5 bg-vela-sage rounded-full animate-pulse"></span>
+                    Systems Nominal
+                </span>
+</div>
+<div class="grid grid-cols-1 gap-3">
+<!-- Heart Rate -->
+<div class="bg-vela-surface border border-vela-border rounded-xl p-4 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-vela-parchment flex items-center justify-center text-vela-rose">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">favorite</span>
+</div>
+<div>
+<p class="font-semibold">Heart Rate <span class="text-vela-inkMuted font-normal text-xs ml-1">心率</span></p>
+<p class="text-xs text-vela-inkMuted">1,440 samples today</p>
+</div>
+</div>
+<div class="text-right">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-vela-sage/10 text-vela-sage border border-vela-sage/20 uppercase tracking-tighter">Live</span>
+<p class="text-[10px] text-vela-inkMuted mt-1">2m ago</p>
+</div>
+</div>
+<!-- HRV -->
+<div class="bg-vela-surface border border-vela-border rounded-xl p-4 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-vela-parchment flex items-center justify-center text-vela-indigo">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">monitoring</span>
+</div>
+<div>
+<p class="font-semibold">HRV <span class="text-vela-inkMuted font-normal text-xs ml-1">心率变异性</span></p>
+<p class="text-xs text-vela-inkMuted">52 valid SDNN windows</p>
+</div>
+</div>
+<div class="text-right">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-vela-sage/10 text-vela-sage border border-vela-sage/20 uppercase tracking-tighter">Live</span>
+<p class="text-[10px] text-vela-inkMuted mt-1">14m ago</p>
+</div>
+</div>
+<!-- Respiratory -->
+<div class="bg-vela-surface border border-vela-border rounded-xl p-4 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-vela-parchment flex items-center justify-center text-vela-sage">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">air</span>
+</div>
+<div>
+<p class="font-semibold">Respiratory Rate <span class="text-vela-inkMuted font-normal text-xs ml-1">呼吸频率</span></p>
+<p class="text-xs text-vela-inkMuted">Background sleep capture</p>
+</div>
+</div>
+<div class="text-right">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-vela-sage/10 text-vela-sage border border-vela-sage/20 uppercase tracking-tighter">Live</span>
+<p class="text-[10px] text-vela-inkMuted mt-1">8h ago (Sleep)</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Contextual Signals -->
+<section class="space-y-4">
+<h3 class="text-sm font-bold uppercase tracking-widest text-vela-inkMuted px-1">Contextual Signals <span class="font-normal normal-case">环境与活动</span></h3>
+<div class="grid grid-cols-2 gap-3">
+<div class="bg-vela-surface border border-vela-border rounded-xl p-4 space-y-3">
+<div class="flex justify-between items-start">
+<span class="material-symbols-outlined text-vela-indigo">bedtime</span>
+<span class="text-[10px] font-bold text-vela-sage uppercase">Fresh</span>
+</div>
+<div>
+<p class="text-sm font-semibold">Sleep</p>
+<div class="w-full bg-vela-parchment h-1 rounded-full mt-2 overflow-hidden">
+<div class="bg-vela-sage h-full w-[90%]"></div>
+</div>
+</div>
+</div>
+<div class="bg-vela-surface border border-vela-border rounded-xl p-4 space-y-3">
+<div class="flex justify-between items-start">
+<span class="material-symbols-outlined text-vela-clay">fitness_center</span>
+<span class="text-[10px] font-bold text-vela-amber uppercase">Stale</span>
+</div>
+<div>
+<p class="text-sm font-semibold">Workouts</p>
+<div class="w-full bg-vela-parchment h-1 rounded-full mt-2 overflow-hidden">
+<div class="bg-vela-amber h-full w-[40%]"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Affected Judgments -->
+<section class="space-y-3">
+<h3 class="text-sm font-bold uppercase tracking-widest text-vela-inkMuted px-1">Impact Analysis <span class="font-normal normal-case">影响分析</span></h3>
+<div class="bg-vela-parchment/50 border border-vela-border rounded-xl p-5 space-y-4">
+<p class="text-xs font-medium text-vela-inkSecondary">Recent data gaps are currently impacting the following interpretations:</p>
+<div class="flex flex-wrap gap-2">
+<div class="flex items-center gap-2 px-3 py-1.5 bg-vela-rose/10 border border-vela-rose/20 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-vela-rose"></span>
+<span class="text-xs font-semibold text-vela-rose">Strain Ceiling</span>
+</div>
+<div class="flex items-center gap-2 px-3 py-1.5 bg-vela-amber/10 border border-vela-amber/20 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-vela-amber"></span>
+<span class="text-xs font-semibold text-vela-amber">Recovery Score</span>
+</div>
+<div class="flex items-center gap-2 px-3 py-1.5 bg-vela-inkMuted/10 border border-vela-inkMuted/20 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-vela-inkMuted"></span>
+<span class="text-xs font-semibold text-vela-inkMuted">Metabolic Trend</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Missing Data Explanation & Permission -->
+<section class="space-y-4">
+<div class="bg-vela-elevated border border-vela-border border-dashed rounded-xl p-5 flex gap-4">
+<div class="text-vela-amber">
+<span class="material-symbols-outlined">warning</span>
+</div>
+<div class="space-y-1">
+<h4 class="text-sm font-bold">Incomplete Sleep Analysis</h4>
+<p class="text-sm text-vela-inkSecondary leading-snug">
+                        It looks like your Apple Watch wasn't worn or was in Power Reserve mode during your last sleep cycle. Vela needs consistent HRV and temperature data to adjust your Training Protocol.
+                    </p>
+</div>
+</div>
+<button class="w-full bg-vela-clay text-white font-bold py-4 rounded-xl active:scale-[0.98] transition-all shadow-sm flex items-center justify-center gap-2">
+<span>Review Permissions</span>
+<span class="material-symbols-outlined text-sm">open_in_new</span>
+</button>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center pt-2 pb-6 px-4 bg-[#F7F1E6]/90 dark:bg-[#17130F]/90 backdrop-blur-md border-t border-[#DED2C1] dark:border-[#40362D]">
+<a class="flex flex-col items-center justify-center text-[#918576] dark:text-[#9E907F] hover:text-[#2B241B] dark:hover:text-[#F4EBDD] transition-colors active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label text-[10px] font-medium mt-1">Today</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#B76445] dark:text-[#D08462] active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">analytics</span>
+<span class="font-label text-[10px] font-medium mt-1">Insights</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#918576] dark:text-[#9E907F] hover:text-[#2B241B] dark:hover:text-[#F4EBDD] transition-colors active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined">psychology</span>
+<span class="font-label text-[10px] font-medium mt-1">Memory</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#918576] dark:text-[#9E907F] hover:text-[#2B241B] dark:hover:text-[#F4EBDD] transition-colors active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label text-[10px] font-medium mt-1">Settings</span>
+</a>
+</nav>
+<!-- Visual Polish: Soft Glows -->
+<div class="fixed top-1/4 -left-20 w-64 h-64 bg-vela-clay/5 rounded-full blur-[100px] pointer-events-none"></div>
+<div class="fixed bottom-1/4 -right-20 w-64 h-64 bg-vela-indigo/5 rounded-full blur-[100px] pointer-events-none"></div>
+<script>
+        // Simple micro-interactions
+        document.querySelectorAll('button, a').forEach(el => {
+            el.addEventListener('click', () => {
+                if (window.navigator.vibrate) {
+                    window.navigator.vibrate(10);
+                }
+            });
+        });
+
+        // Theme sync placeholder (for demo purposes)
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            // document.documentElement.classList.add('dark');
+        }
+    </script>
+</body></html>

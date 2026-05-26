@@ -1,0 +1,78 @@
+{
+  "outputComponents": [
+    {
+      "design": {
+        "screens": [
+          {
+            "designSystem": {
+              "designSystem": {
+                "displayName": "Vela Claude.ai Warm Clinical System",
+                "theme": {
+                  "colorMode": "LIGHT",
+                  "colorVariant": "TONAL_SPOT",
+                  "customColor": "#B76445",
+                  "designMd": "# Vela 2.1 Claude.ai Experience System\n\n## Product Definition\nVela is a premium iOS body intelligence agent. It reads Apple Health and Apple Watch data, interprets the user's body state, explains why the body is ready or fatigued, recommends training and recovery actions, adapts training plans, learns personal health patterns, and keeps an auditable trust log.\n\n## Visual Direction\nClaude.ai-inspired, Apple-native, calm clinical warmth. Use warm paper neutrals, precise dark ink, quiet borders, spacious editorial hierarchy, and restrained semantic accents. Avoid generic fitness dashboards, neon-heavy UI, gamification, social fitness styling, sci-fi panels, and noisy gradients. Balance the warm Claude feel with Vela's clinical health semantics using sage, blue, mauve, amber, and clay accents.\n\n## Brand Principles\n- Calm intelligence: Vela should feel like a thoughtful health agent, not a dashboard full of widgets.\n- Evidence first: every recommendation should have a visible reasoning path.\n- User control: memory and adaptations ask for confirmation before changing plans or knowledge.\n- Native trust: every surface must work in iOS light/dark mode, Dynamic Type, Chinese and English.\n- Low-noise precision: show the most important body state, limiter, action, confidence, and audit details without clutter.\n\n## Color System\nLight mode: warm paper background #F7F1E6, secondary parchment #EFE6D8, surface #FFFDF8, elevated paper #FBF7EE, border #DED2C1, primary ink #2B241B, secondary ink #665B4B, muted ink #918576. Primary action clay #B76445. Vela trust sage #5F8C73. Sleep indigo #6F73A8. Energy amber #B9842E. Stress rose #A95665. Strain copper #B86B4B.\nDark mode: espresso black #17130F, warm surface #211B16, elevated #2A231C, border #40362D, primary parchment #F4EBDD, secondary parchment #CDBFAE, muted #9E907F. Primary action clay #D08462. Keep semantic colors saturated enough for contrast but never neon.\n\n## Typography\nUse native iOS SF Pro semantics. Large editorial headers with `.largeTitle`/`.title2` weight semibold or bold. Body copy should be readable at `.subheadline` or `.body`; essential content never below `.caption`. Metric labels can use `.caption2` only as secondary labels. Use monospaced digits for scores, durations, counts, HRV, sleep, and training load.\n\n## Spacing And Radius\nUse 20pt screen padding, 16pt section spacing, 12pt local grouping, 8pt micro spacing. Cards use 18-20pt radius. Hero surfaces use 24-26pt radius. Buttons and pills use capsule radius. Do not use floating cards inside cards.\n\n## Surface Hierarchy\nScreen background is warm paper. Hero surfaces are warm elevated paper with subtle radial/linear tint and a hairline border. Cards are solid paper surfaces with warm border, minimal shadow, and generous whitespace. Inline alerts use tinted parchment, not saturated banners.\n\n## Component Rules\n- Body state hero: large state sentence, readiness score/ring, limiter, training window, confidence, risk flags.\n- Evidence chain: vertical timeline with metric, current vs baseline, trend, interpretation, action impact, confidence, freshness, source.\n- Adaptive training: banner must show original session, suggested adjustment, reason, alternative, accept/keep/ignore.\n- Memory proposal: pattern, memory type, evidence, confidence, source agent, target file/area, accept/reject/edit if supported.\n- Trust log: readable audit card with run type, status, timestamps, duration, hashes, tool calls, outputs, errors.\n- Coach: proactive command center with today's context, quick commands, findings, and composer; not a generic chatbot.\n\n## Icons And Charts\nSF Symbols only. Icons are small, functional, and paired with text for clarity. Rings/progress should be thin, semantic, and not decorative. Do not rely on color alone.\n\n## Motion\nUse subtle native spring expansion for card details and sheet transitions. Avoid animated spectacle. State changes should feel immediate and trustworthy.\n\n## Localization And Accessibility\nChinese and English must both fit. Avoid uppercase-only critical text in Chinese-heavy areas. Do not hardcode English production UI. Dynamic Type must not overflow horizontally. Touch targets are at least 44pt. Contrast must pass in light and dark.\n\n## Screen Hierarchy\nHome: Body Intelligence Cockpit. Why This: reasoning timeline. Training: adaptive plan workspace. Memory: confirmation inbox. Data Coverage: reliability and missing-data map. Trust Center: agent audit log. Coach: proactive command center. Settings: navigation to trust/data/wiki/health/training/app controls.\n",
+                  "overrideNeutralColor": "#F7F1E6",
+                  "overridePrimaryColor": "#B76445",
+                  "overrideSecondaryColor": "#5F8C73",
+                  "overrideTertiaryColor": "#6F73A8",
+                  "roundness": "ROUND_TWELVE"
+                }
+              },
+              "name": "assets/12061632509050072099",
+              "version": "1"
+            },
+            "deviceType": "MOBILE",
+            "generatedBy": "figaro_agent",
+            "height": "2420",
+            "htmlCode": {
+              "downloadUrl": "https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ7Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpaCiVodG1sX2Q1MTc0N2RlMjJlMzRhZjFiYmQyY2IxM2JkZjQ2NDhjEgsSBxDH95f4_BsYAZIBIwoKcHJvamVjdF9pZBIVQhM2MTAzMzg1NDY0Njc2NzI3OTc3&filename=&opi=96797242",
+              "mimeType": "text/html",
+              "name": "projects/6103385464676727977/files/bb437b692b1944489f453417670370e2"
+            },
+            "id": "8f3e4a9c457445cf8f743b3ccae28e7b",
+            "name": "projects/6103385464676727977/screens/8f3e4a9c457445cf8f743b3ccae28e7b",
+            "prompt": "Design the 'Coach Command Center' for Vela. \nTop: 'Today's Body State' summary card (Readiness 84, Optimal) with a circular gauge and brief editorial synthesis.\nMiddle: A 'Proactive Workspace' grid or stack containing:\n- 'Agent Findings': A card showing a new memory pattern ('Late meals + alcohol') with a 'Review' button.\n- 'Training Adjustment': A card proposing a 'Recovery Run' instead of 'Threshold Run' due to low HRV (-8%), with 'Accept' and 'Ignore' actions.\n- 'Sleep Optimization': A subtle card highlighting 'Sleep Quality' as the primary limiter.\n- 'Data Trust': A reliability indicator (94% Reliable) linking to the Trust Log.\nBottom: A integrated 'Chat Composer' that feels like part of the command center, not a separate screen. It should have a text input area with a 'Command Vela...' placeholder and quick suggestion chips (e.g., 'Why is my HRV low?', 'Explain my sleep data').\nStyle: Use the Vela Claude.ai Warm Clinical System ({{DATA:DESIGN_SYSTEM:DESIGN_SYSTEM_1}}). Warm paper background (#F7F1E6), precise dark ink typography, rounded-2xl cards with soft shadows, sage/indigo/amber accents. Ensure EvidenceChain logic is implied in the card summaries.",
+            "screenMetadata": {
+              "agentType": "PRO_AGENT",
+              "status": "COMPLETE"
+            },
+            "screenType": "DESIGN",
+            "screenshot": {
+              "downloadUrl": "https://lh3.googleusercontent.com/aida/ADBb0ujwYBaf5QGUvtWPZbnV0aVc88w32lEZ83w5-APYMGuDQAO06naP-26luZCkDGIF9c5YJBgwXnCryLMv-k3Mv0jOOg0K2CB-ruEqolcLmbKW_rjFTzXETaWZ8IwlmQq66266mBZZcrlGTE64YDks4dNl_zByOx1l-KbGehslwAhOfn8tg2oCm2Rimz6IyiKrk266PWo-oAfadBssDpl-2PoMNRlsviGsDPCUV7DyREOYYROd9Om30Se62Q8",
+              "name": "projects/6103385464676727977/files/9e38e7658dff498abe0e759c6aecab77"
+            },
+            "theme": {
+              "colorMode": "LIGHT",
+              "colorVariant": "TONAL_SPOT",
+              "customColor": "#B76445",
+              "designMd": "# Vela 2.1 Claude.ai Experience System\n\n## Product Definition\nVela is a premium iOS body intelligence agent. It reads Apple Health and Apple Watch data, interprets the user's body state, explains why the body is ready or fatigued, recommends training and recovery actions, adapts training plans, learns personal health patterns, and keeps an auditable trust log.\n\n## Visual Direction\nClaude.ai-inspired, Apple-native, calm clinical warmth. Use warm paper neutrals, precise dark ink, quiet borders, spacious editorial hierarchy, and restrained semantic accents. Avoid generic fitness dashboards, neon-heavy UI, gamification, social fitness styling, sci-fi panels, and noisy gradients. Balance the warm Claude feel with Vela's clinical health semantics using sage, blue, mauve, amber, and clay accents.\n\n## Brand Principles\n- Calm intelligence: Vela should feel like a thoughtful health agent, not a dashboard full of widgets.\n- Evidence first: every recommendation should have a visible reasoning path.\n- User control: memory and adaptations ask for confirmation before changing plans or knowledge.\n- Native trust: every surface must work in iOS light/dark mode, Dynamic Type, Chinese and English.\n- Low-noise precision: show the most important body state, limiter, action, confidence, and audit details without clutter.\n\n## Color System\nLight mode: warm paper background #F7F1E6, secondary parchment #EFE6D8, surface #FFFDF8, elevated paper #FBF7EE, border #DED2C1, primary ink #2B241B, secondary ink #665B4B, muted ink #918576. Primary action clay #B76445. Vela trust sage #5F8C73. Sleep indigo #6F73A8. Energy amber #B9842E. Stress rose #A95665. Strain copper #B86B4B.\nDark mode: espresso black #17130F, warm surface #211B16, elevated #2A231C, border #40362D, primary parchment #F4EBDD, secondary parchment #CDBFAE, muted #9E907F. Primary action clay #D08462. Keep semantic colors saturated enough for contrast but never neon.\n\n## Typography\nUse native iOS SF Pro semantics. Large editorial headers with `.largeTitle`/`.title2` weight semibold or bold. Body copy should be readable at `.subheadline` or `.body`; essential content never below `.caption`. Metric labels can use `.caption2` only as secondary labels. Use monospaced digits for scores, durations, counts, HRV, sleep, and training load.\n\n## Spacing And Radius\nUse 20pt screen padding, 16pt section spacing, 12pt local grouping, 8pt micro spacing. Cards use 18-20pt radius. Hero surfaces use 24-26pt radius. Buttons and pills use capsule radius. Do not use floating cards inside cards.\n\n## Surface Hierarchy\nScreen background is warm paper. Hero surfaces are warm elevated paper with subtle radial/linear tint and a hairline border. Cards are solid paper surfaces with warm border, minimal shadow, and generous whitespace. Inline alerts use tinted parchment, not saturated banners.\n\n## Component Rules\n- Body state hero: large state sentence, readiness score/ring, limiter, training window, confidence, risk flags.\n- Evidence chain: vertical timeline with metric, current vs baseline, trend, interpretation, action impact, confidence, freshness, source.\n- Adaptive training: banner must show original session, suggested adjustment, reason, alternative, accept/keep/ignore.\n- Memory proposal: pattern, memory type, evidence, confidence, source agent, target file/area, accept/reject/edit if supported.\n- Trust log: readable audit card with run type, status, timestamps, duration, hashes, tool calls, outputs, errors.\n- Coach: proactive command center with today's context, quick commands, findings, and composer; not a generic chatbot.\n\n## Icons And Charts\nSF Symbols only. Icons are small, functional, and paired with text for clarity. Rings/progress should be thin, semantic, and not decorative. Do not rely on color alone.\n\n## Motion\nUse subtle native spring expansion for card details and sheet transitions. Avoid animated spectacle. State changes should feel immediate and trustworthy.\n\n## Localization And Accessibility\nChinese and English must both fit. Avoid uppercase-only critical text in Chinese-heavy areas. Do not hardcode English production UI. Dynamic Type must not overflow horizontally. Touch targets are at least 44pt. Contrast must pass in light and dark.\n\n## Screen Hierarchy\nHome: Body Intelligence Cockpit. Why This: reasoning timeline. Training: adaptive plan workspace. Memory: confirmation inbox. Data Coverage: reliability and missing-data map. Trust Center: agent audit log. Coach: proactive command center. Settings: navigation to trust/data/wiki/health/training/app controls.\n",
+              "overrideNeutralColor": "#F7F1E6",
+              "overridePrimaryColor": "#B76445",
+              "overrideSecondaryColor": "#5F8C73",
+              "overrideTertiaryColor": "#6F73A8",
+              "roundness": "ROUND_TWELVE"
+            },
+            "title": "Coach Command Center",
+            "width": "780"
+          }
+        ],
+        "theme": {}
+      }
+    },
+    {
+      "text": "I've designed the **Coach Command Center**, a proactive workspace that centralizes Vela’s body intelligence. \n\n### Design Rationale:\n*   **Proactive Synthesis**: Instead of a blank chat interface, the screen opens with a high-level synthesis of the user's state (Readiness 84, Optimal) using the \"warm paper\" editorial style of Variant A.\n*   **Agentic Workspace**: The core of the screen uses modular cards for \"Agent Findings\" and \"Training Adjustments,\" allowing the user to act on intelligence (Accept/Review) without leaving the command center.\n*   **Embedded Intelligence**: The chat composer is integrated as a tool at the bottom, supported by quick-command chips to lower the friction of deeper inquiry.\n*   **Trust & Transparency**: A dedicated entry for Data Reliability (94%) maintains the Vela 2.0 principle of agent audit transparency.\n\nThe layout is fully responsive, optimized for Dynamic Type, and adheres to the \"clinical warmth\" aesthetic defined in your design system."
+    },
+    {
+      "suggestion": "Add an EvidenceChain drill-down for the training adjustment"
+    },
+    {
+      "suggestion": "Show the dark mode version of the command center"
+    },
+    {
+      "suggestion": "Simulate a 'Refine' flow for the memory pattern finding"
+    }
+  ],
+  "projectId": "6103385464676727977",
+  "sessionId": "9404033208345868057"
+}

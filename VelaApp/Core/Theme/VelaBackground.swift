@@ -25,9 +25,9 @@ struct CardSurface: ViewModifier {
                 ZStack {
                     RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard, style: .continuous)
                         .fill(VelaTheme.surface)
-                        .shadow(color: VelaTheme.cardShadowColor, radius: 20, y: 9)
+                        .shadow(color: VelaTheme.cardShadowColor, radius: 8, y: 3)
                     RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard, style: .continuous)
-                        .stroke(VelaTheme.stroke, lineWidth: 0.5)
+                        .stroke(VelaTheme.stroke, lineWidth: 0.85)
                 }
             )
     }
@@ -46,16 +46,16 @@ struct HeroCardSurface: ViewModifier {
                             LinearGradient(
                                 colors: [
                                     VelaTheme.elevatedSurface,
-                                    accentColor.opacity(0.10),
-                                    VelaTheme.elevatedSurface
+                                    accentColor.opacity(0.085),
+                                    VelaTheme.elevatedSurface.opacity(0.16)
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
                         )
-                        .shadow(color: VelaTheme.cardShadowColor, radius: 24, y: 10)
+                        .shadow(color: VelaTheme.cardShadowColor, radius: 14, y: 5)
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(VelaTheme.stroke, lineWidth: 0.8)
+                        .stroke(VelaTheme.stroke, lineWidth: 0.9)
                 }
             )
     }

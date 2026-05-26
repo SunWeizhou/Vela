@@ -1,5 +1,7 @@
 # Vela 2.1 Experience System Redesign
 
+Source of truth: Stitch project `6103385464676727977`, design system asset `assets/12061632509050072099`, generated through the official Stitch MCP workflow and downloaded under `StitchExports/Vela21Claude/`.
+
 ## 1. Brand Principles
 
 Vela is a premium iOS body intelligence agent. It helps users understand their body, decide how to train or recover today, and learn what works for them over time. The experience must feel calm, precise, trustworthy, premium, personal, intelligent, low-noise, and clinical but warm.
@@ -8,27 +10,31 @@ The interface should make three ideas visible on every major screen: what Vela b
 
 ## 2. Visual Personality
 
-Use an Apple-native health OS vocabulary: large readable headers, generous scan paths, restrained cards, quiet glass surfaces, semantic color accents, and concise status language. Avoid generic gym-app energy, social feeds, neon-heavy panels, sci-fi dashboards, random gradient cards, emojis as status primitives, and fake medical diagnosis language.
+Use a Claude.ai-inspired warm editorial vocabulary translated into native iOS: warm paper backgrounds, precise ink typography, quiet rounded paper cards, clay primary actions, sage/indigo/amber/rose semantic accents, generous scan paths, and concise status language. The result should still feel Apple-native and clinical, not like a web chat product.
+
+Avoid generic gym-app energy, social feeds, neon-heavy panels, sci-fi dashboards, random gradient cards, one-note beige/brown theming, emojis as status primitives, and fake medical diagnosis language.
 
 ## 3. Color System
 
-- Canvas: adaptive warm off-white in light mode, deep green-black in dark mode.
-- Surface: translucent white or deep graphite-green surfaces over the canvas.
-- Elevated surface: stronger contrast for cards, modals, and active states.
-- Primary text: near-black or soft near-white.
-- Secondary text: neutral green-gray.
-- Muted text: low-emphasis gray, never used for critical actions.
-- Accent: Vela mint for primary confirmation and intelligence cues.
-- Recovery: green, used for restored capacity and safe improvement.
-- Sleep: blue-violet, used only for sleep and circadian context.
-- Strain: coral, used for training load and high physical demand.
-- Stress: rose, used for sympathetic load and mental stress.
-- Energy: amber, used for readiness, confidence, and high-value opportunities.
+- Canvas: Stitch warm paper `#F7F1E6` in light mode, espresso `#17130F` in dark mode.
+- Secondary canvas: parchment `#EFE6D8` and warm dark surface `#211B16`.
+- Surface: elevated paper `#FFFDF8` / `#211B16`.
+- Elevated surface: warm ivory `#FBF7EE` / `#2A231C`.
+- Stroke: warm hairline `#DED2C1` / `#40362D`.
+- Primary text: ink `#2B241B` / parchment `#F4EBDD`.
+- Secondary text: `#665B4B` / `#CDBFAE`.
+- Muted text: `#918576` / `#9E907F`, never used for critical actions.
+- Accent: Claude-style clay `#B76445` / `#D08462` for primary actions, active navigation, and Vela agent cues.
+- Recovery: sage `#5F8C73`, used for restored capacity and safe improvement.
+- Sleep: indigo `#6F73A8`, used only for sleep and circadian context.
+- Strain: copper `#B86B4B`, used for training load and high physical demand.
+- Stress: rose `#A95665`, used for sympathetic load and mental stress.
+- Energy: amber `#B9842E`, used for readiness, confidence, and high-value opportunities.
 - Risk: warning uses coral/rose with an icon and label, never color alone.
 
 ## 4. Typography Scale
 
-Use native San Francisco through SwiftUI system fonts. Prefer rounded design only for score-like numerals and friendly page titles. Body text must support Dynamic Type.
+Use native San Francisco through SwiftUI system fonts. Stitch used Public Sans as the generated web-code proxy; SwiftUI translates that intent into SF Pro with editorial spacing, semibold headers, readable body text, and monospaced digits for health metrics. Body text must support Dynamic Type.
 
 - Display: large title, semibold/bold, for top page state only.
 - Title: title2/title3, semibold, for hero modules and screen sections.
@@ -50,7 +56,7 @@ Use 4 pt increments. Primary screen padding is 20 pt. Card internal padding is 1
 
 ## 7. Surface Hierarchy
 
-VelaScreen owns the adaptive background and scroll layout. VelaHeroSurface is reserved for the first major state module. VelaGlassCard is for repeated data blocks. Inline controls should not be nested in additional cards unless they are independent repeated items.
+VelaScreen owns the adaptive warm paper background and scroll layout. VelaHeroSurface is reserved for the first major state module and should feel like elevated paper, not glass. VelaGlassCard is a compatibility name for repeated paper data blocks. Inline controls should not be nested in additional cards unless they are independent repeated items.
 
 ## 8. Shadow And Elevation
 
@@ -132,4 +138,26 @@ Home starts with Body Intelligence Cockpit: body state, readiness score, fatigue
 
 ## Stitch Direction
 
-The selected Vela 2.1 direction synthesizes Minimal Apple-Native Health OS for structure, Calm Clinical Intelligence for tone, Premium Body Command Center for the training/adaptation emphasis, and Agentic Health Companion for memory/trust/coach surfaces.
+The selected Vela 2.1 direction uses Stitch's Claude.ai-style warm editorial system plus an agentic command-center structure:
+
+- Project: `Vela 2.1 Claude.ai Experience System`
+- Project id: `6103385464676727977`
+- Design system: `Vela Claude.ai Warm Clinical System`
+- Design system asset: `assets/12061632509050072099`
+- Home base: `6359542d585642309bf3800b715ce8ce`
+- Variants generated: Warm Editorial A, Command Center B, Agentic Companion C, Minimal Health OS D
+- Selected synthesis: Variant A's warm paper editorial visual language plus Variant C's proactive agent command-center hierarchy.
+
+Generated and downloaded screens:
+
+- Home / Today Body Plan
+- Home variants A-D
+- Why This / Evidence Chain
+- Training Calendar with Adaptive Training Proposal
+- Memory Inbox / Wiki Confirmation
+- Data Coverage / Trust
+- Trust Center Audit Log
+- Coach Command Center
+- Settings / Navigation Hub
+
+The downloaded Stitch HTML and screenshots live in `StitchExports/Vela21Claude/` and are translated into SwiftUI tokens and components instead of pasted into the iOS app.
