@@ -18,28 +18,20 @@ struct TrustCenterView: View {
             VelaBackground()
 
             if runRecords.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.largeTitle)
-                        .foregroundStyle(VelaTheme.mutedText)
-                    Text(AppLanguage.stored.isChinese
-                         ? "尚无 Agent 运行记录"
-                         : "No agent run records yet"
-                    )
-                    .font(.headline)
-                    .foregroundStyle(VelaTheme.secondaryText)
-                    Text(AppLanguage.stored.isChinese
-                         ? "当 Morning Brief 或 Evening Sync 首次运行后，这里会显示运行日志。"
-                         : "Run logs will appear here after the first Morning Brief or Evening Sync."
-                    )
-                    .font(.caption)
-                    .foregroundStyle(VelaTheme.mutedText)
-                    .multilineTextAlignment(.center)
-                }
-                .padding(40)
+                VelaEmptyState(
+                    title: AppLanguage.stored.isChinese ? "尚无 Agent 运行记录" : "No Agent Runs Yet",
+                    message: AppLanguage.stored.isChinese
+                    ? "Morning Brief、Evening Sync 或 Coach 首次运行后，这里会显示可审计日志。"
+                    : "Auditable logs will appear here after Morning Brief, Evening Sync, or Coach runs.",
+                    systemImage: "checkmark.shield",
+                    tint: VelaTheme.accent
+                )
+                .padding(24)
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 10) {
+                    LazyVStack(spacing: 12) {
+                        auditSummaryCard
+
                         ForEach(runRecords.prefix(100)) { run in
                             runCard(run)
                         }
@@ -57,41 +49,93 @@ struct TrustCenterView: View {
 
     // MARK: - Run Card
 
+    private var auditSummaryCard: some View {
+        let shown = min(runRecords.count, 100)
+        let failed = runRecords.filter { $0.status == "failed" }.count
+        let running = runRecords.filter { $0.status == "running" }.count
+
+        return VelaHeroSurface(tint: failed > 0 ? VelaTheme.strain : VelaTheme.accent) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "checkmark.shield.fill")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(failed > 0 ? VelaTheme.strain : VelaTheme.accent)
+                        .frame(width: 42, height: 42)
+                        .background(Circle().fill((failed > 0 ? VelaTheme.strain : VelaTheme.accent).opacity(0.12)))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(AppLanguage.stored.isChinese ? "Agent 审计日志" : "Agent Audit Log")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(VelaTheme.primaryText)
+                        Text(AppLanguage.stored.isChinese
+                             ? "查看 Vela 何时运行、使用了哪些上下文、产生了什么输出，以及是否调用了工具。"
+                             : "Review when Vela ran, which context it used, what it produced, and whether it called tools."
+                        )
+                        .font(.subheadline)
+                        .foregroundStyle(VelaTheme.secondaryText)
+                    }
+                    Spacer()
+                }
+
+                HStack(spacing: 8) {
+                    VelaMetricPill(title: AppLanguage.stored.isChinese ? "显示" : "Shown", value: "\(shown)", systemImage: "list.bullet", tint: VelaTheme.accent)
+                    VelaMetricPill(title: AppLanguage.stored.isChinese ? "失败" : "Failed", value: "\(failed)", systemImage: "exclamationmark.triangle.fill", tint: failed > 0 ? VelaTheme.strain : VelaTheme.recovery)
+                    VelaMetricPill(title: AppLanguage.stored.isChinese ? "运行中" : "Running", value: "\(running)", systemImage: "clock.fill", tint: VelaTheme.energy)
+                }
+            }
+        }
+    }
+
     private func runCard(_ run: AgentRunRecord) -> some View {
         Button {
             selectedRun = run
         } label: {
-            HStack(spacing: 12) {
+            VelaGlassCard(padding: 14, cornerRadius: 14) {
+                HStack(alignment: .top, spacing: 12) {
                 Image(systemName: iconFor(run.agentName))
                     .font(.title3)
                     .foregroundStyle(colorFor(run.status))
-                    .frame(width: 32, height: 32)
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(colorFor(run.status).opacity(0.12)))
 
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(alignment: .top) {
                         Text(labelFor(run.agentName))
-                            .font(.subheadline.weight(.medium))
+                                .font(.subheadline.weight(.semibold))
                             .foregroundStyle(VelaTheme.primaryText)
                         Spacer()
                         statusBadge(run.status)
                     }
-                    if let endedAt = run.endedAt {
-                        Text(durationText(start: run.startedAt, end: endedAt))
-                            .font(.caption2)
-                            .foregroundStyle(VelaTheme.mutedText)
-                    }
-                    if let reason = run.reason, !reason.isEmpty {
-                        Text(reason)
-                            .font(.caption2)
+
+                        Text(run.startedAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption)
                             .foregroundStyle(VelaTheme.secondaryText)
+
+                        if !run.outputSummary.isEmpty {
+                            Text(run.outputSummary)
+                                .font(.caption)
+                                .foregroundStyle(VelaTheme.secondaryText)
+                                .lineLimit(2)
+                        } else if let reason = run.reason, !reason.isEmpty {
+                            Text(reason)
+                                .font(.caption)
+                                .foregroundStyle(VelaTheme.secondaryText)
+                                .lineLimit(2)
+                        }
+
+                        HStack(spacing: 8) {
+                            if let endedAt = run.endedAt {
+                                VelaStatusBadge(label: durationText(start: run.startedAt, end: endedAt), systemImage: "timer", tint: VelaTheme.sleep)
+                            }
+                            if !run.inputContextHash.isEmpty {
+                                VelaStatusBadge(label: String(run.inputContextHash.prefix(8)), systemImage: "number", tint: VelaTheme.secondaryText)
+                            }
+                            if hasToolCalls(run) {
+                                VelaStatusBadge(label: AppLanguage.stored.isChinese ? "工具" : "Tools", systemImage: "wrench.and.screwdriver.fill", tint: VelaTheme.energy)
+                            }
+                        }
                     }
                 }
             }
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(VelaTheme.surface)
-            )
         }
         .buttonStyle(.plain)
     }
@@ -102,59 +146,94 @@ struct TrustCenterView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    detailRow(
-                        title: AppLanguage.stored.isChinese ? "Agent" : "Agent",
-                        value: labelFor(run.agentName)
-                    )
-                    detailRow(
-                        title: AppLanguage.stored.isChinese ? "状态" : "Status",
-                        value: run.status
-                    )
-                    detailRow(
-                        title: AppLanguage.stored.isChinese ? "开始时间" : "Started",
-                        value: run.startedAt.formatted()
-                    )
-                    if let endedAt = run.endedAt {
-                        detailRow(
-                            title: AppLanguage.stored.isChinese ? "结束时间" : "Ended",
-                            value: endedAt.formatted()
-                        )
-                        detailRow(
-                            title: AppLanguage.stored.isChinese ? "耗时" : "Duration",
-                            value: durationText(start: run.startedAt, end: endedAt)
-                        )
+                    VelaHeroSurface(tint: colorFor(run.status)) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Label(labelFor(run.agentName), systemImage: iconFor(run.agentName))
+                                    .font(.headline.weight(.semibold))
+                                    .foregroundStyle(VelaTheme.primaryText)
+                                Spacer()
+                                statusBadge(run.status)
+                            }
+                            if let reason = run.reason, !reason.isEmpty {
+                                Text(reason)
+                                    .font(.subheadline)
+                                    .foregroundStyle(VelaTheme.secondaryText)
+                            }
+                            HStack(spacing: 8) {
+                                VelaMetricPill(title: AppLanguage.stored.isChinese ? "开始" : "Started", value: run.startedAt.formatted(date: .omitted, time: .shortened), systemImage: "play.fill", tint: VelaTheme.accent)
+                                if let endedAt = run.endedAt {
+                                    VelaMetricPill(title: AppLanguage.stored.isChinese ? "耗时" : "Duration", value: durationText(start: run.startedAt, end: endedAt), systemImage: "timer", tint: VelaTheme.sleep)
+                                }
+                            }
+                        }
                     }
-                    if let reason = run.reason {
-                        detailRow(
-                            title: AppLanguage.stored.isChinese ? "原因" : "Reason",
-                            value: reason
-                        )
+
+                    VelaGlassCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(AppLanguage.stored.isChinese ? "运行上下文" : "Run Context")
+                                .font(.headline.weight(.semibold))
+                                .foregroundStyle(VelaTheme.primaryText)
+                            detailRow(title: AppLanguage.stored.isChinese ? "创建/开始" : "Created / Started", value: run.startedAt.formatted())
+                            if let endedAt = run.endedAt {
+                                detailRow(title: AppLanguage.stored.isChinese ? "结束时间" : "Ended", value: endedAt.formatted())
+                            }
+                            if !run.inputContextHash.isEmpty {
+                                detailRow(title: AppLanguage.stored.isChinese ? "输入上下文哈希" : "Input Context Hash", value: run.inputContextHash)
+                            }
+                        }
                     }
-                    if !run.inputContextHash.isEmpty {
-                        detailRow(
-                            title: AppLanguage.stored.isChinese ? "上下文哈希" : "Context Hash",
-                            value: String(run.inputContextHash.prefix(16))
-                        )
-                    }
+
                     if !run.outputSummary.isEmpty {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(AppLanguage.stored.isChinese ? "输出摘要" : "Output")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(VelaTheme.mutedText)
-                            Text(run.outputSummary)
-                                .font(.caption)
-                                .foregroundStyle(VelaTheme.secondaryText)
+                        VelaGlassCard {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(AppLanguage.stored.isChinese ? "输出摘要" : "Output Summary")
+                                    .font(.headline.weight(.semibold))
+                                    .foregroundStyle(VelaTheme.primaryText)
+                                Text(run.outputSummary)
+                                    .font(.subheadline)
+                                    .foregroundStyle(VelaTheme.secondaryText)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                     }
-                    if let error = run.errorMessage {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(AppLanguage.stored.isChinese ? "错误" : "Error")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(VelaTheme.recovery)
-                            Text(error)
-                                .font(.caption)
+
+                    VelaGlassCard {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(AppLanguage.stored.isChinese ? "工具调用" : "Tool Calls")
+                                .font(.headline.weight(.semibold))
+                                .foregroundStyle(VelaTheme.primaryText)
+                            Text(toolCallsSummary(run))
+                                .font(.caption.monospaced())
                                 .foregroundStyle(VelaTheme.secondaryText)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
+                    }
+
+                    VelaGlassCard {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(AppLanguage.stored.isChinese ? "响应与记忆扫描" : "Response and Memory Scan")
+                                .font(.headline.weight(.semibold))
+                                .foregroundStyle(VelaTheme.primaryText)
+                            VelaInlineAlert(
+                                title: AppLanguage.stored.isChinese ? "透明记录" : "Transparent record",
+                                message: AppLanguage.stored.isChinese
+                                ? "personal_response_scan、记忆提案和训练调整如果被 Agent 写入，会保留在输出摘要或工具调用记录中。"
+                                : "personal_response_scan entries, memory proposals, and training adaptations are preserved here when logged through output summary or tool calls.",
+                                systemImage: "doc.text.magnifyingglass",
+                                tint: VelaTheme.accent
+                            )
+                        }
+                    }
+
+                    if let error = run.errorMessage, !error.isEmpty {
+                        VelaInlineAlert(
+                            title: AppLanguage.stored.isChinese ? "错误" : "Error",
+                            message: error,
+                            systemImage: "exclamationmark.triangle.fill",
+                            tint: VelaTheme.strain
+                        )
                     }
                 }
                 .padding()
@@ -221,8 +300,24 @@ struct TrustCenterView: View {
         default: label = status
         }
         return Text(label)
-            .font(.caption2.weight(.medium))
+            .font(.caption2.weight(.semibold))
             .foregroundStyle(colorFor(status))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(colorFor(status).opacity(0.12)))
+    }
+
+    private func hasToolCalls(_ run: AgentRunRecord) -> Bool {
+        let trimmed = run.toolCallsJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty && trimmed != "[]"
+    }
+
+    private func toolCallsSummary(_ run: AgentRunRecord) -> String {
+        let trimmed = run.toolCallsJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty || trimmed == "[]" {
+            return AppLanguage.stored.isChinese ? "没有记录工具调用。" : "No tool calls recorded."
+        }
+        return trimmed
     }
 
     private func durationText(start: Date, end: Date) -> String {

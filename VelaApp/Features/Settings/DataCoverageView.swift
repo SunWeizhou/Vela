@@ -12,11 +12,15 @@ struct DataCoverageView: View {
             VelaBackground()
 
             if isLoading {
-                ProgressView()
-                    .tint(VelaTheme.accent)
+                VelaEmptyState(
+                    title: AppLanguage.stored.isChinese ? "正在检查数据质量" : "Checking Data Quality",
+                    message: AppLanguage.stored.isChinese ? "Vela 正在读取授权状态、新鲜度和样本数量。" : "Vela is reading authorization, freshness, and sample counts.",
+                    systemImage: "waveform.path.ecg",
+                    tint: VelaTheme.accent
+                )
             } else {
                 ScrollView {
-                    VStack(spacing: 14) {
+                    VStack(spacing: 16) {
                         overallScoreCard
 
                         ForEach(coverageGroups) { group in
@@ -37,6 +41,150 @@ struct DataCoverageView: View {
     // MARK: - Overall Score
 
     private var overallScoreCard: some View {
+        let total = coverageGroups.flatMap(\.signals).count
+        let available = coverageGroups.flatMap(\.signals).filter { $0.isAvailable }.count
+        let pct = total > 0 ? Int(Double(available) / Double(total) * 100) : 0
+        let missing = total - available
+
+        return VelaHeroSurface(tint: coverageColor(pct)) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .center, spacing: 14) {
+                    ZStack {
+                        Circle()
+                            .stroke(VelaTheme.elevatedSurface, lineWidth: 8)
+                            .frame(width: 74, height: 74)
+                        Circle()
+                            .trim(from: 0, to: CGFloat(pct) / 100)
+                            .stroke(coverageColor(pct), style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                            .frame(width: 74, height: 74)
+                            .rotationEffect(.degrees(-90))
+                        Text("\(pct)%")
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(VelaTheme.primaryText)
+                            .monospacedDigit()
+                    }
+                    .accessibilityLabel(AppLanguage.stored.isChinese ? "数据覆盖 \(pct)%" : "Data coverage \(pct)%")
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(AppLanguage.stored.isChinese ? "今天哪些判断可信？" : "Which judgments are reliable today?")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(VelaTheme.primaryText)
+                        Text(AppLanguage.stored.isChinese
+                             ? "\(available)/\(total) 个健康信号可用，\(missing) 个需要补齐或授权。"
+                             : "\(available)/\(total) health signals are available; \(missing) need data or permission."
+                        )
+                        .font(.subheadline)
+                        .foregroundStyle(VelaTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    VelaMetricPill(
+                        title: AppLanguage.stored.isChinese ? "覆盖" : "Coverage",
+                        value: "\(pct)%",
+                        systemImage: "checkmark.shield.fill",
+                        tint: coverageColor(pct)
+                    )
+                    VelaMetricPill(
+                        title: AppLanguage.stored.isChinese ? "缺失" : "Missing",
+                        value: "\(missing)",
+                        systemImage: "exclamationmark.triangle.fill",
+                        tint: missing == 0 ? VelaTheme.recovery : VelaTheme.strain
+                    )
+                }
+
+                VelaInlineAlert(
+                    title: AppLanguage.stored.isChinese ? "影响范围" : "Confidence impact",
+                    message: AppLanguage.stored.isChinese
+                    ? "缺失或陈旧的数据会降低恢复、睡眠、训练负荷和风险判断的置信度。"
+                    : "Missing or stale data lowers confidence for recovery, sleep, training load, and risk judgments.",
+                    systemImage: "slider.horizontal.3",
+                    tint: coverageColor(pct)
+                )
+            }
+        }
+    }
+
+    // MARK: - Group Card
+
+    private func coverageGroupCard(_ group: CoverageGroup) -> some View {
+        let available = group.signals.filter { $0.isAvailable }.count
+        let total = group.signals.count
+        let staleOrMissing = group.signals.filter { $0.freshness == .stale || $0.freshness == .missing }.count
+        let pct = total > 0 ? Int(Double(available) / Double(total) * 100) : 0
+        let tint = groupColor(group)
+
+        return VelaGlassCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: group.icon)
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(tint)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(tint.opacity(0.12)))
+                        .accessibilityHidden(true)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(group.title)
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(VelaTheme.primaryText)
+                        Text(AppLanguage.stored.isChinese
+                             ? "\(available)/\(total) 个信号可用 · \(staleOrMissing) 个陈旧或缺失"
+                             : "\(available)/\(total) signals available · \(staleOrMissing) stale or missing"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(VelaTheme.secondaryText)
+                    }
+
+                    Spacer()
+                    VelaStatusBadge(
+                        label: AppLanguage.stored.isChinese ? "可信度 \(pct)%" : "Trust \(pct)%",
+                        systemImage: "checkmark.shield.fill",
+                        tint: coverageColor(pct)
+                    )
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(AppLanguage.stored.isChinese ? "影响的判断" : "Affected judgments")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(VelaTheme.mutedText)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 112), spacing: 8)], alignment: .leading, spacing: 8) {
+                        ForEach(group.affectedJudgments, id: \.self) { judgment in
+                            VelaStatusBadge(label: judgment, systemImage: "scope", tint: tint)
+                        }
+                    }
+                }
+
+                Divider().overlay(VelaTheme.stroke)
+
+                VStack(spacing: 8) {
+                    ForEach(group.signals) { signal in
+                        VelaDataQualityRow(
+                            title: signal.name,
+                            subtitle: signalSubtitle(signal),
+                            freshness: signal.freshness,
+                            qualityLabel: signal.quality.label,
+                            tint: qualityColor(signal.quality)
+                        )
+                    }
+                }
+
+                if group.signals.contains(where: { !$0.isAuthorized }) {
+                    VelaInlineAlert(
+                        title: AppLanguage.stored.isChinese ? "需要健康权限" : "Health permission needed",
+                        message: AppLanguage.stored.isChinese
+                        ? "在系统健康权限中打开相关数据类型，可提升 Vela 今天判断的置信度。"
+                        : "Enable the related Health data types in system permissions to improve today's confidence.",
+                        systemImage: "lock.open.fill",
+                        tint: VelaTheme.strain
+                    )
+                }
+            }
+        }
+    }
+
+    private var legacyOverallScoreCard: some View {
         let total = coverageGroups.flatMap(\.signals).count
         let available = coverageGroups.flatMap(\.signals).filter { $0.isAvailable }.count
         let pct = total > 0 ? Int(Double(available) / Double(total) * 100) : 0
@@ -74,9 +222,7 @@ struct DataCoverageView: View {
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.surface))
     }
 
-    // MARK: - Group Card
-
-    private func coverageGroupCard(_ group: CoverageGroup) -> some View {
+    private func legacyCoverageGroupCard(_ group: CoverageGroup) -> some View {
         let available = group.signals.filter { $0.isAvailable }.count
         let total = group.signals.count
 
@@ -146,7 +292,6 @@ struct DataCoverageView: View {
 
     private func loadCoverage() async {
         let store = HKHealthStore()
-        let lang = AppLanguage.stored
 
         var groups: [CoverageGroup] = [
             CoverageGroup(
@@ -262,7 +407,7 @@ struct DataCoverageView: View {
         let sampleType: HKSampleType?
         switch kind {
         case .quantity(let id): sampleType = HKQuantityType.quantityType(forIdentifier: id)
-        case .category(let id): sampleType = HKCategoryType(id)
+        case .category(let id): sampleType = HKObjectType.categoryType(forIdentifier: id)
         }
         guard let st = sampleType else { return (nil, nil) }
         guard store.authorizationStatus(for: st) == .sharingAuthorized else { return (nil, nil) }
@@ -298,6 +443,25 @@ struct DataCoverageView: View {
         if pct >= 80 { return VelaTheme.energy }
         if pct >= 50 { return VelaTheme.accent }
         return VelaTheme.strain
+    }
+
+    private func qualityColor(_ quality: SignalQuality) -> Color {
+        switch quality {
+        case .enough: return VelaTheme.energy
+        case .partial: return VelaTheme.accent
+        case .insufficient: return VelaTheme.strain
+        }
+    }
+
+    private func signalSubtitle(_ signal: CoverageSignal) -> String {
+        if !signal.isAuthorized {
+            return AppLanguage.stored.isChinese ? "未授权 · 相关判断置信度会下降" : "Not authorized · related judgments lose confidence"
+        }
+        let count7 = signal.sampleCount7d.map(String.init) ?? "-"
+        let count30 = signal.sampleCount30d.map(String.init) ?? "-"
+        return AppLanguage.stored.isChinese
+            ? "7天 \(count7) 条 · 30天 \(count30) 条"
+            : "7d \(count7) samples · 30d \(count30) samples"
     }
 
     private func freshnessBadge(_ freshness: DataFreshness) -> some View {

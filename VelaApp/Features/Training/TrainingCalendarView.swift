@@ -24,6 +24,10 @@ struct TrainingCalendarView: View {
         pendingAdaptations.filter { $0.planId == plan.id }
     }
 
+    private func pendingAdaptation(for day: TrainingDay, plan: TrainingPlanRecord) -> TrainingPlanAdaptationRecord? {
+        adaptationsForPlan(plan).first { $0.dayId == day.id }
+    }
+
     var body: some View {
         Group {
             if let plan = activePlan {
@@ -66,71 +70,127 @@ struct TrainingCalendarView: View {
     private func pendingAdaptationsBanner(plan: TrainingPlanRecord) -> some View {
         let filtered = adaptationsForPlan(plan)
         guard !filtered.isEmpty else { return AnyView(EmptyView()) }
-        return AnyView(VStack(alignment: .leading, spacing: 8) {
-            Label(
-                AppLanguage.stored.isChinese
-                    ? "Vela 建议调整 \(filtered.count) 项训练"
-                    : "Vela suggests \(filtered.count) training adjustments",
-                systemImage: "exclamationmark.bubble.fill"
-            )
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(VelaTheme.energy)
+        return AnyView(VelaHeroSurface(tint: VelaTheme.energy) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "sparkles")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(VelaTheme.energy)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(VelaTheme.energy.opacity(0.12)))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(AppLanguage.stored.isChinese
+                             ? "Vela 建议调整你的计划"
+                             : "Vela suggests adjusting your plan"
+                        )
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(VelaTheme.primaryText)
+                        Text(AppLanguage.stored.isChinese
+                             ? "\(filtered.count) 项训练与今天的身体状态不完全匹配。"
+                             : "\(filtered.count) sessions do not fully match today's body state."
+                        )
+                        .font(.subheadline)
+                        .foregroundStyle(VelaTheme.secondaryText)
+                    }
+                    Spacer()
+                    VelaStatusBadge(label: AppLanguage.stored.isChinese ? "待确认" : "Pending", systemImage: "clock.fill", tint: VelaTheme.energy)
+                }
 
-            ForEach(filtered.prefix(3)) { adaptation in
-                adaptationRow(adaptation, plan: plan)
-            }
+                ForEach(filtered.prefix(3)) { adaptation in
+                    adaptationRow(adaptation, plan: plan)
+                }
 
-            if filtered.count > 3 {
-                Text(AppLanguage.stored.isChinese
-                     ? "还有 \(filtered.count - 3) 项调整..."
-                     : "\(filtered.count - 3) more adjustments..."
-                )
-                .font(.caption2)
-                .foregroundStyle(VelaTheme.mutedText)
+                if filtered.count > 3 {
+                    Text(AppLanguage.stored.isChinese
+                         ? "还有 \(filtered.count - 3) 项调整..."
+                         : "\(filtered.count - 3) more adjustments..."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(VelaTheme.mutedText)
+                }
             }
-        }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.energy.opacity(0.06)))
-        )
+        })
     }
 
     private func adaptationRow(_ adaptation: TrainingPlanAdaptationRecord, plan: TrainingPlanRecord) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: iconForAdjustment(adaptation.adjustment))
-                .font(.caption)
-                .foregroundStyle(VelaTheme.energy)
-                .frame(width: 20)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: iconForAdjustment(adaptation.adjustment))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(VelaTheme.energy)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(VelaTheme.energy.opacity(0.12)))
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(adaptation.originalDayTitle)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(VelaTheme.primaryText)
-                Text(labelForAdjustment(adaptation.adjustment) + ": " + adaptation.reason)
-                    .font(.caption2)
-                    .foregroundStyle(VelaTheme.secondaryText)
-                    .lineLimit(2)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(adaptation.originalDayTitle)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(VelaTheme.primaryText)
+                    Text(labelForAdjustment(adaptation.adjustment))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(VelaTheme.energy)
+                }
+
+                Spacer()
             }
 
-            Spacer()
+            VStack(alignment: .leading, spacing: 6) {
+                trainingAdaptationDetail(
+                    title: AppLanguage.stored.isChinese ? "原因" : "Reason",
+                    value: adaptation.reason,
+                    icon: "list.bullet.clipboard"
+                )
+                if let alternative = adaptation.suggestedAlternative, !alternative.isEmpty {
+                    trainingAdaptationDetail(
+                        title: AppLanguage.stored.isChinese ? "建议替代" : "Suggested alternative",
+                        value: alternative,
+                        icon: "arrow.triangle.swap"
+                    )
+                }
+            }
 
-            HStack(spacing: 6) {
+            HStack(spacing: 10) {
                 Button {
                     acceptAdaptation(adaptation, plan: plan)
                 } label: {
-                    Text(AppLanguage.stored.isChinese ? "接受" : "Accept")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 10).padding(.vertical, 4)
+                    Label(AppLanguage.stored.isChinese ? "接受调整" : "Accept", systemImage: "checkmark.circle.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.black)
+                        .frame(maxWidth: .infinity, minHeight: 34)
                         .background(Capsule().fill(VelaTheme.accent))
                 }
 
                 Button {
                     rejectAdaptation(adaptation)
                 } label: {
-                    Text(AppLanguage.stored.isChinese ? "忽略" : "Ignore")
-                        .font(.caption2)
-                        .foregroundStyle(VelaTheme.mutedText)
+                    Label(AppLanguage.stored.isChinese ? "保留原计划" : "Keep original", systemImage: "xmark.circle")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(VelaTheme.primaryText)
+                        .frame(maxWidth: .infinity, minHeight: 34)
+                        .background(Capsule().fill(VelaTheme.elevatedSurface))
+                        .overlay(Capsule().stroke(VelaTheme.stroke, lineWidth: 0.7))
                 }
+            }
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.surface.opacity(0.78)))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.energy.opacity(0.20), lineWidth: 0.8))
+    }
+
+    private func trainingAdaptationDetail(title: String, value: String, icon: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(VelaTheme.energy)
+                .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(VelaTheme.mutedText)
+                Text(value)
+                    .font(.caption)
+                    .foregroundStyle(VelaTheme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -288,6 +348,7 @@ struct TrainingCalendarView: View {
     private func workoutCard(day: TrainingDay, plan: TrainingPlanRecord) -> some View {
         let focusColor = getFocusColor(day.focus)
         let focusSymbol = getFocusSymbol(day.focus)
+        let hasPendingAdaptation = pendingAdaptation(for: day, plan: plan) != nil
         
         return HStack(spacing: 14) {
             // Left color-gated bar
@@ -317,6 +378,14 @@ struct TrainingCalendarView: View {
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(Capsule().fill(focusColor.opacity(0.12)))
+                }
+
+                if hasPendingAdaptation {
+                    VelaStatusBadge(
+                        label: AppLanguage.stored.isChinese ? "Vela 建议调整" : "Suggested",
+                        systemImage: "sparkles",
+                        tint: VelaTheme.energy
+                    )
                 }
 
                 // Session Title

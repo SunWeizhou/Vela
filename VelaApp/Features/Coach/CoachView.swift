@@ -203,57 +203,155 @@ struct CoachView: View {
 
     private var actionHubView: some View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 28) {
-                Spacer().frame(height: 32)
-                
-                // Centered Logo & Greeting
-                VStack(spacing: 16) {
-                    VelaLogoMark(size: 72)
-                        .shadow(color: VelaTheme.accent.opacity(0.15), radius: 16)
-                    
-                    VStack(spacing: 6) {
-                        Text(L10n.t("Hey, I'm Vela", "你好，我是 Vela"))
-                            .font(.system(size: 24, weight: .bold, design: .rounded))
-                            .foregroundStyle(VelaTheme.primaryText)
-                        
-                        Text(L10n.t("Your AI health companion, calibrated with your private wiki.", "你的 AI 健康伙伴，结合你的个人 Wiki。"))
-                            .font(.system(size: 14))
-                            .foregroundStyle(VelaTheme.secondaryText)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 24)
+            VStack(alignment: .leading, spacing: 18) {
+                VelaHeroSurface(tint: VelaTheme.accent) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack(alignment: .top, spacing: 12) {
+                            VelaLogoMark(size: 48)
+                                .shadow(color: VelaTheme.accent.opacity(0.16), radius: 14)
+
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(AppLanguage.stored.isChinese ? "Coach Command Center" : "Coach Command Center")
+                                    .font(.title3.weight(.bold))
+                                    .foregroundStyle(VelaTheme.primaryText)
+                                Text(AppLanguage.stored.isChinese
+                                     ? "基于今天的身体状态、Wiki 记忆和健康数据，快速发起一次有上下文的行动。"
+                                     : "Start a context-aware action from today's body state, Wiki memory, and health data."
+                                )
+                                .font(.subheadline)
+                                .foregroundStyle(VelaTheme.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                            }
+
+                            Spacer()
+                        }
+
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 118), spacing: 8)], alignment: .leading, spacing: 8) {
+                            VelaMetricPill(
+                                title: AppLanguage.stored.isChinese ? "恢复" : "Recovery",
+                                value: dashboardVM.dashboard.recovery.hasData ? "\(Int(dashboardVM.dashboard.recovery.score))" : "--",
+                                systemImage: "heart.fill",
+                                tint: VelaTheme.recovery
+                            )
+                            VelaMetricPill(
+                                title: AppLanguage.stored.isChinese ? "睡眠" : "Sleep",
+                                value: dashboardVM.dashboard.sleepScore.hasData ? "\(Int(dashboardVM.dashboard.sleepScore.score))" : "--",
+                                systemImage: "moon.zzz.fill",
+                                tint: VelaTheme.sleep
+                            )
+                            VelaMetricPill(
+                                title: AppLanguage.stored.isChinese ? "负荷" : "Strain",
+                                value: dashboardVM.dashboard.strain.hasData ? "\(Int(dashboardVM.dashboard.strain.score))" : "--",
+                                systemImage: "figure.run",
+                                tint: VelaTheme.strain
+                            )
+                        }
                     }
                 }
-                
-                // 3 Pale cards in a list/grid
-                VStack(spacing: 12) {
-                    suggestionCard(
-                        title: L10n.t("Analyze My Readiness", "分析今日状态"),
-                        description: L10n.t("Check how sleep and heart rate variance affect today's potential strain.", "了解睡眠和心率变异性如何影响负荷上限"),
-                        icon: "sparkles",
-                        question: L10n.t("How am I doing today?", "我今天状态怎么样？"),
+
+                VelaSectionHeader(
+                    title: AppLanguage.stored.isChinese ? "主动行动" : "Proactive Actions",
+                    subtitle: AppLanguage.stored.isChinese ? "选择一个入口，Vela 会带着当前上下文进入对话。" : "Choose an entry point; Vela carries current context into the chat."
+                )
+
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 154), spacing: 12)], spacing: 12) {
+                    VelaCoachCommandCard(
+                        title: L10n.t("Analyze Readiness", "分析今日状态"),
+                        subtitle: L10n.t("Recovery, sleep, strain, and today's limiter.", "恢复、睡眠、负荷和今日限制因素。"),
+                        systemImage: "sparkles",
                         tint: VelaTheme.accent
-                    )
-                    
-                    suggestionCard(
-                        title: L10n.t("Optimize Today's Training", "规划今日训练"),
-                        description: L10n.t("Get custom cardiovascular or strength recommendations matching your recovery.", "结合恢复情况，获取心肺或力量训练建议"),
-                        icon: "figure.run",
-                        question: L10n.t("Should I work out?", "今天适合训练吗？"),
+                    ) {
+                        sendQuestion(L10n.t("How am I doing today? Explain the evidence and the best next action.", "我今天状态怎么样？请解释证据和最合适的下一步行动。"))
+                    }
+
+                    VelaCoachCommandCard(
+                        title: L10n.t("Adjust Training", "调整训练"),
+                        subtitle: L10n.t("Decide whether to train, reduce, swap, or recover.", "判断训练、减量、替换或恢复。"),
+                        systemImage: "figure.run.circle.fill",
                         tint: VelaTheme.strain
-                    )
-                    
-                    suggestionCard(
-                        title: L10n.t("Review Sleep Performance", "评估睡眠表现"),
-                        description: L10n.t("Evaluate sleep phases and get recommendations to optimize sleep hygiene.", "分析睡眠阶段，获得提高睡眠质量的个性化建议"),
-                        icon: "moon.stars.fill",
-                        question: L10n.t("Review my sleep", "分析我的睡眠"),
+                    ) {
+                        sendQuestion(L10n.t("Should I adjust today's training based on recovery and fatigue?", "根据恢复和疲劳情况，今天的训练需要调整吗？"))
+                    }
+
+                    VelaCoachCommandCard(
+                        title: L10n.t("Optimize Sleep", "优化睡眠"),
+                        subtitle: L10n.t("Turn sleep signals into tonight's plan.", "把睡眠信号转成今晚计划。"),
+                        systemImage: "moon.stars.fill",
                         tint: VelaTheme.sleep
-                    )
+                    ) {
+                        sendQuestion(L10n.t("Review my sleep and give me one concrete optimization for tonight.", "请分析我的睡眠，并给出今晚一个具体优化建议。"))
+                    }
+
+                    VelaCoachCommandCard(
+                        title: L10n.t("Review Memory", "检查记忆"),
+                        subtitle: L10n.t("Open pending memories and profile context.", "打开待确认记忆和个人档案。"),
+                        systemImage: "brain.head.profile",
+                        tint: VelaTheme.energy
+                    ) {
+                        showConversation = false
+                    }
+                    .overlay {
+                        NavigationLink {
+                            WikiProfileView()
+                        } label: {
+                            Color.clear
+                        }
+                    }
                 }
-                .padding(.horizontal, 4)
+
+                VelaSectionHeader(
+                    title: AppLanguage.stored.isChinese ? "信任与数据" : "Trust and Data",
+                    subtitle: AppLanguage.stored.isChinese ? "检查 Vela 的输入质量和 Agent 行为记录。" : "Check Vela's input quality and agent behavior records."
+                )
+
+                HStack(spacing: 12) {
+                    NavigationLink {
+                        DataCoverageView()
+                    } label: {
+                        trustCommandTile(
+                            title: AppLanguage.stored.isChinese ? "数据覆盖" : "Data Coverage",
+                            subtitle: AppLanguage.stored.isChinese ? "信号新鲜度与置信度" : "Signal freshness and confidence",
+                            icon: "waveform.path.ecg.rectangle",
+                            tint: VelaTheme.recovery
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    NavigationLink {
+                        TrustCenterView()
+                    } label: {
+                        trustCommandTile(
+                            title: AppLanguage.stored.isChinese ? "信任中心" : "Trust Center",
+                            subtitle: AppLanguage.stored.isChinese ? "Agent 审计日志" : "Agent audit log",
+                            icon: "checkmark.shield.fill",
+                            tint: VelaTheme.accent
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             .padding(VelaTheme.screenPadding)
             .padding(.bottom, 24)
+        }
+    }
+
+    private func trustCommandTile(title: String, subtitle: String, icon: String, tint: Color) -> some View {
+        VelaGlassCard(padding: 14, cornerRadius: 14) {
+            VStack(alignment: .leading, spacing: 10) {
+                Image(systemName: icon)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 34, height: 34)
+                    .background(Circle().fill(tint.opacity(0.12)))
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(VelaTheme.primaryText)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(VelaTheme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
     

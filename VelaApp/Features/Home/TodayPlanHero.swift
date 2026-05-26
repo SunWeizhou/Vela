@@ -10,65 +10,151 @@ struct TodayPlanHero: View {
     @State private var expandedActionId: UUID?
 
     var body: some View {
-        VStack(spacing: 0) {
-            // State banner
-            stateBanner
-
-            // Top actions
-            VStack(spacing: 8) {
-                ForEach(plan.topActions) { action in
-                    actionCard(action)
-                }
-
-                // Memory inbox teaser
-                if plan.confidenceNote.contains("pending") || plan.confidenceNote.contains("待确认") {
-                    memoryInboxTeaser
-                }
-            }
-            .padding(12)
+        VStack(alignment: .leading, spacing: 14) {
+            cockpitHeader
+            cockpitSignals
+            actionStack
         }
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(VelaTheme.surface)
-        )
         .padding(.horizontal, VelaTheme.screenPadding)
     }
 
-    // MARK: - State Banner
+    // MARK: - Body Intelligence Cockpit
 
-    private var stateBanner: some View {
-        HStack(spacing: 12) {
-            // Emoji + score ring placeholder
-            ZStack {
-                Circle()
-                    .fill(stateColor.opacity(0.12))
-                    .frame(width: 56, height: 56)
-                Text(plan.state.emoji)
-                    .font(.title)
+    private var cockpitHeader: some View {
+        VelaHeroSurface(tint: stateColor) {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top, spacing: 16) {
+                    readinessRing
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(AppLanguage.stored.isChinese ? "今日身体状态" : "Today's Body State")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(VelaTheme.mutedText)
+                            .textCase(.uppercase)
+
+                        HStack(spacing: 8) {
+                            Text(plan.state.label)
+                                .font(.title2.weight(.bold))
+                                .foregroundStyle(VelaTheme.primaryText)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.78)
+                            VelaStatusBadge(label: fatigueLabel, systemImage: "waveform.path.ecg", tint: stateColor)
+                        }
+
+                        Text(readinessNarrative)
+                            .font(.subheadline)
+                            .foregroundStyle(VelaTheme.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                if !riskFlags.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(riskFlags.prefix(2)) { flag in
+                            HStack(alignment: .top, spacing: 8) {
+                                VelaRiskBadge(level: flag.level)
+                                Text(flag.message)
+                                    .font(.caption)
+                                    .foregroundStyle(VelaTheme.secondaryText)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                }
             }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(plan.headline)
-                    .font(.headline)
-                    .foregroundStyle(VelaTheme.primaryText)
-                Text(plan.subheadline)
-                    .font(.caption)
-                    .foregroundStyle(VelaTheme.secondaryText)
-            }
-
-            Spacer()
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(stateColor.opacity(0.06))
-        )
+    }
+
+    private var readinessRing: some View {
+        ZStack {
+            Circle()
+                .stroke(VelaTheme.stroke, lineWidth: 9)
+            Circle()
+                .trim(from: 0, to: readinessProgress)
+                .stroke(
+                    AngularGradient(colors: [stateColor.opacity(0.55), stateColor, stateColor.opacity(0.78)], center: .center),
+                    style: StrokeStyle(lineWidth: 9, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+                .shadow(color: stateColor.opacity(0.25), radius: 8, y: 2)
+            VStack(spacing: 2) {
+                Text(readinessScoreText)
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(VelaTheme.primaryText)
+                    .monospacedDigit()
+                Text(AppLanguage.stored.isChinese ? "准备度" : "Ready")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(VelaTheme.mutedText)
+            }
+        }
+        .frame(width: 92, height: 92)
+        .accessibilityLabel(AppLanguage.stored.isChinese ? "今日准备度 \(readinessScoreText)" : "Today's readiness \(readinessScoreText)")
+    }
+
+    private var cockpitSignals: some View {
+        VelaGlassCard {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 10) {
+                    signalBlock(
+                        title: AppLanguage.stored.isChinese ? "主要限制" : "Primary limiter",
+                        value: primaryLimiterTitle,
+                        detail: primaryLimiterDetail,
+                        icon: "exclamationmark.arrow.triangle.2.circlepath",
+                        tint: VelaTheme.strain
+                    )
+
+                    signalBlock(
+                        title: AppLanguage.stored.isChinese ? "训练窗口" : "Training window",
+                        value: trainingWindowTitle,
+                        detail: trainingWindowDetail,
+                        icon: "calendar.badge.clock",
+                        tint: VelaTheme.energy
+                    )
+                }
+
+                if !fatigueSources.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(AppLanguage.stored.isChinese ? "疲劳来源" : "Fatigue sources")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(VelaTheme.mutedText)
+                        FlowPills(items: fatigueSources.prefix(4).map { source in
+                            (source.category.label, VelaSemanticColors.color(for: source.category.rawValue))
+                        })
+                    }
+                }
+
+                VelaInlineAlert(
+                    title: AppLanguage.stored.isChinese ? "判断置信度" : "Confidence",
+                    message: confidenceText,
+                    systemImage: "checkmark.seal.fill",
+                    tint: confidenceTint
+                )
+            }
+        }
     }
 
     // MARK: - Action Card
 
+    private var actionStack: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VelaSectionHeader(
+                title: AppLanguage.stored.isChinese ? "今日行动" : "Today's Actions",
+                subtitle: AppLanguage.stored.isChinese ? "按优先级排列，可查看每条建议的判断依据。" : "Prioritized actions, each with reasoning when available."
+            )
+
+            ForEach(plan.topActions.prefix(3)) { action in
+                actionCard(action)
+            }
+
+            if plan.confidenceNote.localizedCaseInsensitiveContains("pending") || plan.confidenceNote.contains("待确认") {
+                memoryInboxTeaser
+            }
+        }
+    }
+
     private func actionCard(_ action: DailyAction) -> some View {
         let isExpanded = expandedActionId == action.id
+        let hasReasoning = !action.evidenceChain.isEmpty || !action.whyThis.isEmpty
 
         return VStack(spacing: 0) {
             Button {
@@ -77,36 +163,46 @@ struct TodayPlanHero: View {
                 }
                 onActionTap(action)
             } label: {
-                HStack(spacing: 10) {
+                HStack(alignment: .top, spacing: 12) {
                     Image(systemName: action.iconName)
-                        .font(.subheadline)
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(VelaTheme.accent)
-                        .frame(width: 28, height: 28)
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill(VelaTheme.accent.opacity(0.12)))
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text(action.title)
-                            .font(.subheadline.weight(.medium))
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(VelaTheme.primaryText)
+                            .fixedSize(horizontal: false, vertical: true)
                         Text(action.subtitle)
-                            .font(.caption2)
+                            .font(.caption)
                             .foregroundStyle(VelaTheme.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     Spacer()
 
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption2)
-                        .foregroundStyle(VelaTheme.mutedText)
+                    VStack(spacing: 6) {
+                        if hasReasoning {
+                            Image(systemName: "info.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(VelaTheme.energy)
+                        }
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(VelaTheme.mutedText)
+                    }
                 }
-                .padding(12)
+                .padding(14)
             }
             .buttonStyle(.plain)
 
             if isExpanded {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 10) {
                     MarkdownText(markdown: action.detailMarkdown, font: .caption, color: VelaTheme.secondaryText)
 
-                    if !action.whyThis.isEmpty {
+                    if hasReasoning {
                         Button {
                             onWhyThisTap(action)
                         } label: {
@@ -120,14 +216,43 @@ struct TodayPlanHero: View {
                         .padding(.top, 4)
                     }
                 }
-                .padding(.horizontal, 12)
-                .padding(.bottom, 12)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 14)
             }
         }
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(VelaTheme.elevatedSurface)
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(hasReasoning ? VelaTheme.accent.opacity(0.20) : VelaTheme.stroke, lineWidth: 0.7)
+        )
+    }
+
+    private func signalBlock(title: String, value: String, detail: String, icon: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: icon)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(tint)
+            Text(title)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(VelaTheme.mutedText)
+                .textCase(.uppercase)
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(VelaTheme.primaryText)
+                .lineLimit(2)
+                .minimumScaleFactor(0.82)
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(VelaTheme.secondaryText)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(tint.opacity(0.08)))
     }
 
     // MARK: - Memory Inbox Teaser
@@ -171,6 +296,84 @@ struct TodayPlanHero: View {
         case .unknown: return VelaTheme.mutedText
         }
     }
+
+    private var readinessScoreText: String {
+        guard let score = plan.bodyInterpretation?.readinessScore else { return "--" }
+        return "\(Int(score.rounded()))"
+    }
+
+    private var readinessProgress: CGFloat {
+        guard let score = plan.bodyInterpretation?.readinessScore else { return 0.04 }
+        return min(max(CGFloat(score / 100), 0.04), 1)
+    }
+
+    private var readinessNarrative: String {
+        plan.bodyInterpretation?.readinessNarrative ?? plan.subheadline
+    }
+
+    private var fatigueLabel: String {
+        plan.bodyInterpretation?.fatigueLevel.label ?? plan.state.label
+    }
+
+    private var primaryLimiterTitle: String {
+        plan.bodyInterpretation?.primaryLimiter.metricName ?? (AppLanguage.stored.isChinese ? "数据基线" : "Data baseline")
+    }
+
+    private var primaryLimiterDetail: String {
+        plan.bodyInterpretation?.primaryLimiter.interpretation ?? plan.subheadline
+    }
+
+    private var trainingWindowTitle: String {
+        guard let window = plan.bodyInterpretation?.trainingWindow else {
+            return AppLanguage.stored.isChinese ? "等待更多数据" : "Awaiting more data"
+        }
+        if !window.isOpen {
+            return AppLanguage.stored.isChinese ? "窗口关闭" : "Window closed"
+        }
+        return "\(window.recommendedIntensity.capitalized) · \(window.maxDurationMinutes)m"
+    }
+
+    private var trainingWindowDetail: String {
+        plan.bodyInterpretation?.trainingWindow.narrative ?? plan.headline
+    }
+
+    private var fatigueSources: [FatigueSource] {
+        plan.bodyInterpretation?.fatigueSources ?? []
+    }
+
+    private var riskFlags: [RiskFlag] {
+        plan.bodyInterpretation?.riskFlags ?? []
+    }
+
+    private var confidenceText: String {
+        if let confidence = plan.bodyInterpretation?.overallConfidence {
+            switch confidence {
+            case .high: return AppLanguage.stored.isChinese ? "关键健康信号充足，建议可信度较高。" : "Key health signals are available, so this recommendation has high confidence."
+            case .medium: return AppLanguage.stored.isChinese ? "部分信号可用，Vela 会保守解释今天的状态。" : "Some signals are available, so Vela is interpreting today conservatively."
+            case .low: return AppLanguage.stored.isChinese ? "数据覆盖有限，请把建议视为低置信度参考。" : "Data coverage is limited; treat the recommendation as low-confidence guidance."
+            case .unavailable: return plan.confidenceNote
+            }
+        }
+        return plan.confidenceNote
+    }
+
+    private var confidenceTint: Color {
+        guard let confidence = plan.bodyInterpretation?.overallConfidence else { return VelaTheme.accent }
+        return VelaSemanticColors.color(for: confidence)
+    }
+}
+
+private struct FlowPills: View {
+    let items: [(String, Color)]
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 118), spacing: 8)], alignment: .leading, spacing: 8) {
+            ForEach(Array(items.enumerated()), id: \.offset) { item in
+                VelaStatusBadge(label: item.element.0, tint: item.element.1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
 }
 
 // MARK: - Why This Sheet
@@ -182,26 +385,44 @@ struct WhyThisSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(action.title)
-                            .font(.headline)
-                        Text(action.subtitle)
-                            .font(.caption)
-                            .foregroundStyle(VelaTheme.secondaryText)
+                VStack(alignment: .leading, spacing: 16) {
+                    VelaHeroSurface(tint: VelaTheme.accent) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(AppLanguage.stored.isChinese ? "为什么 Vela 建议这样做？" : "Why is Vela recommending this?")
+                                .font(.title3.weight(.bold))
+                                .foregroundStyle(VelaTheme.primaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(action.title)
+                                .font(.headline)
+                                .foregroundStyle(VelaTheme.primaryText)
+                            Text(action.subtitle)
+                                .font(.subheadline)
+                                .foregroundStyle(VelaTheme.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
 
                     // Evidence Chain 2.0 (preferred)
                     if !action.evidenceChain.isEmpty {
-                        ForEach(action.evidenceChain) { item in
-                            evidenceChainCard(item)
+                        VelaSectionHeader(
+                            title: AppLanguage.stored.isChinese ? "证据链" : "Evidence Chain",
+                            subtitle: AppLanguage.stored.isChinese ? "从健康信号到行动影响的推理路径。" : "The path from health signal to action impact."
+                        )
+                        VStack(spacing: 12) {
+                            ForEach(Array(action.evidenceChain.enumerated()), id: \.element.id) { offset, item in
+                                evidenceChainCard(item, index: offset + 1, isLast: offset == action.evidenceChain.count - 1)
+                            }
                         }
                     } else {
                         // Legacy WhyThisItem fallback
-                        ForEach(action.whyThis) { item in
-                            whyThisCard(item)
+                        VelaSectionHeader(
+                            title: AppLanguage.stored.isChinese ? "判断依据" : "Reasoning",
+                            subtitle: AppLanguage.stored.isChinese ? "旧版指标解释会作为备用显示。" : "Legacy metric explanations are shown as fallback."
+                        )
+                        VStack(spacing: 12) {
+                            ForEach(Array(action.whyThis.enumerated()), id: \.element.id) { offset, item in
+                                whyThisCard(item, index: offset + 1, isLast: offset == action.whyThis.count - 1)
+                            }
                         }
                     }
                 }
@@ -220,134 +441,137 @@ struct WhyThisSheet: View {
 
     // MARK: - Evidence Chain Card (Vela 2.0 Beta)
 
-    private func evidenceChainCard(_ item: EvidenceChainItem) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // Step 1: Metric name + current value + trend
-            HStack {
-                Image(systemName: iconForCategory(item.metricCategory))
-                    .font(.subheadline)
-                    .foregroundStyle(colorForCategory(item.metricCategory))
-                Text(item.metricName)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(VelaTheme.primaryText)
-                Spacer()
-                freshnessBadge(item.dataFreshness)
+    private func evidenceChainCard(_ item: EvidenceChainItem, index: Int, isLast: Bool) -> some View {
+        let tint = colorForCategory(item.metricCategory)
+        return HStack(alignment: .top, spacing: 12) {
+            VStack(spacing: 8) {
+                Text("\(index)")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.black)
+                    .frame(width: 26, height: 26)
+                    .background(Circle().fill(tint))
+                if !isLast {
+                    Rectangle()
+                        .fill(tint.opacity(0.26))
+                        .frame(width: 2, height: 116)
+                }
             }
 
-            HStack(spacing: 20) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(AppLanguage.stored.isChinese ? "当前值" : "Current")
-                        .font(.caption2)
-                        .foregroundStyle(VelaTheme.mutedText)
-                    Text("\(item.currentValueFormatted) \(item.unit)")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(VelaTheme.accent)
-                }
-                if let baseline = item.baselineFormatted {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(AppLanguage.stored.isChinese ? "基线" : "Baseline")
-                            .font(.caption2)
-                            .foregroundStyle(VelaTheme.mutedText)
-                        Text("\(baseline) \(item.unit)")
-                            .font(.title3.weight(.bold))
-                            .foregroundStyle(VelaTheme.secondaryText)
+            VelaGlassCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .top) {
+                        Label(item.metricName, systemImage: iconForCategory(item.metricCategory))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(VelaTheme.primaryText)
+                        Spacer()
+                        VelaFreshnessBadge(freshness: item.dataFreshness)
                     }
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(AppLanguage.stored.isChinese ? "趋势" : "Trend")
-                        .font(.caption2)
-                        .foregroundStyle(VelaTheme.mutedText)
-                    HStack(spacing: 4) {
-                        Image(systemName: trendIcon(item.trend))
-                            .font(.caption)
-                        Text(trendLabel(item.trend))
-                            .font(.subheadline.weight(.medium))
+
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                        reasoningValue(
+                            title: AppLanguage.stored.isChinese ? "当前" : "Current",
+                            value: "\(item.currentValueFormatted) \(item.unit)",
+                            tint: tint
+                        )
+                        reasoningValue(
+                            title: AppLanguage.stored.isChinese ? "基线" : "Baseline",
+                            value: item.baselineFormatted.map { "\($0) \(item.unit)" } ?? "--",
+                            tint: VelaTheme.secondaryText
+                        )
+                        reasoningValue(
+                            title: AppLanguage.stored.isChinese ? "趋势" : "Trend",
+                            value: trendLabel(item.trend),
+                            tint: trendColor(item.trend),
+                            icon: trendIcon(item.trend)
+                        )
+                        reasoningValue(
+                            title: AppLanguage.stored.isChinese ? "来源" : "Source",
+                            value: sourceLabel(item.source),
+                            tint: VelaTheme.mutedText
+                        )
                     }
-                    .foregroundStyle(trendColor(item.trend))
+
+                    Text(item.interpretation)
+                        .font(.subheadline)
+                        .foregroundStyle(VelaTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if !item.actionImpact.isEmpty {
+                        VelaInlineAlert(
+                            title: AppLanguage.stored.isChinese ? "对行动的影响" : "Action impact",
+                            message: item.actionImpact,
+                            systemImage: "lightbulb.fill",
+                            tint: VelaTheme.energy
+                        )
+                    }
+
+                    VelaConfidenceBadge(confidence: item.confidence)
                 }
-            }
-
-            // Step 2: Interpretation
-            HStack(alignment: .top, spacing: 6) {
-                Image(systemName: "arrow.turn.down.right")
-                    .font(.caption2)
-                    .foregroundStyle(VelaTheme.mutedText)
-                Text(item.interpretation)
-                    .font(.caption)
-                    .foregroundStyle(VelaTheme.secondaryText)
-            }
-
-            // Step 3: Action Impact
-            if !item.actionImpact.isEmpty {
-                HStack(alignment: .top, spacing: 6) {
-                    Image(systemName: "lightbulb.fill")
-                        .font(.caption2)
-                        .foregroundStyle(VelaTheme.energy)
-                    Text(item.actionImpact)
-                        .font(.caption)
-                        .foregroundStyle(VelaTheme.primaryText)
-                }
-                .padding(8)
-                .background(RoundedRectangle(cornerRadius: 8).fill(VelaTheme.energy.opacity(0.08)))
-            }
-
-            // Meta: confidence + source
-            HStack(spacing: 8) {
-                confidenceBadge(item.confidence)
-                Text("·")
-                    .foregroundStyle(VelaTheme.mutedText)
-                Text(item.source == .healthKit ? "Apple Health" : item.source == .computed ? "Vela Engine" : "User Profile")
-                    .font(.caption2)
-                    .foregroundStyle(VelaTheme.mutedText)
             }
         }
-        .padding()
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(VelaTheme.surface))
     }
 
     // MARK: - Legacy Why This Card
 
-    private func whyThisCard(_ item: WhyThisItem) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(item.metricName)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(VelaTheme.primaryText)
-                Spacer()
-                confidenceBadge(item.confidence)
+    private func whyThisCard(_ item: WhyThisItem, index: Int, isLast: Bool) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(spacing: 8) {
+                Text("\(index)")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.black)
+                    .frame(width: 26, height: 26)
+                    .background(Circle().fill(VelaTheme.accent))
+                if !isLast {
+                    Rectangle()
+                        .fill(VelaTheme.accent.opacity(0.26))
+                        .frame(width: 2, height: 92)
+                }
             }
 
-            HStack(spacing: 16) {
-                VStack(alignment: .leading) {
-                    Text(AppLanguage.stored.isChinese ? "当前值" : "Current")
-                        .font(.caption2)
-                        .foregroundStyle(VelaTheme.mutedText)
-                    Text(item.currentValue)
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(VelaTheme.accent)
-                }
-
-                if let baseline = item.baselineValue {
-                    VStack(alignment: .leading) {
-                        Text(AppLanguage.stored.isChinese ? "参考值" : "Reference")
-                            .font(.caption2)
-                            .foregroundStyle(VelaTheme.mutedText)
-                        Text(baseline)
-                            .font(.title3.weight(.bold))
-                            .foregroundStyle(VelaTheme.secondaryText)
+            VelaGlassCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text(item.metricName)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(VelaTheme.primaryText)
+                        Spacer()
+                        VelaConfidenceBadge(confidence: item.confidence)
                     }
+
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                        reasoningValue(title: AppLanguage.stored.isChinese ? "当前" : "Current", value: item.currentValue, tint: VelaTheme.accent)
+                        reasoningValue(title: AppLanguage.stored.isChinese ? "参考" : "Reference", value: item.baselineValue ?? "--", tint: VelaTheme.secondaryText)
+                    }
+
+                    Text(item.interpretation)
+                        .font(.subheadline)
+                        .foregroundStyle(VelaTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-
-            Text(item.interpretation)
-                .font(.caption)
-                .foregroundStyle(VelaTheme.secondaryText)
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(VelaTheme.surface)
-        )
+    }
+
+    private func reasoningValue(title: String, value: String, tint: Color, icon: String? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(VelaTheme.mutedText)
+            HStack(spacing: 4) {
+                if let icon {
+                    Image(systemName: icon)
+                        .font(.caption.weight(.semibold))
+                }
+                Text(value)
+                    .font(.subheadline.weight(.bold))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.78)
+            }
+            .foregroundStyle(tint)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(tint.opacity(0.08)))
     }
 
     private func confidenceBadge(_ confidence: DataConfidence) -> some View {
@@ -440,6 +664,17 @@ struct WhyThisSheet: View {
         case "energy": return VelaTheme.energy
         case "gait": return VelaTheme.accent
         default: return VelaTheme.accent
+        }
+    }
+
+    private func sourceLabel(_ source: HealthDataSource) -> String {
+        switch source {
+        case .healthKit: return "Apple Health"
+        case .computed: return "Vela Engine"
+        case .userProvided: return AppLanguage.stored.isChinese ? "用户输入" : "User Provided"
+        case .aiEstimated: return AppLanguage.stored.isChinese ? "AI 估计" : "AI Estimated"
+        case .wikiProfile: return AppLanguage.stored.isChinese ? "用户档案" : "Wiki Profile"
+        case .biomarkerLab: return AppLanguage.stored.isChinese ? "实验室指标" : "Lab"
         }
     }
 

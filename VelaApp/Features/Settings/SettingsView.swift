@@ -98,6 +98,58 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.plain)
 
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label(language.isChinese ? "Vela 控制台" : "Vela Controls", systemImage: "slider.horizontal.3")
+                                .font(.headline)
+                                .foregroundStyle(VelaTheme.primaryText)
+
+                            Text(language.isChinese
+                                 ? "快速进入记忆、数据质量和 Agent 审计。"
+                                 : "Quick access to memory, data quality, and agent audit surfaces."
+                            )
+                            .font(.caption)
+                            .foregroundStyle(VelaTheme.secondaryText)
+
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 142), spacing: 10)], spacing: 10) {
+                                NavigationLink {
+                                    WikiProfileView()
+                                } label: {
+                                    SettingsControlTile(
+                                        title: language.isChinese ? "Wiki / 记忆" : "Wiki / Memory",
+                                        subtitle: language.isChinese ? "确认长期记忆" : "Review learned memory",
+                                        icon: "brain.head.profile",
+                                        tint: VelaTheme.energy
+                                    )
+                                }
+                                .buttonStyle(.plain)
+
+                                NavigationLink {
+                                    DataCoverageView()
+                                } label: {
+                                    SettingsControlTile(
+                                        title: language.isChinese ? "数据覆盖" : "Data Coverage",
+                                        subtitle: language.isChinese ? "健康信号质量" : "Health signal quality",
+                                        icon: "waveform.path.ecg.rectangle",
+                                        tint: VelaTheme.recovery
+                                    )
+                                }
+                                .buttonStyle(.plain)
+
+                                NavigationLink {
+                                    TrustCenterView()
+                                } label: {
+                                    SettingsControlTile(
+                                        title: language.isChinese ? "信任中心" : "Trust Center",
+                                        subtitle: language.isChinese ? "Agent 审计日志" : "Agent audit log",
+                                        icon: "checkmark.shield.fill",
+                                        tint: VelaTheme.accent
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .cardSurface()
+
 
                     VStack(alignment: .leading, spacing: 14) {
                         Label(language.isChinese ? "语言" : "Language", systemImage: "globe")
@@ -352,6 +404,7 @@ struct SettingsView: View {
             selectedPersonality = CoachPersonality(rawValue: coachPersonalityRaw) ?? .guardian
         }
     }
+
 }
 
     // MARK: - Agent Skills Section
@@ -770,5 +823,40 @@ struct JSONExportDocument: FileDocument {
 
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
         FileWrapper(regularFileWithContents: data)
+    }
+}
+
+private struct SettingsControlTile: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: icon)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(tint)
+                .frame(width: 34, height: 34)
+                .background(Circle().fill(tint.opacity(0.12)))
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(VelaTheme.primaryText)
+                .multilineTextAlignment(.leading)
+            Text(subtitle)
+                .font(.caption)
+                .foregroundStyle(VelaTheme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, minHeight: 118, alignment: .topLeading)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(VelaTheme.elevatedSurface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(VelaTheme.stroke, lineWidth: 0.7)
+        )
     }
 }

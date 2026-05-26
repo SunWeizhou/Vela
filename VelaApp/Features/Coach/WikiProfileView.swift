@@ -515,6 +515,54 @@ struct WikiProfileView: View {
 
     @ViewBuilder
     private var pendingMemoriesSection: some View {
+        VelaHeroSurface(tint: VelaTheme.energy) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "brain.head.profile")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(VelaTheme.energy)
+                        .frame(width: 40, height: 40)
+                        .background(Circle().fill(VelaTheme.energy.opacity(0.12)))
+                        .accessibilityHidden(true)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(AppLanguage.stored.isChinese ? "Vela 学到了一些关于你的信息" : "Vela learned something about you")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(VelaTheme.primaryText)
+                        Text(AppLanguage.stored.isChinese
+                             ? "确认后才会写入个人 Wiki。你可以保存可信记忆，或拒绝不准确的发现。"
+                             : "Nothing is saved to your Wiki until you confirm it. Save trusted memories or reject anything inaccurate."
+                        )
+                        .font(.subheadline)
+                        .foregroundStyle(VelaTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer()
+                }
+
+                VelaInlineAlert(
+                    title: AppLanguage.stored.isChinese ? "待你确认" : "Awaiting review",
+                    message: AppLanguage.stored.isChinese
+                    ? "\(pendingProposals.count) 条候选长期记忆会影响未来建议、解释和训练调整。"
+                    : "\(pendingProposals.count) proposed memories may shape future recommendations, explanations, and training adjustments.",
+                    systemImage: "person.crop.circle.badge.questionmark",
+                    tint: VelaTheme.energy
+                )
+
+                ForEach(pendingProposals) { proposal in
+                    VelaMemoryProposalCard(
+                        proposal: proposal,
+                        onAccept: { confirmProposal(proposal) },
+                        onReject: { rejectProposal(proposal) }
+                    )
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var legacyPendingMemoriesSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
                 Image(systemName: "clock.badge.questionmark")
