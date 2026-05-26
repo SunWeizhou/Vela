@@ -501,6 +501,22 @@ struct HomeView: View {
                 from: interpretation, activePlan: activePlan,
                 pendingProposals: Array(pendingProposals), wiki: wiki
             )
+            // Generate adaptive training adjustments if an active plan exists
+            if let plan = activePlan {
+                let manager = AdaptiveTrainingManager()
+                let newAdaptations = manager.generateWeekAdjustments(
+                    plan: plan, interpretation: interpretation
+                )
+                // Dedup: skip if same day already has a proposed adaptation
+                let existingFetch = FetchDescriptor<TrainingPlanAdaptationRecord>(
+                    predicate: #Predicate { $0.status == "proposed" }
+                )
+                let existingDayIds = Set(((try? modelContext.fetch(existingFetch)) ?? []).map { $0.dayId })
+                for record in newAdaptations where !existingDayIds.contains(record.dayId) {
+                    modelContext.insert(record)
+                }
+                if !newAdaptations.isEmpty { try? modelContext.save() }
+            }
             await EveningWikiSyncAgent.shared.runIfNeeded(
                 modelContext: modelContext,
                 dashboard: viewModel.dashboard

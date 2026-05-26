@@ -19,6 +19,11 @@ struct TrainingCalendarView: View {
         plans.first(where: { $0.isActive })
     }
 
+    /// Filter pending adaptations to only those matching the active plan.
+    private func adaptationsForPlan(_ plan: TrainingPlanRecord) -> [TrainingPlanAdaptationRecord] {
+        pendingAdaptations.filter { $0.planId == plan.id }
+    }
+
     var body: some View {
         Group {
             if let plan = activePlan {
@@ -59,24 +64,26 @@ struct TrainingCalendarView: View {
 
     // MARK: - Pending Adaptations
     private func pendingAdaptationsBanner(plan: TrainingPlanRecord) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let filtered = adaptationsForPlan(plan)
+        guard !filtered.isEmpty else { return AnyView(EmptyView()) }
+        return AnyView(VStack(alignment: .leading, spacing: 8) {
             Label(
                 AppLanguage.stored.isChinese
-                    ? "Vela 建议调整 \(pendingAdaptations.count) 项训练"
-                    : "Vela suggests \(pendingAdaptations.count) training adjustments",
+                    ? "Vela 建议调整 \(filtered.count) 项训练"
+                    : "Vela suggests \(filtered.count) training adjustments",
                 systemImage: "exclamationmark.bubble.fill"
             )
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(VelaTheme.energy)
 
-            ForEach(pendingAdaptations.prefix(3)) { adaptation in
+            ForEach(filtered.prefix(3)) { adaptation in
                 adaptationRow(adaptation, plan: plan)
             }
 
-            if pendingAdaptations.count > 3 {
+            if filtered.count > 3 {
                 Text(AppLanguage.stored.isChinese
-                     ? "还有 \(pendingAdaptations.count - 3) 项调整..."
-                     : "\(pendingAdaptations.count - 3) more adjustments..."
+                     ? "还有 \(filtered.count - 3) 项调整..."
+                     : "\(filtered.count - 3) more adjustments..."
                 )
                 .font(.caption2)
                 .foregroundStyle(VelaTheme.mutedText)
@@ -84,6 +91,7 @@ struct TrainingCalendarView: View {
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.energy.opacity(0.06)))
+        )
     }
 
     private func adaptationRow(_ adaptation: TrainingPlanAdaptationRecord, plan: TrainingPlanRecord) -> some View {
@@ -128,6 +136,7 @@ struct TrainingCalendarView: View {
     }
 
     private func acceptAdaptation(_ adaptation: TrainingPlanAdaptationRecord, plan: TrainingPlanRecord) {
+        guard adaptation.planId == plan.id else { return }
         do {
             let manager = AdaptiveTrainingManager()
             try manager.applyAdaptation(adaptation, to: plan, modelContext: modelContext)
@@ -177,7 +186,7 @@ struct TrainingCalendarView: View {
 
         return VStack(alignment: .leading, spacing: 20) {
             // Pending Adaptations Banner
-            if !pendingAdaptations.isEmpty {
+            if !adaptationsForPlan(plan).isEmpty {
                 pendingAdaptationsBanner(plan: plan)
             }
 

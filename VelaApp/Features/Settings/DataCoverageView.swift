@@ -253,7 +253,7 @@ struct DataCoverageView: View {
             guard let qty = HKQuantityType.quantityType(forIdentifier: id) else { return false }
             return store.authorizationStatus(for: qty) == .sharingAuthorized
         case .category(let id):
-            let cat = HKCategoryType(id)
+            let cat = HKObjectType.categoryType(forIdentifier: id)!
             return store.authorizationStatus(for: cat) == .sharingAuthorized
         }
     }
