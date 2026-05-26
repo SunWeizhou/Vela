@@ -5,6 +5,12 @@ struct TrainingCalendarView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \TrainingPlanRecord.createdAt, order: .reverse)
     private var plans: [TrainingPlanRecord]
+    @Query(
+        filter: #Predicate<TrainingPlanAdaptationRecord> { $0.status == "proposed" },
+        sort: \TrainingPlanAdaptationRecord.createdAt,
+        order: .reverse
+    )
+    private var pendingAdaptations: [TrainingPlanAdaptationRecord]
 
     @State private var selectedWeek: Int = 1
     @State private var selectedDayForSheet: TrainingDay? = nil
@@ -51,6 +57,117 @@ struct TrainingCalendarView: View {
         }
     }
 
+    // MARK: - Pending Adaptations
+    private func pendingAdaptationsBanner(plan: TrainingPlanRecord) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(
+                AppLanguage.stored.isChinese
+                    ? "Vela 建议调整 \(pendingAdaptations.count) 项训练"
+                    : "Vela suggests \(pendingAdaptations.count) training adjustments",
+                systemImage: "exclamationmark.bubble.fill"
+            )
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(VelaTheme.energy)
+
+            ForEach(pendingAdaptations.prefix(3)) { adaptation in
+                adaptationRow(adaptation, plan: plan)
+            }
+
+            if pendingAdaptations.count > 3 {
+                Text(AppLanguage.stored.isChinese
+                     ? "还有 \(pendingAdaptations.count - 3) 项调整..."
+                     : "\(pendingAdaptations.count - 3) more adjustments..."
+                )
+                .font(.caption2)
+                .foregroundStyle(VelaTheme.mutedText)
+            }
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.energy.opacity(0.06)))
+    }
+
+    private func adaptationRow(_ adaptation: TrainingPlanAdaptationRecord, plan: TrainingPlanRecord) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: iconForAdjustment(adaptation.adjustment))
+                .font(.caption)
+                .foregroundStyle(VelaTheme.energy)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(adaptation.originalDayTitle)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(VelaTheme.primaryText)
+                Text(labelForAdjustment(adaptation.adjustment) + ": " + adaptation.reason)
+                    .font(.caption2)
+                    .foregroundStyle(VelaTheme.secondaryText)
+                    .lineLimit(2)
+            }
+
+            Spacer()
+
+            HStack(spacing: 6) {
+                Button {
+                    acceptAdaptation(adaptation, plan: plan)
+                } label: {
+                    Text(AppLanguage.stored.isChinese ? "接受" : "Accept")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(Capsule().fill(VelaTheme.accent))
+                }
+
+                Button {
+                    rejectAdaptation(adaptation)
+                } label: {
+                    Text(AppLanguage.stored.isChinese ? "忽略" : "Ignore")
+                        .font(.caption2)
+                        .foregroundStyle(VelaTheme.mutedText)
+                }
+            }
+        }
+    }
+
+    private func acceptAdaptation(_ adaptation: TrainingPlanAdaptationRecord, plan: TrainingPlanRecord) {
+        do {
+            let manager = AdaptiveTrainingManager()
+            try manager.applyAdaptation(adaptation, to: plan, modelContext: modelContext)
+            adaptation.status = AdaptationStatus.accepted.rawValue
+            adaptation.acceptedAt = Date()
+            try modelContext.save()
+        } catch {
+            print("Failed to accept adaptation: \(error)")
+        }
+    }
+
+    private func rejectAdaptation(_ adaptation: TrainingPlanAdaptationRecord) {
+        adaptation.status = AdaptationStatus.rejected.rawValue
+        adaptation.rejectedAt = Date()
+        try? modelContext.save()
+    }
+
+    private func iconForAdjustment(_ a: String) -> String {
+        switch a {
+        case "rest": return "bed.double.fill"
+        case "reduce": return "arrow.down.circle.fill"
+        case "swap": return "arrow.triangle.swap"
+        case "reschedule": return "calendar.badge.clock"
+        case "deloadWeek": return "arrow.down.heart.fill"
+        default: return "checkmark.circle.fill"
+        }
+    }
+
+    private func labelForAdjustment(_ a: String) -> String {
+        switch a {
+        case "rest": return AppLanguage.stored.isChinese ? "建议休息" : "Rest"
+        case "reduce": return AppLanguage.stored.isChinese ? "建议减量" : "Reduce"
+        case "swap": return AppLanguage.stored.isChinese ? "建议替换" : "Swap"
+        case "reschedule": return AppLanguage.stored.isChinese ? "建议改期" : "Reschedule"
+        case "deloadWeek": return AppLanguage.stored.isChinese ? "建议减载周" : "Deload Week"
+        default: return a
+        }
+    }
+
+    
     // MARK: - Active Plan View
     private func activePlanView(_ plan: TrainingPlanRecord) -> some View {
         let completedCount = plan.days.filter { $0.isCompleted }.count
@@ -59,6 +176,11 @@ struct TrainingCalendarView: View {
         let percent = Int(progressRatio * 100)
 
         return VStack(alignment: .leading, spacing: 20) {
+            // Pending Adaptations Banner
+            if !pendingAdaptations.isEmpty {
+                pendingAdaptationsBanner(plan: plan)
+            }
+
             // Plan Header Card
             VStack(alignment: .leading, spacing: 12) {
                 HStack {

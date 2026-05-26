@@ -152,8 +152,14 @@ final class EveningWikiSyncAgent: ObservableObject {
             runRecord.endedAt = Date()
             runRecord.status = AgentRunStatus.success.rawValue
             runRecord.inputContextHash = contextMeta.hash
-            runRecord.outputSummary = String(parsed.displayText.prefix(300))
-            let toolCallsInfo: [[String: String]] = appliedFiles.map { ["file": $0, "action": "update_wiki"] }
+            let personalSummary = personalRulesCreated > 0
+                ? "\n\nPersonal Response Model proposed \(personalRulesCreated) new rules."
+                : ""
+            runRecord.outputSummary = String((parsed.displayText + personalSummary).prefix(500))
+            var toolCallsInfo: [[String: String]] = appliedFiles.map { ["file": $0, "action": "update_wiki"] }
+            if personalRulesCreated > 0 {
+                toolCallsInfo.append(["action": "personal_response_scan", "created": "\(personalRulesCreated)"])
+            }
             runRecord.toolCallsJSON = (try? String(data: JSONEncoder().encode(toolCallsInfo), encoding: .utf8)) ?? "[]"
             try? modelContext.save()
 

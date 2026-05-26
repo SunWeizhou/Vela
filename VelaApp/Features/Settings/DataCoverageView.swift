@@ -154,9 +154,9 @@ struct DataCoverageView: View {
                 title: AppLanguage.stored.isChinese ? "恢复" : "Recovery",
                 icon: "heart.fill",
                 signals: [
-                    CoverageSignal(name: "HRV (SDNN)", type: .heartRateVariabilitySDNN, store: store),
-                    CoverageSignal(name: AppLanguage.stored.isChinese ? "静息心率" : "Resting HR", type: .restingHeartRate, store: store),
-                    CoverageSignal(name: AppLanguage.stored.isChinese ? "呼吸率" : "Respiratory Rate", type: .respiratoryRate, store: store),
+                    CoverageSignal(name: "HRV (SDNN)", kind: .quantity(.heartRateVariabilitySDNN), store: store),
+                    CoverageSignal(name: AppLanguage.stored.isChinese ? "静息心率" : "Resting HR", kind: .quantity(.restingHeartRate), store: store),
+                    CoverageSignal(name: AppLanguage.stored.isChinese ? "呼吸率" : "Respiratory Rate", kind: .quantity(.respiratoryRate), store: store),
                 ],
                 affectedJudgments: ["Recovery Score", "Autonomic Fatigue", "HRV Z-Score"]
             ),
@@ -165,10 +165,9 @@ struct DataCoverageView: View {
                 title: AppLanguage.stored.isChinese ? "睡眠" : "Sleep",
                 icon: "moon.zzz.fill",
                 signals: [
-                    CoverageSignal(name: AppLanguage.stored.isChinese ? "睡眠时长" : "Sleep Duration", type: .heartRate, isAvailable: true, store: store),
-                    CoverageSignal(name: AppLanguage.stored.isChinese ? "睡眠阶段" : "Sleep Stages", type: .heartRate, isAvailable: true, store: store),
-                    CoverageSignal(name: AppLanguage.stored.isChinese ? "腕温" : "Wrist Temperature", type: .appleSleepingWristTemperature, store: store),
-                    CoverageSignal(name: AppLanguage.stored.isChinese ? "血氧" : "Blood Oxygen", type: .oxygenSaturation, store: store),
+                    CoverageSignal(name: AppLanguage.stored.isChinese ? "睡眠分析" : "Sleep Analysis", kind: .category(.sleepAnalysis), isAvailable: true, store: store),
+                    CoverageSignal(name: AppLanguage.stored.isChinese ? "腕温" : "Wrist Temperature", kind: .quantity(.appleSleepingWristTemperature), store: store),
+                    CoverageSignal(name: AppLanguage.stored.isChinese ? "血氧" : "Blood Oxygen", kind: .quantity(.oxygenSaturation), store: store),
                 ],
                 affectedJudgments: ["Sleep Score", "Sleep Architecture", "Sleep Deficit"]
             ),
@@ -177,9 +176,9 @@ struct DataCoverageView: View {
                 title: AppLanguage.stored.isChinese ? "训练" : "Training",
                 icon: "figure.run",
                 signals: [
-                    CoverageSignal(name: AppLanguage.stored.isChinese ? "运动记录" : "Workouts", type: .activeEnergyBurned, isAvailable: true, store: store),
-                    CoverageSignal(name: AppLanguage.stored.isChinese ? "运动心率" : "Workout HR", type: .heartRate, store: store),
-                    CoverageSignal(name: AppLanguage.stored.isChinese ? "步数" : "Steps", type: .stepCount, store: store),
+                    CoverageSignal(name: AppLanguage.stored.isChinese ? "运动记录" : "Workouts", kind: .quantity(.activeEnergyBurned), isAvailable: true, store: store),
+                    CoverageSignal(name: AppLanguage.stored.isChinese ? "运动心率" : "Workout HR", kind: .quantity(.heartRate), store: store),
+                    CoverageSignal(name: AppLanguage.stored.isChinese ? "步数" : "Steps", kind: .quantity(.stepCount), store: store),
                 ],
                 affectedJudgments: ["Strain Score", "Training Load", "TSB"]
             ),
@@ -188,9 +187,9 @@ struct DataCoverageView: View {
                 title: AppLanguage.stored.isChinese ? "步态与活动" : "Gait & Mobility",
                 icon: "figure.walk",
                 signals: [
-                    CoverageSignal(name: AppLanguage.stored.isChinese ? "步行速度" : "Walking Speed", type: .walkingSpeed, store: store),
-                    CoverageSignal(name: AppLanguage.stored.isChinese ? "步态不对称" : "Walking Asymmetry", type: .walkingAsymmetryPercentage, store: store),
-                    CoverageSignal(name: AppLanguage.stored.isChinese ? "双支撑比例" : "Double Support", type: .walkingDoubleSupportPercentage, store: store),
+                    CoverageSignal(name: AppLanguage.stored.isChinese ? "步行速度" : "Walking Speed", kind: .quantity(.walkingSpeed), store: store),
+                    CoverageSignal(name: AppLanguage.stored.isChinese ? "步态不对称" : "Walking Asymmetry", kind: .quantity(.walkingAsymmetryPercentage), store: store),
+                    CoverageSignal(name: AppLanguage.stored.isChinese ? "双支撑比例" : "Double Support", kind: .quantity(.walkingDoubleSupportPercentage), store: store),
                 ],
                 affectedJudgments: ["Gait Assessment", "Injury Risk", "Muscular Fatigue"]
             ),
@@ -199,8 +198,8 @@ struct DataCoverageView: View {
                 title: AppLanguage.stored.isChinese ? "心肺" : "Cardio",
                 icon: "lungs.fill",
                 signals: [
-                    CoverageSignal(name: "VO₂ Max", type: .vo2Max, store: store),
-                    CoverageSignal(name: AppLanguage.stored.isChinese ? "血氧" : "SpO₂", type: .oxygenSaturation, store: store),
+                    CoverageSignal(name: "VO₂ Max", kind: .quantity(.vo2Max), store: store),
+                    CoverageSignal(name: "SpO₂", kind: .quantity(.oxygenSaturation), store: store),
                 ],
                 affectedJudgments: ["Cardio Fitness", "Health Age"]
             ),
@@ -209,9 +208,9 @@ struct DataCoverageView: View {
                 title: AppLanguage.stored.isChinese ? "营养" : "Nutrition",
                 icon: "fork.knife",
                 signals: [
-                    CoverageSignal(name: AppLanguage.stored.isChinese ? "饮食能量" : "Dietary Energy", type: .dietaryEnergyConsumed, store: store),
-                    CoverageSignal(name: AppLanguage.stored.isChinese ? "水分" : "Water", type: .dietaryWater, store: store),
-                    CoverageSignal(name: AppLanguage.stored.isChinese ? "咖啡因" : "Caffeine", type: .dietaryCaffeine, store: store),
+                    CoverageSignal(name: AppLanguage.stored.isChinese ? "饮食能量" : "Dietary Energy", kind: .quantity(.dietaryEnergyConsumed), store: store),
+                    CoverageSignal(name: AppLanguage.stored.isChinese ? "水分" : "Water", kind: .quantity(.dietaryWater), store: store),
+                    CoverageSignal(name: AppLanguage.stored.isChinese ? "咖啡因" : "Caffeine", kind: .quantity(.dietaryCaffeine), store: store),
                 ],
                 affectedJudgments: ["Nutrition Score", "Hydration Status"]
             ),
@@ -220,8 +219,8 @@ struct DataCoverageView: View {
                 title: AppLanguage.stored.isChinese ? "环境" : "Environment",
                 icon: "ear.fill",
                 signals: [
-                    CoverageSignal(name: AppLanguage.stored.isChinese ? "环境噪音" : "Env. Noise", type: .headphoneAudioExposure, isAvailable: true, store: store),
-                    CoverageSignal(name: AppLanguage.stored.isChinese ? "日照时间" : "Daylight", type: .timeInDaylight, store: store),
+                    CoverageSignal(name: AppLanguage.stored.isChinese ? "环境噪音" : "Env. Noise", kind: .quantity(.headphoneAudioExposure), isAvailable: true, store: store),
+                    CoverageSignal(name: AppLanguage.stored.isChinese ? "日照时间" : "Daylight", kind: .quantity(.timeInDaylight), store: store),
                 ],
                 affectedJudgments: ["Sleep Quality", "Circadian Rhythm"]
             ),
@@ -231,13 +230,13 @@ struct DataCoverageView: View {
         for i in 0..<groups.count {
             for j in groups[i].signals.indices {
                 var sig = groups[i].signals[j]
-                sig.isAuthorized = await checkAuthorization(sig.type, store: store)
+                sig.isAuthorized = await checkAuthorization(sig.kind, store: store)
                 sig.isAvailable = sig.isAuthorized
-                let (c7, c30) = await fetchSampleCounts(sig.type, store: store)
+                let (c7, c30) = await fetchSampleCounts(sig.kind, store: store)
                 sig.sampleCount7d = c7; sig.sampleCount30d = c30
                 if let c = c7, c >= 7 { sig.freshness = .live; sig.quality = .enough }
                 else if let c = c7, c >= 3 { sig.freshness = .recent; sig.quality = .partial }
-                else if let c = c30, c ?? 0 >= 1 { sig.freshness = .stale; sig.quality = .insufficient }
+                else if let c = c30, c >= 1 { sig.freshness = .stale; sig.quality = .insufficient }
                 else { sig.freshness = .missing; sig.quality = .insufficient }
                 if !sig.isAuthorized { sig.freshness = .missing; sig.quality = .insufficient }
                 groups[i].signals[j] = sig
@@ -248,30 +247,37 @@ struct DataCoverageView: View {
         isLoading = false
     }
 
-    private func checkAuthorization(_ type: HKQuantityTypeIdentifier, store: HKHealthStore) async -> Bool {
-        guard let quantityType = HKQuantityType.quantityType(forIdentifier: type) else { return false }
-        return store.authorizationStatus(for: quantityType) == .sharingAuthorized
+    private func checkAuthorization(_ kind: CoverageSignalKind, store: HKHealthStore) async -> Bool {
+        switch kind {
+        case .quantity(let id):
+            guard let qty = HKQuantityType.quantityType(forIdentifier: id) else { return false }
+            return store.authorizationStatus(for: qty) == .sharingAuthorized
+        case .category(let id):
+            let cat = HKCategoryType(id)
+            return store.authorizationStatus(for: cat) == .sharingAuthorized
+        }
     }
 
-    private func fetchSampleCounts(_ type: HKQuantityTypeIdentifier, store: HKHealthStore) async -> (Int?, Int?) {
-        guard let quantityType = HKQuantityType.quantityType(forIdentifier: type) else {
-            return (nil, nil)
+    private func fetchSampleCounts(_ kind: CoverageSignalKind, store: HKHealthStore) async -> (Int?, Int?) {
+        let sampleType: HKSampleType?
+        switch kind {
+        case .quantity(let id): sampleType = HKQuantityType.quantityType(forIdentifier: id)
+        case .category(let id): sampleType = HKCategoryType(id)
         }
-        guard store.authorizationStatus(for: quantityType) == .sharingAuthorized else {
-            return (nil, nil)
-        }
+        guard let st = sampleType else { return (nil, nil) }
+        guard store.authorizationStatus(for: st) == .sharingAuthorized else { return (nil, nil) }
         let now = Date()
         let cal = Calendar.current
         let d7 = cal.date(byAdding: .day, value: -7, to: now)!
         let d30 = cal.date(byAdding: .day, value: -30, to: now)!
         let pred7d = HKQuery.predicateForSamples(withStart: d7, end: now, options: .strictStartDate)
         let pred30d = HKQuery.predicateForSamples(withStart: d30, end: now, options: .strictStartDate)
-        let count7d = await countSamples(for: quantityType, predicate: pred7d, store: store)
-        let count30d = await countSamples(for: quantityType, predicate: pred30d, store: store)
+        let count7d = await countSamples(for: st, predicate: pred7d, store: store)
+        let count30d = await countSamples(for: st, predicate: pred30d, store: store)
         return (count7d, count30d)
     }
 
-    private func countSamples(for type: HKQuantityType, predicate: NSPredicate, store: HKHealthStore) async -> Int? {
+    private func countSamples(for type: HKSampleType, predicate: NSPredicate, store: HKHealthStore) async -> Int? {
         await withCheckedContinuation { continuation in
             let query = HKSampleQuery(
                 sampleType: type, predicate: predicate, limit: 0, sortDescriptors: nil
@@ -332,10 +338,15 @@ struct CoverageGroup: Identifiable {
     var affectedJudgments: [String]
 }
 
+enum CoverageSignalKind {
+    case quantity(HKQuantityTypeIdentifier)
+    case category(HKCategoryTypeIdentifier)
+}
+
 struct CoverageSignal: Identifiable {
     var id: String { name }
     var name: String
-    var type: HKQuantityTypeIdentifier
+    var kind: CoverageSignalKind
     var isAvailable: Bool = false
     var isAuthorized: Bool = false
     var sampleCount7d: Int?
