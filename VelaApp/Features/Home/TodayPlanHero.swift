@@ -461,15 +461,16 @@ struct WhyThisSheet: View {
         let tint = colorForCategory(item.metricCategory)
         return HStack(alignment: .top, spacing: 12) {
             VStack(spacing: 8) {
-                Text("\(index)")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(Color.black)
+                Image(systemName: iconForCategory(item.metricCategory))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(tint)
                     .frame(width: 26, height: 26)
-                    .background(Circle().fill(tint))
+                    .background(Circle().fill(VelaTheme.background))
+                    .overlay(Circle().stroke(VelaTheme.stroke, lineWidth: 1.2))
                 if !isLast {
                     Rectangle()
-                        .fill(tint.opacity(0.26))
-                        .frame(width: 2, height: 116)
+                        .fill(VelaTheme.stroke)
+                        .frame(width: 1.5, height: 116)
                 }
             }
 
@@ -534,13 +535,14 @@ struct WhyThisSheet: View {
             VStack(spacing: 8) {
                 Text("\(index)")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(Color.black)
+                    .foregroundStyle(VelaTheme.accent)
                     .frame(width: 26, height: 26)
-                    .background(Circle().fill(VelaTheme.accent))
+                    .background(Circle().fill(VelaTheme.background))
+                    .overlay(Circle().stroke(VelaTheme.stroke, lineWidth: 1.2))
                 if !isLast {
                     Rectangle()
-                        .fill(VelaTheme.accent.opacity(0.26))
-                        .frame(width: 2, height: 92)
+                        .fill(VelaTheme.stroke)
+                        .frame(width: 1.5, height: 92)
                 }
             }
 

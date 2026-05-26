@@ -464,13 +464,14 @@ struct VelaEvidenceStep: View {
             VStack(spacing: VelaSpacing.xs) {
                 Text("\(index)")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(Color.black)
+                    .foregroundStyle(tint)
                     .frame(width: 24, height: 24)
-                    .background(Circle().fill(tint))
+                    .background(Circle().fill(VelaTheme.background))
+                    .overlay(Circle().stroke(VelaTheme.stroke, lineWidth: 1.2))
                 if !isLast {
                     Rectangle()
-                        .fill(tint.opacity(0.28))
-                        .frame(width: 2)
+                        .fill(VelaTheme.stroke)
+                        .frame(width: 1.5)
                         .frame(maxHeight: .infinity)
                 }
             }
