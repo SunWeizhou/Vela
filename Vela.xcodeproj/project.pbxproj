@@ -128,6 +128,7 @@
 		0B1001B100000000000000B1 /* VelaError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001B000000000000000B0 /* VelaError.swift */; };
 		0B1001B300000000000000B3 /* VelaServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001B200000000000000B2 /* VelaServices.swift */; };
 		0B1001B500000000000000B5 /* ViewVelaErrorAlert.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001B400000000000000B4 /* ViewVelaErrorAlert.swift */; };
+		0B1002020000000000000202 /* VelaOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1002000000000000000200 /* VelaOnboardingView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -264,6 +265,7 @@
 		0B1001B000000000000000B0 /* VelaError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/VelaError.swift; sourceTree = "<group>"; };
 		0B1001B200000000000000B2 /* VelaServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/VelaServices.swift; sourceTree = "<group>"; };
 		0B1001B400000000000000B4 /* ViewVelaErrorAlert.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Extensions/ViewVelaErrorAlert.swift; sourceTree = "<group>"; };
+		0B1002000000000000000200 /* VelaOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Onboarding/VelaOnboardingView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -410,6 +412,7 @@
 					0B1001930000000000000093 /* PlaceholderInsightCard.swift */,
 				0B10018B000000000000008B /* CoachPersonality.swift */,
 				0B10018C000000000000008C /* BiologicalAgeEngine.swift */,
+					0B1002000000000000000200 /* VelaOnboardingView.swift */,
 			);
 			path = VelaApp;
 			sourceTree = "<group>";
@@ -649,6 +652,7 @@
 				6829963D454246609FA8E8EC /* PersonalResponseModel.swift in Sources */,
 				CCE926745D694215843A40D4 /* AdaptiveTrainingManager.swift in Sources */,
 				AEB2F547D6A04198821B3E0C /* DataCoverageView.swift in Sources */,
+					0B1002020000000000000202 /* VelaOnboardingView.swift in Sources */,
 				5EAF240962A24A8B8D74158C /* PersonalResponseInsightService.swift in Sources */,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
