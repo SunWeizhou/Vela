@@ -13,6 +13,7 @@ final class DailyHealthSummaryRecord {
     var currentEnergy: Double?
     var energyBank: Double?
     var configVersion: String
+    var schemaVersion: Int
     var updatedAt: Date
     var createdAt: Date
     // Raw metrics for historical trend analysis
@@ -64,6 +65,7 @@ final class DailyHealthSummaryRecord {
         respiratoryRate: Double? = nil,
         wristTemperature: Double? = nil,
         configVersion: String = VelaAppMetadata.configVersion,
+        schemaVersion: Int = 1,
         updatedAt: Date = Date(),
         createdAt: Date = Date()
     ) {
@@ -95,6 +97,7 @@ final class DailyHealthSummaryRecord {
         self.respiratoryRate = respiratoryRate
         self.wristTemperature = wristTemperature
         self.configVersion = configVersion
+        self.schemaVersion = schemaVersion
         self.updatedAt = updatedAt
         self.createdAt = createdAt
     }
