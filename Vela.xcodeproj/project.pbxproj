@@ -136,6 +136,7 @@
 		AEB2F547D6A04198821B3E0C /* DataCoverageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63AAF7BE44C44A87855807F0 /* DataCoverageView.swift */; };
 		5EAF240962A24A8B8D74158C /* PersonalResponseInsightService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C38F23741E2F4476BAEAD938 /* PersonalResponseInsightService.swift */; };
 		0B1000350000000000000101 /* ScoreEngineFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001360000000000000101 /* ScoreEngineFactory.swift */; };
+		0B1001A400000000000000A4 /* DomainContextBuilders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001A500000000000000A5 /* DomainContextBuilders.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -279,6 +280,7 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 		63AAF7BE44C44A87855807F0 /* DataCoverageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Features/Settings/DataCoverageView.swift; sourceTree = "<group>"; };
 		C38F23741E2F4476BAEAD938 /* PersonalResponseInsightService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/AI/Proactive/PersonalResponseInsightService.swift; sourceTree = "<group>"; };
 		0B1001360000000000000101 /* ScoreEngineFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/ScoreEngineFactory.swift; sourceTree = "<group>"; };
+		0B1001A500000000000000A5 /* DomainContextBuilders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Context/DomainContextBuilders.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -385,6 +387,7 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 				0B1001260000000000000026 /* PreviewHealthDataProvider.swift */,
 				0B1001200000000000000020 /* AgentContextSchema.swift */,
 				0B1001450000000000000045 /* AIContextBuilder.swift */,
+				0B1001A500000000000000A5 /* DomainContextBuilders.swift */,
 				0B1001520000000000000052 /* WikiFileService.swift */,
 				8E0AA760E81449C5A55B5CC0 /* AgentActionParser.swift */,
 				5C22C274390C43168652DB74 /* DailyLogService.swift */,
@@ -618,6 +621,7 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 				0B1000250000000000000025 /* PreviewHealthDataProvider.swift in Sources */,
 				0B1000200000000000000020 /* AgentContextSchema.swift in Sources */,
 				0B1000440000000000000044 /* AIContextBuilder.swift in Sources */,
+				0B1001A400000000000000A4 /* DomainContextBuilders.swift in Sources */,
 				0B1000510000000000000051 /* WikiFileService.swift in Sources */,
 				0B1000450000000000000045 /* LLMProvider.swift in Sources */,
 				0B1000460000000000000046 /* DeepSeekProvider.swift in Sources */,
