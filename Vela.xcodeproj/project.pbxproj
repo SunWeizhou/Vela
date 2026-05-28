@@ -72,6 +72,7 @@
 		0B1000750000000000000075 /* JournalCorrelationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001750000000000000075 /* JournalCorrelationEngine.swift */; };
 		0B1000420000000000000042 /* DashboardSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001430000000000000043 /* DashboardSummary.swift */; };
 		0B1000430000000000000043 /* DailySummaryUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001440000000000000044 /* DailySummaryUseCase.swift */; };
+		0B1001A600000000000000A6 /* PreviewDataFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001A700000000000000A7 /* PreviewDataFactory.swift */; };
 		0B1000440000000000000044 /* AIContextBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001450000000000000045 /* AIContextBuilder.swift */; };
 		0B1000450000000000000045 /* LLMProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001460000000000000046 /* LLMProvider.swift */; };
 		0B1000460000000000000046 /* DeepSeekProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001470000000000000047 /* DeepSeekProvider.swift */; };
@@ -216,6 +217,7 @@
 		0B1001750000000000000075 /* JournalCorrelationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/Correlation/JournalCorrelationEngine.swift; sourceTree = "<group>"; };
 		0B1001430000000000000043 /* DashboardSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/DashboardSummary.swift; sourceTree = "<group>"; };
 		0B1001440000000000000044 /* DailySummaryUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/DailySummaryUseCase.swift; sourceTree = "<group>"; };
+		0B1001A700000000000000A7 /* PreviewDataFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/PreviewDataFactory.swift; sourceTree = "<group>"; };
 		0B1001450000000000000045 /* AIContextBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Context/AIContextBuilder.swift; sourceTree = "<group>"; };
 		0B1001460000000000000046 /* LLMProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Provider/LLMProvider.swift; sourceTree = "<group>"; };
 		0B1001470000000000000047 /* DeepSeekProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Provider/DeepSeekProvider.swift; sourceTree = "<group>"; };
@@ -349,6 +351,7 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 				0B1001240000000000000024 /* DateRangeQuery.swift */,
 				0B1001430000000000000043 /* DashboardSummary.swift */,
 				0B1001440000000000000044 /* DailySummaryUseCase.swift */,
+				0B1001A700000000000000A7 /* PreviewDataFactory.swift */,
 				0B1001530000000000000053 /* AppLanguage.swift */,
 				0B1001060000000000000006 /* VelaTheme.swift */,
 				0B21D1010000000000000001 /* VelaDesignSystem.swift */,
@@ -582,6 +585,7 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 				0B1000230000000000000023 /* DateRangeQuery.swift in Sources */,
 				0B1000420000000000000042 /* DashboardSummary.swift in Sources */,
 				0B1000430000000000000043 /* DailySummaryUseCase.swift in Sources */,
+				0B1001A600000000000000A6 /* PreviewDataFactory.swift in Sources */,
 				0B1000520000000000000052 /* AppLanguage.swift in Sources */,
 				0B1000060000000000000006 /* VelaTheme.swift in Sources */,
 				0B21D0010000000000000001 /* VelaDesignSystem.swift in Sources */,
