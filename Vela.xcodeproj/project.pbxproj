@@ -99,6 +99,7 @@
 		1A6CE2F96A194B09B5E093C2 /* SleepStageTimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5655A90C0C5C4BF399A52D18 /* SleepStageTimelineView.swift */; };
 		0B1000590000000000000059 /* DateNavigationBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001590000000000000059 /* DateNavigationBar.swift */; };
 		0B1000600000000000000060 /* WikiProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001600000000000000060 /* WikiProfileView.swift */; };
+		0B1000610000000000000061 /* VelaProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001620000000000000062 /* VelaProfileView.swift */; };
 		0B1000710000000000000071 /* MorningBriefScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001710000000000000071 /* MorningBriefScheduler.swift */; };
 		287CB086AF0E4C7D93B733E9 /* EveningWikiSyncAgent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B14519B53994C578B0EB905 /* EveningWikiSyncAgent.swift */; };
 		43BEF779AE284532AACC77E8 /* AgentSkillsConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 087BEB3E31344B8EA6E94717 /* AgentSkillsConfig.swift */; };
@@ -134,6 +135,7 @@
 		CCE926745D694215843A40D4 /* AdaptiveTrainingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54074915D1CD439596F77AD1 /* AdaptiveTrainingManager.swift */; };
 		AEB2F547D6A04198821B3E0C /* DataCoverageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63AAF7BE44C44A87855807F0 /* DataCoverageView.swift */; };
 		5EAF240962A24A8B8D74158C /* PersonalResponseInsightService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C38F23741E2F4476BAEAD938 /* PersonalResponseInsightService.swift */; };
+		0B1000350000000000000101 /* ScoreEngineFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001360000000000000101 /* ScoreEngineFactory.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -240,6 +242,7 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 		5655A90C0C5C4BF399A52D18 /* SleepStageTimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Sleep/SleepStageTimelineView.swift; sourceTree = "<group>"; };
 		0B1001590000000000000059 /* DateNavigationBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/SharedComponents/DateNavigationBar.swift; sourceTree = "<group>"; };
 		0B1001600000000000000060 /* WikiProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/WikiProfileView.swift; sourceTree = "<group>"; };
+		0B1001620000000000000062 /* VelaProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/VelaProfileView.swift; sourceTree = "<group>"; };
 		0B1001610000000000000061 /* Vela-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Vela-Info.plist; sourceTree = "<group>"; };
 		0B1001710000000000000071 /* MorningBriefScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Proactive/MorningBriefScheduler.swift; sourceTree = "<group>"; };
 		8B14519B53994C578B0EB905 /* EveningWikiSyncAgent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Proactive/EveningWikiSyncAgent.swift; sourceTree = "<group>"; };
@@ -275,6 +278,7 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 		54074915D1CD439596F77AD1 /* AdaptiveTrainingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Scoring/Training/AdaptiveTrainingManager.swift; sourceTree = "<group>"; };
 		63AAF7BE44C44A87855807F0 /* DataCoverageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Features/Settings/DataCoverageView.swift; sourceTree = "<group>"; };
 		C38F23741E2F4476BAEAD938 /* PersonalResponseInsightService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/AI/Proactive/PersonalResponseInsightService.swift; sourceTree = "<group>"; };
+		0B1001360000000000000101 /* ScoreEngineFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/ScoreEngineFactory.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -401,6 +405,7 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 				0B1001340000000000000034 /* AIReportRepository.swift */,
 				0B1001740000000000000074 /* HealthSnapshotRepository.swift */,
 				0B1001360000000000000036 /* ScoringCore.swift */,
+				0B1001360000000000000101 /* ScoreEngineFactory.swift */,
 				0B1001370000000000000037 /* SleepScoreEngine.swift */,
 				0B1001380000000000000038 /* RecoveryScoreEngine.swift */,
 				0B1001390000000000000039 /* StrainScoreEngine.swift */,
@@ -415,6 +420,7 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 				8425F1D5158E4674AE1C7B7E /* RecoveryFactorCard.swift */,
 				5655A90C0C5C4BF399A52D18 /* SleepStageTimelineView.swift */,
 				0B1001600000000000000060 /* WikiProfileView.swift */,
+				0B1001620000000000000062 /* VelaProfileView.swift */,
 			0B1001610000000000000061 /* Vela-Info.plist */,				0B1001710000000000000071 /* MorningBriefScheduler.swift */,
 				8B14519B53994C578B0EB905 /* EveningWikiSyncAgent.swift */,
 				087BEB3E31344B8EA6E94717 /* AgentSkillsConfig.swift */,
@@ -630,6 +636,7 @@ tttt0B10004A000000000000004A /* WebSearchService.swift in Sources */,
 				0B1000330000000000000033 /* AIReportRepository.swift in Sources */,
 				0B1000740000000000000074 /* HealthSnapshotRepository.swift in Sources */,
 				0B1000350000000000000035 /* ScoringCore.swift in Sources */,
+				0B1000350000000000000101 /* ScoreEngineFactory.swift in Sources */,
 				0B1000360000000000000036 /* SleepScoreEngine.swift in Sources */,
 				0B1000370000000000000037 /* RecoveryScoreEngine.swift in Sources */,
 				0B1000380000000000000038 /* StrainScoreEngine.swift in Sources */,
@@ -646,6 +653,7 @@ tttt0B10004A000000000000004A /* WebSearchService.swift in Sources */,
 				1A6CE2F96A194B09B5E093C2 /* SleepStageTimelineView.swift in Sources */,
 				0B1000590000000000000059 /* DateNavigationBar.swift in Sources */,
 				0B1000600000000000000060 /* WikiProfileView.swift in Sources */,
+				0B1000610000000000000061 /* VelaProfileView.swift in Sources */,
 				0B1000710000000000000071 /* MorningBriefScheduler.swift in Sources */,
 				287CB086AF0E4C7D93B733E9 /* EveningWikiSyncAgent.swift in Sources */,
 				43BEF779AE284532AACC77E8 /* AgentSkillsConfig.swift in Sources */,

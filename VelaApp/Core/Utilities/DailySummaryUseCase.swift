@@ -53,15 +53,83 @@ final class DailySummaryUseCase {
         let hrvHistory = (try? await queryService.hrvHistory(in: range28)) ?? []
         let rhrHistory = (try? await queryService.rhrHistory(in: range28)) ?? []
 
-        let dashboard = DashboardSummary.healthKit(
-            context: context,
-            strainScoreYesterday: yesterdayStrain,
-            bedtimeOffsetMinutes: sleepTimingBaseline?.bedtimeOffset,
-            wakeOffsetMinutes: sleepTimingBaseline?.wakeOffset,
-            hrvHistory: hrvHistory,
-            rhrHistory: rhrHistory,
-            now: now,
-            calendar: calendar
+        let sleepTarget = UserDefaults.standard.double(forKey: "vela_sleep_target_hours") * 60
+        let effectiveSleepTarget = sleepTarget > 0 ? sleepTarget : 450
+
+        let sleepScore = SleepScoreEngine().calculate(
+            from: ScoreEngineFactory.sleep(
+                from: context,
+                sleepTarget: effectiveSleepTarget,
+                bedtimeOffsetMinutes: sleepTimingBaseline?.bedtimeOffset,
+                wakeOffsetMinutes: sleepTimingBaseline?.wakeOffset
+            )
+        )
+        let resolvedSleepSummary = ScoreEngineFactory.resolvedSleepSummary(
+            from: context,
+            sleepScore: sleepScore.score
+        )
+
+        let recovery = RecoveryScoreEngine().calculate(
+            from: ScoreEngineFactory.recovery(
+                from: context,
+                sleepScore: sleepScore.score,
+                strainScoreYesterday: yesterdayStrain,
+                hrvHistory: hrvHistory,
+                rhrHistory: rhrHistory
+            )
+        )
+
+        let strain = StrainScoreEngine().calculate(
+            from: ScoreEngineFactory.strain(
+                from: context,
+                recoveryScore: recovery.score
+            )
+        )
+
+        let stress = StressIndexEngine().calculate(
+            from: ScoreEngineFactory.stress(
+                from: context,
+                sleepScore: sleepScore.score,
+                strainScore: strain.score
+            )
+        )
+
+        let energy = EnergyBankEngine().calculate(
+            from: ScoreEngineFactory.energyBank(
+                from: context,
+                recoveryScore: recovery.score,
+                sleepScore: context.sleepSummary == nil ? nil : sleepScore.score,
+                strainScore: strain.score,
+                stressIndex: stress.stressIndex,
+                strainHistory: nil
+            )
+        )
+
+        let healthAge = HealthAgeTrendEngine().calculate(
+            from: ScoreEngineFactory.healthAge(
+                from: context,
+                recovery: recovery,
+                sleepScore: sleepScore,
+                strain: strain
+            )
+        )
+
+        let dashboard = DashboardSummary(
+            date: context.date,
+            sleepSummary: resolvedSleepSummary,
+            sleepScore: sleepScore,
+            recovery: recovery,
+            recoveryMetrics: context.recoveryMetrics,
+            recoveryBaseline: context.recoveryBaseline,
+            strain: strain,
+            stress: stress,
+            energy: energy,
+            healthAge: healthAge,
+            bodyMetrics: context.bodyMetrics,
+            extendedMetrics: context.extendedMetrics,
+            workouts: context.strainToday.workouts,
+            dailyInsight: dailyInsight(recovery: recovery, sleepScore: sleepScore, strain: strain, source: .healthKit),
+            source: .healthKit
         )
         let persistedSnapshot = makeSnapshot(from: dashboard, context: context, date: now)
         if let modelContext {
@@ -118,13 +186,58 @@ final class DailySummaryUseCase {
                 bodyMetrics: BodyMetricsSummary()
             )
 
-            let dashboard = DashboardSummary.healthKit(
-                context: context,
-                strainScoreYesterday: nil,
-                bedtimeOffsetMinutes: nil,
-                wakeOffsetMinutes: nil,
-                now: episode.date,
-                calendar: calendar
+            let sleepScore = SleepScoreEngine().calculate(
+                from: ScoreEngineFactory.sleep(
+                    from: context,
+                    sleepTarget: 450,
+                    bedtimeOffsetMinutes: nil,
+                    wakeOffsetMinutes: nil
+                )
+            )
+            let recovery = RecoveryScoreEngine().calculate(
+                from: ScoreEngineFactory.recovery(
+                    from: context,
+                    sleepScore: sleepScore.score,
+                    strainScoreYesterday: nil,
+                    hrvHistory: [],
+                    rhrHistory: []
+                )
+            )
+            let strain = StrainScoreEngine().calculate(
+                from: ScoreEngineFactory.strain(from: context, recoveryScore: recovery.score)
+            )
+            let stress = StressIndexEngine().calculate(
+                from: ScoreEngineFactory.stress(from: context, sleepScore: sleepScore.score, strainScore: strain.score)
+            )
+            let energy = EnergyBankEngine().calculate(
+                from: ScoreEngineFactory.energyBank(
+                    from: context,
+                    recoveryScore: recovery.score,
+                    sleepScore: context.sleepSummary == nil ? nil : sleepScore.score,
+                    strainScore: strain.score,
+                    stressIndex: stress.stressIndex,
+                    strainHistory: nil
+                )
+            )
+            let healthAge = HealthAgeTrendEngine().calculate(
+                from: ScoreEngineFactory.healthAge(from: context, recovery: recovery, sleepScore: sleepScore, strain: strain)
+            )
+            let dashboard = DashboardSummary(
+                date: context.date,
+                sleepSummary: context.sleepSummary ?? SleepSummary(date: context.date, totalSleepMinutes: 0, bedtime: nil, wakeTime: nil, stageMinutes: [:], segments: [], sleepScore: nil),
+                sleepScore: sleepScore,
+                recovery: recovery,
+                recoveryMetrics: context.recoveryMetrics,
+                recoveryBaseline: context.recoveryBaseline,
+                strain: strain,
+                stress: stress,
+                energy: energy,
+                healthAge: healthAge,
+                bodyMetrics: context.bodyMetrics,
+                extendedMetrics: context.extendedMetrics,
+                workouts: context.strainToday.workouts,
+                dailyInsight: dailyInsight(recovery: recovery, sleepScore: sleepScore, strain: strain, source: .healthKit),
+                source: .healthKit
             )
 
             let snapshot = makeSnapshot(from: dashboard, context: context, date: episode.date)
@@ -159,13 +272,58 @@ final class DailySummaryUseCase {
                 bodyMetrics: BodyMetricsSummary()
             )
 
-            let dashboard = DashboardSummary.healthKit(
-                context: context,
-                strainScoreYesterday: nil,
-                bedtimeOffsetMinutes: nil,
-                wakeOffsetMinutes: nil,
-                now: day,
-                calendar: calendar
+            let sleepScore = SleepScoreEngine().calculate(
+                from: ScoreEngineFactory.sleep(
+                    from: context,
+                    sleepTarget: 450,
+                    bedtimeOffsetMinutes: nil,
+                    wakeOffsetMinutes: nil
+                )
+            )
+            let recovery = RecoveryScoreEngine().calculate(
+                from: ScoreEngineFactory.recovery(
+                    from: context,
+                    sleepScore: sleepScore.score,
+                    strainScoreYesterday: nil,
+                    hrvHistory: [],
+                    rhrHistory: []
+                )
+            )
+            let strain = StrainScoreEngine().calculate(
+                from: ScoreEngineFactory.strain(from: context, recoveryScore: recovery.score)
+            )
+            let stress = StressIndexEngine().calculate(
+                from: ScoreEngineFactory.stress(from: context, sleepScore: sleepScore.score, strainScore: strain.score)
+            )
+            let energy = EnergyBankEngine().calculate(
+                from: ScoreEngineFactory.energyBank(
+                    from: context,
+                    recoveryScore: recovery.score,
+                    sleepScore: context.sleepSummary == nil ? nil : sleepScore.score,
+                    strainScore: strain.score,
+                    stressIndex: stress.stressIndex,
+                    strainHistory: nil
+                )
+            )
+            let healthAge = HealthAgeTrendEngine().calculate(
+                from: ScoreEngineFactory.healthAge(from: context, recovery: recovery, sleepScore: sleepScore, strain: strain)
+            )
+            let dashboard = DashboardSummary(
+                date: context.date,
+                sleepSummary: context.sleepSummary ?? SleepSummary(date: context.date, totalSleepMinutes: 0, bedtime: nil, wakeTime: nil, stageMinutes: [:], segments: [], sleepScore: nil),
+                sleepScore: sleepScore,
+                recovery: recovery,
+                recoveryMetrics: context.recoveryMetrics,
+                recoveryBaseline: context.recoveryBaseline,
+                strain: strain,
+                stress: stress,
+                energy: energy,
+                healthAge: healthAge,
+                bodyMetrics: context.bodyMetrics,
+                extendedMetrics: context.extendedMetrics,
+                workouts: context.strainToday.workouts,
+                dailyInsight: dailyInsight(recovery: recovery, sleepScore: sleepScore, strain: strain, source: .healthKit),
+                source: .healthKit
             )
 
             let snapshot = makeSnapshot(from: dashboard, context: context, date: day)
@@ -283,6 +441,24 @@ final class DailySummaryUseCase {
             oxygenSaturation: context.extendedMetrics.oxygenSaturation,
             respiratoryRate: dashboard.recoveryMetrics.respiratoryRate,
             wristTemperature: context.extendedMetrics.bodyTemperature
+        )
+    }
+
+    private func dailyInsight(
+        recovery: StandardScoreResult,
+        sleepScore: StandardScoreResult,
+        strain: StrainScoreResult,
+        source: DashboardSummary.DataSource
+    ) -> String {
+        if source == .healthKit {
+            return L10n.t(
+                "Updated from Apple Health. Recovery \(Int(recovery.score.rounded())), sleep \(Int(sleepScore.score.rounded())), strain \(Int(strain.score.rounded())).",
+                "已读取 Apple 健康数据。恢复 \(Int(recovery.score.rounded()))，睡眠 \(Int(sleepScore.score.rounded()))，负荷 \(Int(strain.score.rounded()))。"
+            )
+        }
+        return L10n.t(
+            "Recovery is moderate. Keep training controlled and protect sleep timing tonight.",
+            "恢复处于中等水平。今天训练保持可控，今晚优先保护睡眠时间。"
         )
     }
 }

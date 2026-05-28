@@ -58,7 +58,6 @@ enum BackgroundTaskManager {
                 let queryService = HealthKitQueryService()
                 let refreshService = HealthDataRefreshService(queryService: queryService)
                 let context = try await refreshService.refreshContext()
-                let dashboard = DashboardSummary.healthKit(context: context, now: Date(), calendar: .current)
 
                 guard context.hasAnyData else {
                     logger.info("No health data available in background. Skipping.")
@@ -66,8 +65,44 @@ enum BackgroundTaskManager {
                     return
                 }
 
-                if config.autoEveningWikiSync, hour >= 21 || hour < 4 {
-                    logger.info("Running evening wiki sync in background.")
+                let sleepScore = SleepScoreEngine().calculate(
+                    from: ScoreEngineFactory.sleep(from: context, sleepTarget: 450, bedtimeOffsetMinutes: nil, wakeOffsetMinutes: nil)
+                )
+                let recovery = RecoveryScoreEngine().calculate(
+                    from: ScoreEngineFactory.recovery(from: context, sleepScore: sleepScore.score, strainScoreYesterday: nil, hrvHistory: [], rhrHistory: [])
+                )
+                let strain = StrainScoreEngine().calculate(
+                    from: ScoreEngineFactory.strain(from: context, recoveryScore: recovery.score)
+                )
+                let stress = StressIndexEngine().calculate(
+                    from: ScoreEngineFactory.stress(from: context, sleepScore: sleepScore.score, strainScore: strain.score)
+                )
+                let energy = EnergyBankEngine().calculate(
+                    from: ScoreEngineFactory.energyBank(from: context, recoveryScore: recovery.score, sleepScore: nil, strainScore: strain.score, stressIndex: stress.stressIndex, strainHistory: nil)
+                )
+                let healthAge = HealthAgeTrendEngine().calculate(
+                    from: ScoreEngineFactory.healthAge(from: context, recovery: recovery, sleepScore: sleepScore, strain: strain)
+                )
+                let dashboard = DashboardSummary(
+                    date: context.date,
+                    sleepSummary: context.sleepSummary ?? SleepSummary(date: context.date, totalSleepMinutes: 0, bedtime: nil, wakeTime: nil, stageMinutes: [:], segments: [], sleepScore: nil),
+                    sleepScore: sleepScore,
+                    recovery: recovery,
+                    recoveryMetrics: context.recoveryMetrics,
+                    recoveryBaseline: context.recoveryBaseline,
+                    strain: strain,
+                    stress: stress,
+                    energy: energy,
+                    healthAge: healthAge,
+                    bodyMetrics: context.bodyMetrics,
+                    extendedMetrics: context.extendedMetrics,
+                    workouts: context.strainToday.workouts,
+                    dailyInsight: "",
+                    source: .healthKit
+                )
+
+                if config.autoEveningWikiSync, hour >= 0, hour < 4 {
+                    logger.info("Running daily profile sync in background.")
                     await EveningWikiSyncAgent.shared.runIfNeeded(
                         modelContext: modelContext,
                         dashboard: dashboard
