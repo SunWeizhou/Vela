@@ -3,7 +3,6 @@ import SwiftUI
 struct VelaMinimalShell: View {
     @ObservedObject private var appState = VelaAppState.shared
     @EnvironmentObject private var dashboardVM: DashboardViewModel
-    @State private var showQuickActions = false
     @State private var showBloodLog = false
     @State private var showWeightLog = false
 
@@ -29,16 +28,11 @@ struct VelaMinimalShell: View {
             VStack {
                 Spacer(minLength: 0)
                 VelaMinimalFloatingTabBar(selectedTab: boundTab) {
-                    showQuickActions = true
+                    appState.showCoachHub = true
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 18)
             }
-        }
-        .sheet(isPresented: $showQuickActions) {
-            VelaQuickActionsSheet()
-                .presentationDetents([.height(350)])
-                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showBloodLog) {
             BloodLogSheetView()
@@ -65,7 +59,7 @@ struct VelaMinimalShell: View {
                 showWeightLog = true
             }
         }
-        .tint(VelaTheme.accent)
+        .tint(VelaTheme.primary)
         .velaErrorAlert(error: $dashboardVM.currentError)
     }
 

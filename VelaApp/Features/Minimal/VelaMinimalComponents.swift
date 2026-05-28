@@ -21,11 +21,21 @@ enum VelaMinimalTab: Int, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
-        case .today: return "square.grid.2x2.fill"
-        case .vitals: return "waveform.path.ecg"
+        case .today: return "house"
+        case .vitals: return "heart"
         case .fitness: return "figure.run"
-        case .journal: return "book.closed.fill"
-        case .coach: return "bubble.left.and.bubble.right.fill"
+        case .journal: return "book"
+        case .coach: return "sparkles"
+        }
+    }
+
+    var filledIcon: String {
+        switch self {
+        case .today: return "house.fill"
+        case .vitals: return "heart.fill"
+        case .fitness: return "figure.run"
+        case .journal: return "book.fill"
+        case .coach: return "sparkles"
         }
     }
 }
@@ -130,55 +140,81 @@ struct VelaMinimalAppBar: View {
 
 struct VelaMinimalFloatingTabBar: View {
     @Binding var selectedTab: VelaMinimalTab
-    var quickAction: () -> Void
+    var coachAction: () -> Void
+
+    private let standardTabs: [VelaMinimalTab] = [.today, .journal, .fitness, .vitals]
 
     var body: some View {
-        HStack(spacing: 2) {
-            ForEach(VelaMinimalTab.allCases) { tab in
-                tabButton(tab)
+        HStack(spacing: 0) {
+            ForEach(Array(standardTabs.enumerated()), id: \.element) { index, tab in
+                if index == 2 {
+                    coachButtonView
+                }
+                tabItemView(tab)
             }
-
-            Button(action: quickAction) {
-                Image(systemName: "plus")
-                    .font(.system(size: 17, weight: .black))
-                    .foregroundStyle(Color.white)
-                    .frame(width: 42, height: 42)
-                    .background(Circle().fill(VelaTheme.accent))
-                    .shadow(color: VelaTheme.accent.opacity(0.25), radius: 12, y: 5)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(L10n.t("Quick Actions", "快速操作"))
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 10)
-        .frame(maxWidth: 420)
-        .background(.ultraThinMaterial, in: Capsule(style: .continuous))
-        .overlay(Capsule(style: .continuous).stroke(VelaTheme.stroke, lineWidth: 0.8))
-        .shadow(color: VelaTheme.cardShadowColor, radius: 24, y: 10)
+        .padding(.horizontal, 6)
+        .frame(height: 56)
+        .frame(maxWidth: .infinity)
+        .background(
+            Capsule(style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .background(
+            Capsule(style: .continuous)
+                .fill(glassTint)
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(VelaTheme.outline, lineWidth: 0.5)
+        )
     }
 
-    private func tabButton(_ tab: VelaMinimalTab) -> some View {
+    private var glassTint: Color {
+        Color(UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(red: 0.110, green: 0.106, blue: 0.094, alpha: 0.55)
+                : UIColor(white: 1.0, alpha: 0.60)
+        })
+    }
+
+    private func tabItemView(_ tab: VelaMinimalTab) -> some View {
         let isSelected = selectedTab == tab
         return Button {
             withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
                 selectedTab = tab
             }
         } label: {
-            VStack(spacing: 3) {
-                Image(systemName: tab.icon)
-                    .font(.system(size: 18, weight: .semibold))
+            VStack(spacing: 2) {
+                Image(systemName: isSelected ? tab.filledIcon : tab.icon)
+                    .font(.system(size: 24, weight: .medium))
+                    .symbolVariant(isSelected ? .fill : .none)
                 Text(tab.title)
-                    .font(.system(size: 9, weight: .black, design: .rounded))
-                    .textCase(.uppercase)
+                    .font(.system(size: 10, weight: .medium))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.65)
             }
-            .foregroundStyle(isSelected ? VelaTheme.accent : VelaTheme.secondaryText.opacity(0.76))
+            .foregroundStyle(isSelected ? VelaTheme.primary : VelaTheme.onSurfaceVariant)
             .frame(maxWidth: .infinity, minHeight: 44)
-            .scaleEffect(isSelected ? 1.05 : 1)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(tab.title)
+    }
+
+    private var coachButtonView: some View {
+        Button(action: coachAction) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 48, height: 48)
+                .background(
+                    Circle()
+                        .fill(VelaTheme.primary)
+                )
+                .shadow(color: VelaTheme.primary.opacity(0.30), radius: 12, y: 4)
+        }
+        .buttonStyle(.plain)
+        .offset(y: -4)
+        .accessibilityLabel(L10n.t("Coach", "教练"))
     }
 }
 
