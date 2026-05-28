@@ -2,136 +2,271 @@ import SwiftUI
 import UIKit
 
 enum VelaTheme {
-    static let cornerRadiusCard: CGFloat = 20
-    static let cornerRadiusTile: CGFloat = 14
-    static let screenPadding: CGFloat = 20
 
-    private static func adaptiveColor(
-        light: UIColor,
-        dark: UIColor
-    ) -> Color {
+    // MARK: - Hex → UIColor Helper
+
+    private static func hexColor(_ hex: String) -> UIColor {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let a, r, g, b: UInt64
+        switch hex.count {
+        case 6:
+            (a, r, g, b) = (255, (int >> 16) & 0xFF, (int >> 8) & 0xFF, int & 0xFF)
+        case 8:
+            (a, r, g, b) = ((int >> 24) & 0xFF, (int >> 16) & 0xFF, (int >> 8) & 0xFF, int & 0xFF)
+        default:
+            (a, r, g, b) = (255, 0, 0, 0)
+        }
+        return UIColor(
+            red: CGFloat(r) / 255,
+            green: CGFloat(g) / 255,
+            blue: CGFloat(b) / 255,
+            alpha: CGFloat(a) / 255
+        )
+    }
+
+    private static func adaptiveColor(lightHex: String, darkHex: String) -> Color {
         Color(UIColor { traits in
-            traits.userInterfaceStyle == .dark ? dark : light
+            traits.userInterfaceStyle == .dark ? hexColor(darkHex) : hexColor(lightHex)
         })
     }
 
-    // Stitch Vitals Minimalist cool glass background layers.
-    static let background = adaptiveColor(
-        light: UIColor(red: 0.976, green: 0.976, blue: 1.000, alpha: 1),
-        dark: UIColor(red: 0.055, green: 0.067, blue: 0.086, alpha: 1)
-    )
-    static let backgroundSecondary = adaptiveColor(
-        light: UIColor(red: 0.945, green: 0.953, blue: 1.000, alpha: 1),
-        dark: UIColor(red: 0.090, green: 0.106, blue: 0.133, alpha: 1)
-    )
-    static let backgroundTertiary = adaptiveColor(
-        light: UIColor(red: 1.000, green: 1.000, blue: 1.000, alpha: 1),
-        dark: UIColor(red: 0.125, green: 0.141, blue: 0.176, alpha: 1)
-    )
-    static let surface = adaptiveColor(
-        light: UIColor(red: 1.000, green: 1.000, blue: 1.000, alpha: 0.70),
-        dark: UIColor(red: 0.125, green: 0.141, blue: 0.176, alpha: 0.70)
-    )
-    static let elevatedSurface = adaptiveColor(
-        light: UIColor(red: 1.000, green: 1.000, blue: 1.000, alpha: 0.82),
-        dark: UIColor(red: 0.165, green: 0.188, blue: 0.239, alpha: 0.82)
-    )
-    static let stroke = adaptiveColor(
-        light: UIColor(red: 1.000, green: 1.000, blue: 1.000, alpha: 0.55),
-        dark: UIColor(red: 1.000, green: 1.000, blue: 1.000, alpha: 0.10)
-    )
+    // MARK: - Canvas / Background
 
-    // Card design tokens
-    static let cardBackground = adaptiveColor(
-        light: UIColor(red: 1.000, green: 1.000, blue: 1.000, alpha: 0.70),
-        dark: UIColor(red: 0.125, green: 0.141, blue: 0.176, alpha: 0.70)
-    )
-    static let heroCardBackground = adaptiveColor(
-        light: UIColor(red: 1.000, green: 1.000, blue: 1.000, alpha: 0.82),
-        dark: UIColor(red: 0.165, green: 0.188, blue: 0.239, alpha: 0.82)
-    )
-    static let cardShadowColor = adaptiveColor(
-        light: UIColor(white: 0.0, alpha: 0.045),
-        dark: UIColor(white: 0.0, alpha: 0.36)
-    )
-    static let innerGlowOpacity: Double = 0.06
-    static let primaryText = adaptiveColor(
-        light: UIColor(red: 0.082, green: 0.110, blue: 0.157, alpha: 1),
-        dark: UIColor(red: 0.925, green: 0.941, blue: 1.000, alpha: 1)
-    )
-    static let secondaryText = adaptiveColor(
-        light: UIColor(red: 0.259, green: 0.278, blue: 0.325, alpha: 1),
-        dark: UIColor(red: 0.760, green: 0.784, blue: 0.840, alpha: 1)
-    )
-    static let mutedText = adaptiveColor(
-        light: UIColor(red: 0.447, green: 0.467, blue: 0.518, alpha: 1),
-        dark: UIColor(red: 0.620, green: 0.651, blue: 0.714, alpha: 1)
-    )
+    /// Warm off-white canvas (light) / deep warm black (dark)
+    static let background = adaptiveColor(lightHex: "#F5F3F0", darkHex: "#100F0D")
 
-    static let inverseText = adaptiveColor(
-        light: UIColor.white,
-        dark: UIColor.black
-    )
-    static let subtleFill = adaptiveColor(
-        light: UIColor(red: 0.910, green: 0.933, blue: 1.000, alpha: 0.72),
-        dark: UIColor(red: 0.188, green: 0.212, blue: 0.267, alpha: 0.72)
-    )
-    static let strongControl = adaptiveColor(
-        light: UIColor(red: 0.000, green: 0.345, blue: 0.737, alpha: 1),
-        dark: UIColor(red: 0.678, green: 0.776, blue: 1.000, alpha: 1)
-    )
-    static let tabBarBackground = adaptiveColor(
-        light: UIColor(red: 1.000, green: 1.000, blue: 1.000, alpha: 0.26),
-        dark: UIColor(red: 0.000, green: 0.000, blue: 0.000, alpha: 0.40)
-    )
+    /// MD3 surface (same as background at the lowest level)
+    static let surface = adaptiveColor(lightHex: "#F5F3F0", darkHex: "#100F0D")
 
-    // Accent
-    static let accent = adaptiveColor(
-        light: UIColor(red: 0.000, green: 0.345, blue: 0.737, alpha: 1),
-        dark: UIColor(red: 0.678, green: 0.776, blue: 1.000, alpha: 1)
-    )
+    // MARK: - Surface Containers
 
-    // Metric colors from Stitch: calm and clinical, not neon.
-    static let sleep = adaptiveColor(
-        light: UIColor(red: 0.035, green: 0.357, blue: 0.749, alpha: 1),
-        dark: UIColor(red: 0.678, green: 0.776, blue: 1.000, alpha: 1)
-    )
-    static let strain = adaptiveColor(
-        light: UIColor(red: 0.298, green: 0.290, blue: 0.792, alpha: 1),
-        dark: UIColor(red: 0.761, green: 0.757, blue: 1.000, alpha: 1)
-    )
-    static let recovery = adaptiveColor(
-        light: UIColor(red: 0.204, green: 0.780, blue: 0.349, alpha: 1),
-        dark: UIColor(red: 0.396, green: 0.859, blue: 0.482, alpha: 1)
-    )
-    static let stress = adaptiveColor(
-        light: UIColor(red: 1.000, green: 0.231, blue: 0.188, alpha: 1),
-        dark: UIColor(red: 1.000, green: 0.455, blue: 0.420, alpha: 1)
-    )
-    static let energy = adaptiveColor(
-        light: UIColor(red: 1.000, green: 0.800, blue: 0.000, alpha: 1),
-        dark: UIColor(red: 1.000, green: 0.843, blue: 0.180, alpha: 1)
-    )
+    /// Primary card surface — clean white / near-black
+    static let surfaceContainerLowest = adaptiveColor(lightHex: "#FFFFFF", darkHex: "#0A0908")
 
-    // Glow variants for ring shadows
-    static let accentGlow = accent.opacity(0.24)
+    /// Slightly elevated surface for nested or hero cards
+    static let surfaceContainerLow = adaptiveColor(lightHex: "#F8F7F4", darkHex: "#161512")
+
+    static let surfaceContainer = adaptiveColor(lightHex: "#F2F0ED", darkHex: "#1C1B18")
+
+    static let surfaceContainerHigh = adaptiveColor(lightHex: "#EDEBE7", darkHex: "#24221E")
+
+    static let surfaceContainerHighest = adaptiveColor(lightHex: "#E8E5E0", darkHex: "#2E2B25")
+
+    // MARK: - On-Surface (Text)
+
+    /// Primary text — near-black warmth / warm parchment
+    static let onSurface = adaptiveColor(lightHex: "#1A1917", darkHex: "#F2EFE8")
+
+    /// Secondary text — descriptions, metadata, labels
+    static let onSurfaceVariant = adaptiveColor(lightHex: "#6E6A63", darkHex: "#A09B92")
+
+    /// Tertiary text — timestamps, captions, tertiary labels
+    static let muted = adaptiveColor(lightHex: "#A09B92", darkHex: "#7A756E")
+
+    // MARK: - Outlines
+
+    /// Hairline card borders — 0.5pt
+    static let outline = adaptiveColor(lightHex: "#E8E4DD", darkHex: "#2E2B25")
+
+    /// Stronger borders for focused states, input fields
+    static let outlineVariant = adaptiveColor(lightHex: "#D5D0C8", darkHex: "#3E3B35")
+
+    // MARK: - Primary (Clay / Brand)
+
+    /// Primary CTAs, brand identity, active states
+    static let primary = adaptiveColor(lightHex: "#C56B4A", darkHex: "#D48463")
+    static let primaryContainer = adaptiveColor(lightHex: "#F5E8E0", darkHex: "#4A2215")
+    static let onPrimary = adaptiveColor(lightHex: "#FFFFFF", darkHex: "#FFFFFF")
+    static let onPrimaryContainer = adaptiveColor(lightHex: "#7A3D2A", darkHex: "#E8CFC3")
+
+    // MARK: - Secondary (Sage / Recovery)
+
+    /// Recovery, readiness, positive health indicators
+    static let secondary = adaptiveColor(lightHex: "#5B8C6F", darkHex: "#73A385")
+    static let secondaryContainer = adaptiveColor(lightHex: "#E0F0E5", darkHex: "#1F3D2A")
+    static let onSecondary = adaptiveColor(lightHex: "#FFFFFF", darkHex: "#FFFFFF")
+    static let onSecondaryContainer = adaptiveColor(lightHex: "#1F3D2A", darkHex: "#C2DFC9")
+
+    // MARK: - Tertiary (Indigo / Sleep)
+
+    /// Sleep metrics, circadian context
+    static let tertiary = adaptiveColor(lightHex: "#6B6FA0", darkHex: "#8588B8")
+    static let tertiaryContainer = adaptiveColor(lightHex: "#E6E7F5", darkHex: "#2A2D52")
+    static let onTertiary = adaptiveColor(lightHex: "#FFFFFF", darkHex: "#FFFFFF")
+    static let onTertiaryContainer = adaptiveColor(lightHex: "#2A2D52", darkHex: "#CDCFEA")
+
+    // MARK: - Quaternary (Amber / Strain)
+
+    /// Training load, exertion, energy expenditure
+    static let quaternary = adaptiveColor(lightHex: "#B8843E", darkHex: "#D0A050")
+    static let quaternaryContainer = adaptiveColor(lightHex: "#FDF0DB", darkHex: "#4A3010")
+    static let onQuaternary = adaptiveColor(lightHex: "#FFFFFF", darkHex: "#FFFFFF")
+    static let onQuaternaryContainer = adaptiveColor(lightHex: "#4A3010", darkHex: "#FDF0DB")
+
+    // MARK: - Quinary (Rose / Stress)
+
+    /// Stress indicators, sympathetic load, warnings
+    static let quinary = adaptiveColor(lightHex: "#A85260", darkHex: "#C4707A")
+    static let quinaryContainer = adaptiveColor(lightHex: "#FAE5E8", darkHex: "#4A1A25")
+    static let onQuinary = adaptiveColor(lightHex: "#FFFFFF", darkHex: "#FFFFFF")
+    static let onQuinaryContainer = adaptiveColor(lightHex: "#4A1A25", darkHex: "#FAE5E8")
+
+    // MARK: - Senary (Gold / Energy)
+
+    /// Energy bank, vitality, readiness
+    static let senary = adaptiveColor(lightHex: "#C4952E", darkHex: "#DCB048")
+    static let senaryContainer = adaptiveColor(lightHex: "#FDF4DB", darkHex: "#4A3510")
+    static let onSenary = adaptiveColor(lightHex: "#FFFFFF", darkHex: "#FFFFFF")
+    static let onSenaryContainer = adaptiveColor(lightHex: "#4A3510", darkHex: "#FDF4DB")
+
+    // MARK: - Error
+
+    static let error = adaptiveColor(lightHex: "#BA1A1A", darkHex: "#FFB4AB")
+    static let errorContainer = adaptiveColor(lightHex: "#FFDAD6", darkHex: "#93000A")
+    static let onError = adaptiveColor(lightHex: "#FFFFFF", darkHex: "#690005")
+    static let onErrorContainer = adaptiveColor(lightHex: "#410002", darkHex: "#FFDAD6")
+
+    // MARK: - Inverse
+
+    static let inverseSurface = adaptiveColor(lightHex: "#1C1B18", darkHex: "#F2EFE8")
+    static let inverseOnSurface = adaptiveColor(lightHex: "#F2EFE8", darkHex: "#1C1B18")
+    static let inversePrimary = adaptiveColor(lightHex: "#D48463", darkHex: "#C56B4A")
+
+    // MARK: - Semantic Aliases
+
+    static let recovery = secondary
+    static let sleep = tertiary
+    static let strain = quaternary
+    static let stress = quinary
+    static let energy = senary
+
+    // MARK: - Glass Effect Opacity Constants
+
+    /// Floating controls: white @ 60% (light), #1C1B18 @ 55% (dark)
+    static let glassFloatingLight = Color(white: 1.0, opacity: 0.60)
+    static let glassFloatingDark = adaptiveColor(lightHex: "#1C1B18", darkHex: "#1C1B18").opacity(0.55)
+
+    /// Overlays & sheets: white @ 40% (light), #1C1B18 @ 35% (dark)
+    static let glassOverlayLight = Color(white: 1.0, opacity: 0.40)
+    static let glassOverlayDark = adaptiveColor(lightHex: "#1C1B18", darkHex: "#1C1B18").opacity(0.35)
+
+    // MARK: - Design Tokens
+
+    static let cornerRadiusCard: CGFloat = 20
+    static let cornerRadiusHero: CGFloat = 24
+    static let cornerRadiusTile: CGFloat = 16
+    static let cornerRadiusFull: CGFloat = 9999
+
+    static let screenPadding: CGFloat = 20
+    static let sectionGap: CGFloat = 24
+    static let cardGap: CGFloat = 16
+
+    // MARK: - Typography
+
+    /// 34pt bold monospaced — hero readiness score, biological age
+    static var heroMetric: Font { .system(size: 34, weight: .bold, design: .monospaced) }
+
+    /// 22pt semibold — screen headers
+    static var pageTitle: Font { .system(size: 22, weight: .semibold) }
+
+    /// 20pt semibold monospaced — secondary metric values
+    static var metricValue: Font { .system(size: 20, weight: .semibold, design: .monospaced) }
+
+    /// 17pt semibold — card headings, section labels
+    static var cardTitle: Font { .system(size: 17, weight: .semibold) }
+
+    // MARK: - Glow Variants (Backward Compat)
+
+    static let accentGlow = primary.opacity(0.24)
+    static let primaryGlow = primary.opacity(0.24)
+    static let secondaryGlow = secondary.opacity(0.24)
+    static let tertiaryGlow = tertiary.opacity(0.24)
+    static let quaternaryGlow = quaternary.opacity(0.24)
+    static let quinaryGlow = quinary.opacity(0.24)
+    static let senaryGlow = senary.opacity(0.24)
+
+    static let recoveryGlow = recovery.opacity(0.24)
     static let sleepGlow = sleep.opacity(0.24)
     static let strainGlow = strain.opacity(0.24)
-    static let recoveryGlow = recovery.opacity(0.24)
     static let stressGlow = stress.opacity(0.24)
     static let energyGlow = energy.opacity(0.24)
 
     static func glow(for tint: Color) -> Color {
         switch tint {
-        case accent: return accentGlow
-        case sleep: return sleepGlow
-        case strain: return strainGlow
-        case recovery: return recoveryGlow
-        case stress: return stressGlow
-        case energy: return energyGlow
+        case primary, accent: return primaryGlow
+        case secondary, recovery: return secondaryGlow
+        case tertiary, sleep: return tertiaryGlow
+        case quaternary, strain: return quaternaryGlow
+        case quinary, stress: return quinaryGlow
+        case senary, energy: return senaryGlow
         default: return tint.opacity(0.35)
         }
     }
+
+    // MARK: - Backward Compatibility Aliases
+
+    /// @deprecated Use `onSurface` instead
+    static let primaryText = onSurface
+
+    /// @deprecated Use `onSurfaceVariant` instead
+    static let secondaryText = onSurfaceVariant
+
+    /// @deprecated Use `muted` instead
+    static let mutedText = muted
+
+    /// @deprecated Use `primary` instead
+    static let accent = primary
+
+    /// @deprecated Use `primary` instead
+    static let strongControl = primary
+
+    /// @deprecated Use `outline` instead
+    static let stroke = outline
+
+    /// @deprecated Use `surfaceContainerLowest` instead
+    static let cardBackground = surfaceContainerLowest
+
+    /// @deprecated Use `surfaceContainerLow` instead
+    static let elevatedSurface = surfaceContainerLow
+
+    /// @deprecated Use `surfaceContainerLow` instead
+    static let heroCardBackground = surfaceContainerLow
+
+    /// @deprecated Use `surfaceContainer` instead
+    static let backgroundSecondary = surfaceContainer
+
+    /// @deprecated Use `surfaceContainerHighest` for the lightest/darkest variant
+    static let backgroundTertiary = surfaceContainerHighest
+
+    /// Shadow color for cards — subtle in light, slightly stronger in dark
+    static let cardShadowColor = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 0, alpha: 0.20)
+            : UIColor(white: 0, alpha: 0.045)
+    })
+
+    static let innerGlowOpacity: Double = 0.06
+
+    /// @deprecated Use `inverseOnSurface` instead
+    static let inverseText = adaptiveColor(lightHex: "#FFFFFF", darkHex: "#000000")
+
+    /// @deprecated Used for subtle fills — now uses on-surface-variant at 12% opacity
+    static let subtleFill = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 1, alpha: 0.08)
+            : UIColor(white: 0, alpha: 0.06)
+    })
+
+    /// @deprecated Tab bar background — glass-like semitransparent
+    static let tabBarBackground = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0, green: 0, blue: 0, alpha: 0.40)
+            : UIColor(red: 1, green: 1, blue: 1, alpha: 0.26)
+    })
+
+    // MARK: - Tab Bar UIKit Colors (Backward Compat)
 
     static var tabBarBackgroundUIColor: UIColor {
         UIColor { traits in
@@ -144,16 +279,16 @@ enum VelaTheme {
     static var tabBarSelectedUIColor: UIColor {
         UIColor { traits in
             traits.userInterfaceStyle == .dark
-                ? UIColor(red: 0.678, green: 0.776, blue: 1.000, alpha: 1)
-                : UIColor(red: 0.000, green: 0.345, blue: 0.737, alpha: 1)
+                ? hexColor("#D48463")
+                : hexColor("#C56B4A")
         }
     }
 
     static var tabBarNormalUIColor: UIColor {
         UIColor { traits in
             traits.userInterfaceStyle == .dark
-                ? UIColor(red: 0.620, green: 0.651, blue: 0.714, alpha: 1)
-                : UIColor(red: 0.447, green: 0.467, blue: 0.518, alpha: 1)
+                ? hexColor("#A09B92")
+                : hexColor("#6E6A63")
         }
     }
 
