@@ -131,7 +131,6 @@ final class CoachChatVM: ObservableObject {
     private let keychain = KeychainService.shared
     private let apiKeyAccount = "deepseek_api_key"
     private let kimiApiKeyAccount = FoodPhotoAnalyzer.keychainAccount
-    private let contextBuilder = AIContextBuilder()
 
     // MARK: - Key State
 
@@ -153,7 +152,8 @@ final class CoachChatVM: ObservableObject {
         modelContext: ModelContext,
         journalEntries: [JournalEntryRecord],
         savedReports: [AIReportRecord],
-        focus: CoachContextFocus = .general
+        focus: CoachContextFocus = .general,
+        services: VelaServices? = nil
     ) async {
         guard let apiKey = try? keychain.read(account: kimiApiKeyAccount), !apiKey.isEmpty else {
             messages.append(ChatMsg(
@@ -192,7 +192,8 @@ final class CoachChatVM: ObservableObject {
                 modelContext: modelContext,
                 journalEntries: journalEntries,
                 savedReports: savedReports,
-                focus: focus
+                focus: focus,
+                services: services
             )
 
             // Also auto-log the food entry into structured Nutrition plus Journal context.
@@ -359,7 +360,8 @@ final class CoachChatVM: ObservableObject {
         modelContext: ModelContext,
         journalEntries: [JournalEntryRecord],
         savedReports: [AIReportRecord],
-        focus: CoachContextFocus = .general
+        focus: CoachContextFocus = .general,
+        services: VelaServices? = nil
     ) async {
         let userText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !userText.isEmpty, !isStreaming else { return }
@@ -396,10 +398,11 @@ final class CoachChatVM: ObservableObject {
                 journalEntries: journalEntries,
                 savedReports: savedReports,
                 focus: focus,
-                modelContext: modelContext
+                modelContext: modelContext,
+                services: services
             )
 
-            let provider = DeepSeekProvider(apiKey: apiKey)
+            let provider = services?.deepSeekProvider(apiKey: apiKey) ?? DeepSeekProvider(apiKey: apiKey)
             let toolRegistry = ToolRegistry(tools: [
                 WebSearchTool(),
                 UpdateWikiTool(modelContext: modelContext),
@@ -538,7 +541,8 @@ final class CoachChatVM: ObservableObject {
         journalEntries: [JournalEntryRecord],
         savedReports: [AIReportRecord],
         focus: CoachContextFocus,
-        modelContext: ModelContext
+        modelContext: ModelContext,
+        services: VelaServices? = nil
     ) async -> [ChatMessage] {
         let wiki = WikiFileService.loadDictionary()
         let wikiText = wiki.map { "### \($0.key)\n\($0.value)" }.joined(separator: "\n\n")
@@ -632,7 +636,7 @@ final class CoachChatVM: ObservableObject {
                 sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
             )
         )) ?? []
-        let (context, contextMeta) = contextBuilder.build(
+        let (context, contextMeta) = (services?.contextBuilder ?? AIContextBuilder()).build(
             dashboard: dashboard,
             journalEntries: journalEntries.prefix(12).map { JournalContextEntry(tags: $0.tags, text: $0.note) },
             historicalReports: savedReports.filter { $0.type != "coach_thread" }.prefix(6).map { record in
@@ -729,6 +733,7 @@ struct CoachChatMessage: Identifiable, Hashable {
 
 struct CoachChatPanel: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject var services: VelaServices
     @Query(sort: \JournalEntryRecord.createdAt, order: .reverse) private var journalEntries: [JournalEntryRecord]
     @Query(sort: \AIReportRecord.createdAt, order: .reverse) private var savedReports: [AIReportRecord]
 
@@ -810,7 +815,8 @@ struct CoachChatPanel: View {
                             modelContext: modelContext,
                             journalEntries: journalEntries,
                             savedReports: savedReports,
-                            focus: focus
+                            focus: focus,
+                            services: services
                         )
                     }
                 } label: {
@@ -839,7 +845,8 @@ struct CoachChatPanel: View {
                     modelContext: modelContext,
                     journalEntries: journalEntries,
                     savedReports: savedReports,
-                    focus: focus
+                    focus: focus,
+                    services: services
                 )
             }
         }

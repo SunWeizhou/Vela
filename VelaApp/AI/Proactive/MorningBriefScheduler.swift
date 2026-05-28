@@ -10,7 +10,6 @@ final class MorningBriefScheduler: ObservableObject {
     
     private let keychain = KeychainService.shared
     private let apiKeyAccount = "deepseek_api_key"
-    private let contextBuilder = AIContextBuilder()
     
     @Published var isGenerating = false
     
@@ -21,7 +20,7 @@ final class MorningBriefScheduler: ObservableObject {
     ///   - modelContext: SwiftData modelContext to query and save records
     ///   - dashboard: The current dashboard summary
     ///   - force: If true, runs generation bypassing time window and date checks
-    func runIfNeeded(modelContext: ModelContext, dashboard: DashboardSummary, force: Bool = false) async {
+    func runIfNeeded(modelContext: ModelContext, dashboard: DashboardSummary, force: Bool = false, services: VelaServices? = nil) async {
         logger.info("runIfNeeded called (force: \(force))")
         
         // 1. If not forced, check time window (06:00 - 11:00)
@@ -110,7 +109,7 @@ final class MorningBriefScheduler: ObservableObject {
             
             // 8. Construct AgentContextEnvelope using AIContextBuilder
             let weeklyTrends = (try? HealthSnapshotRepository(modelContext: modelContext).buildWeeklyTrendSummary()) ?? [:]
-            let (context, contextMeta) = contextBuilder.build(
+            let (context, contextMeta) = (services?.contextBuilder ?? AIContextBuilder()).build(
                 dashboard: dashboard,
                 journalEntries: journalEntries,
                 historicalReports: historicalReports,
@@ -119,7 +118,7 @@ final class MorningBriefScheduler: ObservableObject {
             )
             
             // 9. Generate Report using ReportGenerator
-            let provider = DeepSeekProvider(apiKey: apiKey)
+            let provider = services?.deepSeekProvider(apiKey: apiKey) ?? DeepSeekProvider(apiKey: apiKey)
             let generator = ReportGenerator(provider: provider, language: AppLanguage.stored)
             
             logger.info("Calling ReportGenerator for morning brief...")

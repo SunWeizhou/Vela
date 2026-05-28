@@ -56,6 +56,7 @@ enum BackgroundTaskManager {
 
                 // Build DashboardSummary from HealthKit
                 let queryService = HealthKitQueryService()
+                let services = VelaServices(queryService: queryService)
                 let refreshService = HealthDataRefreshService(queryService: queryService)
                 let context = try await refreshService.refreshContext()
 
@@ -107,13 +108,15 @@ enum BackgroundTaskManager {
                     logger.info("Running daily profile sync in background.")
                     await EveningWikiSyncAgent.shared.runIfNeeded(
                         modelContext: modelContext,
-                        dashboard: dashboard
+                        dashboard: dashboard,
+                        services: services
                     )
                 } else if config.autoMorningBrief, hour >= 6, hour <= 11 {
                     logger.info("Running morning brief in background.")
                     await MorningBriefScheduler.shared.runIfNeeded(
                         modelContext: modelContext,
-                        dashboard: dashboard
+                        dashboard: dashboard,
+                        services: services
                     )
                 } else {
                     logger.info("No agent scheduled for current hour (\(hour)).")

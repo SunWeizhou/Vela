@@ -11,7 +11,6 @@ final class EveningWikiSyncAgent: ObservableObject {
     private let logger = Logger(subsystem: "com.sunweizhou.Vela", category: "EveningWikiSync")
     private let keychain = KeychainService.shared
     private let apiKeyAccount = "deepseek_api_key"
-    private let contextBuilder = AIContextBuilder()
 
     @Published var isRunning = false
     @Published var lastSummary: String?
@@ -25,7 +24,8 @@ final class EveningWikiSyncAgent: ObservableObject {
         modelContext: ModelContext,
         dashboard: DashboardSummary,
         chatMessages: [CoachChatMessage] = [],
-        force: Bool = false
+        force: Bool = false,
+        services: VelaServices? = nil
     ) async {
         guard AutoAgentConfig.shared.autoEveningWikiSync else {
             logger.info("Evening wiki sync is disabled in settings.")
@@ -67,7 +67,7 @@ final class EveningWikiSyncAgent: ObservableObject {
         do {
             let wiki = WikiFileService.loadDictionary()
 
-            let (context, contextMeta) = contextBuilder.build(
+            let (context, contextMeta) = (services?.contextBuilder ?? AIContextBuilder()).build(
                 dashboard: dashboard,
                 journalEntries: [],
                 historicalReports: [],
@@ -81,7 +81,7 @@ final class EveningWikiSyncAgent: ObservableObject {
                 chatMessages: chatMessages
             )
 
-            let provider = DeepSeekProvider(apiKey: apiKey)
+            let provider = services?.deepSeekProvider(apiKey: apiKey) ?? DeepSeekProvider(apiKey: apiKey)
             let response = try await provider.complete(request: LLMRequest(
                 systemPrompt: syncSystemPrompt,
                 userPrompt: prompt,
