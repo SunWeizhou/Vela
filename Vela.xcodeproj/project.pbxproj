@@ -81,6 +81,8 @@
 		0B10004A000000000000004A /* WebSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B10014A000000000000004A /* WebSearchService.swift */; };
 		0B10004B000000000000004B /* AgentTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B10014B000000000000004B /* AgentTool.swift */; };
 		0B10004C000000000000004C /* FoodPhotoAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B10014C000000000000004C /* FoodPhotoAnalyzer.swift */; };
+		0B10004D000000000000004D /* WebSearchHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B10014D000000000000004D /* WebSearchHelper.swift */; };
+		0B10004E000000000000004E /* ToolFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B10014E000000000000004E /* ToolFactory.swift */; };
 		0B1000490000000000000049 /* DashboardViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001500000000000000050 /* DashboardViewModel.swift */; };
 		0B1000500000000000000050 /* JournalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001510000000000000051 /* JournalView.swift */; };
 		0B1000510000000000000051 /* WikiFileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001520000000000000052 /* WikiFileService.swift */; };
@@ -229,6 +231,8 @@
 0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Provider/WebSearchService.swift; sourceTree = "<group>"; };
 		0B10014B000000000000004B /* AgentTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Agent/AgentTool.swift; sourceTree = "<group>"; };
 		0B10014C000000000000004C /* FoodPhotoAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Agent/FoodPhotoAnalyzer.swift; sourceTree = "<group>"; };
+		0B10014D000000000000004D /* WebSearchHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Agent/WebSearchHelper.swift; sourceTree = "<group>"; };
+		0B10014E000000000000004E /* ToolFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Agent/ToolFactory.swift; sourceTree = "<group>"; };
 		0B1001500000000000000050 /* DashboardViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/SharedComponents/DashboardViewModel.swift; sourceTree = "<group>"; };
 		0B1001510000000000000051 /* JournalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Journal/Views/JournalView.swift; sourceTree = "<group>"; };
 		0B1001520000000000000052 /* WikiFileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Context/WikiFileService.swift; sourceTree = "<group>"; };
@@ -411,6 +415,8 @@
 				0B10014B000000000000004B /* AgentTool.swift */,
 				0B10014C000000000000004C /* FoodPhotoAnalyzer.swift */,
 				0B1001210000000000000021 /* JournalDraft.swift */,
+					0B10014D000000000000004D /* WebSearchHelper.swift */,
+					0B10014E000000000000004E /* ToolFactory.swift */,
 				0B1001510000000000000051 /* JournalView.swift */,
 				0B1001220000000000000022 /* PersistenceModels.swift */,
 				0B1001350000000000000035 /* VelaModelContainer.swift */,
@@ -647,6 +653,8 @@
 				0B10004B000000000000004B /* AgentTool.swift in Sources */,
 				0B10004C000000000000004C /* FoodPhotoAnalyzer.swift in Sources */,
 				0B1000210000000000000021 /* JournalDraft.swift in Sources */,
+					0B10004D000000000000004D /* WebSearchHelper.swift in Sources */,
+					0B10004E000000000000004E /* ToolFactory.swift in Sources */,
 				0B1000500000000000000050 /* JournalView.swift in Sources */,
 				0B1000220000000000000022 /* PersistenceModels.swift in Sources */,
 				0B1000340000000000000034 /* VelaModelContainer.swift in Sources */,
