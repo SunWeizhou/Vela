@@ -18,18 +18,44 @@ enum BackgroundTaskManager {
         logger.info("BGTask registered: \(self.refreshTaskIdentifier)")
     }
 
-    /// Schedule the next background refresh.
+    /// Schedule the next background refresh targeting the nearest agent time window.
     /// iOS determines the actual fire time based on app usage patterns and system conditions.
     static func schedule() {
         let request = BGAppRefreshTaskRequest(identifier: refreshTaskIdentifier)
-        request.earliestBeginDate = Date(timeIntervalSinceNow: 3600)
+        request.earliestBeginDate = nextTargetTime()
 
         do {
             try BGTaskScheduler.shared.submit(request)
-            logger.info("Background refresh scheduled.")
+            if let target = request.earliestBeginDate {
+                let formatter = DateFormatter()
+                formatter.dateFormat = "HH:mm"
+                logger.info("Background refresh scheduled, targeting ~\(formatter.string(from: target)).")
+            }
         } catch {
             logger.error("Failed to schedule background refresh: \(error.localizedDescription)")
         }
+    }
+
+    /// Calculates the next target time for background refresh.
+    /// Targets: 23:00 (evening wiki sync) or 07:00 (morning brief), whichever comes next.
+    private static func nextTargetTime() -> Date {
+        let now = Date()
+        let cal = Calendar.current
+
+        let eveningTarget = cal.date(bySettingHour: 23, minute: 0, second: 0, of: now) ?? now
+        let morningTarget = cal.date(bySettingHour: 7, minute: 0, second: 0, of: now) ?? now
+
+        // Find the next target from now
+        var candidates: [Date] = []
+        if eveningTarget > now { candidates.append(eveningTarget) }
+        if morningTarget > now { candidates.append(morningTarget) }
+        // If both have passed today, schedule for tomorrow morning
+        if candidates.isEmpty {
+            let tomorrow = cal.date(byAdding: .day, value: 1, to: morningTarget) ?? morningTarget
+            candidates.append(tomorrow)
+        }
+
+        return candidates.min() ?? now.addingTimeInterval(3600)
     }
 
     /// Cancel all pending background tasks (e.g. when user disables the feature).
