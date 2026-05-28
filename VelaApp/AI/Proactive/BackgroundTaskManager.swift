@@ -65,8 +65,10 @@ enum BackgroundTaskManager {
                     return
                 }
 
+                let sleepTarget = UserDefaults.standard.double(forKey: "vela_sleep_target_hours") * 60
+                let effectiveSleepTarget = sleepTarget > 0 ? sleepTarget : 450
                 let sleepScore = SleepScoreEngine().calculate(
-                    from: ScoreEngineFactory.sleep(from: context, sleepTarget: 450, bedtimeOffsetMinutes: nil, wakeOffsetMinutes: nil)
+                    from: ScoreEngineFactory.sleep(from: context, sleepTarget: effectiveSleepTarget, bedtimeOffsetMinutes: nil, wakeOffsetMinutes: nil)
                 )
                 let recovery = RecoveryScoreEngine().calculate(
                     from: ScoreEngineFactory.recovery(from: context, sleepScore: sleepScore.score, strainScoreYesterday: nil, hrvHistory: [], rhrHistory: [])
@@ -78,7 +80,7 @@ enum BackgroundTaskManager {
                     from: ScoreEngineFactory.stress(from: context, sleepScore: sleepScore.score, strainScore: strain.score)
                 )
                 let energy = EnergyBankEngine().calculate(
-                    from: ScoreEngineFactory.energyBank(from: context, recoveryScore: recovery.score, sleepScore: nil, strainScore: strain.score, stressIndex: stress.stressIndex, strainHistory: nil)
+                    from: ScoreEngineFactory.energyBank(from: context, recoveryScore: recovery.score, sleepScore: context.sleepSummary == nil ? nil : sleepScore.score, strainScore: strain.score, stressIndex: stress.stressIndex, strainHistory: nil)
                 )
                 let healthAge = HealthAgeTrendEngine().calculate(
                     from: ScoreEngineFactory.healthAge(from: context, recovery: recovery, sleepScore: sleepScore, strain: strain)

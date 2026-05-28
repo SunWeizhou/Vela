@@ -16,8 +16,10 @@ final class HealthDataRefreshService {
 
     func refreshToday(now: Date = Date()) async throws -> DailyHealthSnapshot {
         let context = try await refreshContext(now: now)
+        let sleepTarget = UserDefaults.standard.double(forKey: "vela_sleep_target_hours") * 60
+        let effectiveSleepTarget = sleepTarget > 0 ? sleepTarget : 450
         let sleepScore = SleepScoreEngine().calculate(
-            from: ScoreEngineFactory.sleep(from: context, sleepTarget: 450, bedtimeOffsetMinutes: nil, wakeOffsetMinutes: nil)
+            from: ScoreEngineFactory.sleep(from: context, sleepTarget: effectiveSleepTarget, bedtimeOffsetMinutes: nil, wakeOffsetMinutes: nil)
         )
         let recovery = RecoveryScoreEngine().calculate(
             from: ScoreEngineFactory.recovery(from: context, sleepScore: sleepScore.score, strainScoreYesterday: nil, hrvHistory: [], rhrHistory: [])
@@ -29,7 +31,7 @@ final class HealthDataRefreshService {
             from: ScoreEngineFactory.stress(from: context, sleepScore: sleepScore.score, strainScore: strain.score)
         )
         let energy = EnergyBankEngine().calculate(
-            from: ScoreEngineFactory.energyBank(from: context, recoveryScore: recovery.score, sleepScore: nil, strainScore: strain.score, stressIndex: stress.stressIndex, strainHistory: nil)
+            from: ScoreEngineFactory.energyBank(from: context, recoveryScore: recovery.score, sleepScore: context.sleepSummary == nil ? nil : sleepScore.score, strainScore: strain.score, stressIndex: stress.stressIndex, strainHistory: nil)
         )
         guard context.hasAnyData else {
             return DailyHealthSnapshot(
