@@ -5,12 +5,14 @@ struct AppCoordinator: View {
     @AppStorage("vela_onboarding_completed") private var onboardingCompleted = false
     @StateObject private var dashboardVM = DashboardViewModel()
     @StateObject private var appState = VelaAppState.shared
+    @StateObject private var services = VelaServices()
 
     var body: some View {
         ZStack {
             if onboardingCompleted {
                 VelaRootView()
                     .environmentObject(dashboardVM)
+                    .environmentObject(services)
                     .environment(\.locale, Locale(identifier: language.localeIdentifier))
                     .id(language.rawValue)
             } else {

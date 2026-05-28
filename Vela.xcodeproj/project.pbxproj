@@ -138,6 +138,9 @@
 		5EAF240962A24A8B8D74158C /* PersonalResponseInsightService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C38F23741E2F4476BAEAD938 /* PersonalResponseInsightService.swift */; };
 		0B1000350000000000000101 /* ScoreEngineFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001360000000000000101 /* ScoreEngineFactory.swift */; };
 		0B1001A400000000000000A4 /* DomainContextBuilders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001A500000000000000A5 /* DomainContextBuilders.swift */; };
+		0B1001B100000000000000B1 /* VelaError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001B000000000000000B0 /* VelaError.swift */; };
+		0B1001B300000000000000B3 /* VelaServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001B200000000000000B2 /* VelaServices.swift */; };
+		0B1001B500000000000000B5 /* ViewVelaErrorAlert.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001B400000000000000B4 /* ViewVelaErrorAlert.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -223,7 +226,7 @@
 		0B1001470000000000000047 /* DeepSeekProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Provider/DeepSeekProvider.swift; sourceTree = "<group>"; };
 		0B1001480000000000000048 /* ReportGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Reports/ReportGenerator.swift; sourceTree = "<group>"; };
 		0B1001490000000000000049 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Provider/KeychainService.swift; sourceTree = "<group>"; };
-tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Provider/WebSearchService.swift; sourceTree = "<group>"; };
+0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Provider/WebSearchService.swift; sourceTree = "<group>"; };
 		0B10014B000000000000004B /* AgentTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Agent/AgentTool.swift; sourceTree = "<group>"; };
 		0B10014C000000000000004C /* FoodPhotoAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Agent/FoodPhotoAnalyzer.swift; sourceTree = "<group>"; };
 		0B1001500000000000000050 /* DashboardViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/SharedComponents/DashboardViewModel.swift; sourceTree = "<group>"; };
@@ -283,6 +286,9 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 		C38F23741E2F4476BAEAD938 /* PersonalResponseInsightService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/AI/Proactive/PersonalResponseInsightService.swift; sourceTree = "<group>"; };
 		0B1001360000000000000101 /* ScoreEngineFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/ScoreEngineFactory.swift; sourceTree = "<group>"; };
 		0B1001A500000000000000A5 /* DomainContextBuilders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Context/DomainContextBuilders.swift; sourceTree = "<group>"; };
+		0B1001B000000000000000B0 /* VelaError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/VelaError.swift; sourceTree = "<group>"; };
+		0B1001B200000000000000B2 /* VelaServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/VelaServices.swift; sourceTree = "<group>"; };
+		0B1001B400000000000000B4 /* ViewVelaErrorAlert.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Extensions/ViewVelaErrorAlert.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -352,6 +358,9 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 				0B1001430000000000000043 /* DashboardSummary.swift */,
 				0B1001440000000000000044 /* DailySummaryUseCase.swift */,
 				0B1001A700000000000000A7 /* PreviewDataFactory.swift */,
+					0B1001B000000000000000B0 /* VelaError.swift */,
+					0B1001B200000000000000B2 /* VelaServices.swift */,
+					0B1001B400000000000000B4 /* ViewVelaErrorAlert.swift */,
 				0B1001530000000000000053 /* AppLanguage.swift */,
 				0B1001060000000000000006 /* VelaTheme.swift */,
 				0B21D1010000000000000001 /* VelaDesignSystem.swift */,
@@ -586,6 +595,9 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 				0B1000420000000000000042 /* DashboardSummary.swift in Sources */,
 				0B1000430000000000000043 /* DailySummaryUseCase.swift in Sources */,
 				0B1001A600000000000000A6 /* PreviewDataFactory.swift in Sources */,
+					0B1001B100000000000000B1 /* VelaError.swift in Sources */,
+					0B1001B300000000000000B3 /* VelaServices.swift in Sources */,
+					0B1001B500000000000000B5 /* ViewVelaErrorAlert.swift in Sources */,
 				0B1000520000000000000052 /* AppLanguage.swift in Sources */,
 				0B1000060000000000000006 /* VelaTheme.swift in Sources */,
 				0B21D0010000000000000001 /* VelaDesignSystem.swift in Sources */,
@@ -631,7 +643,7 @@ tt0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReferenc
 				0B1000460000000000000046 /* DeepSeekProvider.swift in Sources */,
 				0B1000470000000000000047 /* ReportGenerator.swift in Sources */,
 				0B1000480000000000000048 /* KeychainService.swift in Sources */,
-tttt0B10004A000000000000004A /* WebSearchService.swift in Sources */,
+0B10004A000000000000004A /* WebSearchService.swift in Sources */,
 				0B10004B000000000000004B /* AgentTool.swift in Sources */,
 				0B10004C000000000000004C /* FoodPhotoAnalyzer.swift in Sources */,
 				0B1000210000000000000021 /* JournalDraft.swift in Sources */,

@@ -86,6 +86,7 @@ final class DashboardViewModel: ObservableObject {
     @Published private(set) var dashboard = DashboardSummary.preview()
     @Published private(set) var isLoading = false
     @Published private(set) var errorMessage: String?
+    @Published var currentError: VelaError?
     @Published private(set) var sleepTrend: [TrendPoint] = []
     @Published private(set) var recoveryTrend: [RecoveryTrendPoint] = []
     @Published private(set) var strainTrend: [TrendPoint] = []
@@ -120,10 +121,12 @@ final class DashboardViewModel: ObservableObject {
     }
 
     private let useCase: DailySummaryUseCase
+    private let services: VelaServices?
     private var refreshTask: Task<Void, Never>?
 
-    init(useCase: DailySummaryUseCase = DailySummaryUseCase()) {
+    init(useCase: DailySummaryUseCase = DailySummaryUseCase(), services: VelaServices? = nil) {
         self.useCase = useCase
+        self.services = services
     }
 
     func refresh(modelContext: ModelContext? = nil) async {
@@ -132,6 +135,7 @@ final class DashboardViewModel: ObservableObject {
             guard let self else { return }
             isLoading = true
             errorMessage = nil
+            currentError = nil
             do {
                 dashboard = try await useCase.loadDashboard(for: selectedDate, modelContext: modelContext)
                 lastUpdated = Date()
@@ -152,6 +156,7 @@ final class DashboardViewModel: ObservableObject {
                         ? "数据加载失败：\(message)。下拉刷新重试。"
                         : "Data load failed: \(message). Pull to refresh."
                 }
+                currentError = (error as? VelaError) ?? .unknown(underlying: error)
                 dashboard = .preview(date: Date())
             }
             isLoading = false
