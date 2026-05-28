@@ -2,6 +2,7 @@ import SwiftUI
 
 struct VelaMinimalShell: View {
     @ObservedObject private var appState = VelaAppState.shared
+    @EnvironmentObject private var dashboardVM: DashboardViewModel
     @State private var showQuickActions = false
     @State private var showBloodLog = false
     @State private var showWeightLog = false
@@ -65,6 +66,7 @@ struct VelaMinimalShell: View {
             }
         }
         .tint(VelaTheme.accent)
+        .velaErrorAlert(error: $dashboardVM.currentError)
     }
 
     private var boundTab: Binding<VelaMinimalTab> {
