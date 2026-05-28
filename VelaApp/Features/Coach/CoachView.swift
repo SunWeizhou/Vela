@@ -19,131 +19,70 @@ struct CoachView: View {
     @State private var showConversation = false
     @ObservedObject private var agentConfig = AutoAgentConfig.shared
 
+    // Detail sheets (replacing NavigationLinks for sheet context)
+    @State private var showWikiProfile = false
+    @State private var showSettings = false
+    @State private var showJournal = false
+    @State private var showDataCoverage = false
+    @State private var showTrustCenter = false
+
     // Camera / Food Photo
     @State private var showCameraPicker = false
     @State private var showPhotoLibraryPicker = false
     @State private var capturedImage: UIImage? = nil
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                VelaBackground()
+        ZStack {
+            // MARK: - Glass Overlay Background (iOS 26 Liquid Glass)
+            VelaBackground()
+                .glassEffect(isOverlay: true)
+                .ignoresSafeArea()
 
-                VStack(spacing: 0) {
-                    personalityPicker
-                        .padding(.top, 8)
-                        .padding(.bottom, 4)
+            VStack(spacing: 0) {
+                // MARK: - Header Bar
+                headerBar
+                    .padding(.top, 12)
 
-                    if showConversation {
-                        messageList
-                    } else {
-                        actionHubView
-                    }
-
-                    // Quick questions (only when few messages)
-                    if showConversation && vm.messages.count < 3 && !vm.messages.isEmpty {
-                        quickQuestionsBar
-                    }
-
-                    inputBar
+                // MARK: - Context Pill
+                if showConversation || !vm.messages.isEmpty {
+                    contextPill
+                        .padding(.top, 10)
+                        .padding(.horizontal, VelaTheme.screenPadding)
                 }
 
-                // Bespoke Glassmorphic Sidebar Drawer
-                if showSidebar {
-                    sidebarOverlay
+                // MARK: - Personality Picker
+                personalityPicker
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
+
+                // MARK: - Quick Commands
+                if !showConversation {
+                    quickCommandsRow
+                        .padding(.top, 16)
+                } else if vm.messages.count < 3 && !vm.messages.isEmpty {
+                    quickQuestionsBar
+                        .padding(.top, 6)
                 }
+
+                // MARK: - Content Area
+                if showConversation {
+                    messageList
+                } else {
+                    actionHubView
+                }
+
+                // MARK: - Composer Bar (fixed bottom)
+                composerBar
             }
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    HStack(spacing: 12) {
-                        Button {
-                            dismiss()
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.body.weight(.semibold))
-                                .foregroundStyle(VelaTheme.secondaryText)
-                        }
-
-                        Button {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                showSidebar.toggle()
-                            }
-                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                        } label: {
-                            Image(systemName: "sidebar.left")
-                                .font(.body.weight(.semibold))
-                                .foregroundStyle(VelaTheme.accent)
-                        }
-                    }
+        }
+        .alert(AppLanguage.stored.isChinese ? "重命名对话" : "Rename Session", isPresented: $showRenameAlert) {
+            TextField(AppLanguage.stored.isChinese ? "输入对话名称" : "Session Title", text: $renameText)
+            Button(AppLanguage.stored.isChinese ? "取消" : "Cancel", role: .cancel) { sessionToRename = nil }
+            Button(AppLanguage.stored.isChinese ? "确定" : "OK") {
+                if let session = sessionToRename {
+                    vm.renameSession(session, to: renameText, modelContext: modelContext)
                 }
-                ToolbarItem(placement: .principal) {
-                    HStack(spacing: 6) {
-                        VelaLogoMark(size: 20)
-                        Text(vm.currentSession?.title ?? "Vela")
-                            .font(.headline.weight(.bold))
-                            .foregroundStyle(VelaTheme.primaryText)
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 4) {
-                        if EveningWikiSyncAgent.shared.isRunning {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                                .padding(.trailing, 4)
-                        }
-                        Menu {
-                            Button {
-                                Task {
-                                    await EveningWikiSyncAgent.shared.runIfNeeded(
-                                        modelContext: modelContext,
-                                        dashboard: dashboardVM.dashboard,
-                                        force: true
-                                    )
-                                }
-                            } label: {
-                                Label(L10n.t("Sync Wiki Now", "立即同步 Wiki"), systemImage: "arrow.triangle.2.circlepath")
-                            }
-                            Button {
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                    vm.createNewSession(modelContext: modelContext)
-                                    showConversation = false
-                                }
-                            } label: {
-                                Label(L10n.t("New Session", "新建对话"), systemImage: "plus.circle")
-                            }
-                            Button(role: .destructive) {
-                                vm.clearConversation(modelContext: modelContext)
-                            } label: {
-                                Label(L10n.t("Clear Chat", "清空对话"), systemImage: "trash")
-                            }
-                            NavigationLink {
-                                SettingsView()
-                            } label: {
-                                Label(L10n.t("Settings", "设置"), systemImage: "gearshape.fill")
-                            }
-                            NavigationLink {
-                                JournalView()
-                            } label: {
-                                Label(L10n.t("Journal", "日记"), systemImage: "square.and.pencil")
-                            }
-                        } label: {
-                            Image(systemName: "ellipsis.circle")
-                                .font(.subheadline.weight(.semibold))
-                        }
-                    }
-                }
-            }
-            .alert(AppLanguage.stored.isChinese ? "重命名对话" : "Rename Session", isPresented: $showRenameAlert) {
-                TextField(AppLanguage.stored.isChinese ? "输入对话名称" : "Session Title", text: $renameText)
-                Button(AppLanguage.stored.isChinese ? "取消" : "Cancel", role: .cancel) { sessionToRename = nil }
-                Button(AppLanguage.stored.isChinese ? "确定" : "OK") {
-                    if let session = sessionToRename {
-                        vm.renameSession(session, to: renameText, modelContext: modelContext)
-                    }
-                    sessionToRename = nil
-                }
+                sessionToRename = nil
             }
         }
         .task {
@@ -161,7 +100,6 @@ struct CoachView: View {
                 VelaAppState.shared.triggerFoodLibrary = false
                 showPhotoLibraryPicker = true
             }
-            // Auto agent: evening wiki sync
             await EveningWikiSyncAgent.shared.runIfNeeded(
                 modelContext: modelContext,
                 dashboard: dashboardVM.dashboard
@@ -187,6 +125,21 @@ struct CoachView: View {
         .sheet(isPresented: $showPhotoLibraryPicker) {
             ImagePicker(sourceType: .photoLibrary, selectedImage: $capturedImage)
         }
+        .sheet(isPresented: $showWikiProfile) {
+            NavigationStack { WikiProfileView() }
+        }
+        .sheet(isPresented: $showSettings) {
+            NavigationStack { SettingsView() }
+        }
+        .sheet(isPresented: $showJournal) {
+            NavigationStack { JournalView() }
+        }
+        .sheet(isPresented: $showDataCoverage) {
+            NavigationStack { DataCoverageView() }
+        }
+        .sheet(isPresented: $showTrustCenter) {
+            NavigationStack { TrustCenterView() }
+        }
         .onChange(of: capturedImage) { _, newImage in
             guard let image = newImage else { return }
             Task {
@@ -199,27 +152,205 @@ struct CoachView: View {
                 )
             }
         }
+        // Sidebar overlay (above everything)
+        if showSidebar {
+            sidebarOverlay
+        }
     }
+
+    // MARK: - Header Bar
+
+    private var headerBar: some View {
+        HStack(spacing: 12) {
+            // Sidebar / sessions
+            Button {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                    showSidebar.toggle()
+                }
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            } label: {
+                Image(systemName: "sidebar.left")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(VelaTheme.primary)
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(VelaTheme.primary.opacity(0.12)))
+            }
+
+            Spacer()
+
+            // Title
+            HStack(spacing: 6) {
+                VelaLogoMark(size: 18)
+                Text(showConversation ? (vm.currentSession?.title ?? "Coach") : "Coach")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(VelaTheme.onSurface)
+            }
+
+            Spacer()
+
+            // Close button
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(VelaTheme.onSurfaceVariant)
+                    .frame(width: 36, height: 36)
+            }
+        }
+        .padding(.horizontal, VelaTheme.screenPadding)
+    }
+
+    // MARK: - Context Pill
+
+    private var contextPill: some View {
+        let dash = dashboardVM.dashboard
+        let metrics: [(String, String, Color)] = [
+            (AppLanguage.stored.isChinese ? "睡眠" : "Sleep",
+             dash.sleepScore.hasData ? "\(Int(dash.sleepScore.score))h" : "--",
+             VelaTheme.sleep),
+            (AppLanguage.stored.isChinese ? "负荷" : "Strain",
+             dash.strain.hasData ? "\(Int(dash.strain.score))" : "--",
+             VelaTheme.strain),
+            (AppLanguage.stored.isChinese ? "恢复" : "Recovery",
+             dash.recovery.hasData ? "\(Int(dash.recovery.score))" : "--",
+             VelaTheme.recovery),
+        ]
+
+        return HStack(spacing: 6) {
+            Image(systemName: "sparkles")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(VelaTheme.primary)
+
+            Text(AppLanguage.stored.isChinese ? "今日" : "Today")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(VelaTheme.onSurface)
+
+            ForEach(metrics, id: \.0) { label, value, color in
+                HStack(spacing: 3) {
+                    Circle()
+                        .fill(color)
+                        .frame(width: 4, height: 4)
+                    Text("\(label) \(value)")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(VelaTheme.onSurfaceVariant)
+                }
+            }
+        }
+        .padding(.horizontal, VelaSpacing.sm)
+        .padding(.vertical, 7)
+        .background(
+            Capsule(style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(VelaTheme.outline, lineWidth: 0.5)
+        )
+    }
+
+    // MARK: - Quick Commands (action hub entry points)
+
+    private var quickCommandsRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                quickCommandChip(
+                    icon: "sparkles",
+                    label: L10n.t("Analyze Today", "分析今日"),
+                    question: L10n.t(
+                        "How am I doing today? Explain the evidence and the best next action.",
+                        "我今天状态怎么样？请解释证据和最合适的下一步行动。"
+                    ),
+                    tint: VelaTheme.primary
+                )
+                quickCommandChip(
+                    icon: "figure.run",
+                    label: L10n.t("Plan Workout", "计划训练"),
+                    question: L10n.t(
+                        "Build today's training session from my recovery, strain, energy, sleep, and workouts.",
+                        "请基于我的恢复、负荷、能量、睡眠和训练记录生成今天的训练。"
+                    ),
+                    tint: VelaTheme.strain
+                )
+                quickCommandChip(
+                    icon: "fork.knife",
+                    label: L10n.t("Log Meal", "记录饮食"),
+                    question: L10n.t(
+                        "I just ate a meal. Help me log it and analyze how it fits my nutrition goals.",
+                        "我刚吃了一餐，帮我记录并分析与营养目标的匹配度。"
+                    ),
+                    tint: VelaTheme.energy
+                )
+                quickCommandChip(
+                    icon: "moon.zzz.fill",
+                    label: L10n.t("Check Sleep", "检查睡眠"),
+                    question: L10n.t(
+                        "Analyze my sleep and tell me the one factor that would most improve recovery.",
+                        "请分析我的睡眠，并告诉我最能改善恢复的一个因素。"
+                    ),
+                    tint: VelaTheme.sleep
+                )
+                quickCommandChip(
+                    icon: "chart.line.uptrend.xyaxis",
+                    label: L10n.t("Weekly Summary", "本周小结"),
+                    question: L10n.t(
+                        "Summarize my recent health trends and tell me what changed most this week.",
+                        "请总结我近期的健康趋势，并告诉我本周变化最大的是什么。"
+                    ),
+                    tint: VelaTheme.recovery
+                )
+            }
+            .padding(.horizontal, VelaTheme.screenPadding)
+        }
+    }
+
+    private func quickCommandChip(icon: String, label: String, question: String, tint: Color) -> some View {
+        Button {
+            sendQuestion(question)
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.caption2.weight(.semibold))
+                Text(label)
+                    .font(.caption2.weight(.semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(tint)
+            .padding(.horizontal, VelaSpacing.sm)
+            .padding(.vertical, 7)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(VelaTheme.outline, lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Action Hub View
 
     private var actionHubView: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 18) {
-                VelaHeroSurface(tint: VelaTheme.accent) {
+                VelaHeroSurface(tint: VelaTheme.primary) {
                     VStack(alignment: .leading, spacing: 14) {
                         HStack(alignment: .top, spacing: 12) {
                             VelaLogoMark(size: 48)
-                                .shadow(color: VelaTheme.accent.opacity(0.16), radius: 14)
+                                .shadow(color: VelaTheme.primary.opacity(0.16), radius: 14)
 
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(AppLanguage.stored.isChinese ? "Coach Command Center" : "Coach Command Center")
                                     .font(.title3.weight(.bold))
-                                    .foregroundStyle(VelaTheme.primaryText)
+                                    .foregroundStyle(VelaTheme.onSurface)
                                 Text(AppLanguage.stored.isChinese
                                      ? "基于今天的身体状态、Wiki 记忆和健康数据，快速发起一次有上下文的行动。"
                                      : "Start a context-aware action from today's body state, Wiki memory, and health data."
                                 )
                                 .font(.subheadline)
-                                .foregroundStyle(VelaTheme.secondaryText)
+                                .foregroundStyle(VelaTheme.onSurfaceVariant)
                                 .fixedSize(horizontal: false, vertical: true)
                             }
 
@@ -259,7 +390,7 @@ struct CoachView: View {
                         title: L10n.t("Analyze Readiness", "分析今日状态"),
                         subtitle: L10n.t("Recovery, sleep, strain, and today's limiter.", "恢复、睡眠、负荷和今日限制因素。"),
                         systemImage: "sparkles",
-                        tint: VelaTheme.accent
+                        tint: VelaTheme.primary
                     ) {
                         sendQuestion(L10n.t("How am I doing today? Explain the evidence and the best next action.", "我今天状态怎么样？请解释证据和最合适的下一步行动。"))
                     }
@@ -288,14 +419,7 @@ struct CoachView: View {
                         systemImage: "brain.head.profile",
                         tint: VelaTheme.energy
                     ) {
-                        showConversation = false
-                    }
-                    .overlay {
-                        NavigationLink {
-                            WikiProfileView()
-                        } label: {
-                            Color.clear
-                        }
+                        showWikiProfile = true
                     }
                 }
 
@@ -305,8 +429,8 @@ struct CoachView: View {
                 )
 
                 HStack(spacing: 12) {
-                    NavigationLink {
-                        DataCoverageView()
+                    Button {
+                        showDataCoverage = true
                     } label: {
                         trustCommandTile(
                             title: AppLanguage.stored.isChinese ? "数据覆盖" : "Data Coverage",
@@ -317,14 +441,14 @@ struct CoachView: View {
                     }
                     .buttonStyle(.plain)
 
-                    NavigationLink {
-                        TrustCenterView()
+                    Button {
+                        showTrustCenter = true
                     } label: {
                         trustCommandTile(
                             title: AppLanguage.stored.isChinese ? "信任中心" : "Trust Center",
                             subtitle: AppLanguage.stored.isChinese ? "Agent 审计日志" : "Agent audit log",
                             icon: "checkmark.shield.fill",
-                            tint: VelaTheme.accent
+                            tint: VelaTheme.primary
                         )
                     }
                     .buttonStyle(.plain)
@@ -345,66 +469,14 @@ struct CoachView: View {
                     .background(Circle().fill(tint.opacity(0.12)))
                 Text(title)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(VelaTheme.primaryText)
+                    .foregroundStyle(VelaTheme.onSurface)
                 Text(subtitle)
                     .font(.caption)
-                    .foregroundStyle(VelaTheme.secondaryText)
+                    .foregroundStyle(VelaTheme.onSurfaceVariant)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-    }
-    
-    private func suggestionCard(
-        title: String,
-        description: String,
-        icon: String,
-        question: String,
-        tint: Color
-    ) -> some View {
-        Button {
-            sendQuestion(question)
-        } label: {
-            HStack(spacing: 16) {
-                Image(systemName: icon)
-                    .font(.system(size: 20))
-                    .foregroundStyle(tint)
-                    .frame(width: 48, height: 48)
-                    .background(
-                        Circle()
-                            .fill(tint.opacity(0.08))
-                    )
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(VelaTheme.primaryText)
-                    Text(description)
-                        .font(.system(size: 12))
-                        .foregroundStyle(VelaTheme.secondaryText)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                }
-                
-                Spacer()
-                
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(VelaTheme.mutedText)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(VelaTheme.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Color.black.opacity(0.04), lineWidth: 0.5)
-            )
-            .shadow(color: Color.black.opacity(0.02), radius: 6, x: 0, y: 3)
-        }
-        .buttonStyle(.plain)
     }
 
     // MARK: - Message List
@@ -418,8 +490,8 @@ struct CoachView: View {
                             message: msg,
                             streamingContent: msg.isStreaming ? vm.streamingContent : nil
                         )
-                            .id(msg.id)
-                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        .id(msg.id)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
                 }
                 .padding(VelaTheme.screenPadding)
@@ -444,25 +516,28 @@ struct CoachView: View {
                     Button { sendQuestion(q) } label: {
                         Text(q)
                             .font(.caption.weight(.medium))
-                            .foregroundStyle(VelaTheme.accent)
+                            .foregroundStyle(VelaTheme.primary)
                             .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
+                            .padding(.vertical, 7)
                             .background(
                                 Capsule(style: .continuous)
-                                    .fill(VelaTheme.accent.opacity(0.1))
+                                    .fill(.ultraThinMaterial)
+                            )
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .stroke(VelaTheme.outline, lineWidth: 0.5)
                             )
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, VelaTheme.screenPadding)
-            .padding(.vertical, 6)
         }
     }
 
-    // MARK: - Input Bar
+    // MARK: - Composer Bar
 
-    private var inputBar: some View {
+    private var composerBar: some View {
         HStack(spacing: 8) {
             // Camera button for food photo analysis
             Menu {
@@ -479,70 +554,63 @@ struct CoachView: View {
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(VelaTheme.secondaryText)
+                    .foregroundStyle(VelaTheme.onSurfaceVariant)
                     .frame(width: 36, height: 36)
-                    .background(Circle().fill(VelaTheme.subtleFill))
+                    .background(Circle().fill(.ultraThinMaterial))
+                    .overlay(
+                        Circle().stroke(VelaTheme.outline, lineWidth: 0.5)
+                    )
             }
             .disabled(vm.isStreaming || vm.isAnalyzingFood)
-            
-            // Capsule containing TextField + Send Button
+
+            // Glass capsule input
             HStack(spacing: 4) {
                 TextField(
-                    L10n.t("Ask Vela...", "问 Vela..."),
+                    L10n.t("Ask anything about your health...", "询问关于你健康的任何问题..."),
                     text: $vm.draft,
                     axis: .vertical
                 )
                 .lineLimit(1...5)
                 .focused($inputFocused)
-                .font(.system(size: 14))
+                .font(.system(size: 15))
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .foregroundStyle(VelaTheme.primaryText)
-                
+                .foregroundStyle(VelaTheme.onSurface)
+
                 Button {
                     inputFocused = false
                     sendQuestion(vm.draft)
                 } label: {
                     Group {
-                        if vm.isStreaming {
+                        if vm.isStreaming || vm.isAnalyzingFood {
                             ProgressView()
-                                .tint(VelaTheme.inverseText)
                                 .scaleEffect(0.8)
+                                .tint(VelaTheme.onPrimary)
                         } else {
-                            Image(systemName: "arrow.up")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(VelaTheme.inverseText)
+                            Image(systemName: "arrow.up.circle.fill")
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(
+                                    vm.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                        ? VelaTheme.muted
+                                        : VelaTheme.primary
+                                )
                         }
                     }
-                    .frame(width: 30, height: 30)
-                    .background(
-                        Circle()
-                            .fill(
-                                vm.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                    ? VelaTheme.mutedText.opacity(0.3)
-                                    : VelaTheme.accent
-                            )
-                    )
                 }
                 .disabled(vm.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || vm.isStreaming)
-                .padding(.trailing, 6)
+                .padding(.trailing, 4)
             }
             .background(
                 Capsule(style: .continuous)
-                    .fill(VelaTheme.surface)
+                    .fill(.ultraThinMaterial)
             )
             .overlay(
                 Capsule(style: .continuous)
-                    .stroke(Color.black.opacity(0.05), lineWidth: 0.5)
+                    .stroke(VelaTheme.outline, lineWidth: 0.5)
             )
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(
-            Rectangle()
-                .fill(VelaTheme.background.opacity(0.8))
-                .background(.ultraThinMaterial)
-        )
     }
 
     // MARK: - Glassmorphic Sidebar Drawer
@@ -551,7 +619,6 @@ struct CoachView: View {
         let drawerWidth = min(UIScreen.main.bounds.width * 0.78, 320)
 
         return ZStack(alignment: .leading) {
-            // Dismiss area with blur
             Color.black.opacity(0.4)
                 .ignoresSafeArea()
                 .onTapGesture {
@@ -560,7 +627,6 @@ struct CoachView: View {
                     }
                 }
 
-            // Side Drawer
             GeometryReader { geo in
                 VStack(spacing: 0) {
                     // Header
@@ -568,10 +634,10 @@ struct CoachView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(AppLanguage.stored.isChinese ? "对话历史" : "Sessions")
                                 .font(.title3.weight(.bold))
-                                .foregroundStyle(VelaTheme.primaryText)
+                                .foregroundStyle(VelaTheme.onSurface)
                             Text(AppLanguage.stored.isChinese ? "你的私人健康顾问" : "Your private coach")
                                 .font(.caption)
-                                .foregroundStyle(VelaTheme.secondaryText)
+                                .foregroundStyle(VelaTheme.onSurfaceVariant)
                         }
                         Spacer()
                         Button {
@@ -584,9 +650,9 @@ struct CoachView: View {
                         } label: {
                             Image(systemName: "square.and.pencil")
                                 .font(.body.weight(.bold))
-                                .foregroundStyle(VelaTheme.accent)
+                                .foregroundStyle(VelaTheme.primary)
                                 .padding(8)
-                                .background(Circle().fill(VelaTheme.accent.opacity(0.12)))
+                                .background(Circle().fill(VelaTheme.primary.opacity(0.12)))
                         }
                     }
                     .padding(.horizontal, 20)
@@ -594,7 +660,7 @@ struct CoachView: View {
                     .padding(.bottom, 20)
 
                     Divider()
-                        .background(Color.black.opacity(0.08))
+                        .background(VelaTheme.outline)
 
                     // Session List
                     ScrollView {
@@ -604,21 +670,20 @@ struct CoachView: View {
                                 HStack {
                                     Image(systemName: "bubble.left.and.bubble.right.fill")
                                         .font(.subheadline)
-                                        .foregroundStyle(isSelected ? VelaTheme.accent : VelaTheme.secondaryText)
+                                        .foregroundStyle(isSelected ? VelaTheme.primary : VelaTheme.onSurfaceVariant)
 
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(session.title)
                                             .font(.subheadline.weight(isSelected ? .semibold : .medium))
-                                            .foregroundStyle(isSelected ? VelaTheme.accent : VelaTheme.primaryText)
+                                            .foregroundStyle(isSelected ? VelaTheme.primary : VelaTheme.onSurface)
                                             .lineLimit(1)
                                         Text(session.updatedAt.formatted(date: .abbreviated, time: .omitted))
                                             .font(.system(size: 10))
-                                            .foregroundStyle(VelaTheme.mutedText)
+                                            .foregroundStyle(VelaTheme.muted)
                                     }
 
                                     Spacer()
 
-                                    // Context Menu for Rename / Delete
                                     Menu {
                                         Button {
                                             sessionToRename = session
@@ -637,7 +702,7 @@ struct CoachView: View {
                                     } label: {
                                         Image(systemName: "ellipsis")
                                             .font(.caption)
-                                            .foregroundStyle(VelaTheme.mutedText)
+                                            .foregroundStyle(VelaTheme.muted)
                                             .padding(6)
                                     }
                                 }
@@ -645,7 +710,7 @@ struct CoachView: View {
                                 .padding(.vertical, 12)
                                 .background(
                                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .fill(isSelected ? VelaTheme.accent.opacity(0.1) : Color.clear)
+                                        .fill(isSelected ? VelaTheme.primary.opacity(0.1) : Color.clear)
                                 )
                                 .onTapGesture {
                                     withAnimation {
@@ -665,30 +730,28 @@ struct CoachView: View {
                     // Footer
                     VStack(spacing: 12) {
                         Divider()
-                            .background(Color.black.opacity(0.08))
+                            .background(VelaTheme.outline)
 
-                        NavigationLink {
-                            WikiProfileView()
+                        Button {
+                            showSidebar = false
+                            showWikiProfile = true
                         } label: {
                             HStack(spacing: 10) {
                                 Image(systemName: "person.text.rectangle.fill")
                                     .font(.body)
-                                    .foregroundStyle(VelaTheme.accent)
+                                    .foregroundStyle(VelaTheme.primary)
                                 Text(AppLanguage.stored.isChinese ? "个人健康档案 (Wiki)" : "Personal Health Wiki")
                                     .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(VelaTheme.primaryText)
+                                    .foregroundStyle(VelaTheme.onSurface)
                                 Spacer()
                                 Image(systemName: "chevron.right")
                                     .font(.caption2)
-                                    .foregroundStyle(VelaTheme.mutedText)
+                                    .foregroundStyle(VelaTheme.muted)
                             }
                             .padding(14)
-                            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(VelaTheme.elevatedSurface))
+                            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(VelaTheme.surfaceContainerLow))
                         }
                         .buttonStyle(.plain)
-                        .onTapGesture {
-                            showSidebar = false
-                        }
                     }
                     .padding(16)
                     .padding(.bottom, geo.safeAreaInsets.bottom + 16)
@@ -734,6 +797,8 @@ struct CoachView: View {
         }
     }
 
+    // MARK: - Personality Picker
+
     private var personalityPicker: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
@@ -760,16 +825,16 @@ struct CoachView: View {
                         )
                         .overlay(
                             Capsule(style: .continuous)
-                                .strokeBorder(isSelected ? p.tint.opacity(0.4) : Color.black.opacity(0.08), lineWidth: 1)
+                                .strokeBorder(isSelected ? p.tint.opacity(0.4) : VelaTheme.outline, lineWidth: 1)
                         )
-                        .foregroundStyle(isSelected ? p.tint : VelaTheme.secondaryText)
+                        .foregroundStyle(isSelected ? p.tint : VelaTheme.onSurfaceVariant)
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, VelaTheme.screenPadding)
         }
-        .frame(height: 38)
+        .frame(height: 40)
     }
 
     private func triggerPersonalityHaptic(_ personality: CoachPersonality) {
@@ -799,6 +864,8 @@ struct CoachView: View {
     }
 }
 
+// MARK: - Coach Report Detail View
+
 private struct CoachReportDetailView: View {
     let report: AIReportRecord
 
@@ -811,14 +878,14 @@ private struct CoachReportDetailView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(reportTypeTitle)
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(VelaTheme.accent)
+                            .foregroundStyle(VelaTheme.primary)
                             .textCase(.uppercase)
                         Text(report.title)
                             .font(.system(size: 28, weight: .bold, design: .rounded))
-                            .foregroundStyle(VelaTheme.primaryText)
+                            .foregroundStyle(VelaTheme.onSurface)
                         Text(report.createdAt.formatted(date: .complete, time: .shortened))
                             .font(.caption)
-                            .foregroundStyle(VelaTheme.secondaryText)
+                            .foregroundStyle(VelaTheme.onSurfaceVariant)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, 18)
@@ -826,17 +893,17 @@ private struct CoachReportDetailView: View {
                     MarkdownText(
                         markdown: report.markdownContent,
                         font: .body,
-                        color: VelaTheme.primaryText,
+                        color: VelaTheme.onSurface,
                         isStreaming: false
                     )
                     .padding(16)
                     .background(
                         RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard, style: .continuous)
-                            .fill(VelaTheme.surface)
+                            .fill(VelaTheme.surfaceContainerLowest)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard, style: .continuous)
-                            .stroke(Color.black.opacity(0.06), lineWidth: 0.5)
+                            .stroke(VelaTheme.outline, lineWidth: 0.5)
                     )
                 }
                 .padding(VelaTheme.screenPadding)
@@ -851,7 +918,7 @@ private struct CoachReportDetailView: View {
     }
 }
 
-// MARK: - Chat Bubble
+// MARK: - Chat Bubble (Redesigned)
 
 private struct ChatBubbleView: View {
     let message: CoachChatVM.ChatMsg
@@ -859,26 +926,15 @@ private struct ChatBubbleView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
-            if message.role == .user { Spacer(minLength: 72) }
+            if message.role == .user { Spacer(minLength: 60) }
 
-            VStack(alignment: .leading, spacing: 8) {
-                // Header (only for assistant)
-                if message.role == .assistant {
-                    HStack(spacing: 6) {
-                        VelaLogoMark(size: 16)
-                        Text("Vela AI")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(VelaTheme.accent)
-                    }
-                    .padding(.bottom, 2)
-                }
-
+            VStack(alignment: message.role == .assistant ? .leading : .trailing, spacing: 6) {
                 // Content
                 let displayText = (message.isStreaming ? (streamingContent ?? message.content) : message.content)
                 MarkdownText(
                     markdown: displayText,
-                    font: .system(size: 14),
-                    color: VelaTheme.primaryText,
+                    font: .system(size: 15),
+                    color: VelaTheme.onSurface,
                     isStreaming: message.isStreaming
                 )
 
@@ -887,36 +943,55 @@ private struct ChatBubbleView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(VelaTheme.accent)
+                            .foregroundStyle(VelaTheme.primary)
                         Text(L10n.t("Wiki updated: \(message.wikiUpdates.joined(separator: ", "))", "已更新档案: \(message.wikiUpdates.joined(separator: ", "))"))
                             .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(VelaTheme.accent)
+                            .foregroundStyle(VelaTheme.primary)
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Capsule(style: .continuous).fill(VelaTheme.accent.opacity(0.12)))
-                    .padding(.top, 4)
+                    .background(Capsule(style: .continuous).fill(VelaTheme.primary.opacity(0.12)))
+                    .padding(.top, 2)
                 }
 
                 // Timestamp
                 if !message.isStreaming {
                     Text(message.timestamp.formatted(date: .omitted, time: .shortened))
                         .font(.system(size: 9))
-                        .foregroundStyle(VelaTheme.mutedText)
+                        .foregroundStyle(VelaTheme.muted)
                         .padding(.top, 2)
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 14)
             .padding(.vertical, 12)
+            .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: message.role == .assistant ? .leading : .trailing)
             .background(
+                Group {
+                    if message.role == .assistant {
+                        // Coach: glass bubble
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(
+                                Color(UIColor { traits in
+                                    traits.userInterfaceStyle == .dark
+                                        ? UIColor(red: 0.110, green: 0.106, blue: 0.094, alpha: 0.55)
+                                        : UIColor(white: 1.0, alpha: 0.60)
+                                })
+                            )
+                    } else {
+                        // User: solid surface bubble
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(VelaTheme.surfaceContainerLow.opacity(0.92))
+                    }
+                }
+            )
+            .overlay(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(message.role == .user
-                        ? VelaTheme.subtleFill
-                        : VelaTheme.surface.opacity(0.4)
-                    )
+                    .stroke(VelaTheme.outline, lineWidth: 0.5)
             )
 
-            if message.role == .assistant { Spacer(minLength: 72) }
+            if message.role == .assistant { Spacer(minLength: 60) }
         }
     }
 }

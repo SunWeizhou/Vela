@@ -22,13 +22,13 @@ struct VelaMinimalCoachView: View {
 
                 Text(L10n.t("Ask Vela to explain your body.", "让 Vela 解释你的身体状态。"))
                     .font(.system(size: 32, weight: .black, design: .rounded))
-                    .foregroundStyle(VelaTheme.primaryText)
+                    .foregroundStyle(VelaTheme.onSurface)
                     .lineLimit(3)
                     .minimumScaleFactor(0.72)
 
                 Text(L10n.t("The coach uses your recovery, sleep, strain, stress, energy, workouts, journal, and personal wiki.", "教练会结合恢复、睡眠、负荷、压力、能量、训练、手记和个人 Wiki。"))
                     .font(.system(size: 15, weight: .medium, design: .rounded))
-                    .foregroundStyle(VelaTheme.secondaryText)
+                    .foregroundStyle(VelaTheme.onSurfaceVariant)
                     .lineSpacing(4)
 
                 Button {
@@ -39,7 +39,7 @@ struct VelaMinimalCoachView: View {
                         .foregroundStyle(Color.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(Capsule(style: .continuous).fill(VelaTheme.accent))
+                        .background(Capsule(style: .continuous).fill(VelaTheme.primary))
                 }
                 .buttonStyle(.plain)
             }
@@ -98,10 +98,10 @@ struct VelaMinimalCoachView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(L10n.t("Local-first context", "本地优先上下文"))
                         .font(.system(size: 17, weight: .semibold, design: .rounded))
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.onSurface)
                     Text(L10n.t("Vela sends structured summaries, not raw HealthKit data.", "Vela 发送结构化摘要，不发送原始 HealthKit 数据。"))
                         .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .foregroundStyle(VelaTheme.secondaryText)
+                        .foregroundStyle(VelaTheme.onSurfaceVariant)
                 }
             }
         }
@@ -115,13 +115,13 @@ struct VelaMinimalCoachView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Image(systemName: icon)
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(VelaTheme.accent)
+                        .foregroundStyle(VelaTheme.primary)
                     Text(title)
                         .font(.system(size: 18, weight: .semibold, design: .rounded))
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.onSurface)
                     Text(body)
                         .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .foregroundStyle(VelaTheme.secondaryText)
+                        .foregroundStyle(VelaTheme.onSurfaceVariant)
                         .lineLimit(3)
                 }
                 .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)

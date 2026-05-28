@@ -44,8 +44,11 @@ struct VelaMinimalShell: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
-        .fullScreenCover(isPresented: $appState.showCoachHub) {
+        .sheet(isPresented: $appState.showCoachHub) {
             CoachView()
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.hidden)
+                .interactiveDismissDisabled(false)
         }
         .onChange(of: appState.triggerBloodLog) { _, newValue in
             if newValue {

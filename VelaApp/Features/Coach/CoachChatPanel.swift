@@ -406,8 +406,6 @@ final class CoachChatVM: ObservableObject {
                 break
             }
 
-            streamingContent = ""
-
             if fullResponse.isEmpty {
                 fullResponse = L10n.t(
                     "I wasn't able to generate a response. Please try again.",
@@ -415,8 +413,7 @@ final class CoachChatVM: ObservableObject {
                 )
             }
 
-            // Also parse legacy [ACTION:] blocks for backward compatibility
-            // Convert to MemoryProposals instead of direct writes
+            // Parse legacy [ACTION:] blocks for backward compatibility
             let parsed = AgentActionParser.parse(fullResponse)
             let ledger = MemoryLedger(modelContext: modelContext)
             for action in parsed.actions where action.type == .updateWiki {
@@ -434,12 +431,23 @@ final class CoachChatVM: ObservableObject {
                 }
             }
 
+            // Word-by-word streaming with 60ms throttle
+            let finalText = parsed.displayText.isEmpty ? fullResponse : parsed.displayText
+            let words = finalText.components(separatedBy: " ")
+            var accumulated: [String] = []
+            for word in words {
+                try? await Task.sleep(nanoseconds: 60_000_000)
+                accumulated.append(word)
+                streamingContent = accumulated.joined(separator: " ")
+            }
+            streamingContent = ""
+
             // Finalize message
             if let idx = messages.firstIndex(where: { $0.id == assistantId }) {
                 messages[idx] = ChatMsg(
                     id: assistantId,
                     role: .assistant,
-                    content: parsed.displayText.isEmpty ? fullResponse : parsed.displayText,
+                    content: finalText,
                     wikiUpdates: wikiFiles
                 )
             }
