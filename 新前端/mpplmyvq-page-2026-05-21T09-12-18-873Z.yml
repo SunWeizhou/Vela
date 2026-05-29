@@ -1,0 +1,393 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#content"
+  - img "preloader" [ref=e4]
+  - generic [ref=e6]:
+    - generic [ref=e10]:
+      - list [ref=e13]:
+        - listitem [ref=e14]:
+          - 'link "Phone: 855-409-8855" [ref=e15] [cursor=pointer]':
+            - /url: tel:855-409-8855
+            - img [ref=e17]
+            - generic [ref=e19]: "Phone: 855-409-8855"
+        - listitem [ref=e20]:
+          - 'link "Phone: 412-569-4300" [ref=e21] [cursor=pointer]':
+            - /url: tel:%20412-569-4300
+            - img [ref=e23]
+            - generic [ref=e25]: "Phone: 412-569-4300"
+        - listitem [ref=e26]:
+          - link "support@bevelhealth.com" [ref=e27] [cursor=pointer]:
+            - /url: http://mailtosupport@bevelhealth.com
+            - img [ref=e29]
+            - generic [ref=e31]: support@bevelhealth.com
+      - link [ref=e37] [cursor=pointer]:
+        - /url: /cart
+      - generic [ref=e39]:
+        - generic:
+          - generic:
+            - generic:
+              - link "offcanvas-menu":
+                - /url: "#"
+    - generic [ref=e41]:
+      - link [ref=e46] [cursor=pointer]:
+        - /url: /
+      - navigation [ref=e51]:
+        - list [ref=e53]:
+          - listitem [ref=e54]:
+            - link "Home" [ref=e55] [cursor=pointer]:
+              - /url: https://bevelhealth.com/
+          - listitem [ref=e56]:
+            - link "Screenings" [ref=e57] [cursor=pointer]:
+              - /url: https://bevelhealth.com/screenings/
+          - listitem [ref=e58]:
+            - link "Resources" [ref=e59] [cursor=pointer]:
+              - /url: https://bevelhealth.com/resources/
+              - text: Resources
+              - generic [ref=e60]: 
+          - listitem [ref=e61]:
+            - link "HIPAA" [ref=e62] [cursor=pointer]:
+              - /url: https://bevelhealth.com/hipaa/
+          - listitem [ref=e63]:
+            - link "Blog" [ref=e64] [cursor=pointer]:
+              - /url: https://bevelhealth.com/blog/
+          - listitem [ref=e65]:
+            - link "About" [ref=e66] [cursor=pointer]:
+              - /url: https://bevelhealth.com/about/
+          - listitem [ref=e67]:
+            - link "Contact" [ref=e68] [cursor=pointer]:
+              - /url: https://bevelhealth.com/contact/
+      - generic [ref=e73]:
+        - link "navsearch-button" [ref=e74] [cursor=pointer]:
+          - /url: "#ekit_modal-popup-15791d6"
+          - generic [ref=e75]: 
+        - text: 
+  - main [ref=e76]:
+    - generic [ref=e78]:
+      - generic [ref=e88] [cursor=pointer]:
+        - generic [ref=e89]:
+          - generic:
+            - generic:
+              - generic: C
+              - generic: o
+              - generic: m
+              - generic: p
+              - generic: a
+              - generic: s
+              - generic: s
+              - generic: i
+              - generic: o
+              - generic: "n"
+              - generic: a
+              - generic: t
+              - generic: e
+            - generic:
+              - generic: C
+              - generic: a
+              - generic: r
+              - generic: e
+            - generic:
+              - generic: f
+              - generic: o
+              - generic: r
+            - generic:
+              - generic: a
+            - generic:
+              - generic: H
+              - generic: e
+              - generic: a
+              - generic: l
+              - generic: t
+              - generic: h
+              - generic: i
+              - generic: e
+              - generic: r
+            - generic:
+              - generic: "Y"
+              - generic: o
+              - generic: u
+          - generic:
+            - generic:
+              - generic: D
+              - generic: i
+              - generic: a
+              - generic: g
+              - generic: "n"
+              - generic: o
+              - generic: s
+              - generic: i
+              - generic: s
+            - generic:
+              - generic: "&"
+            - generic:
+              - generic: T
+              - generic: r
+              - generic: e
+              - generic: a
+              - generic: t
+              - generic: m
+              - generic: e
+              - generic: "n"
+              - generic: t
+        - generic [ref=e91]: 
+        - generic [ref=e92]: 
+      - generic [ref=e95]:
+        - link "Contact Us " [ref=e102] [cursor=pointer]:
+          - /url: "#booking"
+        - link "Book Appointment " [ref=e109] [cursor=pointer]:
+          - /url: "#book_appointment"
+        - link "412-569-4300 Contact Us" [ref=e115] [cursor=pointer]:
+          - /url: tel:7273337999
+          - generic [ref=e118]:
+            - text: 412-569-4300
+            - paragraph [ref=e119]: Contact Us
+      - generic [ref=e128]:
+        - generic [ref=e129]:
+          - generic [ref=e130]: 1. Service
+          - generic [ref=e132]: 2. Time
+          - generic [ref=e134]: 3. Details
+          - generic [ref=e136]: 4. Payment
+          - generic [ref=e138]: 5. Done
+        - generic [ref=e140]:
+          - generic [ref=e141]: "Please select service:"
+          - generic [ref=e145]:
+            - generic [ref=e146]: Service
+            - combobox "Service" [ref=e148]:
+              - option "Select service"
+              - option "Home screening kit" [selected]
+          - generic [ref=e149]:
+            - generic [ref=e150]:
+              - generic [ref=e151]:
+                - generic [ref=e153]:
+                  - generic [ref=e154]: I'm available on or after
+                  - textbox "I'm available on or after" [ref=e156]: May 25, 2026
+                - generic [ref=e157]:
+                  - generic [ref=e158]:
+                    - generic [ref=e159]: Mon
+                    - checkbox "Mon" [checked] [ref=e160] [cursor=pointer]
+                  - generic [ref=e161]:
+                    - generic [ref=e162]: Tue
+                    - checkbox "Tue" [checked] [ref=e163] [cursor=pointer]
+                  - generic [ref=e164]:
+                    - generic [ref=e165]: Wed
+                    - checkbox "Wed" [checked] [ref=e166] [cursor=pointer]
+                  - generic [ref=e167]:
+                    - generic [ref=e168]: Thu
+                    - checkbox "Thu" [checked] [ref=e169] [cursor=pointer]
+                  - generic [ref=e170]:
+                    - generic [ref=e171]: Fri
+                    - checkbox "Fri" [checked] [ref=e172] [cursor=pointer]
+                  - generic [ref=e173]:
+                    - generic [ref=e174]: Sat
+                    - checkbox "Sat" [checked] [ref=e175] [cursor=pointer]
+                  - generic [ref=e176]:
+                    - generic [ref=e177]: Sun
+                    - checkbox "Sun" [checked] [ref=e178] [cursor=pointer]
+              - generic [ref=e179]:
+                - generic [ref=e180]:
+                  - generic [ref=e181]: Start from
+                  - combobox "Start from" [ref=e183]:
+                    - option "8:00 pm" [selected]
+                    - option "9:00 pm"
+                    - option "10:00 pm"
+                    - option "11:00 pm"
+                    - option "12:00 am"
+                    - option "1:00 am"
+                    - option "2:00 am"
+                    - option "3:00 am"
+                    - option "4:00 am"
+                - generic [ref=e184]:
+                  - generic [ref=e185]: Finish by
+                  - combobox "Finish by" [ref=e187]:
+                    - option "8:00 pm"
+                    - option "9:00 pm"
+                    - option "10:00 pm"
+                    - option "11:00 pm"
+                    - option "12:00 am"
+                    - option "1:00 am"
+                    - option "2:00 am"
+                    - option "3:00 am"
+                    - option "4:00 am" [selected]
+            - button "Next" [ref=e190] [cursor=pointer]:
+              - generic [ref=e191]: Next
+      - generic [ref=e223]:
+        - generic [ref=e225]:
+          - paragraph [ref=e228]: Suboxone/Subutex Treatment
+          - heading "Mental Health" [level=2] [ref=e231]
+          - heading "Support" [level=2] [ref=e234]
+          - generic [ref=e238]:
+            - heading "Assistance" [level=3] [ref=e239]
+            - paragraph [ref=e243]: We offer round-the-clock access to urgent mental health support. Whether you're facing a difficult moment or need someone to talk to, our team is just a message away—ready to help anytime, anywhere.
+        - generic [ref=e258]:
+          - generic [ref=e262]:
+            - paragraph [ref=e263]: Need Help?
+            - heading "Fill the form below" [level=3] [ref=e264]
+          - generic [ref=e270] [cursor=pointer]:
+            - generic [ref=e271]: Select
+            - textbox
+          - generic [ref=e273]:
+            - textbox "Your name" [ref=e279]:
+              - /placeholder: "Your name "
+            - spinbutton [ref=e285]
+          - generic [ref=e287]:
+            - spinbutton [ref=e293]
+            - textbox "Email Address" [ref=e299]:
+              - /placeholder: "Email Address "
+          - generic [ref=e301]:
+            - textbox "Appointment Date" [ref=e308] [cursor=pointer]:
+              - /placeholder: "Appointment Date "
+            - textbox "Select Time" [ref=e315] [cursor=pointer]:
+              - /placeholder: "Select Time "
+          - textbox "Type your essential message here..." [ref=e319]:
+            - /placeholder: "Type your essential message here... "
+          - button "Submit your Request" [ref=e323] [cursor=pointer]:
+            - img [ref=e324]
+            - generic [ref=e326]: Submit your Request
+      - img "doctor" [ref=e335]
+      - generic [ref=e347]:
+        - generic [ref=e357]:
+          - link "Online Therapy We offer convenient and accessible online therapy to support your mental wellness—helping you heal emotionally and mentally without leaving your home." [ref=e363] [cursor=pointer]:
+            - /url: "#"
+            - generic [ref=e366]:
+              - heading "Online Therapy" [level=3] [ref=e367]
+              - paragraph [ref=e368]: We offer convenient and accessible online therapy to support your mental wellness—helping you heal emotionally and mentally without leaving your home.
+          - link "Medication Management Manage your treatment with expert guidance, including Suboxone/Subutex for opioid recovery and medications for anxiety and depression." [ref=e374] [cursor=pointer]:
+            - /url: "#"
+            - generic [ref=e377]:
+              - heading "Medication Management" [level=3] [ref=e378]
+              - paragraph [ref=e379]: Manage your treatment with expert guidance, including Suboxone/Subutex for opioid recovery and medications for anxiety and depression.
+          - link "At-Home Lab Orders Easily request lab work and diagnostics to support your treatment plan—all ordered online and processed through partnered labs." [ref=e385] [cursor=pointer]:
+            - /url: "#"
+            - generic [ref=e388]:
+              - heading "At-Home Lab Orders" [level=3] [ref=e389]
+              - paragraph [ref=e390]: Easily request lab work and diagnostics to support your treatment plan—all ordered online and processed through partnered labs.
+        - generic [ref=e392]:
+          - link "Crisis Support In case of mental health emergencies, our care team can guide you to immediate support services or refer you to local crisis response." [ref=e398] [cursor=pointer]:
+            - /url: "#"
+            - generic [ref=e399]:
+              - img [ref=e402]
+              - generic [ref=e404]:
+                - heading "Crisis Support" [level=3] [ref=e405]
+                - paragraph [ref=e406]: In case of mental health emergencies, our care team can guide you to immediate support services or refer you to local crisis response.
+          - link "Ongoing Treatment Plans Receive structured, personalized care plans developed by licensed providers to ensure consistent progress on your wellness journey." [ref=e412] [cursor=pointer]:
+            - /url: "#"
+            - generic [ref=e415]:
+              - heading "Ongoing Treatment Plans" [level=3] [ref=e416]
+              - paragraph [ref=e417]: Receive structured, personalized care plans developed by licensed providers to ensure consistent progress on your wellness journey.
+          - link "Mental Health Check-ins Stay on top of your mental health with regular virtual check-ins, evaluations, and goal-setting sessions with our therapists." [ref=e423] [cursor=pointer]:
+            - /url: "#"
+            - generic [ref=e424]:
+              - img [ref=e427]
+              - generic [ref=e429]:
+                - heading "Mental Health Check-ins" [level=3] [ref=e430]
+                - paragraph [ref=e431]: Stay on top of your mental health with regular virtual check-ins, evaluations, and goal-setting sessions with our therapists.
+      - generic [ref=e451]:
+        - generic [ref=e453]:
+          - generic [ref=e454]:
+            - link "Bevel Health Medical Group Launches Affordable High-Quality Suboxone/Subutext Treatment Program for Opioid Addiction" [ref=e455] [cursor=pointer]:
+              - /url: https://bevelhealth.com/2025/06/27/bevel-health-medical-group-launches-affordable-high-quality-suboxone-subutext-treatment-program-for-opioid-addiction/
+              - img "Bevel Health Medical Group Launches Affordable High-Quality Suboxone/Subutext Treatment Program for Opioid Addiction" [ref=e456]
+            - generic [ref=e459]:
+              - strong [ref=e460]: "27"
+              - text: Jun
+          - heading "Bevel Health Medical Group Launches Affordable High-Quality Suboxone/Subutext Treatment Program…" [level=2] [ref=e462]:
+            - link "Bevel Health Medical Group Launches Affordable High-Quality Suboxone/Subutext Treatment Program…" [ref=e463] [cursor=pointer]:
+              - /url: https://bevelhealth.com/2025/06/27/bevel-health-medical-group-launches-affordable-high-quality-suboxone-subutext-treatment-program-for-opioid-addiction/
+        - generic [ref=e465]:
+          - generic [ref=e466]:
+            - link "Bevel Health Medical Group Provides Lowest-Cost Treatment Options" [ref=e467] [cursor=pointer]:
+              - /url: https://bevelhealth.com/2025/06/27/bevel-health-medical-group-provides-lowest-cost-treatment-options/
+              - img "Bevel Health Medical Group Provides Lowest-Cost Treatment Options" [ref=e468]
+            - generic [ref=e471]:
+              - strong [ref=e472]: "27"
+              - text: Jun
+          - heading "Bevel Health Medical Group Provides Lowest-Cost Treatment Options" [level=2] [ref=e474]:
+            - link "Bevel Health Medical Group Provides Lowest-Cost Treatment Options" [ref=e475] [cursor=pointer]:
+              - /url: https://bevelhealth.com/2025/06/27/bevel-health-medical-group-provides-lowest-cost-treatment-options/
+        - generic [ref=e477]:
+          - generic [ref=e478]:
+            - link "Bevel Health Medical Group Leverages Technology" [ref=e479] [cursor=pointer]:
+              - /url: https://bevelhealth.com/2025/06/27/bevel-health-medical-group-leverages-technology/
+              - img "Bevel Health Medical Group Leverages Technology" [ref=e480]
+            - generic [ref=e483]:
+              - strong [ref=e484]: "27"
+              - text: Jun
+          - heading "Bevel Health Medical Group Leverages Technology" [level=2] [ref=e486]:
+            - link "Bevel Health Medical Group Leverages Technology" [ref=e487] [cursor=pointer]:
+              - /url: https://bevelhealth.com/2025/06/27/bevel-health-medical-group-leverages-technology/
+        - generic [ref=e489]:
+          - generic [ref=e490]:
+            - link "Why some people become addicted and others don’t" [ref=e491] [cursor=pointer]:
+              - /url: https://bevelhealth.com/2025/06/27/why-some-people-become-addicted-and-others-dont/
+              - img "Why some people become addicted and others don’t" [ref=e492]
+            - generic [ref=e495]:
+              - strong [ref=e496]: "27"
+              - text: Jun
+          - heading "Why some people become addicted and others don’t" [level=2] [ref=e498]:
+            - link "Why some people become addicted and others don’t" [ref=e499] [cursor=pointer]:
+              - /url: https://bevelhealth.com/2025/06/27/why-some-people-become-addicted-and-others-dont/
+        - generic [ref=e501]:
+          - generic [ref=e502]:
+            - link "Opioid overdose deaths among teens have skyrocketed due to fentanyl" [ref=e503] [cursor=pointer]:
+              - /url: https://bevelhealth.com/2025/06/27/opioid-overdose-deaths-among-teens-have-skyrocketed-due-to-fentanyl/
+              - img "Opioid overdose deaths among teens have skyrocketed due to fentanyl" [ref=e504]
+            - generic [ref=e507]:
+              - strong [ref=e508]: "27"
+              - text: Jun
+          - heading "Opioid overdose deaths among teens have skyrocketed due to fentanyl" [level=2] [ref=e510]:
+            - link "Opioid overdose deaths among teens have skyrocketed due to fentanyl" [ref=e511] [cursor=pointer]:
+              - /url: https://bevelhealth.com/2025/06/27/opioid-overdose-deaths-among-teens-have-skyrocketed-due-to-fentanyl/
+        - generic [ref=e513]:
+          - generic [ref=e514]:
+            - 'link "Inside West Virginia’s fight against the Opioid epidemic: holding companies responsible" [ref=e515] [cursor=pointer]':
+              - /url: https://bevelhealth.com/2025/06/27/inside-west-virginias-fight-against-the-opioid-epidemic-holding-companies-responsible/
+              - 'img "Inside West Virginia’s fight against the Opioid epidemic: holding companies responsible" [ref=e516]'
+            - generic [ref=e519]:
+              - strong [ref=e520]: "27"
+              - text: Jun
+          - 'heading "Inside West Virginia’s fight against the Opioid epidemic: holding companies…" [level=2] [ref=e522]':
+            - 'link "Inside West Virginia’s fight against the Opioid epidemic: holding companies…" [ref=e523] [cursor=pointer]':
+              - /url: https://bevelhealth.com/2025/06/27/inside-west-virginias-fight-against-the-opioid-epidemic-holding-companies-responsible/
+      - generic [ref=e532]:
+        - generic [ref=e533]:
+          - group "3 / 6" [ref=e534]:
+            - 'generic "Sponsor #3" [ref=e536]'
+          - group "4 / 6" [ref=e539]:
+            - 'generic "Sponsor #4" [ref=e541]'
+          - group "5 / 6" [ref=e544]:
+            - 'generic "Sponsor #4" [ref=e546]'
+          - group "6 / 6" [ref=e549]:
+            - 'generic "Sponsor #4" [ref=e551]'
+          - group "1 / 6" [ref=e554]:
+            - 'generic "Sponsor #1" [ref=e556]'
+          - group "2 / 6" [ref=e559]:
+            - 'generic "Sponsor #2" [ref=e561]'
+          - group "3 / 6" [ref=e564]:
+            - 'generic "Sponsor #3" [ref=e566]'
+          - group "4 / 6" [ref=e569]:
+            - 'generic "Sponsor #4" [ref=e571]'
+          - group "5 / 6" [ref=e574]:
+            - 'generic "Sponsor #4" [ref=e576]'
+          - group "6 / 6" [ref=e579]:
+            - 'generic "Sponsor #4" [ref=e581]'
+          - group "1 / 6" [ref=e584]:
+            - 'generic "Sponsor #1" [ref=e586]'
+          - group "2 / 6" [ref=e589]:
+            - 'generic "Sponsor #2" [ref=e591]'
+          - group "3 / 6" [ref=e594]:
+            - 'generic "Sponsor #3" [ref=e596]'
+          - group "4 / 6" [ref=e599]:
+            - 'generic "Sponsor #4" [ref=e601]'
+        - generic [ref=e604]:
+          - button "Go to slide 1" [ref=e605] [cursor=pointer]
+          - button "Go to slide 2" [ref=e606] [cursor=pointer]
+          - button "Go to slide 3" [ref=e607] [cursor=pointer]
+          - button "Go to slide 4" [ref=e608] [cursor=pointer]
+          - button "Go to slide 5" [ref=e609] [cursor=pointer]
+          - button "Go to slide 6" [ref=e610] [cursor=pointer]
+  - generic [ref=e613]: © 2025, Bevel Health Medical Group. All Rights Reserved.
+  - generic [ref=e614]: desktop
+  - status [ref=e615]
+  - generic:
+    - text: BESbswyBESbswy
+    - generic: 
+    - text: BESbswy

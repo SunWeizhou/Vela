@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Vela - Nutrition Journal</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+                "on-surface-variant": "#424753",
+                "on-error-container": "#93000a",
+                "tertiary-fixed-dim": "#c2c1ff",
+                "secondary-fixed-dim": "#53e16f",
+                "on-background": "#151c28",
+                "surface-container-low": "#f1f3ff",
+                "on-tertiary-container": "#d2d1ff",
+                "primary": "#00418f",
+                "outline-variant": "#c2c6d5",
+                "secondary-fixed": "#72fe88",
+                "inverse-primary": "#adc6ff",
+                "on-surface": "#151c28",
+                "primary-container": "#0058bc",
+                "surface-container-highest": "#dde2f3",
+                "surface": "#f9f9ff",
+                "outline": "#727784",
+                "on-secondary-fixed-variant": "#00531c",
+                "surface-tint": "#095bbf",
+                "surface-container-high": "#e2e8f9",
+                "surface-bright": "#f9f9ff",
+                "on-primary": "#ffffff",
+                "surface-variant": "#dde2f3",
+                "secondary-container": "#6ffb85",
+                "on-tertiary": "#ffffff",
+                "surface-container": "#e8eeff",
+                "primary-fixed": "#d8e2ff",
+                "surface-dim": "#d4daeb",
+                "primary-fixed-dim": "#adc6ff",
+                "tertiary-container": "#4c4aca",
+                "surface-container-lowest": "#ffffff",
+                "on-secondary-container": "#00732a",
+                "inverse-surface": "#2a303d",
+                "on-secondary-fixed": "#002107",
+                "tertiary-fixed": "#e2dfff",
+                "on-error": "#ffffff",
+                "tertiary": "#332eb2",
+                "error": "#ba1a1a",
+                "secondary": "#006e28",
+                "on-tertiary-fixed-variant": "#3531b4",
+                "on-tertiary-fixed": "#0b006b",
+                "on-primary-fixed-variant": "#004494",
+                "on-primary-fixed": "#001a41",
+                "error-container": "#ffdad6",
+                "on-secondary": "#ffffff",
+                "inverse-on-surface": "#ecf0ff",
+                "background": "#f9f9ff",
+                "on-primary-container": "#c3d4ff",
+                "glass-fill-light": "rgba(255, 255, 255, 0.4)",
+                "glass-border-light": "rgba(255, 255, 255, 0.5)"
+        },
+        "borderRadius": {
+                "DEFAULT": "0.25rem",
+                "lg": "0.5rem",
+                "xl": "0.75rem",
+                "2xl": "1rem",
+                "3xl": "1.5rem",
+                "full": "9999px"
+        },
+        "spacing": {
+            "unit": "4px",
+            "stack-sm": "8px",
+            "gutter": "16px",
+            "stack-md": "16px",
+            "margin-mobile": "20px",
+            "stack-lg": "32px",
+            "margin-desktop": "40px",
+            "nav-offset": "88px"
+        },
+        "fontFamily": {
+                "headline": [
+                        "Manrope"
+                ],
+                "display": [
+                        "Manrope"
+                ],
+                "body": [
+                        "Manrope"
+                ],
+                "label": [
+                        "Manrope"
+                ]
+        },
+        "fontSize": {}
+},
+    },
+  }
+</script>
+<style>
+        body {
+            background-color: #F5F3F0;
+            background-attachment: fixed;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        .glass-panel {
+            background-color: theme('colors.glass-fill-light');
+            backdrop-filter: blur(32px);
+            -webkit-backdrop-filter: blur(32px);
+            border: 1px solid theme('colors.glass-border-light');
+            box-shadow: 0 4px 24px rgba(0,0,0,0.02);
+            border-bottom-color: rgba(255,255,255,0.2);
+            border-right-color: rgba(255,255,255,0.2);
+        }
+        
+        .liquid-progress {
+            background: #0058bc;
+        }
+    </style>
+</head>
+<body class="font-body text-on-surface min-h-screen antialiased selection:bg-[#0058bc] selection:text-on-primary-container">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-glass-fill-light/40 backdrop-blur-xl border-b border-white/20">
+<div class="flex justify-between items-center px-margin-mobile h-16 max-w-[768px] mx-auto">
+<!-- Leading: Avatar -->
+<button class="w-8 h-8 rounded-full overflow-hidden border border-white/50 active:scale-95 duration-200 transition-transform hover:opacity-80">
+<img alt="User profile photo" class="w-full h-full object-cover" data-alt="A close-up, high-quality portrait of a person with clear, warm lighting, representing a modern health app user profile photo." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDfUcVqDNRPFf5jhAljDHWAMivdD5kaVh8PDNOlbSyR4JsT_8EPV6eF3UO1NsUuyn-npU2tIKI2LQTacdnZsd9nNnfvdWSuuuiyveLowDvV5gxhsWRAoxZwskh85Hc4ueM74D4BBonsC5BaCv2evlIyYucQXNK_IoN0-5_rSCkpbb0Hvjx-Y7a-6w_1SMGOJLqZHvOAz4Y2QBRD95crrIjJyn-lQZW39YA1kk6u2JbCjWHoTcPNh7hyLRvUGmLw7izk6RMxRp5p1jxa"/>
+</button>
+<!-- Headline -->
+<h1 class="font-display font-extrabold text-[#0058bc] tracking-tighter text-[20px]">Vela</h1>
+<!-- Trailing: Icon -->
+<button class="text-on-surface-variant hover:opacity-80 transition-opacity active:scale-95 duration-200 p-2 -mr-2">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">settings</span>
+</button>
+</div>
+</header>
+<!-- Main Content Container -->
+<main class="pt-[104px] pb-32 px-margin-mobile max-w-[768px] mx-auto space-y-stack-lg">
+<!-- Header -->
+<div class="space-y-unit">
+<h2 class="font-headline text-[28px] font-bold leading-[34px] tracking-tight text-on-surface">Meal Log</h2>
+<p class="font-body text-[17px] text-on-surface-variant">Your daily intake overview.</p>
+</div>
+<!-- Summary Card (Glassmorphism) -->
+<section class="glass-panel rounded-3xl p-stack-md transition-transform duration-300 hover:scale-[1.01]">
+<div class="flex flex-col space-y-stack-md">
+<!-- Calorie Main Display -->
+<div class="flex items-end justify-between">
+<div>
+<span class="font-label text-[12px] font-bold uppercase tracking-[0.06em] text-on-surface-variant block mb-1">Total Consumed</span>
+<div class="flex items-baseline space-x-2">
+<span class="font-display text-[48px] font-extrabold tracking-[-0.04em] leading-none text-[#0058bc]">1,850</span>
+<span class="font-body text-[17px] text-on-surface-variant">/ 2,200 kcal</span>
+</div>
+</div>
+<!-- Small visual indicator -->
+<div class="w-12 h-12 rounded-full border-4 border-surface-variant relative flex items-center justify-center">
+<svg class="absolute inset-0 w-full h-full -rotate-90" viewbox="0 0 36 36">
+<path class="text-[#0058bc] stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-dasharray="100, 100" stroke-dashoffset="15" stroke-linecap="round" stroke-width="4"></path>
+</svg>
+<span class="material-symbols-outlined text-[#0058bc] text-sm" style="font-variation-settings: 'FILL' 1;">restaurant</span>
+</div>
+</div>
+<hr class="border-outline-variant/30"/>
+<!-- Macros Breakdown -->
+<div class="space-y-3">
+<!-- Protein -->
+<div>
+<div class="flex justify-between text-[14px] mb-1 font-body">
+<span class="text-on-surface font-medium">Protein</span>
+<span class="text-on-surface-variant">110g / 150g</span>
+</div>
+<div class="h-1.5 w-full bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-[#0058bc] rounded-full" style="width: 73%;"></div>
+</div>
+</div>
+<!-- Carbs -->
+<div>
+<div class="flex justify-between text-[14px] mb-1 font-body">
+<span class="text-on-surface font-medium">Carbs</span>
+<span class="text-on-surface-variant">180g / 220g</span>
+</div>
+<div class="h-1.5 w-full bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-[#0058bc] rounded-full" style="width: 81%;"></div>
+</div>
+</div>
+<!-- Fats -->
+<div>
+<div class="flex justify-between text-[14px] mb-1 font-body">
+<span class="text-on-surface font-medium">Fats</span>
+<span class="text-on-surface-variant">55g / 70g</span>
+</div>
+<div class="h-1.5 w-full bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-[#0058bc] rounded-full" style="width: 78%;"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Chronological List -->
+<section class="space-y-stack-sm">
+<!-- Breakfast Entry -->
+<article class="glass-panel rounded-3xl p-3 flex gap-4 items-center">
+<div class="w-20 h-20 rounded-2xl overflow-hidden shrink-0 relative">
+<img alt="Breakfast Bowl" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida/ADBb0ugqIo7gmg8Ioi4hQfVSXkbvNpqpCjKIHCo4XaZQFYlaszPsjRBGkfyTDVjeXELfGE8Gvu9Bi9D-gRlvFU6blAObnzHqrMycm5knMHvrdq2NKU5dhdIrU6nYfXtXMxivsJrh7onnBurL9_Zsnx3m3Flo-b2IbYl4NV_ICrNXfU9zGddMfKN-scXA3DK05GBhJDiNnRSk6OrUDbraiF_HOUB1tQGPZPvsAiDCugPayOrKwPXE5K-uxYVjx9Wi"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
+</div>
+<div class="flex-1 min-w-0 pr-2">
+<div class="flex justify-between items-start mb-1">
+<h3 class="font-headline text-[17px] font-bold text-on-surface truncate">Morning Granola Bowl</h3>
+<span class="font-display text-[17px] font-bold text-[#0058bc] shrink-0 ml-2">420 kcal</span>
+</div>
+<div class="flex items-center gap-2 mb-2">
+<span class="text-[12px] text-on-surface-variant">8:30 AM</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span class="inline-flex items-center gap-1 bg-[#0058bc]/10 text-[#0058bc] px-2 py-0.5 rounded-full text-[10px] font-label uppercase tracking-widest font-bold">
+<span class="material-symbols-outlined text-[12px]" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+                            AI Estimate
+                        </span>
+</div>
+</div>
+</article>
+<!-- Lunch Entry -->
+<article class="glass-panel rounded-3xl p-3 flex gap-4 items-center">
+<div class="w-20 h-20 rounded-2xl overflow-hidden shrink-0 relative">
+<img alt="Lunch Salad" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida/ADBb0uibQ0jQtQgef7NVm6ReDrqhLcto0suZPIU4QPSP4CbuYATW0BPFJLlFL0YAcy1RKmld9HDHRO6pcNc3mSXQv6PEADFqg1zpRWgeQD4IH4eDN46op1PGiu2r6C31K-rpufxzkYJiVB5Fm136GeMe-LQNRvcXGpWdlL11Ux5M25WlLxRCQXNMgK-8oAvG5RHCWKhyHSHdyPGxg6A4tf4ajjYFebFMXIJIESesNllltdV-DbpoxE3WIR3m_qxK"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
+</div>
+<div class="flex-1 min-w-0 pr-2">
+<div class="flex justify-between items-start mb-1">
+<h3 class="font-headline text-[17px] font-bold text-on-surface truncate">Grilled Chicken Salad</h3>
+<span class="font-display text-[17px] font-bold text-[#0058bc] shrink-0 ml-2">580 kcal</span>
+</div>
+<div class="flex items-center gap-2 mb-2">
+<span class="text-[12px] text-on-surface-variant">1:15 PM</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span class="inline-flex items-center gap-1 bg-[#0058bc]/10 text-[#0058bc] px-2 py-0.5 rounded-full text-[10px] font-label uppercase tracking-widest font-bold">
+<span class="material-symbols-outlined text-[12px]" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+                            AI Estimate
+                        </span>
+</div>
+</div>
+</article>
+<!-- Add Meal Button (Ghost Style) -->
+<button class="w-full py-4 border-2 border-dashed border-outline-variant/40 rounded-3xl text-on-surface-variant font-label text-[12px] uppercase tracking-[0.06em] flex items-center justify-center gap-2 hover:bg-surface-container-low transition-colors duration-200 font-bold">
+<span class="material-symbols-outlined text-lg">add_circle</span>
+                Log Next Meal
+            </button>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-40px)] max-w-[400px] z-50 rounded-full bg-white/40 dark:bg-black/40 backdrop-blur-3xl border border-white/30 shadow-2xl h-16">
+<div class="flex justify-around items-center px-4 h-full">
+<!-- Active: Today -->
+<a class="flex flex-col items-center justify-center text-[#0058bc] font-bold scale-110 transition-all duration-300 ease-out w-16" href="#">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">calendar_today</span>
+<span class="text-[10px] font-bold uppercase tracking-wider mt-0.5">Today</span>
+</a>
+<!-- Inactive: Vitals -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant/70 hover:text-[#0058bc] transition-all duration-300 w-16" href="#">
+<span class="material-symbols-outlined text-[24px]">monitor_heart</span>
+<span class="text-[10px] font-bold uppercase tracking-wider mt-0.5">Vitals</span>
+</a>
+<!-- Inactive: Fitness -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant/70 hover:text-[#0058bc] transition-all duration-300 w-16" href="#">
+<span class="material-symbols-outlined text-[24px]">exercise</span>
+<span class="text-[10px] font-bold uppercase tracking-wider mt-0.5">Fitness</span>
+</a>
+<!-- Inactive: Coach -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant/70 hover:text-[#0058bc] transition-all duration-300 w-16" href="#">
+<span class="material-symbols-outlined text-[24px]">psychiatry</span>
+<span class="text-[10px] font-bold uppercase tracking-wider mt-0.5">Coach</span>
+</a>
+</div>
+</nav>
+</body></html>

@@ -35,7 +35,7 @@ struct CoachView: View {
         ZStack {
             // MARK: - Glass Overlay Background (iOS 26 Liquid Glass)
             VelaBackground()
-                .glassEffect(isOverlay: true)
+                .glassEffect()
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -237,7 +237,7 @@ struct CoachView: View {
                 }
             }
         }
-        .padding(.horizontal, VelaSpacing.sm)
+        .padding(.horizontal, VelaTheme.spaceSM)
         .padding(.vertical, 7)
         .background(
             Capsule(style: .continuous)
@@ -316,7 +316,7 @@ struct CoachView: View {
                     .lineLimit(1)
             }
             .foregroundStyle(tint)
-            .padding(.horizontal, VelaSpacing.sm)
+            .padding(.horizontal, VelaTheme.spaceSM)
             .padding(.vertical, 7)
             .background(
                 Capsule(style: .continuous)

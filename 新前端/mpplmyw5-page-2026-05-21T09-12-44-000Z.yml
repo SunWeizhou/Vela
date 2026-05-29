@@ -1,0 +1,173 @@
+- generic [ref=e2]:
+  - banner:
+    - generic [ref=e3]:
+      - link "Skip to Content" [ref=e4] [cursor=pointer]:
+        - /url: "#page"
+      - generic [ref=e8]:
+        - link "Athlytic" [ref=e11] [cursor=pointer]:
+          - /url: /
+          - img "Athlytic" [ref=e13]
+        - navigation [ref=e16]:
+          - link "Home" [ref=e18] [cursor=pointer]:
+            - /url: /
+          - link "Why Athlytic?" [ref=e20] [cursor=pointer]:
+            - /url: /getting-started
+          - link "Blog" [ref=e22] [cursor=pointer]:
+            - /url: /blog
+          - button "Widgets" [ref=e24] [cursor=pointer]:
+            - generic [ref=e25]: Widgets
+          - link "In the News" [ref=e27] [cursor=pointer]:
+            - /url: /news
+          - link "FAQ & User Guides" [ref=e29] [cursor=pointer]:
+            - /url: https://athlyticapp.helpscoutdocs.com/
+          - link "Beta Testing" [ref=e31] [cursor=pointer]:
+            - /url: /beta-testing
+  - main [ref=e32]:
+    - article [ref=e33]:
+      - generic [ref=e34]:
+        - generic [ref=e39]:
+          - heading "Athlytic is your fitness guide to smarter training & a healthier you." [level=3] [ref=e78]:
+            - strong [ref=e80]: Athlytic is your fitness guide to smarter training & a healthier you.
+          - generic [ref=e85]:
+            - paragraph [ref=e86]:
+              - strong [ref=e87]: Recovery
+              - text: ": A daily percentage showing how ready your body is to perform."
+            - paragraph [ref=e88]:
+              - strong [ref=e89]: Exertion
+              - text: ": A cumulative measure of cardiovascular load."
+            - paragraph [ref=e90]:
+              - strong [ref=e91]: Target Exertion Zone
+              - text: ": Personalized exertion goals based on your Recovery."
+            - paragraph [ref=e92]:
+              - strong [ref=e93]: Sleep Quality
+              - text: ": A holistic evaluation of your nightly rest."
+            - paragraph [ref=e94]: …and more tools to help you train smarter and prioritize your health.
+          - generic [ref=e101]:
+            - link:
+              - /url: https://apps.apple.com/us/app/athlytic-ai-fitness-coach/id1543571755?platform=iphone
+        - generic:
+          - img
+          - img
+      - generic [ref=e103]:
+        - generic [ref=e110]:
+          - heading "Know when to push your limits and when to take it easy. Whether it’s a day to go hard or focus on recovery, Athlytic gives you the insights to make the right choice." [level=3] [ref=e116]
+          - generic [ref=e119]:
+            - paragraph [ref=e124]: Learn more about how Athlytic can help you make smarter training decisions.
+            - link "Learn More" [ref=e128] [cursor=pointer]:
+              - /url: /getting-started
+        - generic:
+          - img
+          - img
+      - generic [ref=e129]:
+        - generic [ref=e134]:
+          - heading "Your Health, Your Data — Always Yours" [level=2] [ref=e140]:
+            - strong [ref=e141]: Your Health, Your Data — Always Yours
+          - paragraph [ref=e147]: At Athlytic, we don’t collect, store, or sell your personal information — it stays with you, where it belongs. All your health insights are securely read and processed through the Apple Health app on your device. You remain in complete control of your data — because we believe your health data should be yours and yours alone.
+        - generic:
+          - img
+          - img
+      - generic [ref=e160]:
+        - paragraph [ref=e162]: ⭐️⭐️⭐️⭐️⭐️
+        - generic [ref=e163]:
+          - region "Carousel" [ref=e164]:
+            - list [ref=e167]:
+              - listitem:
+                - generic:
+                  - generic:
+                    - heading "“Pair this app and Apple Watch and never look back.”" [level=2]
+                    - generic:
+                      - paragraph:
+                        - emphasis: — Jones Boy
+              - listitem:
+                - generic:
+                  - generic:
+                    - heading "“I have never felt the need to write a review for an app in the past, but this app deserves to be seen.”" [level=2]
+                    - generic:
+                      - paragraph:
+                        - emphasis: — Danbradley
+              - listitem:
+                - generic:
+                  - generic:
+                    - heading "“Absolutely some of the best money I ever spent. My only issue with this app is that I didn’t hear about it sooner.”" [level=2]
+                    - generic:
+                      - paragraph:
+                        - emphasis: — jdn117
+              - listitem:
+                - generic:
+                  - generic:
+                    - heading "“Apple should acquire this and kill their Fitness App. This developer is a cut above. Honestly, Athlytic is the only reason I wear an Apple Watch.”" [level=2]
+                    - generic:
+                      - paragraph:
+                        - emphasis: — zsgott
+              - listitem:
+                - generic:
+                  - generic:
+                    - heading [level=2]: "\"I’ve tried a few different apps, but none of the produce insights and feedback anywhere close to Athlytic.\""
+                    - generic:
+                      - paragraph:
+                        - emphasis: — SpruceMuuce
+              - listitem:
+                - generic:
+                  - generic:
+                    - heading [level=2]: "\"One of very few apps I feel are worth the subscription cost. Use it every day in my training.\""
+                    - generic:
+                      - paragraph:
+                        - emphasis: — Azmike17
+              - listitem:
+                - generic:
+                  - generic:
+                    - heading [level=2]: "\"If you have an Apple Watch this app is essential.\""
+                    - generic:
+                      - paragraph:
+                        - emphasis: — gerrymcnic
+              - listitem:
+                - generic:
+                  - generic:
+                    - heading [level=2]: "\"Only with this app did I understand why I needed an Apple Watch at all ❤️\""
+                    - generic:
+                      - paragraph:
+                        - emphasis: — vbardyuzha
+              - listitem:
+                - generic:
+                  - generic:
+                    - heading [level=2]: "\"The best app for a fitness/recovery that I’ve found. Honestly, nothing comes close. It truly unlocks the potential of the Apple Watch. \""
+                    - generic:
+                      - paragraph:
+                        - emphasis: "- YaYola"
+              - listitem:
+                - generic:
+                  - generic:
+                    - heading "\"I never rate apps. This thing is amazing.\"" [level=2]
+                    - generic:
+                      - paragraph:
+                        - emphasis: — scruffmcgruff87
+            - generic: Item 1 of 10
+          - generic [ref=e169]:
+            - button "Previous" [ref=e170] [cursor=pointer]:
+              - img [ref=e172]
+            - button "Next" [ref=e174] [cursor=pointer]:
+              - img [ref=e176]
+  - contentinfo [ref=e178]:
+    - generic [ref=e185]:
+      - paragraph [ref=e190]:
+        - link "About" [ref=e191] [cursor=pointer]:
+          - /url: /getting-started
+        - link "Contact" [ref=e192] [cursor=pointer]:
+          - /url: /contact-us
+        - link "Privacy Policy" [ref=e193] [cursor=pointer]:
+          - /url: /privacy-policy
+        - link "Terms Of Service" [ref=e194] [cursor=pointer]:
+          - /url: /terms-of-service
+      - navigation [ref=e199]:
+        - link "Facebook" [ref=e200] [cursor=pointer]:
+          - /url: https://www.facebook.com/groups/736713750574994/
+          - img [ref=e202]
+        - link "Twitter" [ref=e205] [cursor=pointer]:
+          - /url: https://twitter.com/athlytic_app?s=20&t=m-Ubf3x5ZmO-8nxB0t05hw
+          - img [ref=e207]
+        - link "Instagram" [ref=e210] [cursor=pointer]:
+          - /url: https://instagram.com/athlytic_app?igshid=YmMyMTA2M2Y=
+          - img [ref=e212]
+        - link "Reddit" [ref=e215] [cursor=pointer]:
+          - /url: https://www.reddit.com/r/AthlyticAppOfficial/
+          - img [ref=e217]

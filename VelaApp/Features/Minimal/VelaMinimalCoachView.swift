@@ -1,133 +1,320 @@
 import SwiftUI
 
+// MARK: - VelaAppleCoachView — Apple-style Coach Command Center
+// Full-screen sheet. Body status header + quick action chips + chat interface
+
 struct VelaMinimalCoachView: View {
-    @EnvironmentObject private var viewModel: DashboardViewModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var draft = ""
+    @State private var messages: [CoachMessage] = CoachMessage.sample
+    @FocusState private var inputFocused: Bool
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 24) {
-                coachHero
-                promptGrid
-                contextCard
+        NavigationStack {
+            ZStack {
+                VelaTheme.groupedBg.ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    // Chat area
+                    if messages.count > 2 {
+                        messageList
+                    } else {
+                        actionHub
+                    }
+
+                    // Quick questions
+                    if messages.count < 3 && !messages.isEmpty {
+                        quickQuestions
+                    }
+
+                    // Input bar
+                    inputBar
+                }
             }
-            .padding(.horizontal, 20)
+            .navigationTitle("Vela Coach")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(VelaTheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Action Hub
+
+    private var actionHub: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: VelaTheme.spaceLG) {
+                // Body status header
+                bodyStatusHeader
+                    .padding(.top, VelaTheme.spaceLG)
+
+                // Quick actions
+                VelaMinimalSectionHeader(title: "Ask Vela")
+
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                    VelaAppleCommandCard(
+                        title: "Analyze Readiness",
+                        subtitle: "Recovery, sleep, strain, and today's limiter",
+                        systemImage: "sparkles",
+                        tint: VelaTheme.accent
+                    ) { sendPreset("How am I doing today? Explain the evidence and the best next action.") }
+
+                    VelaAppleCommandCard(
+                        title: "Adjust Training",
+                        subtitle: "Check whether to train, swap, or recover",
+                        systemImage: "figure.run.circle.fill",
+                        tint: VelaTheme.strain
+                    ) { sendPreset("Should I adjust today's training based on recovery and fatigue?") }
+
+                    VelaAppleCommandCard(
+                        title: "Optimize Sleep",
+                        subtitle: "Turn sleep signals into tonight's plan",
+                        systemImage: "moon.stars.fill",
+                        tint: VelaTheme.sleep
+                    ) { sendPreset("Review my sleep and give one concrete optimization for tonight.") }
+
+                    VelaAppleCommandCard(
+                        title: "Review Memories",
+                        subtitle: "Pending patterns and profile updates",
+                        systemImage: "brain.head.profile",
+                        tint: VelaTheme.energy
+                    ) { sendPreset("What patterns has Vela noticed about me recently?") }
+                }
+
+                // Trust shortcuts
+                VelaMinimalSectionHeader(title: "Trust & Data")
+
+                HStack(spacing: 12) {
+                    trustTile("Data Coverage", "Signal quality check", "waveform.path.ecg.rectangle", VelaTheme.recovery)
+                    trustTile("Trust Center", "Agent audit log", "checkmark.shield.fill", VelaTheme.accent)
+                }
+            }
+            .padding(.horizontal, VelaTheme.screenPadding)
             .padding(.bottom, 24)
         }
     }
 
-    private var coachHero: some View {
-        VelaMinimalGlassPanel(padding: 24, radius: 28) {
-            VStack(alignment: .leading, spacing: 16) {
-                VelaMinimalSectionTitle(title: L10n.t("Coach", "教练"), subtitle: L10n.t("Personal health intelligence", "个人健康智能"))
+    private var bodyStatusHeader: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Image(systemName: "apple.logo")
+                    .font(.title)
+                    .foregroundStyle(VelaTheme.accent)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Coach Command Center")
+                        .font(VelaTheme.cardTitle)
+                        .foregroundStyle(VelaTheme.onSurface)
+                    Text("Context-aware coaching from your health data")
+                        .font(VelaTheme.captionFont)
+                        .foregroundStyle(VelaTheme.onSurfaceVariant)
+                }
+            }
 
-                Text(L10n.t("Ask Vela to explain your body.", "让 Vela 解释你的身体状态。"))
-                    .font(.system(size: 32, weight: .black, design: .rounded))
+            HStack(spacing: 8) {
+                VelaAppleMetricPill(title: "Recovery", value: "84", systemImage: "heart.fill", tint: VelaTheme.recovery)
+                VelaAppleMetricPill(title: "Sleep", value: "78%", systemImage: "moon.zzz.fill", tint: VelaTheme.sleep)
+                VelaAppleMetricPill(title: "Strain", value: "65", systemImage: "figure.run", tint: VelaTheme.strain)
+            }
+        }
+        .heroCardSurface(accent: VelaTheme.accent)
+    }
+
+    private func trustTile(_ title: String, _ subtitle: String, _ icon: String, _ tint: Color) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.title3.weight(.medium))
+                .foregroundStyle(tint)
+                .frame(width: 34, height: 34)
+                .background(Circle().fill(tint.opacity(0.10)))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(VelaTheme.onSurface)
-                    .lineLimit(3)
-                    .minimumScaleFactor(0.72)
-
-                Text(L10n.t("The coach uses your recovery, sleep, strain, stress, energy, workouts, journal, and personal wiki.", "教练会结合恢复、睡眠、负荷、压力、能量、训练、手记和个人 Wiki。"))
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                Text(subtitle)
+                    .font(VelaTheme.microFont)
                     .foregroundStyle(VelaTheme.onSurfaceVariant)
-                    .lineSpacing(4)
+            }
+            Spacer()
+        }
+        .padding(VelaTheme.spaceSM)
+        .frame(maxWidth: .infinity)
+        .cardSurface(radius: VelaTheme.radiusSM)
+    }
+
+    // MARK: - Message List
+
+    private var messageList: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    ForEach(messages) { msg in
+                        chatBubble(msg)
+                    }
+                }
+                .padding(.horizontal, VelaTheme.screenPadding)
+                .padding(.vertical, 12)
+            }
+            .onChange(of: messages.count) { _ in
+                if let id = messages.last?.id {
+                    withAnimation { proxy.scrollTo(id, anchor: .bottom) }
+                }
+            }
+        }
+    }
+
+    private func chatBubble(_ msg: CoachMessage) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            if msg.isUser { Spacer(minLength: 60) }
+
+            VStack(alignment: .leading, spacing: 6) {
+                if !msg.isUser {
+                    HStack(spacing: 4) {
+                        Image(systemName: "apple.logo")
+                            .font(.caption2)
+                        Text("Vela")
+                            .font(.caption2.weight(.semibold))
+                    }
+                    .foregroundStyle(VelaTheme.accent)
+                }
+                Text(msg.content)
+                    .font(.system(size: 15))
+                    .foregroundStyle(msg.isUser ? .white : VelaTheme.onSurface)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(msg.isUser ? VelaTheme.accent : VelaTheme.surface)
+                    )
+
+                if !msg.isUser {
+                    Text(msg.timestamp.formatted(date: .omitted, time: .shortened))
+                        .font(.system(size: 10))
+                        .foregroundStyle(VelaTheme.muted)
+                        .padding(.leading, 4)
+                }
+            }
+
+            if !msg.isUser { Spacer(minLength: 60) }
+        }
+    }
+
+    // MARK: - Quick Questions
+
+    private var quickQuestions: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(quickQuestionPresets, id: \.self) { q in
+                    Button {
+                        sendPreset(q)
+                    } label: {
+                        Text(q)
+                            .font(VelaTheme.captionFont.weight(.medium))
+                            .foregroundStyle(VelaTheme.accent)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(VelaTheme.accent.opacity(0.08))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, VelaTheme.screenPadding)
+            .padding(.vertical, 8)
+        }
+    }
+
+    private let quickQuestionPresets = [
+        "How is my recovery today?",
+        "Should I train or rest?",
+        "Why am I feeling tired?",
+        "What should I eat today?"
+    ]
+
+    // MARK: - Input Bar
+
+    private var inputBar: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 4) {
+                TextField("Ask Vela...", text: $draft, axis: .vertical)
+                    .lineLimit(1...5)
+                    .focused($inputFocused)
+                    .font(.system(size: 15))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .foregroundStyle(VelaTheme.onSurface)
 
                 Button {
-                    VelaAppState.shared.showCoachHub = true
+                    inputFocused = false
+                    sendPreset(draft)
                 } label: {
-                    Label(L10n.t("Open Coach", "打开教练"), systemImage: "sparkles")
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Capsule(style: .continuous).fill(VelaTheme.primary))
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 30)
+                        .background(
+                            Circle()
+                                .fill(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                    ? VelaTheme.muted.opacity(0.3)
+                                    : VelaTheme.accent)
+                        )
                 }
-                .buttonStyle(.plain)
+                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .padding(.trailing, 6)
             }
+            .background(
+                Capsule(style: .continuous)
+                    .fill(VelaTheme.surface)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(VelaTheme.outline, lineWidth: 0.5)
+            )
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial)
     }
 
-    private var promptGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)], spacing: 14) {
-            promptCard(
-                title: L10n.t("Readiness", "准备度"),
-                body: L10n.t("Explain today's recovery and what to do.", "解释今天的恢复和行动。"),
-                icon: "heart.text.square.fill",
-                question: L10n.t(
-                    "Explain today's recovery and readiness. Give me the conclusion, the main limiter, and one action.",
-                    "请解释今天的恢复和准备度。给我结论、主要限制因素和一个行动。"
-                )
-            )
-            promptCard(
-                title: L10n.t("Training", "训练"),
-                body: L10n.t("Build a session from current signals.", "基于当前信号生成训练。"),
-                icon: "figure.run",
-                question: L10n.t(
-                    "Build today's training session from my recovery, strain, energy, sleep, and workouts.",
-                    "请基于我的恢复、负荷、能量、睡眠和训练记录生成今天的训练。"
-                )
-            )
-            promptCard(
-                title: L10n.t("Sleep", "睡眠"),
-                body: L10n.t("Find the sleep factor to improve.", "找出睡眠改善点。"),
-                icon: "bed.double.fill",
-                question: L10n.t(
-                    "Analyze my sleep and tell me the one factor that would most improve recovery.",
-                    "请分析我的睡眠，并告诉我最能改善恢复的一个因素。"
-                )
-            )
-            promptCard(
-                title: L10n.t("Trends", "趋势"),
-                body: L10n.t("Summarize what changed recently.", "总结近期变化。"),
-                icon: "chart.line.uptrend.xyaxis",
-                question: L10n.t(
-                    "Summarize my recent health trends and tell me what changed most.",
-                    "请总结我近期的健康趋势，并告诉我变化最大的是什么。"
-                )
-            )
-        }
-    }
+    // MARK: - Helpers
 
-    private var contextCard: some View {
-        VelaMinimalGlassPanel(padding: 18, radius: 22) {
-            HStack(spacing: 14) {
-                Image(systemName: "lock.shield.fill")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(VelaTheme.recovery)
-                    .frame(width: 44, height: 44)
-                    .background(Circle().fill(VelaTheme.recovery.opacity(0.12)))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(L10n.t("Local-first context", "本地优先上下文"))
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
-                        .foregroundStyle(VelaTheme.onSurface)
-                    Text(L10n.t("Vela sends structured summaries, not raw HealthKit data.", "Vela 发送结构化摘要，不发送原始 HealthKit 数据。"))
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .foregroundStyle(VelaTheme.onSurfaceVariant)
-                }
-            }
-        }
-    }
+    private func sendPreset(_ text: String) {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let userMsg = CoachMessage(content: text, isUser: true)
+        messages.append(userMsg)
+        draft = ""
 
-    private func promptCard(title: String, body: String, icon: String, question: String) -> some View {
-        Button {
-            VelaAppState.shared.routeToCoach(question: question)
-        } label: {
-            VelaMinimalGlassPanel(padding: 16, radius: 18) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Image(systemName: icon)
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(VelaTheme.primary)
-                    Text(title)
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
-                        .foregroundStyle(VelaTheme.onSurface)
-                    Text(body)
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .foregroundStyle(VelaTheme.onSurfaceVariant)
-                        .lineLimit(3)
-                }
-                .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
-            }
+        // Simulate response
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            let resp = CoachMessage(
+                content: "Based on your current HRV (48ms), resting heart rate (52bpm), and sleep score (78%), you're in a good place for moderate training. I'd recommend sticking with your Zone 2 run but capping intensity at 145bpm. Your recovery trend is positive — keep the bedtime consistent tonight.",
+                isUser: false
+            )
+            messages.append(resp)
         }
-        .buttonStyle(.plain)
     }
 }
 
+// MARK: - Coach Message Model
+
+struct CoachMessage: Identifiable {
+    let id = UUID()
+    let content: String
+    let isUser: Bool
+    let timestamp = Date()
+
+    static let sample: [CoachMessage] = [
+        CoachMessage(content: "Good morning! How am I doing today?", isUser: true),
+        CoachMessage(content: "Your readiness score is 82/100. HRV is trending up to 48ms, resting heart rate is steady at 52bpm, and you got 7h 12m of sleep with 92% efficiency. This is a strong recovery day — ideal for a Zone 2 endurance session. Avoid high-intensity intervals until your sleep debt from Wednesday is cleared.", isUser: false),
+        CoachMessage(content: "Got it. What about my training plan for tomorrow?", isUser: true)
+    ]
+}

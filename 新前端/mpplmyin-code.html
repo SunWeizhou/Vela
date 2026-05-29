@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Vela - Goal Setting</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "surface-bright": "#f9f9ff",
+                        "surface-tint": "#095bbf",
+                        "surface-container-low": "#f1f3ff",
+                        "on-error": "#ffffff",
+                        "inverse-on-surface": "#ecf0ff",
+                        "surface-dim": "#d4daeb",
+                        "tertiary": "#332eb2",
+                        "tertiary-container": "#4c4aca",
+                        "on-surface": "#151c28",
+                        "background": "#f9f9ff",
+                        "surface-container-highest": "#dde2f3",
+                        "error": "#ba1a1a",
+                        "on-background": "#151c28",
+                        "surface-variant": "#dde2f3",
+                        "tertiary-fixed-dim": "#c2c1ff",
+                        "primary-container": "#0058bc",
+                        "secondary-fixed": "#72fe88",
+                        "on-primary-fixed-variant": "#004494",
+                        "secondary": "#006e28",
+                        "surface-container": "#e8eeff",
+                        "inverse-primary": "#adc6ff",
+                        "on-primary": "#ffffff",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-high": "#e2e8f9",
+                        "on-tertiary": "#ffffff",
+                        "on-error-container": "#93000a",
+                        "inverse-surface": "#2a303d",
+                        "on-primary-fixed": "#001a41",
+                        "on-secondary-container": "#00732a",
+                        "primary-fixed": "#d8e2ff",
+                        "on-secondary": "#ffffff",
+                        "primary": "#00418f",
+                        "on-tertiary-fixed": "#0b006b",
+                        "on-secondary-fixed-variant": "#00531c",
+                        "on-secondary-fixed": "#002107",
+                        "secondary-fixed-dim": "#53e16f",
+                        "on-primary-container": "#c3d4ff",
+                        "tertiary-fixed": "#e2dfff",
+                        "primary-fixed-dim": "#adc6ff",
+                        "error-container": "#ffdad6",
+                        "outline-variant": "#c2c6d5",
+                        "secondary-container": "#6ffb85",
+                        "on-tertiary-container": "#d2d1ff",
+                        "on-surface-variant": "#424753",
+                        "outline": "#727784",
+                        "surface": "#f9f9ff",
+                        "on-tertiary-fixed-variant": "#3531b4",
+                        "glass-fill-light": "rgba(255, 255, 255, 0.4)",
+                        "glass-border-light": "rgba(255, 255, 255, 0.5)",
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "sm": "0.25rem",
+                        "md": "0.75rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "2xl": "1.5rem",
+                        "3xl": "2rem",
+                        "full": "9999px"
+                    },
+                    fontFamily: {
+                        "headline": ["Manrope", "sans-serif"],
+                        "display": ["Manrope", "sans-serif"],
+                        "body": ["Manrope", "sans-serif"],
+                        "label": ["Manrope", "sans-serif"],
+                        "sans": ["Manrope", "sans-serif"],
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            /* Warm minimalist background */
+            background-color: #F5F3F0;
+            min-height: 100vh;
+        }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(32px);
+            -webkit-backdrop-filter: blur(32px);
+            border-top: 1px solid rgba(255, 255, 255, 0.8);
+            border-left: 1px solid rgba(255, 255, 255, 0.8);
+            border-right: 1px solid rgba(255, 255, 255, 0.3);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.05);
+        }
+
+        /* Custom Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none; 
+            width: 100%; 
+            background: transparent; 
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 24px;
+            width: 24px;
+            border-radius: 50%;
+            background: #ffffff;
+            border: 2px solid #0058bc;
+            cursor: pointer;
+            margin-top: -10px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #d4daeb;
+            border-radius: 2px;
+        }
+        
+        /* The filled part of the track is handled via inline style gradient */
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="text-on-surface antialiased pb-32">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full bg-[#F5F3F0]/80 dark:bg-canvas-deep/80 backdrop-blur-xl border-b border-outline-variant/20 shadow-[inset_0_1px_1px_0_rgba(255,255,255,0.15)] flex items-center justify-between px-6 h-16 z-50">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-variant overflow-hidden">
+<img alt="User profile" class="w-full h-full object-cover" data-alt="A close-up portrait of a serene individual with a neutral expression, softly lit with warm, natural light. The styling is clean and minimalist, aligning with a premium health app's aesthetic. High resolution, shallow depth of field." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDAXRo5sL53poLuDIwe0Teh3pj7gFT8BgtY9xzd-s5vuM7PlqPSGM-t9l9q6fWiR7JUmDLWg7KRxBLxjj8yIQAuEejrDCwXFB1wByjizxf9xWq7C2b6VJ2Syg97u0p4pHs2wCl3yJ5WJgClqOj-_gSFx2GwXGM9O3AZlHhFq_4CoT8XQ1dXj6ZA3CvNIVIepmCg4cKl5Hl4nlnSYVUHcIbCC1hsYQm4hXQSAliVYZkkG7iX-Eull3EioDR21da4aA4vAm4Sf7fg1fx-"/>
+</div>
+</div>
+<h1 class="font-headline font-bold text-2xl tracking-tighter text-on-surface">Vela</h1>
+<button class="w-10 h-10 flex items-center justify-center text-on-surface-variant hover:opacity-80 transition-opacity active:scale-95 duration-200 rounded-full hover:bg-surface-variant/50">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">settings</span>
+</button>
+</header>
+<!-- Main Content -->
+<main class="pt-24 px-5 max-w-3xl mx-auto space-y-8">
+<!-- Header Section -->
+<section class="mb-8">
+<h2 class="font-display font-extrabold text-3xl tracking-tight text-on-surface mb-2">Goal Setting</h2>
+<p class="font-body text-on-surface-variant">Adjust your daily targets to align with your current performance and recovery capacity.</p>
+</section>
+<!-- Goals Grid (Bento Style) -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Daily Steps Card -->
+<div class="glass-panel rounded-3xl p-6 flex flex-col justify-between hover:scale-[1.02] transition-transform duration-300 md:col-span-2">
+<div class="flex justify-between items-start mb-6">
+<div class="flex items-center gap-3">
+<div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-[#0058bc]">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">directions_walk</span>
+</div>
+<div>
+<h3 class="font-headline font-bold text-lg">Daily Steps</h3>
+<span class="font-label text-xs tracking-widest uppercase text-on-surface-variant">Movement</span>
+</div>
+</div>
+<div class="text-right">
+<span class="font-display font-extrabold text-3xl tracking-tighter text-[#0058bc]" id="steps-val">10,000</span>
+</div>
+</div>
+<div class="mt-4">
+<input class="w-full" id="steps-slider" max="20000" min="3000" oninput="updateSlider('steps-slider', 'steps-val', this.value, 3000, 20000); document.getElementById('steps-val').innerText = Number(this.value).toLocaleString()" step="500" style="background: linear-gradient(to right, #0058bc 41.1%, #d4daeb 41.1%);" type="range" value="10000"/>
+<div class="flex justify-between mt-2 font-label text-xs text-on-surface-variant uppercase tracking-wider">
+<span>3k</span>
+<span>20k</span>
+</div>
+</div>
+</div>
+<!-- Sleep Duration Card -->
+<div class="glass-panel rounded-3xl p-6 flex flex-col justify-between hover:scale-[1.02] transition-transform duration-300">
+<div class="flex justify-between items-start mb-6">
+<div class="flex items-center gap-3">
+<div class="w-12 h-12 rounded-full bg-tertiary/10 flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">bedtime</span>
+</div>
+<div>
+<h3 class="font-headline font-bold text-lg">Sleep Duration</h3>
+<span class="font-label text-xs tracking-widest uppercase text-on-surface-variant">Recovery</span>
+</div>
+</div>
+</div>
+<div class="text-center mb-6">
+<span class="font-display font-extrabold text-4xl tracking-tighter text-tertiary" id="sleep-val">8.0<span class="text-xl">h</span></span>
+</div>
+<div class="mt-auto">
+<input class="w-full" id="sleep-slider" max="12" min="5" oninput="updateSlider('sleep-slider', 'sleep-val', this.value, 5, 12); document.getElementById('sleep-val').innerHTML = this.value + '&lt;span class=\'text-xl\'&gt;h&lt;/span&gt;'" step="0.5" style="background: linear-gradient(to right, #0058bc 42.8%, #d4daeb 42.8%);" type="range" value="8"/>
+<div class="flex justify-between mt-2 font-label text-xs text-on-surface-variant uppercase tracking-wider">
+<span>5h</span>
+<span>12h</span>
+</div>
+</div>
+</div>
+<!-- Mindfulness Card -->
+<div class="glass-panel rounded-3xl p-6 flex flex-col justify-between hover:scale-[1.02] transition-transform duration-300">
+<div class="flex justify-between items-start mb-6">
+<div class="flex items-center gap-3">
+<div class="w-12 h-12 rounded-full bg-secondary/10 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">self_improvement</span>
+</div>
+<div>
+<h3 class="font-headline font-bold text-lg">Mindfulness</h3>
+<span class="font-label text-xs tracking-widest uppercase text-on-surface-variant">Clarity</span>
+</div>
+</div>
+</div>
+<div class="text-center mb-6">
+<span class="font-display font-extrabold text-4xl tracking-tighter text-secondary" id="mind-val">15<span class="text-xl">m</span></span>
+</div>
+<div class="mt-auto">
+<input class="w-full" id="mind-slider" max="60" min="0" oninput="updateSlider('mind-slider', 'mind-val', this.value, 0, 60); document.getElementById('mind-val').innerHTML = this.value + '&lt;span class=\'text-xl\'&gt;m&lt;/span&gt;'" step="5" style="background: linear-gradient(to right, #0058bc 25%, #d4daeb 25%);" type="range" value="15"/>
+<div class="flex justify-between mt-2 font-label text-xs text-on-surface-variant uppercase tracking-wider">
+<span>0m</span>
+<span>60m</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Action Area -->
+<div class="mt-10 mb-8 flex justify-center">
+<button class="bg-[#0058bc] text-white font-headline font-bold rounded-full px-10 py-4 text-lg hover:opacity-90 active:scale-95 transition-all duration-200 w-full max-w-sm flex items-center justify-center gap-2">
+<span>Save Targets</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">check</span>
+</button>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-40px)] max-w-[400px] z-50 rounded-full bg-white/20 dark:bg-black/40 backdrop-blur-3xl border border-white/30 dark:border-white/10 shadow-2xl h-16 md:hidden">
+<div class="flex justify-around items-center px-4 h-full">
+<a class="flex items-center justify-center text-on-surface-variant w-12 h-12 hover:bg-surface-container-high/50 rounded-full transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">calendar_today</span>
+</a>
+<a class="flex items-center justify-center text-on-surface-variant w-12 h-12 hover:bg-surface-container-high/50 rounded-full transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">auto_stories</span>
+</a>
+<a class="flex items-center justify-center text-on-surface-variant w-12 h-12 hover:bg-surface-container-high/50 rounded-full transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">colors_spark</span>
+</a>
+<a class="flex items-center justify-center bg-[#0058bc] text-white rounded-full w-12 h-12 shadow-lg shadow-[#0058bc]/20 hover:bg-[#0058bc]/90 transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1; color: white;">fitness_center</span>
+</a>
+<a class="flex items-center justify-center text-on-surface-variant w-12 h-12 hover:bg-surface-container-high/50 rounded-full transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">monitoring</span>
+</a>
+</div>
+</nav>
+<script>
+        function updateSlider(sliderId, textId, val, min, max) {
+            const percentage = ((val - min) / (max - min)) * 100;
+            const slider = document.getElementById(sliderId);
+            slider.style.background = `linear-gradient(to right, #0058bc ${percentage}%, #d4daeb ${percentage}%)`;
+        }
+    </script>
+</body></html>

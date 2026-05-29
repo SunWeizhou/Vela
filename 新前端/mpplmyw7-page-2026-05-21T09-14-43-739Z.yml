@@ -1,0 +1,647 @@
+- generic [ref=e2]:
+  - navigation [ref=e3]
+  - main [ref=e4]:
+    - generic [ref=e11]:
+      - generic [ref=e12]:
+        - heading "Your Connected Health Coach" [level=1] [ref=e15]
+        - paragraph [ref=e18]: Make sense of your health data, from wearables to bloodwork, and everything in between.
+      - generic [ref=e19]:
+        - link "Download app" [ref=e20] [cursor=pointer]:
+          - /url: https://bevelhealth.sng.link/C1n9c/0mq5?_dl=home&_smtype=3
+          - generic:
+            - generic:
+              - img
+          - generic [ref=e21]: Download app
+        - generic [ref=e22]:
+          - img [ref=e23]
+          - generic [ref=e30]: 4.8 / 28.6k ratings globally
+    - generic [ref=e34]:
+      - heading "Works with" [level=2] [ref=e35]
+      - generic [ref=e37]:
+        - img "Apple Watch" [ref=e38]
+        - img "Oura" [ref=e39]
+        - img "Garmin" [ref=e40]
+        - img "Amazfit" [ref=e41]
+    - generic [ref=e44]:
+      - generic [ref=e47]:
+        - img "Apple Watch Spotlight and New and Noteworthy awards with Apple logos and laurel wreaths." [ref=e48]
+        - heading "Join over 1 million members on their health journey" [level=2] [ref=e49]
+      - generic [ref=e50]:
+        - generic [ref=e51]:
+          - generic [ref=e52]:
+            - img "Man in black workout clothes taking a mirror selfie in a gym, with fitness stats showing 74% Belastung, 60% Erholung, and 77% Schlaf at the top."
+          - generic [ref=e53]:
+            - img "Fitness app screenshot showing 2% strain, 74% recovery, 65% sleep with coaching message praising recovery and advising earlier sleep; user reflects on a stressful week returning to fitness."
+          - generic [ref=e54]:
+            - img "Cyclist holding a can of Coca-Cola, resting next to a black road bike at a gas station, with fitness app stats showing 133 km distance, 4:41:13 duration, and 96% strain."
+          - generic [ref=e55]:
+            - 'img "Collage of two breakfast plates with nutritional information overlays: oatmeal with bananas and blueberries showing 496 kcal, and two fried eggs with avocado slices showing 277 kcal along with recovery and sleep percentages."'
+          - generic [ref=e56]:
+            - img "Woman in black athletic outfit taking a mirror selfie in a gym with overlay of Garmin data showing strain, recovery, sleep, and strength training metrics including duration, calories burned, heart rate, and weight lifted."
+          - generic [ref=e57]:
+            - img "Black Canyon racing bicycle parked on grass near a palm tree by a waterfront under a clear sky."
+          - generic [ref=e58]:
+            - img "Running app screenshot showing a 16.03 km outdoor run in Indore, Madhya Pradesh with active duration 1h 52m, pace 7:03/km, 1243 kcal burned, elevation 45 m, heart rate 152 bpm, and power 183 watt."
+          - generic [ref=e59]:
+            - img "Man in a gym performing a push exercise using cable machine, with workout stats overlay showing 66% strain, 95% recovery, 99% sleep, 25g fat, 204g carbs, 171g protein, 1 hour 29 minutes duration, and 517 kcal energy burned."
+          - generic [ref=e60]:
+            - img "Screenshot of a testimonial praising the Bevel Health app for managing health conditions, showing daily metrics of strain, recovery, sleep, stress and energy, plus personalized health advice about luteal phase recovery and managing POTS symptoms."
+          - generic [ref=e61]:
+            - img "Indoor paddle tennis court with a player holding a paddle, a blue floor, net divides the court, and a sneaker visible in the foreground, overlaid with fitness tracking stats for strain, recovery, and sleep percentages."
+        - generic [ref=e62]:
+          - generic [ref=e63]:
+            - img "Man in black workout clothes taking a mirror selfie in a gym, with fitness stats showing 74% Belastung, 60% Erholung, and 77% Schlaf at the top."
+          - generic [ref=e64]:
+            - img "Fitness app screenshot showing 2% strain, 74% recovery, 65% sleep with coaching message praising recovery and advising earlier sleep; user reflects on a stressful week returning to fitness."
+          - generic [ref=e65]:
+            - img "Cyclist holding a can of Coca-Cola, resting next to a black road bike at a gas station, with fitness app stats showing 133 km distance, 4:41:13 duration, and 96% strain."
+          - generic [ref=e66]:
+            - 'img "Collage of two breakfast plates with nutritional information overlays: oatmeal with bananas and blueberries showing 496 kcal, and two fried eggs with avocado slices showing 277 kcal along with recovery and sleep percentages."'
+          - generic [ref=e67]:
+            - img "Woman in black athletic outfit taking a mirror selfie in a gym with overlay of Garmin data showing strain, recovery, sleep, and strength training metrics including duration, calories burned, heart rate, and weight lifted."
+          - generic [ref=e68]:
+            - img "Black Canyon racing bicycle parked on grass near a palm tree by a waterfront under a clear sky."
+          - generic [ref=e69]:
+            - img "Running app screenshot showing a 16.03 km outdoor run in Indore, Madhya Pradesh with active duration 1h 52m, pace 7:03/km, 1243 kcal burned, elevation 45 m, heart rate 152 bpm, and power 183 watt."
+          - generic [ref=e70]:
+            - img "Man in a gym performing a push exercise using cable machine, with workout stats overlay showing 66% strain, 95% recovery, 99% sleep, 25g fat, 204g carbs, 171g protein, 1 hour 29 minutes duration, and 517 kcal energy burned."
+          - generic [ref=e71]:
+            - img "Screenshot of a testimonial praising the Bevel Health app for managing health conditions, showing daily metrics of strain, recovery, sleep, stress and energy, plus personalized health advice about luteal phase recovery and managing POTS symptoms."
+          - generic [ref=e72]:
+            - img "Indoor paddle tennis court with a player holding a paddle, a blue floor, net divides the court, and a sneaker visible in the foreground, overlaid with fitness tracking stats for strain, recovery, and sleep percentages."
+    - generic [ref=e75]:
+      - generic [ref=e78]:
+        - heading "Start the day with confidence" [level=2] [ref=e79]
+        - paragraph [ref=e80]: Turn your body's signals into clear, actionable metrics.
+      - generic [ref=e81]:
+        - generic [ref=e83]:
+          - generic [ref=e85]:
+            - heading "Strain" [level=3] [ref=e86]
+            - paragraph [ref=e87]: Track how hard you're pushing with one number that captures your daily effort and exertion.
+          - generic [ref=e88]:
+            - generic [ref=e89]:
+              - img "Mobile screen showing Strain Score at 65% on February 19, 2025, with a line graph depicting daily strain scores over one month, color-coded by low, normal, and high ranges."
+            - generic [ref=e90]:
+              - img "Daytime heart rate showing 45 bpm, labeled as below normal, with a small orange line graph."
+              - img "Dashboard displaying total energy consumption of 654 kilocalories marked as normal with a fluctuating orange line graph."
+        - generic [ref=e92]:
+          - generic [ref=e94]:
+            - heading "Sleep" [level=3] [ref=e95]
+            - paragraph [ref=e96]: Discover what it takes to get a good night's rest by knowing your sleep stages and needs.
+          - generic [ref=e97]:
+            - generic [ref=e98]:
+              - img "Sleep tracking app screen showing sleep stages from 12:34 AM to 8:36 AM with 1 hour 7 minutes awake, 1 hour 39 minutes REM, 4 hours 28 minutes core, and 56 minutes deep sleep over 8 hours total sleep duration."
+            - img "A widget showing 8 hours 30 minutes of sleep needed"
+        - generic [ref=e100]:
+          - generic [ref=e102]:
+            - heading "Recovery" [level=3] [ref=e103]
+            - paragraph [ref=e104]: See if you're ready to tackle the day or if it's time to slow down and let your body recover.
+          - generic [ref=e105]:
+            - generic [ref=e106]:
+              - img "Mobile app screen showing 70% recovery status on September 12, 2025 with details on strong recovery and resting HRV and heart rate."
+            - generic [ref=e107]:
+              - img [ref=e108]
+              - img [ref=e118]
+        - generic [ref=e129]:
+          - generic [ref=e131]:
+            - heading "Understand what you eat" [level=3] [ref=e132]
+            - paragraph [ref=e133]: Track your meals and get a full breakdown of what's fueling your body.
+          - generic [ref=e135]:
+            - img "Food tracking app interface showing nutrition scores for vegetables, whole grains, red meat, excess sodium, and excess sugar, with a barcode scanner highlighting a reduced price sticker on strawberries."
+            - img "Nutritional details showing percentages of fat 32%, carbs 50%, protein 28%, net energy at -100 kcal, and levels of fiber, magnesium, potassium, calcium, iron, and vitamin D with progress bars."
+        - generic [ref=e137]:
+          - generic [ref=e139]:
+            - generic [ref=e140]:
+              - img "Mobile phone screen showing a health records app with medical documents filtered by all categories and dates from November and December 2025."
+            - generic [ref=e141]:
+              - generic [ref=e143]:
+                - generic [ref=e144]:
+                  - img "Labcorp"
+                - img "Questlab" [ref=e146]
+                - img "BR" [ref=e149]
+                - img "Lifelabs" [ref=e153]
+                - img "Suraksha" [ref=e155]
+                - img "ABC" [ref=e157]
+                - img "CRL" [ref=e159]
+              - generic [ref=e161]:
+                - img "PathGroup" [ref=e164]
+                - img "GrupaLuxmed" [ref=e166]
+                - img "Acutis" [ref=e168]
+                - generic [ref=e169]:
+                  - img "Synnovis" [ref=e170]
+                  - img "Accu Reference Medical Lab" [ref=e171]
+                - generic [ref=e172]:
+                  - img "CCL"
+                - generic [ref=e173]:
+                  - img "Clinical Labs" [ref=e174]
+                  - img "Inovie" [ref=e175]
+                - img "Medicover" [ref=e178]
+          - generic [ref=e183]:
+            - heading "Connect your health records" [level=3] [ref=e184]
+            - paragraph [ref=e185]: Store your labs, clinical notes, and medical records in one secure place.
+    - generic [ref=e189]:
+      - generic [ref=e191]:
+        - generic [ref=e192]:
+          - generic [ref=e194]: Commander
+          - generic [ref=e196]: Friend
+          - generic [ref=e198]: Guardian
+          - generic [ref=e200]: Data Nerd
+        - generic [ref=e201]:
+          - generic [ref=e203]: Commander
+          - generic [ref=e205]: Friend
+          - generic [ref=e207]: Guardian
+          - generic [ref=e209]: Data Nerd
+      - generic [ref=e210]:
+        - generic [ref=e213]:
+          - heading "Go deeper with Bevel Intelligence" [level=2] [ref=e214]:
+            - text: Go deeper with
+            - text: Bevel Intelligence
+          - paragraph [ref=e215]: Get personalized guidance and actionable advice from your own 24/7 coach.
+        - generic [ref=e216]:
+          - generic [ref=e219]:
+            - generic [ref=e222]:
+              - heading "Get answers from your data" [level=3] [ref=e223]:
+                - text: Get answers
+                - text: from your data
+              - paragraph [ref=e224]: Ask questions about your health and get answers grounded in your own metrics.
+            - img "Mobile app screen showing recovery analysis with sleep and heart rate insights, indicating good deep and REM sleep and positive recovery trends." [ref=e232]
+          - generic [ref=e235]:
+            - generic [ref=e238]:
+              - heading "Proactive check-ins" [level=3] [ref=e239]:
+                - text: Proactive
+                - text: check-ins
+              - paragraph [ref=e240]: Get reminders, daily summaries, and nudges without having to ask.
+            - img "Smartphone screen showing a health app analyzing recovery data, latest activity, workout routines, strain levels, and creating a check-in for taking creatine at 3:00 PM with notification options." [ref=e248]
+          - generic [ref=e251]:
+            - generic [ref=e254]:
+              - heading "Finds sources you can trust" [level=3] [ref=e255]:
+                - text: Finds sources
+                - text: you can trust
+              - paragraph [ref=e256]: Get answers informed by the latest research, articles, and trusted sources online.
+            - img "Smartphone screen showing a text analysis app with insights on rest and movement, including advice on breaks, recovery signals, and clustering of movement." [ref=e264]
+          - generic [ref=e267]:
+            - generic [ref=e270]:
+              - heading "Personalized training plans" [level=3] [ref=e271]
+              - paragraph [ref=e272]: Generate workouts and training plans tailored to your goals and schedule.
+            - 'img "Smartphone screen showing a workout generation app with a Lower Body Session workout listing four exercises: Goblet Squats, Romanian Deadlifts, Dumbbell Bench Press, and One Arm Bent Over Rows with sets and reps." [ref=e280]'
+    - generic [ref=e288]:
+      - generic [ref=e289]:
+        - heading "And that’s not all" [level=2] [ref=e290]
+        - paragraph [ref=e291]: "Bevel also has the following features:"
+      - generic [ref=e292]:
+        - generic [ref=e294] [cursor=pointer]:
+          - generic [ref=e295]:
+            - heading "Biological Age" [level=3] [ref=e296]
+            - paragraph [ref=e297]: One score that shows how you're aging and how to improve.
+          - generic [ref=e299]:
+            - img [ref=e301]
+            - img [ref=e305]
+            - img [ref=e309]
+        - generic [ref=e312] [cursor=pointer]:
+          - generic [ref=e313]:
+            - heading "Cycle Tracking" [level=3] [ref=e314]
+            - paragraph [ref=e315]: Understand your body's rhythm and train smarter around it.
+          - generic [ref=e317]:
+            - img [ref=e319]
+            - img [ref=e323]
+            - img [ref=e327]
+        - generic [ref=e330] [cursor=pointer]:
+          - generic [ref=e331]:
+            - heading "Strength Training" [level=3] [ref=e332]
+            - paragraph [ref=e333]: Log your lifts and watch your progress stack up.
+          - generic [ref=e335]:
+            - img [ref=e337]
+            - img [ref=e341]
+            - img [ref=e345]
+        - generic [ref=e348] [cursor=pointer]:
+          - generic [ref=e349]:
+            - heading "Journal" [level=3] [ref=e350]
+            - paragraph [ref=e351]: Track your habits and connect the dots over time.
+          - generic [ref=e353]:
+            - img [ref=e355]
+            - img [ref=e359]
+            - img [ref=e363]
+        - generic [ref=e366] [cursor=pointer]:
+          - generic [ref=e367]:
+            - heading "Caffeine Tracking" [level=3] [ref=e368]
+            - paragraph [ref=e369]: Track your coffee, tea, and everything in between.
+          - generic [ref=e371]:
+            - img [ref=e373]
+            - img [ref=e377]
+            - img [ref=e381]
+        - generic [ref=e384] [cursor=pointer]:
+          - generic [ref=e385]:
+            - heading "Smart Alarm" [level=3] [ref=e386]
+            - paragraph [ref=e387]: Wake up at the perfect moment in your sleep cycle.
+          - generic [ref=e389]:
+            - img [ref=e391]
+            - img [ref=e395]
+            - img [ref=e399]
+        - generic [ref=e402] [cursor=pointer]:
+          - generic [ref=e403]:
+            - heading "Activity Status" [level=3] [ref=e404]
+            - paragraph [ref=e405]: Let Bevel know when you're traveling, sick, or back at it.
+          - generic [ref=e407]:
+            - img [ref=e409]
+            - img [ref=e413]
+            - img [ref=e417]
+        - generic [ref=e420] [cursor=pointer]:
+          - generic [ref=e421]:
+            - heading "Water Tracking" [level=3] [ref=e422]
+            - paragraph [ref=e423]: Keep track of every glass and hit your daily goal.
+          - generic [ref=e425]:
+            - img [ref=e427]
+            - img [ref=e431]
+            - img [ref=e435]
+        - generic [ref=e438] [cursor=pointer]:
+          - generic [ref=e439]:
+            - heading "Home Screen Widgets" [level=3] [ref=e440]
+            - paragraph [ref=e441]: Style your home screen with beautifully crafted widgets.
+          - generic [ref=e443]:
+            - img [ref=e445]
+            - img [ref=e449]
+            - img [ref=e453]
+    - generic [ref=e462]:
+      - heading "Built for privacy" [level=2] [ref=e463]
+      - paragraph [ref=e464]: Your data is yours. We never sell it, never share it, and protect it with industry-standard security.
+    - generic [ref=e494]:
+      - generic [ref=e498]:
+        - heading "Crafted with Care Loved Everywhere" [level=2] [ref=e499]
+        - paragraph [ref=e500]: Don’t take our words for it. See why Bevel is trusted and loved by people around the world who want to feel better, live longer, and train smarter.
+      - generic [ref=e502]:
+        - list [ref=e504]:
+          - listitem [ref=e505]:
+            - generic [ref=e507]:
+              - generic [ref=e508]:
+                - generic [ref=e509]:
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                - generic [ref=e510]:
+                  - heading "会一直使用" [level=3] [ref=e511]
+                  - paragraph [ref=e512]: Isaac_andy97, September 9, 2025
+              - paragraph [ref=e513]: “已经使用 Bevel 一天了！ 太不可思议了。 设计美观、使用简单、易于理解。 才刚推出就如此强大，我已经迫不及待见证它未来的样子了！”
+          - listitem [ref=e514]:
+            - generic [ref=e516]:
+              - generic [ref=e517]:
+                - generic [ref=e518]:
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                - generic [ref=e519]:
+                  - heading "功能强大且实用的 App" [level=3] [ref=e520]
+                  - paragraph [ref=e521]: Chinatiger0000, September 1, 2025
+              - paragraph [ref=e522]: “用这款 App 来跟踪我的睡眠和训练真是太好用了！ 我认为与其他 App 相比，它的数据非常准确，确实能帮助规划每日安排。”
+          - listitem [ref=e523]:
+            - generic [ref=e525]:
+              - generic [ref=e526]:
+                - generic [ref=e527]:
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                - generic [ref=e528]:
+                  - heading "这款 App 操作起来无比流畅，并有长远的发展计划，未来可期" [level=3] [ref=e529]
+                  - paragraph [ref=e530]: Ghosal, August 31, 2025
+              - paragraph [ref=e531]: “这款 App 太棒了。 虽然发布时间不长，但细节的打磨非常到位。 界面设计美观，开发者计划将其打造成同类 App 的标杆 。”
+          - listitem [ref=e532]:
+            - generic [ref=e534]:
+              - generic [ref=e535]:
+                - generic [ref=e536]:
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                - generic [ref=e537]:
+                  - heading "这就是你一直在寻找的健康 App" [level=3] [ref=e538]
+                  - paragraph [ref=e539]: the real wayne,
+              - paragraph [ref=e540]: “这款 App 的设计宗旨是真正关注健康。 有指标提供支持。 你恢复了吗？ 一段时间内的恢复数据？ 一段时间内的压力数据。 它能全部搞定。 这款健康 App 堪称完美，Apple 就应该直接把它内置到 Apple Watch 中。”
+          - listitem [ref=e541]:
+            - generic [ref=e543]:
+              - generic [ref=e544]:
+                - generic [ref=e545]:
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                - generic [ref=e546]:
+                  - heading "神奇的 App" [level=3] [ref=e547]
+                  - paragraph [ref=e548]: CFHW, August 12, 2025
+              - paragraph [ref=e549]: “这款 App 完全实现了它的设计用途。 如果你佩戴 Apple Watch，就会知道它不会处理数据，只是将数据以适当的方式显示在 Apple“健康”中，这基本上没什么用。 有了这款 App，你可以获得有关睡眠、恢复和耗力的完美概览。”
+        - list [ref=e551]:
+          - listitem [ref=e552]:
+            - generic [ref=e554]:
+              - generic [ref=e555]:
+                - generic [ref=e556]:
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                - generic [ref=e557]:
+                  - heading "会一直使用" [level=3] [ref=e558]
+                  - paragraph [ref=e559]: Isaac_andy97, September 9, 2025
+              - paragraph [ref=e560]: “已经使用 Bevel 一天了！ 太不可思议了。 设计美观、使用简单、易于理解。 才刚推出就如此强大，我已经迫不及待见证它未来的样子了！”
+          - listitem [ref=e561]:
+            - generic [ref=e563]:
+              - generic [ref=e564]:
+                - generic [ref=e565]:
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                - generic [ref=e566]:
+                  - heading "功能强大且实用的 App" [level=3] [ref=e567]
+                  - paragraph [ref=e568]: Chinatiger0000, September 1, 2025
+              - paragraph [ref=e569]: “用这款 App 来跟踪我的睡眠和训练真是太好用了！ 我认为与其他 App 相比，它的数据非常准确，确实能帮助规划每日安排。”
+          - listitem [ref=e570]:
+            - generic [ref=e572]:
+              - generic [ref=e573]:
+                - generic [ref=e574]:
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                - generic [ref=e575]:
+                  - heading "这款 App 操作起来无比流畅，并有长远的发展计划，未来可期" [level=3] [ref=e576]
+                  - paragraph [ref=e577]: Ghosal, August 31, 2025
+              - paragraph [ref=e578]: “这款 App 太棒了。 虽然发布时间不长，但细节的打磨非常到位。 界面设计美观，开发者计划将其打造成同类 App 的标杆 。”
+          - listitem [ref=e579]:
+            - generic [ref=e581]:
+              - generic [ref=e582]:
+                - generic [ref=e583]:
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                - generic [ref=e584]:
+                  - heading "这就是你一直在寻找的健康 App" [level=3] [ref=e585]
+                  - paragraph [ref=e586]: the real wayne,
+              - paragraph [ref=e587]: “这款 App 的设计宗旨是真正关注健康。 有指标提供支持。 你恢复了吗？ 一段时间内的恢复数据？ 一段时间内的压力数据。 它能全部搞定。 这款健康 App 堪称完美，Apple 就应该直接把它内置到 Apple Watch 中。”
+          - listitem [ref=e588]:
+            - generic [ref=e590]:
+              - generic [ref=e591]:
+                - generic [ref=e592]:
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                - generic [ref=e593]:
+                  - heading "神奇的 App" [level=3] [ref=e594]
+                  - paragraph [ref=e595]: CFHW, August 12, 2025
+              - paragraph [ref=e596]: “这款 App 完全实现了它的设计用途。 如果你佩戴 Apple Watch，就会知道它不会处理数据，只是将数据以适当的方式显示在 Apple“健康”中，这基本上没什么用。 有了这款 App，你可以获得有关睡眠、恢复和耗力的完美概览。”
+        - list [ref=e598]:
+          - listitem [ref=e599]:
+            - generic [ref=e601]:
+              - generic [ref=e602]:
+                - generic [ref=e603]:
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                - generic [ref=e604]:
+                  - heading "会一直使用" [level=3] [ref=e605]
+                  - paragraph [ref=e606]: Isaac_andy97, September 9, 2025
+              - paragraph [ref=e607]: “已经使用 Bevel 一天了！ 太不可思议了。 设计美观、使用简单、易于理解。 才刚推出就如此强大，我已经迫不及待见证它未来的样子了！”
+          - listitem [ref=e608]:
+            - generic [ref=e610]:
+              - generic [ref=e611]:
+                - generic [ref=e612]:
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                - generic [ref=e613]:
+                  - heading "功能强大且实用的 App" [level=3] [ref=e614]
+                  - paragraph [ref=e615]: Chinatiger0000, September 1, 2025
+              - paragraph [ref=e616]: “用这款 App 来跟踪我的睡眠和训练真是太好用了！ 我认为与其他 App 相比，它的数据非常准确，确实能帮助规划每日安排。”
+          - listitem [ref=e617]:
+            - generic [ref=e619]:
+              - generic [ref=e620]:
+                - generic [ref=e621]:
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                - generic [ref=e622]:
+                  - heading "这款 App 操作起来无比流畅，并有长远的发展计划，未来可期" [level=3] [ref=e623]
+                  - paragraph [ref=e624]: Ghosal, August 31, 2025
+              - paragraph [ref=e625]: “这款 App 太棒了。 虽然发布时间不长，但细节的打磨非常到位。 界面设计美观，开发者计划将其打造成同类 App 的标杆 。”
+          - listitem [ref=e626]:
+            - generic [ref=e628]:
+              - generic [ref=e629]:
+                - generic [ref=e630]:
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                - generic [ref=e631]:
+                  - heading "这就是你一直在寻找的健康 App" [level=3] [ref=e632]
+                  - paragraph [ref=e633]: the real wayne,
+              - paragraph [ref=e634]: “这款 App 的设计宗旨是真正关注健康。 有指标提供支持。 你恢复了吗？ 一段时间内的恢复数据？ 一段时间内的压力数据。 它能全部搞定。 这款健康 App 堪称完美，Apple 就应该直接把它内置到 Apple Watch 中。”
+          - listitem [ref=e635]:
+            - generic [ref=e637]:
+              - generic [ref=e638]:
+                - generic [ref=e639]:
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                  - generic:
+                    - img
+                - generic [ref=e640]:
+                  - heading "神奇的 App" [level=3] [ref=e641]
+                  - paragraph [ref=e642]: CFHW, August 12, 2025
+              - paragraph [ref=e643]: “这款 App 完全实现了它的设计用途。 如果你佩戴 Apple Watch，就会知道它不会处理数据，只是将数据以适当的方式显示在 Apple“健康”中，这基本上没什么用。 有了这款 App，你可以获得有关睡眠、恢复和耗力的完美概览。”
+    - generic [ref=e644]:
+      - generic [ref=e648]:
+        - generic [ref=e649]:
+          - heading "Ready When You Are" [level=2] [ref=e650]
+          - paragraph [ref=e651]: Start with one step. One log at a time. Bevel meets you where you are and helps you move forward with clarity and confidence.
+        - link "Download app" [ref=e652] [cursor=pointer]:
+          - /url: https://bevelhealth.sng.link/C1n9c/0mq5?_dl=home&_smtype=3
+          - generic:
+            - generic:
+              - img
+          - generic [ref=e653]: Download app
+      - img "Collection of fitness and daily essentials including a white water bottle, orange GU Energy Gel packet, black and red sports sunglasses, white wireless earbuds in a case, a smartphone displaying health tracking app, a smartwatch showing stress and energy stats, a keyring with three keys, and a light grey cap." [ref=e654]
+  - contentinfo [ref=e655]:
+    - generic [ref=e657]:
+      - generic [ref=e659]:
+        - generic [ref=e660]:
+          - link "Bevel" [ref=e661] [cursor=pointer]:
+            - /url: /zh
+            - img [ref=e663]
+            - generic [ref=e671]: Bevel
+          - generic [ref=e672]: © Finerpoint, Inc. 2026
+        - generic [ref=e673]:
+          - link "Instagram" [ref=e674] [cursor=pointer]:
+            - /url: https://www.instagram.com/bevel.health/
+            - generic:
+              - generic:
+                - img
+            - generic [ref=e675]: Instagram
+          - link "Twitter" [ref=e676] [cursor=pointer]:
+            - /url: https://twitter.com/bevel_health
+            - generic:
+              - img
+            - generic [ref=e677]: Twitter
+          - link "Reddit" [ref=e678] [cursor=pointer]:
+            - /url: https://www.reddit.com/r/bevelhealth/
+            - generic:
+              - generic:
+                - img
+            - generic [ref=e679]: Reddit
+          - link "YouTube" [ref=e680] [cursor=pointer]:
+            - /url: https://www.youtube.com/@bevelhealth
+            - generic:
+              - generic:
+                - img
+            - generic [ref=e681]: YouTube
+          - link "Facebook" [ref=e682] [cursor=pointer]:
+            - /url: https://www.facebook.com/bevel.health
+            - generic:
+              - generic:
+                - img
+            - generic [ref=e683]: Facebook
+      - generic [ref=e685]:
+        - generic [ref=e687]:
+          - heading "Company" [level=2] [ref=e688]
+          - list [ref=e689]:
+            - listitem [ref=e690]:
+              - link "About us" [ref=e691] [cursor=pointer]:
+                - /url: /zh/about-us
+            - listitem [ref=e692]:
+              - link "Careers" [ref=e693] [cursor=pointer]:
+                - /url: /zh/careers
+            - listitem [ref=e694]:
+              - link "Blog" [ref=e695] [cursor=pointer]:
+                - /url: /zh/blog
+        - generic [ref=e697]:
+          - heading "Product" [level=2] [ref=e698]
+          - list [ref=e699]:
+            - listitem [ref=e700]:
+              - link "Download app" [ref=e701] [cursor=pointer]:
+                - /url: https://bevelhealth.sng.link/C1n9c/0mq5?_dl=home&_smtype=3
+            - listitem [ref=e702]:
+              - link "Knowledge Base" [ref=e703] [cursor=pointer]:
+                - /url: https://help.bevel.health/
+            - listitem [ref=e704]:
+              - link "Release Notes" [ref=e705] [cursor=pointer]:
+                - /url: https://docs.bevel.health/release-notes
+            - listitem [ref=e706]:
+              - link "Roadmap" [ref=e707] [cursor=pointer]:
+                - /url: https://feedback.bevel.health
+        - generic [ref=e709]:
+          - heading "Company" [level=2] [ref=e710]
+          - list [ref=e711]:
+            - listitem [ref=e712]:
+              - link "FAQ" [ref=e713] [cursor=pointer]:
+                - /url: https://docs.bevel.health/faq
+            - listitem [ref=e714]:
+              - link "Request a feature" [ref=e715] [cursor=pointer]:
+                - /url: https://feedback.bevel.health/feature-requests
+            - listitem [ref=e716]:
+              - link "Report a bug" [ref=e717] [cursor=pointer]:
+                - /url: https://bevel.link/report-a-bug
+            - listitem [ref=e718]:
+              - link "Contact us" [ref=e719] [cursor=pointer]:
+                - /url: mailto:hello@bevel.health
+        - generic [ref=e721]:
+          - heading "Legal" [level=2] [ref=e722]
+          - list [ref=e723]:
+            - listitem [ref=e724]:
+              - link "Terms of Service" [ref=e725] [cursor=pointer]:
+                - /url: https://docs.bevel.health/terms-of-service
+            - listitem [ref=e726]:
+              - link "Privacy Policy" [ref=e727] [cursor=pointer]:
+                - /url: https://docs.bevel.health/privacy-policy

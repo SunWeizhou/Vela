@@ -1,0 +1,14 @@
+[    1309ms] [WARNING] [Meta Pixel] - Duplicate Pixel ID: 674879451265800. @ https://connect.facebook.net/en_US/fbevents.js:181
+[    1354ms] ReferenceError: singularSdk is not defined
+    at <anonymous>:1:13
+    at <anonymous>:1:273
+    at https://www.googletagmanager.com/gtm.js?id=GTM-PNXG37DC:831:429
+    at cS (https://www.googletagmanager.com/gtm.js?id=GTM-PNXG37DC:833:31)
+    at Md.bS (https://www.googletagmanager.com/gtm.js?id=GTM-PNXG37DC:830:92)
+    at Md.<anonymous> (https://www.googletagmanager.com/gtm.js?id=GTM-PNXG37DC:274:187)
+    at k.apply (https://www.googletagmanager.com/gtm.js?id=GTM-PNXG37DC:200:466)
+    at gb (https://www.googletagmanager.com/gtm.js?id=GTM-PNXG37DC:163:719)
+    at fb (https://www.googletagmanager.com/gtm.js?id=GTM-PNXG37DC:163:470)
+    at Md.<anonymous> (https://www.googletagmanager.com/gtm.js?id=GTM-PNXG37DC:224:473)
+[    1965ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ https://pixel-config.reddit.com/pixels/a2_hvv1euzu4p85/config:0
+[   20937ms] [ERROR] Failed to load resource: net::ERR_TIMED_OUT @ https://www.facebook.com/tr/?id=674879451265800&ev=PageView&dl=https%3A%2F%2Fwww.bevel.health%2Fzh%2Fabout-us&rl=&if=false&ts=1779371725789&sw=1470&sh=956&v=2.9.324&r=stable&a=plwebflow&ec=0&o=4126&fbp=fb.1.1779354902130.18215709997461480&eid=ob3_plugin-set_9aa96a242fbd1aba69e611bf18811f02f60d92f46e69978c8ab214b1ab7585d4&cs_est=true&ler=empty&cdl=API_unavailable&pmd[title]=%E5%85%B3%E4%BA%8E%20Bevel&pmd[locale]=zh&pmd[description]=Bevel%20is%20the%20AI%20health%20companion%20that%20turns%20your%20data%20into%20personalized%20insights%20and%20recommendations%20across%20sleep%2C%20fitness%2C%20nutrition%2C%20and%20more.&tz=480&it=1779371725703&coo=false&cf=1&expv2[0]=pl0&expv2[1]=el3&expv2[2]=bc1&expv2[3]=ra2&expv2[4]=rp2&expv2[5]=ct2&expv2[6]=hf1&rqm=GET:0

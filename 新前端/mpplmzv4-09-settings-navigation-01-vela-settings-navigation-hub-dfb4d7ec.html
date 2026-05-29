@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>Vela Settings Hub</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+                vela: {
+                    paper: '#F7F1E6',
+                    parchment: '#EFE6D8',
+                    surface: '#FFFDF8',
+                    elevated: '#FBF7EE',
+                    border: '#DED2C1',
+                    ink: '#2B241B',
+                    secondary: '#665B4B',
+                    muted: '#918576',
+                    clay: '#B76445',
+                    sage: '#5F8C73',
+                    indigo: '#6F73A8',
+                    amber: '#B9842E'
+                },
+                dark: {
+                    espresso: '#17130F',
+                    surface: '#211B16',
+                    elevated: '#2A231C',
+                    border: '#40362D',
+                    parchment: '#F4EBDD',
+                    secondary: '#CDBFAE',
+                    muted: '#9E907F',
+                    clay: '#D08462'
+                }
+            },
+            borderRadius: {
+              'DEFAULT': '0.5rem',
+              'lg': '1rem',
+              'xl': '1.5rem',
+              'full': '9999px',
+              'ios': '12px'
+            },
+            fontFamily: {
+              headline: ["Public Sans", "sans-serif"],
+              display: ["Public Sans", "sans-serif"],
+              body: ["Public Sans", "sans-serif"],
+              label: ["Public Sans", "sans-serif"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            font-family: 'Public Sans', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            font-size: 22px;
+        }
+        .ios-list-group {
+            @apply space-y-8 pb-32;
+        }
+        .ios-list-item {
+            @apply flex items-center justify-between py-3.5 px-4 active:bg-vela-parchment dark:active:bg-dark-border transition-colors duration-150;
+        }
+        .ios-card {
+            @apply bg-vela-surface dark:bg-dark-surface rounded-xl overflow-hidden border border-vela-border dark:border-dark-border;
+        }
+        .section-label {
+            @apply px-4 mb-2 text-[13px] font-medium uppercase tracking-wider text-vela-muted dark:text-dark-muted;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-vela-paper dark:bg-dark-espresso text-vela-ink dark:text-dark-parchment min-h-screen">
+<!-- Top Navigation Bar (JSON Anchor: TopAppBar) -->
+<nav class="w-full top-0 sticky bg-[#F7F1E6] dark:bg-[#17130F] border-b border-[#DED2C1] dark:border-[#40362D] flex items-center justify-between px-5 h-16 w-full z-50">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full overflow-hidden bg-vela-clay flex items-center justify-center">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="A clean, professional studio portrait of a young man with a friendly, intelligent expression, styled for a high-end mobile application. The lighting is soft and natural, reflecting a warm paper aesthetic typical of a premium wellness brand. The background is a solid, muted parchment color that complements the sophisticated Vela color palette. The overall mood is calm, trustworthy, and clinical." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCrjqAF74qYOVHS8BGtnxOG-nOYmKwlXzXEAoQaIRjWP-bbs-4vRvqWHQhJltmdkjmHLwU671Hhdv3EuzfzH19-reYLRMlcTsY5nbB7Qil8s_Ut-7mVhGto_AaM6nlfbf7wTfIQXHQZb5M1Q4UzgqymPygh2oVFIlWitjfEgx8EJFMZROzOArmjeCB6LXwcbz0YK6sRm_DwQw1KnET1jkO0BAPXWphqGWnQLJ68up2Zrqu5TNtAByftPQbk1wsbd40YO4KtLYdA1b8"/>
+</div>
+<span class="font-headline text-2xl font-bold text-[#2B241B] dark:text-[#F4EBDD]">Settings</span>
+</div>
+<div class="text-[#2B241B] dark:text-[#F4EBDD] active:scale-95 duration-200 cursor-pointer">
+<span class="material-symbols-outlined" data-icon="verified_user">verified_user</span>
+</div>
+</nav>
+<main class="max-w-2xl mx-auto px-5 pt-8 ios-list-group">
+<!-- Section 1: Profile -->
+<section>
+<div class="ios-card">
+<div class="ios-list-item">
+<div class="flex items-center gap-4">
+<div class="w-14 h-14 rounded-full bg-vela-parchment dark:bg-dark-border flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Detailed close-up profile picture of Julian Sol, a premium user of the Vela intelligence app. The image features soft cinematic lighting on a warm paper background. Julian appears calm and focused, embodying the body intelligence brand's intelligent and healthy persona. The visual style is premium, high-resolution, and perfectly integrated into a warm light-mode UI theme." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDAhoTrtZMQuVueYtbtCMYF9r9UDvN80n-WwrRcwzjm-xtCTBmDMtpBY-_k7HdW4tIozhg5QGAkX-uiki36Qmo9hLpd6DEZLwvWknQs5QyXecltOwl7kU79xwnmUo0IRq0Q2D90isWVGJkIqFkK_cXasy6kA7ougLJNlr2dcdVUzd1fSpViX4Q0YXjR9rGGDLOOfxLIrCRg14qG-QjooAWh-RMJUMT7n2bWPPEOJFBDt4NJEvAzpRXvD21SR6II4Gddz-D1g-37DBE"/>
+</div>
+<div>
+<h2 class="text-lg font-semibold tracking-tight">Julian Sol</h2>
+<p class="text-vela-clay dark:text-dark-clay text-sm font-medium">Premium Member</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-vela-muted" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+</section>
+<!-- Section 2: Agent Intelligence -->
+<section>
+<h3 class="section-label">Agent Intelligence</h3>
+<div class="ios-card divide-y divide-vela-border dark:divide-dark-border">
+<a class="ios-list-item" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-vela-indigo" data-icon="psychology">psychology</span>
+<span class="font-medium">Memory Inbox</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="bg-vela-clay text-white text-[10px] px-2 py-0.5 rounded-full font-bold">12</span>
+<span class="material-symbols-outlined text-vela-muted" data-icon="chevron_right">chevron_right</span>
+</div>
+</a>
+<a class="ios-list-item" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-vela-sage" data-icon="verified">verified</span>
+<span class="font-medium">Trust Center</span>
+</div>
+<span class="material-symbols-outlined text-vela-muted" data-icon="chevron_right">chevron_right</span>
+</a>
+<a class="ios-list-item" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-vela-amber" data-icon="auto_fix_high">auto_fix_high</span>
+<span class="font-medium">Coach Configuration</span>
+</div>
+<span class="material-symbols-outlined text-vela-muted" data-icon="chevron_right">chevron_right</span>
+</a>
+</div>
+</section>
+<!-- Section 3: Data & Privacy -->
+<section>
+<h3 class="section-label">Data &amp; Privacy</h3>
+<div class="ios-card divide-y divide-vela-border dark:divide-dark-border">
+<a class="ios-list-item" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-vela-sage" data-icon="monitoring">monitoring</span>
+<span class="font-medium">Data Coverage</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-sm text-vela-sage font-semibold">98% Optimal</span>
+<span class="material-symbols-outlined text-vela-muted" data-icon="chevron_right">chevron_right</span>
+</div>
+</a>
+<a class="ios-list-item" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-vela-clay" data-icon="favorite">favorite</span>
+<span class="font-medium">Health Permissions</span>
+</div>
+<span class="material-symbols-outlined text-vela-muted" data-icon="chevron_right">chevron_right</span>
+</a>
+<a class="ios-list-item" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-vela-muted" data-icon="shield">shield</span>
+<span class="font-medium">Privacy Policy</span>
+</div>
+<span class="material-symbols-outlined text-vela-muted" data-icon="chevron_right">chevron_right</span>
+</a>
+</div>
+</section>
+<!-- Section 4: App Settings -->
+<section>
+<h3 class="section-label">App Settings</h3>
+<div class="ios-card divide-y divide-vela-border dark:divide-dark-border">
+<div class="ios-list-item">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-vela-secondary dark:text-dark-secondary" data-icon="language">language</span>
+<span class="font-medium">Language</span>
+</div>
+<div class="flex bg-vela-parchment dark:bg-dark-border p-1 rounded-lg">
+<button class="px-3 py-1 text-xs font-bold rounded-md bg-white dark:bg-dark-elevated shadow-sm">EN</button>
+<button class="px-3 py-1 text-xs font-medium text-vela-muted">中</button>
+</div>
+</div>
+<div class="ios-list-item">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-vela-secondary dark:text-dark-secondary" data-icon="notifications">notifications</span>
+<span class="font-medium">Notifications</span>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-vela-border peer-focus:outline-none rounded-full peer dark:bg-dark-border peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-vela-clay"></div>
+</label>
+</div>
+<div class="ios-list-item" onclick="document.documentElement.classList.toggle('dark')">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-vela-secondary dark:text-dark-secondary" data-icon="dark_mode">dark_mode</span>
+<span class="font-medium">Appearance</span>
+</div>
+<span class="text-sm text-vela-muted font-medium">System</span>
+</div>
+</div>
+</section>
+<!-- Section 5: Help & Support -->
+<section>
+<h3 class="section-label">Help &amp; Support</h3>
+<div class="ios-card divide-y divide-vela-border dark:divide-dark-border">
+<a class="ios-list-item" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-vela-muted" data-icon="menu_book">menu_book</span>
+<span class="font-medium">Documentation</span>
+</div>
+<span class="material-symbols-outlined text-vela-muted" data-icon="open_in_new">open_in_new</span>
+</a>
+<a class="ios-list-item" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-vela-muted" data-icon="support_agent">support_agent</span>
+<span class="font-medium">Support</span>
+</div>
+<span class="material-symbols-outlined text-vela-muted" data-icon="chevron_right">chevron_right</span>
+</a>
+</div>
+</section>
+<div class="text-center pt-4 pb-12">
+<p class="text-xs text-vela-muted font-medium tracking-tight">Vela Intelligence v2.1.4</p>
+<p class="text-[10px] text-vela-muted/50 mt-1 uppercase tracking-widest font-bold">Clinical Precision • Body Wisdom</p>
+</div>
+</main>
+<!-- Bottom Navigation Bar (JSON Anchor: BottomNavBar) -->
+<nav class="fixed bottom-0 w-full z-50 rounded-t-xl bg-[#F7F1E6]/95 dark:bg-[#17130F]/95 backdrop-blur-md border-t border-[#DED2C1] dark:border-[#40362D] shadow-sm flex justify-around items-center h-20 pb-safe px-2">
+<button class="flex flex-col items-center justify-center text-[#918576] dark:text-[#9E907F] hover:text-[#2B241B] dark:hover:text-[#F4EBDD] active:scale-90 transition-transform">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="font-label text-[10px] font-medium mt-1">Today</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#918576] dark:text-[#9E907F] hover:text-[#2B241B] dark:hover:text-[#F4EBDD] active:scale-90 transition-transform">
+<span class="material-symbols-outlined" data-icon="query_stats">query_stats</span>
+<span class="font-label text-[10px] font-medium mt-1">Insights</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#918576] dark:text-[#9E907F] hover:text-[#2B241B] dark:hover:text-[#F4EBDD] active:scale-90 transition-transform">
+<span class="material-symbols-outlined" data-icon="fitness_center">fitness_center</span>
+<span class="font-label text-[10px] font-medium mt-1">Training</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#918576] dark:text-[#9E907F] hover:text-[#2B241B] dark:hover:text-[#F4EBDD] active:scale-90 transition-transform">
+<span class="material-symbols-outlined" data-icon="psychology">psychology</span>
+<span class="font-label text-[10px] font-medium mt-1">Memory</span>
+</button>
+<!-- ACTIVE TAB: Settings -->
+<button class="flex flex-col items-center justify-center text-[#B76445] dark:text-[#D08462] font-semibold active:scale-90 transition-transform">
+<span class="material-symbols-outlined" data-icon="settings" style="font-variation-settings: 'FILL' 1;">settings</span>
+<span class="font-label text-[10px] font-medium mt-1">Settings</span>
+</button>
+</nav>
+<script>
+        // Simple ripple/active state for cards
+        document.querySelectorAll('.ios-list-item').forEach(item => {
+            item.addEventListener('touchstart', function() {
+                this.classList.add('opacity-70');
+            });
+            item.addEventListener('touchend', function() {
+                this.classList.remove('opacity-70');
+            });
+        });
+
+        // Auto-detect system preference for dark mode
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            // document.documentElement.classList.add('dark'); // Disabled by default to respect prompt's Light Mode requirement
+        }
+    </script>
+</body></html>

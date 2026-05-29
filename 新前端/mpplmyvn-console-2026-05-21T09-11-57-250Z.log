@@ -1,0 +1,70 @@
+[    5528ms] [LOG] JQMIGRATE: Migrate is installed, version 3.4.1 @ https://bevelhealth.com/wp-includes/js/jquery/jquery-migrate.min.js?ver=3.4.1:1
+[    6169ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: https://fonts.gstatic.com/s/roboto/v51/KFO7CnqEu92Fr1ME7kSn66aGLdTylUAMa3yUBHMdazQ.woff2 @ https://bevelhealth.com/:231
+[    6216ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: https://fonts.gstatic.com/s/exo/v25/4UaOrEtFpBISc36j2jDu5w.woff2 @ https://bevelhealth.com/:1982
+[    6216ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: https://bevelhealth.com/wp-content/plugins/elementor/assets/lib/font-awesome/fonts/fontawesome-webfont.woff2?v=4.7.0 @ https://bevelhealth.com/:1982
+[   16969ms] TypeError: Cannot read properties of null (reading 'url')
+    at self.pushElement (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:219:101)
+    at Object.<anonymous> (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:80:22)
+    at ce.each (https://bevelhealth.com/wp-includes/js/jquery/jquery.min.js?ver=3.7.1:2:3129)
+    at self.setParallaxMulti (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:75:15)
+    at self.init (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:47:18)
+    at elementorSection (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:17:22)
+    at _runHook (https://bevelhealth.com/wp-content/plugins/elementor/assets/js/frontend.min.js?ver=4.0.8:1:14901)
+    at Object.doAction (https://bevelhealth.com/wp-content/plugins/elementor/assets/js/frontend.min.js?ver=4.0.8:1:15503)
+    at e.exports.runReadyTrigger (https://bevelhealth.com/wp-content/plugins/elementor/assets/js/frontend.min.js?ver=4.0.8:1:19512)
+    at https://bevelhealth.com/wp-content/plugins/elementor/assets/js/frontend-modules.min.js?ver=4.0.8:1:12410
+[   16969ms] TypeError: Cannot read properties of null (reading 'url')
+    at self.pushElement (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:219:101)
+    at Object.<anonymous> (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:80:22)
+    at ce.each (https://bevelhealth.com/wp-includes/js/jquery/jquery.min.js?ver=3.7.1:2:3129)
+    at self.setParallaxMulti (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:75:15)
+    at self.init (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:47:18)
+    at elementorSection (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:17:22)
+    at _runHook (https://bevelhealth.com/wp-content/plugins/elementor/assets/js/frontend.min.js?ver=4.0.8:1:14901)
+    at Object.doAction (https://bevelhealth.com/wp-content/plugins/elementor/assets/js/frontend.min.js?ver=4.0.8:1:15503)
+    at e.exports.runReadyTrigger (https://bevelhealth.com/wp-content/plugins/elementor/assets/js/frontend.min.js?ver=4.0.8:1:19512)
+    at https://bevelhealth.com/wp-content/plugins/elementor/assets/js/frontend-modules.min.js?ver=4.0.8:1:12410
+[   16969ms] TypeError: Cannot read properties of null (reading 'url')
+    at self.pushElement (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:219:101)
+    at Object.<anonymous> (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:80:22)
+    at ce.each (https://bevelhealth.com/wp-includes/js/jquery/jquery.min.js?ver=3.7.1:2:3129)
+    at self.setParallaxMulti (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:75:15)
+    at self.init (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:47:18)
+    at elementorSection (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:17:22)
+    at _runHook (https://bevelhealth.com/wp-content/plugins/elementor/assets/js/frontend.min.js?ver=4.0.8:1:14901)
+    at Object.doAction (https://bevelhealth.com/wp-content/plugins/elementor/assets/js/frontend.min.js?ver=4.0.8:1:15503)
+    at e.exports.runReadyTrigger (https://bevelhealth.com/wp-content/plugins/elementor/assets/js/frontend.min.js?ver=4.0.8:1:19512)
+    at https://bevelhealth.com/wp-content/plugins/elementor/assets/js/frontend-modules.min.js?ver=4.0.8:1:12410
+[   16917ms] [WARNING] Error: Invalid date provided: yes
+    at Object.parseDate (https://bevelhealth.com/wp-content/plugins/metform/public/assets/js/app.js?ver=4.1.4:27:20137)
+    at Object.<anonymous> (https://bevelhealth.com/wp-content/plugins/metform/public/assets/js/app.js?ver=4.1.4:27:37849)
+    at Object.assign (<anonymous>)
+    at https://bevelhealth.com/wp-content/plugins/metform/public/assets/js/app.js?ver=4.1.4:27:51544
+    at https://bevelhealth.com/wp-content/plugins/metform/public/assets/js/app.js?ver=4.1.4:27:52303
+    at A (https://bevelhealth.com/wp-content/plugins/metform/public/assets/js/app.js?ver=4.1.4:27:61852)
+    at D (https://bevelhealth.com/wp-content/plugins/metform/public/assets/js/app.js?ver=4.1.4:27:62143)
+    at T (https://bevelhealth.com/wp-content/plugins/metform/public/assets/js/app.js?ver=4.1.4:27:62592)
+    at s.createFlatpickrInstance (https://bevelhealth.com/wp-content/plugins/metform/public/assets/js/app.js?ver=4.1.4:33:9845)
+    at s.value (https://bevelhealth.com/wp-content/plugins/metform/public/assets/js/app.js?ver=4.1.4:33:10793) @ https://bevelhealth.com/wp-content/plugins/metform/public/assets/js/app.js?ver=4.1.4:26
+[   16969ms] TypeError: Cannot read properties of null (reading 'url')
+    at self.pushElement (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:219:101)
+    at Object.<anonymous> (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:80:22)
+    at ce.each (https://bevelhealth.com/wp-includes/js/jquery/jquery.min.js?ver=3.7.1:2:3129)
+    at self.setParallaxMulti (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:75:15)
+    at self.init (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:47:18)
+    at elementorSection (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:17:22)
+    at _runHook (https://bevelhealth.com/wp-content/plugins/elementor/assets/js/frontend.min.js?ver=4.0.8:1:14901)
+    at Object.doAction (https://bevelhealth.com/wp-content/plugins/elementor/assets/js/frontend.min.js?ver=4.0.8:1:15503)
+    at e.exports.runReadyTrigger (https://bevelhealth.com/wp-content/plugins/elementor/assets/js/frontend.min.js?ver=4.0.8:1:19512)
+    at https://bevelhealth.com/wp-content/plugins/elementor/assets/js/frontend-modules.min.js?ver=4.0.8:1:12410
+[   16969ms] TypeError: Cannot read properties of null (reading 'url')
+    at self.pushElement (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:219:101)
+    at Object.<anonymous> (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:80:22)
+    at ce.each (https://bevelhealth.com/wp-includes/js/jquery/jquery.min.js?ver=3.7.1:2:3129)
+    at self.setParallaxMulti (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:75:15)
+    at self.init (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:47:18)
+    at elementorSection (https://bevelhealth.com/wp-content/plugins/medizco-essential/modules/parallax/assets/js/main.js?ver=1.0.2:17:22)
+    at _runHook (https://bevelhealth.com/wp-content/plugins/elementor/assets/js/frontend.min.js?ver=4.0.8:1:14901)
+    at Object.doAction (https://bevelhealth.com/wp-content/plugins/elementor/assets/js/frontend.min.js?ver=4.0.8:1:15503)
+    at e.exports.runReadyTrigger (https://bevelhealth.com/wp-content/plugins/elementor/assets/js/frontend.min.js?ver=4.0.8:1:19512)
+    at https://bevelhealth.com/wp-content/plugins/elementor/assets/js/frontend-modules.min.js?ver=4.0.8:1:12410

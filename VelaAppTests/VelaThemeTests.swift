@@ -6,7 +6,7 @@ final class VelaThemeTests: XCTestCase {
     func testThemeDefinesStableProductIdentity() {
         XCTAssertEqual(VelaAppMetadata.name, "Vela")
         XCTAssertEqual(VelaAppMetadata.minimumOSVersion, "17.0")
-        XCTAssertEqual(VelaTheme.cornerRadiusCard, 20)
+        XCTAssertEqual(VelaTheme.cornerRadiusCard, 18)
     }
 
     func testDateRangeBuildsRecentCalendarWindows() throws {
@@ -28,7 +28,7 @@ final class VelaThemeTests: XCTestCase {
         XCTAssertEqual(Set(HealthDataTypeCatalog.readTypes).count, HealthDataTypeCatalog.readTypes.count)
     }
 
-    func testHomeReadinessBriefSurfacesWhyAndNextAction() {
+    func testDailyPlanRecommendsRecoveryWhenScoreLow() {
         var dashboard = DashboardSummary.preview()
         dashboard.recovery = StandardScoreResult(
             score: 35,
@@ -36,17 +36,20 @@ final class VelaThemeTests: XCTestCase {
             confidence: .high,
             components: ["hrv": 35],
             weights: ["hrv": 1],
-            reasons: ["HRV significantly below personal baseline (z=-2.0)"],
+            reasons: ["HRV significantly below personal baseline"],
             metrics: ["hrv_z_score": -2.0]
         )
-
         let plan = DailyPlanEngine.recommendation(for: dashboard)
-        let brief = HomeReadinessBrief.make(dashboard: dashboard, plan: plan)
+        XCTAssertEqual(plan.kind, .recovery)
+        XCTAssertEqual(plan.accent, .recovery)
+    }
 
-        XCTAssertEqual(brief.statusLabel, "Low readiness")
-        XCTAssertTrue(brief.why.contains("HRV"))
-        XCTAssertEqual(brief.nextAction, plan.primaryActionTitle)
-        XCTAssertEqual(brief.accent, .recovery)
+    func testAppleThemeHasSemanticColors() {
+        XCTAssertNotNil(VelaTheme.recovery)
+        XCTAssertNotNil(VelaTheme.sleep)
+        XCTAssertNotNil(VelaTheme.strain)
+        XCTAssertNotNil(VelaTheme.stress)
+        XCTAssertNotNil(VelaTheme.energy)
     }
 
     @MainActor

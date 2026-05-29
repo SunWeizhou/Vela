@@ -1,0 +1,622 @@
+- generic [ref=e3]:
+  - navigation [ref=e6]:
+    - generic [ref=e7]:
+      - generic [ref=e8]:
+        - img "App Store" [ref=e9]:
+          - img
+        - button "App Store iPhone 专区" [ref=e10] [cursor=pointer]:
+          - generic "App Store iPhone 专区" [ref=e11]:
+            - generic [ref=e12]: iPhone 专区
+            - img
+      - generic [ref=e17]:
+        - img
+        - generic: 搜索
+        - searchbox "搜索" [ref=e18]
+    - generic [ref=e20]:
+      - list [ref=e22]:
+        - listitem [ref=e23]:
+          - button "Today" [ref=e24] [cursor=pointer]:
+            - generic [ref=e25]:
+              - generic [ref=e26]:
+                - img
+              - generic [ref=e27]: Today
+        - listitem [ref=e28]:
+          - button "游戏" [ref=e29] [cursor=pointer]:
+            - generic [ref=e30]:
+              - generic [ref=e31]:
+                - img
+              - generic [ref=e32]: 游戏
+        - listitem [ref=e33]:
+          - button "App" [ref=e34] [cursor=pointer]:
+            - generic [ref=e35]:
+              - generic [ref=e36]:
+                - img
+              - generic [ref=e37]: App
+      - generic [ref=e38]:
+        - generic [ref=e40]: 类别
+        - list "类别" [ref=e41]:
+          - listitem [ref=e42]:
+            - button "类别" [ref=e43] [cursor=pointer]:
+              - generic [ref=e47]: 类别
+          - listitem [ref=e48]:
+            - button "摄影与录像" [ref=e49] [cursor=pointer]:
+              - generic [ref=e53]: 摄影与录像
+          - listitem [ref=e54]:
+            - button "健康健美" [ref=e55] [cursor=pointer]:
+              - generic [ref=e59]: 健康健美
+          - listitem [ref=e60]:
+            - button "效率" [ref=e61] [cursor=pointer]:
+              - generic [ref=e65]: 效率
+          - listitem [ref=e66]:
+            - button "娱乐" [ref=e67] [cursor=pointer]:
+              - generic [ref=e71]: 娱乐
+          - listitem [ref=e72]:
+            - button "动作" [ref=e73] [cursor=pointer]:
+              - generic [ref=e77]: 动作
+          - listitem [ref=e78]:
+            - button "冒险" [ref=e79] [cursor=pointer]:
+              - generic [ref=e83]: 冒险
+          - listitem [ref=e84]:
+            - button "益智解谜" [ref=e85] [cursor=pointer]:
+              - generic [ref=e89]: 益智解谜
+          - listitem [ref=e90]:
+            - button "独立" [ref=e91] [cursor=pointer]:
+              - generic [ref=e95]: 独立
+      - generic:
+        - list
+  - generic [ref=e96]:
+    - main [ref=e97]:
+      - generic [ref=e98]:
+        - generic [ref=e109]:
+          - 'heading "Bevel: AI健康教练" [level=1] [ref=e110]':
+            - generic [ref=e111]: "Bevel: AI健康教练"
+          - paragraph [ref=e112]: 锻炼、睡眠和恢复
+          - paragraph [ref=e113]: 免费 · App 内购买 · 专为 iPhone 设计。未针对 macOS 验证。
+          - generic [ref=e114]:
+            - button "在 Mac App Store 中查看" [ref=e116] [cursor=pointer]:
+              - generic [ref=e118]: 在这里查看： Mac App Store
+              - img
+            - button "分享" [ref=e119] [cursor=pointer]:
+              - img
+        - generic [ref=e124]:
+          - button "上一页" [disabled] [ref=e125]:
+            - img
+          - list [ref=e126]:
+            - listitem [ref=e127]:
+              - link "145个评分 4.7 星" [ref=e129] [cursor=pointer]:
+                - /url: "#productRatings"
+                - generic [ref=e131]:
+                  - term [ref=e132]:
+                    - generic [ref=e133]: 145个评分
+                  - definition [ref=e134]:
+                    - generic [ref=e135]: "4.7"
+                    - list "4.7 星" [ref=e136]:
+                      - listitem [ref=e137]:
+                        - img
+                      - listitem [ref=e138]:
+                        - img
+                      - listitem [ref=e139]:
+                        - img
+                      - listitem [ref=e140]:
+                        - img
+                      - listitem [ref=e141]:
+                        - generic [ref=e142]:
+                          - img
+                        - img
+            - listitem [ref=e143]:
+              - link "年龄分级 13+ 岁" [ref=e145] [cursor=pointer]:
+                - /url: "#information"
+                - generic [ref=e147]:
+                  - term [ref=e148]:
+                    - generic [ref=e149]: 年龄分级
+                  - definition [ref=e150]:
+                    - generic [ref=e151]: 13+
+                    - generic [ref=e152]: 岁
+            - listitem [ref=e153]:
+              - link "类别 健康健美" [ref=e155] [cursor=pointer]:
+                - /url: "#information"
+                - generic [ref=e157]:
+                  - term [ref=e158]:
+                    - generic [ref=e159]: 类别
+                  - definition [ref=e160]:
+                    - generic [ref=e164]: 健康健美
+            - listitem [ref=e165]:
+              - link "开发者 Finerpoint, Inc" [ref=e167] [cursor=pointer]:
+                - /url: https://apps.apple.com/cn/developer/finerpoint-inc/id1700312515?platform=iphone
+                - generic [ref=e169]:
+                  - term [ref=e170]:
+                    - generic [ref=e171]: 开发者
+                  - definition [ref=e172]:
+                    - generic [ref=e173]:
+                      - img
+                    - generic [ref=e174]: Finerpoint, Inc
+            - listitem [ref=e175]:
+              - link "语言 RU + 12 种语言" [ref=e177] [cursor=pointer]:
+                - /url: "#information"
+                - generic [ref=e179]:
+                  - term [ref=e180]:
+                    - generic [ref=e181]: 语言
+                  - definition [ref=e182]:
+                    - generic [ref=e183]: RU
+                    - generic [ref=e184]: + 12 种语言
+            - listitem [ref=e185]:
+              - link [ref=e187] [cursor=pointer]:
+                - /url: "#information"
+                - generic [ref=e189]:
+                  - term [ref=e190]:
+                    - generic [ref=e191]: 大小
+                  - definition [ref=e192]:
+                    - generic [ref=e193]: "746.6"
+                    - generic [ref=e194]: MB
+          - button "下一页" [ref=e195] [cursor=pointer]:
+            - img
+        - region "iPhone App 预览和截屏" [ref=e196]:
+          - generic [ref=e199]:
+            - button "上一页" [disabled] [ref=e200]:
+              - img
+            - list [ref=e201]:
+              - listitem [ref=e202]:
+                - generic "截屏" [ref=e204]
+              - listitem [ref=e208]:
+                - generic "截屏" [ref=e210]
+              - listitem [ref=e214]:
+                - generic "截屏" [ref=e216]
+              - listitem [ref=e220]
+              - listitem [ref=e226]
+              - listitem [ref=e232]
+              - listitem [ref=e238]
+              - listitem [ref=e239]
+              - listitem [ref=e240]
+              - listitem [ref=e241]
+            - button "下一页" [ref=e242] [cursor=pointer]:
+              - img
+        - button "iPhone、Apple Watch" [ref=e244] [cursor=pointer]:
+          - generic [ref=e245]:
+            - generic [ref=e246]:
+              - generic [ref=e247]:
+                - img
+              - generic [ref=e248]:
+                - img
+            - generic [ref=e249]: iPhone、Apple Watch
+          - generic [ref=e250]:
+            - img
+        - paragraph [ref=e253]:
+          - generic [ref=e255]: Bevel 是改善健康状况、提升表现和延长寿命的首选 App，获数十万用户信赖并拥有科学背书。 从睡眠、恢复、压力管理到力量训练，Bevel 将健康数据转化为真正可用的个性化指导。无论你是备战大赛还是追求日常状态提升，Bevel 都能助你更聪明地运动、更高效地恢复并延长寿命。 功能 Bevel Intelligence： 你的智能健康引擎。Bevel Intelligence 将你的多维度数据相关联，提供实时反馈和个性化建议。它会告知最佳训练时机、休息节点和进步阻碍因素。 恢复分数： 每日准备情况一目了然。通过显示身体的每日准备状态，帮助避免过度训练、预防受伤并培养更易长久坚持的习惯。 睡眠得分： 利用单一数字跟踪和评估你的睡眠状况。Bevel 会分析你的睡眠阶段、时长和睡眠中断，揭示每晚的真实休息质量。智能闹钟可在睡眠周期的最佳时刻唤醒你。 耗力分数： 全天监测身体负荷。根据睡眠和恢复状况生成个性化的耗力分数，帮助你以合适的强度训练并避免过度疲劳。 营养得分： 通过扫描条形码、搜索图片、创建食谱、描述餐食或搜索我们 600 万+ 种食物的数据库来记录每一餐。在一个地方设置卡路里、宏量营养素和营养目标。Bevel 还支持血糖跟踪，让你查看食物对新陈代谢的影响。 压力分数： 了解压力在身体上的表现形式。Bevel 提供实时评分，帮助你了解睡眠、体能训练和日常生活中的压力模式。 健力助手： 利用 Bevel 的力量训练模块更智能地训练。超过 700 种锻炼可供选择，在手表与手机之间同步体能训练，并实时接收肌肉耗力反馈。你甚至可以生成自定义计划或记录过往体能训练，从而持续跟踪进度。 能量储备： 把它想象成你身体的电池。Bevel 将恢复、睡眠、耗力和压力整合到一项指标中，帮助你了解一天中能量水平的积累和消耗情况。 生物年龄： 发现你身体的真实年龄。Bevel 通过睡眠、活动量、静息心率等关键健康指标计算你的生物年龄。追踪生活方式的改变如何产生影响，了解你的选择如何加速或减缓衰老。 健康档案： 将你的医疗数据导入 Bevel。导入化验结果、血液检查和临床记录，在一个地方全面掌握你的健康状况。了解各项指标的含义，并追踪随时间的变化趋势。 日记： 跟踪影响健康的习惯。使用日记记录补水、日照、屏幕使用时间等信息。Bevel 会展示这些细微行为如何累积并影响你的睡眠和恢复状况。 订阅与条款 Bevel 可以免费使用，你也可以选择通过自动续订订阅的方式升级为 Bevel Pro。你可以在 Apple ID 账户设置中关闭自动续订功能。 高级订阅将在确认购买后通过你的 Apple ID 扣费。订阅按周或按年自动续订，除非在当前周期结束前至少 24 小时取消，否则将自动续订。取消后，订阅有效期至当前周期结束，未使用部分不予退款。 完成购买，即表示你已了解并同意以下内容： 服务条款：https://docs.bevel.health/terms-of-service 隐私政策：https://docs.bevel.health/privacy-policy Bevel 并非医疗器械，不可用于诊断、治疗、治愈、监测或预防任何疾病。请务必先咨询你的医生。提供的所有信息仅作为一般参考。
+          - button "更多" [ref=e256] [cursor=pointer]
+        - region "活动" [ref=e257]:
+          - heading "活动" [level=2] [ref=e260]
+          - generic [ref=e263]:
+            - button "上一页" [disabled] [ref=e264]:
+              - img
+            - list [ref=e265]:
+              - listitem [ref=e266]:
+                - generic [ref=e268]:
+                  - time [ref=e270]: 现已推出
+                  - article [ref=e273] [cursor=pointer]:
+                    - link "全新 Bevel Intelligence" [ref=e274]:
+                      - /url: https://apps.apple.com/cn/app/bevel-ai%E5%81%A5%E5%BA%B7%E6%95%99%E7%BB%83/id6456176249?eventid=6762316869
+                      - generic [ref=e284]:
+                        - generic [ref=e285]: 重磅更新
+                        - heading "全新 Bevel Intelligence" [level=3] [ref=e286]
+                        - paragraph [ref=e289]: 全天候健康指导，智能数据分析。更聪明地管理你的营养、训练与恢复。
+              - listitem [ref=e290]:
+                - generic [ref=e292]:
+                  - time [ref=e294]: 现已推出
+                  - article [ref=e297] [cursor=pointer]:
+                    - link "发现你的生物年龄" [ref=e298]:
+                      - /url: https://apps.apple.com/cn/app/bevel-ai%E5%81%A5%E5%BA%B7%E6%95%99%E7%BB%83/id6456176249?eventid=6762232410
+                      - generic [ref=e306]:
+                        - generic [ref=e307]: 重磅更新
+                        - heading "发现你的生物年龄" [level=3] [ref=e308]
+                        - paragraph [ref=e311]: 通过关键健康指标计算你的生物年龄。了解你的日常选择如何加速或减缓衰老。
+              - listitem [ref=e312]:
+                - generic [ref=e314]:
+                  - time [ref=e316]: 现已推出
+                  - article [ref=e319] [cursor=pointer]:
+                    - link [ref=e320]:
+                      - /url: https://apps.apple.com/cn/app/bevel-ai%E5%81%A5%E5%BA%B7%E6%95%99%E7%BB%83/id6456176249?eventid=6762234984
+                      - generic [ref=e328]:
+                        - generic [ref=e329]: 重磅更新
+                        - heading [level=3] [ref=e330]: 连接你的健康记录
+                        - paragraph [ref=e333]: 导入化验结果、血液检查和临床记录。了解各项指标的含义，并追踪随时间的变化。
+            - button "下一页" [ref=e334] [cursor=pointer]:
+              - img
+        - region "评分及评论" [ref=e335]:
+          - link "评分及评论" [ref=e337] [cursor=pointer]:
+            - /url: https://apps.apple.com/cn/app/6456176249?see-all=reviews&platform=iphone
+            - generic [ref=e338]:
+              - heading "评分及评论" [level=2] [ref=e339]
+              - generic [ref=e340]:
+                - img
+          - list [ref=e341]:
+            - listitem [ref=e342]:
+              - generic [ref=e344]:
+                - generic [ref=e345]:
+                  - generic [ref=e346]: "4.7"
+                  - generic [ref=e347]: 满分 5 分
+                - generic [ref=e348]:
+                  - generic [ref=e349]: 145 个评分
+                  - generic [ref=e350]:
+                    - generic "**ASE.Shared.Ratings.Review.StarsAria.one.other**" [ref=e351]:
+                      - generic [ref=e352]:
+                        - generic [ref=e353]:
+                          - img
+                        - generic [ref=e354]:
+                          - img
+                        - generic [ref=e355]:
+                          - img
+                        - generic [ref=e356]:
+                          - img
+                        - generic [ref=e357]:
+                          - img
+                    - generic "**ASE.Shared.Ratings.Review.StarsAria.one.other**" [ref=e360]:
+                      - generic [ref=e361]:
+                        - generic [ref=e362]:
+                          - img
+                        - generic [ref=e363]:
+                          - img
+                        - generic [ref=e364]:
+                          - img
+                        - generic [ref=e365]:
+                          - img
+                    - generic "**ASE.Shared.Ratings.Review.StarsAria.one.other**" [ref=e368]:
+                      - generic [ref=e369]:
+                        - generic [ref=e370]:
+                          - img
+                        - generic [ref=e371]:
+                          - img
+                        - generic [ref=e372]:
+                          - img
+                    - generic "**ASE.Shared.Ratings.Review.StarsAria.one.other**" [ref=e375]:
+                      - generic [ref=e376]:
+                        - generic [ref=e377]:
+                          - img
+                        - generic [ref=e378]:
+                          - img
+                    - generic "**ASE.Shared.Ratings.Review.StarsAria.other.other**" [ref=e381]:
+                      - generic [ref=e383]:
+                        - img
+        - generic [ref=e389]:
+          - button "上一页" [disabled] [ref=e390]:
+            - img
+          - list [ref=e391]:
+            - listitem [ref=e392]:
+              - generic "怎么订阅" [ref=e394]:
+                - generic [ref=e395]:
+                  - generic [ref=e396]:
+                    - heading "怎么订阅" [level=3] [ref=e399]
+                    - list "5 星" [ref=e401]:
+                      - listitem [ref=e402]:
+                        - img
+                      - listitem [ref=e403]:
+                        - img
+                      - listitem [ref=e404]:
+                        - img
+                      - listitem [ref=e405]:
+                        - img
+                      - listitem [ref=e406]:
+                        - img
+                  - generic [ref=e407]:
+                    - time [ref=e408]: 2月3日
+                    - paragraph [ref=e411]: 你不爱他的时候最爱你
+                - paragraph [ref=e414]: 把国区的订阅打开
+            - listitem [ref=e415]:
+              - generic "中国地区无法购买会员" [ref=e417]:
+                - generic [ref=e418]:
+                  - generic [ref=e419]:
+                    - heading "中国地区无法购买会员" [level=3] [ref=e422]
+                    - list "3 星" [ref=e424]:
+                      - listitem [ref=e425]:
+                        - img
+                      - listitem [ref=e426]:
+                        - img
+                      - listitem [ref=e427]:
+                        - img
+                      - listitem [ref=e428]:
+                        - img
+                      - listitem [ref=e429]:
+                        - img
+                  - generic [ref=e430]:
+                    - time [ref=e431]: 2025/10/11
+                    - paragraph [ref=e434]: 海蓝邪月
+                - paragraph [ref=e437]: 希望能更加注重一下中国区，没法购买会员，然后所有功能都需要开通会员，体感非常不好
+            - listitem [ref=e438]:
+              - generic [ref=e440]:
+                - generic [ref=e441]:
+                  - generic [ref=e442]:
+                    - heading [level=3] [ref=e445]: 好用
+                    - list [ref=e447]:
+                      - listitem [ref=e448]:
+                        - img
+                      - listitem [ref=e449]:
+                        - img
+                      - listitem [ref=e450]:
+                        - img
+                      - listitem [ref=e451]:
+                        - img
+                      - listitem [ref=e452]:
+                        - img
+                  - generic [ref=e453]:
+                    - time [ref=e454]: 2025/12/30
+                    - paragraph [ref=e457]: 请叫我兔子南瓜
+                - paragraph [ref=e460]: 真的好用
+            - listitem [ref=e461]:
+              - generic [ref=e463]:
+                - generic [ref=e464]:
+                  - generic [ref=e465]:
+                    - heading [level=3] [ref=e468]: 最好的健康app
+                    - list [ref=e470]:
+                      - listitem [ref=e471]:
+                        - img
+                      - listitem [ref=e472]:
+                        - img
+                      - listitem [ref=e473]:
+                        - img
+                      - listitem [ref=e474]:
+                        - img
+                      - listitem [ref=e475]:
+                        - img
+                  - generic [ref=e476]:
+                    - time [ref=e477]: 2024/10/15
+                    - paragraph [ref=e480]: percifale
+                - paragraph [ref=e483]: 我一直就用这个软件弄了很长的时间了，他这一个软件在all in one的健康软件里面，无论是设计好各方面的数据展示也好，人性化也好，都是属于绝对的第一梯队，然后是一个综合体验来讲最优秀的软件
+            - listitem [ref=e484]
+            - listitem [ref=e485]
+            - listitem [ref=e486]
+            - listitem [ref=e487]
+          - button "下一页" [ref=e488] [cursor=pointer]:
+            - img
+        - region "新功能" [ref=e489]:
+          - button "新功能" [ref=e491] [cursor=pointer]:
+            - generic [ref=e493]:
+              - heading "新功能" [level=2] [ref=e494]
+              - generic [ref=e495]:
+                - img
+          - generic "新功能" [ref=e496]:
+            - generic [ref=e497]:
+              - paragraph [ref=e498]:
+                - generic [ref=e500]: "全新与改进 - 在生物年龄中新增“本周变化”部分，可视化显示每个生物标志物与上周相比如何影响你的年龄。你可以点击年龄下方的“与上周相比的变化”按钮来访问。 - 新增横幅，提醒你更新血液检测、吸烟习惯，并在结果处理中时通知你。 - 新增在将文档上传到健康记录之前预览、编辑或删除文档的方法。 - 改进了 Bevel Intelligence 中的聊天视图：图片现在可在表格内呈现，内容不再被裁剪，代码块可选择并复制。 - 改进了拥有大量食物日志用户的手记加载时间和性能。 - 更新了 Bevel Intelligence 每周限制视图，以显示明确的日期和时间，而不是倒计时。 - 在 Bevel Intelligence 中新增当消息超过大小限制时显示的特定错误消息。 - 新增推荐帮助页，提供输入推荐码的分步说明。 错误修复 - 修复了健力助手训练在崩溃后卡住并继续运行，导致你无法重新打开它们的问题。 - 修复了此前退款订阅用户的推荐奖励兑换问题。 - 修复了部分生物标志物图表数据点和范围会显示在图表外的 UI 问题。 - 修复了来自 Apple Watch 的补水和咖啡因日志有时会显示为重复项的问题。 - 修复了健力助手中用户编辑的时长会被该组实际经过时间覆盖的问题。 - 修复了 Bevel Intelligence 回复中周期追踪上下文有时缺失或过时的问题。 关注我们的社交媒体以获取最新消息： - Reddit: r/bevelhealth - IG: @bevel.health - X: @bevel_health - YouTube: @bevelhealth 在此分享你的功能请求：https://feedback.bevel.health。 通过 Bevel 应用中的设置 > 报告错误来报告任何错误或问题。"
+                - button "更多" [ref=e501] [cursor=pointer]
+              - generic [ref=e502]:
+                - generic [ref=e503]: 版本 3.0.5
+                - time [ref=e504]: 1天前
+        - region "App 隐私" [ref=e505]:
+          - button "App 隐私" [ref=e507] [cursor=pointer]:
+            - link "App 隐私" [ref=e509]:
+              - /url: "#"
+              - generic [ref=e510]:
+                - heading "App 隐私" [level=2] [ref=e511]
+                - generic [ref=e512]:
+                  - img
+          - paragraph [ref=e516]:
+            - text: 开发者“Finerpoint, Inc”已表明该 App 的隐私规范可能包括下述数据处理方式。更多相关信息，请参阅
+            - link "开发者隐私政策" [ref=e517] [cursor=pointer]:
+              - /url: https://docs.bevel.health/privacy-policy
+              - generic [ref=e518]: 开发者隐私政策
+            - text: 。
+        - list [ref=e520]:
+          - listitem [ref=e521]:
+            - generic "与你关联的数据" [ref=e522]:
+              - generic [ref=e523]:
+                - img
+              - heading "与你关联的数据" [level=3] [ref=e524]
+              - paragraph [ref=e525]: 开发者可能会收集以下数据，且数据与你的身份关联：
+              - list [ref=e526]:
+                - listitem [ref=e527]:
+                  - generic [ref=e528]:
+                    - img
+                  - text: 位置
+                - listitem [ref=e529]:
+                  - generic [ref=e530]:
+                    - img
+                  - text: 联系信息
+                - listitem [ref=e531]:
+                  - generic [ref=e532]:
+                    - img
+                  - text: 标识符
+                - listitem [ref=e533]:
+                  - generic [ref=e534]:
+                    - img
+                  - text: 使用数据
+          - listitem [ref=e535]:
+            - generic "未与你关联的数据" [ref=e536]:
+              - generic [ref=e537]:
+                - img
+              - heading "未与你关联的数据" [level=3] [ref=e538]
+              - paragraph [ref=e539]: 开发者可能会收集以下数据，但数据不会关联你的身份：
+              - list [ref=e540]:
+                - listitem [ref=e541]:
+                  - generic [ref=e542]:
+                    - img
+                  - text: 健康与健身
+                - listitem [ref=e543]:
+                  - generic [ref=e544]:
+                    - img
+                  - text: 诊断
+        - paragraph [ref=e546]:
+          - text: 隐私规范可能因你使用的功能或你的年龄等因素而异。
+          - link "进一步了解" [ref=e547] [cursor=pointer]:
+            - /url: https://apps.apple.com/cn/iphone/story/id1538632801
+        - region "辅助功能" [ref=e548]:
+          - heading "辅助功能" [level=2] [ref=e552]
+          - paragraph [ref=e556]:
+            - text: 开发者尚未表明此 App 支持哪些辅助功能。
+            - link "进一步了解" [ref=e557] [cursor=pointer]:
+              - /url: https://apps.apple.com/story/id1814164299
+        - region "信息" [ref=e558]:
+          - heading "信息" [level=2] [ref=e561]
+          - generic [ref=e562]:
+            - generic [ref=e563]:
+              - term [ref=e564]: 提供者
+              - definition [ref=e565]:
+                - list [ref=e566]:
+                  - listitem [ref=e567]: Starlight Tech LLC
+            - generic [ref=e568]:
+              - term [ref=e569]: 大小
+              - definition [ref=e570]:
+                - list [ref=e571]:
+                  - listitem [ref=e572]: 746.6 MB
+            - generic [ref=e573]:
+              - term [ref=e574]: 类别
+              - definition [ref=e575]:
+                - list [ref=e576]:
+                  - listitem [ref=e577]: 健康健美
+            - generic [ref=e578]:
+              - term [ref=e579]: 兼容性
+              - definition [ref=e580]:
+                - group [ref=e581]:
+                  - generic "设备需装有 iOS 18.0 或更高版本。" [ref=e582] [cursor=pointer]:
+                    - text: 设备需装有 iOS 18.0 或更高版本。
+                    - img
+            - generic [ref=e583]:
+              - term [ref=e584]: 语言
+              - definition [ref=e585]:
+                - group [ref=e586]:
+                  - generic "俄文和另外12种" [ref=e587] [cursor=pointer]:
+                    - text: 俄文和另外12种
+                    - img
+            - generic [ref=e588]:
+              - term [ref=e589]: 年龄分级
+              - definition [ref=e590]:
+                - group [ref=e591]:
+                  - generic "13+" [ref=e592] [cursor=pointer]:
+                    - text: 13+
+                    - img
+            - generic [ref=e593]:
+              - term [ref=e594]: App内购买
+              - definition [ref=e595]:
+                - group [ref=e596]:
+                  - generic "是" [ref=e597] [cursor=pointer]:
+                    - text: 是
+                    - img
+            - generic [ref=e598]:
+              - term [ref=e599]: 版权
+              - definition [ref=e600]:
+                - list [ref=e601]:
+                  - listitem [ref=e602]: © 2026 Finerpoint, Inc.
+        - generic [ref=e604]:
+          - listitem [ref=e605]:
+            - link "开发者网站 ↗" [ref=e607] [cursor=pointer]:
+              - /url: https://bevel.health/
+              - generic [ref=e608]: 开发者网站
+              - text: ↗
+          - listitem [ref=e609]:
+            - link "隐私政策 ↗" [ref=e611] [cursor=pointer]:
+              - /url: https://docs.bevel.health/privacy-policy
+              - generic [ref=e612]: 隐私政策
+              - text: ↗
+        - region "支持" [ref=e613]:
+          - heading "支持" [level=2] [ref=e616]
+          - list [ref=e617]:
+            - listitem [ref=e618]:
+              - generic [ref=e619]:
+                - img [ref=e621]
+                - generic [ref=e622]:
+                  - heading "家人共享" [level=3] [ref=e625]
+                  - paragraph [ref=e626]:
+                    - text: “家人共享”启用后，部分 App 内购买项目和订阅可与家人共享群组共享。
+                    - link "进一步了解" [ref=e627] [cursor=pointer]:
+                      - /url: https://apps.apple.com/cn/iphone/story/id1563279606
+        - region "你可能还喜欢" [ref=e628]:
+          - link "你可能还喜欢" [ref=e630] [cursor=pointer]:
+            - /url: https://apps.apple.com/cn/app/6456176249?see-all=customers-also-bought-apps&platform=iphone
+            - generic [ref=e631]:
+              - heading "你可能还喜欢" [level=2] [ref=e632]
+              - generic [ref=e633]:
+                - img
+          - generic [ref=e636]:
+            - button "上一页" [disabled] [ref=e637]:
+              - img
+            - list [ref=e638]:
+              - listitem [ref=e639]:
+                - 'link "查看 Athlytic: AI Fitness Coach 健康健美" [ref=e643] [cursor=pointer]':
+                  - /url: https://apps.apple.com/cn/app/athlytic-ai-fitness-coach/id1543571755
+                  - generic [ref=e645]: 查看
+                  - generic [ref=e650]:
+                    - 'heading "Athlytic: AI Fitness Coach" [level=3] [ref=e653]'
+                    - paragraph [ref=e656]: 健康健美
+              - listitem [ref=e657]:
+                - link "查看 PeakWatch AI运动健康助手 HRV 心率 运动 恢复 睡眠 咖啡因 喝水 卡路里识别" [ref=e661] [cursor=pointer]:
+                  - /url: https://apps.apple.com/cn/app/peakwatch-ai%E8%BF%90%E5%8A%A8%E5%81%A5%E5%BA%B7%E5%8A%A9%E6%89%8B/id6478431075
+                  - generic [ref=e663]: 查看
+                  - generic [ref=e668]:
+                    - heading "PeakWatch AI运动健康助手" [level=3] [ref=e671]
+                    - paragraph [ref=e674]: HRV 心率 运动 恢复 睡眠 咖啡因 喝水 卡路里识别
+              - listitem [ref=e675]:
+                - link "查看 Sonar - 健康与表现 健身、睡眠与恢复" [ref=e679] [cursor=pointer]:
+                  - /url: https://apps.apple.com/cn/app/sonar-%E5%81%A5%E5%BA%B7%E4%B8%8E%E8%A1%A8%E7%8E%B0/id1595073849
+                  - generic [ref=e681]: 查看
+                  - generic [ref=e686]:
+                    - heading "Sonar - 健康与表现" [level=3] [ref=e689]
+                    - paragraph [ref=e692]: 健身、睡眠与恢复
+              - listitem [ref=e693]:
+                - 'link "查看 BodyState: 身体电量 恢复与压力监控" [ref=e697] [cursor=pointer]':
+                  - /url: https://apps.apple.com/cn/app/bodystate-%E8%BA%AB%E4%BD%93%E7%94%B5%E9%87%8F/id6479940325
+                  - generic [ref=e699]: 查看
+                  - generic [ref=e704]:
+                    - 'heading "BodyState: 身体电量" [level=3] [ref=e707]'
+                    - paragraph [ref=e710]: 恢复与压力监控
+              - listitem [ref=e711]:
+                - 'link "查看 Livity: 最佳睡眠健康监控手表应用 专业身体电量与压力监控健康手表" [ref=e715] [cursor=pointer]':
+                  - /url: https://apps.apple.com/cn/app/livity-%E6%9C%80%E4%BD%B3%E7%9D%A1%E7%9C%A0%E5%81%A5%E5%BA%B7%E7%9B%91%E6%8E%A7%E6%89%8B%E8%A1%A8%E5%BA%94%E7%94%A8/id6498938838
+                  - generic [ref=e717]: 查看
+                  - generic [ref=e722]:
+                    - 'heading "Livity: 最佳睡眠健康监控手表应用" [level=3] [ref=e725]'
+                    - paragraph [ref=e728]: 专业身体电量与压力监控健康手表
+              - listitem [ref=e729]:
+                - link "查看 Training Today 健康健美" [ref=e733] [cursor=pointer]:
+                  - /url: https://apps.apple.com/cn/app/training-today/id1507992127
+                  - generic [ref=e735]: 查看
+                  - generic [ref=e740]:
+                    - heading "Training Today" [level=3] [ref=e743]
+                    - paragraph [ref=e746]: 健康健美
+              - listitem [ref=e747]:
+                - link [ref=e751] [cursor=pointer]:
+                  - /url: https://apps.apple.com/cn/app/elite-hrv-wellness-fitness/id868829970
+                  - generic [ref=e753]: 查看
+                  - generic [ref=e758]:
+                    - heading [level=3] [ref=e761]: "Elite HRV: Wellness & Fitness"
+                    - paragraph [ref=e764]: 健康健美
+              - listitem [ref=e765]:
+                - link [ref=e769] [cursor=pointer]:
+                  - /url: https://apps.apple.com/cn/app/motra-ai-%E5%81%A5%E8%BA%AB%E8%AE%AD%E7%BB%83%E6%95%99%E7%BB%83/id1548577496
+                  - generic [ref=e771]: 查看
+                  - generic [ref=e776]:
+                    - heading [level=3] [ref=e779]: Motra AI 健身训练教练
+                    - paragraph [ref=e782]: 手表健身房力量训练
+              - listitem [ref=e783]:
+                - link [ref=e787] [cursor=pointer]:
+                  - /url: https://apps.apple.com/cn/app/heartwatch-%E5%BF%83%E8%84%8F%E5%92%8C%E6%B4%BB%E5%8A%A8%E7%9B%91%E6%B5%8B%E5%99%A8/id1062745479
+                  - generic [ref=e789]: 查看
+                  - generic [ref=e794]:
+                    - heading [level=3] [ref=e797]: "HeartWatch: 心脏和活动监测器"
+                    - paragraph [ref=e800]: 睡眠与锻炼时的心率监测
+              - listitem [ref=e801]:
+                - link [ref=e805] [cursor=pointer]:
+                  - /url: https://apps.apple.com/cn/app/heart-analyzer-%E5%BF%83%E7%8E%87%E4%B8%8E-hrv/id1006420410
+                  - generic [ref=e807]: 查看
+                  - generic [ref=e812]:
+                    - heading [level=3] [ref=e815]: "Heart Analyzer: 心率与 HRV"
+                    - paragraph [ref=e818]: 睡眠、静息心率与心脏健康
+            - button "下一页" [ref=e819] [cursor=pointer]:
+              - img
+    - generic [ref=e822]:
+      - paragraph [ref=e823]:
+        - generic [ref=e824]:
+          - text: Copyright © 2026
+          - link "Apple Inc." [ref=e825] [cursor=pointer]:
+            - /url: https://www.apple.com.cn
+        - text: 保留所有权利。
+      - list [ref=e826]:
+        - listitem [ref=e827]:
+          - link "互联网服务条款" [ref=e828] [cursor=pointer]:
+            - /url: https://www.apple.com.cn/legal/internet-services/
+        - listitem [ref=e829]:
+          - link "App Store 与隐私" [ref=e830] [cursor=pointer]:
+            - /url: https://www.apple.com/legal/privacy/data/zh-cn/app-store/
+        - listitem [ref=e831]:
+          - link "Cookie 警告" [ref=e832] [cursor=pointer]:
+            - /url: https://www.apple.com/legal/privacy/szh/cookies/
+        - listitem [ref=e833]:
+          - link "支持" [ref=e834] [cursor=pointer]:
+            - /url: https://support.apple.com/zh-cn/billing

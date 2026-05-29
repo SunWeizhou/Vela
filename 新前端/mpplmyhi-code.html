@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Vela - Log Health Data</title>
+<!-- Google Fonts: Manrope -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Config & Custom Styles -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-surface-variant": "#424753",
+                        "on-error-container": "#93000a",
+                        "tertiary-fixed-dim": "#c2c1ff",
+                        "secondary-fixed-dim": "#53e16f",
+                        "on-background": "#151c28",
+                        "surface-container-low": "#f1f3ff",
+                        "on-tertiary-container": "#d2d1ff",
+                        "primary": "#0058bc", /* Apple Blue */
+                        "outline-variant": "#c2c6d5",
+                        "secondary-fixed": "#72fe88",
+                        "inverse-primary": "#adc6ff",
+                        "on-surface": "#151c28",
+                        "primary-container": "#0058bc",
+                        "surface-container-highest": "#dde2f3",
+                        "surface": "#ffffff",
+                        "outline": "#727784",
+                        "on-secondary-fixed-variant": "#00531c",
+                        "surface-tint": "#095bbf",
+                        "surface-container-high": "#e2e8f9",
+                        "surface-bright": "#f9f9ff",
+                        "on-primary": "#ffffff",
+                        "surface-variant": "#dde2f3",
+                        "secondary-container": "#6ffb85",
+                        "on-tertiary": "#ffffff",
+                        "surface-container": "#e8eeff",
+                        "primary-fixed": "#d8e2ff",
+                        "surface-dim": "#d4daeb",
+                        "primary-fixed-dim": "#adc6ff",
+                        "tertiary-container": "#4c4aca",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-container": "#00732a",
+                        "inverse-surface": "#2a303d",
+                        "on-secondary-fixed": "#002107",
+                        "tertiary-fixed": "#e2dfff",
+                        "on-error": "#ffffff",
+                        "tertiary": "#332eb2",
+                        "error": "#ba1a1a",
+                        "secondary": "#006e28",
+                        "on-tertiary-fixed-variant": "#3531b4",
+                        "on-tertiary-fixed": "#0b006b",
+                        "on-primary-fixed-variant": "#004494",
+                        "on-primary-fixed": "#001a41",
+                        "error-container": "#ffdad6",
+                        "on-secondary": "#ffffff",
+                        "inverse-on-surface": "#ecf0ff",
+                        "background": "#F5F3F0", /* Warm Minimalist Canvas */
+                        "on-primary-container": "#c3d4ff",
+                        // Brand Specific Additions based on Design System specs
+                        "glass-fill-light": "rgba(255, 255, 255, 0.4)",
+                        "glass-border-light": "rgba(255, 255, 255, 0.5)",
+                        "confidence-high": "#34C759",
+                        "confidence-medium": "#FFCC00",
+                        "confidence-low": "#FF3B30",
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "sm": "0.25rem",
+                        "md": "0.75rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "2xl": "2rem",
+                        "3xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                    spacing: {
+                        "gutter": "16px",
+                        "stack-sm": "8px",
+                        "stack-md": "16px",
+                        "stack-lg": "32px",
+                        "nav-offset": "88px"
+                    },
+                    fontFamily: {
+                        "display": ["Manrope", "sans-serif"],
+                        "headline": ["Manrope", "sans-serif"],
+                        "body": ["Manrope", "sans-serif"],
+                        "label": ["Manrope", "sans-serif"]
+                    },
+                    boxShadow: {
+                        'glass-glow': '0 8px 32px rgba(0, 88, 188, 0.08)',
+                        'glass-inner': 'inset 0 1px 0 rgba(255, 255, 255, 0.8), inset 1px 0 0 rgba(255, 255, 255, 0.4)',
+                        'button-glow': '0 4px 12px rgba(0, 88, 188, 0.3)'
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Manrope', sans-serif;
+            background-color: theme('colors.background');
+        }
+        
+        /* Ambient Background Gradients */
+        .ambient-glow {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            background: radial-gradient(circle at 50% 0%, rgba(0, 88, 188, 0.05) 0%, transparent 70%);
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        .glass-panel {
+            background: theme('colors.surface');
+            border: 1px solid theme('colors.glass-border-light');
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+        }
+
+        .glass-button-primary {
+            background: theme('colors.primary');
+            box-shadow: 0 4px 12px rgba(0, 88, 188, 0.2);
+        }
+
+        /* Hide scrollbar for clean UI */
+        ::-webkit-scrollbar {
+            display: none;
+        }
+        * {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="text-on-surface antialiased min-h-screen relative selection:bg-primary-container selection:text-on-primary-container">
+<!-- Ambient Background -->
+<div class="ambient-glow"></div>
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-background/80 backdrop-blur-xl border-b border-glass-border-light flex justify-between items-center px-gutter h-16 max-w-[768px] mx-auto md:max-w-full">
+<div class="w-8 h-8 rounded-full overflow-hidden bg-surface-variant flex items-center justify-center">
+<!-- Avatar Placeholder -->
+<span class="material-symbols-outlined text-on-surface-variant text-[20px]">person</span>
+</div>
+<div class="font-display text-[28px] md:text-[32px] font-bold tracking-tighter text-primary">
+            Vela
+        </div>
+<button class="w-8 h-8 flex items-center justify-center text-on-surface-variant hover:opacity-80 transition-opacity">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</header>
+<!-- Main Content Canvas -->
+<main class="relative z-10 w-full max-w-[768px] mx-auto px-gutter pt-28 pb-32">
+<!-- Header -->
+<header class="mb-stack-lg">
+<h2 class="font-display text-[32px] font-bold tracking-tight text-on-surface leading-tight">Log Health Data</h2>
+<p class="font-body text-[17px] text-on-surface-variant mt-2">Select a category to record your latest metrics.</p>
+</header>
+<!-- Logging Categories Grid -->
+<div class="flex flex-col gap-stack-md">
+<!-- Active Entry Pad: Weight -->
+<div class="glass-panel rounded-3xl p-6 transition-all duration-300 shadow-sm">
+<div class="flex items-center justify-between mb-6">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined filled">scale</span>
+</div>
+<h3 class="font-headline text-[20px] font-semibold text-on-surface">Weight</h3>
+</div>
+<span class="text-[14px] font-label font-bold text-primary tracking-[0.06em] uppercase">Today, 8:42 AM</span>
+</div>
+<!-- Interactive Entry Pad -->
+<div class="flex flex-col items-center py-4">
+<!-- Value Display -->
+<div class="flex items-baseline gap-2 mb-8">
+<span class="font-display text-[56px] font-extrabold tracking-tighter text-primary leading-none">72.4</span>
+<span class="font-headline text-[20px] font-semibold text-on-surface-variant">kg</span>
+</div>
+<!-- Controls -->
+<div class="w-full flex items-center justify-between bg-surface-container-low rounded-full p-2 mb-8">
+<button class="w-14 h-14 rounded-full bg-white shadow-sm flex items-center justify-center text-primary hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-[28px]">remove</span>
+</button>
+<!-- Visual Scale Indicator -->
+<div class="flex-1 h-12 relative flex items-center justify-center overflow-hidden mx-4 opacity-50">
+<div class="w-full flex justify-between px-2">
+<div class="w-0.5 h-4 bg-outline-variant rounded-full"></div>
+<div class="w-0.5 h-6 bg-outline rounded-full"></div>
+<div class="w-0.5 h-4 bg-outline-variant rounded-full"></div>
+<div class="w-0.5 h-8 bg-primary rounded-full"></div>
+<div class="w-0.5 h-4 bg-outline-variant rounded-full"></div>
+<div class="w-0.5 h-6 bg-outline rounded-full"></div>
+<div class="w-0.5 h-4 bg-outline-variant rounded-full"></div>
+</div>
+</div>
+<button class="w-14 h-14 rounded-full bg-white shadow-sm flex items-center justify-center text-primary hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-[28px]">add</span>
+</button>
+</div>
+<!-- Save Action -->
+<button class="w-full glass-button-primary text-on-primary font-headline text-[17px] font-bold py-4 rounded-full hover:opacity-90 transition-opacity active:scale-[0.98]">
+                        Save Weight Log
+                    </button>
+</div>
+</div>
+<!-- Inactive Category: Blood Pressure -->
+<button class="w-full glass-panel rounded-3xl p-4 flex items-center justify-between hover:bg-surface-container-low transition-colors group text-left">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">favorite</span>
+</div>
+<div>
+<h3 class="font-headline text-[17px] font-semibold text-on-surface">Blood Pressure</h3>
+<p class="font-body text-[14px] text-on-surface-variant mt-0.5">Last log: 120/80 yesterday</p>
+</div>
+</div>
+<div class="w-8 h-8 rounded-full bg-surface-container-low flex items-center justify-center text-on-surface-variant group-hover:bg-white transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[20px]">add</span>
+</div>
+</button>
+<!-- Inactive Category: Symptoms -->
+<button class="w-full glass-panel rounded-3xl p-4 flex items-center justify-between hover:bg-surface-container-low transition-colors group text-left">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">sick</span>
+</div>
+<div>
+<h3 class="font-headline text-[17px] font-semibold text-on-surface">Symptoms</h3>
+<p class="font-body text-[14px] text-on-surface-variant mt-0.5">Track pain, energy, or mood</p>
+</div>
+</div>
+<div class="w-8 h-8 rounded-full bg-surface-container-low flex items-center justify-center text-on-surface-variant group-hover:bg-white transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[20px]">add</span>
+</div>
+</button>
+<!-- Inactive Category: Labs -->
+<button class="w-full glass-panel rounded-3xl p-4 flex items-center justify-between hover:bg-surface-container-low transition-colors group text-left">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">science</span>
+</div>
+<div>
+<h3 class="font-headline text-[17px] font-semibold text-on-surface">Labs &amp; Results</h3>
+<p class="font-body text-[14px] text-on-surface-variant mt-0.5">Upload or enter panel data</p>
+</div>
+</div>
+<div class="w-8 h-8 rounded-full bg-surface-container-low flex items-center justify-center text-on-surface-variant group-hover:bg-white transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[20px]">add</span>
+</div>
+</button>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-40px)] max-w-[400px] z-50 rounded-full bg-white/60 backdrop-blur-3xl border border-white/50 shadow-2xl h-16">
+<div class="flex justify-around items-center px-4 h-full">
+<!-- Active: Today (Log Data logic fits here best if it's a top-level flow) -->
+<a class="flex flex-col items-center justify-center bg-primary text-on-primary rounded-full px-4 py-2 shadow-button-glow scale-95 transition-transform duration-200" href="#">
+<span class="material-symbols-outlined text-[20px]">analytics</span>
+<span class="font-label text-[10px] font-bold tracking-[0.06em] uppercase mt-1">Today</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant/70 hover:text-primary transition-all duration-300 w-16" href="#">
+<span class="material-symbols-outlined text-[24px]">query_stats</span>
+<span class="text-[10px] font-bold uppercase tracking-wider mt-0.5">Insights</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant/70 hover:text-primary transition-all duration-300 w-16" href="#">
+<span class="material-symbols-outlined text-[24px]">psychology</span>
+<span class="text-[10px] font-bold uppercase tracking-wider mt-0.5">Coach</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant/70 hover:text-primary transition-all duration-300 w-16" href="#">
+<span class="material-symbols-outlined text-[24px]">person</span>
+<span class="text-[10px] font-bold uppercase tracking-wider mt-0.5">Profile</span>
+</a>
+</div>
+</nav>
+</body></html>

@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Vela - Insights</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed": "#0b006b",
+                        "primary-container": "#0058bc",
+                        "on-secondary-fixed": "#002107",
+                        "tertiary-fixed": "#e2dfff",
+                        "on-tertiary-fixed-variant": "#3531b4",
+                        "on-error-container": "#93000a",
+                        "on-surface-variant": "#424753",
+                        "surface-container-highest": "#dde2f3",
+                        "secondary-fixed-dim": "#53e16f",
+                        "on-primary-fixed-variant": "#004494",
+                        "on-background": "#151c28",
+                        "tertiary-fixed-dim": "#c2c1ff",
+                        "tertiary-container": "#4c4aca",
+                        "secondary-fixed": "#72fe88",
+                        "surface": "#f9f9ff",
+                        "background": "#F5F3F0",
+                        "on-tertiary-container": "#d2d1ff",
+                        "primary-fixed-dim": "#adc6ff",
+                        "on-primary-fixed": "#001a41",
+                        "inverse-surface": "#2a303d",
+                        "error": "#ba1a1a",
+                        "surface-tint": "#095bbf",
+                        "outline-variant": "#c2c6d5",
+                        "on-secondary-fixed-variant": "#00531c",
+                        "inverse-primary": "#adc6ff",
+                        "inverse-on-surface": "#ecf0ff",
+                        "on-primary": "#ffffff",
+                        "secondary-container": "#6ffb85",
+                        "primary": "#0058bc",
+                        "surface-container-low": "#f1f3ff",
+                        "primary-fixed": "#d8e2ff",
+                        "surface-variant": "#dde2f3",
+                        "surface-dim": "#d4daeb",
+                        "on-tertiary": "#ffffff",
+                        "surface-bright": "#f9f9ff",
+                        "surface-container": "#e8eeff",
+                        "secondary": "#006e28",
+                        "surface-container-high": "#e2e8f9",
+                        "on-secondary-container": "#00732a",
+                        "surface-container-lowest": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "on-primary-container": "#c3d4ff",
+                        "tertiary": "#332eb2",
+                        "on-surface": "#151c28",
+                        "outline": "#727784",
+                        "on-error": "#ffffff",
+                        "on-secondary": "#ffffff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.5rem",
+                        "sm": "0.25rem",
+                        "md": "0.75rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "2xl": "1.75rem",
+                        "3xl": "2rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Manrope"],
+                        "display": ["Manrope"],
+                        "body": ["Manrope"],
+                        "label": ["Manrope"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #F5F3F0;
+            background-attachment: fixed;
+        }
+        
+        /* Chart specific */
+        .chart-grid {
+            background-image: linear-gradient(to right, rgba(0,0,0,0.03) 1px, transparent 1px),
+                              linear-gradient(to bottom, rgba(0,0,0,0.03) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        
+        .liquid-gradient-text {
+            color: #0058bc;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="font-body text-on-background antialiased pb-32">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-[#F5F3F0]/80 backdrop-blur-xl">
+<div class="flex justify-between items-center px-6 py-4 max-w-screen-md mx-auto">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden bg-surface-container-highest border border-white/50">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="Close up portrait of a calm, focused individual with clear skin, shot against a bright, clean white background. Soft, diffused lighting highlights the serene mood, fitting for a premium health and wellness platform. The aesthetic is modern, light, and airy, utilizing a palette of whites and subtle warm tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCQ_DJuBgU3xODic9O610zw_9ZCm0aNsFzqZyvhFUQ59wVRXU3huhOqdDzDdA3R0baPjDnqGeRmtswoeJI-_AZRgqQoe8-serlnIuQbISGQOca0G7Bs_CdvJnI-1qMtYqK9gXoAyVzDmqJdoMKO4odDCuXg4BWlg9j4jN_KmqFrwK5uOObEPuWrg8xBXcPbtxxTnemiXO3ePKWnJbQYjvQH_wvbqnCYfKDG4N0YUabvujavEzFNnSnWa0WCu7BHf8ByivlRVYZ1HJvY"/>
+</div>
+</div>
+<h1 class="font-headline text-[32px] leading-[40px] font-bold tracking-tight text-primary">Insights</h1>
+<button class="w-10 h-10 flex items-center justify-center text-on-surface-variant hover:opacity-80 transition-opacity active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[24px]">settings</span>
+</button>
+</div>
+</header>
+<!-- Main Content -->
+<main class="max-w-screen-md mx-auto px-5 pt-28 flex flex-col gap-6">
+<!-- Coach Insight -->
+<section class="bg-white rounded-3xl p-6 shadow-sm hover:scale-[1.02] transition-transform duration-300">
+<div class="flex items-start gap-4">
+<div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">psychology</span>
+</div>
+<div>
+<h2 class="text-[12px] font-bold uppercase tracking-[0.06em] text-primary mb-2">Coach Insight</h2>
+<p class="text-[17px] leading-[24px] text-on-surface-variant">Your HRV and resting heart rate trends indicate optimal recovery over the past month. Sleep consistency has improved, supporting higher daily readiness scores.</p>
+</div>
+</div>
+</section>
+<!-- Bento Grid for Charts -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<!-- Monthly HRV -->
+<section class="bg-white rounded-3xl p-6 shadow-sm md:col-span-2">
+<div class="flex justify-between items-end mb-6">
+<div>
+<h3 class="text-[12px] font-bold uppercase tracking-[0.06em] text-outline mb-1">Monthly HRV</h3>
+<div class="text-[40px] font-bold leading-[48px] tracking-tight text-primary">64 <span class="text-[17px] font-normal text-on-surface-variant">ms</span></div>
+</div>
+<div class="text-right">
+<span class="inline-flex items-center gap-1 text-[14px] font-semibold text-[#34C759]">
+<span class="material-symbols-outlined text-[16px]">trending_up</span> +5%
+                        </span>
+<div class="text-[12px] text-outline mt-1">vs last month</div>
+</div>
+</div>
+<div class="h-48 w-full chart-grid relative rounded-xl overflow-hidden">
+<!-- Faux SVG Line Chart -->
+<svg class="w-full h-full preserve-aspect-ratio-none" viewbox="0 0 400 150">
+<path d="M0,120 Q50,130 100,100 T200,80 T300,50 T400,30 L400,150 L0,150 Z" fill="url(#hrvGradient)" opacity="0.2"></path>
+<path d="M0,120 Q50,130 100,100 T200,80 T300,50 T400,30" fill="none" stroke="#0058bc" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"></path>
+<defs>
+<lineargradient id="hrvGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#0058bc"></stop>
+<stop offset="100%" stop-color="transparent"></stop>
+</lineargradient>
+</defs>
+</svg>
+</div>
+</section>
+<!-- Resting HR -->
+<section class="bg-white rounded-3xl p-6 shadow-sm flex flex-col justify-between">
+<div>
+<h3 class="text-[12px] font-bold uppercase tracking-[0.06em] text-outline mb-1">Resting Heart Rate</h3>
+<div class="text-[32px] font-bold leading-[40px] tracking-tight text-on-surface">52 <span class="text-[14px] font-normal text-on-surface-variant">bpm</span></div>
+</div>
+<div class="h-32 mt-4 chart-grid relative rounded-xl">
+<!-- Faux Bar Chart -->
+<div class="absolute bottom-0 w-full flex justify-between items-end px-2 h-full gap-2">
+<div class="w-full bg-primary/20 rounded-t-sm h-[60%]"></div>
+<div class="w-full bg-primary/20 rounded-t-sm h-[55%]"></div>
+<div class="w-full bg-primary/40 rounded-t-sm h-[50%]"></div>
+<div class="w-full bg-primary/40 rounded-t-sm h-[48%]"></div>
+<div class="w-full bg-primary/60 rounded-t-sm h-[45%]"></div>
+<div class="w-full bg-primary rounded-t-sm h-[42%]"></div>
+</div>
+</div>
+</section>
+<!-- Sleep Quality -->
+<section class="bg-white rounded-3xl p-6 shadow-sm flex flex-col justify-between">
+<div>
+<h3 class="text-[12px] font-bold uppercase tracking-[0.06em] text-outline mb-1">Sleep Quality</h3>
+<div class="text-[32px] font-bold leading-[40px] tracking-tight text-on-surface">88 <span class="text-[14px] font-normal text-on-surface-variant">/100</span></div>
+</div>
+<div class="h-32 mt-4 flex items-center justify-center relative">
+<!-- Faux Radial Chart -->
+<svg class="w-24 h-24 transform -rotate-90" viewbox="0 0 100 100">
+<circle cx="50" cy="50" fill="none" r="40" stroke="rgba(0,88,188,0.1)" stroke-width="8"></circle>
+<circle cx="50" cy="50" fill="none" r="40" stroke="#0058bc" stroke-dasharray="251.2" stroke-dashoffset="30" stroke-linecap="round" stroke-width="8"></circle>
+</svg>
+<div class="absolute inset-0 flex items-center justify-center flex-col">
+<span class="material-symbols-outlined text-primary text-[24px]">bedtime</span>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-40px)] max-w-[400px] z-50 rounded-full bg-white/40 backdrop-blur-3xl border border-white/50 shadow-2xl h-16">
+<div class="flex justify-around items-center px-4 h-full">
+<!-- Inactive: Home -->
+<button class="flex flex-col items-center justify-center text-on-surface-variant/70 hover:text-primary transition-all duration-300 w-16 h-full">
+<span class="material-symbols-outlined text-[24px]">dashboard</span>
+</button>
+<!-- Active: Intelligence/Insights -->
+<button class="flex flex-col items-center justify-center text-primary font-bold scale-110 transition-all duration-300 ease-out w-16 h-full">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">monitoring</span>
+</button>
+<!-- Inactive: Strain/Activity -->
+<button class="flex flex-col items-center justify-center text-on-surface-variant/70 hover:text-primary transition-all duration-300 w-16 h-full">
+<span class="material-symbols-outlined text-[24px]">fitness_center</span>
+</button>
+<!-- Inactive: Profile -->
+<button class="flex flex-col items-center justify-center text-on-surface-variant/70 hover:text-primary transition-all duration-300 w-16 h-full">
+<span class="material-symbols-outlined text-[24px]">person</span>
+</button>
+</div>
+</nav>
+</body></html>

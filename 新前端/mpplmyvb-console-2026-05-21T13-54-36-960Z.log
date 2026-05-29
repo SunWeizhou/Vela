@@ -1,0 +1,72 @@
+[    1727ms] [LOG] [VideoTabs] Script loaded @ https://www.bevel.health/zh:757
+[    1729ms] [LOG] Found 3 phone videos, 3 watch videos @ https://www.bevel.health/zh:552
+[    1729ms] [LOG] Created 3 pairs @ https://www.bevel.health/zh:564
+[    1730ms] [LOG] Playing pair 0: [hero_phone-video cc-1, hero_watch-video cc-1] @ https://www.bevel.health/zh:578
+[    1731ms] [LOG]   Waiting for hero_phone-video cc-1 to load... @ https://www.bevel.health/zh:619
+[    1731ms] [LOG]   Waiting for hero_watch-video cc-1 to load... @ https://www.bevel.health/zh:619
+[    1938ms] [LOG]   hero_watch-video cc-1 playing @ https://www.bevel.health/zh:612
+[    2167ms] ReferenceError: singularSdk is not defined
+    at <anonymous>:1:13
+    at <anonymous>:1:273
+    at https://www.googletagmanager.com/gtm.js?id=GTM-PNXG37DC:831:429
+    at cS (https://www.googletagmanager.com/gtm.js?id=GTM-PNXG37DC:833:31)
+    at Md.bS (https://www.googletagmanager.com/gtm.js?id=GTM-PNXG37DC:830:92)
+    at Md.<anonymous> (https://www.googletagmanager.com/gtm.js?id=GTM-PNXG37DC:274:187)
+    at k.apply (https://www.googletagmanager.com/gtm.js?id=GTM-PNXG37DC:200:466)
+    at gb (https://www.googletagmanager.com/gtm.js?id=GTM-PNXG37DC:163:719)
+    at fb (https://www.googletagmanager.com/gtm.js?id=GTM-PNXG37DC:163:470)
+    at Md.<anonymous> (https://www.googletagmanager.com/gtm.js?id=GTM-PNXG37DC:224:473)
+[    2637ms] [WARNING] [Meta Pixel] - Duplicate Pixel ID: 674879451265800. @ https://connect.facebook.net/en_US/fbevents.js:181
+[    2884ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ https://pixel-config.reddit.com/pixels/a2_hvv1euzu4p85/config:0
+[    4867ms] [LOG]   hero_phone-video cc-1 playing @ https://www.bevel.health/zh:612
+[    7430ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ https://www.google-analytics.com/g/s/collect?v=2&_gsid=QxQeALe2ESjMtdRIQd9BENsRxRWA05hvLA&gtm=45g92e65j1v9185361127z89189570673za20kzb9189570673zd9189570673:0
+[    7699ms] [LOG]   hero_watch-video cc-1 finished (1/2) @ https://www.bevel.health/zh:598
+[   10074ms] [LOG]   hero_phone-video cc-1 finished (2/2) @ https://www.bevel.health/zh:598
+[   10074ms] [LOG] Playing pair 1: [hero_phone-video cc-2, hero_watch-video cc-2] @ https://www.bevel.health/zh:578
+[   10074ms] [LOG]   Waiting for hero_phone-video cc-2 to load... @ https://www.bevel.health/zh:619
+[   10075ms] [LOG]   Waiting for hero_watch-video cc-2 to load... @ https://www.bevel.health/zh:619
+[   10093ms] [LOG]   hero_watch-video cc-2 playing @ https://www.bevel.health/zh:612
+[   10094ms] [LOG]   hero_phone-video cc-2 playing @ https://www.bevel.health/zh:612
+[   15934ms] [LOG]   hero_watch-video cc-2 finished (1/2) @ https://www.bevel.health/zh:598
+[   15934ms] [LOG]   hero_phone-video cc-2 finished (2/2) @ https://www.bevel.health/zh:598
+[   15934ms] [LOG] Playing pair 2: [hero_phone-video cc-3, hero_watch-video cc-3] @ https://www.bevel.health/zh:578
+[   15934ms] [LOG]   Waiting for hero_phone-video cc-3 to load... @ https://www.bevel.health/zh:619
+[   15935ms] [LOG]   Waiting for hero_watch-video cc-3 to load... @ https://www.bevel.health/zh:619
+[   15956ms] [LOG]   hero_phone-video cc-3 playing @ https://www.bevel.health/zh:612
+[   15957ms] [LOG]   hero_watch-video cc-3 playing @ https://www.bevel.health/zh:612
+[   21794ms] [LOG]   hero_phone-video cc-3 finished (1/2) @ https://www.bevel.health/zh:598
+[   21794ms] [LOG]   hero_watch-video cc-3 finished (2/2) @ https://www.bevel.health/zh:598
+[   21794ms] [LOG] Playing pair 0: [hero_phone-video cc-1, hero_watch-video cc-1] @ https://www.bevel.health/zh:578
+[   21795ms] [LOG]   Waiting for hero_phone-video cc-1 to load... @ https://www.bevel.health/zh:619
+[   21795ms] [LOG]   Waiting for hero_watch-video cc-1 to load... @ https://www.bevel.health/zh:619
+[   21819ms] [LOG]   hero_phone-video cc-1 playing @ https://www.bevel.health/zh:612
+[   21819ms] [LOG]   hero_watch-video cc-1 playing @ https://www.bevel.health/zh:612
+[   27121ms] [LOG]   hero_phone-video cc-1 finished (1/2) @ https://www.bevel.health/zh:598
+[   27653ms] [LOG]   hero_watch-video cc-1 finished (2/2) @ https://www.bevel.health/zh:598
+[   27653ms] [LOG] Playing pair 1: [hero_phone-video cc-2, hero_watch-video cc-2] @ https://www.bevel.health/zh:578
+[   27653ms] [LOG]   Waiting for hero_phone-video cc-2 to load... @ https://www.bevel.health/zh:619
+[   27654ms] [LOG]   Waiting for hero_watch-video cc-2 to load... @ https://www.bevel.health/zh:619
+[   27683ms] [LOG]   hero_watch-video cc-2 playing @ https://www.bevel.health/zh:612
+[   27683ms] [LOG]   hero_phone-video cc-2 playing @ https://www.bevel.health/zh:612
+[   33528ms] [LOG]   hero_watch-video cc-2 finished (1/2) @ https://www.bevel.health/zh:598
+[   33528ms] [LOG]   hero_phone-video cc-2 finished (2/2) @ https://www.bevel.health/zh:598
+[   33528ms] [LOG] Playing pair 2: [hero_phone-video cc-3, hero_watch-video cc-3] @ https://www.bevel.health/zh:578
+[   33528ms] [LOG]   Waiting for hero_phone-video cc-3 to load... @ https://www.bevel.health/zh:619
+[   33528ms] [LOG]   Waiting for hero_watch-video cc-3 to load... @ https://www.bevel.health/zh:619
+[   33544ms] [LOG]   hero_watch-video cc-3 playing @ https://www.bevel.health/zh:612
+[   33544ms] [LOG]   hero_phone-video cc-3 playing @ https://www.bevel.health/zh:612
+[   38751ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ https://www.facebook.com/tr/?id=674879451265800&ev=PageView&dl=https%3A%2F%2Fwww.bevel.health%2Fzh&rl=&if=false&ts=1779371679592&sw=1470&sh=956&v=2.9.324&r=stable&a=plwebflow&ec=0&o=4126&fbp=fb.1.1779354902130.18215709997461480&eid=ob3_plugin-set_cb758dadddd34a74620ad3f70915ba1fe8e8a2db037b884d5af81a3ee499aaa8&cs_est=true&ler=empty&cdl=API_unavailable&pmd[title]=Bevel%20-%20The%20Connected%20Health%20Coach&pmd[locale]=zh&pmd[description]=Bevel%20is%20the%20connected%20health%20coach%20that%20turns%20your%20wearables%2C%20bloodwork%2C%20and%20lifestyle%20into%20personalized%20recommendations.&plt=1701.199999988079&tz=480&it=1779371679097&coo=false&ap[currency]=USD&ap[contents]=%5B%7B%22item_price%22%3A0%2C%22availability%22%3A%22InStock%22%7D%5D&cf=1&expv2[0]=pl1&expv2[1]=el2&expv2[2]=bc1&expv2[3]=ra2&expv2[4]=rp2&expv2[5]=im0&expv2[6]=hf0&rqm=GET:0
+[   39388ms] [LOG]   hero_watch-video cc-3 finished (1/2) @ https://www.bevel.health/zh:598
+[   39388ms] [LOG]   hero_phone-video cc-3 finished (2/2) @ https://www.bevel.health/zh:598
+[   39388ms] [LOG] Playing pair 0: [hero_phone-video cc-1, hero_watch-video cc-1] @ https://www.bevel.health/zh:578
+[   39388ms] [LOG]   Waiting for hero_phone-video cc-1 to load... @ https://www.bevel.health/zh:619
+[   39389ms] [LOG]   Waiting for hero_watch-video cc-1 to load... @ https://www.bevel.health/zh:619
+[   39413ms] [LOG]   hero_phone-video cc-1 playing @ https://www.bevel.health/zh:612
+[   39414ms] [LOG]   hero_watch-video cc-1 playing @ https://www.bevel.health/zh:612
+[   44715ms] [LOG]   hero_phone-video cc-1 finished (1/2) @ https://www.bevel.health/zh:598
+[   45246ms] [LOG]   hero_watch-video cc-1 finished (2/2) @ https://www.bevel.health/zh:598
+[   45246ms] [LOG] Playing pair 1: [hero_phone-video cc-2, hero_watch-video cc-2] @ https://www.bevel.health/zh:578
+[   45246ms] [LOG]   Waiting for hero_phone-video cc-2 to load... @ https://www.bevel.health/zh:619
+[   45246ms] [LOG]   Waiting for hero_watch-video cc-2 to load... @ https://www.bevel.health/zh:619
+[   45265ms] [LOG]   hero_watch-video cc-2 playing @ https://www.bevel.health/zh:612
+[   45265ms] [LOG]   hero_phone-video cc-2 playing @ https://www.bevel.health/zh:612

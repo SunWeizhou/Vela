@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>Vela Coach Command Center</title>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        'paper': '#F7F1E6',
+                        'parchment': '#EFE6D8',
+                        'surface': '#FFFDF8',
+                        'elevated': '#FBF7EE',
+                        'border-warm': '#DED2C1',
+                        'ink-primary': '#2B241B',
+                        'ink-secondary': '#665B4B',
+                        'ink-muted': '#918576',
+                        'clay': '#B76445',
+                        'sage': '#5F8C73',
+                        'indigo': '#6F73A8',
+                        'amber': '#B9842E',
+                        'rose': '#A95665',
+                        'copper': '#B86B4B',
+                    },
+                    borderRadius: {
+                        'DEFAULT': '0.5rem',
+                        'lg': '1rem',
+                        'xl': '1.5rem',
+                        '2xl': '1.25rem',
+                        'full': '9999px'
+                    },
+                    fontFamily: {
+                        'headline': ['Public Sans', 'sans-serif'],
+                        'body': ['Public Sans', 'sans-serif'],
+                        'label': ['Public Sans', 'sans-serif'],
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .gauge-gradient {
+            background: conic-gradient(from 180deg at 50% 50%, #5F8C73 0deg, #B9842E 180deg, #B76445 360deg);
+        }
+        body {
+            background-color: #F7F1E6;
+            color: #2B241B;
+            -webkit-font-smoothing: antialiased;
+        }
+        .glass-card {
+            background: rgba(255, 253, 248, 0.7);
+            backdrop-filter: blur(8px);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-body selection:bg-clay/20">
+<!-- Top Navigation Bar -->
+<header class="bg-[#F7F1E6] dark:bg-[#17130F] border-b border-[#DED2C1] dark:border-[#40362D] fixed top-0 left-0 w-full z-50 px-5 py-3 flex justify-between items-center">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-parchment flex items-center justify-center overflow-hidden border border-border-warm">
+<img alt="User" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAAqHKJI-tGfxWTF7G0qftWdl98gywy21EUrkBTiq1xVEMbS8UKZwKiY5vcRvtqzIwZkKPqg2a8Z44NrGB2RPA8rusvMTIRFAg_glBjEPNk49AYNZ-ksMmFKUu6hrDm2hTSwKNEYYITlsBw-tJJ-RmAETUWpPdK-5SUxKKzOXQigud0MQ-MaJE8lCIQa1a7G1e7rv0T82gWXMVPwlaYWrcmUq0D_VpDCZCJGBcdpMfMrjqarQe0Shi1n44rBINcinAV9EWDV7L74ps"/>
+</div>
+<h1 class="font-headline text-xl font-bold text-[#2B241B] dark:text-[#F4EBDD]">Vela</h1>
+</div>
+<button class="text-[#2B241B] dark:text-[#F4EBDD] hover:opacity-80 transition-opacity">
+<span class="material-symbols-outlined" data-icon="search">search</span>
+</button>
+</header>
+<main class="pt-20 pb-32 px-5 max-w-2xl mx-auto space-y-6">
+<!-- Hero: Body State -->
+<section class="bg-elevated border border-border-warm rounded-3xl p-6 shadow-sm">
+<div class="flex justify-between items-start mb-6">
+<div class="space-y-1">
+<span class="text-ink-muted text-xs font-medium uppercase tracking-wider">Today's Body State</span>
+<h2 class="text-3xl font-bold text-ink-primary">Optimal</h2>
+<p class="text-ink-secondary text-sm leading-relaxed max-w-[240px]">
+                        Your nervous system shows high resilience today. A prime window for high-intensity training exists before 4 PM.
+                    </p>
+</div>
+<div class="relative w-24 h-24 flex items-center justify-center">
+<svg class="w-full h-full transform -rotate-90">
+<circle class="text-parchment" cx="48" cy="48" fill="transparent" r="40" stroke="currentColor" stroke-width="6"></circle>
+<circle class="text-sage" cx="48" cy="48" fill="transparent" r="40" stroke="currentColor" stroke-dasharray="251.2" stroke-dashoffset="40.2" stroke-width="6"></circle>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="text-2xl font-bold font-mono tracking-tighter">84</span>
+<span class="text-[10px] uppercase font-bold text-sage">Ready</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-4 pt-4 border-t border-border-warm/50">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-sage text-lg" data-icon="bolt">bolt</span>
+<span class="text-xs font-semibold">High Capacity</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-indigo text-lg" data-icon="bedtime">bedtime</span>
+<span class="text-xs font-semibold">Restored</span>
+</div>
+</div>
+</section>
+<!-- Grid Workspace -->
+<section class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Agent Findings (Memory Pattern) -->
+<div class="bg-surface border border-border-warm rounded-2xl p-5 space-y-4 flex flex-col">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-lg bg-amber/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-amber text-xl" data-icon="psychology">psychology</span>
+</div>
+<span class="text-xs font-bold text-ink-secondary uppercase tracking-tight">Agent Finding</span>
+</div>
+<div class="flex-grow">
+<h3 class="text-base font-semibold mb-1">New Memory Pattern</h3>
+<p class="text-sm text-ink-secondary leading-snug">Identified a 12% HRV drop correlating with <span class="font-bold text-ink-primary">late meals + alcohol</span> consumption in the last 3 nights.</p>
+</div>
+<button class="w-full py-2.5 bg-ink-primary text-white text-sm font-medium rounded-xl hover:opacity-90 active:scale-95 transition-all">
+                    Review Pattern
+                </button>
+</div>
+<!-- Training Adjustment -->
+<div class="bg-surface border border-border-warm rounded-2xl p-5 space-y-4 flex flex-col">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-lg bg-clay/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-clay text-xl" data-icon="fitness_center">fitness_center</span>
+</div>
+<span class="text-xs font-bold text-ink-secondary uppercase tracking-tight">Training Adjustment</span>
+</div>
+<div class="flex-grow">
+<div class="flex items-center gap-2 mb-2">
+<span class="text-xs line-through text-ink-muted">Threshold Run</span>
+<span class="material-symbols-outlined text-ink-muted text-sm" data-icon="arrow_forward">arrow_forward</span>
+<span class="text-xs font-bold text-clay uppercase">Recovery Run</span>
+</div>
+<p class="text-sm text-ink-secondary leading-snug">HRV is 8% below your 14-day baseline. High-intensity training today would likely increase injury risk.</p>
+</div>
+<div class="grid grid-cols-2 gap-2">
+<button class="py-2.5 border border-border-warm text-ink-secondary text-sm font-medium rounded-xl hover:bg-parchment transition-colors">Ignore</button>
+<button class="py-2.5 bg-clay text-white text-sm font-medium rounded-xl hover:opacity-90 active:scale-95 transition-all">Accept</button>
+</div>
+</div>
+<!-- Sleep Optimization (Limiter) -->
+<div class="bg-indigo/5 border border-indigo/20 rounded-2xl p-5 flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-indigo/10 flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-indigo text-2xl" data-icon="warning">warning</span>
+</div>
+<div class="space-y-0.5">
+<h4 class="text-sm font-bold text-indigo uppercase tracking-wider">Primary Limiter</h4>
+<p class="text-sm text-ink-primary font-medium">Sleep Quality was suboptimal (62%) due to high room temperature (74°F).</p>
+</div>
+</div>
+<!-- Data Trust Indicator -->
+<div class="bg-sage/5 border border-sage/20 rounded-2xl p-5 flex items-center justify-between group cursor-pointer hover:bg-sage/10 transition-colors">
+<div class="flex items-center gap-3">
+<div class="relative">
+<svg class="w-10 h-10 transform -rotate-90">
+<circle class="text-sage/20" cx="20" cy="20" fill="transparent" r="16" stroke="currentColor" stroke-width="3"></circle>
+<circle class="text-sage" cx="20" cy="20" fill="transparent" r="16" stroke="currentColor" stroke-dasharray="100.5" stroke-dashoffset="6" stroke-width="3"></circle>
+</svg>
+<span class="absolute inset-0 flex items-center justify-center text-[10px] font-mono font-bold text-sage">94%</span>
+</div>
+<div>
+<h4 class="text-sm font-bold text-ink-primary">Data Reliability</h4>
+<p class="text-xs text-ink-muted">High confidence in current state</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-ink-muted group-hover:translate-x-1 transition-transform" data-icon="chevron_right">chevron_right</span>
+</div>
+</section>
+<!-- Command Center Composer -->
+<section class="fixed bottom-20 left-0 w-full px-5 pointer-events-none">
+<div class="max-w-2xl mx-auto pointer-events-auto bg-surface border border-border-warm rounded-3xl p-4 shadow-xl shadow-ink-primary/5 space-y-4">
+<!-- Suggestions -->
+<div class="flex gap-2 overflow-x-auto pb-1 scrollbar-hide no-scrollbar">
+<button class="whitespace-nowrap px-4 py-2 bg-parchment/50 border border-border-warm rounded-full text-xs font-medium text-ink-secondary hover:bg-parchment transition-colors">
+                        Why is my HRV low?
+                    </button>
+<button class="whitespace-nowrap px-4 py-2 bg-parchment/50 border border-border-warm rounded-full text-xs font-medium text-ink-secondary hover:bg-parchment transition-colors">
+                        Explain my sleep data
+                    </button>
+<button class="whitespace-nowrap px-4 py-2 bg-parchment/50 border border-border-warm rounded-full text-xs font-medium text-ink-secondary hover:bg-parchment transition-colors">
+                        Am I overtraining?
+                    </button>
+</div>
+<!-- Input Area -->
+<div class="relative flex items-center gap-3">
+<div class="flex-grow bg-parchment/30 border border-border-warm rounded-2xl px-4 py-3 focus-within:ring-2 ring-clay/20 transition-all">
+<textarea class="w-full bg-transparent border-none focus:ring-0 text-sm text-ink-primary placeholder:text-ink-muted resize-none py-0 align-middle" placeholder="Command Vela..." rows="1"></textarea>
+</div>
+<button class="w-11 h-11 bg-ink-primary text-white rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all">
+<span class="material-symbols-outlined" data-icon="arrow_upward">arrow_upward</span>
+</button>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 w-full bg-[#F7F1E6]/90 dark:bg-[#17130F]/90 backdrop-blur-md border-t border-[#DED2C1] dark:border-[#40362D] flex justify-around items-center px-4 pt-2 pb-6 z-40">
+<div class="flex flex-col items-center justify-center text-[#918576] dark:text-[#9E907F] gap-1 hover:text-[#2B241B] dark:hover:text-[#F4EBDD] transition-colors cursor-pointer">
+<span class="material-symbols-outlined" data-icon="today">today</span>
+<span class="font-label text-[10px] font-medium">Today</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#B76445] dark:text-[#D08462] gap-1 hover:text-[#2B241B] dark:hover:text-[#F4EBDD] transition-colors cursor-pointer">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="font-label text-[10px] font-medium">Insights</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#918576] dark:text-[#9E907F] gap-1 hover:text-[#2B241B] dark:hover:text-[#F4EBDD] transition-colors cursor-pointer">
+<span class="material-symbols-outlined" data-icon="memory">memory</span>
+<span class="font-label text-[10px] font-medium">Memory</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#918576] dark:text-[#9E907F] gap-1 hover:text-[#2B241B] dark:hover:text-[#F4EBDD] transition-colors cursor-pointer">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-label text-[10px] font-medium">Settings</span>
+</div>
+</nav>
+<script>
+        // Auto-resize textarea
+        const tx = document.getElementsByTagName("textarea");
+        for (let i = 0; i < tx.length; i++) {
+          tx[i].setAttribute("style", "height:" + (tx[i].scrollHeight) + "px;overflow-y:hidden;");
+          tx[i].addEventListener("input", OnInput, false);
+        }
+
+        function OnInput() {
+          this.style.height = "auto";
+          this.style.height = (this.scrollHeight) + "px";
+        }
+    </script>
+</body></html>

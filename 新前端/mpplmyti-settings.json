@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xcodebuild:*)",
+      "Bash(swiftc:*)",
+      "Bash(xcrun:*)",
+      "Bash(xcode-select:*)"
+    ]
+  },
+  "sandbox": {
+    "enabled": false
+  }
+}

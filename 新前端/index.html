@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vela — App Prototype Gallery</title>
+<style>
+:root {
+  --bg: #f5f5f7; --surface: #ffffff;
+  --fg: #1d1d1f; --muted: #6e6e73; --meta: #86868b;
+  --border: #d2d2d7;
+  --accent: #0071e3;
+  --font-display: "SF Pro Display", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body: "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --radius-sm: 8px; --radius-md: 12px; --radius-lg: 18px; --radius-pill: 980px;
+  --motion-fast: 150ms; --motion-base: 220ms;
+  --ease-standard: cubic-bezier(0.28, 0, 0.22, 1);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 17px; scroll-behavior: smooth; }
+body {
+  font-family: var(--font-body); color: var(--fg); background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Header ─── */
+.header {
+  text-align: center; padding: 80px 24px 48px;
+}
+.header h1 {
+  font-family: var(--font-display); font-size: clamp(40px, 6vw, 64px);
+  font-weight: 700; letter-spacing: -0.02em; line-height: 1.05;
+  color: var(--fg); margin-bottom: 12px;
+}
+.header p {
+  font-size: 17px; color: var(--muted); max-width: 480px;
+  margin: 0 auto;
+}
+
+/* ─── Nav Chips ─── */
+.nav-chips {
+  display: flex; justify-content: center; gap: 10px;
+  padding: 0 24px 40px; flex-wrap: wrap;
+}
+.chip {
+  padding: 8px 18px; border-radius: var(--radius-pill);
+  border: 1px solid var(--border); background: var(--surface);
+  font-family: var(--font-body); font-size: 14px; font-weight: 500;
+  color: var(--fg); cursor: pointer; text-decoration: none;
+  transition: all var(--motion-fast) var(--ease-standard);
+}
+.chip:hover, .chip.active {
+  background: var(--accent); color: #fff; border-color: var(--accent);
+}
+.chip.landing { background: var(--fg); color: #fff; border-color: var(--fg); }
+.chip.landing:hover { background: var(--accent); border-color: var(--accent); }
+
+/* ─── Gallery Grid ─── */
+.gallery {
+  max-width: 1300px; margin: 0 auto; padding: 0 24px 80px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(390px, 1fr));
+  gap: 40px 24px; justify-items: center;
+}
+.gallery-item {
+  text-align: center;
+}
+.gallery-item .label {
+  font-family: var(--font-display); font-size: 17px; font-weight: 600;
+  color: var(--fg); margin-bottom: 4px;
+}
+.gallery-item .sublabel {
+  font-size: 13px; color: var(--meta); margin-bottom: 16px;
+}
+.gallery-item iframe {
+  width: 390px; height: 844px; border: none;
+  border-radius: 44px;
+  box-shadow: 0 28px 60px -12px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.06);
+  background: #fff;
+}
+
+/* ─── Landing preview ─── */
+.landing-preview {
+  max-width: 1300px; margin: 0 auto 80px;
+  padding: 0 24px; text-align: center;
+}
+.landing-preview .label {
+  font-family: var(--font-display); font-size: 17px; font-weight: 600;
+  color: var(--fg); margin-bottom: 16px;
+}
+.landing-preview iframe {
+  width: 100%; max-width: 1100px; height: 700px;
+  border: none; border-radius: var(--radius-lg);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.1);
+  background: #fff;
+}
+
+/* ─── Footer ─── */
+.footer {
+  text-align: center; padding: 40px 24px;
+  font-size: 13px; color: var(--meta);
+  border-top: 0.5px solid var(--border);
+}
+.footer a { color: var(--accent); text-decoration: none; }
+
+/* ─── Responsive ─── */
+@media (max-width: 900px) {
+  .gallery { grid-template-columns: 1fr; }
+  .gallery-item iframe { width: 340px; height: 736px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Vela</h1>
+  <p>AI Body Intelligence &middot; A next-generation iOS health coach. Built on Apple design foundations — SF Pro, precision spacing, single blue accent, Cinematic chapter rhythm.</p>
+</div>
+
+<div class="nav-chips">
+  <a href="#landing" class="chip landing">Landing Page</a>
+  <a href="#today" class="chip">Today</a>
+  <a href="#training" class="chip">Training</a>
+  <a href="#coach" class="chip">Coach</a>
+  <a href="#insights" class="chip">Insights</a>
+  <a href="#settings" class="chip">Settings</a>
+  <a href="#widgets" class="chip">Widgets</a>
+</div>
+
+<!-- Landing Page Preview -->
+<div class="landing-preview" id="landing">
+  <div class="label">App Store Product Page</div>
+  <iframe src="landing.html" title="Vela Landing Page" loading="lazy"></iframe>
+</div>
+
+<!-- App Screens Gallery -->
+<div class="gallery">
+  <div class="gallery-item" id="today">
+    <div class="label">Today Cockpit</div>
+    <div class="sublabel">Main dashboard — readiness, metrics, plan, coach insight</div>
+    <iframe src="today.html" title="Vela Today Cockpit" loading="lazy"></iframe>
+  </div>
+
+  <div class="gallery-item" id="training">
+    <div class="label">Training Calendar</div>
+    <div class="sublabel">Week view, adaptive vs. original plan, upcoming workouts</div>
+    <iframe src="training.html" title="Vela Training Calendar" loading="lazy"></iframe>
+  </div>
+
+  <div class="gallery-item" id="coach">
+    <div class="label">Coach Command</div>
+    <div class="sublabel">Full-screen coach interface — instruct, ask, get answers</div>
+    <iframe src="coach.html" title="Vela Coach Command" loading="lazy"></iframe>
+  </div>
+
+  <div class="gallery-item" id="insights">
+    <div class="label">Insights Hub</div>
+    <div class="sublabel">Data coverage · Evidence chain · Memory inbox · Trust center</div>
+    <iframe src="insights.html" title="Vela Insights Hub" loading="lazy"></iframe>
+  </div>
+
+  <div class="gallery-item" id="settings">
+    <div class="label">Settings</div>
+    <div class="sublabel">iOS-style grouped settings, health sources, privacy controls</div>
+    <iframe src="settings.html" title="Vela Settings" loading="lazy"></iframe>
+  </div>
+</div>
+
+<!-- Widgets -->
+<div class="landing-preview" id="widgets">
+  <div class="label">iOS Widgets &amp; Lock Screen</div>
+  <iframe src="widgets.html" title="Vela Widgets" loading="lazy" style="height:auto;min-height:600px;"></iframe>
+</div>
+
+<div class="footer">
+  <p>Vela iOS Prototype &middot; Apple Design System &middot; <a href="#top">Back to top</a></p>
+</div>
+
+</body>
+</html>

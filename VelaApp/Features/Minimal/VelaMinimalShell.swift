@@ -1,98 +1,76 @@
 import SwiftUI
 
+// MARK: - VelaAppleShell — Apple-style frosted glass tab bar shell
+// Replaces VelaMinimalShell.swift. Uses 4 tabs + center Coach button.
+
 struct VelaMinimalShell: View {
-    @ObservedObject private var appState = VelaAppState.shared
-    @EnvironmentObject private var dashboardVM: DashboardViewModel
-    @State private var showBloodLog = false
-    @State private var showWeightLog = false
+    @State private var selectedTab: VelaMinimalTab = .today
+    @State private var showCoach = false
 
     var body: some View {
         ZStack {
-            VelaBackground()
+            VelaTheme.background.ignoresSafeArea()
 
+            // Active tab content
             activeTab
-                .padding(.top, 88)
-                .safeAreaPadding(.bottom, 108)
+                .padding(.top, 60)
+                .safeAreaPadding(.bottom, 100)
 
+            // Top navigation bar
             VStack(spacing: 0) {
-                VelaMinimalAppBar(
-                    title: "Vela",
-                    leadingSystemImage: "person.crop.circle.fill",
-                    trailingSystemImage: "bell"
-                ) {
-                    appState.showCoachHub = true
-                }
-                Spacer(minLength: 0)
+                VelaMinimalNavBar(title: navTitle,
+                    leading: {
+                        Image(systemName: "person.crop.circle.fill")
+                            .font(.system(size: 28, weight: .regular))
+                            .foregroundStyle(VelaTheme.accent)
+                    },
+                    trailing: {
+                        Image(systemName: "bell")
+                            .font(.system(size: 18, weight: .regular))
+                            .foregroundStyle(VelaTheme.onSurfaceVariant)
+                    }
+                )
+                Spacer()
             }
 
+            // Floating tab bar
             VStack {
-                Spacer(minLength: 0)
-                VelaMinimalFloatingTabBar(selectedTab: boundTab) {
-                    appState.showCoachHub = true
+                Spacer()
+                VelaMinimalFloatingTabBar(selectedTab: $selectedTab) {
+                    showCoach = true
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 18)
             }
         }
-        .sheet(isPresented: $showBloodLog) {
-            BloodLogSheetView()
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $showWeightLog) {
-            WeightLogSheetView()
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $appState.showCoachHub) {
-            CoachView()
+        .sheet(isPresented: $showCoach) {
+            VelaMinimalCoachView()
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.hidden)
-                .interactiveDismissDisabled(false)
         }
-        .onChange(of: appState.triggerBloodLog) { _, newValue in
-            if newValue {
-                appState.triggerBloodLog = false
-                showBloodLog = true
-            }
-        }
-        .onChange(of: appState.triggerWeightLog) { _, newValue in
-            if newValue {
-                appState.triggerWeightLog = false
-                showWeightLog = true
-            }
-        }
-        .tint(VelaTheme.primary)
-        .velaErrorAlert(error: $dashboardVM.currentError)
+        .tint(VelaTheme.accent)
     }
 
-    private var boundTab: Binding<VelaMinimalTab> {
-        Binding(
-            get: {
-                VelaMinimalTab(rawValue: appState.selectedTab) ?? .today
-            },
-            set: { tab in
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-                    appState.selectedTab = tab.rawValue
-                }
-            }
-        )
+    private var navTitle: String {
+        switch selectedTab {
+        case .today:    return "Vela"
+        case .training: return "Training"
+        case .insights: return "Insights"
+        case .settings: return "You"
+        }
     }
 
     @ViewBuilder
     private var activeTab: some View {
-        switch boundTab.wrappedValue {
+        switch selectedTab {
         case .today:
             VelaMinimalTodayView()
-        case .vitals:
-            VelaMinimalVitalsView()
-        case .fitness:
+        case .training:
             VelaMinimalFitnessView()
-        case .journal:
+        case .insights:
+            VelaMinimalVitalsView()
+        case .settings:
             VelaMinimalJournalView()
-        case .coach:
-            VelaMinimalCoachView()
         }
     }
 }
-
