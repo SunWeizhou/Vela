@@ -106,6 +106,11 @@ enum ScoreEngineFactory {
         let quietHRSD = rhrHistory.isEmpty ? nil : Double(10)
         let hrvSD = hrvHistory.isEmpty ? nil : Double(15)
         
+        let now = Date()
+        let isWorkoutWindow = context.strainToday.workouts.contains { workout in
+            now >= workout.start && now <= workout.end.addingTimeInterval(90.0 * 60.0)
+        }
+        
         return StressIndexInput(
             quietHRToday: context.recoveryMetrics.restingHeartRate,
             quietHRBaseline: context.recoveryBaseline.restingHeartRate,
@@ -119,7 +124,7 @@ enum ScoreEngineFactory {
             bodyTempDelta: context.extendedMetrics.bodyTemperature.map { $0 - 36.5 },
             sleepScoreLastNight: sleepScore,
             strainScoreToday: strainScore,
-            isWithinWorkoutWindow: false
+            isWithinWorkoutWindow: isWorkoutWindow
         )
     }
 
@@ -131,9 +136,14 @@ enum ScoreEngineFactory {
         sleepScore: Double?,
         strainScore: Double,
         stressIndex: Double,
-        strainHistory: [Double]?
+        strainHistory: [Double]?,
+        trainingLoadStatus: TrainingLoadStatus? = nil
     ) -> EnergyBankInput {
-        EnergyBankInput(
+        let now = Date()
+        let wake = context.sleepSummary?.wakeTime ?? Calendar.current.date(bySettingHour: 7, minute: 30, second: 0, of: now) ?? now
+        let hoursSinceWake = max(0.0, min(24.0, now.timeIntervalSince(wake) / 3600.0))
+
+        return EnergyBankInput(
             recoveryScore: recoveryScore,
             sleepScore: sleepScore,
             strainScore: strainScore,
@@ -145,12 +155,12 @@ enum ScoreEngineFactory {
             sleepHours: context.sleepSummary.map { Double($0.totalSleepMinutes) / 60.0 },
             strainHistory: strainHistory,
             bodyTempDelta: context.extendedMetrics.bodyTemperature.map { $0 - 36.5 },
-            hoursSinceWake: 8.0,
+            hoursSinceWake: hoursSinceWake,
             respiratoryRateZ: nil,
             SpO2: context.extendedMetrics.oxygenSaturation,
             mindfulMinutes: context.extendedMetrics.mindfulMinutes,
             napMinutes: nil,
-            trainingLoadStatus: nil
+            trainingLoadStatus: trainingLoadStatus
         )
     }
 

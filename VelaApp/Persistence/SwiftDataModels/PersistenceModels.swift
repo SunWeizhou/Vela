@@ -35,6 +35,12 @@ final class DailyHealthSummaryRecord {
     var oxygenSaturation: Double?
     var respiratoryRate: Double?
     var wristTemperature: Double?
+    var dailyLoad: Double?
+    var workoutLoad: Double?
+    var activityLoad: Double?
+    var trainingLoadRatio: Double?
+    var bedtime: Date?
+    var wakeTime: Date?
 
     init(
         dayIdentifier: String,
@@ -64,6 +70,12 @@ final class DailyHealthSummaryRecord {
         oxygenSaturation: Double? = nil,
         respiratoryRate: Double? = nil,
         wristTemperature: Double? = nil,
+        dailyLoad: Double? = nil,
+        workoutLoad: Double? = nil,
+        activityLoad: Double? = nil,
+        trainingLoadRatio: Double? = nil,
+        bedtime: Date? = nil,
+        wakeTime: Date? = nil,
         configVersion: String = VelaAppMetadata.configVersion,
         schemaVersion: Int = 1,
         updatedAt: Date = Date(),
@@ -96,6 +108,12 @@ final class DailyHealthSummaryRecord {
         self.oxygenSaturation = oxygenSaturation
         self.respiratoryRate = respiratoryRate
         self.wristTemperature = wristTemperature
+        self.dailyLoad = dailyLoad
+        self.workoutLoad = workoutLoad
+        self.activityLoad = activityLoad
+        self.trainingLoadRatio = trainingLoadRatio
+        self.bedtime = bedtime
+        self.wakeTime = wakeTime
         self.configVersion = configVersion
         self.schemaVersion = schemaVersion
         self.updatedAt = updatedAt
@@ -131,7 +149,13 @@ final class DailyHealthSummaryRecord {
             bmi: snapshot.bmi,
             oxygenSaturation: snapshot.oxygenSaturation,
             respiratoryRate: snapshot.respiratoryRate,
-            wristTemperature: snapshot.wristTemperature
+            wristTemperature: snapshot.wristTemperature,
+            dailyLoad: snapshot.dailyLoad,
+            workoutLoad: snapshot.workoutLoad,
+            activityLoad: snapshot.activityLoad,
+            trainingLoadRatio: snapshot.trainingLoadRatio,
+            bedtime: snapshot.bedtime,
+            wakeTime: snapshot.wakeTime
         )
     }
 
@@ -163,6 +187,12 @@ final class DailyHealthSummaryRecord {
         oxygenSaturation = snapshot.oxygenSaturation
         respiratoryRate = snapshot.respiratoryRate
         wristTemperature = snapshot.wristTemperature
+        dailyLoad = snapshot.dailyLoad
+        workoutLoad = snapshot.workoutLoad
+        activityLoad = snapshot.activityLoad
+        trainingLoadRatio = snapshot.trainingLoadRatio
+        bedtime = snapshot.bedtime
+        wakeTime = snapshot.wakeTime
         configVersion = VelaAppMetadata.configVersion
         self.updatedAt = updatedAt
     }
@@ -206,7 +236,13 @@ final class DailyHealthSummaryRecord {
             bmi: bmi,
             oxygenSaturation: oxygenSaturation,
             respiratoryRate: respiratoryRate,
-            wristTemperature: wristTemperature
+            wristTemperature: wristTemperature,
+            dailyLoad: dailyLoad,
+            workoutLoad: workoutLoad,
+            activityLoad: activityLoad,
+            trainingLoadRatio: trainingLoadRatio,
+            bedtime: bedtime,
+            wakeTime: wakeTime
         )
     }
 }

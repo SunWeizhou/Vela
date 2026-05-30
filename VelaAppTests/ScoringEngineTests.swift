@@ -12,7 +12,7 @@ final class ScoringEngineTests: XCTestCase {
             )
         )
 
-        XCTAssertGreaterThanOrEqual(result.score, 90)
+        XCTAssertEqual(result.score, 79)
         XCTAssertNotEqual(result.band, .low)
         XCTAssertEqual(result.confidence, .low)
         XCTAssertEqual(result.components["duration"], 50.0)
@@ -537,8 +537,8 @@ final class ScoringEngineTests: XCTestCase {
 
         // No awake data → interruption component should be nil
         XCTAssertNil(result.components["interruption"])
-        // Duration at target → high score
-        XCTAssertGreaterThanOrEqual(result.value ?? 0, 80)
+        // Duration at target but confidence is low due to missing interruption -> capped at 79
+        XCTAssertEqual(result.value ?? 0, 79)
     }
 
     // MARK: - Recovery Score: Spec-required tests
@@ -1138,6 +1138,119 @@ final class ScoringEngineTests: XCTestCase {
         // Perfect negative monotonic → r close to -1.0
         XCTAssertLessThan(r, -0.9)
         XCTAssertGreaterThan(r, -1.01)
+    }
+
+    func testDailyLoadPersistence() {
+        let snapshot = DailyHealthSnapshot(
+            date: Date(),
+            dailyLoad: 125.0,
+            workoutLoad: 80.0,
+            activityLoad: 45.0,
+            trainingLoadRatio: 1.25,
+            bedtime: Date().addingTimeInterval(-28800),
+            wakeTime: Date()
+        )
+        let record = DailyHealthSummaryRecord(snapshot: snapshot)
+        XCTAssertEqual(record.dailyLoad, 125.0)
+        XCTAssertEqual(record.workoutLoad, 80.0)
+        XCTAssertEqual(record.activityLoad, 45.0)
+        XCTAssertEqual(record.trainingLoadRatio, 1.25)
+        XCTAssertNotNil(record.bedtime)
+        XCTAssertNotNil(record.wakeTime)
+
+        let converted = record.toSnapshot()
+        XCTAssertEqual(converted.dailyLoad, 125.0)
+        XCTAssertEqual(converted.workoutLoad, 80.0)
+        XCTAssertEqual(converted.activityLoad, 45.0)
+        XCTAssertEqual(converted.trainingLoadRatio, 1.25)
+        XCTAssertNotNil(converted.bedtime)
+        XCTAssertNotNil(converted.wakeTime)
+    }
+
+    func testEnergyHighRiskLoadDrain() {
+        let engine = EnergyBankEngine()
+        
+        // Base input with highRisk training load status
+        let inputHighRisk = EnergyBankInput(
+            recoveryScore: 80.0,
+            sleepScore: 85.0,
+            strainScore: 18.0,
+            stressIndex: 25.0,
+            hrvToday: 70.0,
+            hrvBaseline: 65.0,
+            rhrToday: 55.0,
+            rhrBaseline: 58.0,
+            sleepHours: 8.0,
+            strainHistory: [10.0, 12.0, 9.0],
+            bodyTempDelta: 0.0,
+            hoursSinceWake: 8.0,
+            trainingLoadStatus: .highRisk
+        )
+        
+        let resultHighRisk = engine.calculate(from: inputHighRisk)
+        
+        // Base input with optimal training load status
+        let inputOptimal = EnergyBankInput(
+            recoveryScore: 80.0,
+            sleepScore: 85.0,
+            strainScore: 18.0,
+            stressIndex: 25.0,
+            hrvToday: 70.0,
+            hrvBaseline: 65.0,
+            rhrToday: 55.0,
+            rhrBaseline: 58.0,
+            sleepHours: 8.0,
+            strainHistory: [10.0, 12.0, 9.0],
+            bodyTempDelta: 0.0,
+            hoursSinceWake: 8.0,
+            trainingLoadStatus: .optimal
+        )
+        
+        let resultOptimal = engine.calculate(from: inputOptimal)
+        
+        // highRisk loadDrain must be greater than optimal loadDrain
+        let drainHighRisk = resultHighRisk.components["load_drain"] ?? 0.0
+        let drainOptimal = resultOptimal.components["load_drain"] ?? 0.0
+        XCTAssertGreaterThan(drainHighRisk, drainOptimal)
+    }
+
+    func testMetricComputationPipelineRollingBaselines() {
+        let pipeline = MetricComputationPipeline()
+        let today = Date()
+        let calendar = Calendar.current
+        
+        // Build 42 days of historical snapshots with realistic dailyLoads
+        var history: [DailyHealthSnapshot] = []
+        for i in 1...42 {
+            let date = calendar.date(byAdding: .day, value: -i, to: today)!
+            history.append(DailyHealthSnapshot(
+                date: date,
+                sleepScore: 80.0,
+                recoveryScore: 75.0,
+                strainScore: 12.0,
+                stressIndex: 30.0,
+                hrvAverage: 65.0,
+                restingHeartRate: 58.0,
+                sleepHours: 7.5,
+                dailyLoad: 120.0 // Raw daily load!
+            ))
+        }
+        
+        let todaySnapshot = DailyHealthSnapshot(
+            date: today,
+            hrvAverage: 70.0,
+            restingHeartRate: 55.0,
+            sleepHours: 8.0,
+            steps: 8000.0,
+            activeCalories: 350.0,
+            workoutDuration: 45.0
+        )
+        
+        let result = pipeline.compute(for: todaySnapshot, history: history)
+        
+        // Verify rolling baselines are calculated (e.g. dailyLoadHistory contains raw loads and not strainScores)
+        XCTAssertEqual(result.strain.components["daily_load"] ?? 0, 25.7, accuracy: 1.0)
+        XCTAssertNotNil(result.strain.components["training_load_ratio"])
     }
 }
 

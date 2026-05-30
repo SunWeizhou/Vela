@@ -165,21 +165,6 @@ public struct SleepScoreEngine: ScoreEngine {
         let availableWeight = componentWeights.values.reduce(0, +)
         let sumScore = components.reduce(0) { $0 + $1.value }
         
-        let finalValue: Double?
-        if availableWeight > 0 {
-            finalValue = ScoringMath.clamp((sumScore / availableWeight) * 100.0, min: 0, max: 100)
-        } else {
-            finalValue = nil
-        }
-
-        // Mapped Band & Confidence
-        let band: MetricBand
-        if let val = finalValue {
-            band = ScoringMath.band(for: val)
-        } else {
-            band = .low
-        }
-
         let confidence: MetricConfidence
         if components.count == 3 {
             confidence = .high
@@ -187,6 +172,27 @@ public struct SleepScoreEngine: ScoreEngine {
             confidence = .medium
         } else {
             confidence = .low
+        }
+
+        var finalValue: Double?
+        if availableWeight > 0 {
+            let baseVal = ScoringMath.clamp((sumScore / availableWeight) * 100.0, min: 0, max: 100)
+            if confidence == .low {
+                finalValue = min(baseVal, 79.0)
+                reasons.append("由于缺少质量与一致性指标，该评分已降为低置信度（最大限制为 79 分）")
+            } else {
+                finalValue = baseVal
+            }
+        } else {
+            finalValue = nil
+        }
+
+        // Mapped Band
+        let band: MetricBand
+        if let val = finalValue {
+            band = ScoringMath.band(for: val)
+        } else {
+            band = .low
         }
 
         // Add disclaimers

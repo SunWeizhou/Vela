@@ -66,13 +66,7 @@ public struct StrainScoreInput: Hashable {
     }
 }
 
-public enum TrainingLoadStatus: String, Codable, Hashable {
-    case wellBelow = "wellBelow"
-    case below = "below"
-    case optimal = "optimal"
-    case elevated = "elevated"
-    case highRisk = "highRisk"
-}
+
 
 public struct StrainScoreEngine: ScoreEngine {
     public typealias Input = StrainScoreInput
@@ -214,6 +208,15 @@ public struct StrainScoreEngine: ScoreEngine {
         components["training_load_ratio"] = trainingLoadRatio
         components["acute_7d_load"] = acute7
         components["chronic_28d_equivalent"] = chronic28Equivalent
+        let statusCode: Double
+        switch loadStatus {
+        case .wellBelow: statusCode = 0.0
+        case .below: statusCode = 1.0
+        case .optimal: statusCode = 2.0
+        case .elevated: statusCode = 3.0
+        case .highRisk: statusCode = 4.0
+        }
+        components["training_load_status_code"] = statusCode
         components["recommended_lower"] = Double(recommendedRange(for: input.recoveryScore).lowerBound)
         components["recommended_upper"] = Double(recommendedRange(for: input.recoveryScore).upperBound)
 

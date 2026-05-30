@@ -41,6 +41,14 @@ public enum EnergyBankStatus: String, Codable, Hashable {
     case strong = "Strong"
 }
 
+public enum TrainingLoadStatus: String, Codable, Hashable {
+    case wellBelow = "wellBelow"
+    case below = "below"
+    case optimal = "optimal"
+    case elevated = "elevated"
+    case highRisk = "highRisk"
+}
+
 public struct MetricResult: Codable, Hashable {
     public var name: String
     public var value: Double?              // 0–100; nil if not computable
@@ -114,6 +122,17 @@ public struct MetricResult: Codable, Hashable {
         if v < Double(r.lowerBound) { return .belowTarget }
         if v > Double(r.upperBound) { return .aboveTarget }
         return .withinTarget
+    }
+    public var trainingLoadStatus: TrainingLoadStatus {
+        guard let code = components["training_load_status_code"] else { return .optimal }
+        switch Int(code) {
+        case 0: return .wellBelow
+        case 1: return .below
+        case 2: return .optimal
+        case 3: return .elevated
+        case 4: return .highRisk
+        default: return .optimal
+        }
     }
 
     // For StressIndexResult

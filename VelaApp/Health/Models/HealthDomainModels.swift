@@ -30,6 +30,12 @@ struct DailyHealthSnapshot: Identifiable, Hashable {
     var oxygenSaturation: Double?
     var respiratoryRate: Double?
     var wristTemperature: Double?
+    var dailyLoad: Double?
+    var workoutLoad: Double?
+    var activityLoad: Double?
+    var trainingLoadRatio: Double?
+    var bedtime: Date?
+    var wakeTime: Date?
 }
 
 enum SleepStage: String, Codable, Hashable, CaseIterable {
