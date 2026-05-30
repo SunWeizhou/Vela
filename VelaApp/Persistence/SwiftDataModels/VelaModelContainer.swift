@@ -7,6 +7,7 @@ private let logger = Logger(subsystem: "com.sunweizhou.Vela", category: "ModelCo
 enum VelaModelContainer {
     static let schema = Schema([
         DailyHealthSummaryRecord.self,
+        SleepSummaryRecord.self,
         JournalEntryRecord.self,
         AIReportRecord.self,
         UserWikiDocumentRecord.self,
@@ -51,6 +52,7 @@ enum VelaModelContainer {
         } catch {
             logger.warning("Failed to open store, attempting migration recovery: \(error.localizedDescription)")
 
+            #if DEBUG
             // Delete the current store and any legacy stores from older app versions.
             // This is acceptable during active development. In production you would
             // implement SchemaMigrationPlan for proper migration.
@@ -61,6 +63,9 @@ enum VelaModelContainer {
 
             let config = ModelConfiguration(schema: schema, url: storeURL)
             return try ModelContainer(for: schema, configurations: [config])
+            #else
+            throw error
+            #endif
         }
     }
 }

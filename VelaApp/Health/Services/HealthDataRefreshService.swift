@@ -60,12 +60,13 @@ final class HealthDataRefreshService {
         let todayRange = DateRangeQuery.today(containing: now, calendar: calendar)
         let baselineRange = DateRangeQuery.recentDays(28, endingAt: calendar.startOfDay(for: now), calendar: calendar)
 
-        let resolvedSleep = try await queryService.sleepSummary(in: DateRangeQuery.recentDays(2, endingAt: now, calendar: calendar))
-        let recovery = try await queryService.recoveryMetrics(in: todayRange)
-        let recoveryBaseline = try await queryService.recoveryMetrics(in: baselineRange)
-        let strain = try await queryService.strainSummary(in: todayRange)
-        let strainBaseline = try await queryService.strainSummary(in: baselineRange).dailyAverage(days: 28)
-        let body = try await queryService.bodyMetrics(in: DateRangeQuery.recentDays(90, endingAt: now, calendar: calendar))
+        let resolvedSleep = try? await queryService.sleepSummary(in: DateRangeQuery.recentDays(2, endingAt: now, calendar: calendar))
+        let recovery = (try? await queryService.recoveryMetrics(in: todayRange)) ?? RecoveryMetricSummary()
+        let recoveryBaseline = (try? await queryService.recoveryMetrics(in: baselineRange)) ?? RecoveryMetricSummary()
+        let strain = (try? await queryService.strainSummary(in: todayRange)) ?? StrainActivitySummary(workouts: [])
+        let rawStrainBaseline = try? await queryService.strainSummary(in: baselineRange)
+        let strainBaseline = rawStrainBaseline?.dailyAverage(days: 28) ?? StrainActivitySummary(workouts: [])
+        let body = (try? await queryService.bodyMetrics(in: DateRangeQuery.recentDays(90, endingAt: now, calendar: calendar))) ?? BodyMetricsSummary()
 
         // Query extended metrics (non-critical, so catch errors gracefully)
         let hkQueryService = queryService as? HealthKitQueryService

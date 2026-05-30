@@ -99,6 +99,30 @@ struct VelaTodayView: View {
                 // 1. Date Header with Selector & Share & Avatar
                 dateHeaderRow
                 
+                if let errorMessage = dashboardVM.errorMessage {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(Color.red)
+                            Text(errorMessage)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Color(hex: "#1A1917"))
+                        }
+                        if let suggestion = dashboardVM.currentError?.recoverySuggestion {
+                            Text(suggestion)
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color(hex: "#8E8A80"))
+                        }
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 16).fill(Color.white))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.red.opacity(0.3), lineWidth: 1)
+                    )
+                }
+                
                 // 2. Horizontal Status & Weather Pills
                 pillsRow
                 

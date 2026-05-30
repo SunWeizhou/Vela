@@ -324,6 +324,8 @@ final class CoachChatVM: ObservableObject {
                 content: L10n.t("Please add your DeepSeek API key in Settings first.", "请先在设置中添加 DeepSeek API Key。")
             ))
             isReady = false
+            persistThread(modelContext: modelContext)
+            isStreaming = false
             return
         }
 
@@ -353,9 +355,10 @@ final class CoachChatVM: ObservableObject {
             var fullResponse = ""
             var wikiFiles: [String] = []
             var wikiUpdateSummaries: [String] = []
+            var wasStreamed = false
 
             // Agentic loop: LLM decides whether to call tools or answer
-            for _ in 0..<maxIterations {
+            for iteration in 0..<maxIterations {
                 let response = try await provider.chat(
                     messages: agentMessages,
                     tools: toolRegistry.definitions
@@ -398,6 +401,19 @@ final class CoachChatVM: ObservableObject {
                     }
 
                     streamingContent = ""
+                    
+                    // If this was the first or second iteration, we stream the final response!
+                    if iteration < maxIterations - 1 {
+                        let stream = provider.streamChat(messages: agentMessages)
+                        var streamedText = ""
+                        wasStreamed = true
+                        for try await delta in stream {
+                            streamedText += delta
+                            streamingContent = streamedText
+                        }
+                        fullResponse = streamedText
+                        break
+                    }
                     continue
                 }
 
@@ -432,16 +448,18 @@ final class CoachChatVM: ObservableObject {
                 }
             }
 
-            // Word-by-word streaming with 60ms throttle
             let finalText = parsed.displayText.isEmpty ? fullResponse : parsed.displayText
-            let words = finalText.components(separatedBy: " ")
-            var accumulated: [String] = []
-            for word in words {
-                try? await Task.sleep(nanoseconds: 60_000_000)
-                accumulated.append(word)
-                streamingContent = accumulated.joined(separator: " ")
+            
+            if !wasStreamed {
+                // Smooth character-by-character typing simulation for non-streamed response
+                var accumulated = ""
+                for char in finalText {
+                    try? await Task.sleep(nanoseconds: 10_000_000) // 10ms per character
+                    accumulated.append(char)
+                    streamingContent = accumulated
+                }
+                streamingContent = ""
             }
-            streamingContent = ""
 
             // Finalize message
             if let idx = messages.firstIndex(where: { $0.id == assistantId }) {
@@ -472,6 +490,7 @@ final class CoachChatVM: ObservableObject {
             if let idx = messages.firstIndex(where: { $0.id == assistantId }) {
                 messages[idx] = ChatMsg(id: assistantId, role: .assistant, content: error.localizedDescription)
             }
+            persistThread(modelContext: modelContext)
         }
 
         isStreaming = false

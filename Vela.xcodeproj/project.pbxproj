@@ -12,8 +12,6 @@
 		0B1000A100000000000000A1 /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001A100000000000000A1 /* LocationManager.swift */; };
 		0B1000A200000000000000A2 /* WeatherService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001A200000000000000A2 /* WeatherService.swift */; };
 		0B1000A300000000000000A3 /* WorkoutDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001A300000000000000A3 /* WorkoutDetailView.swift */; };
-		0B1000900000000000000090 /* VelaQuickActionsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001900000000000000090 /* VelaQuickActionsSheet.swift */; };
-		0B1000910000000000000091 /* WeightLogSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001910000000000000091 /* WeightLogSheetView.swift */; };
 		0B0000010000000000000001 /* VelaThemeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000020000000000000002 /* VelaThemeTests.swift */; };
 		0B0000290000000000000029 /* HealthFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000300000000000000030 /* HealthFoundationTests.swift */; };
 		0B0000310000000000000031 /* PersistenceFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000320000000000000032 /* PersistenceFoundationTests.swift */; };
@@ -241,25 +239,25 @@
 		0B1001930000000000000093 /* PlaceholderInsightCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/SharedComponents/PlaceholderInsightCard.swift; sourceTree = "<group>"; };
 		0B10018B000000000000008B /* CoachPersonality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/CoachPersonality.swift; sourceTree = "<group>"; };
 		0B10018C000000000000008C /* BiologicalAgeEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/Biology/BiologicalAgeEngine.swift; sourceTree = "<group>"; };
-		A6B6D7ADB8B84A4089793988 /* TypedContextSchema.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/AI/Models/TypedContextSchema.swift; sourceTree = "<group>"; };
-		53E4C9616A624711B40AD7F4 /* MemoryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/AI/Memory/MemoryModels.swift; sourceTree = "<group>"; };
-		540A8976728D4342AB813647 /* CoachPromptComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/AI/Prompting/CoachPromptComposer.swift; sourceTree = "<group>"; };
-		83AE10D45DA9421385D48088 /* AgentLoop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/AI/Agent/AgentLoop.swift; sourceTree = "<group>"; };
-		4AC9EACC8099421CA872BDBF /* MemoryLedger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/AI/Memory/MemoryLedger.swift; sourceTree = "<group>"; };
+		A6B6D7ADB8B84A4089793988 /* TypedContextSchema.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Models/TypedContextSchema.swift; sourceTree = "<group>"; };
+		53E4C9616A624711B40AD7F4 /* MemoryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Memory/MemoryModels.swift; sourceTree = "<group>"; };
+		540A8976728D4342AB813647 /* CoachPromptComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Prompting/CoachPromptComposer.swift; sourceTree = "<group>"; };
+		83AE10D45DA9421385D48088 /* AgentLoop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Agent/AgentLoop.swift; sourceTree = "<group>"; };
+		4AC9EACC8099421CA872BDBF /* MemoryLedger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Memory/MemoryLedger.swift; sourceTree = "<group>"; };
 		6B3FF1E44A844CECACC8727E /* WikiMergeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WikiMergeTests.swift; sourceTree = "<group>"; };
 		9D3C95453E2F4CA38EF8BCC8 /* AgentActionParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentActionParserTests.swift; sourceTree = "<group>"; };
 		8D2B5FDE2C894A4E932CD4DB /* ContextBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextBuilderTests.swift; sourceTree = "<group>"; };
 		06E296850D824F5484621DB7 /* PromptComposerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptComposerTests.swift; sourceTree = "<group>"; };
 		FC2F3B94AA064B1E83F71978 /* MemoryLedgerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryLedgerTests.swift; sourceTree = "<group>"; };
-		DFF4CA95248945C89D12DDB1 /* DailyPlanBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Scoring/DailyPlan/DailyPlanBuilder.swift; sourceTree = "<group>"; };
-		7992FEFB1A064B77A704975B /* AdaptiveTrainingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Scoring/Training/AdaptiveTrainingEngine.swift; sourceTree = "<group>"; };
-		82C4D493FC3C40CCBF15B72B /* TrustCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Features/Settings/TrustCenterView.swift; sourceTree = "<group>"; };
-		EBA7A2EC2D864756B06DC78E /* BodyInterpretationTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Scoring/BodyInterpreter/BodyInterpretationTypes.swift; sourceTree = "<group>"; };
-		359118EB7D9C43659D1C55C1 /* BodyInterpreterEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Scoring/BodyInterpreter/BodyInterpreterEngine.swift; sourceTree = "<group>"; };
-		96D0A980BB50405EA1CFA4B8 /* PersonalResponseModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Scoring/BodyInterpreter/PersonalResponseModel.swift; sourceTree = "<group>"; };
-		54074915D1CD439596F77AD1 /* AdaptiveTrainingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Scoring/Training/AdaptiveTrainingManager.swift; sourceTree = "<group>"; };
-		63AAF7BE44C44A87855807F0 /* DataCoverageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/Features/Settings/DataCoverageView.swift; sourceTree = "<group>"; };
-		C38F23741E2F4476BAEAD938 /* PersonalResponseInsightService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaApp/AI/Proactive/PersonalResponseInsightService.swift; sourceTree = "<group>"; };
+		DFF4CA95248945C89D12DDB1 /* DailyPlanBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/DailyPlan/DailyPlanBuilder.swift; sourceTree = "<group>"; };
+		7992FEFB1A064B77A704975B /* AdaptiveTrainingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/Training/AdaptiveTrainingEngine.swift; sourceTree = "<group>"; };
+		82C4D493FC3C40CCBF15B72B /* TrustCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Settings/TrustCenterView.swift; sourceTree = "<group>"; };
+		EBA7A2EC2D864756B06DC78E /* BodyInterpretationTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/BodyInterpreter/BodyInterpretationTypes.swift; sourceTree = "<group>"; };
+		359118EB7D9C43659D1C55C1 /* BodyInterpreterEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/BodyInterpreter/BodyInterpreterEngine.swift; sourceTree = "<group>"; };
+		96D0A980BB50405EA1CFA4B8 /* PersonalResponseModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/BodyInterpreter/PersonalResponseModel.swift; sourceTree = "<group>"; };
+		54074915D1CD439596F77AD1 /* AdaptiveTrainingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/Training/AdaptiveTrainingManager.swift; sourceTree = "<group>"; };
+		63AAF7BE44C44A87855807F0 /* DataCoverageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Settings/DataCoverageView.swift; sourceTree = "<group>"; };
+		C38F23741E2F4476BAEAD938 /* PersonalResponseInsightService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Proactive/PersonalResponseInsightService.swift; sourceTree = "<group>"; };
 		0B1001360000000000000101 /* ScoreEngineFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/ScoreEngineFactory.swift; sourceTree = "<group>"; };
 		0B1001A500000000000000A5 /* DomainContextBuilders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Context/DomainContextBuilders.swift; sourceTree = "<group>"; };
 		0B1001B000000000000000B0 /* VelaError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/VelaError.swift; sourceTree = "<group>"; };
@@ -273,9 +271,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-			
-				5357016B721440F7AA0D7EFF /* PromptComposerTests.swift in Sources */,
-				DD4356A314314464890D8B2D /* MemoryLedgerTests.swift in Sources */,);
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		0B0000090000000000000009 /* Frameworks */ = {
@@ -294,21 +290,7 @@
 				0B0000110000000000000011 /* VelaApp */,
 				0B0000120000000000000012 /* VelaAppTests */,
 				0B0000130000000000000013 /* Products */,
-			
-				A6B6D7ADB8B84A4089793988 /* TypedContextSchema.swift */,
-				53E4C9616A624711B40AD7F4 /* MemoryModels.swift */,
-				540A8976728D4342AB813647 /* CoachPromptComposer.swift */,
-				83AE10D45DA9421385D48088 /* AgentLoop.swift */,
-				4AC9EACC8099421CA872BDBF /* MemoryLedger.swift */,
-				DFF4CA95248945C89D12DDB1 /* DailyPlanBuilder.swift */,
-				7992FEFB1A064B77A704975B /* AdaptiveTrainingEngine.swift */,
-				82C4D493FC3C40CCBF15B72B /* TrustCenterView.swift */,
-				EBA7A2EC2D864756B06DC78E /* BodyInterpretationTypes.swift */,
-				359118EB7D9C43659D1C55C1 /* BodyInterpreterEngine.swift */,
-				96D0A980BB50405EA1CFA4B8 /* PersonalResponseModel.swift */,
-				54074915D1CD439596F77AD1 /* AdaptiveTrainingManager.swift */,
-				63AAF7BE44C44A87855807F0 /* DataCoverageView.swift */,
-				C38F23741E2F4476BAEAD938 /* PersonalResponseInsightService.swift */,);
+			);
 			sourceTree = "<group>";
 		};
 		0B0000110000000000000011 /* VelaApp */ = {
@@ -413,6 +395,20 @@
 				0B10018B000000000000008B /* CoachPersonality.swift */,
 				0B10018C000000000000008C /* BiologicalAgeEngine.swift */,
 					0B1002000000000000000200 /* VelaOnboardingView.swift */,
+				A6B6D7ADB8B84A4089793988 /* TypedContextSchema.swift */,
+				53E4C9616A624711B40AD7F4 /* MemoryModels.swift */,
+				540A8976728D4342AB813647 /* CoachPromptComposer.swift */,
+				83AE10D45DA9421385D48088 /* AgentLoop.swift */,
+				4AC9EACC8099421CA872BDBF /* MemoryLedger.swift */,
+				DFF4CA95248945C89D12DDB1 /* DailyPlanBuilder.swift */,
+				7992FEFB1A064B77A704975B /* AdaptiveTrainingEngine.swift */,
+				82C4D493FC3C40CCBF15B72B /* TrustCenterView.swift */,
+				EBA7A2EC2D864756B06DC78E /* BodyInterpretationTypes.swift */,
+				359118EB7D9C43659D1C55C1 /* BodyInterpreterEngine.swift */,
+				96D0A980BB50405EA1CFA4B8 /* PersonalResponseModel.swift */,
+				54074915D1CD439596F77AD1 /* AdaptiveTrainingManager.swift */,
+				63AAF7BE44C44A87855807F0 /* DataCoverageView.swift */,
+				C38F23741E2F4476BAEAD938 /* PersonalResponseInsightService.swift */,
 			);
 			path = VelaApp;
 			sourceTree = "<group>";
@@ -664,10 +660,12 @@
 				0B0000290000000000000029 /* HealthFoundationTests.swift in Sources */,
 				0B0000310000000000000031 /* PersistenceFoundationTests.swift in Sources */,
 				0B0000330000000000000033 /* ScoringEngineTests.swift in Sources */,
-			
 				FE760BA0280B448DB02489E4 /* WikiMergeTests.swift in Sources */,
 				BB4501256E114FAC859D914B /* AgentActionParserTests.swift in Sources */,
-				1586C9ADAE4F4253BDE1C34C /* ContextBuilderTests.swift in Sources */,);
+				1586C9ADAE4F4253BDE1C34C /* ContextBuilderTests.swift in Sources */,
+				5357016B721440F7AA0D7EFF /* PromptComposerTests.swift in Sources */,
+				DD4356A314314464890D8B2D /* MemoryLedgerTests.swift in Sources */,
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */

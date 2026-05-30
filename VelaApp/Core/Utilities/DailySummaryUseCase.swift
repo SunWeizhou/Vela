@@ -21,6 +21,7 @@ final class DailySummaryUseCase {
         let now = date
         let context = try await refreshService.refreshContext(now: now)
         if !context.hasAnyData {
+            #if DEBUG
             if let modelContext {
                 seedMockDataIfNeeded(modelContext: modelContext, now: now)
                 
@@ -33,6 +34,9 @@ final class DailySummaryUseCase {
                 }
             }
             return PreviewDataFactory.makeDashboard(date: now)
+            #else
+            throw VelaError.healthKitDataUnavailable(sampleType: AppLanguage.stored.isChinese ? "Apple 健康" : "Apple Health")
+            #endif
         }
 
         let yesterdayStrain: Double?
@@ -357,18 +361,26 @@ final class DailySummaryUseCase {
 
         let bedtimes: [Date] = pastEpisodes.compactMap(\.bedtime)
         let bedtimeComponents = bedtimes.map { calendar.dateComponents([.hour, .minute], from: $0) }
-        let bedtimeSeconds = bedtimeComponents.map { ($0.hour ?? 0) * 3600 + ($0.minute ?? 0) * 60 }
-        let avgBedtimeSeconds = bedtimeSeconds.isEmpty ? nil : Double(bedtimeSeconds.reduce(0, +)) / Double(bedtimeSeconds.count)
+        
+        // Map bedtime seconds to be relative to 12:00 PM (noon). If bedtime is before 12:00 PM (e.g. 00:30), add 86400 to map it smoothly across midnight.
+        let bedtimeSeconds = bedtimeComponents.map { comps -> Double in
+            let secs = Double((comps.hour ?? 0) * 3600 + (comps.minute ?? 0) * 60)
+            return secs < 43200.0 ? secs + 86400.0 : secs
+        }
+        let avgBedtimeSeconds = bedtimeSeconds.isEmpty ? nil : bedtimeSeconds.reduce(0, +) / Double(bedtimeSeconds.count)
 
         let waketimes: [Date] = pastEpisodes.compactMap(\.wakeTime)
         let waketimeComponents = waketimes.map { calendar.dateComponents([.hour, .minute], from: $0) }
-        let waketimeSeconds = waketimeComponents.map { ($0.hour ?? 0) * 3600 + ($0.minute ?? 0) * 60 }
+        let waketimeSeconds = waketimeComponents.map { Double(($0.hour ?? 0) * 3600 + ($0.minute ?? 0) * 60) }
         let avgWaketimeSeconds = waketimeSeconds.isEmpty ? nil : Double(waketimeSeconds.reduce(0, +)) / Double(waketimeSeconds.count)
 
         guard let avgBedtimeSeconds, let avgWaketimeSeconds else { return nil }
 
         let todayBedtimeComps = calendar.dateComponents([.hour, .minute], from: todayBedtime)
-        let todayBedtimeSeconds = Double((todayBedtimeComps.hour ?? 0) * 3600 + (todayBedtimeComps.minute ?? 0) * 60)
+        var todayBedtimeSeconds = Double((todayBedtimeComps.hour ?? 0) * 3600 + (todayBedtimeComps.minute ?? 0) * 60)
+        if todayBedtimeSeconds < 43200.0 {
+            todayBedtimeSeconds += 86400.0
+        }
 
         let todayWaketimeComps = calendar.dateComponents([.hour, .minute], from: todayWaketime)
         let todayWaketimeSeconds = Double((todayWaketimeComps.hour ?? 0) * 3600 + (todayWaketimeComps.minute ?? 0) * 60)

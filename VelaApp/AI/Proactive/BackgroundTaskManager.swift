@@ -131,7 +131,7 @@ enum BackgroundTaskManager {
                 )
                 try? DailyLogService.refresh(dashboard: dashboard)
 
-                if config.autoEveningWikiSync, hour >= 0, hour < 4 {
+                if config.autoEveningWikiSync, hour >= 23 || hour < 4 {
                     logger.info("Running daily profile sync in background.")
                     await EveningWikiSyncAgent.shared.runIfNeeded(
                         modelContext: modelContext,
