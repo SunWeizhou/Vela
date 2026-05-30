@@ -134,6 +134,7 @@ final class MorningBriefScheduler: ObservableObject {
                 tags: ["morning_brief", "automated"]
             )
             
+            try PersistenceWriteGate.shared.assertWritable(operation: "MorningBriefScheduler: save report", modelContext: modelContext)
             modelContext.insert(newRecord)
             try modelContext.save()
             logger.info("Successfully generated and saved Morning Brief report!")

@@ -18,7 +18,9 @@ struct AIContextBuilder {
                 "date": dashboard.date.formatted(date: .numeric, time: .omitted),
                 "overall_state": dashboard.recovery.band.rawValue.lowercased(),
                 "source": dashboard.source.rawValue,
-                "top_reason": dashboard.recovery.reasons.first ?? dashboard.dailyInsight
+                "top_reason": dashboard.recovery.reasons.first ?? dashboard.dailyInsight,
+                "readiness_level": dashboard.trainingDecision.readinessLevel,
+                "readiness_guidance": dashboard.trainingDecision.readinessGuidance
             ],
             sleep: SleepContextBuilder().build(from: dashboard),
             recovery: RecoveryContextBuilder().build(from: dashboard),
@@ -162,7 +164,7 @@ struct AIContextBuilder {
             heightCm: ext.heightCm.map { MetricValue.live($0, unit: "cm") } ?? MetricValue.missing(),
             weightKg: body.weightKilograms.map { MetricValue.live($0, unit: "kg") } ?? MetricValue.missing(),
             bmi: ext.bmi.map { MetricValue.live($0, unit: "kg/m²") } ?? MetricValue.missing(),
-            bodyFatPct: body.bodyFatPercentage.map { MetricValue.live($0 * 100.0, unit: "%") } ?? MetricValue.missing(),
+            bodyFatPct: body.bodyFatPercentage.map { MetricValue.live($0, unit: "%") } ?? MetricValue.missing(),
             vo2Max: body.vo2Max.map { MetricValue.live($0, unit: "ml/kg/min") } ?? MetricValue.missing(),
             walkingSpeed: ext.walkingSpeed.map { MetricValue.live($0, unit: "m/s") } ?? MetricValue.missing(),
             walkingAsymmetry: ext.walkingAsymmetry.map { MetricValue.live($0, unit: "%") } ?? MetricValue.missing(),

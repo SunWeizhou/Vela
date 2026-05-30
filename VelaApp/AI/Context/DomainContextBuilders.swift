@@ -51,7 +51,9 @@ struct RecoveryContextBuilder: DomainContextBuilder {
             "rhr_bpm": dashboard.recoveryMetrics.restingHeartRate.map { "\(Int($0))" } ?? "N/A",
             "respiratory_rate": dashboard.recoveryMetrics.respiratoryRate.map { String(format: "%.1f", $0) } ?? "N/A",
             "hrv_z_score": hrvZ,
-            "hrv_vs_baseline_pct": hrvVsBaselinePct
+            "hrv_vs_baseline_pct": hrvVsBaselinePct,
+            "hrv_baseline_ms": hrvBaseline.map { "\(Int($0))" } ?? "N/A",
+            "rhr_baseline_bpm": dashboard.recoveryBaseline.restingHeartRate.map { "\(Int($0))" } ?? "N/A"
         ]
     }
 }
@@ -156,7 +158,7 @@ struct ExtendedMetricsContextBuilder {
         if let h = ext.heightCm { d["height_cm"] = String(format: "%.1f", h) }
         if let bmi = ext.bmi { d["bmi"] = String(format: "%.1f", bmi) }
         if let w = body.weightKilograms { d["weight_kg"] = String(format: "%.1f", w) }
-        if let bf = body.bodyFatPercentage { d["body_fat_pct"] = String(format: "%.1f", bf * 100.0) }
+        if let bf = body.bodyFatPercentage { d["body_fat_pct"] = String(format: "%.1f", bf) }
         if let lbm = body.leanBodyMassKilograms { d["lean_body_mass_kg"] = String(format: "%.1f", lbm) }
         if let vo2 = body.vo2Max { d["vo2_max"] = String(format: "%.1f", vo2) }
         if let spo2 = ext.oxygenSaturation { d["spo2_pct"] = String(format: "%.0f", spo2) }

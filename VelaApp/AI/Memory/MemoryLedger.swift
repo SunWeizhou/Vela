@@ -27,6 +27,7 @@ final class MemoryLedger {
         source: String,
         linkedAgentRunId: String? = nil
     ) throws -> MemoryEventRecord {
+        try PersistenceWriteGate.shared.assertWritable(operation: "MemoryLedger: createProposal", modelContext: modelContext)
         let record = MemoryEventRecord(
             source: source,
             targetFile: targetFile,
@@ -47,6 +48,7 @@ final class MemoryLedger {
     // MARK: - Confirm (accept proposal → write to wiki)
 
     func confirmProposal(_ proposalId: UUID) throws {
+        try PersistenceWriteGate.shared.assertWritable(operation: "MemoryLedger: confirmProposal", modelContext: modelContext)
         let descriptor = FetchDescriptor<MemoryEventRecord>(
             predicate: #Predicate { $0.id == proposalId }
         )
@@ -82,6 +84,7 @@ final class MemoryLedger {
     // MARK: - Reject Proposal
 
     func rejectProposal(_ proposalId: UUID, reason: String? = nil) throws {
+        try PersistenceWriteGate.shared.assertWritable(operation: "MemoryLedger: rejectProposal", modelContext: modelContext)
         let descriptor = FetchDescriptor<MemoryEventRecord>(
             predicate: #Predicate { $0.id == proposalId }
         )
@@ -96,6 +99,7 @@ final class MemoryLedger {
     // MARK: - Rollback (revert a confirmed memory)
 
     func rollback(recordId: UUID) throws {
+        try PersistenceWriteGate.shared.assertWritable(operation: "MemoryLedger: rollback", modelContext: modelContext)
         let descriptor = FetchDescriptor<MemoryEventRecord>(
             predicate: #Predicate { $0.id == recordId }
         )
@@ -141,6 +145,7 @@ final class MemoryLedger {
     // MARK: - Cleanup (auto-expire old pending proposals)
 
     func expireOldPendingProposals(olderThan days: Int = 14) throws {
+        try PersistenceWriteGate.shared.assertWritable(operation: "MemoryLedger: expireOldPendingProposals", modelContext: modelContext)
         let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
         let pending = pendingProposals()
         for record in pending where record.createdAt < cutoff {

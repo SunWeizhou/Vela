@@ -57,6 +57,7 @@ struct VelaApp: App {
             // In Release, catch schema migration / store failures, activate read-only safety mode,
             // and fallback to in-memory store so the app can launch, preventing data loss.
             VelaAppState.shared.isReadOnlySafetyMode = true
+            PersistenceWriteGate.shared.setReadOnly(true)
             VelaAppState.shared.isFallbackStore = true
             if let memoryContainer = try? VelaModelContainer.make(inMemory: true) {
                 modelContainer = memoryContainer

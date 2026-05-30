@@ -118,6 +118,7 @@ final class EveningWikiSyncAgent: ObservableObject {
                 serializedContextSnapshot: (try? String(data: JSONEncoder().encode(context), encoding: .utf8)) ?? "{}",
                 tags: ["daily_sync", "automated"] + appliedFiles
             )
+            try PersistenceWriteGate.shared.assertWritable(operation: "EveningWikiSyncAgent: save report", modelContext: modelContext)
             modelContext.insert(record)
             try modelContext.save()
 

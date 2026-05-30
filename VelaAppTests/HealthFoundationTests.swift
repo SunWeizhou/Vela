@@ -60,7 +60,7 @@ final class HealthFoundationTests: XCTestCase {
     func testRefreshServiceReturnsSnapshotWhenHealthDataIsMissing() async throws {
         let service = HealthDataRefreshService(queryService: EmptyHealthQueryService())
 
-        let snapshot = try await service.refreshToday(now: Date(timeIntervalSince1970: 1_779_000_000))
+        let snapshot = try await service.buildTodayRawSnapshot(now: Date(timeIntervalSince1970: 1_779_000_000))
 
         XCTAssertNil(snapshot.sleepScore)
         XCTAssertNil(snapshot.recoveryScore)

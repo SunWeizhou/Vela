@@ -50,6 +50,12 @@ struct ToolRegistry {
 
 // MARK: - Concrete Tools
 
+enum SearchSourcePolicy: String, Codable, Sendable {
+    case medicalPrimary = "medical_primary"
+    case sportsScience = "sports_science"
+    case general = "general"
+}
+
 /// Searches Bing.com for web results.
 struct WebSearchTool: AgentTool {
     let name = "web_search"
@@ -63,6 +69,11 @@ struct WebSearchTool: AgentTool {
                     "type": .string("string"),
                     "description": .string("The search query. Write in English for best results."),
                 ]),
+                "source_policy": .object([
+                    "type": .string("string"),
+                    "description": .string("Prioritizes specific domain sources. Use 'medical_primary' for clinical, diseases, supplements or guidelines; 'sports_science' for training science and recovery; 'general' for other topics."),
+                    "enum": .array([.string("medical_primary"), .string("sports_science"), .string("general")])
+                ])
             ]),
             "required": .array([.string("query")]),
         ]
@@ -74,8 +85,45 @@ struct WebSearchTool: AgentTool {
               let query = json["query"] as? String else {
             return "Error: missing or invalid 'query' argument."
         }
-        let results = await WebSearchHelper.shared.search(query, maxResults: 3)
-        return results.isEmpty ? "No search results found for '\(query)'." : results
+
+        let policyRaw = json["source_policy"] as? String
+        let policy: SearchSourcePolicy
+        if let policyRaw, let parsed = SearchSourcePolicy(rawValue: policyRaw) {
+            policy = parsed
+        } else {
+            policy = Self.detectPolicy(for: query)
+        }
+
+        let enrichedQuery = Self.enrichQuery(query, policy: policy)
+        let results = await WebSearchHelper.shared.search(enrichedQuery, maxResults: 3)
+        let citationSuffix = "\n\n[Source Policy: \(policy.rawValue.uppercased()) - Authoritative sources prioritized. Citation from primary databases only. Marketing/forum sources ignored.]"
+
+        return results.isEmpty ? "No search results found for '\(query)'." : (results + citationSuffix)
+    }
+
+    private static func detectPolicy(for query: String) -> SearchSourcePolicy {
+        let q = query.lowercased()
+        let medicalTerms = ["disease", "medicine", "supplement", "vitamin", "dose", "clinical", "study", "guideline", "nih", "who", "cdc", "health", "symptom", "blood", "hormone", "cortisol", "nutrition", "diet"]
+        let sportsTerms = ["vo2", "zone 2", "cardio", "training", "strength", "hypertrophy", "overreaching", "overtraining", "recovery", "acsm", "nsca", "heart rate"]
+
+        if medicalTerms.contains(where: { q.contains($0) }) {
+            return .medicalPrimary
+        } else if sportsTerms.contains(where: { q.contains($0) }) {
+            return .sportsScience
+        } else {
+            return .general
+        }
+    }
+
+    private static func enrichQuery(_ query: String, policy: SearchSourcePolicy) -> String {
+        switch policy {
+        case .medicalPrimary:
+            return query + " (site:nih.gov OR site:who.int OR site:cdc.gov OR site:ncbi.nlm.nih.gov OR site:cochranelibrary.com OR site:fda.gov)"
+        case .sportsScience:
+            return query + " (site:acsm.org OR site:ncbi.nlm.nih.gov OR site:sportsci.org OR site:jissn.biomedcentral.com OR site:nsca.com)"
+        case .general:
+            return query
+        }
     }
 }
 
@@ -157,6 +205,8 @@ struct HealthDataTool: AgentTool {
     let name = "check_health_data"
     let description = "Retrieve a specific health metric value from today's context when the user asks for an exact number. Use this sparingly — most data is visible in the system prompt context JSON."
 
+    nonisolated(unsafe) let dashboard: DashboardSummary
+
     var parameters: [String: Value] {
         [
             "type": .string("object"),
@@ -176,7 +226,86 @@ struct HealthDataTool: AgentTool {
               let metric = json["metric"] as? String else {
             return "Error: missing 'metric' argument."
         }
-        return "Metric '\(metric)' data is available in the system context JSON. Refer to the context provided in your system prompt for the exact value."
+        
+        struct MetricResponse: Codable {
+            var metric: String
+            var value: Double?
+            var unit: String
+            var confidence: String
+            var source: String
+            var lastUpdated: String
+        }
+        
+        var response = MetricResponse(
+            metric: metric,
+            value: nil,
+            unit: "",
+            confidence: "high",
+            source: dashboard.source.rawValue,
+            lastUpdated: ISO8601DateFormatter().string(from: dashboard.date)
+        )
+        
+        switch metric.lowercased() {
+        case "sleep_score":
+            response.value = dashboard.sleepScore.value
+            response.unit = "pts"
+            response.confidence = dashboard.sleepScore.confidence.rawValue
+        case "recovery_score":
+            response.value = dashboard.recovery.value
+            response.unit = "pts"
+            response.confidence = dashboard.recovery.confidence.rawValue
+        case "strain_score":
+            response.value = dashboard.strain.value
+            response.unit = "pts"
+            response.confidence = dashboard.strain.confidence.rawValue
+        case "stress_index":
+            response.value = dashboard.stress.value
+            response.unit = "index"
+            response.confidence = dashboard.stress.confidence.rawValue
+        case "hrv_avg":
+            response.value = dashboard.recoveryMetrics.hrvMilliseconds
+            response.unit = "ms"
+            response.confidence = dashboard.recoveryMetrics.hrvMilliseconds != nil ? "high" : "unavailable"
+        case "rhr_avg", "resting_hr":
+            response.value = dashboard.recoveryMetrics.restingHeartRate
+            response.unit = "bpm"
+            response.confidence = dashboard.recoveryMetrics.restingHeartRate != nil ? "high" : "unavailable"
+        case "energy_bank":
+            response.value = dashboard.energy.value
+            response.unit = "pts"
+            response.confidence = dashboard.energy.confidence.rawValue
+        case "steps":
+            response.value = dashboard.strain.metrics["steps_raw"]
+            response.unit = "steps"
+            response.confidence = "high"
+        case "active_calories":
+            response.value = dashboard.strain.metrics["active_energy_raw"]
+            response.unit = "kcal"
+            response.confidence = "high"
+        case "sleep_hours":
+            response.value = dashboard.sleepSummary.totalSleepMinutes > 0 ? Double(dashboard.sleepSummary.totalSleepMinutes) / 60.0 : nil
+            response.unit = "hours"
+            response.confidence = "high"
+        case "sleep_efficiency":
+            response.value = dashboard.sleepScore.metrics["sleep_efficiency"]
+            response.unit = "%"
+            response.confidence = "high"
+        case "rem_percent":
+            response.value = dashboard.sleepScore.metrics["rem_pct"]
+            response.unit = "%"
+            response.confidence = "high"
+        case "deep_percent":
+            response.value = dashboard.sleepScore.metrics["deep_pct"]
+            response.unit = "%"
+            response.confidence = "high"
+        default:
+            return "Unknown metric '\(metric)'"
+        }
+        
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .prettyPrinted
+        let resData = try encoder.encode(response)
+        return String(data: resData, encoding: .utf8) ?? "{}"
     }
 }
 
@@ -187,15 +316,7 @@ struct TrainingPlanTool: AgentTool {
     let name = "generate_training_plan"
     let description = "Generate a personalized training plan recommendation based on today's physiological readiness (recovery, strain, energy bank, sleep, stress) and the user's Wiki goals. Use this when the user asks about workout plans, training recommendations, or whether they should train today."
 
-    // Today's scores — populated from the dashboard
-    let recoveryScore: Double
-    let strainScore: Double
-    let energyBankScore: Double
-    let atl: Double
-    let ctl: Double
-    let tsb: Double
-    let sleepScore: Double
-    let stressIndex: Double
+    nonisolated(unsafe) let decision: TrainingDecision
 
     var parameters: [String: Value] {
         [
@@ -228,21 +349,6 @@ struct TrainingPlanTool: AgentTool {
         let duration = json["duration_minutes"] as? Int ?? 45
         let intensity = json["intensity"] as? String ?? "moderate"
 
-        // ── Readiness Assessment ──
-        let readinessLevel: String
-        let readinessGuidance: String
-
-        if recoveryScore > 75 && energyBankScore > 60 && tsb > 5 {
-            readinessLevel = "HIGH"
-            readinessGuidance = "Body is primed for intense training. Push hard — this is an optimal biological window for progression."
-        } else if recoveryScore > 50 && energyBankScore > 40 {
-            readinessLevel = "MODERATE"
-            readinessGuidance = "Train at controlled intensity. Moderate load or active recovery is appropriate."
-        } else {
-            readinessLevel = "LOW"
-            readinessGuidance = "Prioritize recovery. Recommend rest or light mobility work only."
-        }
-
         // ── Build structured context for the LLM ──
         var context = ""
         context += "## Training Plan Context (generated by generate_training_plan tool)\n\n"
@@ -250,31 +356,35 @@ struct TrainingPlanTool: AgentTool {
         context += "### Today's Physiological State\n"
         context += "| Metric | Score |\n"
         context += "|--------|-------|\n"
-        context += "| Recovery | \(Int(recoveryScore.rounded()))/100 |\n"
-        context += "| Sleep | \(Int(sleepScore.rounded()))/100 |\n"
-        context += "| Strain (today) | \(Int(strainScore.rounded()))/100 |\n"
-        context += "| Stress Index | \(Int(stressIndex.rounded()))/100 |\n"
-        context += "| Energy Bank | \(Int(energyBankScore.rounded()))/100 |\n\n"
+        context += "| Recovery Volume Multiplier | \(decision.volumeMultiplier) |\n"
+        context += "| Sleep | \(decision.body) |\n"
 
-        context += "### Training Load Status (Banister ATL/CTL/TSB)\n"
-        context += "| Metric | Value |\n"
-        context += "|--------|-------|\n"
-        context += "| ATL (Acute, 7-day) | \(Int(atl.rounded())) |\n"
-        context += "| CTL (Chronic, 42-day) | \(Int(ctl.rounded())) |\n"
-        context += "| TSB (Fitness — Fatigue) | \(Int(tsb.rounded())) |\n"
-
-        if tsb < -15 {
-            context += "\nTSB is deeply negative — the athlete is carrying significant accumulated fatigue. Recommend reduced load or a deload day.\n"
-        } else if tsb < -5 {
-            context += "\nTSB is slightly negative — some fatigue accumulation. Train but avoid maximum intensity.\n"
-        } else if tsb > 10 {
-            context += "\nPositive TSB — the athlete is fresh and can absorb a high training stimulus.\n"
+        context += "\n### Training Load Status (Banister ATL/CTL/TSB)\n"
+        if decision.trainingLoadConfidence == .unavailable {
+            context += "\n训练负荷历史不足，不能判断 ATL/CTL/TSB。今日建议只基于 recovery / sleep / current strain / subjective flags。\n"
         } else {
-            context += "\nTSB is near neutral — maintain current training load.\n"
+            context += "| Metric | Value |\n"
+            context += "|--------|-------|\n"
+            context += "| ATL (Acute, 7-day) | \(decision.atl.map { "\(Int($0.rounded()))" } ?? "N/A") |\n"
+            context += "| CTL (Chronic, 42-day) | \(decision.ctl.map { "\(Int($0.rounded()))" } ?? "N/A") |\n"
+            context += "| TSB (Fitness — Fatigue) | \(decision.tsb.map { "\(Int($0.rounded()))" } ?? "N/A") |\n"
+
+            if let tsbVal = decision.tsb {
+                if tsbVal < -15 {
+                    context += "\nTSB is deeply negative — the athlete is carrying significant accumulated fatigue. Recommend reduced load or a deload day.\n"
+                } else if tsbVal < -5 {
+                    context += "\nTSB is slightly negative — some fatigue accumulation. Train but avoid maximum intensity.\n"
+                } else if tsbVal > 10 {
+                    context += "\nPositive TSB — the athlete is fresh and can absorb a high training stimulus.\n"
+                } else {
+                    context += "\nTSB is near neutral — maintain current training load.\n"
+                }
+            }
         }
 
         context += "\n### Readiness Assessment\n"
-        context += "**\(readinessLevel) READINESS** — \(readinessGuidance)\n"
+        context += "**\(decision.readinessLevel) READINESS** — \(decision.readinessGuidance)\n"
+        context += "Target Intensity: \(decision.maxIntensity) · Recommended Type: \(decision.recommendedTrainingType)\n"
 
         context += "\n### User Request\n"
         context += "- Focus: \(focus)\n"
@@ -288,9 +398,9 @@ struct TrainingPlanTool: AgentTool {
         context += "3. **Be specific**: Include concrete exercises, sets/reps (for strength), heart rate zones (for cardio), pace targets, or mobility drills. Not vague suggestions.\n"
         context += "4. **Energy Bank aware**: If TSB is negative or energy bank is low, reduce volume/intensity regardless of what the user requested.\n"
         context += "5. **Recovery-gated rules**:\n"
-        context += "   - Recovery > 75 AND energy bank > 60 AND TSB positive → push hard, recommend high-intensity (HR zone 4-5, heavy weights, sprint intervals)\n"
-        context += "   - Recovery 50-75 → moderate training (HR zone 2-3, moderate weights, steady-state cardio) or active recovery\n"
-        context += "   - Recovery < 50 → rest or light mobility only (yoga, walking, foam rolling, stretching)\n"
+        context += "   - Readiness Level HIGH → push hard, recommend high-intensity (HR zone 4-5, heavy weights, sprint intervals)\n"
+        context += "   - Readiness Level MODERATE → moderate training (HR zone 2-3, moderate weights, steady-state cardio) or active recovery\n"
+        context += "   - Readiness Level LOW → rest or light mobility only (yoga, walking, foam rolling, stretching)\n"
         context += "6. **Format**: Use a clear structure with warm-up, main session, and cool-down. Include approximate time allocations.\n"
 
         return context
@@ -353,6 +463,9 @@ struct FoodLogTool: AgentTool {
     }
 
     func execute(arguments: String) async throws -> String {
+        try await MainActor.run {
+            try PersistenceWriteGate.shared.assertWritable(operation: "FoodLogTool", modelContext: modelContext)
+        }
         guard let data = arguments.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let mealName = json["meal_name"] as? String else {
@@ -455,6 +568,9 @@ struct CreateTrainingPlanTool: AgentTool {
     }
 
     func execute(arguments: String) async throws -> String {
+        try await MainActor.run {
+            try PersistenceWriteGate.shared.assertWritable(operation: "CreateTrainingPlanTool", modelContext: modelContext)
+        }
         guard let data = arguments.data(using: .utf8) else {
             return "Error: invalid UTF-8 string."
         }

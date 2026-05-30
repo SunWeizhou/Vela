@@ -14,6 +14,7 @@ final class SwiftDataJournalRepository: JournalRepository {
     }
 
     func add(tags: [String], note: String, createdAt: Date = Date()) throws {
+        try PersistenceWriteGate.shared.assertWritable(operation: "JournalRepository: add", modelContext: modelContext)
         modelContext.insert(JournalEntryRecord(createdAt: createdAt, tags: tags, note: note))
         try modelContext.save()
     }

@@ -40,7 +40,7 @@ public struct DailyPlanLimiterInput {
     }
 }
 
-public struct PlanLimiter: Codable, Hashable, Identifiable {
+public struct PlanLimiter: Codable, Hashable, Identifiable, Sendable {
     public var id: String
     public var severity: Int // 1–3
     public var reason: String

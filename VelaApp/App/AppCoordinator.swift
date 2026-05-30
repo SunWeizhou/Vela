@@ -58,14 +58,16 @@ struct AppCoordinator: View {
                 .font(.caption.weight(.medium))
                 .foregroundStyle(VelaTheme.primaryText)
             Spacer()
-            Button {
-                withAnimation {
-                    appState.isFallbackStore = false
-                    appState.isReadOnlySafetyMode = false
+            if !appState.isReadOnlySafetyMode {
+                Button {
+                    withAnimation {
+                        appState.isFallbackStore = false
+                        appState.isReadOnlySafetyMode = false
+                    }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(VelaTheme.secondaryText)
                 }
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(VelaTheme.secondaryText)
             }
         }
         .padding(.horizontal, 16)

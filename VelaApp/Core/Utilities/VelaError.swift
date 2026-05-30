@@ -16,6 +16,7 @@ enum VelaError: Error, LocalizedError, Identifiable {
     // MARK: - Persistence
     case persistenceFailed(operation: String, underlying: Error? = nil)
     case wikiFileError(path: String, underlying: Error? = nil)
+    case readOnlySafetyMode
 
     // MARK: - General
     case unknown(underlying: Error? = nil)
@@ -30,6 +31,7 @@ enum VelaError: Error, LocalizedError, Identifiable {
         case .aiResponseEmpty: return 2003
         case .persistenceFailed: return 3001
         case .wikiFileError: return 3002
+        case .readOnlySafetyMode: return 3003
         case .unknown: return 9999
         }
     }
@@ -53,6 +55,8 @@ enum VelaError: Error, LocalizedError, Identifiable {
             return isChinese ? "数据\(op)失败" : "Data \(op) failed"
         case .wikiFileError:
             return isChinese ? "Wiki 文件错误" : "Wiki file error"
+        case .readOnlySafetyMode:
+            return isChinese ? "数据库处于只读安全模式，无法保存更改" : "Database in Safe Read-Only Mode, changes cannot be saved"
         case .unknown:
             return isChinese ? "未知错误" : "Unknown error"
         }
@@ -91,6 +95,10 @@ enum VelaError: Error, LocalizedError, Identifiable {
                 : "Please restart the app and try again"
         case .wikiFileError:
             return nil
+        case .readOnlySafetyMode:
+            return isChinese
+                ? "系统处于只读保护。要保存新数据，请重启 App 以尝试恢复数据库；如果持续出现，请释放设备空间并重试。"
+                : "System is in read-only protection. To save new data, restart the app to recover the store."
         case .unknown:
             return isChinese
                 ? "请重启 App 后重试"

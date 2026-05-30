@@ -14,6 +14,7 @@ final class SwiftDataAIReportRepository: AIReportRepository {
     }
 
     func save(_ report: AIReportRecord) throws {
+        try PersistenceWriteGate.shared.assertWritable(operation: "AIReportRepository: save", modelContext: modelContext)
         modelContext.insert(report)
         try modelContext.save()
     }

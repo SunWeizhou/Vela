@@ -35,12 +35,12 @@ enum HealthUnitNormalizer {
         return max(0.0, min(100.0, val))
     }
 
-    /// Normalizes body fat percentage from raw percent (0-100 or 0-1) to 0...1.
+    /// Normalizes body fat percentage from raw percent (0-100 or 0-1) to 0...100.
     static func normalizeBodyFatPercentage(_ val: Double) -> Double {
-        if val > 1.0 {
-            return val / 100.0
+        if val > 0.0 && val <= 1.0 {
+            return val * 100.0
         }
-        return max(0.0, min(1.0, val))
+        return max(0.0, min(100.0, val))
     }
 
     /// Normalizes walking gait metrics (asymmetry, double support, steadiness) to 0...100.

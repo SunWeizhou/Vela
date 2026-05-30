@@ -12,10 +12,17 @@ struct ReportGenerator: Sendable {
         }()
         let contextData = try encoder.encode(context)
         let contextJSON = String(data: contextData, encoding: .utf8) ?? "{}"
+        
+        var userPrompt = prompt(for: type)
+        if type == .morningBrief {
+            let facts = buildMorningBriefFactsPrompt(from: context)
+            userPrompt += "\n\n" + facts
+        }
+
         let response = try await provider.complete(
             request: LLMRequest(
                 systemPrompt: systemPrompt,
-                userPrompt: prompt(for: type),
+                userPrompt: userPrompt,
                 contextJSON: contextJSON
             )
         )
@@ -26,6 +33,55 @@ struct ReportGenerator: Sendable {
             contextSnapshot: contextJSON,
             createdAt: Date()
         )
+    }
+
+    private func buildMorningBriefFactsPrompt(from context: AgentContextEnvelope) -> String {
+        let recoveryScore = context.recovery["score"] ?? "N/A"
+        let recoveryBand = context.recovery["band"] ?? "N/A"
+        let sleepScore = context.sleep["sleep_score"] ?? "N/A"
+        let sleepDurationMin = context.sleep["duration_minutes"] ?? "N/A"
+        let sleepEfficiencyPct = context.sleep["sleep_efficiency_pct"] ?? "N/A"
+        let hrvToday = context.recovery["hrv_ms"] ?? "N/A"
+        let hrvBaseline = context.recovery["hrv_baseline_ms"] ?? "N/A"
+        let hrvVsBaselinePct = context.recovery["hrv_vs_baseline_pct"] ?? "N/A"
+        let hrvZScore = context.recovery["hrv_z_score"] ?? "N/A"
+        let rhrToday = context.recovery["rhr_bpm"] ?? "N/A"
+        let rhrBaseline = context.recovery["rhr_baseline_bpm"] ?? "N/A"
+        
+        let readinessLevel = context.todaySummary["readiness_level"] ?? "MODERATE"
+        let readinessGuidance = context.todaySummary["readiness_guidance"] ?? "Train at controlled intensity."
+
+        if language.isChinese {
+            return """
+            [CRITICAL DIRECTIVE: The following physical facts are pre-calculated locally from verified data sources. You MUST populate your Markdown table and verbal text strictly using these values. NEVER hallucinate, extrapolate, or alter any numbers. If any value is "N/A", display it as "N/A" or "--" and mention that historical calibration is in progress.]
+
+            今日客观身体指标事实 (MorningBriefFacts):
+            - 恢复得分 (Recovery Score): \(recoveryScore) 分 (Band: \(recoveryBand))
+            - 睡眠得分 (Sleep Score): \(sleepScore) 分 (时长: \(sleepDurationMin) 分钟, 效率: \(sleepEfficiencyPct))
+            - HRV 今日值: \(hrvToday) ms
+            - HRV 基线值: \(hrvBaseline) ms
+            - HRV 相对基线偏差 (vs Baseline): \(hrvVsBaselinePct) (Z-Score: \(hrvZScore))
+            - 静息心率 今日值: \(rhrToday) bpm
+            - 静息心率 基线值: \(rhrBaseline) bpm
+            - 训练准备度级别 (Readiness): \(readinessLevel)
+            - 训练指导建议 (Guidance): \(readinessGuidance)
+            """
+        } else {
+            return """
+            [CRITICAL DIRECTIVE: The following physical facts are pre-calculated locally from verified data sources. You MUST populate your Markdown table and verbal text strictly using these values. NEVER extrapolate or alter any numbers. If any value is "N/A", display it as "N/A" or "--" and mention that historical calibration is in progress.]
+
+            Today's Objective Physical Facts (MorningBriefFacts):
+            - Recovery Score: \(recoveryScore) (Band: \(recoveryBand))
+            - Sleep Score: \(sleepScore) (Duration: \(sleepDurationMin) mins, Efficiency: \(sleepEfficiencyPct))
+            - HRV Today: \(hrvToday) ms
+            - HRV Baseline: \(hrvBaseline) ms
+            - HRV vs Baseline Pct: \(hrvVsBaselinePct) (Z-Score: \(hrvZScore))
+            - Resting HR Today: \(rhrToday) bpm
+            - Resting HR Baseline: \(rhrBaseline) bpm
+            - Athletic Readiness Level: \(readinessLevel)
+            - Athletic Readiness Guidance: \(readinessGuidance)
+            """
+        }
     }
 
     private var systemPrompt: String {

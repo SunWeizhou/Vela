@@ -1270,9 +1270,9 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertEqual(HealthUnitNormalizer.normalizeOxygenSaturation(0.98), 98.0, accuracy: 0.001)
         XCTAssertEqual(HealthUnitNormalizer.normalizeOxygenSaturation(98.0), 98.0, accuracy: 0.001)
 
-        // Body Fat: 0...1 bound
-        XCTAssertEqual(HealthUnitNormalizer.normalizeBodyFatPercentage(15.0), 0.15, accuracy: 0.001)
-        XCTAssertEqual(HealthUnitNormalizer.normalizeBodyFatPercentage(0.15), 0.15, accuracy: 0.001)
+        // Body Fat: 0...100 bound (scales 0-1 input to 0-100)
+        XCTAssertEqual(HealthUnitNormalizer.normalizeBodyFatPercentage(15.0), 15.0, accuracy: 0.001)
+        XCTAssertEqual(HealthUnitNormalizer.normalizeBodyFatPercentage(0.15), 15.0, accuracy: 0.001)
     }
 
     func testStressEngineWithTemperatureNull() {

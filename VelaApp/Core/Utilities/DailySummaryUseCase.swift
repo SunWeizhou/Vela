@@ -199,7 +199,30 @@ final class DailySummaryUseCase {
             )
         )
         
-        let dashboard = DashboardSummary(
+        var activePlan: TrainingPlanRecord? = nil
+        var journalFlags: Set<String> = []
+        if let modelContext {
+            let activePlanFetch = FetchDescriptor<TrainingPlanRecord>(
+                predicate: #Predicate<TrainingPlanRecord> { $0.isActive }
+            )
+            activePlan = (try? modelContext.fetch(activePlanFetch))?.first
+            
+            let todayRange = DateRangeQuery.today(containing: now, calendar: calendar)
+            let todayStart = todayRange.start
+            let todayEnd = todayRange.end
+            let journalFetch = FetchDescriptor<JournalEntryRecord>(
+                predicate: #Predicate<JournalEntryRecord> { $0.createdAt >= todayStart && $0.createdAt < todayEnd }
+            )
+            if let journals = try? modelContext.fetch(journalFetch) {
+                for j in journals {
+                    for tag in j.tags {
+                        journalFlags.insert(tag)
+                    }
+                }
+            }
+        }
+
+        var dashboard = DashboardSummary(
             date: context.date,
             sleepSummary: resolvedSleepSummary,
             sleepScore: sleepScore,
@@ -215,6 +238,12 @@ final class DailySummaryUseCase {
             workouts: context.strainToday.workouts,
             dailyInsight: dailyInsight(recovery: recovery, sleepScore: sleepScore, strain: strain, source: .healthKit),
             source: .healthKit
+        )
+        dashboard.trainingDecision = TrainingDecisionEngine.evaluate(
+            dashboard,
+            journalFlags: journalFlags,
+            activePlan: activePlan,
+            history: snapshots42
         )
         
         let persistedSnapshot = makeSnapshot(from: dashboard, context: context, date: now)

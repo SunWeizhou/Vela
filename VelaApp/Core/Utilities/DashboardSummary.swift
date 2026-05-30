@@ -16,6 +16,52 @@ struct DashboardSummary: Hashable {
     var workouts: [WorkoutSummary]
     var dailyInsight: String
     var source: DataSource
+    
+    private var _trainingDecision: TrainingDecision?
+    var trainingDecision: TrainingDecision {
+        get {
+            if let _trainingDecision { return _trainingDecision }
+            return TrainingDecisionEngine.evaluate(self)
+        }
+        set {
+            _trainingDecision = newValue
+        }
+    }
+    
+    init(
+        date: Date,
+        sleepSummary: SleepSummary,
+        sleepScore: MetricResult,
+        recovery: MetricResult,
+        recoveryMetrics: RecoveryMetricSummary,
+        recoveryBaseline: RecoveryMetricSummary,
+        strain: MetricResult,
+        stress: MetricResult,
+        energy: MetricResult,
+        healthAge: HealthAgeTrendResult,
+        bodyMetrics: BodyMetricsSummary,
+        extendedMetrics: ExtendedHealthMetrics,
+        workouts: [WorkoutSummary],
+        dailyInsight: String,
+        source: DataSource
+    ) {
+        self.date = date
+        self.sleepSummary = sleepSummary
+        self.sleepScore = sleepScore
+        self.recovery = recovery
+        self.recoveryMetrics = recoveryMetrics
+        self.recoveryBaseline = recoveryBaseline
+        self.strain = strain
+        self.stress = stress
+        self.energy = energy
+        self.healthAge = healthAge
+        self.bodyMetrics = bodyMetrics
+        self.extendedMetrics = extendedMetrics
+        self.workouts = workouts
+        self.dailyInsight = dailyInsight
+        self.source = source
+        self._trainingDecision = nil
+    }
 
     enum DataSource: String, Hashable {
         case healthKit = "HealthKit"
@@ -399,7 +445,7 @@ enum CoachSnapshotDirective {
         generatedAt: Date = Date(),
         calendar: Calendar = .current
     ) -> String {
-        let plan = DailyPlanEngine.recommendation(for: dashboard)
+        let plan = dashboard.trainingDecision
         let limiterText = plan.limiter.map { "\($0.title) - \($0.detail)" } ?? L10n.t("none detected", "暂未识别")
         let time = formattedTime(generatedAt, calendar: calendar)
         let hrv = dashboard.recoveryMetrics.hrvMilliseconds.map { "\(Int($0.rounded()))ms" } ?? "N/A"

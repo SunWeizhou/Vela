@@ -14,7 +14,7 @@ final class HealthDataRefreshService {
         self.init(queryService: HealthKitQueryService())
     }
 
-    func refreshToday(now: Date = Date()) async throws -> DailyHealthSnapshot {
+    func buildTodayRawSnapshot(now: Date = Date()) async throws -> DailyHealthSnapshot {
         let context = try await refreshContext(now: now)
         guard context.hasAnyData else {
             return DailyHealthSnapshot(date: context.date)
@@ -63,18 +63,6 @@ final class HealthDataRefreshService {
         
         snapshot.oxygenSaturation = context.extendedMetrics.oxygenSaturation.map { HealthUnitNormalizer.normalizeOxygenSaturation($0) }
         snapshot.wristTemperature = context.extendedMetrics.bodyTemperature
-        
-        // Execute unified scoring pipeline
-        let pipeline = MetricComputationPipeline()
-        let result = pipeline.compute(for: snapshot, history: [])
-        
-        snapshot.sleepScore = result.sleepScore.value
-        snapshot.recoveryScore = result.recovery.value
-        snapshot.strainScore = result.strain.value
-        snapshot.stressIndex = result.stress.value
-        snapshot.morningEnergy = result.energy.components["morningEnergy"]
-        snapshot.currentEnergy = result.energy.value
-        snapshot.energyBank = result.energy.value
         
         return snapshot
     }

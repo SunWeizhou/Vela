@@ -26,19 +26,10 @@ enum ToolFactory {
         [
             WebSearchTool(),
             UpdateWikiTool(modelContext: modelContext),
-            HealthDataTool(),
+            HealthDataTool(dashboard: dashboard),
             JournalCorrelationTool(),
             FoodLogTool(modelContext: modelContext),
-            TrainingPlanTool(
-                recoveryScore: dashboard.recovery.score,
-                strainScore: dashboard.strain.score,
-                energyBankScore: dashboard.energy.currentEnergy,
-                atl: dashboard.energy.metrics["atl"] ?? dashboard.strain.score,
-                ctl: dashboard.energy.metrics["ctl"] ?? dashboard.strain.score,
-                tsb: dashboard.energy.metrics["tsb"] ?? 0,
-                sleepScore: dashboard.sleepScore.score,
-                stressIndex: dashboard.stress.stressIndex
-            ),
+            TrainingPlanTool(decision: dashboard.trainingDecision),
             CreateTrainingPlanTool(modelContext: modelContext),
             RenderCorrelationChartTool(),
         ]

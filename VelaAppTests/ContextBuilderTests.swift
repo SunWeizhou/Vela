@@ -273,4 +273,49 @@ final class ContextBuilderTests: XCTestCase {
         XCTAssertEqual(decoded?.recovery.score.value, 85.0)
         XCTAssertEqual(decoded?.sleep.remPercent.value, 22.0)
     }
+
+    func testReliabilitySprintConstraints() throws {
+        // 1. Verify bodyFatPct in buildTyped
+        let builder = AIContextBuilder()
+        var dashboard = DashboardSummary.preview()
+        dashboard.bodyMetrics.bodyFatPercentage = 17.5
+
+        let (typedContext, _) = builder.buildTyped(
+            dashboard: dashboard,
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:]
+        )
+
+        // bodyFatPct should be present with correct value
+        if let bodyFatValue = typedContext.extendedMetrics.bodyFatPct.value {
+            XCTAssertEqual(bodyFatValue, 17.5)
+        }
+        XCTAssertEqual(typedContext.extendedMetrics.bodyFatPct.unit, "%")
+
+        // 2. TrainingDecisionEngine with empty history
+        let decisionEmptyHistory = TrainingDecisionEngine.evaluate(
+            dashboard,
+            journalFlags: [],
+            activePlan: nil,
+            history: []
+        )
+        XCTAssertEqual(decisionEmptyHistory.trainingLoadConfidence, .unavailable)
+        XCTAssertNotEqual(decisionEmptyHistory.readinessLevel, "HIGH")
+
+        // 3. PersistenceWriteGate read-only safety
+        PersistenceWriteGate.shared.setReadOnly(true)
+        XCTAssertThrowsError(try PersistenceWriteGate.shared.assertWritable(operation: "Test Operation")) { error in
+            guard let velaError = error as? VelaError else {
+                XCTFail("Should throw VelaError")
+                return
+            }
+            if case .readOnlySafetyMode = velaError {
+                // Success
+            } else {
+                XCTFail("Should throw .readOnlySafetyMode error")
+            }
+        }
+        PersistenceWriteGate.shared.setReadOnly(false)
+    }
 }

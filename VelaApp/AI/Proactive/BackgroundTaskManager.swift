@@ -83,81 +83,11 @@ enum BackgroundTaskManager {
                 // Build DashboardSummary from HealthKit
                 let queryService = HealthKitQueryService()
                 let services = VelaServices(queryService: queryService)
-                let refreshService = HealthDataRefreshService(queryService: queryService)
-                let context = try await refreshService.refreshContext()
 
-                guard context.hasAnyData else {
-                    logger.info("No health data available in background. Skipping.")
-                    task.setTaskCompleted(success: true)
-                    return
-                }
 
-                let sleepTarget = UserDefaults.standard.double(forKey: "vela_sleep_target_hours") * 60
-                let effectiveSleepTarget = sleepTarget > 0 ? sleepTarget : 450
-                let sleepScore = SleepScoreEngine().calculate(
-                    from: ScoreEngineFactory.sleep(
-                        from: context,
-                        sleepTarget: effectiveSleepTarget,
-                        todayBedtime: context.sleepSummary?.bedtime,
-                        recentBedtimes: []
-                    )
-                )
-                let recovery = RecoveryScoreEngine().calculate(
-                    from: ScoreEngineFactory.recovery(
-                        from: context,
-                        sleepScore: sleepScore.score,
-                        strainScoreYesterday: nil,
-                        hrvHistory: [],
-                        rhrHistory: []
-                    )
-                )
-                let strain = StrainScoreEngine().calculate(
-                    from: await ScoreEngineFactory.strain(
-                        from: context,
-                        recoveryScore: recovery.score,
-                        last28DaysDailyLoads: [],
-                        queryService: queryService
-                    )
-                )
-                let stress = StressIndexEngine().calculate(
-                    from: ScoreEngineFactory.stress(
-                        from: context,
-                        sleepScore: sleepScore.score,
-                        strainScore: strain.score,
-                        hrvHistory: [],
-                        rhrHistory: []
-                    )
-                )
-                let energy = EnergyBankEngine().calculate(
-                    from: ScoreEngineFactory.energyBank(
-                        from: context,
-                        recoveryScore: recovery.score,
-                        sleepScore: context.sleepSummary == nil ? nil : sleepScore.score,
-                        strainScore: strain.score,
-                        stressIndex: stress.stressIndex,
-                        strainHistory: []
-                    )
-                )
-                let healthAge = HealthAgeTrendEngine().calculate(
-                    from: ScoreEngineFactory.healthAge(from: context, recovery: recovery, sleepScore: sleepScore, strain: strain)
-                )
-                let dashboard = DashboardSummary(
-                    date: context.date,
-                    sleepSummary: context.sleepSummary ?? SleepSummary(date: context.date, totalSleepMinutes: 0, bedtime: nil, wakeTime: nil, stageMinutes: [:], segments: [], sleepScore: nil),
-                    sleepScore: sleepScore,
-                    recovery: recovery,
-                    recoveryMetrics: context.recoveryMetrics,
-                    recoveryBaseline: context.recoveryBaseline,
-                    strain: strain,
-                    stress: stress,
-                    energy: energy,
-                    healthAge: healthAge,
-                    bodyMetrics: context.bodyMetrics,
-                    extendedMetrics: context.extendedMetrics,
-                    workouts: context.strainToday.workouts,
-                    dailyInsight: "",
-                    source: .healthKit
-                )
+                let dashboard = try await DailySummaryUseCase(
+                    queryService: queryService
+                ).loadDashboard(for: Date(), modelContext: modelContext)
                 try? DailyLogService.refresh(dashboard: dashboard)
 
                 if config.autoEveningWikiSync, hour >= 23 || hour < 4 {

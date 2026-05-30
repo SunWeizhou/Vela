@@ -1,7 +1,6 @@
 import Foundation
 import SwiftData
 
-@MainActor
 public final class PipelineDiagnosticsLogger {
     /// Logs a health pipeline operation outcome as an auditable log entry.
     /// This integrates directly with the existing Trust Center UI.
