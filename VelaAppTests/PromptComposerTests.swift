@@ -25,6 +25,25 @@ final class PromptComposerTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Wiki"), "Casual prompt should mention Wiki")
     }
 
+    func testCasualPromptIncludesDualTrackArchiveDirective() {
+        let composer = CoachPromptComposer(
+            lang: .english,
+            personality: personality,
+            wikiText: "",
+            baselinePrompt: "",
+            activePlan: nil,
+            contextJSON: "",
+            correlationText: "",
+            wikiFiles: "profile.md, habits.md"
+        )
+
+        let prompt = composer.compose(for: .casual)
+
+        XCTAssertTrue(prompt.contains("Dual-Track Archive Maintenance"))
+        XCTAssertTrue(prompt.contains("single-day"))
+        XCTAssertTrue(prompt.contains("update_user_wiki"))
+    }
+
     func testFullPromptContainsAllSections() {
         let composer = CoachPromptComposer(
             lang: lang,

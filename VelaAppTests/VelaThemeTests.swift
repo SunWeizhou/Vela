@@ -20,6 +20,21 @@ final class VelaThemeTests: XCTestCase {
         XCTAssertEqual(calendar.component(.hour, from: range.end), 0)
     }
 
+    func testEmptyDashboardDoesNotExposePreviewScores() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let date = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 5, day: 29)))
+        let dashboard = DashboardSummary.empty(date: date)
+
+        XCTAssertEqual(dashboard.source, .empty)
+        XCTAssertFalse(dashboard.sleepScore.hasData)
+        XCTAssertFalse(dashboard.recovery.hasData)
+        XCTAssertFalse(dashboard.strain.hasData)
+        XCTAssertFalse(dashboard.stress.hasData)
+        XCTAssertFalse(dashboard.energy.hasData)
+        XCTAssertTrue(dashboard.workouts.isEmpty)
+        XCTAssertTrue(dashboard.dailyInsight.isEmpty)
+    }
+
     func testHealthDataCatalogCoversPhaseOneReadTypes() {
         XCTAssertTrue(HealthDataTypeCatalog.sleepReadTypes.contains(HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!))
         XCTAssertTrue(HealthDataTypeCatalog.recoveryReadTypes.contains(HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN)!))
@@ -64,5 +79,19 @@ final class VelaThemeTests: XCTestCase {
         XCTAssertEqual(state.selectedTab, 0)
         XCTAssertTrue(state.showCoachHub)
         XCTAssertEqual(state.prefilledCoachQuestion, "Review my sleep and give me one action.")
+    }
+
+    @MainActor
+    func testCoachRouteWithoutQuestionStartsBlankSession() {
+        let state = VelaAppState.shared
+        state.showCoachHub = false
+        state.prefilledCoachQuestion = "Stale question"
+        state.forceNewCoachSession = false
+
+        state.routeToCoach(question: nil)
+
+        XCTAssertTrue(state.showCoachHub)
+        XCTAssertTrue(state.forceNewCoachSession)
+        XCTAssertNil(state.prefilledCoachQuestion)
     }
 }

@@ -1,150 +1,168 @@
-# Vela — Handoff Document
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## 项目概述
 
-Vela 是一个 local-first 的 iOS 健康分析 App（SwiftUI + SwiftData + HealthKit），对标 Bevel Health。数据留在设备本地，只有结构化摘要发送给 DeepSeek LLM。
-
-2026-05-22 更新：Vela 当前构建已进入 Bevel 3.0-class 打磨阶段，不再只是 MVP。最新产品研究和框架文档：
-
-- `docs/BEVEL_3_RESEARCH.md` — Bevel 3.0 官网/App Store/论坛/真机观察调研。
-- `docs/VELA_FULL_STRENGTH_PRODUCT_BLUEPRINT.md` — Vela 满血版产品、设计、工程、AI、路线图。
-- `docs/GAP_ANALYSIS.md` — 当前 Vela vs Bevel 3.0 的体验差距。
+Vela 是一个 local-first 的 iOS 健康分析 App（SwiftUI + SwiftData + HealthKit），对标 Bevel Health。原始健康数据留在设备本地，只有结构化摘要发送给 DeepSeek LLM（通过 VelaBackend Vapor 服务，Claude API 也可用）。
 
 - **Target**: `Vela`
-- **Scheme**: `Vela`  
+- **Scheme**: `Vela`
 - **Bundle ID**: `com.sunweizhou.Vela`
-- **Deployment**: iPhone (connected via cable/network)
-- **Project 路径**: `/Users/sunweizhou/Desktop/AI Project/Vela/Vela.xcodeproj`
+- **Deployment**: iPhone 00008140-00164DE022C3801C
+- **Project**: `/Users/sunweizhou/Desktop/AI Project/Vela/Vela.xcodeproj`
+- **Backend**: `/Users/sunweizhou/Desktop/AI Project/Vela/VelaBackend` (Vapor 4, SQLite)
 
 ## 构建与推送
 
 ```bash
-# 1. 构建（Debug，目标 iPhone）
+# 构建到手机（先确认手机已连接）
 cd "/Users/sunweizhou/Desktop/AI Project/Vela"
 DEVICE="00008140-00164DE022C3801C"
 xcodebuild -project Vela.xcodeproj -scheme Vela -destination "id=$DEVICE" -configuration Debug -allowProvisioningUpdates build
 
-# 2. 推送到手机（用 devicectl，xcodebuild install 不会真正装到设备）
+# 推送已构建产物到手机（只改 Swift 代码时可直接执行）
 xcrun devicectl device install app --device "$DEVICE" \
   "/Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Products/Debug-iphoneos/Vela.app"
+
+# 仅检查编译（不连手机）
+xcodebuild -project Vela.xcodeproj -scheme Vela -sdk iphoneos -configuration Debug build
 ```
 
-注意：`build` 只需要在首次或依赖变化后执行，`install` 会重用已有构建产物推送到手机。如果只改了 Swift 代码，可以直接 `install`。
+## 前端架构：Apple Design System（2026-05-29 更新）
 
-## 项目结构
+所有视图已迁移到新的 Apple Design System，以根目录下 11 个新 Swift 文件为准。
+
+### 核心层
+
+**VelaTheme** (`VelaApp/Core/Theme/VelaTheme.swift`) — 设计 Token 唯一入口：
+- Surface: `bg`, `surface`, `cardBg`, `elevatedBg`, `groupedBg`
+- Text: `fg`, `fg2`, `muted`, `meta`
+- Accent: `accent` (#0071E3/#2997FF)
+- Semantic: `strainColor`, `recoveryColor`, `sleepColor`, `stressColor`, `energyColor`
+- Typography: `largeTitle()`, `title1()`-`title3()`, `headline()`, `body()`, `callout()`, `subheadline()`, `footnote()`, `caption1()`-`caption2()`
+- Spacing: `space1`-`space12` (4-48px, 8px grid), `pagePadding` (20px), `cardGap` (14px)
+- 向后兼容别名: `onSurface` → `fg`, `outline` → `borderSoft`, `recovery` → `recoveryColor`, 等
+
+**VelaDesignSystem** (`VelaApp/Core/DesignSystem/VelaDesignSystem.swift`) — 复用组件 + View Modifiers：
+- `ScoreRing`, `VitalCard`, `InfoCard`, `InsightCard`, `EmptyStateCard`
+- `GlassTabBar`, `StatusCapsule`, `DayPill`, `MessageBubble`, `TypingIndicator`
+- `SettingsRow`, `ToggleRow`, `EvidenceStep`, `DataFreshnessBar`
+- `SettingsGroup<Content>`, `QuickEntryButton`, `WorkoutCard`, `TagChip`, `PlusAction`
+- `.cardSurface()`, `.heroCardSurface()`, `.glassEffect()`, `.sectionSpacing()`
+- Button styles: `.cardPress`, `.tabItem`, `.plusButton`
+- 向后兼容桩: `VelaHeroSurface`, `VelaMetricPill`, `VelaGlassCard`, `VelaMemoryProposalCard`, `VelaEmptyState`, `VelaStatusBadge`, `VelaInlineAlert`, `VelaDataQualityRow`, `ImagePicker`
+
+**VelaLoc** (`VelaTheme.swift` 内) — 中文默认本地化枚举，所有属性为 computed 以避免 Sendable 警告。
+
+### Shell 与页面（5-Tab）
+
+**VelaShell** (`VelaApp/Features/Minimal/VelaMinimalShell.swift`) — 根导航：
+- 5 tabs: 今日 / 手记 / 训练 / 体征 / [+]
+- `GlassTabBar` 底部导航，`+` 在最右侧
+- 头像按钮 → Settings sheet，Coach 通过 Today 页按钮触发 sheet
+
+| 页面 | 文件 | 数据源 |
+|------|------|--------|
+| TodayView | `VelaApp/Features/Minimal/VelaMinimalTodayView.swift` | `@EnvironmentObject dashboardVM: DashboardViewModel` |
+| JournalView | `VelaApp/Features/Minimal/VelaMinimalCoachView.swift` | SwiftData `JournalEntryRecord`（待接入） |
+| TrainingView | `VelaApp/Features/Minimal/VelaMinimalFitnessView.swift` | `@EnvironmentObject dashboardVM` + `DailyPlanEngine` |
+| VitalsView | `VelaApp/Features/Minimal/VelaMinimalVitalsView.swift` | `@EnvironmentObject dashboardVM` |
+| SettingsView | `VelaApp/Features/Minimal/VelaMinimalJournalView.swift` | `@AppStorage`（notifications/language/theme） |
+| CoachView | `VelaApp/Features/Coach/CoachView.swift` | `@StateObject vm: CoachChatVM`（DeepSeek streaming） |
+| MetricDetailView | `VelaApp/Features/Minimal/VelaMinimalComponents.swift` | 各页面 onTap 导航进入 |
+| PlusActionSheet | `VelaApp/Features/SharedComponents/VelaQuickActionsSheet.swift` | 快速添加动作面板 |
+
+### 关键：文件映射（pbxproj 未变）
+
+由于直接修改 pbxproj 会损坏项目，新文件通过**覆盖现有文件内容**的方式放入：
+- `VelaShell.swift` → 覆盖 `VelaMinimalShell.swift`
+- `VelaJournalView.swift` → 覆盖 `VelaMinimalCoachView.swift`
+- `VelaMetricDetailView.swift` → 覆盖 `VelaMinimalComponents.swift`
+- `VelaSettingsView.swift` → 覆盖 `VelaMinimalJournalView.swift`
+- `VelaPlusActionSheet.swift` → 覆盖 `VelaQuickActionsSheet.swift`
+
+**绝不通过脚本修改 pbxproj**。新增 Swift 文件时，覆盖一个已存在于 pbxproj 但不再使用的旧文件，或让用户在 Xcode 中手动添加。
+
+### 数据注入模式
+
+```swift
+@EnvironmentObject private var dashboardVM: DashboardViewModel  // 健康评分
+@EnvironmentObject private var services: VelaServices            // AI Provider 等
+@Environment(\.modelContext) private var modelContext            // SwiftData
+@StateObject private var vm = CoachChatVM()                      // Coach 专用 VM
+```
+
+## 数据流
 
 ```
-VelaApp/
-├── App/                    # App 入口
-│   ├── VelaApp.swift       # @main
-│   └── AppCoordinator.swift
-├── AI/                     # AI 层
-│   ├── Context/            # AIContextBuilder — 构建 LLM 上下文
-│   ├── Models/             # AgentContextEnvelope, AIReportType
-│   ├── Proactive/          # EveningWikiSyncAgent, MorningBriefScheduler, AgentSkillsConfig
-│   ├── Actions/            # AgentActionParser — 解析 [ACTION:update_wiki]
-│   ├── Provider/           # DeepSeekProvider — LLM 调用
-│   ├── Reports/            # ReportGenerator — 自动报告生成
-│   ├── Prompting/          # Wiki 相关服务
-│   └── Logs/               # DailyLogService
-├── Features/               # UI 层
-│   ├── Home/               # 主仪表盘
-│   ├── Coach/              # AI 聊天面板
-│   ├── Settings/           # 设置页
-│   ├── Sleep/              # 睡眠分析
-│   ├── Strain/             # 负荷分析
-│   ├── Recovery/           # 恢复分析
-│   └── SharedComponents/   # MarkdownText, VelaTheme 等
-├── Health/                 # HealthKit 数据层
-│   ├── Services/           # HealthKitQueryService, HealthDataRefreshService
-│   ├── Authorization/      # HealthAuthorizationService
-│   ├── Models/             # Data models (WorkoutSummary, SleepSummary 等)
-│   ├── Mapping/            # SleepStage mapper
-│   └── Queries/            # 查询相关
-├── Scoring/                # 评分引擎
-│   ├── Sleep/              # SleepScoreEngine
-│   ├── Recovery/           # RecoveryScoreEngine
-│   ├── Strain/             # StrainScoreEngine
-│   ├── Stress/             # StressIndexEngine
-│   ├── EnergyBank/         # EnergyBankEngine (TRIMP ATL/CTL/TSB)
-│   └── HealthAge/          # HealthAgeTrendEngine
-├── Journal/                # 日记子系统
-├── Persistence/            # SwiftData 持久化
-│   ├── SwiftDataModels/    # CoreData 模型
-│   └── Repositories/       # 仓库层
-├── Core/                   # 跨模块共享
-│   ├── Theme/              # VelaTheme
-│   ├── Utilities/          # DashboardSummary, ScoringMath
-│   ├── Constants/          # 常量
-│   └── Extensions/         # Swift 扩展
-└── Resources/              # Assets.xcassets
+HealthKit → HealthKitQueryService → DailyHealthContext → DashboardSummary.healthKit()
+  → 评分引擎 (Sleep/Recovery/Strain/Stress/Energy) → DashboardViewModel
+  → AIContextBuilder.build() → AgentContextEnvelope → LLM Prompt (DeepSeek)
 ```
 
-## 数据流架构
+关键类型：
+- `DashboardSummary`: 所有评分的聚合体（`Core/Utilities/DashboardSummary.swift`）
+- `DashboardViewModel`: ObservableObject，持有 DashboardSummary，通过 `@EnvironmentObject` 注入页面
+- `DailyPlanEngine.recommendation(for: dashboard)` → 今日训练计划
+- `CoachChatVM`: Coach 对话的 ViewModel，管理 streaming 状态和消息历史
 
-HealthKit → HealthKitQueryService → (sleep/recovery/strain/extended/body metrics)
-                                   → DailyHealthContext (中间模型)
-                                   → DashboardSummary.healthKit() (评分计算)
-                                   → AIContextBuilder.build() (→ AgentContextEnvelope)
-                                   → LLM Prompt (覆盖 40+ 项指标 + 用户 Wiki)
+## VelaBackend（Vapor 4）
 
-### 关键数据痛点（已知）
+独立的服务端项目 (`VelaBackend/`)，使用 Fluent + SQLite + JWT。
 
-- **Workout 数据已在 AgentContextEnvelope 中包含 workouts 字段**（2026-05-21 修复），包含运动类型、时长、心率、热量、距离
-- **ExtendedMetrics 包含 30+ 项细粒度指标**（年龄、性别、血压、血糖、步态、营养等）
-- **年龄/性别已在 system prompt 中明确告知 LLM**，基于人口统计学参考值进行分析
-- **持久化层只存评分，不存原始指标** — 历史趋势分析受限
+### API 路由
 
-## 已完成的特性
+| 方法 | 路径 | 是否走 LLM |
+|------|------|-----------|
+| POST | `/api/auth/register` | 否 |
+| POST | `/api/auth/login` | 否 |
+| POST | `/api/auth/refresh` | 否 |
+| POST | `/api/coach/chat` | Claude API + Tool Use |
+| GET | `/api/today/plan?lang=zh&recovery=72&...` | Claude JSON |
+| GET | `/api/training/adaptations` | Claude JSON |
+| POST | `/api/insights/evidence` | Claude JSON 证据链 |
+| GET | `/api/memory/inbox` | 读 DB |
+| PUT | `/api/memory/card/:id` | 更新 DB |
+| GET | `/api/data-coverage` | 纯计算（不走 LLM） |
+| GET | `/api/trust/audit` | 读 DB |
+| PUT | `/api/settings` | 读写 DB |
 
-- [x] Coach AI 聊天（DeepSeek streaming，含 casual intent detection 防过度回复）
-- [x] Coach personalities（Data Nerd / Guardian / Friend / Commander）
-- [x] Markdown 渲染（行级 AttributedString 解析，streaming 时不闪）
-- [x] 30+ 项 HealthKit 数据读取（睡眠、恢复、负荷、步态、营养、心血管等）
-- [x] 睡眠评分引擎（含 REM/Deep/Core 阶段分析和效率计算）
-- [x] 恢复评分引擎（HRV Z-score 28-day rolling + RHR 基线对比）
-- [x] 负荷评分引擎（TRIMP-inspired + workout intensity load）
-- [x] 压力指数（4 因子模型：RHR 抬升、HRV 抑制、睡眠负债、负荷压力）
-- [x] 能量银行（Firstbeat charge/discharge + Banister ATL/CTL/TSB）
-- [x] 健康年龄趋势
-- [x] Energy Bank 引擎增强（HRV/RHR charge efficiency、ATL 7天/CTL 42天指数衰减）
-- [x] 用户 Wiki 系统（form-based UI 编辑，非原生 Markdown）
-- [x] Personal Baselines 写入 Wiki `baselines.md`
-- [x] 夜间 Wiki 同步 Agent（每晚 23:00 自动总结当日数据 → 更新 Wiki）
-- [x] 晨间简报 Agent（6:00-11:00 自动生成晨间报告）
-- [x] Agent Skills 配置 UI（Settings 页开关 + 时间偏好）
-- [x] TrainingView / TrainingCalendarView 初版
-- [x] BiologyView / BiologicalAgeEngine / manual biomarker entry 初版
-- [x] FoodPhotoAnalyzer 与 food logging tool 初版
-- [x] WebSearchService 与 web_search tool 初版
-- [x] Coach 侧边栏安全区域适配修复
-- [x] Streaming 节流（60ms debounce 防闪烁）
-- [x] Workout 数据进入 AI 上下文（2026-05-21）
+### 核心服务
 
-## 内存系统
+- `LLMService`: actor，封装 Claude API 调用（`chat()` / `jsonCompletion()`），含 3 个 Tool Definition
+- `PromptService`: 5 套中文 Prompt 模板（coach/todayInsight/trainingAdaptation/evidenceChain/memoryPattern）
+- `JWTService`: Access Token 15min / Refresh Token 7d
 
-项目持久记忆存储在：
-`/Users/sunweizhou/.claude/projects/-Users-sunweizhou-Desktop-AI-Project/memory/`
+### HealthContext 边界
 
-索引文件：`MEMORY.md` — 新对话会自动加载。如需回顾上次会话完整日志：
-`/Users/sunweizhou/.claude/projects/-Users-sunweizhou-Desktop-AI-Project-Vela/02c5d742-5732-4c7f-8ff4-e626afd42899.jsonl`
+iOS 端只发摘要 `HealthContext`，原始 HealthKit 数据永不离设备。所有 AI prompt 通过 `PromptService.formatHealthContext()` 注入数据。
 
-## 待办/开放问题
+## 评分引擎
 
-- [ ] **HRV 历史查询优化** — 当前使用大量 raw HKQuantitySamples，可考虑改用 HKStatisticsCollectionQuery 减少查询次数
-- [ ] **TRIMP 算法需要真实 workout HR 数据** — 当前 ATL/CTL 基于 strain 评分计算，未直接接入 workout HR zone minutes
-- [ ] **BGAppRefreshTask 后台刷新** — EveningWikiSyncAgent 的 `scheduleBackgroundRefresh()` 仍是空实现
-- [ ] **DeepSeek 回复仍然有时过长** — casual intent detection 已缓解，但仍有改进空间
-- [x] **Coach 网络搜索能力初版** — WebSearchService 与 web_search tool 已存在；下一步需要接入更清晰的 UI/权限/引用展示。
-- [ ] **Coach streaming 仍有闪烁** — memory 有记录，60ms throttle 已缓解但未根除
-- [ ] **Coach 回复缺少换行** — line-by-line AttributedString 已解决，但 streaming 过程中换行仍可能丢失
-- [x] **Persistence 层已扩展原始指标** — DailyHealthSummaryRecord 已包含 HRV/RHR/sleep/steps/body metrics 等；下一步是补齐 FoodLogRecord、AgentArtifactRecord、HealthRecordDocument。
+每个引擎实现 `ScoreEngine` protocol：
+- `SleepScoreEngine` — REM/Deep/Core 阶段分析 + 效率
+- `RecoveryScoreEngine` — HRV Z-score 28-day rolling + RHR 基线
+- `StrainScoreEngine` — TRIMP-inspired + workout intensity
+- `StressIndexEngine` — 4 因子: RHR↑, HRV↓, 睡眠负债, 负荷压力
+- `EnergyBankEngine` — Firstbeat charge/discharge + ATL(7d)/CTL(42d)/TSB
+- `HealthAgeTrendEngine` — 生物年龄估算
+- `ScoreEngineFactory` — 统一创建评分输入
 
-## 2026-05-22 新优先级
+## 注意事项
 
-- [ ] **Coach → Intelligence Workspace** — 把聊天、Wiki、Check-ins、Artifacts、Tools 合并成一个主动健康工作台。
-- [ ] **Home 首屏再收敛** — 10 秒内回答状态、原因、今日行动、数据置信度。
-- [ ] **Training Plan 结构化** — AI 生成的训练计划必须进入日历和训练卡，不停留在 markdown。
-- [ ] **Biology 可信化** — Biological Age 增加 freshness/confidence/missing data。
-- [ ] **Nutrition 结构化** — 食物照片识别后支持编辑份量、宏量、置信度并保存。
-- [ ] **真机体验打磨** — 底部 safe area、长文本、空状态、通知、后台任务。
+- **🔥 [CRITICAL] 永久前端视觉标准 (Bevel Parity)**: 2026-05-30 实现的 Bevel 视觉体系（暖白色 `#F5F3F0` 画布、白卡驾驶舱、并排三环仪表、压力虚线仪、格栅电池条、生物年龄大刻度盘、Biomarker Sparkline 平滑小趋势图及悬浮毛玻璃胶囊底栏）是项目的**最终前端标准**。未来的开发和智能代理只能**往里增加内容**（如完善按钮动作、接入详情页、丰富数据字段），**绝不能大改其整体视觉风格与结构**。
+- **📁 [Minimal Shell 文件映射说明]**: 为了在不损坏 Xcode `.pbxproj` 索引引用的前提下实现最清晰的文件逻辑，前端文件内容与 Tab 映射如下：
+    - `VelaMinimalShell.swift` ➡️ 底栏 Tab 胶囊容器 `VelaShell`
+    - `VelaMinimalTodayView.swift` ➡️ Tab 1 今日主页 `VelaTodayView`
+    - `VelaMinimalJournalView.swift` ➡️ Tab 2 习惯手记 `VelaJournalView`
+    - `VelaMinimalFitnessView.swift` ➡️ Tab 3 训练主页 `VelaTrainingView`
+    - `VelaMinimalVitalsView.swift` ➡️ Tab 4 体征主页 `VelaVitalsView`
+    - `VelaMinimalCoachView.swift` ➡️ “我的”设置页面 `VelaSettingsView`
+    - `VelaMinimalComponents.swift` ➡️ 耗力/睡眠/压力等全量指标高保真详情页 `VelaMetricDetailView`
+- 不直接修改 pbxproj，用文件覆盖方式添加新代码
+- 新前端代码中 `body` 不能用作存储属性名（与 SwiftUI `body` 冲突），用 `bodyText` 替代
+- LocalizedStringKey 在 Swift 6 下有 Sendable 警告，用 computed property 而非 stored let
+- 设计 Token 使用新名称（`fg`/`bg`/`cardBg`），旧名称作为向后兼容别名保留
+- Coach streaming 使用 60ms throttle（`DeepSeekProvider`），防止 UI 闪烁
+- 根目录的 `Vela*.swift` 和 `VelaApple*.swift` 文件是 Stitch 设计参考，实际代码在 `VelaApp/` 中

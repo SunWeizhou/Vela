@@ -24,7 +24,9 @@ enum WikiFileService {
         ("observations.md", "AI 观察"),
         ("strategies.md", "当前策略"),
         ("notes.md", "备注与发现"),
-        ("archive.md", "历史归档")
+        ("archive.md", "历史归档"),
+        ("diet.md", "饮食偏好与禁忌"),
+        ("sleep.md", "睡眠卫生与环境")
     ]
 
     private static let allowedFilenames = Set(filenames.map(\.filename))
@@ -248,6 +250,10 @@ enum WikiFileService {
             return "# Active Strategies\n\nCurrent training/recovery strategies in use.\n"
         case "archive.md":
             return "# Archive\n\nSuperseded or expired memories.\n"
+        case "diet.md":
+            return "# Diet\n\n- Dietary restrictions: \n- Caffeine window: \n- Preferred meals: \n"
+        case "sleep.md":
+            return "# Sleep\n\n- Sleep environment: \n- Wind-down routine: \n- Targets: \n"
         case "notes.md":
             return "# Notes\n\n"
         default:

@@ -7,6 +7,27 @@ struct DailyLogEntry: Hashable {
     var keyInsights: [String]
 }
 
+private struct DailyBodyDataSnapshot: Encodable {
+    var date: String
+    var generatedAt: Date
+    var source: String
+    var recovery: StandardScoreResult
+    var sleepSummary: SleepSummary
+    var sleepScore: StandardScoreResult
+    var recoveryMetrics: RecoveryMetricSummary
+    var recoveryBaseline: RecoveryMetricSummary
+    var strain: StrainScoreResult
+    var stress: StressIndexResult
+    var energy: EnergyBankResult
+    var healthAge: HealthAgeTrendResult
+    var bodyMetrics: BodyMetricsSummary
+    var extendedMetrics: ExtendedHealthMetrics
+    var workouts: [WorkoutSummary]
+    var dailyInsight: String
+    var wikiUpdatesDigest: String
+    var coachArchiveMaintenanceSummary: String
+}
+
 enum DailyLogService {
     private static var baseURL: URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -35,12 +56,79 @@ enum DailyLogService {
 
     // MARK: - Read / Write
 
-    static func write(dashboard: DashboardSummary, chatMessages: [CoachChatMessage], date: Date = Date()) throws {
+    static func refresh(dashboard: DashboardSummary, date: Date = Date()) throws {
+        try write(dashboard: dashboard, chatMessages: [], date: date)
+    }
+
+    static func recordInteraction(
+        dashboard: DashboardSummary,
+        userText: String,
+        assistantText: String,
+        date: Date = Date(),
+        wikiUpdates: [String] = [],
+        coachArchiveSummary: String? = nil
+    ) throws {
+        try write(
+            dashboard: dashboard,
+            chatMessages: [
+                CoachChatMessage(role: .user, content: userText),
+                CoachChatMessage(role: .assistant, content: assistantText)
+            ],
+            date: date,
+            wikiUpdates: wikiUpdates,
+            coachArchiveSummary: coachArchiveSummary
+        )
+    }
+
+    static func write(
+        dashboard: DashboardSummary,
+        chatMessages: [CoachChatMessage],
+        date: Date = Date(),
+        wikiUpdates: [String] = [],
+        coachArchiveSummary: String? = nil
+    ) throws {
         try FileManager.default.createDirectory(at: baseURL, withIntermediateDirectories: true)
 
+        let existing = (try? String(contentsOf: url(for: date), encoding: .utf8)) ?? ""
         let healthSection = buildHealthSection(from: dashboard)
-        let chatSection = buildChatSection(from: chatMessages)
+        let chatSection = mergeConversation(
+            existing: extractSection("Coach Conversation", from: existing),
+            incoming: chatMessages
+        )
+        let wikiDigest = mergeWikiDigest(
+            existing: extractSection("Wiki Updates Digest", from: existing),
+            wikiUpdates: wikiUpdates
+        )
+        let archiveSummary = mergeArchiveSummary(
+            existing: extractSection("Coach Archive Maintenance Summary", from: existing),
+            incoming: coachArchiveSummary
+        )
         let insights = buildInsights(from: dashboard)
+
+        let bodyData = DailyBodyDataSnapshot(
+            date: dateFormatter.string(from: date),
+            generatedAt: Date(),
+            source: dashboard.source.rawValue,
+            recovery: dashboard.recovery,
+            sleepSummary: dashboard.sleepSummary,
+            sleepScore: dashboard.sleepScore,
+            recoveryMetrics: dashboard.recoveryMetrics,
+            recoveryBaseline: dashboard.recoveryBaseline,
+            strain: dashboard.strain,
+            stress: dashboard.stress,
+            energy: dashboard.energy,
+            healthAge: dashboard.healthAge,
+            bodyMetrics: dashboard.bodyMetrics,
+            extendedMetrics: dashboard.extendedMetrics,
+            workouts: dashboard.workouts,
+            dailyInsight: dashboard.dailyInsight,
+            wikiUpdatesDigest: wikiDigest,
+            coachArchiveMaintenanceSummary: archiveSummary
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let jsonStr = String(data: try encoder.encode(bodyData), encoding: .utf8) ?? "{}"
 
         let content = """
         # \(dateFormatter.string(from: date))
@@ -55,11 +143,22 @@ enum DailyLogService {
         - Stress: \(dashboard.stress.hasData ? "\(Int(dashboard.stress.stressIndex.rounded()))/100 (\(dashboard.stress.band.rawValue))" : "No data")
         - Energy: \(dashboard.energy.hasData ? "Morning: \(Int(dashboard.energy.morningEnergy.rounded())), Current: \(Int(dashboard.energy.currentEnergy.rounded()))" : "No data")
 
+        ## Wiki Updates Digest
+        \(wikiDigest)
+
+        ## Coach Archive Maintenance Summary
+        \(archiveSummary)
+
         ## Insights
         \(insights)
 
         ## Coach Conversation
         \(chatSection)
+
+        ## Daily Body Data JSON
+        ```json
+        \(jsonStr)
+        ```
 
         ---
         Generated by Vela · \(isoFormatter.string(from: date))
@@ -121,6 +220,48 @@ enum DailyLogService {
         return messages.map { msg in
             "**\(msg.role == .user ? "User" : "Vela")**: \(msg.content.prefix(500))"
         }.joined(separator: "\n\n")
+    }
+
+    private static func mergeConversation(existing: String, incoming: [CoachChatMessage]) -> String {
+        guard !incoming.isEmpty else {
+            return existing.isEmpty ? "No conversation today." : existing
+        }
+
+        let incomingText = buildChatSection(from: incoming)
+        guard !existing.isEmpty, existing != "No conversation today." else {
+            return incomingText
+        }
+        return "\(existing)\n\n\(incomingText)"
+    }
+
+    private static func mergeWikiDigest(existing: String, wikiUpdates: [String]) -> String {
+        let defaultDigest = "- 今日未发生个人 Wiki 档案的主动修改。"
+        guard !wikiUpdates.isEmpty else {
+            return existing.isEmpty ? defaultDigest : existing
+        }
+
+        let uniqueFiles = Array(Set(wikiUpdates)).sorted()
+        let updateLine = "- Coach 主动提出个人 Wiki 档案更新：\(uniqueFiles.joined(separator: ", "))。待用户确认后写入长期档案。"
+        guard !existing.isEmpty, existing != defaultDigest else {
+            return updateLine
+        }
+        guard !uniqueFiles.allSatisfy({ existing.contains($0) }) else {
+            return existing
+        }
+        return "\(existing)\n\(updateLine)"
+    }
+
+    private static func mergeArchiveSummary(existing: String, incoming: String?) -> String {
+        let defaultSummary = "- 今日尚未运行主动档案维护。"
+        guard let incoming, !incoming.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return existing.isEmpty ? defaultSummary : existing
+        }
+
+        let summary = "- \(incoming.trimmingCharacters(in: .whitespacesAndNewlines))"
+        guard !existing.isEmpty, existing != defaultSummary else {
+            return summary
+        }
+        return "\(existing)\n\(summary)"
     }
 
     private static func buildInsights(from dashboard: DashboardSummary) -> String {

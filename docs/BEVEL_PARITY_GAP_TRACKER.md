@@ -1,6 +1,6 @@
 # Bevel Parity Gap Tracker
 
-> Updated: 2026-05-25  
+> Updated: 2026-05-30
 > Purpose: concrete page-by-page parity tracker for turning Vela from a Bevel-like shell into a Bevel-class daily health product.
 
 ## Root Cause
@@ -49,7 +49,7 @@ Observed through iPhone Mirroring on 2026-05-24:
 
 ### P0: Navigation and Shell
 - Keep Home / Journal / Fitness / Vitals / `+`.
-- Done first pass: the app now uses Apple-like glass navigation: four primary tabs sit inside a material capsule and `+` is a separate right-side material action target.
+- Done: the app now uses the native SwiftUI `TabView`, allowing iOS 26 to provide the system Liquid Glass tab bar behavior. The terracotta `+` remains a separate right-side action target.
 - Done first pass: `+` opens the Vela Intelligence extension hub instead of switching to a fifth Coach tab.
 - Done first pass: bottom transition black flash is addressed by restoring translucent system material behavior and keeping the custom shell inside the safe-area inset.
 - Done first pass: global forced light/dark overrides were removed and core theme tokens now adapt to iOS light/dark mode.
@@ -82,6 +82,9 @@ Observed through iPhone Mirroring on 2026-05-24:
 - Done first pass: Home Recovery/readiness cards now route to a Bevel-like Recovery metric drilldown with large value, 7D/30D trend, baseline ranges, driver analysis, and action guidance.
 - Done first pass: Vitals rows for HRV, resting heart rate, sleep heart rate, respiratory rate, blood oxygen, and weight now push into Bevel-like single-metric detail pages.
 - Done first pass: HRV, resting heart rate, respiratory rate, blood oxygen, and weight detail pages can load saved 30-day trend data from `DailyHealthSummaryRecord`.
+- Done first pass: the Vitals biological-age Hero now consumes `BiologicalAgeEngine` output and renders a pending state when real inputs are missing instead of using a fixed age delta.
+- Done first pass: missing Vitals values now render as `--` with neutral sparklines instead of demo HRV, RHR, weight, and body-fat values.
+- Next: add biological-age confidence, freshness, missing-input explanations, weekly trend persistence, and contributor chips.
 - Next: apply the same drilldown pattern to VO2 Max, body fat, BMI, stress, energy, health age, and biological age biomarkers.
 
 ### P1: `+` Intelligence
@@ -99,6 +102,7 @@ Observed through iPhone Mirroring on 2026-05-24:
 
 ## Bug Classes To Track
 
+- Fixed: shared metric detail navigation controls were embedded in the scrollable Hero card. They now stay in a fixed header above the card.
 - Visual: invisible low-opacity white strokes on light backgrounds.
 - Visual: dark-mode variants need real-device visual QA beyond the adaptive token foundation.
 - Layout: controls hidden behind tab bar.

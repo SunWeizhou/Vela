@@ -19,6 +19,7 @@ struct DashboardSummary: Hashable {
 
     enum DataSource: String, Hashable {
         case healthKit = "HealthKit"
+        case empty = "Empty"
         case preview = "Preview"
     }
 
@@ -26,6 +27,108 @@ struct DashboardSummary: Hashable {
         PreviewDataFactory.makeDashboard(date: date)
     }
 
+    static func empty(date: Date = Date()) -> DashboardSummary {
+        DashboardSummary(
+            date: date,
+            sleepSummary: SleepSummary(
+                date: date,
+                totalSleepMinutes: 0,
+                bedtime: nil,
+                wakeTime: nil,
+                stageMinutes: [:],
+                segments: [],
+                sleepScore: nil
+            ),
+            sleepScore: StandardScoreResult(
+                score: 0,
+                band: .low,
+                confidence: .low,
+                components: [:],
+                weights: [:],
+                reasons: ["Sleep data unavailable."],
+                metrics: [:]
+            ),
+            recovery: StandardScoreResult(
+                score: 0,
+                band: .low,
+                confidence: .low,
+                components: [:],
+                weights: [:],
+                reasons: ["Recovery data unavailable."],
+                metrics: [:]
+            ),
+            recoveryMetrics: RecoveryMetricSummary(
+                hrvMilliseconds: nil,
+                restingHeartRate: nil,
+                sleepHeartRate: nil,
+                respiratoryRate: nil
+            ),
+            recoveryBaseline: RecoveryMetricSummary(
+                hrvMilliseconds: nil,
+                restingHeartRate: nil,
+                sleepHeartRate: nil,
+                respiratoryRate: nil
+            ),
+            strain: StrainScoreEngine().calculate(from: StrainScoreInput(
+                activeEnergyToday: nil,
+                activeEnergyBaseline: nil,
+                exerciseMinutesToday: nil,
+                exerciseMinutesBaseline: nil,
+                workoutIntensityLoad: nil,
+                recoveryScore: nil,
+                stepCount: nil
+            )),
+            stress: StressIndexEngine().calculate(from: StressIndexInput(
+                heartRateElevationScore: nil,
+                hrvSuppressionScore: nil,
+                sleepDebtStressScore: nil,
+                recentStrainStressScore: nil
+            )),
+            energy: EnergyBankEngine().calculate(from: EnergyBankInput(
+                recoveryScore: nil,
+                sleepScore: nil,
+                strainScore: nil,
+                stressIndex: nil,
+                hrvToday: nil,
+                hrvBaseline: nil,
+                rhrToday: nil,
+                rhrBaseline: nil,
+                sleepHours: nil,
+                strainHistory: nil,
+                bodyTempDelta: nil
+            )),
+            healthAge: HealthAgeTrendEngine().calculate(from: HealthAgeTrendInput(factors: [])),
+            bodyMetrics: BodyMetricsSummary(
+                vo2Max: nil,
+                weightKilograms: nil,
+                bodyFatPercentage: nil,
+                leanBodyMassKilograms: nil
+            ),
+            extendedMetrics: ExtendedHealthMetrics.empty,
+            workouts: [],
+            dailyInsight: "",
+            source: .empty
+        )
+    }
+}
+
+private extension ExtendedHealthMetrics {
+    static let empty = ExtendedHealthMetrics(
+        age: nil, biologicalSex: nil, heightCm: nil, bmi: nil,
+        walkingHeartRateAvg: nil, oxygenSaturation: nil,
+        bloodPressureSystolic: nil, bloodPressureDiastolic: nil,
+        bloodGlucose: nil,
+        walkingSpeed: nil, walkingStepLength: nil, walkingAsymmetry: nil,
+        walkingDoubleSupport: nil, walkingSteadiness: nil,
+        stairAscentSpeed: nil, stairDescentSpeed: nil, sixMinuteWalkDistance: nil,
+        exerciseMinutes: nil, standMinutes: nil, flightsClimbed: nil,
+        distanceKm: nil, cyclingDistanceKm: nil,
+        environmentalNoisedB: nil, headphoneNoisedB: nil, timeInDaylight: nil,
+        bodyTemperature: nil,
+        waterMl: nil, caffeineMg: nil, dietaryEnergyKcal: nil,
+        dietaryProteinG: nil, dietaryCarbsG: nil, dietaryFatG: nil,
+        mindfulMinutes: nil, sleepBreathingDisturbances: nil
+    )
 }
 
 enum DailyPlanKind: String, Codable, Hashable {

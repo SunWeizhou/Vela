@@ -77,3 +77,33 @@ final class WikiMergeTests: XCTestCase {
         XCTAssertNil(dict[unknownFile], "Unknown file should not appear in dictionary")
     }
 }
+
+final class DailyLogServiceTests: XCTestCase {
+
+    func testRefreshPreservesConversationAndWritesFullBodySnapshot() throws {
+        let date = Date(timeIntervalSince1970: 0)
+        let fileURL = DailyLogService.url(for: date)
+        try? FileManager.default.removeItem(at: fileURL)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        let dashboard = DashboardSummary.preview(date: date)
+        try DailyLogService.recordInteraction(
+            dashboard: dashboard,
+            userText: "I slept poorly last night.",
+            assistantText: "Keep today's training light.",
+            date: date,
+            wikiUpdates: ["habits.md"],
+            coachArchiveSummary: "Coach proposed a durable caffeine cutoff preference."
+        )
+        try DailyLogService.refresh(dashboard: dashboard, date: date)
+
+        let text = try String(contentsOf: fileURL, encoding: .utf8)
+        XCTAssertTrue(text.contains("I slept poorly last night."))
+        XCTAssertTrue(text.contains("Keep today's training light."))
+        XCTAssertTrue(text.contains("\"extendedMetrics\""))
+        XCTAssertTrue(text.contains("\"recoveryMetrics\""))
+        XCTAssertTrue(text.contains("\"workouts\""))
+        XCTAssertTrue(text.contains("habits.md"))
+        XCTAssertTrue(text.contains("durable caffeine cutoff preference"))
+    }
+}

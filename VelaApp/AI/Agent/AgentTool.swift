@@ -84,7 +84,7 @@ struct WebSearchTool: AgentTool {
 /// No longer writes directly to Markdown — proposals require user confirmation.
 struct UpdateWikiTool: AgentTool {
     let name = "update_user_wiki"
-    let description = "Propose a new long-term memory entry for the user's Wiki profile. Generates a proposal that the user can review and confirm. Available files: profile.md, goals.md, constraints.md, preferences.md, habits.md, training_history.md, health_context.md, observations.md, strategies.md."
+    let description = "Propose a durable long-term memory entry for the user's personal Wiki profile. Use only for stable preferences, confirmed facts, constraints, goals, or repeated patterns. Never store a one-day symptom, workout, meal, sleep result, or temporary body state here; those belong in the automatic daily Wiki log. Generates a proposal that the user can review and confirm. Available files: profile.md, goals.md, constraints.md, preferences.md, habits.md, training_history.md, health_context.md, observations.md, strategies.md."
 
     nonisolated(unsafe) let modelContext: ModelContext
 

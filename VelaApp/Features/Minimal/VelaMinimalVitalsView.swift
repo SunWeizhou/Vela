@@ -1,241 +1,482 @@
 import SwiftUI
+import SwiftData
 
-// MARK: - VelaAppleInsightsView — Insights Hub
-// Segmented control switching between Data Coverage / Evidence Chain / Memory Inbox / Trust Center
+// MARK: - VelaVitalsView — Bevel Replica Vitals Tab
+// Biological Age dial gauge × Interactive Sparkline Biomarker list
 
-struct VelaMinimalVitalsView: View {
-    @State private var selectedSegment = 0
-    private let segments = ["Coverage", "Evidence", "Memory", "Trust"]
+struct VelaVitalsView: View {
+    @Environment(\.colorScheme) private var cs
+    @Environment(\.velaScrollDirection) private var scrollDirection
+    @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var dashboardVM: DashboardViewModel
+    @Query(sort: \BiomarkerRecord.date, order: .reverse) private var biomarkers: [BiomarkerRecord]
+
+    private var dashboard: DashboardSummary { dashboardVM.dashboard }
+
+    // Dynamic states for RHR, HRV, Weight, Fat histories
+    @State private var weightHistoryData: [Double] = [0.5]
+    @State private var hrvHistoryData: [Double] = [0.5]
+    @State private var rhrHistoryData: [Double] = [0.5]
+    @State private var fatHistoryData: [Double] = [0.5]
+    
+    @State private var hrvValueText: String = "--"
+    @State private var rhrValueText: String = "--"
+    @State private var weightValueText: String = "--"
+    @State private var fatValueText: String = "--"
 
     var body: some View {
-        VelaMinimalScreen {
-            // Segment Picker
-            Picker("", selection: $selectedSegment) {
-                ForEach(0..<segments.count, id: \.self) { i in
-                    Text(segments[i]).tag(i)
-                }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                // 1. Biological Age Card (生物年龄 cockpit)
+                biologicalAgeHero
+                
+                // 2. Other Biomarkers Section
+                otherBiomarkersSection
             }
-            .pickerStyle(.segmented)
-            .padding(.bottom, VelaTheme.spaceSM)
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 100)
+        }
+        .scrollIndicators(.hidden)
+        .velaTrackScroll(direction: scrollDirection)
+        .background(Color(hex: "#F5F3F0")) // Warm canvas base
+        .onAppear {
+            loadRealVitalsData()
+        }
+        .onChange(of: dashboardVM.selectedDate) {
+            loadRealVitalsData()
+        }
+    }
 
-            switch selectedSegment {
-            case 0: dataCoverageContent
-            case 1: evidenceChainContent
-            case 2: memoryInboxContent
-            case 3: trustCenterContent
-            default: EmptyView()
+    // MARK: - Biological Age cockpit
+    private var biologicalAgeResult: BiologicalAgeResult? {
+        guard let chronologicalAge else { return nil }
+
+        let restingHR = dashboard.recoveryMetrics.restingHeartRate
+        let vo2Max = dashboard.bodyMetrics.vo2Max
+        let sleepHours = dashboard.sleepSummary.totalSleepMinutes > 0
+            ? Double(dashboard.sleepSummary.totalSleepMinutes) / 60.0
+            : nil
+        let sleepEfficiency = dashboard.sleepScore.metrics["sleep_efficiency"].map { $0 / 100.0 }
+        let steps = dashboard.strain.metrics["steps_raw"]
+        let hasLiveSignal = restingHR != nil
+            || vo2Max != nil
+            || sleepHours != nil
+            || sleepEfficiency != nil
+            || steps != nil
+            || !biomarkers.isEmpty
+
+        guard hasLiveSignal else { return nil }
+
+        return BiologicalAgeEngine().calculate(
+            input: BiologicalAgeInput(
+                chronologicalAge: Double(chronologicalAge),
+                restingHR: restingHR,
+                vo2Max: vo2Max,
+                sleepHours: sleepHours,
+                sleepEfficiency: sleepEfficiency,
+                steps: steps,
+                biomarkers: Array(biomarkers)
+            )
+        )
+    }
+
+    private var chronologicalAge: Int? {
+        WikiFileService.getAgeFromWiki() ?? dashboard.extendedMetrics.age
+    }
+
+    private var selectedDateText: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_Hans_CN")
+        formatter.dateFormat = "更新于 M月d日"
+        return formatter.string(from: dashboardVM.selectedDate)
+    }
+
+    private var biologicalAgeHero: some View {
+        let result = biologicalAgeResult
+        let biologicalAge = result.map { String(format: "%.1f", $0.biologicalAge) } ?? "--"
+        let age = Double(chronologicalAge ?? 0)
+        let minAgeRange = chronologicalAge.map { String(format: "%.0f", Double($0) - 7.0) } ?? "--"
+        let maxAgeRange = chronologicalAge.map { String(format: "%.0f", Double($0) + 3.0) } ?? "--"
+        let gaugeProgress = min(max((result?.overallScore ?? 0) / 100.0, 0), 1)
+        let deltaText: String = {
+            guard let result, chronologicalAge != nil else {
+                return "连接 Apple Health 后生成"
             }
-        }
-    }
-
-    // MARK: - 1. Data Coverage
-
-    private var dataCoverageContent: some View {
-        VStack(alignment: .leading, spacing: VelaTheme.spaceLG) {
-            coverageHero
-
-            VelaMinimalSectionHeader(title: "Signal Quality")
-
-            VelaAppleDataQualityRow(title: "Heart Rate Variability", subtitle: "Apple Watch · Last 7 days", isAvailable: true, qualityLabel: "98%", tint: VelaTheme.recovery)
-            VelaAppleDataQualityRow(title: "Resting Heart Rate", subtitle: "Apple Watch · Last 7 days", isAvailable: true, qualityLabel: "100%", tint: VelaTheme.recovery)
-            VelaAppleDataQualityRow(title: "Sleep Stages", subtitle: "Apple Watch · Last 7 days", isAvailable: true, qualityLabel: "92%", tint: VelaTheme.recovery)
-            VelaAppleDataQualityRow(title: "Blood Oxygen", subtitle: "Apple Watch · Spotty", isAvailable: true, qualityLabel: "64%", tint: VelaTheme.energy)
-            VelaAppleDataQualityRow(title: "Body Temperature", subtitle: "Apple Watch Series 9+", isAvailable: false, qualityLabel: "N/A", tint: VelaTheme.muted)
-            VelaAppleDataQualityRow(title: "Blood Glucose", subtitle: "CGM not paired", isAvailable: false, qualityLabel: "Missing", tint: VelaTheme.muted)
-
-            VelaAppleInlineAlert(
-                title: "Coverage Summary",
-                message: "85% of key signals available. Vela's recommendations are high-confidence for recovery and training, moderate for nutrition insights.",
-                systemImage: "checkmark.shield.fill",
-                tint: VelaTheme.recovery
-            )
-        }
-    }
-
-    private var coverageHero: some View {
-        HStack(alignment: .center, spacing: 20) {
-            VelaMinimalScoreRing(score: 85, color: VelaTheme.recovery, size: 100, lineWidth: 8, label: "Coverage")
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("DATA COVERAGE")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(VelaTheme.onSurfaceVariant)
-                    .tracking(1.2)
-
-                Text("High Confidence")
-                    .font(VelaTheme.cardTitle)
-                    .foregroundStyle(VelaTheme.onSurface)
-
-                Text("Most key health signals are available and fresh. Vela's recommendations are well-supported.")
-                    .font(VelaTheme.captionFont)
-                    .foregroundStyle(VelaTheme.onSurfaceVariant)
-                    .fixedSize(horizontal: false, vertical: true)
+            let delta = result.biologicalAge - age
+            if abs(delta) < 0.05 {
+                return "与实际年龄接近"
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .heroCardSurface(accent: VelaTheme.recovery)
-    }
-
-    // MARK: - 2. Evidence Chain
-
-    private var evidenceChainContent: some View {
-        VStack(alignment: .leading, spacing: VelaTheme.spaceLG) {
-            VelaMinimalSectionHeader(
-                title: "Why This Recommendation?",
-                subtitle: "The reasoning path from health signals to today's plan"
-            )
-
-            VelaAppleEvidenceStep(
-                index: 1,
-                title: "Heart Rate Variability",
-                value: "48ms (+3)",
-                detail: "HRV is trending up over 7 days, indicating increasing parasympathetic activity and recovery capacity.",
-                tint: VelaTheme.recovery,
-                isLast: false
-            )
-            VelaAppleEvidenceStep(
-                index: 2,
-                title: "Resting Heart Rate",
-                value: "52bpm (stable)",
-                detail: "RHR has remained at baseline for 5 consecutive days. No sign of accumulated fatigue or illness onset.",
-                tint: VelaTheme.accent,
-                isLast: false
-            )
-            VelaAppleEvidenceStep(
-                index: 3,
-                title: "Sleep Quality",
-                value: "78/100",
-                detail: "Sleep duration 7h12m with 92% efficiency. Deep sleep proportion is adequate but REM could improve.",
-                tint: VelaTheme.sleep,
-                isLast: false
-            )
-            VelaAppleEvidenceStep(
-                index: 4,
-                title: "Training Load (7-day)",
-                value: "Moderate",
-                detail: "ATL:CTL ratio is 1.1 — within the safe window. Previous session's strain has been absorbed.",
-                tint: VelaTheme.strain,
-                isLast: true
-            )
-
-            VelaAppleInlineAlert(
-                title: "Conclusion",
-                message: "All four signals converge: today is a green-light day for Zone 2 endurance work. Hold off on high-intensity intervals until REM sleep improves.",
-                systemImage: "lightbulb.fill",
-                tint: VelaTheme.energy
-            )
-        }
-    }
-
-    // MARK: - 3. Memory Inbox
-
-    private var memoryInboxContent: some View {
-        VStack(alignment: .leading, spacing: VelaTheme.spaceLG) {
-            VelaMinimalSectionHeader(
-                title: "Memory Inbox",
-                subtitle: "Patterns Vela has noticed. Confirm or reject to train the model."
-            )
-
-            memoryProposal(
-                title: "Zone 2 Performance Pattern",
-                evidence: "Your HR during Zone 2 runs has dropped 4bpm over the last 3 weeks at the same pace.",
-                source: "Training History",
-                target: "Fitness Profile",
-                confidence: "92%"
-            )
-            memoryProposal(
-                title: "Late-Night Eating Impact",
-                evidence: "Sleep efficiency drops to 78% on nights you log food after 21:30, vs. 91% otherwise.",
-                source: "Journal + Sleep",
-                target: "Nutrition Preferences",
-                confidence: "85%"
-            )
-            memoryProposal(
-                title: "Monday Recovery Pattern",
-                evidence: "HRV is consistently 8-12ms lower on Mondays after weekend long runs. Recovery takes ~36h.",
-                source: "Training + Recovery",
-                target: "Training Schedule",
-                confidence: "78%"
-            )
-        }
-    }
-
-    private func memoryProposal(title: String, evidence: String, source: String, target: String, confidence: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+            return String(format: delta < 0 ? "比实际年龄年轻 %.1f 岁" : "比实际年龄高 %.1f 岁", abs(delta))
+        }()
+        
+        return VStack(spacing: 8) {
+            // Header
             HStack {
-                VelaMinimalStatusBadge(label: "Pattern", systemImage: "brain.head.profile", tint: VelaTheme.accent)
                 Spacer()
-                Text("\(confidence) confidence")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(VelaTheme.energy)
-            }
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(VelaTheme.onSurface)
-            Text(evidence)
-                .font(VelaTheme.captionFont)
-                .foregroundStyle(VelaTheme.onSurfaceVariant)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 8) {
-                VelaAppleMetricPill(title: "Source", value: source, systemImage: "point.3.connected.trianglepath.dotted", tint: VelaTheme.sleep)
-                VelaAppleMetricPill(title: "Target", value: target, systemImage: "doc.text", tint: VelaTheme.recovery)
-            }
-
-            HStack(spacing: 10) {
-                VelaMinimalPillButton(title: "Confirm", systemImage: "checkmark", role: .primary) {}
-                VelaMinimalPillButton(title: "Reject", systemImage: "xmark", role: .secondary) {}
-            }
-        }
-        .cardSurface()
-    }
-
-    // MARK: - 4. Trust Center
-
-    private var trustCenterContent: some View {
-        VStack(alignment: .leading, spacing: VelaTheme.spaceLG) {
-            VelaMinimalSectionHeader(
-                title: "Agent Trust Log",
-                subtitle: "Every recommendation Vela made, and why. Immutable audit trail."
-            )
-
-            ForEach(trustLogItems, id: \.0) { (title, subtitle, status) in
-                HStack(spacing: 12) {
-                    Image(systemName: "checkmark.shield.fill")
-                        .font(.title3)
-                        .foregroundStyle(VelaTheme.recovery)
-                        .frame(width: 32, height: 32)
-                        .background(Circle().fill(VelaTheme.recovery.opacity(0.10)))
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(title)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(VelaTheme.onSurface)
-                        Text(subtitle)
-                            .font(VelaTheme.captionFont)
-                            .foregroundStyle(VelaTheme.onSurfaceVariant)
-                            .lineLimit(2)
-                    }
-                    Spacer()
-                    VelaMinimalStatusBadge(label: status, tint: VelaTheme.recovery)
+                
+                VStack(spacing: 4) {
+                    Text("生物年龄")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(Color(hex: "#1A1917"))
+                    
+                    Text(selectedDateText)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color(hex: "#8E8A80"))
                 }
-                .padding(VelaTheme.spaceSM)
-                .cardSurface(radius: VelaTheme.radiusSM)
+                
+                Spacer()
             }
+            .overlay(alignment: .trailing) {
+                Button {
+                    // Actions menu
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(Color(hex: "#1A1917"))
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(Color.white))
+                        .shadow(color: Color.black.opacity(0.02), radius: 4, y: 2)
+                }
+            }
+            .padding(.top, 8)
 
-            VelaAppleInlineAlert(
-                title: "Cryptographic Verification",
-                message: "All 34 recommendations this week have verified evidence chains. Zero anomalies detected. SHA-256 audit trail is intact.",
-                systemImage: "lock.shield.fill",
-                tint: VelaTheme.recovery
-            )
+            // Circular Dial Gauge
+            ZStack {
+                // Background ticks gauge
+                GaugeScaleArcView(size: 220)
+
+                Circle()
+                    .trim(from: 0.15, to: 0.15 + (0.70 * gaugeProgress))
+                    .stroke(
+                        Color(hex: "#5B8C6F"),
+                        style: StrokeStyle(lineWidth: 5, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(90))
+                    .frame(width: 220, height: 220)
+                
+                // Glowing cell dots visual effect
+                scatteredParticles
+                    .frame(width: 140, height: 100)
+                    .offset(y: -10)
+                
+                // Center dial text values
+                VStack(spacing: 0) {
+                    Text(biologicalAge)
+                        .font(.system(size: 40, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color(hex: "#1A1917"))
+
+                    Text(deltaText)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(result == nil ? Color(hex: "#8E8A80") : Color(hex: "#5B8C6F"))
+                        .padding(.top, 4)
+
+                    Text(minAgeRange)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .offset(x: -78, y: 50)
+                    
+                    Text(maxAgeRange)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .offset(x: 78, y: 37)
+                }
+                
+                // End Dot indicator at bottom center
+                Circle()
+                    .fill(Color(hex: "#8E8A80"))
+                    .frame(width: 8, height: 8)
+                    .offset(y: 65)
+            }
+            .frame(width: 220, height: 180)
+            .padding(.top, 16)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            // Top portion has a sky-blue-yellow aura/gradient background
+            ZStack {
+                Color.white
+                
+                LinearGradient(
+                    colors: [
+                        Color(hex: "#D0E1FD").opacity(0.4),
+                        Color(hex: "#FFF9C4").opacity(0.3),
+                        Color.white.opacity(0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .shadow(color: Color.black.opacity(0.03), radius: 6, y: 3)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+        )
+    }
+
+    // MARK: - Scattered glowing particles in center of age gauge
+    private var scatteredParticles: some View {
+        Canvas { context, size in
+            let points = [
+                CGPoint(x: 0.25, y: 0.3), CGPoint(x: 0.35, y: 0.2), CGPoint(x: 0.45, y: 0.25),
+                CGPoint(x: 0.3, y: 0.45), CGPoint(x: 0.4, y: 0.4), CGPoint(x: 0.38, y: 0.55),
+                CGPoint(x: 0.6, y: 0.35), CGPoint(x: 0.7, y: 0.22), CGPoint(x: 0.65, y: 0.48),
+                CGPoint(x: 0.58, y: 0.52), CGPoint(x: 0.72, y: 0.42), CGPoint(x: 0.68, y: 0.3)
+            ]
+            
+            for pt in points {
+                let rect = CGRect(
+                    x: pt.x * size.width - 2.5,
+                    y: pt.y * size.height - 2.5,
+                    width: 5,
+                    height: 5
+                )
+                context.fill(Path(ellipseIn: rect), with: .color(Color.white.opacity(0.85)))
+            }
         }
     }
 
-    private let trustLogItems: [(String, String, String)] = [
-        ("Zone 2 recommendation", "Today 07:42 · HRV + RHR + Sleep → Endurance", "Verified"),
-        ("Sleep optimization tip", "Yesterday 21:15 · Sleep debt + REM pattern → Wind-down", "Verified"),
-        ("Training adjustment", "Yesterday 06:30 · Strain + Recovery → Reduce intervals", "Verified"),
-        ("Nutrition suggestion", "Jan 3 12:10 · Journal + Training load → Protein timing", "Verified")
-    ]
+    // MARK: - Other Biomarkers Section
+    private var otherBiomarkersSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("其他生物标志物")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Color(hex: "#1A1917"))
+                
+                Spacer()
+                
+                Button("编辑") {
+                    // Edit action
+                }
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(Color(hex: "#C56B4A")) // Brand Accent
+            }
+            .padding(.horizontal, 2)
+            
+            VStack(spacing: 12) {
+                // Card 1: 体重 (Weight) - Trigger Weight Sheet
+                Button {
+                    VelaAppState.shared.triggerWeightLog = true
+                } label: {
+                    biomarkerRow(
+                        title: "体重",
+                        trendText: "稳定",
+                        trendIcon: "arrow.right",
+                        valueText: weightValueText,
+                        valueColor: Color(hex: "#1A1917"),
+                        history: weightHistoryData,
+                        graphColor: Color(hex: "#8E8A80")
+                    )
+                }
+                .buttonStyle(.plain)
+                
+                // Card 2: HRV 基线 (HRV Baseline) - Open HRV Detail
+                NavigationLink(destination: VelaMetricDetailView(metric: .hrv)) {
+                    biomarkerRow(
+                        title: "HRV 基线",
+                        trendText: "稳定",
+                        trendIcon: "arrow.right",
+                        valueText: hrvValueText,
+                        valueColor: Color(hex: "#1A1917"),
+                        history: hrvHistoryData,
+                        graphColor: Color(hex: "#6E6A63")
+                    )
+                }
+                .buttonStyle(.plain)
+                
+                // Card 3: RHR 基线 (RHR Baseline) - Open RHR Detail
+                NavigationLink(destination: VelaMetricDetailView(metric: .rhr)) {
+                    biomarkerRow(
+                        title: "RHR 基线",
+                        trendText: "良好",
+                        trendIcon: "arrow.right",
+                        valueText: rhrValueText,
+                        valueColor: Color(hex: "#5B8C6F"), // Sage Green for healthy RHR
+                        history: rhrHistoryData,
+                        graphColor: Color(hex: "#5B8C6F")
+                    )
+                }
+                .buttonStyle(.plain)
+                
+                // Card 4: 体脂 (Body Fat) - Trigger Weight/Fat Sheet
+                Button {
+                    VelaAppState.shared.triggerWeightLog = true
+                } label: {
+                    biomarkerRow(
+                        title: "体脂",
+                        trendText: "稳定",
+                        trendIcon: "arrow.right",
+                        valueText: fatValueText,
+                        valueColor: Color(hex: "#1A1917"),
+                        history: fatHistoryData,
+                        graphColor: Color(hex: "#8E8A80")
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    // MARK: - Row builder
+    private func biomarkerRow(
+        title: String,
+        trendText: String,
+        trendIcon: String,
+        valueText: String,
+        valueColor: Color,
+        history: [Double],
+        graphColor: Color
+    ) -> some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Color(hex: "#1A1917"))
+                
+                HStack(spacing: 4) {
+                    Image(systemName: trendIcon)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(valueColor)
+                    
+                    Text("\(trendText) · \(valueText)")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(valueColor)
+                }
+            }
+            
+            Spacer()
+            
+            // Sparkline Line Graph Widget
+            SparklineLineGraph(data: history, color: graphColor, height: 38, width: 90)
+                .padding(.trailing, 4)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.02), radius: 4, y: 2)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+        )
+    }
+
+    // MARK: - Dynamic Vitals Sync Loader
+    private func loadRealVitalsData() {
+        let calendar = Calendar.current
+        let now = dashboardVM.selectedDate
+        let startDate = calendar.date(byAdding: .day, value: -9, to: now) ?? now // Fetch 10 points
+        let startOfDay = calendar.startOfDay(for: startDate)
+        let endOfDay = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: now) ?? now
+        
+        // Fetch DailyHealthSummaryRecord from SwiftData
+        var descriptor = FetchDescriptor<DailyHealthSummaryRecord>(
+            predicate: #Predicate<DailyHealthSummaryRecord> { record in
+                record.date >= startOfDay && record.date <= endOfDay
+            },
+            sortBy: [SortDescriptor(\DailyHealthSummaryRecord.date, order: .forward)]
+        )
+        descriptor.fetchLimit = 10
+        
+        do {
+            let records = try modelContext.fetch(descriptor)
+            
+            if !records.isEmpty {
+                // Extract arrays
+                let rawHRV = records.compactMap { $0.hrvAverage }
+                let rawRHR = records.compactMap { $0.restingHeartRate }
+                let rawWeight = records.compactMap { $0.bodyWeight }
+                let rawFat = records.compactMap { $0.bodyFatPercent }
+                
+                // Update latest values from the newest record
+                if let latest = records.last {
+                    if let hrv = latest.hrvAverage {
+                        hrvValueText = String(format: "%.1f ms", hrv)
+                    }
+                    if let rhr = latest.restingHeartRate {
+                        rhrValueText = String(format: "%.1f bpm", rhr)
+                    }
+                    if let wt = latest.bodyWeight {
+                        weightValueText = String(format: "%.1f kg", wt)
+                    }
+                    if let fat = latest.bodyFatPercent {
+                        fatValueText = String(format: "%.1f %%", fat)
+                    }
+                }
+                
+                // Normalize to 0...1 for sparklines
+                hrvHistoryData = normalizeData(rawHRV)
+                rhrHistoryData = normalizeData(rawRHR)
+                weightHistoryData = normalizeData(rawWeight)
+                fatHistoryData = normalizeData(rawFat)
+            } else {
+                usePendingDefaults()
+            }
+        } catch {
+            usePendingDefaults()
+        }
+    }
+    
+    private func normalizeData(_ values: [Double]) -> [Double] {
+        guard !values.isEmpty else { return [0.5] }
+        if values.count == 1 { return [0.5] }
+        let minVal = values.min() ?? 0
+        let maxVal = values.max() ?? 1
+        let diff = maxVal - minVal
+        guard diff > 0 else { return values.map { _ in 0.5 } }
+        return values.map { ($0 - minVal) / diff }
+    }
+    
+    private func usePendingDefaults() {
+        hrvHistoryData = [0.5]
+        rhrHistoryData = [0.5]
+        weightHistoryData = [0.5]
+        fatHistoryData = [0.5]
+        
+        hrvValueText = "--"
+        rhrValueText = "--"
+        weightValueText = "--"
+        fatValueText = "--"
+    }
+}
+
+// MARK: - Custom Arc View for Gauge
+struct GaugeScaleArcView: View {
+    let size: CGFloat
+    
+    var body: some View {
+        ZStack {
+            // Main gauge track arc
+            Circle()
+                .trim(from: 0.15, to: 0.85)
+                .stroke(
+                    Color(hex: "#E8E4DD"),
+                    style: StrokeStyle(lineWidth: 1.5, lineCap: .round)
+                )
+                .rotationEffect(.degrees(90))
+                .frame(width: size, height: size)
+            
+            // Radial Tick Marks
+            ForEach(0..<41) { tick in
+                let angle = 144 + (Double(tick) * 6.3) // Map 41 ticks around the arc
+                Rectangle()
+                    .fill(Color(hex: "#D5D0C8"))
+                    .frame(width: tick % 5 == 0 ? 8 : 4, height: 1)
+                    .offset(x: (size / 2) - 8)
+                    .rotationEffect(.degrees(angle))
+            }
+        }
+    }
+}
+
+// MARK: - Preview
+#Preview {
+    VelaVitalsView()
+        .environmentObject(DashboardViewModel())
 }

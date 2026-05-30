@@ -49,12 +49,14 @@ struct JournalCorrelationEngine {
             snapshotByDay[key] = snap
         }
 
-        // Collect all unique tags and the days each tag appeared
-        var tagDays: [String: Set<String>] = [:]  // tag -> Set<dayKey>
+        // Collect all unique tags and map them to the NEXT day (T+1) to capture lagged physiological impacts
+        var tagDays: [String: Set<String>] = [:]  // tag -> Set<dayKey of T+1>
         for entry in journalEntries {
-            let key = dayKey(for: entry.createdAt, calendar: calendar)
-            for tag in entry.tags {
-                tagDays[tag, default: []].insert(key)
+            if let nextDay = calendar.date(byAdding: .day, value: 1, to: entry.createdAt) {
+                let key = dayKey(for: nextDay, calendar: calendar)
+                for tag in entry.tags {
+                    tagDays[tag, default: []].insert(key)
+                }
             }
         }
 

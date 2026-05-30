@@ -136,7 +136,7 @@ struct NutritionContext: Codable, Hashable {
 }
 
 struct ExtendedMetricsContext: Codable, Hashable {
-    var age: Int
+    var age: Int?
     var biologicalSex: String?
     var heightCm: MetricValue<Double>
     var weightKg: MetricValue<Double>

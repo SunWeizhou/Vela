@@ -83,7 +83,7 @@ struct FitnessActivityDay: Identifiable, Hashable {
 
 @MainActor
 final class DashboardViewModel: ObservableObject {
-    @Published private(set) var dashboard = DashboardSummary.preview()
+    @Published private(set) var dashboard = DashboardSummary.empty()
     @Published private(set) var isLoading = false
     @Published private(set) var errorMessage: String?
     @Published var currentError: VelaError?
@@ -108,16 +108,21 @@ final class DashboardViewModel: ObservableObject {
 
     func goToPreviousDay() {
         let prev = Calendar.current.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate
-        selectedDate = prev
+        selectDate(prev)
     }
 
     func goToNextDay() {
         let next = Calendar.current.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate
-        if next <= Date() { selectedDate = next }
+        selectDate(next)
     }
 
     func goToToday() {
-        selectedDate = Date()
+        selectDate(Date())
+    }
+
+    func selectDate(_ date: Date) {
+        let calendar = Calendar.current
+        selectedDate = min(calendar.startOfDay(for: date), calendar.startOfDay(for: Date()))
     }
 
     private let useCase: DailySummaryUseCase
@@ -138,6 +143,9 @@ final class DashboardViewModel: ObservableObject {
             currentError = nil
             do {
                 dashboard = try await useCase.loadDashboard(for: selectedDate, modelContext: modelContext)
+                if Calendar.current.isDateInToday(dashboard.date) {
+                    try? DailyLogService.refresh(dashboard: dashboard)
+                }
                 lastUpdated = Date()
                 let generator = UIImpactFeedbackGenerator(style: .light)
                 generator.impactOccurred()
@@ -157,7 +165,7 @@ final class DashboardViewModel: ObservableObject {
                         : "Data load failed: \(message). Pull to refresh."
                 }
                 currentError = (error as? VelaError) ?? .unknown(underlying: error)
-                dashboard = .preview(date: Date())
+                dashboard = .empty(date: selectedDate)
             }
             isLoading = false
         }

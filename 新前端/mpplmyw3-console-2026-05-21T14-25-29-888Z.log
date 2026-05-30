@@ -1,2 +1,0 @@
-[    3533ms] [WARNING] Datadog Browser SDK: Ignoring Premium Sample Rate because Session Replay Sample Rate is set @ https://www.craft.do/share/static/js/vendors~main.130b0480.js:1
-[    4347ms] [WARNING] Manifest: property 'start_url' ignored, should be same origin as document. @ https://www.craft.do/share/static/site.webmanifest:0

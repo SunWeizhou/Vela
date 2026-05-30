@@ -2,7 +2,8 @@
 
 This directory is the source of truth for product, architecture, scoring, AI, reuse, and design decisions.
 
-Current build direction as of 2026-05-25:
+Current build direction as of 2026-05-30:
+- The current frontend direction is frozen. Future UI work is limited to incremental fixes and refinements while backend data contracts are aligned. See `FRONTEND_FREEZE_AND_BACKEND_ALIGNMENT.md`.
 - Personal Bevel-like adaptive UI across Home, Journal, Fitness, Vitals, Sleep, and `+` Intelligence.
 - Vela differentiates through local-first data, transparent scoring, and an agent-maintained user Wiki.
 - The bottom shell now uses an Apple-like glass navigation bar: Home, Journal, Fitness, and Vitals sit in one material capsule, while the right-side circular `+` is separate and opens Vela Intelligence.
@@ -29,6 +30,7 @@ Required documents:
 - `OPEN_SOURCE_REUSE_PLAN.md`
 - `SCORING_SYSTEM_V0_1.md`
 - `STITCH_DESIGN_BRIEF.md`
+- `FRONTEND_FREEZE_AND_BACKEND_ALIGNMENT.md`
 
 Current product strategy documents:
 - `BEVEL_3_RESEARCH.md` — public Bevel 3.0 research, iPhone mirror observations, forum feedback, and implications for Vela.

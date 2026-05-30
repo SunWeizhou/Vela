@@ -155,7 +155,7 @@ struct AIContextBuilder {
 
         let ext = dashboard.extendedMetrics
         let body = dashboard.bodyMetrics
-        let age = WikiFileService.getAgeFromWiki() ?? ext.age ?? 30
+        let age = WikiFileService.getAgeFromWiki() ?? ext.age
         let extended = ExtendedMetricsContext(
             age: age,
             biologicalSex: ext.biologicalSex,

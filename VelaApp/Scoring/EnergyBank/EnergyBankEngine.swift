@@ -119,6 +119,20 @@ struct EnergyBankEngine: ScoreEngine {
         let stressDrain = 0.25 * stress
         metrics["stress_drain"] = stressDrain
 
+        // 2b. Cumulative Fatigue / ACWR drain (Windt & Gabbett 2016)
+        // High ACWR (>1.5) representing acute workload spikes increases injury risk and cumulative systemic fatigue,
+        // accelerating the daily energy bank baseline discharge.
+        var acwrDrain = 0.0
+        if atlCtl.ctl > 0 {
+            let acwr = atlCtl.atl / atlCtl.ctl
+            metrics["acwr"] = acwr
+            if acwr > 1.5 {
+                acwrDrain = min(20.0, (acwr - 1.5) * 20.0) // up to 20 pts penalty
+                reasons.append("Acute-to-Chronic Workload Ratio high (ACWR=\(String(format: "%.2f", acwr))) — accelerated discharge due to cumulative fatigue")
+            }
+        }
+        metrics["acwr_drain"] = acwrDrain
+
         // 3. Allostatic load adjustment (elevated body temp → systemic stress)
         var allostaticDrain: Double = 0
         if let tempDelta = input.bodyTempDelta, abs(tempDelta) > 0.5 {
@@ -134,7 +148,7 @@ struct EnergyBankEngine: ScoreEngine {
             metrics["sleep_debt_drain"] = sleepDebtDrain
         }
 
-        let totalDrain = strainDrain + stressDrain + allostaticDrain + sleepDebtDrain
+        let totalDrain = strainDrain + stressDrain + acwrDrain + allostaticDrain + sleepDebtDrain
         let currentEnergy = ScoringMath.clamp(morningEnergy - totalDrain)
         reasons.append("Current energy = morning energy − strain drain − stress drain − allostatic/sleep adjustments.")
 

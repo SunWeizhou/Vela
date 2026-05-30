@@ -15,11 +15,22 @@ final class VelaAppState: ObservableObject {
     @Published var triggerFoodLibrary = false
     @Published var triggerBloodLog = false
     @Published var triggerWeightLog = false
-
+    @Published var triggerWorkoutLog = false
+    @Published var triggerFoodSearch = false
+    @Published var triggerFoodScanner = false
+    @Published var scannerType = "camera"
+    @Published var forceNewCoachSession = false
+    
     static let shared = VelaAppState()
 
-    func routeToCoach(question: String) {
-        prefilledCoachQuestion = question
+    func routeToCoach(question: String?) {
+        if let question = question {
+            prefilledCoachQuestion = question
+            forceNewCoachSession = false
+        } else {
+            prefilledCoachQuestion = nil
+            forceNewCoachSession = true
+        }
         showCoachHub = true
     }
 }

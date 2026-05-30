@@ -1,1056 +1,520 @@
-import SwiftData
 import SwiftUI
-import UIKit
+import SwiftData
 
-struct CoachView: View {
-    @Environment(\.dismiss) private var dismiss
+// MARK: - VelaCoachView — ChatGPT-Style Coach with DeepSeek AI
+// 中文默认 · 深色模式 · 欢迎区 · 对话气泡 · 打字指示器 · 底部编辑框 · 侧滑历史对话管理
+
+struct VelaCoachView: View {
+    @Environment(\.colorScheme) private var cs
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \JournalEntryRecord.createdAt, order: .reverse) private var journalEntries: [JournalEntryRecord]
-    @Query(sort: \AIReportRecord.createdAt, order: .reverse) private var savedReports: [AIReportRecord]
+    @EnvironmentObject private var dashboardVM: DashboardViewModel
+    @EnvironmentObject private var services: VelaServices
+
     @StateObject private var vm = CoachChatVM()
-    @EnvironmentObject var dashboardVM: DashboardViewModel
-    @FocusState private var inputFocused: Bool
+    @State private var inputText: String = ""
+    @FocusState private var isFocused: Bool
 
-    @State private var showSidebar = false
-    @State private var showRenameAlert = false
-    @State private var sessionToRename: CoachSessionRecord? = nil
+    // Drawer state management
+    @State private var showHistoryDrawer = false
+    @State private var isRenamingSession = false
+    @State private var renamingSession: CoachSessionRecord? = nil
     @State private var renameText = ""
-    @State private var activePersonality = CoachPersonality.current
-    @State private var showConversation = false
-    @ObservedObject private var agentConfig = AutoAgentConfig.shared
 
-    // Detail sheets (replacing NavigationLinks for sheet context)
-    @State private var showWikiProfile = false
-    @State private var showSettings = false
-    @State private var showJournal = false
-    @State private var showDataCoverage = false
-    @State private var showTrustCenter = false
+    @Query(
+        filter: #Predicate<JournalEntryRecord> { _ in true },
+        sort: \JournalEntryRecord.createdAt, order: .reverse
+    ) private var journalEntries: [JournalEntryRecord]
 
-    // Camera / Food Photo
-    @State private var showCameraPicker = false
-    @State private var showPhotoLibraryPicker = false
-    @State private var capturedImage: UIImage? = nil
+    @Query(
+        filter: #Predicate<AIReportRecord> { _ in true },
+        sort: \AIReportRecord.createdAt, order: .reverse
+    ) private var savedReports: [AIReportRecord]
+
+    private var dashboard: DashboardSummary { dashboardVM.dashboard }
 
     var body: some View {
         ZStack {
-            // MARK: - Glass Overlay Background (iOS 26 Liquid Glass)
-            VelaBackground()
-                .glassEffect()
-                .ignoresSafeArea()
-
+            // Main Chat Panel
             VStack(spacing: 0) {
-                // MARK: - Header Bar
-                headerBar
-                    .padding(.top, 12)
+                headerView
+                    .background(.ultraThinMaterial)
 
-                // MARK: - Context Pill
-                if showConversation || !vm.messages.isEmpty {
-                    contextPill
-                        .padding(.top, 10)
-                        .padding(.horizontal, VelaTheme.screenPadding)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 20) {
+                            if vm.messages.isEmpty {
+                                welcomeView
+                            }
+
+                            ForEach(vm.messages) { msg in
+                                MessageBubble(
+                                    text: msg.content,
+                                    isUser: msg.role == .user,
+                                    time: msg.timestamp.formatted(.dateTime.hour().minute())
+                                )
+                            }
+
+                            if vm.isStreaming {
+                                TypingIndicator()
+                                    .id("typing")
+                            }
+                        }
+                        .padding(.horizontal, VelaTheme.pagePadding)
+                        .padding(.vertical, 16)
+                    }
+                    .scrollIndicators(.hidden)
+                    .onChange(of: vm.messages.count) { _, _ in
+                        if let last = vm.messages.last {
+                            withAnimation {
+                                proxy.scrollTo(last.id, anchor: .bottom)
+                            }
+                        }
+                    }
+                    .onChange(of: vm.isStreaming) { _, streaming in
+                        if streaming {
+                            withAnimation {
+                                proxy.scrollTo("typing", anchor: .bottom)
+                            }
+                        }
+                    }
                 }
 
-                // MARK: - Personality Picker
-                personalityPicker
-                    .padding(.top, 8)
-                    .padding(.bottom, 4)
+                composerView
+            }
+            .background(VelaTheme.bg)
+            .blur(radius: showHistoryDrawer ? 3 : 0)
+            .disabled(showHistoryDrawer)
 
-                // MARK: - Quick Commands
-                if !showConversation {
-                    quickCommandsRow
-                        .padding(.top, 16)
-                } else if vm.messages.count < 3 && !vm.messages.isEmpty {
-                    quickQuestionsBar
-                        .padding(.top, 6)
-                }
+            // Transparent backdrop for drawer
+            if showHistoryDrawer {
+                Color.black.opacity(0.4)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                            showHistoryDrawer = false
+                        }
+                    }
+            }
 
-                // MARK: - Content Area
-                if showConversation {
-                    messageList
-                } else {
-                    actionHubView
+            // Sliding drawer view
+            GeometryReader { geo in
+                HStack(spacing: 0) {
+                    historyDrawerView(width: geo.size.width * 0.78)
+                        .offset(x: showHistoryDrawer ? 0 : -geo.size.width * 0.78)
+                    Spacer()
                 }
-
-                // MARK: - Composer Bar (fixed bottom)
-                composerBar
             }
-        }
-        .alert(AppLanguage.stored.isChinese ? "重命名对话" : "Rename Session", isPresented: $showRenameAlert) {
-            TextField(AppLanguage.stored.isChinese ? "输入对话名称" : "Session Title", text: $renameText)
-            Button(AppLanguage.stored.isChinese ? "取消" : "Cancel", role: .cancel) { sessionToRename = nil }
-            Button(AppLanguage.stored.isChinese ? "确定" : "OK") {
-                if let session = sessionToRename {
-                    vm.renameSession(session, to: renameText, modelContext: modelContext)
-                }
-                sessionToRename = nil
-            }
-        }
-        .task {
-            vm.loadSessions(modelContext: modelContext)
-            await dashboardVM.refresh(modelContext: modelContext)
-            vm.refreshKeyState()
-            if let prefilled = VelaAppState.shared.prefilledCoachQuestion {
-                vm.draft = prefilled
-                VelaAppState.shared.prefilledCoachQuestion = nil
-            }
-            if VelaAppState.shared.triggerFoodCamera {
-                VelaAppState.shared.triggerFoodCamera = false
-                showCameraPicker = true
-            } else if VelaAppState.shared.triggerFoodLibrary {
-                VelaAppState.shared.triggerFoodLibrary = false
-                showPhotoLibraryPicker = true
-            }
-            await EveningWikiSyncAgent.shared.runIfNeeded(
-                modelContext: modelContext,
-                dashboard: dashboardVM.dashboard
-            )
+            .ignoresSafeArea()
         }
         .onAppear {
-            if let prefilled = VelaAppState.shared.prefilledCoachQuestion {
-                vm.draft = prefilled
+            vm.loadSessions(modelContext: modelContext)
+
+            if VelaAppState.shared.forceNewCoachSession {
+                vm.createNewSession(modelContext: modelContext)
+                VelaAppState.shared.forceNewCoachSession = false
+            }
+
+            if let question = VelaAppState.shared.prefilledCoachQuestion {
+                sendMessage(question)
                 VelaAppState.shared.prefilledCoachQuestion = nil
             }
-            if VelaAppState.shared.triggerFoodCamera {
-                VelaAppState.shared.triggerFoodCamera = false
-                showCameraPicker = true
-            } else if VelaAppState.shared.triggerFoodLibrary {
-                VelaAppState.shared.triggerFoodLibrary = false
-                showPhotoLibraryPicker = true
+
+            try? DailyLogService.refresh(dashboard: dashboard)
+        }
+        .alert("重命名对话", isPresented: $isRenamingSession) {
+            TextField("输入新标题...", text: $renameText)
+            Button("取消", role: .cancel) {
+                renamingSession = nil
             }
-        }
-        .sheet(isPresented: $showCameraPicker) {
-            ImagePicker(sourceType: .camera, selectedImage: $capturedImage)
-                .ignoresSafeArea()
-        }
-        .sheet(isPresented: $showPhotoLibraryPicker) {
-            ImagePicker(sourceType: .photoLibrary, selectedImage: $capturedImage)
-        }
-        .sheet(isPresented: $showWikiProfile) {
-            NavigationStack { WikiProfileView() }
-        }
-        .sheet(isPresented: $showSettings) {
-            NavigationStack { SettingsView() }
-        }
-        .sheet(isPresented: $showJournal) {
-            NavigationStack { JournalView() }
-        }
-        .sheet(isPresented: $showDataCoverage) {
-            NavigationStack { DataCoverageView() }
-        }
-        .sheet(isPresented: $showTrustCenter) {
-            NavigationStack { TrustCenterView() }
-        }
-        .onChange(of: capturedImage) { _, newImage in
-            guard let image = newImage else { return }
-            Task {
-                await vm.analyzeFoodPhoto(
-                    image,
-                    dashboard: dashboardVM.dashboard,
-                    modelContext: modelContext,
-                    journalEntries: journalEntries,
-                    savedReports: savedReports
-                )
+            Button("保存") {
+                if let session = renamingSession {
+                    vm.renameSession(session, to: renameText, modelContext: modelContext)
+                }
+                renamingSession = nil
             }
-        }
-        // Sidebar overlay (above everything)
-        if showSidebar {
-            sidebarOverlay
         }
     }
 
-    // MARK: - Header Bar
-
-    private var headerBar: some View {
-        HStack(spacing: 12) {
-            // Sidebar / sessions
-            Button {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                    showSidebar.toggle()
+    // MARK: - History Drawer View
+    
+    private func historyDrawerView(width: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Drawer Header
+            HStack {
+                Text("历史对话")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(Color(hex: "#1A1917"))
+                Spacer()
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        showHistoryDrawer = false
+                    }
+                } label: {
+                    Image(systemName: "sidebar.left")
+                        .font(.system(size: 16))
+                        .foregroundStyle(Color(hex: "#C56B4A"))
                 }
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 64)
+            .padding(.bottom, 16)
+            
+            // New Chat Button
+            Button {
+                vm.createNewSession(modelContext: modelContext)
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    showHistoryDrawer = false
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 14, weight: .bold))
+                    Text("新建对话")
+                        .font(.system(size: 14, weight: .bold))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(RoundedRectangle(cornerRadius: 22).fill(Color(hex: "#C56B4A")))
+                .shadow(color: Color(hex: "#C56B4A").opacity(0.15), radius: 6, y: 3)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
+            
+            Divider().padding(.horizontal, 20).padding(.bottom, 12)
+            
+            // Sessions Scroll List
+            ScrollView {
+                VStack(spacing: 10) {
+                    ForEach(vm.sessions) { session in
+                        HStack(spacing: 12) {
+                            Image(systemName: "bubble.left.and.bubble.right.fill")
+                                .font(.system(size: 13))
+                                .foregroundStyle(vm.currentSession?.id == session.id ? Color(hex: "#C56B4A") : Color(hex: "#8E8A80"))
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(session.title.isEmpty ? "新对话" : session.title)
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(Color(hex: "#1A1917"))
+                                    .lineLimit(1)
+                                
+                                Text(session.updatedAt.formatted(.dateTime.month().day().hour().minute()))
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(Color(hex: "#BFB9AC"))
+                            }
+                            
+                            Spacer()
+                            
+                            if vm.currentSession?.id == session.id {
+                                Button {
+                                    renamingSession = session
+                                    renameText = session.title
+                                    isRenamingSession = true
+                                } label: {
+                                    Image(systemName: "pencil")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(Color(hex: "#C56B4A"))
+                                        .frame(width: 24, height: 24)
+                                }
+                                .buttonStyle(.plain)
+                                
+                                Button {
+                                    vm.deleteSession(session, modelContext: modelContext)
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(Color(hex: "#FF3B30"))
+                                        .frame(width: 24, height: 24)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(vm.currentSession?.id == session.id ? Color.white : Color.clear)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .stroke(vm.currentSession?.id == session.id ? Color(hex: "#C56B4A").opacity(0.3) : Color.clear, lineWidth: 1)
+                                )
+                        )
+                        .padding(.horizontal, 14)
+                        .onTapGesture {
+                            vm.selectSession(session, modelContext: modelContext)
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                showHistoryDrawer = false
+                            }
+                        }
+                    }
+                }
+                .padding(.vertical, 8)
+            }
+            
+            // Drawer Footer
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color(hex: "#C56B4A"), Color(hex: "#E89B7E")],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 36, height: 36)
+                    
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.white)
+                }
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Weizhou")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Color(hex: "#1A1917"))
+                    Text("Vela 创始会员")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(Color(hex: "#C56B4A"))
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 48)
+            .background(Color.white.opacity(0.4))
+        }
+        .frame(width: width)
+        .frame(maxHeight: .infinity)
+        .background(Color(hex: "#F5F3F0"))
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(Color(hex: "#E8E4DD"))
+                .frame(width: 0.5)
+        }
+    }
+
+    // MARK: - Header
+
+    private var headerView: some View {
+        HStack {
+            Button {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    showHistoryDrawer = true
+                }
             } label: {
                 Image(systemName: "sidebar.left")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(VelaTheme.primary)
+                    .font(.system(size: 18))
+                    .foregroundStyle(Color(hex: "#C56B4A"))
                     .frame(width: 36, height: 36)
-                    .background(Circle().fill(VelaTheme.primary.opacity(0.12)))
+                    .background(
+                        Circle().fill(VelaTheme.surface)
+                    )
             }
+            .buttonStyle(.plain)
 
-            Spacer()
-
-            // Title
-            HStack(spacing: 6) {
-                VelaLogoMark(size: 18)
-                Text(showConversation ? (vm.currentSession?.title ?? "Coach") : "Coach")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(VelaTheme.onSurface)
-            }
-
-            Spacer()
-
-            // Close button
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(VelaTheme.onSurfaceVariant)
-                    .frame(width: 36, height: 36)
-            }
-        }
-        .padding(.horizontal, VelaTheme.screenPadding)
-    }
-
-    // MARK: - Context Pill
-
-    private var contextPill: some View {
-        let dash = dashboardVM.dashboard
-        let metrics: [(String, String, Color)] = [
-            (AppLanguage.stored.isChinese ? "睡眠" : "Sleep",
-             dash.sleepScore.hasData ? "\(Int(dash.sleepScore.score))h" : "--",
-             VelaTheme.sleep),
-            (AppLanguage.stored.isChinese ? "负荷" : "Strain",
-             dash.strain.hasData ? "\(Int(dash.strain.score))" : "--",
-             VelaTheme.strain),
-            (AppLanguage.stored.isChinese ? "恢复" : "Recovery",
-             dash.recovery.hasData ? "\(Int(dash.recovery.score))" : "--",
-             VelaTheme.recovery),
-        ]
-
-        return HStack(spacing: 6) {
-            Image(systemName: "sparkles")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(VelaTheme.primary)
-
-            Text(AppLanguage.stored.isChinese ? "今日" : "Today")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(VelaTheme.onSurface)
-
-            ForEach(metrics, id: \.0) { label, value, color in
-                HStack(spacing: 3) {
-                    Circle()
-                        .fill(color)
-                        .frame(width: 4, height: 4)
-                    Text("\(label) \(value)")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(VelaTheme.onSurfaceVariant)
-                }
-            }
-        }
-        .padding(.horizontal, VelaTheme.spaceSM)
-        .padding(.vertical, 7)
-        .background(
-            Capsule(style: .continuous)
-                .fill(.ultraThinMaterial)
-        )
-        .overlay(
-            Capsule(style: .continuous)
-                .stroke(VelaTheme.outline, lineWidth: 0.5)
-        )
-    }
-
-    // MARK: - Quick Commands (action hub entry points)
-
-    private var quickCommandsRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                quickCommandChip(
-                    icon: "sparkles",
-                    label: L10n.t("Analyze Today", "分析今日"),
-                    question: L10n.t(
-                        "How am I doing today? Explain the evidence and the best next action.",
-                        "我今天状态怎么样？请解释证据和最合适的下一步行动。"
-                    ),
-                    tint: VelaTheme.primary
-                )
-                quickCommandChip(
-                    icon: "figure.run",
-                    label: L10n.t("Plan Workout", "计划训练"),
-                    question: L10n.t(
-                        "Build today's training session from my recovery, strain, energy, sleep, and workouts.",
-                        "请基于我的恢复、负荷、能量、睡眠和训练记录生成今天的训练。"
-                    ),
-                    tint: VelaTheme.strain
-                )
-                quickCommandChip(
-                    icon: "fork.knife",
-                    label: L10n.t("Log Meal", "记录饮食"),
-                    question: L10n.t(
-                        "I just ate a meal. Help me log it and analyze how it fits my nutrition goals.",
-                        "我刚吃了一餐，帮我记录并分析与营养目标的匹配度。"
-                    ),
-                    tint: VelaTheme.energy
-                )
-                quickCommandChip(
-                    icon: "moon.zzz.fill",
-                    label: L10n.t("Check Sleep", "检查睡眠"),
-                    question: L10n.t(
-                        "Analyze my sleep and tell me the one factor that would most improve recovery.",
-                        "请分析我的睡眠，并告诉我最能改善恢复的一个因素。"
-                    ),
-                    tint: VelaTheme.sleep
-                )
-                quickCommandChip(
-                    icon: "chart.line.uptrend.xyaxis",
-                    label: L10n.t("Weekly Summary", "本周小结"),
-                    question: L10n.t(
-                        "Summarize my recent health trends and tell me what changed most this week.",
-                        "请总结我近期的健康趋势，并告诉我本周变化最大的是什么。"
-                    ),
-                    tint: VelaTheme.recovery
-                )
-            }
-            .padding(.horizontal, VelaTheme.screenPadding)
-        }
-    }
-
-    private func quickCommandChip(icon: String, label: String, question: String, tint: Color) -> some View {
-        Button {
-            sendQuestion(question)
-        } label: {
-            HStack(spacing: 5) {
-                Image(systemName: icon)
-                    .font(.caption2.weight(.semibold))
-                Text(label)
-                    .font(.caption2.weight(.semibold))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(vm.currentSession?.title.isEmpty != false ? "Coach" : vm.currentSession!.title)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(VelaTheme.fg)
                     .lineLimit(1)
-            }
-            .foregroundStyle(tint)
-            .padding(.horizontal, VelaTheme.spaceSM)
-            .padding(.vertical, 7)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(.ultraThinMaterial)
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(VelaTheme.outline, lineWidth: 0.5)
-            )
-        }
-        .buttonStyle(.plain)
-    }
 
-    // MARK: - Action Hub View
-
-    private var actionHubView: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 18) {
-                VelaHeroSurface(tint: VelaTheme.primary) {
-                    VStack(alignment: .leading, spacing: 14) {
-                        HStack(alignment: .top, spacing: 12) {
-                            VelaLogoMark(size: 48)
-                                .shadow(color: VelaTheme.primary.opacity(0.16), radius: 14)
-
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text(AppLanguage.stored.isChinese ? "Coach Command Center" : "Coach Command Center")
-                                    .font(.title3.weight(.bold))
-                                    .foregroundStyle(VelaTheme.onSurface)
-                                Text(AppLanguage.stored.isChinese
-                                     ? "基于今天的身体状态、Wiki 记忆和健康数据，快速发起一次有上下文的行动。"
-                                     : "Start a context-aware action from today's body state, Wiki memory, and health data."
-                                )
-                                .font(.subheadline)
-                                .foregroundStyle(VelaTheme.onSurfaceVariant)
-                                .fixedSize(horizontal: false, vertical: true)
-                            }
-
-                            Spacer()
-                        }
-
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 118), spacing: 8)], alignment: .leading, spacing: 8) {
-                            VelaMetricPill(
-                                title: AppLanguage.stored.isChinese ? "恢复" : "Recovery",
-                                value: dashboardVM.dashboard.recovery.hasData ? "\(Int(dashboardVM.dashboard.recovery.score))" : "--",
-                                systemImage: "heart.fill",
-                                tint: VelaTheme.recovery
-                            )
-                            VelaMetricPill(
-                                title: AppLanguage.stored.isChinese ? "睡眠" : "Sleep",
-                                value: dashboardVM.dashboard.sleepScore.hasData ? "\(Int(dashboardVM.dashboard.sleepScore.score))" : "--",
-                                systemImage: "moon.zzz.fill",
-                                tint: VelaTheme.sleep
-                            )
-                            VelaMetricPill(
-                                title: AppLanguage.stored.isChinese ? "负荷" : "Strain",
-                                value: dashboardVM.dashboard.strain.hasData ? "\(Int(dashboardVM.dashboard.strain.score))" : "--",
-                                systemImage: "figure.run",
-                                tint: VelaTheme.strain
-                            )
-                        }
-                    }
-                }
-
-                VelaSectionHeader(
-                    title: AppLanguage.stored.isChinese ? "主动行动" : "Proactive Actions",
-                    subtitle: AppLanguage.stored.isChinese ? "选择一个入口，Vela 会带着当前上下文进入对话。" : "Choose an entry point; Vela carries current context into the chat."
-                )
-
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 154), spacing: 12)], spacing: 12) {
-                    VelaCoachCommandCard(
-                        title: L10n.t("Analyze Readiness", "分析今日状态"),
-                        subtitle: L10n.t("Recovery, sleep, strain, and today's limiter.", "恢复、睡眠、负荷和今日限制因素。"),
-                        systemImage: "sparkles",
-                        tint: VelaTheme.primary
-                    ) {
-                        sendQuestion(L10n.t("How am I doing today? Explain the evidence and the best next action.", "我今天状态怎么样？请解释证据和最合适的下一步行动。"))
-                    }
-
-                    VelaCoachCommandCard(
-                        title: L10n.t("Adjust Training", "调整训练"),
-                        subtitle: L10n.t("Decide whether to train, reduce, swap, or recover.", "判断训练、减量、替换或恢复。"),
-                        systemImage: "figure.run.circle.fill",
-                        tint: VelaTheme.strain
-                    ) {
-                        sendQuestion(L10n.t("Should I adjust today's training based on recovery and fatigue?", "根据恢复和疲劳情况，今天的训练需要调整吗？"))
-                    }
-
-                    VelaCoachCommandCard(
-                        title: L10n.t("Optimize Sleep", "优化睡眠"),
-                        subtitle: L10n.t("Turn sleep signals into tonight's plan.", "把睡眠信号转成今晚计划。"),
-                        systemImage: "moon.stars.fill",
-                        tint: VelaTheme.sleep
-                    ) {
-                        sendQuestion(L10n.t("Review my sleep and give me one concrete optimization for tonight.", "请分析我的睡眠，并给出今晚一个具体优化建议。"))
-                    }
-
-                    VelaCoachCommandCard(
-                        title: L10n.t("Review Memory", "检查记忆"),
-                        subtitle: L10n.t("Open pending memories and profile context.", "打开待确认记忆和个人档案。"),
-                        systemImage: "brain.head.profile",
-                        tint: VelaTheme.energy
-                    ) {
-                        showWikiProfile = true
-                    }
-                }
-
-                VelaSectionHeader(
-                    title: AppLanguage.stored.isChinese ? "信任与数据" : "Trust and Data",
-                    subtitle: AppLanguage.stored.isChinese ? "检查 Vela 的输入质量和 Agent 行为记录。" : "Check Vela's input quality and agent behavior records."
-                )
-
-                HStack(spacing: 12) {
-                    Button {
-                        showDataCoverage = true
-                    } label: {
-                        trustCommandTile(
-                            title: AppLanguage.stored.isChinese ? "数据覆盖" : "Data Coverage",
-                            subtitle: AppLanguage.stored.isChinese ? "信号新鲜度与置信度" : "Signal freshness and confidence",
-                            icon: "waveform.path.ecg.rectangle",
-                            tint: VelaTheme.recovery
-                        )
-                    }
-                    .buttonStyle(.plain)
-
-                    Button {
-                        showTrustCenter = true
-                    } label: {
-                        trustCommandTile(
-                            title: AppLanguage.stored.isChinese ? "信任中心" : "Trust Center",
-                            subtitle: AppLanguage.stored.isChinese ? "Agent 审计日志" : "Agent audit log",
-                            icon: "checkmark.shield.fill",
-                            tint: VelaTheme.primary
-                        )
-                    }
-                    .buttonStyle(.plain)
+                HStack(spacing: 4) {
+                    Circle().fill(vm.isReady ? VelaTheme.success : VelaTheme.muted).frame(width: 6, height: 6)
+                    Text(vm.isReady ? "在线" : "未连接")
+                        .font(VelaTheme.caption2())
+                        .foregroundStyle(vm.isReady ? VelaTheme.success : VelaTheme.muted)
                 }
             }
-            .padding(VelaTheme.screenPadding)
-            .padding(.bottom, 24)
-        }
-    }
 
-    private func trustCommandTile(title: String, subtitle: String, icon: String, tint: Color) -> some View {
-        VelaGlassCard(padding: 14, cornerRadius: 14) {
-            VStack(alignment: .leading, spacing: 10) {
-                Image(systemName: icon)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(tint)
-                    .frame(width: 34, height: 34)
-                    .background(Circle().fill(tint.opacity(0.12)))
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(VelaTheme.onSurface)
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(VelaTheme.onSurfaceVariant)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
+            Spacer()
 
-    // MARK: - Message List
-
-    private var messageList: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 16) {
-                    ForEach(vm.messages) { msg in
-                        ChatBubbleView(
-                            message: msg,
-                            streamingContent: msg.isStreaming ? vm.streamingContent : nil
-                        )
-                        .id(msg.id)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
-                    }
-                }
-                .padding(VelaTheme.screenPadding)
-                .padding(.bottom, 8)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .onChange(of: vm.messages.count) {
-                scrollToBottom(proxy)
-            }
-            .onChange(of: vm.streamingContent) {
-                scrollToBottom(proxy)
-            }
-        }
-    }
-
-    // MARK: - Quick Questions Bar
-
-    private var quickQuestionsBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(vm.quickQuestions.prefix(4), id: \.self) { q in
-                    Button { sendQuestion(q) } label: {
-                        Text(q)
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(VelaTheme.primary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(.ultraThinMaterial)
-                            )
-                            .overlay(
-                                Capsule(style: .continuous)
-                                    .stroke(VelaTheme.outline, lineWidth: 0.5)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, VelaTheme.screenPadding)
-        }
-    }
-
-    // MARK: - Composer Bar
-
-    private var composerBar: some View {
-        HStack(spacing: 8) {
-            // Camera button for food photo analysis
-            Menu {
-                Button {
-                    showCameraPicker = true
-                } label: {
-                    Label(L10n.t("Take Photo", "拍照"), systemImage: "camera.fill")
-                }
-                Button {
-                    showPhotoLibraryPicker = true
-                } label: {
-                    Label(L10n.t("Choose from Library", "从相册选择"), systemImage: "photo.on.rectangle")
-                }
+            Button {
+                vm.createNewSession(modelContext: modelContext)
             } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(VelaTheme.onSurfaceVariant)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(Color(hex: "#C56B4A"))
                     .frame(width: 36, height: 36)
-                    .background(Circle().fill(.ultraThinMaterial))
-                    .overlay(
-                        Circle().stroke(VelaTheme.outline, lineWidth: 0.5)
+                    .background(
+                        Circle().fill(VelaTheme.surface)
                     )
             }
-            .disabled(vm.isStreaming || vm.isAnalyzingFood)
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 56)
+        .padding(.bottom, 12)
+    }
 
-            // Glass capsule input
-            HStack(spacing: 4) {
-                TextField(
-                    L10n.t("Ask anything about your health...", "询问关于你健康的任何问题..."),
-                    text: $vm.draft,
-                    axis: .vertical
+    // MARK: - Welcome
+
+    private var welcomeView: some View {
+        VStack(spacing: 20) {
+            Spacer().frame(height: 40)
+
+            ZStack {
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 76, height: 76)
+                    .overlay(Circle().stroke(Color(hex: "#E8E4DD"), lineWidth: 0.8))
+                    .shadow(color: Color.black.opacity(0.04), radius: 8, y: 3)
+
+                AlpacaView(
+                    strokeColor: Color(hex: "#C56B4A"),
+                    size: 58,
+                    lineWidth: 2.6
                 )
-                .lineLimit(1...5)
-                .focused($inputFocused)
-                .font(.system(size: 15))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .foregroundStyle(VelaTheme.onSurface)
-
-                Button {
-                    inputFocused = false
-                    sendQuestion(vm.draft)
-                } label: {
-                    Group {
-                        if vm.isStreaming || vm.isAnalyzingFood {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                                .tint(VelaTheme.onPrimary)
-                        } else {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.title3.weight(.semibold))
-                                .foregroundStyle(
-                                    vm.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                        ? VelaTheme.muted
-                                        : VelaTheme.primary
-                                )
-                        }
-                    }
-                }
-                .disabled(vm.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || vm.isStreaming)
-                .padding(.trailing, 4)
             }
-            .background(
-                Capsule(style: .continuous)
-                    .fill(.ultraThinMaterial)
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(VelaTheme.outline, lineWidth: 0.5)
-            )
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-    }
 
-    // MARK: - Glassmorphic Sidebar Drawer
+            Text("Coach")
+                .font(VelaTheme.title2())
+                .foregroundStyle(VelaTheme.fg)
 
-    private var sidebarOverlay: some View {
-        let drawerWidth = min(UIScreen.main.bounds.width * 0.78, 320)
+            Text("你的 AI 身体智能代理。可以讨论训练、恢复、睡眠、营养，我会根据你的健康数据给出个性化建议。")
+                .font(VelaTheme.subheadline())
+                .foregroundStyle(VelaTheme.muted)
+                .multilineTextAlignment(.center)
+                .lineSpacing(4)
 
-        return ZStack(alignment: .leading) {
-            Color.black.opacity(0.4)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                        showSidebar = false
+            FlexStack(spacing: 8) {
+                ForEach(vm.quickQuestions, id: \.self) { text in
+                    Button(text) {
+                        sendMessage(text)
                     }
-                }
-
-            GeometryReader { geo in
-                VStack(spacing: 0) {
-                    // Header
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(AppLanguage.stored.isChinese ? "对话历史" : "Sessions")
-                                .font(.title3.weight(.bold))
-                                .foregroundStyle(VelaTheme.onSurface)
-                            Text(AppLanguage.stored.isChinese ? "你的私人健康顾问" : "Your private coach")
-                                .font(.caption)
-                                .foregroundStyle(VelaTheme.onSurfaceVariant)
-                        }
-                        Spacer()
-                        Button {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                vm.createNewSession(modelContext: modelContext)
-                                showConversation = false
-                                showSidebar = false
-                            }
-                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        } label: {
-                            Image(systemName: "square.and.pencil")
-                                .font(.body.weight(.bold))
-                                .foregroundStyle(VelaTheme.primary)
-                                .padding(8)
-                                .background(Circle().fill(VelaTheme.primary.opacity(0.12)))
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.top, geo.safeAreaInsets.top + 12)
-                    .padding(.bottom, 20)
-
-                    Divider()
-                        .background(VelaTheme.outline)
-
-                    // Session List
-                    ScrollView {
-                        VStack(spacing: 8) {
-                            ForEach(vm.sessions) { session in
-                                let isSelected = vm.currentSession?.id == session.id
-                                HStack {
-                                    Image(systemName: "bubble.left.and.bubble.right.fill")
-                                        .font(.subheadline)
-                                        .foregroundStyle(isSelected ? VelaTheme.primary : VelaTheme.onSurfaceVariant)
-
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(session.title)
-                                            .font(.subheadline.weight(isSelected ? .semibold : .medium))
-                                            .foregroundStyle(isSelected ? VelaTheme.primary : VelaTheme.onSurface)
-                                            .lineLimit(1)
-                                        Text(session.updatedAt.formatted(date: .abbreviated, time: .omitted))
-                                            .font(.system(size: 10))
-                                            .foregroundStyle(VelaTheme.muted)
-                                    }
-
-                                    Spacer()
-
-                                    Menu {
-                                        Button {
-                                            sessionToRename = session
-                                            renameText = session.title
-                                            showRenameAlert = true
-                                        } label: {
-                                            Label(AppLanguage.stored.isChinese ? "重命名" : "Rename", systemImage: "pencil")
-                                        }
-
-                                        Button(role: .destructive) {
-                                            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
-                                            vm.deleteSession(session, modelContext: modelContext)
-                                        } label: {
-                                            Label(AppLanguage.stored.isChinese ? "删除" : "Delete", systemImage: "trash")
-                                        }
-                                    } label: {
-                                        Image(systemName: "ellipsis")
-                                            .font(.caption)
-                                            .foregroundStyle(VelaTheme.muted)
-                                            .padding(6)
-                                    }
-                                }
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .fill(isSelected ? VelaTheme.primary.opacity(0.1) : Color.clear)
-                                )
-                                .onTapGesture {
-                                    withAnimation {
-                                        vm.selectSession(session, modelContext: modelContext)
-                                        showConversation = true
-                                        showSidebar = false
-                                    }
-                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                }
-                            }
-                        }
-                        .padding(14)
-                    }
-
-                    Spacer()
-
-                    // Footer
-                    VStack(spacing: 12) {
-                        Divider()
-                            .background(VelaTheme.outline)
-
-                        Button {
-                            showSidebar = false
-                            showWikiProfile = true
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: "person.text.rectangle.fill")
-                                    .font(.body)
-                                    .foregroundStyle(VelaTheme.primary)
-                                Text(AppLanguage.stored.isChinese ? "个人健康档案 (Wiki)" : "Personal Health Wiki")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(VelaTheme.onSurface)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption2)
-                                    .foregroundStyle(VelaTheme.muted)
-                            }
-                            .padding(14)
-                            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(VelaTheme.surfaceContainerLow))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(16)
-                    .padding(.bottom, geo.safeAreaInsets.bottom + 16)
-                }
-                .frame(width: drawerWidth, height: geo.size.height)
-                .background(.ultraThinMaterial)
-            }
-            .frame(width: drawerWidth)
-            .transition(.move(edge: .leading))
-            .gesture(
-                DragGesture()
-                    .onEnded { value in
-                        if value.translation.width < -50 {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                showSidebar = false
-                            }
-                        }
-                    }
-                )
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-    }
-
-    // MARK: - Helpers
-
-    private func sendQuestion(_ text: String) {
-        showConversation = true
-        Task {
-            await vm.send(
-                text: text,
-                dashboard: dashboardVM.dashboard,
-                modelContext: modelContext,
-                journalEntries: journalEntries,
-                savedReports: savedReports
-            )
-        }
-    }
-
-    private func scrollToBottom(_ proxy: ScrollViewProxy) {
-        guard let id = vm.messages.last?.id else { return }
-        withAnimation(.easeOut(duration: 0.2)) {
-            proxy.scrollTo(id, anchor: .bottom)
-        }
-    }
-
-    // MARK: - Personality Picker
-
-    private var personalityPicker: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(CoachPersonality.allCases) { p in
-                    let isSelected = activePersonality == p
-                    Button {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                            activePersonality = p
-                            CoachPersonality.current = p
-                        }
-                        triggerPersonalityHaptic(p)
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: p.icon)
-                                .font(.system(size: 13, weight: .semibold))
-                            Text(p.displayName)
-                                .font(.system(size: 12, weight: .bold))
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(isSelected ? p.tint.opacity(0.18) : Color.clear)
-                        )
-                        .overlay(
-                            Capsule(style: .continuous)
-                                .strokeBorder(isSelected ? p.tint.opacity(0.4) : VelaTheme.outline, lineWidth: 1)
-                        )
-                        .foregroundStyle(isSelected ? p.tint : VelaTheme.onSurfaceVariant)
-                    }
+                    .font(VelaTheme.subheadline())
+                    .foregroundStyle(VelaTheme.fg)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(VelaTheme.surface)
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .stroke(VelaTheme.border, lineWidth: 0.5)
+                            )
+                    )
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, VelaTheme.screenPadding)
-        }
-        .frame(height: 40)
-    }
-
-    private func triggerPersonalityHaptic(_ personality: CoachPersonality) {
-        switch personality {
-        case .dataNerd:
-            let gen = UIImpactFeedbackGenerator(style: .light)
-            gen.prepare()
-            gen.impactOccurred()
-        case .guardian:
-            let gen = UINotificationFeedbackGenerator()
-            gen.prepare()
-            gen.notificationOccurred(.success)
-        case .friend:
-            let gen = UISelectionFeedbackGenerator()
-            gen.prepare()
-            gen.selectionChanged()
-        case .commander:
-            let gen = UIImpactFeedbackGenerator(style: .heavy)
-            gen.prepare()
-            gen.impactOccurred()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                let gen2 = UIImpactFeedbackGenerator(style: .medium)
-                gen2.prepare()
-                gen2.impactOccurred()
-            }
         }
     }
-}
 
-// MARK: - Coach Report Detail View
+    // MARK: - Composer
 
-private struct CoachReportDetailView: View {
-    let report: AIReportRecord
-
-    var body: some View {
-        ZStack {
-            VelaBackground()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(reportTypeTitle)
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(VelaTheme.primary)
-                            .textCase(.uppercase)
-                        Text(report.title)
-                            .font(.system(size: 28, weight: .bold, design: .rounded))
-                            .foregroundStyle(VelaTheme.onSurface)
-                        Text(report.createdAt.formatted(date: .complete, time: .shortened))
-                            .font(.caption)
-                            .foregroundStyle(VelaTheme.onSurfaceVariant)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 18)
-
-                    MarkdownText(
-                        markdown: report.markdownContent,
-                        font: .body,
-                        color: VelaTheme.onSurface,
-                        isStreaming: false
-                    )
-                    .padding(16)
-                    .background(
-                        RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard, style: .continuous)
-                            .fill(VelaTheme.surfaceContainerLowest)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard, style: .continuous)
-                            .stroke(VelaTheme.outline, lineWidth: 0.5)
-                    )
-                }
-                .padding(VelaTheme.screenPadding)
-                .padding(.bottom, 36)
-            }
-        }
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private var reportTypeTitle: String {
-        AIReportType(rawValue: report.type)?.title ?? L10n.t("Artifact", "智能产物")
-    }
-}
-
-// MARK: - Chat Bubble (Redesigned)
-
-private struct ChatBubbleView: View {
-    let message: CoachChatVM.ChatMsg
-    let streamingContent: String?
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            if message.role == .user { Spacer(minLength: 60) }
-
-            VStack(alignment: message.role == .assistant ? .leading : .trailing, spacing: 6) {
-                // Content
-                let displayText = (message.isStreaming ? (streamingContent ?? message.content) : message.content)
-                MarkdownText(
-                    markdown: displayText,
-                    font: .system(size: 15),
-                    color: VelaTheme.onSurface,
-                    isStreaming: message.isStreaming
+    private var composerView: some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            TextField("输入消息…", text: $inputText, axis: .vertical)
+                .font(VelaTheme.callout())
+                .lineLimit(1...5)
+                .focused($isFocused)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(VelaTheme.surface)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                .stroke(isFocused ? VelaTheme.accent : VelaTheme.border, lineWidth: 0.5)
+                        )
                 )
-
-                // Wiki update badges
-                if !message.wikiUpdates.isEmpty {
-                    HStack(spacing: 4) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(VelaTheme.primary)
-                        Text(L10n.t("Wiki updated: \(message.wikiUpdates.joined(separator: ", "))", "已更新档案: \(message.wikiUpdates.joined(separator: ", "))"))
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(VelaTheme.primary)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Capsule(style: .continuous).fill(VelaTheme.primary.opacity(0.12)))
-                    .padding(.top, 2)
+                .onSubmit {
+                    guard !inputText.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                    sendMessage(inputText)
                 }
 
-                // Timestamp
-                if !message.isStreaming {
-                    Text(message.timestamp.formatted(date: .omitted, time: .shortened))
-                        .font(.system(size: 9))
-                        .foregroundStyle(VelaTheme.muted)
-                        .padding(.top, 2)
-                }
+            Button {
+                guard !inputText.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                sendMessage(inputText)
+            } label: {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(
+                        Circle()
+                            .fill(inputText.trimmingCharacters(in: .whitespaces).isEmpty
+                                ? VelaTheme.border : VelaTheme.accent)
+                    )
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: message.role == .assistant ? .leading : .trailing)
-            .background(
-                Group {
-                    if message.role == .assistant {
-                        // Coach: glass bubble
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(
-                                Color(UIColor { traits in
-                                    traits.userInterfaceStyle == .dark
-                                        ? UIColor(red: 0.110, green: 0.106, blue: 0.094, alpha: 0.55)
-                                        : UIColor(white: 1.0, alpha: 0.60)
-                                })
-                            )
-                    } else {
-                        // User: solid surface bubble
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(VelaTheme.surfaceContainerLow.opacity(0.92))
-                    }
-                }
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(VelaTheme.outline, lineWidth: 0.5)
-            )
+            .disabled(inputText.trimmingCharacters(in: .whitespaces).isEmpty)
+            .buttonStyle(.plusButton)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .padding(.bottom, 28)
+        .background(VelaTheme.bg)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(VelaTheme.borderSoft)
+                .frame(height: 0.5)
+        }
+    }
 
-            if message.role == .assistant { Spacer(minLength: 60) }
+    // MARK: - Actions
+
+    private func sendMessage(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, !vm.isStreaming else { return }
+        inputText = ""
+
+        Task {
+            await vm.send(
+                text: trimmed,
+                dashboard: dashboard,
+                modelContext: modelContext,
+                journalEntries: journalEntries,
+                savedReports: savedReports,
+                focus: .general,
+                services: services
+            )
         }
     }
 }
 
-// MARK: - Blinking Modifier
+// MARK: - FlexStack (wrapping HStack for suggestion chips)
 
-private struct BlinkingModifier: ViewModifier {
-    @State private var isVisible = true
+struct FlexStack: Layout {
+    var spacing: CGFloat = 8
 
-    func body(content: Content) -> some View {
-        content
-            .opacity(isVisible ? 1 : 0)
-            .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: isVisible)
-            .onAppear { isVisible = false }
-    }
-}
-
-extension View {
-    func blinking() -> some View {
-        modifier(BlinkingModifier())
-    }
-}
-
-// MARK: - Image Picker (UIKit wrapper)
-
-struct ImagePicker: UIViewControllerRepresentable {
-    let sourceType: UIImagePickerController.SourceType
-    @Binding var selectedImage: UIImage?
-    @Environment(\.dismiss) private var dismiss
-
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.sourceType = sourceType
-        picker.delegate = context.coordinator
-        return picker
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(proposal: proposal, subviews: subviews)
+        let height = rows.map { $0.map { $0.size.height }.max() ?? 0 }.reduce(0, +) + spacing * CGFloat(max(0, rows.count - 1))
+        return CGSize(width: proposal.width ?? 0, height: height)
     }
 
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-
-    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
-        let parent: ImagePicker
-
-        init(_ parent: ImagePicker) {
-            self.parent = parent
-        }
-
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-            if let image = info[.originalImage] as? UIImage {
-                parent.selectedImage = image
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let rows = arrange(proposal: proposal, subviews: subviews)
+        var y = bounds.minY
+        for row in rows {
+            var x = bounds.minX
+            for item in row {
+                subviews[item.index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(item.size))
+                x += item.size.width + spacing
             }
-            parent.dismiss()
+            let rowH = row.map { $0.size.height }.max() ?? 0
+            y += rowH + spacing
         }
+    }
 
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            parent.dismiss()
+    struct Item { let index: Int; let size: CGSize }
+
+    private func arrange(proposal: ProposedViewSize, subviews: Subviews) -> [[Item]] {
+        let maxW = proposal.width ?? .infinity
+        var rows: [[Item]] = [[]]
+        var currentRowW: CGFloat = 0
+
+        for (i, sub) in subviews.enumerated() {
+            let size = sub.sizeThatFits(.unspecified)
+            let fits = rows.last?.isEmpty == true || currentRowW + size.width <= maxW
+            if !fits {
+                rows.append([])
+                currentRowW = 0
+            }
+            rows[rows.count - 1].append(Item(index: i, size: size))
+            currentRowW += size.width + spacing
         }
+        return rows
     }
 }

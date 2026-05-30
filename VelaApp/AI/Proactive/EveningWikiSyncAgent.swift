@@ -124,6 +124,12 @@ final class EveningWikiSyncAgent: ObservableObject {
             lastSummary = String(parsed.displayText.prefix(200))
             lastRunDate = Date()
             logger.info("Evening wiki sync complete. Updated \(appliedFiles.count) files.")
+            try? DailyLogService.write(
+                dashboard: dashboard,
+                chatMessages: [],
+                wikiUpdates: appliedFiles,
+                coachArchiveSummary: parsed.displayText.isEmpty ? response.content : parsed.displayText
+            )
 
             // ── Personal Response Pattern Scan ──
             var personalRulesCreated = 0

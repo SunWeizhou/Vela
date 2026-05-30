@@ -62,13 +62,9 @@ final class CoachChatVM: ObservableObject {
     @Published var isAnalyzingFood = false
 
     let quickQuestions: [String] = [
-        L10n.t("How am I doing today?", "我今天状态怎么样？"),
-        L10n.t("Should I work out?", "今天适合训练吗？"),
-        L10n.t("🏋️ Today's workout plan", "🏋️ 今天的训练建议"),
-        L10n.t("🔄 Should I rest today?", "🔄 需要休息吗？"),
-        L10n.t("Review my sleep", "分析我的睡眠"),
-        L10n.t("📊 Weekly Trends", "📊 本周趋势分析"),
-        L10n.t("Morning brief", "早间简报"),
+        L10n.t("Today's training advice", "今天的训练建议"),
+        L10n.t("Weekly trend analysis", "本周趋势分析"),
+        L10n.t("Analyze my sleep", "分析我的睡眠"),
         L10n.t("Update my profile", "更新我的档案"),
     ]
 
@@ -356,6 +352,7 @@ final class CoachChatVM: ObservableObject {
             let maxIterations = 3
             var fullResponse = ""
             var wikiFiles: [String] = []
+            var wikiUpdateSummaries: [String] = []
 
             // Agentic loop: LLM decides whether to call tools or answer
             for _ in 0..<maxIterations {
@@ -389,11 +386,14 @@ final class CoachChatVM: ObservableObject {
                             toolCallId: tc.id
                         ))
                         // Track wiki updates from tool calls
-                        if tc.name == "update_user_wiki",
+                        if tc.name == "update_user_wiki", !result.hasPrefix("Error"),
                            let data = tc.arguments.data(using: .utf8),
                            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                            let file = json["file"] as? String {
                             wikiFiles.append(file)
+                            if let content = json["content"] as? String {
+                                wikiUpdateSummaries.append("\(file): \(content)")
+                            }
                         }
                     }
 
@@ -418,7 +418,7 @@ final class CoachChatVM: ObservableObject {
             let ledger = MemoryLedger(modelContext: modelContext)
             for action in parsed.actions where action.type == .updateWiki {
                 let memType = WikiFileRole.memoryTypeFor(filename: action.target)
-                _ = try? ledger.createProposal(
+                let proposal = try? ledger.createProposal(
                     targetFile: action.target,
                     memoryType: memType,
                     content: action.content,
@@ -426,8 +426,9 @@ final class CoachChatVM: ObservableObject {
                     confidence: 0.5,
                     source: "coach_legacy_parser"
                 )
-                if !wikiFiles.contains(action.target) {
+                if proposal != nil, !wikiFiles.contains(action.target) {
                     wikiFiles.append(action.target)
+                    wikiUpdateSummaries.append("\(action.target): \(action.content)")
                 }
             }
 
@@ -455,9 +456,15 @@ final class CoachChatVM: ObservableObject {
             // Persist
             persistThread(modelContext: modelContext)
             persistInteraction(userText: userText, assistantText: parsed.displayText, focus: focus, modelContext: modelContext)
-            try? DailyLogService.write(dashboard: dashboard, chatMessages: messages.map {
-                CoachChatMessage(role: $0.role == .user ? .user : .assistant, content: $0.content, createdAt: $0.timestamp)
-            })
+            try? DailyLogService.recordInteraction(
+                dashboard: dashboard,
+                userText: userText,
+                assistantText: finalText,
+                wikiUpdates: wikiFiles,
+                coachArchiveSummary: wikiUpdateSummaries.isEmpty
+                    ? nil
+                    : "本轮 Coach 主动提出长期档案更新：" + wikiUpdateSummaries.joined(separator: "；")
+            )
 
             isReady = true
         } catch {

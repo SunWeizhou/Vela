@@ -1,80 +1,1039 @@
 import SwiftUI
 
-// MARK: - Apple-Style Reusable Components
-// Uses VelaTheme tokens. Drop-in replacement for VelaDesignSystem / VelaMinimalComponents.
+// MARK: - VelaComponents — Apple-Style Reusable Components
+// 组件清单: ScoreRing, VitalCard, InfoCard, InsightCard, EmptyStateCard,
+//           GlassTabBar, StatusCapsule, DayPill, MessageBubble, TypingIndicator,
+//           SettingsRow, ToggleRow, EvidenceStep, DataFreshnessBar
 
-// MARK: - Apple Background
+// MARK: - ScoreRing (Ring progress view)
 
-struct VelaBackground: View {
+struct ScoreRing: View {
+    let score: Double      // 0…1
+    let color: Color
+    let size: CGFloat
+    let strokeWidth: CGFloat?
+    let value: String
+    let unit: String?
+    let label: String
+
+    init(
+        score: Double,
+        color: Color,
+        size: CGFloat = VelaTheme.ringMd,
+        strokeWidth: CGFloat? = nil,
+        value: String,
+        unit: String? = nil,
+        label: String
+    ) {
+        self.score = max(0, min(1, score))
+        self.color = color
+        self.size = size
+        self.strokeWidth = strokeWidth ?? (size * 0.085)
+        self.value = value
+        self.unit = unit
+        self.label = label
+    }
+
     var body: some View {
-        VelaTheme.background.ignoresSafeArea()
+        let sw = strokeWidth ?? (size * 0.085)
+        ZStack {
+            Circle()
+                .stroke(VelaTheme.borderSoft, lineWidth: sw)
+
+            Circle()
+                .trim(from: 0, to: score)
+                .stroke(color, style: StrokeStyle(lineWidth: sw, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .animation(.smooth(duration: 0.8), value: score)
+
+            VStack(spacing: 0) {
+                if let unit = unit {
+                    Text(value)
+                        .font(.system(size: size * 0.28, weight: .semibold, design: .rounded))
+                        .foregroundStyle(VelaTheme.fg)
+                    Text(unit)
+                        .font(VelaTheme.caption2())
+                        .foregroundStyle(VelaTheme.meta)
+                } else {
+                    Text(value)
+                        .font(.system(size: size * 0.28, weight: .semibold, design: .rounded))
+                        .foregroundStyle(VelaTheme.fg)
+                }
+            }
+        }
+        .frame(width: size, height: size)
+        .overlay(alignment: .bottom) {
+            Text(label)
+                .font(VelaTheme.caption2())
+                .foregroundStyle(VelaTheme.muted)
+                .offset(y: size * 0.2)
+        }
+        .padding(.bottom, size * 0.16)
     }
 }
 
-// MARK: - View Modifiers (Apple style)
+// MARK: - VitalCard (vitals metric card)
+
+struct VitalCard: View {
+    let title: String
+    let value: String
+    let unit: String
+    let range: String
+    let freshness: VitalFreshness
+    let bars: [Double]
+    let color: Color
+    var onTap: () -> Void
+
+    enum VitalFreshness {
+        case fresh, stale, missing
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text(title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(VelaTheme.fg)
+                    Spacer()
+                    freshnessBadge
+                }
+
+                HStack(alignment: .lastTextBaseline, spacing: 4) {
+                    Text(value)
+                        .font(.system(size: 36, weight: .semibold, design: .rounded))
+                        .foregroundStyle(VelaTheme.fg)
+                    Text(unit)
+                        .font(.system(size: 16))
+                        .foregroundStyle(VelaTheme.meta)
+                }
+
+                Text(range)
+                    .font(VelaTheme.caption1())
+                    .foregroundStyle(VelaTheme.muted)
+
+                HStack(alignment: .bottom, spacing: 3) {
+                    ForEach(Array(bars.enumerated()), id: \.offset) { i, h in
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(i == bars.count - 1 ? color : color.opacity(0.3))
+                            .frame(height: max(2, h * 48))
+                    }
+                }
+                .frame(height: 48)
+            }
+            .padding(18)
+            .background(
+                RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
+                    .fill(VelaTheme.cardBg)
+            )
+        }
+        .buttonStyle(.cardPress)
+    }
+
+    @ViewBuilder
+    private var freshnessBadge: some View {
+        switch freshness {
+        case .fresh:
+            Text("最新")
+                .font(VelaTheme.caption2())
+                .fontWeight(.medium)
+                .foregroundStyle(Color(hex: "#137333"))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .background(Color(hex: "#E6F4EA"))
+                .clipShape(.capsule)
+        case .stale:
+            Text("8小时前")
+                .font(VelaTheme.caption2())
+                .fontWeight(.medium)
+                .foregroundStyle(Color(hex: "#B06000"))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .background(Color(hex: "#FEF7E0"))
+                .clipShape(.capsule)
+        case .missing:
+            Text("无数据")
+                .font(VelaTheme.caption2())
+                .fontWeight(.medium)
+                .foregroundStyle(Color(hex: "#C5221F"))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .background(Color(hex: "#FCE8E6"))
+                .clipShape(.capsule)
+        }
+    }
+}
+
+// MARK: - InfoCard (dual metric card)
+
+struct InfoCard: View {
+    let eyebrow: String
+    let value: String
+    let unit: String?
+    let subtitle: String
+    var onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(eyebrow)
+                    .font(VelaTheme.caption2())
+                    .fontWeight(.semibold)
+                    .textCase(.uppercase)
+                    .foregroundStyle(VelaTheme.meta)
+                    .kerning(0.04)
+
+                HStack(alignment: .lastTextBaseline, spacing: 4) {
+                    Text(value)
+                        .font(.system(size: 32, weight: .semibold, design: .rounded))
+                        .foregroundStyle(VelaTheme.fg)
+                    if let unit = unit {
+                        Text(unit)
+                            .font(.system(size: 14))
+                            .foregroundStyle(VelaTheme.meta)
+                    }
+                }
+
+                Text(subtitle)
+                    .font(VelaTheme.caption1())
+                    .foregroundStyle(VelaTheme.muted)
+            }
+            .padding(16)
+        }
+        .buttonStyle(.cardPress)
+    }
+}
+
+// MARK: - InsightCard (coach insight with left accent bar)
+
+struct InsightCard: View {
+    let title: String
+    let bodyText: String
+    let cta: String
+    var onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                    .font(VelaTheme.caption2())
+                    .fontWeight(.semibold)
+                    .textCase(.uppercase)
+                    .kerning(0.04)
+                    .foregroundStyle(VelaTheme.accent)
+
+                Text(bodyText)
+                    .font(VelaTheme.subheadline())
+                    .lineSpacing(4)
+                    .foregroundStyle(VelaTheme.fg)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                HStack(spacing: 4) {
+                    Text(cta)
+                        .font(VelaTheme.subheadline())
+                        .fontWeight(.medium)
+                    Image(systemName: "chevron.forward")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .foregroundStyle(VelaTheme.accent)
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
+                    .fill(VelaTheme.cardBg)
+            )
+            .overlay(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(VelaTheme.accent)
+                    .frame(width: 3)
+                    .padding(.leading, 1)
+                    .clipShape(RoundedRectangle(cornerRadius: 2))
+            }
+        }
+        .buttonStyle(.cardPress)
+    }
+}
+
+// MARK: - EmptyStateCard
+
+struct EmptyStateCard: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    var actionLabel: String?
+    var onAction: (() -> Void)?
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 32))
+                .foregroundStyle(VelaTheme.meta)
+
+            Text(title)
+                .font(VelaTheme.headline())
+                .foregroundStyle(VelaTheme.fg)
+
+            Text(subtitle)
+                .font(VelaTheme.subheadline())
+                .foregroundStyle(VelaTheme.muted)
+                .multilineTextAlignment(.center)
+                .lineSpacing(2)
+
+            if let label = actionLabel, let action = onAction {
+                Button(action: action) {
+                    Text(label)
+                        .font(VelaTheme.subheadline())
+                        .fontWeight(.medium)
+                        .foregroundStyle(VelaTheme.accent)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule(style: .continuous)
+                                .stroke(VelaTheme.accent, lineWidth: 1)
+                        )
+                }
+            }
+        }
+        .padding(32)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
+                .fill(VelaTheme.cardBg)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
+                .stroke(VelaTheme.border, style: StrokeStyle(lineWidth: 1, dash: [6, 4]))
+        )
+    }
+}
+
+// MARK: - GlassTabBar (4 tabs centered, floating capsule style with sliding active indicator)
+
+struct GlassTabBar: View {
+    @Binding var selectedTab: VelaTab
+    @Namespace private var animation
+
+    enum VelaTab: CaseIterable {
+        case today, journal, training, vitals
+
+        var index: Int {
+            switch self {
+            case .today: 0; case .journal: 1; case .training: 2; case .vitals: 3
+            }
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(VelaTab.allCases, id: \.self) { tab in
+                Button {
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.78, blendDuration: 0)) {
+                        selectedTab = tab
+                    }
+                } label: {
+                    let isActive = selectedTab == tab
+                    VStack(spacing: 4) {
+                        Image(systemName: iconName(for: tab))
+                            .font(.system(size: 18, weight: isActive ? .semibold : .regular))
+                            .frame(width: 22, height: 22)
+                        Text(label(for: tab))
+                            .font(.system(size: 9, weight: .bold))
+                    }
+                    .foregroundStyle(isActive ? Color(hex: "#1A1917") : Color(hex: "#8E8A80"))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48)
+                    .background(
+                        ZStack {
+                            if isActive {
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(Color(hex: "#E8E4DD").opacity(0.45))
+                                    .matchedGeometryEffect(id: "activeTabBackground", in: animation)
+                            }
+                        }
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .velaInteractiveGlass(in: Capsule())
+        .overlay(
+            Capsule()
+                .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
+        )
+        .shadow(color: Color.black.opacity(0.04), radius: 8, y: 4)
+    }
+
+    private func iconName(for tab: VelaTab) -> String {
+        switch tab {
+        case .today:    "sun.max"
+        case .journal:  "book.pages"
+        case .training: "figure.run"
+        case .vitals:   "heart.text.square"
+        }
+    }
+
+    private func label(for tab: VelaTab) -> LocalizedStringKey {
+        switch tab {
+        case .today:    VelaLoc.tabToday
+        case .journal:  VelaLoc.tabJournal
+        case .training: VelaLoc.tabTraining
+        case .vitals:   VelaLoc.tabVitals
+        }
+    }
+}
 
 extension View {
-    /// Apple-style card: white surface, hairline border, minimal shadow
+    @ViewBuilder
+    func velaInteractiveGlass<S: Shape>(in shape: S) -> some View {
+        if #available(iOS 26.0, *) {
+            glassEffect(.regular.interactive(), in: shape)
+        } else {
+            background(.ultraThinMaterial, in: shape)
+        }
+    }
+}
+
+// MARK: - StatusCapsule
+
+struct StatusCapsule: View {
+    let icon: String
+    let label: String
+    let value: String
+    let color: Color
+    var onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(color)
+                    .frame(width: 8, height: 8)
+
+                Text(label)
+                    .font(VelaTheme.subheadline())
+                    .foregroundStyle(VelaTheme.fg2)
+
+                Text(value)
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .foregroundStyle(VelaTheme.fg)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(VelaTheme.cardBg)
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - DayPill (week strip day)
+
+struct DayPill: View {
+    let dow: String
+    let dom: String
+    let isToday: Bool
+    let isActive: Bool
+    let hasEvent: Bool
+    var onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(spacing: 4) {
+                Text(dow)
+                    .font(VelaTheme.caption2())
+                    .fontWeight(isToday ? .semibold : .medium)
+                    .foregroundStyle(isToday ? VelaTheme.accent : VelaTheme.meta)
+                    .kerning(0.02)
+
+                Text(dom)
+                    .font(.system(size: 18, weight: isActive ? .semibold : .medium, design: .rounded))
+                    .foregroundStyle(isActive ? .white : VelaTheme.fg)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        Group {
+                            if isActive {
+                                Circle().fill(VelaTheme.accent)
+                            }
+                        }
+                    )
+
+                Circle()
+                    .fill(VelaTheme.accent)
+                    .frame(width: 4, height: 4)
+                    .opacity(hasEvent ? 1 : 0)
+            }
+            .frame(width: 48)
+            .padding(.vertical, 8)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - MessageBubble
+
+struct MessageBubble: View {
+    let text: String
+    let isUser: Bool
+    let time: String
+
+    var body: some View {
+        HStack(spacing: 0) {
+            if isUser { Spacer() }
+
+            VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
+                Text(text)
+                    .font(VelaTheme.subheadline())
+                    .lineSpacing(4)
+                    .foregroundStyle(isUser ? .white : VelaTheme.fg)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(
+                        Group {
+                            if isUser {
+                                VelaTheme.accent
+                            } else {
+                                VelaTheme.surface
+                            }
+                        }
+                    )
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: VelaTheme.radiusLg,
+                            style: .continuous
+                        )
+                    )
+                    .clipShape(
+                        UnevenRoundedRectangle(
+                            topLeadingRadius: isUser ? VelaTheme.radiusLg : 4,
+                            bottomLeadingRadius: VelaTheme.radiusLg,
+                            bottomTrailingRadius: VelaTheme.radiusLg,
+                            topTrailingRadius: isUser ? 4 : VelaTheme.radiusLg,
+                            style: .continuous
+                        )
+                    )
+                    .frame(maxWidth: 280, alignment: isUser ? .trailing : .leading)
+
+                Text(time)
+                    .font(VelaTheme.caption2())
+                    .foregroundStyle(VelaTheme.meta)
+                    .padding(.horizontal, 4)
+            }
+
+            if !isUser { Spacer() }
+        }
+    }
+}
+
+// MARK: - TypingIndicator
+
+struct TypingIndicator: View {
+    @State private var phase = 0
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<3) { i in
+                Circle()
+                    .fill(VelaTheme.meta)
+                    .frame(width: 7, height: 7)
+                    .scaleEffect(phase == i ? 1 : 0.6)
+                    .opacity(phase == i ? 1 : 0.3)
+                    .animation(.easeInOut(duration: 0.32).repeatForever(autoreverses: true), value: phase)
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .background(
+            UnevenRoundedRectangle(
+                topLeadingRadius: 4,
+                bottomLeadingRadius: VelaTheme.radiusLg,
+                bottomTrailingRadius: VelaTheme.radiusLg,
+                topTrailingRadius: VelaTheme.radiusLg,
+                style: .continuous
+            )
+            .fill(VelaTheme.surface)
+        )
+        .onAppear {
+            phase = 0
+            withAnimation(.easeInOut(duration: 0.32).delay(0.32)) { phase = 1 }
+            withAnimation(.easeInOut(duration: 0.32).delay(0.64)) { phase = 2 }
+            withAnimation(.easeInOut(duration: 0.32).delay(0.96)) { phase = 0 }
+        }
+    }
+}
+
+// MARK: - SettingsRow
+
+struct SettingsRow: View {
+    let icon: String
+    let iconBg: Color
+    let title: String
+    var value: String?
+    var onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 14) {
+                Image(systemName: icon)
+                    .font(.system(size: 16))
+                    .foregroundStyle(.white)
+                    .frame(width: 30, height: 30)
+                    .background(iconBg)
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+                Text(title)
+                    .font(VelaTheme.body())
+                    .foregroundStyle(VelaTheme.fg)
+
+                Spacer()
+
+                if let value = value {
+                    Text(value)
+                        .font(VelaTheme.body())
+                        .foregroundStyle(VelaTheme.meta)
+                }
+
+                Image(systemName: "chevron.forward")
+                    .font(.system(size: 14))
+                    .foregroundStyle(VelaTheme.meta.opacity(0.5))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - ToggleRow
+
+struct ToggleRow: View {
+    let icon: String
+    let iconBg: Color
+    let title: String
+    @Binding var isOn: Bool
+    var onToggle: ((Bool) -> Void)?
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 16))
+                .foregroundStyle(.white)
+                .frame(width: 30, height: 30)
+                .background(iconBg)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+            Text(title)
+                .font(VelaTheme.body())
+                .foregroundStyle(VelaTheme.fg)
+
+            Spacer()
+
+            Toggle("", isOn: $isOn)
+                .tint(VelaTheme.accent)
+                .labelsHidden()
+                .onChange(of: isOn) { _, val in
+                    onToggle?(val)
+                }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+}
+
+// MARK: - EvidenceStep
+
+struct EvidenceStep: View {
+    let step: Int
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text("\(step)")
+                .font(VelaTheme.monoCaption())
+                .fontWeight(.bold)
+                .foregroundStyle(.white)
+                .frame(width: 22, height: 22)
+                .background(VelaTheme.accent)
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(VelaTheme.subheadline())
+                    .fontWeight(.semibold)
+                    .foregroundStyle(VelaTheme.fg)
+                Text(detail)
+                    .font(VelaTheme.caption1())
+                    .foregroundStyle(VelaTheme.muted)
+                    .lineSpacing(2)
+            }
+        }
+    }
+}
+
+// MARK: - DataFreshnessBar
+
+struct DataFreshnessBar: View {
+    let lastSync: String
+    let device: String?
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(VelaTheme.success)
+                .frame(width: 8, height: 8)
+
+            VStack(alignment: .leading) {
+                Text("数据已同步")
+                    .font(VelaTheme.footnote())
+                    .foregroundStyle(VelaTheme.fg)
+                +
+                Text(" · \(lastSync)")
+                    .font(VelaTheme.footnote())
+                    .foregroundStyle(VelaTheme.muted)
+
+                if let device = device {
+                    Text(" · \(device)")
+                        .font(VelaTheme.footnote())
+                        .foregroundStyle(VelaTheme.meta)
+                }
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
+                .fill(VelaTheme.surface)
+        )
+    }
+}
+
+// MARK: - QuickEntryButton
+
+struct QuickEntryButton: View {
+    let icon: String
+    let iconBg: Color
+    let iconFg: Color
+    let label: String
+    var onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 18))
+                    .foregroundStyle(iconFg)
+                    .frame(width: 36, height: 36)
+                    .background(iconBg)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                Text(label)
+                    .font(VelaTheme.subheadline())
+                    .fontWeight(.medium)
+                    .foregroundStyle(VelaTheme.fg)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
+                    .fill(VelaTheme.cardBg)
+            )
+        }
+        .buttonStyle(.cardPress)
+    }
+}
+
+// MARK: - WorkoutCard
+
+struct WorkoutCard: View {
+    let badge: String
+    let badgeColor: Color
+    let badgeBg: Color
+    let title: String
+    let duration: String
+    let originalPlan: String?
+    let adaptedPlan: String
+    let reason: String
+    var onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text(badge)
+                        .font(VelaTheme.caption2())
+                        .fontWeight(.semibold)
+                        .foregroundStyle(badgeColor)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule(style: .continuous).fill(badgeBg)
+                        )
+
+                    Text(title)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(VelaTheme.fg)
+
+                    Spacer()
+
+                    Text(duration)
+                        .font(VelaTheme.caption1())
+                        .foregroundStyle(VelaTheme.muted)
+                }
+
+                if let original = originalPlan {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "arrow.triangle.swap")
+                            .font(.system(size: 12))
+                            .foregroundStyle(VelaTheme.warn)
+                            .padding(.top, 2)
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(original)
+                                .font(VelaTheme.caption1())
+                                .foregroundStyle(VelaTheme.meta)
+                                .strikethrough()
+
+                            Text(adaptedPlan)
+                                .font(VelaTheme.caption1())
+                                .foregroundStyle(VelaTheme.fg)
+                                .fontWeight(.medium)
+                        }
+                    }
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: VelaTheme.radiusSm, style: .continuous)
+                            .fill(VelaTheme.elevatedBg)
+                    )
+                } else {
+                    Text(adaptedPlan)
+                        .font(VelaTheme.caption1())
+                        .foregroundStyle(VelaTheme.fg)
+                        .padding(10)
+                        .background(
+                            RoundedRectangle(cornerRadius: VelaTheme.radiusSm, style: .continuous)
+                                .fill(VelaTheme.elevatedBg)
+                        )
+                }
+
+                Text(reason)
+                    .font(VelaTheme.caption2())
+                    .foregroundStyle(VelaTheme.meta)
+                    .lineLimit(2)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
+                    .fill(VelaTheme.cardBg)
+            )
+        }
+        .buttonStyle(.cardPress)
+    }
+}
+
+// MARK: - TagChip
+
+struct TagChip: View {
+    let label: String
+    let color: Color
+
+    init(_ label: String, color: Color) {
+        self.label = label
+        self.color = color
+    }
+
+    var body: some View {
+        Text(label)
+            .font(VelaTheme.caption1())
+            .fontWeight(.medium)
+            .foregroundStyle(VelaTheme.fg)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(VelaTheme.cardBg)
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+                    )
+            )
+    }
+}
+
+// MARK: - SettingsGroup
+
+struct SettingsGroup<Content: View>: View {
+    var header: String?
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let header = header {
+                Text(header)
+                    .font(VelaTheme.caption1())
+                    .fontWeight(.medium)
+                    .foregroundStyle(VelaTheme.muted)
+                    .textCase(.uppercase)
+                    .kerning(0.02)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 6)
+            }
+
+            VStack(spacing: 0) {
+                content()
+            }
+            .background(
+                RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
+                    .fill(VelaTheme.cardBg)
+            )
+        }
+    }
+}
+
+// MARK: - PlusAction
+
+struct PlusAction: View {
+    let icon: String
+    let iconBg: Color
+    let iconFg: Color
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 22))
+                .foregroundStyle(iconFg)
+                .frame(width: 44, height: 44)
+                .background(iconBg)
+                .clipShape(Circle())
+
+            Text(title)
+                .font(VelaTheme.subheadline())
+                .fontWeight(.semibold)
+                .foregroundStyle(VelaTheme.fg)
+
+            Text(subtitle)
+                .font(VelaTheme.caption2())
+                .foregroundStyle(VelaTheme.muted)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.vertical, 20)
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
+                .fill(VelaTheme.surface)
+        )
+    }
+}
+
+// MARK: - Button Styles
+
+extension ButtonStyle where Self == CardPressStyle {
+    static var cardPress: CardPressStyle { CardPressStyle() }
+}
+
+struct CardPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+    }
+}
+
+extension ButtonStyle where Self == TabItemStyle {
+    static var tabItem: TabItemStyle { TabItemStyle() }
+}
+
+struct TabItemStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.6 : 1)
+            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+    }
+}
+
+extension ButtonStyle where Self == PlusButtonStyle {
+    static var plusButton: PlusButtonStyle { PlusButtonStyle() }
+}
+
+struct PlusButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.92 : 1)
+            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+    }
+}
+
+// MARK: - View Modifiers
+
+extension View {
     func cardSurface(padding: CGFloat = VelaTheme.spaceLG, radius: CGFloat = VelaTheme.radiusLG) -> some View {
         self
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(VelaTheme.surfaceContainerLowest)
+                    .fill(VelaTheme.cardBg)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(VelaTheme.outline, lineWidth: 0.5)
+                    .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
             )
             .shadow(color: VelaTheme.cardShadowColor, radius: 2, y: 1)
     }
 
-    /// Hero card with subtle accent tint
     func heroCardSurface(accent: Color = VelaTheme.accent, padding: CGFloat = VelaTheme.spaceLG) -> some View {
         self
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: VelaTheme.radiusHero, style: .continuous)
-                    .fill(VelaTheme.surfaceContainerLow)
+                    .fill(VelaTheme.elevatedBg)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: VelaTheme.radiusHero, style: .continuous)
-                    .stroke(VelaTheme.outline, lineWidth: 0.5)
+                    .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
             )
     }
 
-    /// Frosted glass surface — Apple's signature
     func glassEffect(radius: CGFloat = VelaTheme.radiusLG) -> some View {
         self
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
     }
 
-    /// Section spacing
     func sectionSpacing() -> some View {
         self.padding(.bottom, VelaTheme.sectionGap)
     }
 }
 
-// MARK: - Apple Screen Scaffold
+// MARK: - Screen Wrapper
 
 struct VelaMinimalScreen<Content: View>: View {
-    @ViewBuilder var content: () -> Content
+    @ViewBuilder let content: () -> Content
 
     var body: some View {
-        ZStack {
-            VelaBackground()
-            ScrollView {
-                VStack(alignment: .leading, spacing: VelaTheme.spaceLG) {
-                    content()
-                }
-                .padding(.horizontal, VelaTheme.screenPadding)
-                .padding(.top, VelaTheme.spaceLG)
-                .padding(.bottom, 100)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                content()
             }
+            .padding(.horizontal, VelaTheme.pagePadding)
+            .padding(.bottom, VelaTheme.tabBarHeight + 20)
         }
+        .scrollIndicators(.hidden)
+        .background(VelaTheme.bg)
     }
 }
 
@@ -82,801 +1041,581 @@ struct VelaMinimalScreen<Content: View>: View {
 
 struct VelaMinimalSectionHeader: View {
     let title: String
-    var subtitle: String? = nil
-    var trailing: String? = nil
+    var subtitle: String?
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: VelaTheme.spaceXS) {
-                Text(title)
-                    .font(VelaTheme.sectionTitle)
-                    .foregroundStyle(VelaTheme.onSurface)
-                if let subtitle {
-                    Text(subtitle)
-                        .font(VelaTheme.captionFont)
-                        .foregroundStyle(VelaTheme.onSurfaceVariant)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            Spacer()
-            if let trailing {
-                Text(trailing)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(VelaTheme.accent)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(VelaTheme.meta)
+                .textCase(.uppercase)
+                .tracking(1.0)
+            if let subtitle = subtitle {
+                Text(subtitle)
+                    .font(VelaTheme.caption2())
+                    .foregroundStyle(VelaTheme.muted)
             }
         }
         .padding(.top, VelaTheme.spaceSM)
+        .padding(.bottom, VelaTheme.spaceSM)
     }
 }
 
-// MARK: - Apple Pill Button
+// MARK: - Backward Compat Types
 
-struct VelaMinimalPillButton: View {
-    let title: String
-    var systemImage: String? = nil
-    var role: PillRole = .primary
-    var action: () -> Void
-
-    enum PillRole {
-        case primary, secondary, ghost
-    }
-
+// VelaBackground — simple full-screen background
+struct VelaBackground: View {
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                if let systemImage {
-                    Image(systemName: systemImage)
-                        .font(.subheadline.weight(.semibold))
-                }
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 11)
-            .frame(maxWidth: .infinity)
-            .background(backgroundShape)
-        }
-        .buttonStyle(.plain)
-    }
-
-    @ViewBuilder
-    private var backgroundShape: some View {
-        switch role {
-        case .primary:
-            Capsule(style: .continuous)
-                .fill(VelaTheme.accent)
-        case .secondary:
-            Capsule(style: .continuous)
-                .fill(VelaTheme.surface)
-                .overlay(Capsule(style: .continuous).stroke(VelaTheme.outline, lineWidth: 0.5))
-        case .ghost:
-            Capsule(style: .continuous)
-                .fill(Color.clear)
-        }
+        VelaTheme.bg.ignoresSafeArea()
     }
 }
 
-// MARK: - Apple Metric Pill
-
-struct VelaAppleMetricPill: View {
-    let title: String
-    let value: String
-    var systemImage: String? = nil
+// Old VelaEmptyState with legacy init signature (all optional for compat)
+struct VelaEmptyStateCompat: View {
+    var title: String = ""
+    var subtitle: String = ""
+    var message: String = ""
+    var systemImage: String = "questionmark.circle"
     var tint: Color = VelaTheme.accent
+    var action: (() -> Void)?
+    var actionLabel: String?
 
     var body: some View {
-        HStack(spacing: VelaTheme.spaceSM) {
-            if let systemImage {
-                Image(systemName: systemImage)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(tint)
+        VStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 32))
+                .foregroundStyle(tint)
+            Text(title)
+                .font(VelaTheme.headline())
+                .foregroundStyle(VelaTheme.fg)
+            if !message.isEmpty {
+                Text(message)
+                    .font(VelaTheme.subheadline())
+                    .foregroundStyle(VelaTheme.muted)
+                    .multilineTextAlignment(.center)
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(VelaTheme.microFont.weight(.semibold))
-                    .foregroundStyle(VelaTheme.onSurfaceVariant)
-                Text(value)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(VelaTheme.onSurface)
-                    .monospacedDigit()
+            if let label = actionLabel, let action = action {
+                Button(action: action) {
+                    Text(label)
+                        .font(VelaTheme.subheadline())
+                        .fontWeight(.medium)
+                        .foregroundStyle(VelaTheme.accent)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 8)
+                        .background(Capsule().stroke(VelaTheme.accent, lineWidth: 1))
+                }
             }
         }
-        .padding(.horizontal, VelaTheme.spaceSM)
-        .padding(.vertical, VelaTheme.spaceXS)
-        .background(Capsule(style: .continuous).fill(tint.opacity(0.10)))
-        .overlay(Capsule(style: .continuous).stroke(tint.opacity(0.15), lineWidth: 0.5))
+        .padding(32)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: VelaTheme.radiusLg)
+                .fill(VelaTheme.cardBg)
+        )
     }
 }
+typealias VelaEmptyState = VelaEmptyStateCompat
 
-// MARK: - Status Badge
-
-struct VelaMinimalStatusBadge: View {
+// Old VelaStatusBadge with legacy init signature
+struct VelaStatusBadgeCompat: View {
     let label: String
-    var systemImage: String? = nil
+    var systemImage: String?
     var tint: Color = VelaTheme.accent
 
     var body: some View {
         HStack(spacing: 4) {
-            if let systemImage {
-                Image(systemName: systemImage)
-                    .font(.caption2.weight(.bold))
+            if let img = systemImage {
+                Image(systemName: img)
+                    .font(.system(size: 10))
             }
             Text(label)
-                .font(.caption2.weight(.semibold))
+                .font(VelaTheme.caption2())
+                .fontWeight(.medium)
         }
         .foregroundStyle(tint)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(Capsule(style: .continuous).fill(tint.opacity(0.10)))
+        .background(Capsule().fill(tint.opacity(0.12)))
     }
 }
+typealias VelaStatusBadge = VelaStatusBadgeCompat
 
-// MARK: - Inline Alert
-
-struct VelaAppleInlineAlert: View {
+// Old VelaInlineAlert with legacy init signature
+struct VelaInlineAlertCompat: View {
     let title: String
     let message: String
-    var systemImage: String = "info.circle.fill"
+    var systemImage: String?
     var tint: Color = VelaTheme.accent
 
     var body: some View {
-        HStack(alignment: .top, spacing: VelaTheme.spaceSM) {
-            Image(systemName: systemImage)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(tint)
+        HStack(spacing: 10) {
+            if let img = systemImage {
+                Image(systemName: img)
+                    .font(.title3)
+                    .foregroundStyle(tint)
+            }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(VelaTheme.onSurface)
+                    .foregroundStyle(VelaTheme.fg)
                 Text(message)
                     .font(VelaTheme.captionFont)
                     .foregroundStyle(VelaTheme.onSurfaceVariant)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(VelaTheme.spaceSM)
-        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSM, style: .continuous).fill(tint.opacity(0.08)))
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: VelaTheme.radiusMd)
+                .fill(tint.opacity(0.06))
+        )
     }
 }
+typealias VelaInlineAlert = VelaInlineAlertCompat
+typealias VelaAppleInlineAlert = VelaInlineAlertCompat
 
-// MARK: - Score Ring (Apple style)
-
-struct VelaMinimalScoreRing: View {
-    let score: Double
-    let color: Color
-    var size: CGFloat = 90
-    var lineWidth: CGFloat = 6
-    var label: String? = nil
-
-    @State private var animatedProgress: Double = 0
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(VelaTheme.outline, lineWidth: lineWidth)
-                .frame(width: size, height: size)
-
-            Circle()
-                .trim(from: 0, to: animatedProgress)
-                .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                .frame(width: size, height: size)
-                .rotationEffect(.degrees(-90))
-                .animation(.spring(response: 1.2, dampingFraction: 0.72), value: animatedProgress)
-
-            VStack(spacing: 2) {
-                Text("\(Int(score.rounded()))")
-                    .font(size >= 100 ? VelaTheme.heroMetric : VelaTheme.metricValue)
-                    .foregroundStyle(VelaTheme.onSurface)
-                    .monospacedDigit()
-                if let label {
-                    Text(label)
-                        .font(VelaTheme.microFont)
-                        .foregroundStyle(VelaTheme.onSurfaceVariant)
-                }
-            }
-        }
-        .frame(width: size, height: size)
-        .onAppear { animatedProgress = score / 100.0 }
-    }
-}
-
-// MARK: - Apple Tab
-
-enum VelaMinimalTab: Int, CaseIterable, Identifiable {
-    case today, training, insights, settings
-
-    var id: Int { rawValue }
-
-    var title: String {
-        switch self {
-        case .today:     return "Today"
-        case .training:  return "Training"
-        case .insights:  return "Insights"
-        case .settings:  return "You"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .today:     return "square.grid.2x2"
-        case .training:  return "figure.run"
-        case .insights:  return "chart.bar.fill"
-        case .settings:  return "person.crop.circle"
-        }
-    }
-}
-
-// MARK: - Apple Tab Bar
-
-struct VelaMinimalFloatingTabBar: View {
-    @Binding var selectedTab: VelaMinimalTab
-    var coachAction: () -> Void
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(VelaMinimalTab.allCases) { tab in
-                tabButton(tab)
-            }
-
-            // Center + button — Coach quick access
-            Button(action: coachAction) {
-                Image(systemName: "plus")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .background(Circle().fill(VelaTheme.accent))
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial, in: Capsule(style: .continuous))
-        .overlay(Capsule(style: .continuous).stroke(VelaTheme.outline, lineWidth: 0.3))
-        .shadow(color: .black.opacity(0.06), radius: 16, y: 6)
-    }
-
-    private func tabButton(_ tab: VelaMinimalTab) -> some View {
-        let isSelected = selectedTab == tab
-        return Button {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                selectedTab = tab
-            }
-        } label: {
-            VStack(spacing: 3) {
-                Image(systemName: isSelected ? "\(tab.icon).fill" : tab.icon)
-                    .font(.system(size: 22, weight: .regular))
-                Text(tab.title)
-                    .font(.system(size: 10, weight: .medium))
-            }
-            .foregroundStyle(isSelected ? VelaTheme.accent : VelaTheme.onSurfaceVariant)
-            .frame(maxWidth: .infinity, minHeight: 44)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-// MARK: - Apple Navigation Bar
-
-struct VelaMinimalNavBar: View {
-    let title: String
-    var leading: (() -> AnyView)? = nil
-    var trailing: (() -> AnyView)? = nil
-
-    init<L: View, T: View>(
-        title: String,
-        @ViewBuilder leading: @escaping () -> L = { EmptyView() },
-        @ViewBuilder trailing: @escaping () -> T = { EmptyView() }
-    ) {
-        self.title = title
-        self.leading = { AnyView(leading()) }
-        self.trailing = { AnyView(trailing()) }
-    }
-
-    var body: some View {
-        HStack {
-            leading?()
-                .frame(width: 44, height: 44)
-            Spacer()
-            Text(title)
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(VelaTheme.onSurface)
-            Spacer()
-            trailing?()
-                .frame(width: 44, height: 44)
-        }
-        .padding(.horizontal, VelaTheme.screenPadding)
-        .frame(height: 44)
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(VelaTheme.outline)
-                .frame(height: 0.5)
-        }
-    }
-}
-
-// MARK: - Apple Empty State
-
-struct VelaAppleEmptyState: View {
-    let title: String
-    let message: String
-    var systemImage: String = "tray"
-    var tint: Color = VelaTheme.accent
-
-    var body: some View {
-        VStack(spacing: VelaTheme.spaceLG) {
-            Image(systemName: systemImage)
-                .font(.largeTitle.weight(.medium))
-                .foregroundStyle(tint)
-                .frame(width: 64, height: 64)
-                .background(Circle().fill(tint.opacity(0.10)))
-            Text(title)
-                .font(VelaTheme.cardTitle)
-                .foregroundStyle(VelaTheme.onSurface)
-                .multilineTextAlignment(.center)
-            Text(message)
-                .font(VelaTheme.captionFont)
-                .foregroundStyle(VelaTheme.onSurfaceVariant)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, VelaTheme.space4XL)
-    }
-}
-
-// MARK: - Evidence Step (Apple style)
-
-struct VelaAppleEvidenceStep: View {
-    let index: Int
-    let title: String
-    let value: String
-    let detail: String
-    var tint: Color = VelaTheme.accent
-    var isLast: Bool = false
-
-    var body: some View {
-        HStack(alignment: .top, spacing: VelaTheme.spaceSM) {
-            VStack(spacing: 6) {
-                Text("\(index)")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(tint)
-                    .frame(width: 24, height: 24)
-                    .background(Circle().fill(tint.opacity(0.10)))
-                    .overlay(Circle().stroke(tint.opacity(0.20), lineWidth: 1))
-                if !isLast {
-                    Rectangle()
-                        .fill(VelaTheme.outline)
-                        .frame(width: 1.5)
-                        .frame(maxHeight: .infinity)
-                }
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(VelaTheme.onSurface)
-                    Spacer()
-                    Text(value)
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(tint)
-                        .monospacedDigit()
-                }
-                Text(detail)
-                    .font(VelaTheme.captionFont)
-                    .foregroundStyle(VelaTheme.onSurfaceVariant)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-}
-
-// MARK: - Data Quality Row
-
-struct VelaAppleDataQualityRow: View {
+// Old VelaDataQualityRow with legacy init signature
+struct VelaDataQualityRowCompat: View {
     let title: String
     let subtitle: String
-    let isAvailable: Bool
+    var isAvailable: Bool = true
+    var freshness: DataFreshness? = nil
     let qualityLabel: String
-    var tint: Color = VelaTheme.accent
+    let tint: Color
 
     var body: some View {
-        HStack(spacing: VelaTheme.spaceSM) {
-            Image(systemName: isAvailable ? "checkmark.circle.fill" : "xmark.circle.fill")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(isAvailable ? VelaTheme.recovery : VelaTheme.muted)
+        let available = freshness.map { $0 != .missing } ?? isAvailable
+        HStack(spacing: 12) {
+            Image(systemName: available ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .font(.title3)
+                .foregroundStyle(available ? tint : VelaTheme.muted)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(VelaTheme.onSurface)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(VelaTheme.fg)
                 Text(subtitle)
-                    .font(VelaTheme.captionFont)
+                    .font(VelaTheme.microFont)
                     .foregroundStyle(VelaTheme.onSurfaceVariant)
             }
             Spacer()
             Text(qualityLabel)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(tint)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(available ? tint : VelaTheme.muted)
         }
-        .padding(.vertical, VelaTheme.spaceXS)
+        .padding(.vertical, 6)
     }
 }
+typealias VelaDataQualityRow = VelaDataQualityRowCompat
+typealias VelaAppleDataQualityRow = VelaDataQualityRowCompat
 
-// MARK: - Coach Command Card
-
-struct VelaAppleCommandCard: View {
-    let title: String
-    let subtitle: String
-    let systemImage: String
-    var tint: Color = VelaTheme.accent
-    var action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: VelaTheme.spaceMD) {
-                Image(systemName: systemImage)
-                    .font(.title3.weight(.medium))
-                    .foregroundStyle(tint)
-                    .frame(width: 40, height: 40)
-                    .background(Circle().fill(tint.opacity(0.10)))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(VelaTheme.onSurface)
-                    Text(subtitle)
-                        .font(VelaTheme.captionFont)
-                        .foregroundStyle(VelaTheme.onSurfaceVariant)
-                        .lineLimit(2)
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(VelaTheme.muted)
-            }
-            .padding(VelaTheme.spaceMD)
-            .background(
-                RoundedRectangle(cornerRadius: VelaTheme.radiusLG, style: .continuous)
-                    .fill(VelaTheme.surfaceContainerLowest)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: VelaTheme.radiusLG, style: .continuous)
-                    .stroke(VelaTheme.outline, lineWidth: 0.5)
-            )
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-
-
-// MARK: - Backward Compat (from old VelaDesignSystem)
-
+// VelaHeroSurface — tinted hero card container
 struct VelaHeroSurface<Content: View>: View {
-    var tint: Color = VelaTheme.accent
-    @ViewBuilder var content: () -> Content
+    let tint: Color
+    @ViewBuilder let content: () -> Content
+
     var body: some View {
         content()
             .padding(VelaTheme.spaceLG)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: VelaTheme.radiusHero, style: .continuous)
-                    .fill(VelaTheme.surfaceContainerLow)
-                    .shadow(color: VelaTheme.cardShadowColor, radius: 14, y: 5)
+                    .fill(tint.opacity(0.06))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: VelaTheme.radiusHero, style: .continuous)
-                    .stroke(VelaTheme.outline, lineWidth: 0.5)
+                    .stroke(tint.opacity(0.2), lineWidth: 0.5)
             )
     }
 }
 
-struct VelaInlineAlert: View {
-    let title: String
-    let message: String
-    var systemImage = "info.circle.fill"
-    var tint: Color = VelaTheme.accent
-    var body: some View {
-        HStack(alignment: .top, spacing: VelaTheme.spaceSM) {
-            Image(systemName: systemImage)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(tint)
-            VStack(alignment: .leading, spacing: VelaTheme.spaceXS) {
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(VelaTheme.onSurface)
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(VelaTheme.onSurfaceVariant)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(VelaTheme.spaceSM)
-        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSM, style: .continuous).fill(tint.opacity(0.10)))
-    }
-}
-
-struct VelaMemoryProposalCard: View {
-    let proposal: MemoryEventRecord
-    var onAccept: () -> Void
-    var onReject: () -> Void
-    var body: some View {
-        VStack(alignment: .leading, spacing: VelaTheme.spaceSM) {
-            HStack {
-                Text(proposal.memoryType.rawValue)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(VelaTheme.accent)
-                Spacer()
-                Text("\(Int((proposal.confidence * 100).rounded()))%")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(VelaTheme.energy)
-            }
-            Text(proposal.content)
-                .font(VelaTheme.bodyFont)
-                .foregroundStyle(VelaTheme.onSurface)
-                .lineLimit(4)
-            HStack(spacing: 12) {
-                Button(action: onAccept) {
-                    Label("Accept", systemImage: "checkmark.circle.fill")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(VelaTheme.recovery)
-                }
-                Button(action: onReject) {
-                    Label("Dismiss", systemImage: "xmark.circle.fill")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(VelaTheme.muted)
-                }
-                Spacer()
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(VelaTheme.spaceLG)
-        .background(
-            RoundedRectangle(cornerRadius: VelaTheme.radiusCard, style: .continuous)
-                .fill(VelaTheme.surfaceContainerLowest)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: VelaTheme.radiusCard, style: .continuous)
-                .stroke(VelaTheme.outline, lineWidth: 0.5)
-        )
-    }
-}
-
-
-struct VelaGlassCard<Content: View>: View {
-    var padding: CGFloat = VelaTheme.spaceMD
-    var cornerRadius: CGFloat = VelaTheme.radiusCard
-    @ViewBuilder var content: () -> Content
-    var body: some View {
-        content()
-            .padding(padding)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(VelaTheme.surface)
-                    .shadow(color: VelaTheme.cardShadowColor, radius: 8, y: 3)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(VelaTheme.outline, lineWidth: 0.5)
-            )
-    }
-}
-
+// VelaMetricPill — small metric chip
 struct VelaMetricPill: View {
     let title: String
     let value: String
     var systemImage: String?
     var tint: Color = VelaTheme.accent
+
     var body: some View {
-        HStack(spacing: VelaTheme.spaceXS) {
-            if let systemImage {
-                Image(systemName: systemImage)
-                    .font(.caption.weight(.semibold))
+        HStack(spacing: 4) {
+            if let img = systemImage {
+                Image(systemName: img)
+                    .font(.system(size: 10))
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(VelaTheme.muted)
-                    .lineLimit(1)
-                Text(value)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(VelaTheme.onSurface)
-            }
+            Text("\(title) ")
+                .font(VelaTheme.caption2())
+                .foregroundStyle(VelaTheme.muted)
+            + Text(value)
+                .font(VelaTheme.caption2().weight(.semibold))
+                .foregroundStyle(VelaTheme.fg)
         }
-        .foregroundStyle(tint)
-        .padding(.horizontal, VelaTheme.spaceXS)
-        .padding(.vertical, 5)
-        .background(Capsule(style: .continuous).fill(tint.opacity(0.12)))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(tint.opacity(0.12)))
     }
 }
 
-struct VelaStatusBadge: View {
-    let label: String
-    var systemImage: String?
-    var tint: Color = VelaTheme.accent
+// VelaGlassCard — glass-style card wrapper
+struct VelaGlassCard<Content: View>: View {
+    var padding: CGFloat = VelaTheme.spaceLG
+    var cornerRadius: CGFloat = VelaTheme.radiusLg
+    @ViewBuilder let content: () -> Content
+
     var body: some View {
-        HStack(spacing: VelaTheme.spaceXXS) {
-            if let systemImage {
-                Image(systemName: systemImage)
-                    .font(.caption2.weight(.bold))
-            }
-            Text(label)
-                .font(.caption2.weight(.semibold))
-                .lineLimit(1)
-        }
-        .foregroundStyle(tint)
-        .padding(.horizontal, VelaTheme.spaceXS)
-        .padding(.vertical, 5)
-        .background(Capsule(style: .continuous).fill(tint.opacity(0.12)))
+        content()
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 }
 
-struct VelaEmptyState: View {
-    let title: String
-    let message: String
-    var systemImage = "tray"
-    var tint: Color = VelaTheme.accent
+// VelaMemoryProposalCard — proposal-based card for WikiProfileView compat
+struct VelaMemoryProposalCardCompat: View {
+    var title: String = ""
+    var evidence: String = ""
+    var confidence: String = ""
+    var source: String = ""
+    var target: String = ""
+    var proposal: Any?
+    var onAccept: (() -> Void)?
+    var onReject: (() -> Void)?
+
     var body: some View {
-        VStack(spacing: VelaTheme.spaceMD) {
-            Image(systemName: systemImage)
-                .font(.largeTitle.weight(.semibold))
-                .foregroundStyle(tint)
-                .frame(width: 72, height: 72)
-                .background(Circle().fill(tint.opacity(0.12)))
-            Text(title)
-                .font(.headline)
-                .foregroundStyle(VelaTheme.onSurface)
-                .multilineTextAlignment(.center)
-            Text(message)
-                .font(.subheadline)
-                .foregroundStyle(VelaTheme.onSurfaceVariant)
-                .multilineTextAlignment(.center)
-        }
-        .padding(VelaTheme.spaceXL)
-        .frame(maxWidth: .infinity)
-    }
-}
+        let displayTitle: String = {
+            if let p = proposal as? MemoryProposal { return p.displayTitle }
+            if let r = proposal as? MemoryEventRecord { return r.content }
+            return title
+        }()
+        let displayEvidence: String = {
+            if let p = proposal as? MemoryProposal { return p.content }
+            if let r = proposal as? MemoryEventRecord { return r.evidence }
+            return evidence
+        }()
+        let displayConfidence: String = {
+            if let p = proposal as? MemoryProposal { return String(format: "%.0f%%", p.confidence * 100) }
+            if let r = proposal as? MemoryEventRecord { return String(format: "%.0f%%", r.confidence * 100) }
+            return confidence
+        }()
 
-
-struct VelaFreshnessBadge: View {
-        let freshness: DataFreshness
-
-        var body: some View {
-                VelaStatusBadge(label: label, systemImage: "clock.fill", tint: VelaSemanticColors.color(for: freshness))
-        }
-
-        private var label: String {
-                switch freshness {
-                case .live: return AppLanguage.stored.isChinese ? "实时" : "Live"
-                case .today: return AppLanguage.stored.isChinese ? "今日" : "Today"
-                case .recent: return AppLanguage.stored.isChinese ? "近期" : "Recent"
-                case .stale: return AppLanguage.stored.isChinese ? "陈旧" : "Stale"
-                case .missing: return AppLanguage.stored.isChinese ? "缺失" : "Missing"
-                }
-        }
-}
-
-struct VelaDataQualityRow: View {
-        let title: String
-        let subtitle: String
-        let freshness: DataFreshness
-        let qualityLabel: String
-        var tint: Color = VelaTheme.primary
-
-        var body: some View {
-                HStack(spacing: VelaTheme.spaceSM) {
-                        Image(systemName: freshness == .missing ? "xmark.circle.fill" : "checkmark.circle.fill")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(VelaSemanticColors.color(for: freshness))
-                                .accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: 2) {
-                                Text(title)
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(VelaTheme.onSurface)
-                                Text(subtitle)
-                                        .font(.caption)
-                                        .foregroundStyle(VelaTheme.onSurfaceVariant)
-                                        .fixedSize(horizontal: false, vertical: true)
-                        }
-                        Spacer(minLength: VelaTheme.spaceXS)
-                        VStack(alignment: .trailing, spacing: VelaTheme.spaceXXS) {
-                                VelaFreshnessBadge(freshness: freshness)
-                                Text(qualityLabel)
-                                        .font(.caption2.weight(.semibold))
-                                        .foregroundStyle(tint)
-                        }
-                }
-                .padding(.vertical, VelaTheme.spaceXS)
-        }
-}
-
-enum VelaSemanticColors {
-    static func color(for category: String) -> Color {
-        switch category {
-        case "recovery": return VelaTheme.recovery
-        case "sleep": return VelaTheme.sleep
-        case "strain", "training": return VelaTheme.strain
-        case "stress": return VelaTheme.stress
-        case "energy": return VelaTheme.energy
-        case "gait", "cardio": return VelaTheme.primary
-        default: return VelaTheme.primary
-        }
-    }
-
-    static func color(for confidence: DataConfidence) -> Color {
-        switch confidence {
-        case .high: return VelaTheme.recovery
-        case .medium: return VelaTheme.energy
-        case .low: return VelaTheme.strain
-        case .unavailable: return VelaTheme.muted
-        }
-    }
-
-    static func color(for freshness: DataFreshness) -> Color {
-        switch freshness {
-        case .live, .today: return VelaTheme.recovery
-        case .recent: return VelaTheme.primary
-        case .stale: return VelaTheme.strain
-        case .missing: return VelaTheme.muted
-        }
-    }
-}
-
-// CoachView compat types
-struct VelaSectionHeader: View {
-    let title: String
-    var subtitle: String? = nil
-    var body: some View {
-        VStack(alignment: .leading, spacing: VelaTheme.spaceXS) {
-            Text(title)
-                .font(VelaTheme.sectionTitle)
-                .foregroundStyle(VelaTheme.onSurface)
-            if let subtitle {
-                Text(subtitle)
-                    .font(VelaTheme.captionFont)
-                    .foregroundStyle(VelaTheme.onSurfaceVariant)
-            }
-        }
-        .padding(.bottom, VelaTheme.spaceSM)
-    }
-}
-
-struct VelaCoachCommandCard: View {
-    let title: String
-    let subtitle: String
-    let systemImage: String
-    var tint: Color = VelaTheme.accent
-    var action: (() -> Void)? = nil
-    @State private var isPressed = false
-    var body: some View {
-        Button(action: { action?() }) {
-            HStack(spacing: VelaTheme.spaceSM) {
-                Image(systemName: systemImage)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(tint)
-                    .frame(width: 36, height: 36)
-                    .background(Circle().fill(tint.opacity(0.10)))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(VelaTheme.onSurface)
-                    Text(subtitle)
-                        .font(VelaTheme.captionFont)
-                        .foregroundStyle(VelaTheme.onSurfaceVariant)
-                        .lineLimit(2)
-                }
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                VelaStatusBadge(label: "Pattern", systemImage: "brain.head.profile", tint: VelaTheme.accent)
                 Spacer()
+                Text("\(displayConfidence) confidence")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(VelaTheme.energyColor)
+            }
+            Text(displayTitle)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(VelaTheme.fg)
+            Text(displayEvidence)
+                .font(VelaTheme.captionFont)
+                .foregroundStyle(VelaTheme.onSurfaceVariant)
+            if !source.isEmpty || !target.isEmpty {
+                HStack(spacing: 8) {
+                    VelaMetricPill(title: "Source", value: source, systemImage: "point.3.connected.trianglepath.dotted", tint: VelaTheme.sleepColor)
+                    VelaMetricPill(title: "Target", value: target, systemImage: "doc.text", tint: VelaTheme.recoveryColor)
+                }
+            }
+            HStack(spacing: 10) {
+                Button(action: { onAccept?() }) {
+                    Label("Confirm", systemImage: "checkmark")
+                        .font(.subheadline.weight(.medium))
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(VelaTheme.accent)
+                Button(action: { onReject?() }) {
+                    Label("Reject", systemImage: "xmark")
+                        .font(.subheadline.weight(.medium))
+                }
+                .buttonStyle(.bordered)
+                .tint(VelaTheme.muted)
             }
         }
-        .buttonStyle(.plain)
         .padding(VelaTheme.spaceLG)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: VelaTheme.radiusCard, style: .continuous)
-                .fill(VelaTheme.surfaceContainerLowest)
+            RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
+                .fill(VelaTheme.cardBg)
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: VelaTheme.radiusCard, style: .continuous)
-                .stroke(VelaTheme.outline, lineWidth: 0.5)
-        )
+    }
+}
+
+typealias VelaMemoryProposalCard = VelaMemoryProposalCardCompat
+// MemoryProposal is defined in AI/Memory/MemoryModels.swift
+
+// MARK: - ImagePicker wrapper (for CoachChatPanel compat)
+
+struct ImagePicker: UIViewControllerRepresentable {
+    let sourceType: UIImagePickerController.SourceType
+    @Binding var selectedImage: UIImage?
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = sourceType
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let parent: ImagePicker
+        init(_ parent: ImagePicker) { self.parent = parent }
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let image = info[.originalImage] as? UIImage {
+                parent.selectedImage = image
+            }
+            parent.dismiss()
+        }
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
+        }
+    }
+}
+
+enum VelaMinimalTab: CaseIterable {
+    case today, training, insights, settings
+}
+
+struct VelaMinimalNavBar: View {
+    let title: String
+    var body: some View {
+        Text(title)
+            .font(VelaTheme.title1())
+            .foregroundStyle(VelaTheme.fg)
+            .padding(.top, 8)
+    }
+}
+
+struct VelaMinimalFloatingTabBar: View {
+    @Binding var selectedTab: VelaMinimalTab
+    var onCoachTap: () -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(VelaMinimalTab.allCases, id: \.self) { tab in
+                Button {
+                    selectedTab = tab
+                } label: {
+                    VStack(spacing: 4) {
+                        Image(systemName: icon(for: tab))
+                            .font(.system(size: 22))
+                        Text(label(for: tab))
+                            .font(.system(size: 10, weight: .medium))
+                    }
+                    .foregroundStyle(selectedTab == tab ? VelaTheme.accent : VelaTheme.meta)
+                }
+                .buttonStyle(.plain)
+                if tab != VelaMinimalTab.allCases.last { Spacer() }
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 8)
+        .padding(.bottom, 28)
+        .background(.ultraThinMaterial)
+    }
+
+    private func icon(for tab: VelaMinimalTab) -> String {
+        switch tab {
+        case .today: "sun.max"
+        case .training: "figure.run"
+        case .insights: "heart.text.square"
+        case .settings: "gearshape"
+        }
+    }
+
+    private func label(for tab: VelaMinimalTab) -> String {
+        switch tab {
+        case .today: "Today"
+        case .training: "Training"
+        case .insights: "Insights"
+        case .settings: "Settings"
+        }
+    }
+}
+
+// DataFreshness and DataConfidence defined in TypedContextSchema.swift
+
+// MARK: - Bevel Score Ring (Bevel-style circular gauge)
+
+struct BevelScoreRing: View {
+    let score: Double // 0 to 1
+    let color: Color
+    var useGradient: Bool = false
+    var size: CGFloat = 80
+    let label: String
+    let valueText: String
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                // Track
+                Circle()
+                    .stroke(VelaTheme.borderSoft, lineWidth: 6.5)
+                    .frame(width: size, height: size)
+                
+                if score > 0 {
+                    // Gradient or solid arc using system gradient to avoid rotation coordinate bugs
+                    Circle()
+                        .trim(from: 0, to: max(0.01, score))
+                        .stroke(
+                            useGradient 
+                            ? AnyShapeStyle(color.gradient)
+                            : AnyShapeStyle(color),
+                            style: StrokeStyle(lineWidth: 6.5, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: size, height: size)
+                        .animation(.smooth(duration: 0.8), value: score)
+                }
+                
+                // Small indicator dot at progress end aligned perfectly on stroke center path
+                if score > 0 {
+                    let angle = -90 + (max(0.01, score) * 360)
+                    let radius = (size - 6.5) / 2
+                    Circle()
+                        .fill(color)
+                        .frame(width: 8, height: 8)
+                        .offset(x: radius * cos(angle * .pi / 180), y: radius * sin(angle * .pi / 180))
+                }
+                
+                // Center Value
+                Text(valueText)
+                    .font(.system(size: size * 0.28, weight: .bold, design: .rounded))
+                    .foregroundStyle(VelaTheme.fg)
+            }
+            .frame(width: size, height: size)
+            
+            Text(label)
+                .font(VelaTheme.caption2())
+                .foregroundStyle(VelaTheme.muted)
+        }
+    }
+}
+
+// MARK: - Dotted Circle Gauge (Bevel-style circular tick gauge)
+
+struct DottedCircleGauge: View {
+    let score: Double // 0 to 100
+    let labelText: String // e.g. "低"
+    var size: CGFloat = 72
+    let color: Color
+
+    var body: some View {
+        ZStack {
+            // Dotted circle track
+            Circle()
+                .stroke(VelaTheme.borderSoft, style: StrokeStyle(lineWidth: 4.5, lineCap: .round, dash: [1.5, 4]))
+                .frame(width: size, height: size)
+            
+            // Colored active dots matching score
+            Circle()
+                .trim(from: 0, to: max(0.02, score / 100.0))
+                .stroke(color, style: StrokeStyle(lineWidth: 4.5, lineCap: .round, dash: [1.5, 4]))
+                .rotationEffect(.degrees(-90))
+                .frame(width: size, height: size)
+                .animation(.smooth(duration: 0.8), value: score)
+            
+            VStack(spacing: 1) {
+                Text("\(Int(score))")
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .foregroundStyle(VelaTheme.fg)
+                Text(labelText)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(color)
+            }
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+// MARK: - Segmented Battery Bar (Bevel-style segmented horizontal bar)
+
+struct SegmentedBatteryBar: View {
+    let percentage: Double // 0 to 1
+    var barCount: Int = 26
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<barCount, id: \.self) { idx in
+                let activeCount = Int(percentage * Double(barCount))
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(idx < activeCount ? color : VelaTheme.borderSoft)
+                    .frame(width: 4, height: 14)
+            }
+        }
+    }
+}
+
+// MARK: - Sparkline Line Graph (Bevel-style biomarker sparkline)
+
+struct SparklineLineGraph: View {
+    let data: [Double] // Normalized 0...1 values
+    let color: Color
+    var height: CGFloat = 36
+    var width: CGFloat = 80
+
+    var body: some View {
+        if data.isEmpty {
+            Color.clear.frame(width: width, height: height)
+        } else {
+            ZStack {
+                // Shaded area
+                Path { path in
+                    guard data.count > 1 else { return }
+                    let stepX = width / CGFloat(data.count - 1)
+                    path.move(to: CGPoint(x: 0, y: height))
+                    for idx in 0..<data.count {
+                         let x = CGFloat(idx) * stepX
+                         let y = height - (CGFloat(data[idx]) * (height - 6) + 3)
+                         path.addLine(to: CGPoint(x: x, y: y))
+                    }
+                    path.addLine(to: CGPoint(x: width, y: height))
+                    path.closeSubpath()
+                }
+                .fill(
+                    LinearGradient(
+                        colors: [color.opacity(0.12), color.opacity(0.0)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                
+                // Line Path
+                Path { path in
+                    guard data.count > 1 else { return }
+                    let stepX = width / CGFloat(data.count - 1)
+                    for idx in 0..<data.count {
+                        let x = CGFloat(idx) * stepX
+                        let y = height - (CGFloat(data[idx]) * (height - 6) + 3)
+                        if idx == 0 {
+                            path.move(to: CGPoint(x: x, y: y))
+                        } else {
+                            path.addLine(to: CGPoint(x: x, y: y))
+                        }
+                    }
+                }
+                .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                
+                // End Dot
+                if let lastVal = data.last {
+                    let stepX = width / CGFloat(data.count - 1)
+                    let x = CGFloat(data.count - 1) * stepX
+                    let y = height - (CGFloat(lastVal) * (height - 6) + 3)
+                    Circle()
+                        .fill(color)
+                        .frame(width: 5, height: 5)
+                        .position(x: x, y: y)
+                }
+            }
+            .frame(width: width, height: height)
+        }
     }
 }

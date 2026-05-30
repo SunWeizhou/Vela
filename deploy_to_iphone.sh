@@ -21,7 +21,7 @@ echo "✅ Build complete! Deploying to iPhone..."
 echo ""
 
 # Install to device
-APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Vela-*/Build/Products/Debug-iphoneos -name "Vela.app" 2>/dev/null | head -1)
+APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Vela-*/Build/Products/Debug-iphoneos -maxdepth 1 -name "Vela.app" 2>/dev/null | head -1)
 
 if [ -n "$APP_PATH" ]; then
     echo "Installing $APP_PATH to device..."

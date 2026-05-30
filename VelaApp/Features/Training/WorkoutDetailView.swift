@@ -6,6 +6,7 @@ import HealthKit
 struct WorkoutDetailView: View {
     let workout: WorkoutSummary
     
+    @Environment(\.dismiss) private var dismiss
     @State private var heartRates: [HeartRateSample] = []
     @State private var routeCoordinates: [CLLocationCoordinate2D] = []
     @State private var isLoading = true
@@ -13,11 +14,43 @@ struct WorkoutDetailView: View {
     private let queryService = HealthKitQueryService()
     
     var body: some View {
-        ZStack {
-            VelaBackground()
+        VStack(spacing: 0) {
+            // Custom Premium Header
+            HStack {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(Color(hex: "#1A1917"))
+                        .frame(width: 40, height: 40)
+                        .background(Circle().fill(Color.white))
+                        .shadow(color: Color.black.opacity(0.04), radius: 6, y: 3)
+                        .overlay(
+                            Circle()
+                                .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+                        )
+                }
+                .buttonStyle(.plain)
+                
+                Spacer()
+                
+                Text("健身详情")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(Color(hex: "#1A1917"))
+                
+                Spacer()
+                
+                // Balanced spacer
+                Color.clear.frame(width: 40, height: 40)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
+            .background(Color(hex: "#F5F3F0"))
             
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 16) {
                     // Header Card
                     workoutHeaderCard
                     
@@ -28,17 +61,22 @@ struct WorkoutDetailView: View {
                     heartRateChartSection
                     
                     // GPS Route Map
-                    gpsRouteSection
+                    if !routeCoordinates.isEmpty {
+                        gpsRouteSection
+                    }
                     
                     // Coach Insight Integration
                     workoutCoachCard
                 }
-                .padding(VelaTheme.screenPadding)
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
                 .padding(.bottom, 32)
             }
+            .scrollIndicators(.hidden)
+            .background(Color(hex: "#F5F3F0")) // Warm canvas base
         }
-        .navigationTitle(L10n.t("Workout Detail", "健身详情"))
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar) // Hide standard nav bar for premium custom header
         .task {
             await loadWorkoutDetails()
         }
@@ -50,28 +88,36 @@ struct WorkoutDetailView: View {
         HStack(spacing: 16) {
             ZStack {
                 Circle()
-                    .fill(VelaTheme.strain.opacity(0.12))
+                    .fill(Color(hex: "#F4EBDC")) // Warm light gold
                     .frame(width: 52, height: 52)
                 
                 Image(systemName: iconForWorkout(workout.activityName))
-                    .font(.title3)
-                    .foregroundStyle(VelaTheme.strain)
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(Color(hex: "#C59B27")) // Warm gold bronze
             }
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(workout.activityName)
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(VelaTheme.primaryText)
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(Color(hex: "#1A1917"))
                 
                 Text(formattedWorkoutTime)
-                    .font(.subheadline)
-                    .foregroundStyle(VelaTheme.secondaryText)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Color(hex: "#8E8A80"))
             }
             
             Spacer()
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.surface))
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.03), radius: 6, y: 3)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+        )
     }
     
     private var statsMetricsRow: some View {
@@ -80,69 +126,74 @@ struct WorkoutDetailView: View {
                 title: L10n.t("Duration", "持续时间"),
                 value: formattedDuration(workout.start, workout.end),
                 icon: "clock.fill",
-                color: VelaTheme.energy
+                color: Color(hex: "#E0A926") // Deep warm yellow
             )
             
             workoutStatTile(
                 title: L10n.t("Active Burn", "活动消耗"),
                 value: workout.energyKilocalories.map { "\(Int($0)) kcal" } ?? "--",
                 icon: "flame.fill",
-                color: VelaTheme.strain
+                color: Color(hex: "#FF7043") // Orange fire
             )
             
             workoutStatTile(
                 title: L10n.t("Avg Heart Rate", "平均心率"),
                 value: workout.averageHeartRate.map { "\(Int($0)) bpm" } ?? "--",
                 icon: "heart.fill",
-                color: VelaTheme.sleep
+                color: Color(hex: "#5C6BC0") // Indigo purple
             )
         }
     }
     
     private func workoutStatTile(title: String, value: String, icon: String, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 Image(systemName: icon)
-                    .font(.caption)
+                    .font(.system(size: 11))
                     .foregroundStyle(color)
                 Text(title)
-                    .font(.caption2.bold())
-                    .foregroundStyle(VelaTheme.mutedText)
-                    .textCase(.uppercase)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color(hex: "#8E8A80"))
             }
             
             Text(value)
-                .font(.system(.title3, design: .rounded).weight(.bold))
-                .foregroundStyle(VelaTheme.primaryText)
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(hex: "#1A1917"))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
+        .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(VelaTheme.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(Color.black.opacity(0.045), lineWidth: 0.5)
-                )
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.02), radius: 4, y: 2)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
         )
     }
     
-    @ViewBuilder
     private var heartRateChartSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(L10n.t("Heart Rate Fluctuation", "心率波动趋势"), systemImage: "waveform.path.ecg")
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(VelaTheme.primaryText)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: "waveform.path.ecg")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Color(hex: "#FF5252")) // Vibrant pulse red
+                
+                Text(L10n.t("Heart Rate Fluctuation", "心率波动趋势"))
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Color(hex: "#1A1917"))
+            }
             
             if isLoading {
-                ProgressView().tint(VelaTheme.accent).frame(height: 150).frame(maxWidth: .infinity)
+                ProgressView().tint(Color(hex: "#C56B4A")).frame(height: 160).frame(maxWidth: .infinity)
             } else if heartRates.isEmpty {
                 Text(L10n.t("No heart rate details recorded for this period.", "此时间段未记录心率明细。"))
-                    .font(.footnote)
-                    .foregroundStyle(VelaTheme.secondaryText)
-                    .frame(height: 150)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .frame(height: 160)
             } else {
                 Chart {
                     ForEach(heartRates) { item in
@@ -151,7 +202,7 @@ struct WorkoutDetailView: View {
                             y: .value("BPM", item.bpm)
                         )
                         .foregroundStyle(LinearGradient(
-                            colors: [VelaTheme.sleep.opacity(0.24), VelaTheme.sleep.opacity(0.02)],
+                            colors: [Color(hex: "#5C6BC0").opacity(0.24), Color(hex: "#5C6BC0").opacity(0.01)],
                             startPoint: .top,
                             endPoint: .bottom
                         ))
@@ -161,8 +212,8 @@ struct WorkoutDetailView: View {
                             x: .value("Time", item.date),
                             y: .value("BPM", item.bpm)
                         )
-                        .foregroundStyle(VelaTheme.sleep)
-                        .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                        .foregroundStyle(Color(hex: "#5C6BC0"))
+                        .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
                         .interpolationMethod(.catmullRom)
                     }
                 }
@@ -172,40 +223,62 @@ struct WorkoutDetailView: View {
                 .padding(.top, 6)
             }
         }
-        .cardSurface()
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.03), radius: 6, y: 3)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+        )
     }
     
-    @ViewBuilder
     private var gpsRouteSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(L10n.t("GPS Workout Route", "GPS 运动轨迹"), systemImage: "map.fill")
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(VelaTheme.primaryText)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: "map.fill")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Color(hex: "#4CAF50")) // Map green
+                
+                Text(L10n.t("GPS Workout Route", "GPS 运动轨迹"))
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Color(hex: "#1A1917"))
+            }
             
             if isLoading {
-                ProgressView().tint(VelaTheme.accent).frame(height: 220).frame(maxWidth: .infinity)
+                ProgressView().tint(Color(hex: "#C56B4A")).frame(height: 220).frame(maxWidth: .infinity)
             } else if routeCoordinates.isEmpty {
                 Text(L10n.t("No GPS route mapping recorded for this workout.", "此项运动未记录 GPS 运动轨迹。"))
-                    .font(.footnote)
-                    .foregroundStyle(VelaTheme.secondaryText)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color(hex: "#8E8A80"))
                     .frame(height: 100)
             } else {
-                let polyline = MapPolyline(coordinates: routeCoordinates)
-                
                 Map(position: .constant(.region(MKCoordinateRegion(
                     center: centerOfCoordinates(routeCoordinates),
                     span: MKCoordinateSpan(latitudeDelta: 0.008, longitudeDelta: 0.008)
                 )))) {
                     MapPolyline(coordinates: routeCoordinates)
-                        .stroke(VelaTheme.accent, lineWidth: 5.0)
+                        .stroke(Color(hex: "#FF5722"), lineWidth: 4.5) // Reddish-orange loop like Apple Watch route!
                     
                     if let first = routeCoordinates.first {
-                        Marker(L10n.t("Start", "起点"), coordinate: first)
-                            .tint(.green)
+                        Annotation(L10n.t("Start", "起点"), coordinate: first) {
+                            Circle()
+                                .fill(Color.green)
+                                .frame(width: 12, height: 12)
+                                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                                .shadow(radius: 2)
+                        }
                     }
                     if let last = routeCoordinates.last {
-                        Marker(L10n.t("End", "终点"), coordinate: last)
-                            .tint(.red)
+                        Annotation(L10n.t("End", "终点"), coordinate: last) {
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 12, height: 12)
+                                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                                .shadow(radius: 2)
+                        }
                     }
                 }
                 .frame(height: 220)
@@ -216,7 +289,16 @@ struct WorkoutDetailView: View {
                 )
             }
         }
-        .cardSurface()
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.03), radius: 6, y: 3)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+        )
     }
     
     private var workoutCoachCard: some View {
@@ -284,7 +366,6 @@ struct WorkoutDetailView: View {
     }
     
     private var dashboardVMForWorkout: DashboardSummary {
-        // Build a temporary summary mapping this workout so the coach context is fully aware
         var base = DashboardSummary.preview()
         base.workouts = [workout]
         return base
@@ -294,27 +375,23 @@ struct WorkoutDetailView: View {
         isLoading = true
         
         do {
-            // 1. Fetch heart rate fluctuations from HealthKit
             let samples = try await queryService.heartRateSamples(start: workout.start, end: workout.end)
             if !samples.isEmpty {
                 heartRates = samples
             } else {
-                // Generate a beautiful simulated heart rate loop matching duration
                 heartRates = generateSimulatedHeartRates()
             }
             
-            // 2. Fetch routes from HealthKit
             let route = try await queryService.workoutRoute(workoutId: workout.id)
             if !route.isEmpty {
                 routeCoordinates = route.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
             } else {
-                // Simulator/indoor fallback: loop around Cupertino Apple Park!
-                routeCoordinates = simulatedAppleParkLoop()
+                routeCoordinates = []
             }
         } catch {
             print("Workout detail loading failed, loading fallbacks: \(error.localizedDescription)")
             heartRates = generateSimulatedHeartRates()
-            routeCoordinates = simulatedAppleParkLoop()
+            routeCoordinates = []
         }
         
         isLoading = false
@@ -332,9 +409,8 @@ struct WorkoutDetailView: View {
             let offset = Double(i) * stepInterval
             let date = workout.start.addingTimeInterval(offset)
             
-            // Curve: start low, rise, peak, fluctuate, recover at the end
             let ratio = Double(i) / Double(steps)
-            let factor = sin(ratio * Double.pi) // curve rises and drops
+            let factor = sin(ratio * Double.pi)
             let randomFluctuation = Double.random(in: -8...8)
             let bpm = avgHR - 18.0 + (factor * 30.0) + randomFluctuation
             
@@ -343,20 +419,5 @@ struct WorkoutDetailView: View {
         return result
     }
     
-    private func simulatedAppleParkLoop() -> [CLLocationCoordinate2D] {
-        // Set coordinates looping Apple Park
-        return [
-            CLLocationCoordinate2D(latitude: 37.3361, longitude: -122.0112),
-            CLLocationCoordinate2D(latitude: 37.3375, longitude: -122.0105),
-            CLLocationCoordinate2D(latitude: 37.3381, longitude: -122.0089),
-            CLLocationCoordinate2D(latitude: 37.3378, longitude: -122.0071),
-            CLLocationCoordinate2D(latitude: 37.3363, longitude: -122.0059),
-            CLLocationCoordinate2D(latitude: 37.3347, longitude: -122.0062),
-            CLLocationCoordinate2D(latitude: 37.3335, longitude: -122.0076),
-            CLLocationCoordinate2D(latitude: 37.3332, longitude: -122.0094),
-            CLLocationCoordinate2D(latitude: 37.3339, longitude: -122.0109),
-            CLLocationCoordinate2D(latitude: 37.3353, longitude: -122.0116),
-            CLLocationCoordinate2D(latitude: 37.3361, longitude: -122.0112)
-        ]
-    }
+
 }

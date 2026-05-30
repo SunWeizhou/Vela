@@ -129,6 +129,7 @@ enum BackgroundTaskManager {
                     dailyInsight: "",
                     source: .healthKit
                 )
+                try? DailyLogService.refresh(dashboard: dashboard)
 
                 if config.autoEveningWikiSync, hour >= 0, hour < 4 {
                     logger.info("Running daily profile sync in background.")

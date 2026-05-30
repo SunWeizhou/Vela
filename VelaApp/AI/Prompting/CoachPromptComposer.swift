@@ -125,17 +125,39 @@ enum PromptFragments {
     static func wikiMemoryUpdateDirective(wikiFiles: String, lang: AppLanguage) -> String {
         if lang.isChinese {
             return """
-            ## Wiki 长期记忆同步动作
-            当你在交流中确认了用户新的长期偏好、习惯变化时，使用 update_user_wiki 工具生成长期记忆提议。系统会先保存为"待确认"，用户确认后再写入 Wiki。
-            可选更新文件：\(wikiFiles)
-            （注意：仅在确认了长期且稳定的变化趋势时才使用，不要为单次临时状况更新）
+            ## 📂 双轨制档案维护指令（Wiki 长期记忆 vs 每日 Wiki 日志）
+            你作为 Coach 负责协助维护用户的两类健康档案，你必须学会在对话中**自行诊断并区分**什么数据该记录到哪里：
+            
+            1. 👤 **用户个人 Wiki 长期档案 (Long-term Personal Wiki Documents)**:
+               - **定位**：记录用户长期稳定、可重复的生理特征、偏好、习惯、规避项或中长期宏伟目标。
+               - **文件列表**：\(wikiFiles)
+               - **维护条件**：仅在发现用户确认了**长期且稳定的习惯转变/物理变更**时（例如：“我决定从今天开始下午三点后严格禁咖啡因”或“我被确诊为轻度乳糖不耐受”），才调用 `update_user_wiki` 工具生成长期记忆提案。
+               - **严禁事项**：绝对禁止将单次、临时的状况（如“昨晚没睡好”、“今天跑了5公里极度疲劳”、“今天喝了一杯冰美式”）提案到长期 Wiki 档案中。
+            
+            2. 🗓 **用户每日 Wiki / 每日日志档案 (Daily Wiki Logs)**:
+               - **定位**：记录用户当天临时的具体生理数据、当天特定训练及饮食日志，以及您的“主动更新个人档案摘要”。
+               - **运行机制**：该档案由系统在对话结束时**自动生成 md 归档（包含当日身体全部数据的 JSON 块）**。
+               - **你所需要做的**：在对话中，如果您发现了临时发生的状况（如“今天感冒了，很虚弱”或“昨晚睡眠只有40分”），你应当在心智中诊断其为 transient (临时) 信息。向用户表达关怀与调整建议，但**无需**调用 `update_user_wiki` 写入长期 Wiki，系统会自动将这些当天的琐碎信息记在每日日志中。
+            
+            在决定是否发起 `update_user_wiki` 时，先进行【心智自省】：这是长期反复发生或订立的习惯/特征（是 Wiki 级别），还是仅为今天一天的状况/状态（是 Daily 级别）？
             """
         }
         return """
-        ## Wiki Long-Term Memory Sync
-        When you confirm a new stable habit shift or long-term preference, use the update_user_wiki tool to generate a memory proposal. The system saves it as "proposed" — the user confirms before writing to Wiki.
-        Available files: \(wikiFiles)
-        (Note: Only use when a stable trend is confirmed, not for transient single-day fluctuations.)
+        ## 📂 Dual-Track Archive Maintenance (Long-term Personal Wiki vs Daily Wiki Logs)
+        As the Coach, you are responsible for managing two distinct layers of user health archives. You MUST learn to self-diagnose and differentiate where to record information:
+        
+        1. 👤 **User Long-term Personal Wiki (Long-term Memory)**:
+           - **Purpose**: Records stable, repeatable, long-term physiological traits, habits, hard rules, constraints, or macro goals.
+           - **Available files**: \(wikiFiles)
+           - **Trigger**: ONLY use the `update_user_wiki` tool when the user confirms a **long-term, stable habit shift or permanent baseline change** (e.g. "I will strictly stop caffeine after 2 PM from now on" or "I am diagnosed with lactose intolerance").
+           - **Forbidden**: Never propose single-day, transient events (e.g. "slept bad last night", "had high strain workout today", "drank a cup of coffee today") to the long-term Wiki.
+        
+        2. 🗓 **User Daily Wiki / Daily Logs**:
+           - **Purpose**: Records transient, single-day occurrences, specific workout logs of the day, daily biomarker charts, and your "Wiki updates digest".
+           - **Mechanism**: The system automatically saves these logs as a markdown file containing a **full daily body metrics JSON block** at the end of the conversation.
+           - **Your Role**: For single-day anomalies or transient events (e.g. "caught a cold today" or "slept only 4 hours"), treat them as transient. Give immediately actionable coaching advice, but **DO NOT** trigger `update_user_wiki`. Trust the system to capture it in the Daily Wiki log.
+        
+        Always run a mental self-diagnosis before calling `update_user_wiki`: Is this a repeatable stable habit/feature (Wiki-worthy) or just today's temporary state/workout (Daily-log-worthy)?
         """
     }
 }
@@ -261,6 +283,8 @@ struct CoachPromptComposer {
             ## 个人生理基线 (Personal Baselines)
             \(PromptFragments.baselinesBlock(baselinePrompt: baselinePrompt, lang: lang))
 
+            \(PromptFragments.wikiMemoryUpdateDirective(wikiFiles: wikiFiles, lang: lang))
+
             ## 核心规则 (CRITICAL)
             - 用户在闲聊或简单问候，你必须**简短回复（2-3 句话以内）**
             - 不要主动展示健康数据或分析，除非用户明确要求
@@ -284,6 +308,8 @@ struct CoachPromptComposer {
 
         ## Personal Baselines
         \(PromptFragments.baselinesBlock(baselinePrompt: baselinePrompt, lang: lang))
+
+        \(PromptFragments.wikiMemoryUpdateDirective(wikiFiles: wikiFiles, lang: lang))
 
         ## Critical Rules
         - The user is chatting casually — keep replies **short and concise (2-3 sentences max)**

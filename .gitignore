@@ -17,3 +17,8 @@ skills-lock.json
 bevel-homepage.png
 *.bak
 scratch/
+
+# Design reference / tool exports
+StitchExports/
+新前端/
+stitch_vela_ios_26_liquid_glass/

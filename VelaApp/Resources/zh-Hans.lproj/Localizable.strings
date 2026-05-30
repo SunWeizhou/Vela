@@ -1,0 +1,192 @@
+/*
+  Localizable.strings (zh-Hans)
+  Vela iOS App — Simplified Chinese Localization
+  Generated for Apple Design System frontend v1.0
+*/
+
+// MARK: - Tab Bar
+"Today" = "今日";
+"Training" = "训练";
+"Insights" = "洞察";
+"You" = "我的";
+
+// MARK: - Today Page
+"Good morning" = "早上好";
+"Good afternoon" = "下午好";
+"Good evening" = "晚上好";
+"Key Metrics" = "关键指标";
+"Sleep" = "睡眠";
+"Strain" = "负荷";
+"Energy" = "能量";
+"Recovery" = "恢复";
+"Ready" = "就绪";
+"Today's Plan" = "今日计划";
+"Adapted from your recovery profile" = "根据你的恢复状态调整";
+"Coach Insight" = "教练洞察";
+"Ask Coach More" = "继续问教练";
+"Your body is ready.\nRecovery capacity is high." = "身体已就绪。\n恢复能力充足。";
+"Steady state.\nGood day for controlled effort." = "状态平稳。\n适合可控训练。";
+"Take it easy.\nFocus on recovery today." = "放轻松。\n今天优先恢复。";
+"HRV %@" = "HRV %@";
+"RHR %@" = "静息心率 %@";
+
+// MARK: - Training Page
+"TRAINING WINDOW" = "训练窗口";
+"Current strain is inside the recommended window. Keep the next session controlled and purposeful." = "当前负荷在推荐范围内。下一次训练保持可控且有明确目的。";
+"Activity Heatmap" = "活动热力图";
+"30-Day Activity" = "30 天活动";
+"Daily Strain" = "每日负荷";
+"Target" = "目标";
+"This Week" = "本周";
+"Recent Workouts" = "近期运动";
+"View All" = "查看全部";
+"Planned" = "已计划";
+"Completed" = "已完成";
+"Adaptive" = "AI 调整";
+"Low" = "偏低";
+"Moderate" = "适中";
+"High" = "偏高";
+"Rest Day" = "休息日";
+"Zone 2 Run" = "Zone 2 跑步";
+"Foam Roll + Stretch" = "泡沫轴放松";
+"Early Wind-down" = "提前准备入睡";
+"45 min · Keep HR 130–145 bpm" = "45 分钟 · 心率保持 130–145 bpm";
+"15 min · Focus on hamstrings" = "15 分钟 · 重点拉伸腘绳肌";
+"22:00 · No screens, read 20 min" = "22:00 · 不看屏幕，阅读 20 分钟";
+
+// MARK: - Insights (Vitals) Page
+"DATA COVERAGE" = "数据覆盖";
+"High Confidence" = "高可信度";
+"Medium Confidence" = "中等可信度";
+"Low Confidence" = "低可信度";
+"Most key health signals are available and fresh. Vela's recommendations are well-supported." = "大部分关键健康信号可用且新鲜。Vela 的建议有充分依据。";
+"confidence" = "可信度";
+"Biological Age" = "生物年龄";
+"years younger" = "岁更年轻";
+"years older" = "岁更年长";
+"Sleep · Last Night" = "睡眠 · 昨晚";
+"Efficiency" = "效率";
+"Sleep Debt" = "睡眠负债";
+"Recovery Breakdown" = "恢复分解";
+"Body Metrics" = "身体指标";
+"Blood Pressure" = "血压";
+"Weight" = "体重";
+"Blood Glucose" = "血糖";
+"BMI" = "身体质量指数";
+"Respiratory Rate" = "呼吸频率";
+"VO2 Max" = "最大摄氧量";
+"Health Records" = "健康记录";
+"Import Record" = "导入记录";
+
+// MARK: - Coach Page
+"Vela Coach" = "Vela 教练";
+"Coach Command Center" = "教练指挥中心";
+"Context-aware coaching from your health data" = "基于健康数据的上下文感知教练";
+"Ask Vela" = "问 Vela";
+"Analyze Today" = "分析今日状态";
+"Plan Workout" = "规划训练";
+"Log Meal" = "记录饮食";
+"Check Sleep" = "检查睡眠";
+"Weekly Summary" = "本周总结";
+"Body Status" = "身体状态";
+"Recovery Score" = "恢复分数";
+"Sleep Score" = "睡眠分数";
+"Strain Score" = "负荷分数";
+"Ask anything about your health..." = "询问任何健康相关问题...";
+"Type a message..." = "输入消息...";
+"Good recovery. How can I help you optimize today?" = "恢复良好。今天我能帮你优化什么？";
+"Your sleep was restorative. Let's make the most of today." = "你的睡眠有修复效果。让我们充分利用今天。";
+"Recovery needs attention. Let's focus on rest and nutrition." = "恢复需要关注。我们先重视休息和营养。";
+
+// MARK: - Settings / You Page
+"Add Data Source" = "添加数据源";
+"Apple Watch" = "Apple Watch";
+"iPhone Sensors" = "iPhone 传感器";
+"Manual Entry" = "手动输入";
+"Vela AI Body Intelligence · Made with Apple design language\nHealth data never leaves your device without permission." = "Vela AI 身体智能 · Apple 设计语言\n你的健康数据永远不会未经许可离开设备。";
+"Language" = "语言";
+"Notifications" = "通知";
+"Appearance" = "外观";
+"Data Sources" = "数据源";
+"Privacy & Security" = "隐私与安全";
+"About Vela" = "关于 Vela";
+"Version" = "版本";
+"Coach Personality" = "教练风格";
+"Data Nerd" = "数据极客";
+"Guardian" = "守护者";
+"Friend" = "朋友";
+"Commander" = "指挥官";
+
+// MARK: - Onboarding
+"Welcome to" = "欢迎使用";
+"Your private health analyst" = "你的私人健康分析师";
+"Turn your Apple Watch into recovery, sleep, strain, and coaching insights — all processed on-device." = "将 Apple Watch 数据转化为恢复、睡眠、负荷和教练建议——一切都在设备本地处理。";
+"Recovery & Readiness" = "恢复与准备度";
+"Daily score from HRV, resting heart rate, and sleep" = "基于 HRV、静息心率和睡眠的每日评分";
+"Sleep Analysis" = "睡眠分析";
+"Sleep stages, duration, and consistency scoring" = "睡眠阶段、时长和规律性评分";
+"Strain & Activity" = "负荷与活动";
+"Training load from energy, exercise, and workouts" = "来自能量消耗、锻炼和运动的训练负荷";
+"Connect Apple Health" = "连接 Apple 健康";
+"Skip for now" = "稍后再说";
+"Your health data stays on-device. Nothing leaves without permission." = "你的健康数据保留在设备本地，不会未经允许离开你的手机。";
+
+// MARK: - General
+"OK" = "确定";
+"Cancel" = "取消";
+"Save" = "保存";
+"Delete" = "删除";
+"Edit" = "编辑";
+"Done" = "完成";
+"Next" = "下一步";
+"Back" = "返回";
+"Loading..." = "加载中...";
+"Retry" = "重试";
+"Error" = "错误";
+"Success" = "成功";
+"Confirm" = "确认";
+"Dismiss" = "忽略";
+
+// MARK: - Health Metrics
+"Heart Rate Variability" = "心率变异性";
+"Resting Heart Rate" = "静息心率";
+"Sleep Duration" = "睡眠时长";
+"Deep Sleep" = "深度睡眠";
+"REM Sleep" = "快速眼动睡眠";
+"Core Sleep" = "核心睡眠";
+"Awake Time" = "清醒时间";
+"Steps" = "步数";
+"Active Calories" = "活动热量";
+"Exercise Minutes" = "锻炼分钟";
+"Workout Count" = "运动次数";
+"Body Temperature" = "体温";
+"Oxygen Saturation" = "血氧";
+"Walking Speed" = "步行速度";
+"Walking Asymmetry" = "步态不对称";
+
+// MARK: - Errors & States
+"Waiting for Health Data" = "等待健康数据";
+"Open the Apple Health app and make sure data sharing is enabled for Vela." = "请打开 Apple 健康 App 并确保已为 Vela 开启数据共享。";
+"Open Health Settings" = "打开健康设置";
+"Health Access Required" = "需要健康访问权限";
+"Vela needs access to your Apple Health data to work. Enable it in Settings > Privacy > Health > Vela." = "Vela 需要访问你的 Apple 健康数据。请在 设置 > 隐私 > 健康 > Vela 中开启。";
+"Open Settings" = "打开设置";
+"Network Unavailable" = "网络不可用";
+"Please check your internet connection and try again." = "请检查网络连接后重试。";
+"AI Service Error" = "AI 服务错误";
+"Please try again later or check your API key in Settings." = "请稍后重试或在设置中检查 API Key。";
+"No Data" = "暂无数据";
+"Building baseline" = "正在建立基线";
+"Synced" = "已同步";
+
+// MARK: - Time
+"Today" = "今天";
+"Yesterday" = "昨天";
+"min" = "分钟";
+"hrs" = "小时";
+"bpm" = "次/分";
+"ms" = "毫秒";
+"kg" = "公斤";
+"cm" = "厘米";
+"kcal" = "千卡";
+"steps" = "步";

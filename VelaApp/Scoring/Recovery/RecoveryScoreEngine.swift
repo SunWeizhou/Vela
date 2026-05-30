@@ -46,22 +46,29 @@ struct RecoveryScoreEngine: ScoreEngine {
             }()
             
             let zScore = estimatedSD > 0 ? (lnToday - lnBaseline) / estimatedSD : 0
-            // Smooth mapping: z=0 → 50, z=+2 → ~96, z=-2 → ~4
-            let score = 50 + 48 * tanh(zScore * 0.6)
+            
+            // Plews et al. (2013): Abnormally elevated HRV (Z-score > 2.5) combined with high prior strain
+            // indicates autonomic hyper-parasympathetic activation (overtraining saturation/overreaching).
+            let score: Double
+            if zScore > 2.5 && (input.strainScoreYesterday ?? 0) > 70 {
+                score = 50 - 25 * tanh((zScore - 2.5) * 1.0)
+                reasons.append("HRV abnormally elevated (z=\(String(format: "%.1f", zScore))) — potential parasympathetic saturation / overreaching")
+            } else {
+                score = 50 + 48 * tanh(zScore * 0.6)
+                if zScore < -1.0 {
+                    reasons.append("HRV significantly below personal baseline (z=\(String(format: "%.1f", zScore)))")
+                } else if zScore < -0.3 {
+                    reasons.append("HRV slightly below baseline")
+                } else if zScore > 0.5 {
+                    reasons.append("HRV above baseline — good autonomic recovery")
+                } else {
+                    reasons.append("HRV within normal range")
+                }
+            }
             components["hrv"] = ScoringMath.clamp(score)
             metrics["hrv_z_score"] = zScore
             metrics["hrv_today"] = hrvToday
             metrics["hrv_baseline"] = baseline
-
-            if zScore < -1.0 {
-                reasons.append("HRV significantly below personal baseline (z=\(String(format: "%.1f", zScore)))")
-            } else if zScore < -0.3 {
-                reasons.append("HRV slightly below baseline")
-            } else if zScore > 0.5 {
-                reasons.append("HRV above baseline — good autonomic recovery")
-            } else {
-                reasons.append("HRV within normal range")
-            }
         } else {
             reasons.append("HRV data unavailable; recovery score is based on remaining metrics.")
         }

@@ -13,19 +13,20 @@ struct BiologyView: View {
     private var language: AppLanguage {
         AppLanguage.stored
     }
+
+    private var chronologicalAge: Int? {
+        WikiFileService.getAgeFromWiki() ?? dashboardVM.dashboard.extendedMetrics.age
+    }
     
     // Calculated Result
     private var bioAgeResult: BiologicalAgeResult {
-        let chronologicalAge = Double(WikiFileService.getAgeFromWiki() ?? dashboardVM.dashboard.extendedMetrics.age ?? 30)
+        let chronologicalAge = Double(chronologicalAge ?? 0)
         let restingHR = dashboardVM.dashboard.recoveryMetrics.restingHeartRate
         let vo2Max = dashboardVM.dashboard.bodyMetrics.vo2Max
-        let sleepHours = Double(dashboardVM.dashboard.sleepSummary.totalSleepMinutes) / 60.0
-        
-        // Fetch steps from latest records if available, otherwise fallback
-        let steps = dashboardVM.dashboard.strain.metrics["steps_raw"] ?? 6500.0
-        
-        // Approximate sleep efficiency (defaulting to 92% if no details)
-        let sleepEfficiency = 0.92
+        let sleepMinutes = dashboardVM.dashboard.sleepSummary.totalSleepMinutes
+        let sleepHours = sleepMinutes > 0 ? Double(sleepMinutes) / 60.0 : nil
+        let steps = dashboardVM.dashboard.strain.metrics["steps_raw"]
+        let sleepEfficiency = dashboardVM.dashboard.sleepScore.metrics["sleep_efficiency"].map { $0 / 100 }
         
         let input = BiologicalAgeInput(
             chronologicalAge: chronologicalAge,
@@ -59,41 +60,45 @@ struct BiologyView: View {
                     }
                     .padding(.top, 16)
                     
-                    // Arc Gauge Hero Card
-                    bioAgeArcCard
-                    
-                    // Stats Breakdown Grid
-                    statsGrid
-                    
-                    // Wearables and Biomarkers Sections
-                    VStack(alignment: .leading, spacing: 16) {
-                        SectionLabel(title: L10n.t("Wearable Physiology", "生理可穿戴指标"), icon: "appletwatch")
-                        wearableFactorsSection
+                    if chronologicalAge == nil {
+                        profileSetupCard
+                    } else {
+                        // Arc Gauge Hero Card
+                        bioAgeArcCard
                         
-                        HStack {
-                            SectionLabel(title: L10n.t("Lab Blood Biomarkers", "血检生化指标"), icon: "drop.fill")
-                            Spacer()
-                            Button {
-                                UISelectionFeedbackGenerator().selectionChanged()
-                                showLogSheet = true
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "plus.circle.fill")
-                                    Text(L10n.t("Add Lab Results", "录入血检"))
+                        // Stats Breakdown Grid
+                        statsGrid
+                        
+                        // Wearables and Biomarkers Sections
+                        VStack(alignment: .leading, spacing: 16) {
+                            SectionLabel(title: L10n.t("Wearable Physiology", "生理可穿戴指标"), icon: "appletwatch")
+                            wearableFactorsSection
+                            
+                            HStack {
+                                SectionLabel(title: L10n.t("Lab Blood Biomarkers", "血检生化指标"), icon: "drop.fill")
+                                Spacer()
+                                Button {
+                                    UISelectionFeedbackGenerator().selectionChanged()
+                                    showLogSheet = true
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "plus.circle.fill")
+                                        Text(L10n.t("Add Lab Results", "录入血检"))
+                                    }
+                                    .font(.caption.bold())
+                                    .foregroundStyle(VelaTheme.accent)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(VelaTheme.accent.opacity(0.12))
+                                    .clipShape(Capsule())
                                 }
-                                .font(.caption.bold())
-                                .foregroundStyle(VelaTheme.accent)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(VelaTheme.accent.opacity(0.12))
-                                .clipShape(Capsule())
                             }
+                            .padding(.top, 8)
+                            
+                            biomarkersSection
                         }
-                        .padding(.top, 8)
-                        
-                        biomarkersSection
+                        .padding(.horizontal, VelaTheme.screenPadding)
                     }
-                    .padding(.horizontal, VelaTheme.screenPadding)
                     
                     Spacer(minLength: 40)
                 }
@@ -107,10 +112,40 @@ struct BiologyView: View {
     }
     
     // MARK: - Subviews
+
+    private var profileSetupCard: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "person.text.rectangle")
+                .font(.system(size: 34))
+                .foregroundStyle(VelaTheme.accent)
+            Text(L10n.t("Set up your profile first", "请先完成个人档案初始设置"))
+                .font(.headline)
+                .foregroundStyle(VelaTheme.primaryText)
+            Text(L10n.t(
+                "Biological age needs your real chronological age. Vela reads it from Apple Health or your personal Wiki profile.",
+                "生物年龄需要你的真实年龄。Vela 会优先读取个人 Wiki 档案，也可以读取 Apple 健康中的年龄。"
+            ))
+            .font(.caption)
+            .multilineTextAlignment(.center)
+            .foregroundStyle(VelaTheme.secondaryText)
+            NavigationLink(destination: WikiProfileView()) {
+                Text(L10n.t("Open personal Wiki", "打开个人 Wiki 档案"))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .background(Capsule().fill(VelaTheme.accent))
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity)
+        .background(RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard).fill(VelaTheme.surface))
+        .padding(.horizontal, VelaTheme.screenPadding)
+    }
     
     private var bioAgeArcCard: some View {
         let result = bioAgeResult
-        let chronologicalAge = Double(WikiFileService.getAgeFromWiki() ?? dashboardVM.dashboard.extendedMetrics.age ?? 30)
+        let chronologicalAge = Double(chronologicalAge ?? 0)
         let diff = chronologicalAge - result.biologicalAge
         
         return VStack(spacing: 20) {

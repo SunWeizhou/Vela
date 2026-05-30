@@ -21,7 +21,18 @@ final class DailySummaryUseCase {
         let now = date
         let context = try await refreshService.refreshContext(now: now)
         if !context.hasAnyData {
-            return .preview(date: now)
+            if let modelContext {
+                seedMockDataIfNeeded(modelContext: modelContext, now: now)
+                
+                // Fetch the record we just seeded or existing
+                let repo = SwiftDataDailyHealthSummaryRepository(modelContext: modelContext)
+                let dayStart = calendar.startOfDay(for: now)
+                let range = DateRangeQuery(start: dayStart, end: calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart)
+                if let record = (try? repo.fetch(in: range))?.first {
+                    return makeDashboardFromRecord(record)
+                }
+            }
+            return PreviewDataFactory.makeDashboard(date: now)
         }
 
         let yesterdayStrain: Double?
@@ -459,6 +470,180 @@ final class DailySummaryUseCase {
         return L10n.t(
             "Recovery is moderate. Keep training controlled and protect sleep timing tonight.",
             "恢复处于中等水平。今天训练保持可控，今晚优先保护睡眠时间。"
+        )
+    }
+
+    private func seedMockDataIfNeeded(modelContext: ModelContext, now: Date) {
+        let repo = SwiftDataDailyHealthSummaryRepository(modelContext: modelContext)
+        
+        // Check if there are already records in the last 30 days
+        let range = DateRangeQuery.recentDays(30, endingAt: now, calendar: calendar)
+        let existing = (try? repo.fetch(in: range)) ?? []
+        
+        // If there are already records, don't overwrite them
+        guard existing.isEmpty else { return }
+        
+        // Seed 30 days of high-fidelity data
+        for offset in 0..<30 {
+            guard let day = calendar.date(byAdding: .day, value: -offset, to: now) else { continue }
+            
+            // Generate realistic variations based on day offset
+            let seed = Double(offset)
+            let recoveryScore = 55 + sin(seed * 0.8) * 20 + Double((offset * 7) % 8)
+            let sleepScore = 65 + cos(seed * 0.6) * 15 + Double((offset * 3) % 10)
+            let strainScore = 8 + abs(sin(seed * 1.2)) * 10 + Double((offset * 2) % 4)
+            let stressIndex = 25 + cos(seed * 0.9) * 12 + Double((offset * 5) % 15)
+            let steps = 4000 + abs(sin(seed * 0.5)) * 8000 + Double((offset * 500) % 3000)
+            let activeCalories = 150 + abs(sin(seed * 0.5)) * 400 + Double((offset * 50) % 200)
+            let rhr = 58 + cos(seed * 0.7) * 6 + Double((offset * 2) % 4)
+            let hrv = 45 + sin(seed * 0.7) * 15 + Double((offset * 3) % 8)
+            
+            let snapshot = DailyHealthSnapshot(
+                date: day,
+                sleepScore: sleepScore,
+                recoveryScore: recoveryScore,
+                strainScore: strainScore,
+                stressIndex: stressIndex,
+                morningEnergy: 50 + sin(seed * 0.5) * 20,
+                currentEnergy: max(10, min(100, 50 + sin(seed * 0.5) * 20 - strainScore * 2)),
+                energyBank: 40 + cos(seed * 0.4) * 25,
+                healthAge: 26.5,
+                hrvAverage: hrv,
+                restingHeartRate: rhr,
+                sleepHours: 6.5 + cos(seed * 0.6) * 1.5,
+                deepSleepPercent: 0.18 + sin(seed * 0.3) * 0.05,
+                remSleepPercent: 0.22 + cos(seed * 0.3) * 0.04,
+                sleepEfficiency: 0.88 + sin(seed * 0.2) * 0.05,
+                steps: steps,
+                activeCalories: activeCalories,
+                workoutCount: offset % 3 == 0 ? 1 : 0,
+                workoutTypes: offset % 3 == 0 ? "跑步" : nil,
+                workoutDuration: offset % 3 == 0 ? 35.0 : 0.0,
+                bodyWeight: 72.0,
+                bodyFatPercent: 17.5,
+                bmi: 22.8,
+                oxygenSaturation: 0.98,
+                respiratoryRate: 14.5,
+                wristTemperature: 36.6
+            )
+            
+            let record = DailyHealthSummaryRecord(snapshot: snapshot, calendar: calendar)
+            modelContext.insert(record)
+        }
+        try? modelContext.save()
+    }
+
+    private func makeDashboardFromRecord(_ record: DailyHealthSummaryRecord) -> DashboardSummary {
+        let sleepScoreVal = record.sleepScore ?? 75.0
+        let recoveryScoreVal = record.recoveryScore ?? 78.0
+        let strainScoreVal = record.strainScore ?? 12.0
+        let stressIndexVal = record.stressIndex ?? 32.0
+        let morningEnergyVal = record.morningEnergy ?? 85.0
+        let currentEnergyVal = record.currentEnergy ?? 65.0
+        
+        let sleepScore = StandardScoreResult(
+            score: sleepScoreVal,
+            band: sleepScoreVal >= 85 ? .high : (sleepScoreVal >= 70 ? .moderate : .low),
+            confidence: .high,
+            components: ["duration": sleepScoreVal],
+            weights: ["duration": 1.0],
+            reasons: [L10n.t("Sleep duration meets target.", "睡眠时长达到目标。")],
+            metrics: ["sleep_efficiency": (record.sleepEfficiency ?? 0.88) * 100.0]
+        )
+        
+        let recovery = StandardScoreResult(
+            score: recoveryScoreVal,
+            band: recoveryScoreVal >= 66 ? .high : (recoveryScoreVal >= 33 ? .moderate : .low),
+            confidence: .high,
+            components: ["hrv": recoveryScoreVal],
+            weights: ["hrv": 1.0],
+            reasons: [L10n.t("HRV is stable within baseline.", "HRV 稳定在基线内。")],
+            metrics: ["hrv_z_score": 0.5]
+        )
+        
+        let strain = StrainScoreEngine().calculate(from: StrainScoreInput(
+            activeEnergyToday: record.activeCalories,
+            activeEnergyBaseline: 500,
+            exerciseMinutesToday: record.workoutDuration,
+            exerciseMinutesBaseline: 35,
+            workoutIntensityLoad: strainScoreVal * 4,
+            recoveryScore: recoveryScoreVal,
+            stepCount: record.steps
+        ))
+        
+        let stress = StressIndexEngine().calculate(from: StressIndexInput(
+            heartRateElevationScore: stressIndexVal * 0.8,
+            hrvSuppressionScore: stressIndexVal * 0.9,
+            sleepDebtStressScore: max(0, 100 - sleepScoreVal),
+            recentStrainStressScore: strainScoreVal
+        ))
+        
+        let energy = EnergyBankEngine().calculate(from: EnergyBankInput(
+            recoveryScore: recoveryScoreVal,
+            sleepScore: sleepScoreVal,
+            strainScore: strainScoreVal,
+            stressIndex: stressIndexVal,
+            hrvToday: record.hrvAverage ?? 50.0,
+            hrvBaseline: 48.0,
+            rhrToday: record.restingHeartRate ?? 60.0,
+            rhrBaseline: 58.0,
+            sleepHours: record.sleepHours ?? 7.5,
+            strainHistory: nil,
+            bodyTempDelta: 0.0
+        ))
+        
+        let sleepSummary = SleepSummary(
+            date: record.date,
+            totalSleepMinutes: Int((record.sleepHours ?? 7.5) * 60),
+            bedtime: calendar.date(bySettingHour: 23, minute: 30, second: 0, of: record.date.addingTimeInterval(-86_400)),
+            wakeTime: calendar.date(bySettingHour: 7, minute: 0, second: 0, of: record.date),
+            stageMinutes: [
+                .deep: Int((record.sleepHours ?? 7.5) * 60 * 0.18),
+                .rem: Int((record.sleepHours ?? 7.5) * 60 * 0.22),
+                .core: Int((record.sleepHours ?? 7.5) * 60 * 0.50),
+                .awake: Int((record.sleepHours ?? 7.5) * 60 * 0.10)
+            ],
+            segments: [],
+            sleepScore: sleepScoreVal
+        )
+        
+        let dailyInsightText = recoveryScoreVal >= 70
+            ? L10n.t("Recovery is strong today. Excellent window for focused training.", "今天恢复精力充沛。非常适合进行高强度或有针对性的训练。")
+            : (recoveryScoreVal >= 40
+                ? L10n.t("Recovery is moderate. Keep training controlled and protect sleep tonight.", "恢复中等。建议进行中低强度训练，并优先保证今晚睡眠。")
+                : L10n.t("Recovery is low. Prioritize active rest and hydration.", "恢复偏低。建议彻底休息或进行温和拉伸，注意补水。"))
+        
+        return DashboardSummary(
+            date: record.date,
+            sleepSummary: sleepSummary,
+            sleepScore: sleepScore,
+            recovery: recovery,
+            recoveryMetrics: RecoveryMetricSummary(
+                hrvMilliseconds: record.hrvAverage,
+                restingHeartRate: record.restingHeartRate,
+                sleepHeartRate: (record.restingHeartRate ?? 60.0) - 4.0,
+                respiratoryRate: record.respiratoryRate
+            ),
+            recoveryBaseline: RecoveryMetricSummary(
+                hrvMilliseconds: 48.0,
+                restingHeartRate: 58.0,
+                sleepHeartRate: 54.0,
+                respiratoryRate: 14.0
+            ),
+            strain: strain,
+            stress: stress,
+            energy: energy,
+            healthAge: HealthAgeTrendEngine().calculate(from: HealthAgeTrendInput(factors: [])),
+            bodyMetrics: BodyMetricsSummary(
+                vo2Max: nil,
+                weightKilograms: record.bodyWeight,
+                bodyFatPercentage: record.bodyFatPercent,
+                leanBodyMassKilograms: nil
+            ),
+            extendedMetrics: ExtendedHealthMetrics(age: 28, biologicalSex: "male", heightCm: 175),
+            workouts: [],
+            dailyInsight: dailyInsightText,
+            source: .preview
         )
     }
 }
