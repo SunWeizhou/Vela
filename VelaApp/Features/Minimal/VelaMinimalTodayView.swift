@@ -188,6 +188,15 @@ struct VelaTodayView: View {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Color(hex: "#8E8A80"))
+                    
+                    if dashboard.source == .preview {
+                        Text("模拟数据")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(Color.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2.5)
+                            .background(Capsule().fill(Color(hex: "#C56B4A")))
+                    }
                 }
             }
             .buttonStyle(.plain)

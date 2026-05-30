@@ -48,6 +48,8 @@
 		0B1000280000000000000028 /* HealthKitQueryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001290000000000000029 /* HealthKitQueryService.swift */; };
 		0B1000290000000000000029 /* HealthDataRefreshService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001300000000000000030 /* HealthDataRefreshService.swift */; };
 		0B1000990000000000000099 /* HealthKitSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001990000000000000099 /* HealthKitSyncEngine.swift */; };
+		0B1000A100000000000000A1 /* HealthUnitNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001A100000000000000A1 /* HealthUnitNormalizer.swift */; };
+		0B1000A200000000000000A2 /* PipelineDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001A200000000000000A2 /* PipelineDiagnostics.swift */; };
 		0B1000300000000000000030 /* HealthCachePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001310000000000000031 /* HealthCachePolicy.swift */; };
 		0B1000310000000000000031 /* DailyHealthSummaryRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001320000000000000032 /* DailyHealthSummaryRepository.swift */; };
 		0B1000320000000000000032 /* JournalRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001330000000000000033 /* JournalRepository.swift */; };
@@ -185,6 +187,8 @@
 		0B1001290000000000000029 /* HealthKitQueryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/Services/HealthKitQueryService.swift; sourceTree = "<group>"; };
 		0B1001300000000000000030 /* HealthDataRefreshService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/Services/HealthDataRefreshService.swift; sourceTree = "<group>"; };
 		0B1001990000000000000099 /* HealthKitSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/Services/HealthKitSyncEngine.swift; sourceTree = "<group>"; };
+		0B1001A100000000000000A1 /* HealthUnitNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/Mapping/HealthUnitNormalizer.swift; sourceTree = "<group>"; };
+		0B1001A200000000000000A2 /* PipelineDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/PipelineDiagnostics.swift; sourceTree = "<group>"; };
 		0B1001310000000000000031 /* HealthCachePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence/Repositories/HealthCachePolicy.swift; sourceTree = "<group>"; };
 		0B1001320000000000000032 /* DailyHealthSummaryRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence/Repositories/DailyHealthSummaryRepository.swift; sourceTree = "<group>"; };
 		0B1001330000000000000033 /* JournalRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence/Repositories/JournalRepository.swift; sourceTree = "<group>"; };
@@ -347,6 +351,8 @@
 				2CF8EED0E93741AB80179897 /* HealthStoreProvider.swift */,
 				0B1001300000000000000030 /* HealthDataRefreshService.swift */,
 				0B1001990000000000000099 /* HealthKitSyncEngine.swift */,
+				0B1001A100000000000000A1 /* HealthUnitNormalizer.swift */,
+				0B1001A200000000000000A2 /* PipelineDiagnostics.swift */,
 				0B1001260000000000000026 /* PreviewHealthDataProvider.swift */,
 				0B1001200000000000000020 /* AgentContextSchema.swift */,
 				0B1001450000000000000045 /* AIContextBuilder.swift */,
@@ -589,6 +595,8 @@
 				705A8DE187AF4FE29F2BB59D /* HealthStoreProvider.swift in Sources */,
 				0B1000290000000000000029 /* HealthDataRefreshService.swift in Sources */,
 				0B1000990000000000000099 /* HealthKitSyncEngine.swift in Sources */,
+				0B1000A100000000000000A1 /* HealthUnitNormalizer.swift in Sources */,
+				0B1000A200000000000000A2 /* PipelineDiagnostics.swift in Sources */,
 				0B1000250000000000000025 /* PreviewHealthDataProvider.swift in Sources */,
 				0B1000200000000000000020 /* AgentContextSchema.swift in Sources */,
 				0B1000440000000000000044 /* AIContextBuilder.swift in Sources */,

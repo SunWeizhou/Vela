@@ -1249,8 +1249,91 @@ final class ScoringEngineTests: XCTestCase {
         let result = pipeline.compute(for: todaySnapshot, history: history)
         
         // Verify rolling baselines are calculated (e.g. dailyLoadHistory contains raw loads and not strainScores)
-        XCTAssertEqual(result.strain.components["daily_load"] ?? 0, 25.7, accuracy: 1.0)
+        XCTAssertEqual(result.strain.components["daily_load"] ?? 0, 41.5, accuracy: 1.0)
         XCTAssertNotNil(result.strain.components["training_load_ratio"])
+    }
+
+    // MARK: - Core Metrics v1.3 Refactor Verification Tests
+
+    func testHealthUnitNormalizerScaling() {
+        // Sleep Efficiency: 0...1 bound
+        XCTAssertEqual(HealthUnitNormalizer.normalizeSleepEfficiency(85.0), 0.85, accuracy: 0.001)
+        XCTAssertEqual(HealthUnitNormalizer.normalizeSleepEfficiency(0.85), 0.85, accuracy: 0.001)
+        XCTAssertEqual(HealthUnitNormalizer.normalizeSleepEfficiency(100.0), 1.0, accuracy: 0.001)
+        XCTAssertEqual(HealthUnitNormalizer.normalizeSleepEfficiency(-0.1), 0.0, accuracy: 0.001)
+
+        // Deep/Rem Sleep: 0...1 bound
+        XCTAssertEqual(HealthUnitNormalizer.normalizeSleepStagePercent(20.0), 0.20, accuracy: 0.001)
+        XCTAssertEqual(HealthUnitNormalizer.normalizeSleepStagePercent(0.20), 0.20, accuracy: 0.001)
+
+        // Oxygen Saturation: 0...100 bound
+        XCTAssertEqual(HealthUnitNormalizer.normalizeOxygenSaturation(0.98), 98.0, accuracy: 0.001)
+        XCTAssertEqual(HealthUnitNormalizer.normalizeOxygenSaturation(98.0), 98.0, accuracy: 0.001)
+
+        // Body Fat: 0...1 bound
+        XCTAssertEqual(HealthUnitNormalizer.normalizeBodyFatPercentage(15.0), 0.15, accuracy: 0.001)
+        XCTAssertEqual(HealthUnitNormalizer.normalizeBodyFatPercentage(0.15), 0.15, accuracy: 0.001)
+    }
+
+    func testStressEngineWithTemperatureNull() {
+        let input = StressIndexInput(
+            mode: .rawVitals,
+            quietHRToday: 65,
+            quietHRBaseline: 60,
+            hrvToday: 55,
+            hrvBaseline: 60,
+            bodyTempDelta: nil // Missing temperature
+        )
+        let result = StressIndexEngine().calculate(from: input)
+        
+        XCTAssertNil(result.components["temp_stress"])
+        XCTAssertTrue(result.missingInputs.contains("bodyTempDelta"))
+    }
+
+    func testEnergyBankMorningEnergyWithChargeEfficiency() {
+        let inputNormal = EnergyBankInput(
+            recoveryScore: 80,
+            sleepScore: 80,
+            strainScore: 10,
+            stressIndex: 10,
+            hrvToday: 60,
+            hrvBaseline: 60,
+            rhrToday: 60,
+            rhrBaseline: 60 // chargeEfficiency = 0.6 * 0.7 + 0.4 * 0.7 = 0.7
+        )
+        let resultNormal = EnergyBankEngine().calculate(from: inputNormal)
+        
+        let inputHigh = EnergyBankInput(
+            recoveryScore: 80,
+            sleepScore: 80,
+            strainScore: 10,
+            stressIndex: 10,
+            hrvToday: 90,
+            hrvBaseline: 60,
+            rhrToday: 50,
+            rhrBaseline: 60 // chargeEfficiency = 0.6 * 1.0 + 0.4 * 1.0 = 1.0
+        )
+        let resultHigh = EnergyBankEngine().calculate(from: inputHigh)
+        
+        XCTAssertGreaterThan(resultHigh.morningEnergy, resultNormal.morningEnergy)
+        XCTAssertEqual(resultHigh.components["charge_efficiency"] ?? 0, 1.0, accuracy: 0.01)
+    }
+
+    func testStrainTrainingLoadStatusZeroHistoryInhibition() {
+        let input = StrainScoreInput(
+            workouts: [],
+            activeEnergyToday: 500,
+            exerciseMinutesToday: 30,
+            stepCount: 8000,
+            restingHR: 60,
+            maxHR: 190,
+            last28DaysDailyLoads: [45.0, 50.0] // History < 7 days
+        )
+        let result = StrainScoreEngine().calculate(from: input)
+        
+        XCTAssertNil(result.components["training_load_status_code"])
+        XCTAssertEqual(result.confidence, .low)
+        XCTAssertTrue(result.reasons.contains { $0.contains("不足 7 天") })
     }
 }
 

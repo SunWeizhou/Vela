@@ -41,6 +41,13 @@ final class DailyHealthSummaryRecord {
     var trainingLoadRatio: Double?
     var bedtime: Date?
     var wakeTime: Date?
+    
+    // Core Metrics v1.3 Additions
+    var awakeMinutes: Double?
+    var awakeEpisodeCount: Int?
+    var deepSleepMinutes: Double?
+    var remSleepMinutes: Double?
+    @Attribute(.externalStorage) var workoutsData: Data?
 
     init(
         dayIdentifier: String,
@@ -76,8 +83,13 @@ final class DailyHealthSummaryRecord {
         trainingLoadRatio: Double? = nil,
         bedtime: Date? = nil,
         wakeTime: Date? = nil,
+        awakeMinutes: Double? = nil,
+        awakeEpisodeCount: Int? = nil,
+        deepSleepMinutes: Double? = nil,
+        remSleepMinutes: Double? = nil,
+        workoutsData: Data? = nil,
         configVersion: String = VelaAppMetadata.configVersion,
-        schemaVersion: Int = 1,
+        schemaVersion: Int = 2,
         updatedAt: Date = Date(),
         createdAt: Date = Date()
     ) {
@@ -114,6 +126,11 @@ final class DailyHealthSummaryRecord {
         self.trainingLoadRatio = trainingLoadRatio
         self.bedtime = bedtime
         self.wakeTime = wakeTime
+        self.awakeMinutes = awakeMinutes
+        self.awakeEpisodeCount = awakeEpisodeCount
+        self.deepSleepMinutes = deepSleepMinutes
+        self.remSleepMinutes = remSleepMinutes
+        self.workoutsData = workoutsData
         self.configVersion = configVersion
         self.schemaVersion = schemaVersion
         self.updatedAt = updatedAt
@@ -122,6 +139,7 @@ final class DailyHealthSummaryRecord {
 
     convenience init(snapshot: DailyHealthSnapshot, calendar: Calendar = .current) {
         let day = calendar.startOfDay(for: snapshot.date)
+        let wData = try? JSONEncoder().encode(snapshot.workouts)
         self.init(
             dayIdentifier: Self.dayIdentifier(for: day, calendar: calendar),
             date: day,
@@ -155,7 +173,12 @@ final class DailyHealthSummaryRecord {
             activityLoad: snapshot.activityLoad,
             trainingLoadRatio: snapshot.trainingLoadRatio,
             bedtime: snapshot.bedtime,
-            wakeTime: snapshot.wakeTime
+            wakeTime: snapshot.wakeTime,
+            awakeMinutes: snapshot.awakeMinutes,
+            awakeEpisodeCount: snapshot.awakeEpisodeCount,
+            deepSleepMinutes: snapshot.deepSleepMinutes,
+            remSleepMinutes: snapshot.remSleepMinutes,
+            workoutsData: wData
         )
     }
 
@@ -193,6 +216,11 @@ final class DailyHealthSummaryRecord {
         trainingLoadRatio = snapshot.trainingLoadRatio
         bedtime = snapshot.bedtime
         wakeTime = snapshot.wakeTime
+        awakeMinutes = snapshot.awakeMinutes
+        awakeEpisodeCount = snapshot.awakeEpisodeCount
+        deepSleepMinutes = snapshot.deepSleepMinutes
+        remSleepMinutes = snapshot.remSleepMinutes
+        workoutsData = try? JSONEncoder().encode(snapshot.workouts)
         configVersion = VelaAppMetadata.configVersion
         self.updatedAt = updatedAt
     }
@@ -209,7 +237,11 @@ final class DailyHealthSummaryRecord {
     }
 
     func toSnapshot() -> DailyHealthSnapshot {
-        DailyHealthSnapshot(
+        var wList: [WorkoutSummary] = []
+        if let wData = workoutsData, let decoded = try? JSONDecoder().decode([WorkoutSummary].self, from: wData) {
+            wList = decoded
+        }
+        return DailyHealthSnapshot(
             date: date,
             createdAt: createdAt,
             sleepScore: sleepScore,
@@ -242,7 +274,12 @@ final class DailyHealthSummaryRecord {
             activityLoad: activityLoad,
             trainingLoadRatio: trainingLoadRatio,
             bedtime: bedtime,
-            wakeTime: wakeTime
+            wakeTime: wakeTime,
+            awakeMinutes: awakeMinutes,
+            awakeEpisodeCount: awakeEpisodeCount,
+            deepSleepMinutes: deepSleepMinutes,
+            remSleepMinutes: remSleepMinutes,
+            workouts: wList
         )
     }
 }

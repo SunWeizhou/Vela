@@ -110,11 +110,12 @@ public struct EnergyBankEngine: ScoreEngine {
             missingInputs.append("recoveryScore")
             missingInputs.append("sleepScore")
         }
-        morningEnergy = ScoringMath.clamp(morningEnergy, min: 0, max: 100)
-        components["morningEnergy"] = morningEnergy
-
         let chargeEfficiency = calculateChargeEfficiency(from: input)
         components["charge_efficiency"] = chargeEfficiency
+
+        morningEnergy += (chargeEfficiency - 0.6) * 12.0
+        morningEnergy = ScoringMath.clamp(morningEnergy, min: 0, max: 100)
+        components["morningEnergy"] = morningEnergy
 
         let trainingLoad = calculateTrainingLoad(
             strainHistory: input.strainHistory,

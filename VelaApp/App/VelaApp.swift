@@ -5,6 +5,7 @@ import BackgroundTasks
 @MainActor
 final class VelaAppState: ObservableObject {
     @Published var isFallbackStore = false
+    @Published var isReadOnlySafetyMode = false
     @Published var selectedTab = 0
     @Published var showCoachHub = false
     @Published var prefilledCoachQuestion: String? = nil
@@ -40,13 +41,29 @@ struct VelaApp: App {
     private let modelContainer: ModelContainer
 
     init() {
-        if let container = try? VelaModelContainer.make() {
-            modelContainer = container
-        } else if let memoryContainer = try? VelaModelContainer.make(inMemory: true) {
+        do {
+            modelContainer = try VelaModelContainer.make()
+        } catch {
+            #if DEBUG
+            // In DEBUG, VelaModelContainer.make() already deletes files on catch.
+            // But if it still fails, fallback to in-memory:
+            if let memoryContainer = try? VelaModelContainer.make(inMemory: true) {
+                VelaAppState.shared.isFallbackStore = true
+                modelContainer = memoryContainer
+            } else {
+                preconditionFailure("Vela: Could not create ModelContainer in any configuration.")
+            }
+            #else
+            // In Release, catch schema migration / store failures, activate read-only safety mode,
+            // and fallback to in-memory store so the app can launch, preventing data loss.
+            VelaAppState.shared.isReadOnlySafetyMode = true
             VelaAppState.shared.isFallbackStore = true
-            modelContainer = memoryContainer
-        } else {
-            preconditionFailure("Vela: Could not create ModelContainer in any configuration.")
+            if let memoryContainer = try? VelaModelContainer.make(inMemory: true) {
+                modelContainer = memoryContainer
+            } else {
+                preconditionFailure("Vela: Could not create ModelContainer in any configuration.")
+            }
+            #endif
         }
 
         // Register background task handler

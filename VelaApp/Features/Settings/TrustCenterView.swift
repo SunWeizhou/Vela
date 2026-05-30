@@ -267,6 +267,7 @@ struct TrustCenterView: View {
         case "morning_brief": return AppLanguage.stored.isChinese ? "早间简报" : "Morning Brief"
         case "evening_wiki_sync": return AppLanguage.stored.isChinese ? "晚间同步" : "Evening Sync"
         case "coach": return "Coach"
+        case "health_pipeline": return AppLanguage.stored.isChinese ? "健康数据管道" : "Health Data Pipeline"
         default: return agentName
         }
     }
@@ -276,6 +277,7 @@ struct TrustCenterView: View {
         case "morning_brief": return "sunrise.fill"
         case "evening_wiki_sync": return "moon.stars.fill"
         case "coach": return "bubble.left.and.bubble.right.fill"
+        case "health_pipeline": return "heart.text.square.fill"
         default: return "gear"
         }
     }

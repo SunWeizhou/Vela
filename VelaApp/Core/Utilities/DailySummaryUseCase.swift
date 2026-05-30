@@ -23,14 +23,35 @@ final class DailySummaryUseCase {
         // 1. Sync past 14 days from HealthKit first to SwiftData (Pass 1 loads raw features, Pass 2 scores everything correctly!)
         if let modelContext {
             let syncEngine = HealthKitSyncEngine(queryService: queryService, modelContext: modelContext, calendar: calendar)
-            try? await syncEngine.syncPastDays(14, endingAt: now)
+            do {
+                try await syncEngine.syncPastDays(14, endingAt: now)
+            } catch {
+                PipelineDiagnosticsLogger.log(
+                    modelContext: modelContext,
+                    stage: "DailySummaryUseCase.loadDashboard.syncPastDays",
+                    isSuccess: false,
+                    summary: "HealthKit background sync failed.",
+                    error: error
+                )
+            }
         }
         
         // 2. Query today's snapshot and 42-day history from SwiftData
         let snapshots42: [DailyHealthSnapshot]
         if let modelContext {
             let snapshotRepo = HealthSnapshotRepository(modelContext: modelContext, calendar: calendar)
-            snapshots42 = (try? snapshotRepo.fetchSnapshots(days: 42, endingAt: now)) ?? []
+            do {
+                snapshots42 = try snapshotRepo.fetchSnapshots(days: 42, endingAt: now)
+            } catch {
+                PipelineDiagnosticsLogger.log(
+                    modelContext: modelContext,
+                    stage: "DailySummaryUseCase.loadDashboard.fetchSnapshots",
+                    isSuccess: false,
+                    summary: "Failed to fetch 42-day snapshot history.",
+                    error: error
+                )
+                snapshots42 = []
+            }
         } else {
             snapshots42 = []
         }
@@ -74,14 +95,14 @@ final class DailySummaryUseCase {
         let recoveryMetrics = RecoveryMetricSummary(
             hrvMilliseconds: snapshot.hrvAverage,
             restingHeartRate: snapshot.restingHeartRate,
-            sleepHeartRate: snapshot.restingHeartRate.map { $0 - 4.0 },
+            sleepHeartRate: nil,
             respiratoryRate: snapshot.respiratoryRate
         )
         
         let recoveryBaseline = RecoveryMetricSummary(
             hrvMilliseconds: calculateMedian(hrvHistory),
             restingHeartRate: calculateMedian(rhrHistory),
-            sleepHeartRate: calculateMedian(rhrHistory).map { $0 - 4.0 },
+            sleepHeartRate: nil,
             respiratoryRate: calculateMedian(respHistory)
         )
         
@@ -98,10 +119,10 @@ final class DailySummaryUseCase {
             ),
             strainBaselineDaily: StrainActivitySummary(workouts: []),
             bodyMetrics: BodyMetricsSummary(
-                vo2Max: 45.0,
+                vo2Max: nil,
                 weightKilograms: snapshot.bodyWeight,
                 bodyFatPercentage: snapshot.bodyFatPercent,
-                leanBodyMassKilograms: snapshot.bodyWeight.map { $0 * 0.8 }
+                leanBodyMassKilograms: nil
             ),
             extendedMetrics: ExtendedHealthMetrics(
                 oxygenSaturation: snapshot.oxygenSaturation,
@@ -199,9 +220,29 @@ final class DailySummaryUseCase {
         let persistedSnapshot = makeSnapshot(from: dashboard, context: context, date: now)
         if let modelContext {
             let snapshotRepo = HealthSnapshotRepository(modelContext: modelContext, calendar: calendar)
-            try? snapshotRepo.saveDailySnapshot(persistedSnapshot)
+            do {
+                try snapshotRepo.saveDailySnapshot(persistedSnapshot)
+            } catch {
+                PipelineDiagnosticsLogger.log(
+                    modelContext: modelContext,
+                    stage: "DailySummaryUseCase.loadDashboard.saveDailySnapshot",
+                    isSuccess: false,
+                    summary: "Failed to save daily snapshot to repository.",
+                    error: error
+                )
+            }
             await refreshPersonalBaselinesIfNeeded(modelContext: modelContext)
-            try? snapshotRepo.pruneOldSnapshots(keepingDays: 90)
+            do {
+                try snapshotRepo.pruneOldSnapshots(keepingDays: 90)
+            } catch {
+                PipelineDiagnosticsLogger.log(
+                    modelContext: modelContext,
+                    stage: "DailySummaryUseCase.loadDashboard.pruneOldSnapshots",
+                    isSuccess: false,
+                    summary: "Failed to prune old snapshots.",
+                    error: error
+                )
+            }
             await checkAndAlertAbnormalMetrics(snapshot: persistedSnapshot, modelContext: modelContext)
         }
         return dashboard
@@ -533,24 +574,29 @@ final class DailySummaryUseCase {
             hrvAverage: dashboard.recoveryMetrics.hrvMilliseconds,
             restingHeartRate: dashboard.recoveryMetrics.restingHeartRate,
             sleepHours: context.sleepSummary.map { Double($0.totalSleepMinutes) / 60.0 },
-            deepSleepPercent: sleepMetrics["deep_pct"].map { $0 / 100.0 },
-            remSleepPercent: sleepMetrics["rem_pct"].map { $0 / 100.0 },
-            sleepEfficiency: sleepMetrics["sleep_efficiency"].map { $0 / 100.0 },
+            deepSleepPercent: sleepMetrics["deep_pct"].map { HealthUnitNormalizer.normalizeSleepStagePercent($0 / 100.0) },
+            remSleepPercent: sleepMetrics["rem_pct"].map { HealthUnitNormalizer.normalizeSleepStagePercent($0 / 100.0) },
+            sleepEfficiency: sleepMetrics["sleep_efficiency"].map { HealthUnitNormalizer.normalizeSleepEfficiency($0 / 100.0) },
             steps: strainMetrics["steps_raw"],
             activeCalories: strainMetrics["active_energy_raw"],
             workoutCount: dashboard.workouts.isEmpty ? nil : dashboard.workouts.count,
             workoutTypes: dashboard.workouts.isEmpty ? nil : Set(dashboard.workouts.map(\.activityName)).sorted().joined(separator: ", "),
             workoutDuration: dashboard.workouts.isEmpty ? nil : dashboard.workouts.reduce(0) { $0 + $1.end.timeIntervalSince($1.start) } / 60.0,
             bodyWeight: context.bodyMetrics.weightKilograms,
-            bodyFatPercent: context.bodyMetrics.bodyFatPercentage,
+            bodyFatPercent: context.bodyMetrics.bodyFatPercentage.map { HealthUnitNormalizer.normalizeBodyFatPercentage($0) },
             bmi: context.extendedMetrics.bmi,
-            oxygenSaturation: context.extendedMetrics.oxygenSaturation,
+            oxygenSaturation: context.extendedMetrics.oxygenSaturation.map { HealthUnitNormalizer.normalizeOxygenSaturation($0) },
             respiratoryRate: dashboard.recoveryMetrics.respiratoryRate,
             wristTemperature: context.extendedMetrics.bodyTemperature,
             dailyLoad: strainMetrics["daily_load"],
             workoutLoad: strainMetrics["workout_load"],
             activityLoad: strainMetrics["activity_load"],
-            trainingLoadRatio: strainMetrics["training_load_ratio"]
+            trainingLoadRatio: strainMetrics["training_load_ratio"],
+            awakeMinutes: context.sleepSummary?.stageMinutes[.awake].map { Double($0) },
+            awakeEpisodeCount: context.sleepSummary?.segments.filter { $0.stage == .awake && $0.end.timeIntervalSince($0.start) >= 120 }.count,
+            deepSleepMinutes: context.sleepSummary?.stageMinutes[.deep].map { Double($0) },
+            remSleepMinutes: context.sleepSummary?.stageMinutes[.rem].map { Double($0) },
+            workouts: context.strainToday.workouts
         )
     }
 
@@ -572,6 +618,7 @@ final class DailySummaryUseCase {
         )
     }
 
+#if DEBUG
     private func seedMockDataIfNeeded(modelContext: ModelContext, now: Date) {
         let repo = SwiftDataDailyHealthSummaryRepository(modelContext: modelContext)
         
@@ -731,13 +778,13 @@ final class DailySummaryUseCase {
             recoveryMetrics: RecoveryMetricSummary(
                 hrvMilliseconds: record.hrvAverage,
                 restingHeartRate: record.restingHeartRate,
-                sleepHeartRate: (record.restingHeartRate ?? 60.0) - 4.0,
+                sleepHeartRate: nil,
                 respiratoryRate: record.respiratoryRate
             ),
             recoveryBaseline: RecoveryMetricSummary(
                 hrvMilliseconds: 48.0,
                 restingHeartRate: 58.0,
-                sleepHeartRate: 54.0,
+                sleepHeartRate: nil,
                 respiratoryRate: 14.0
             ),
             strain: strain,
@@ -756,4 +803,5 @@ final class DailySummaryUseCase {
             source: .preview
         )
     }
+#endif
 }

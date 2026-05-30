@@ -33,7 +33,17 @@ final class HealthKitSyncEngine {
             )
             
             // Save the raw snapshot
-            try snapshotRepo.saveDailySnapshot(snapshot)
+            do {
+                try snapshotRepo.saveDailySnapshot(snapshot)
+            } catch {
+                PipelineDiagnosticsLogger.log(
+                    modelContext: modelContext,
+                    stage: "HealthKitSyncEngine.syncPastDays.saveRawSnapshot",
+                    isSuccess: false,
+                    summary: "Failed to save raw daily snapshot for \(dayStart).",
+                    error: error
+                )
+            }
         }
 
         // Pass 2: Calculate scores day-by-day, pulling correct rolling raw baselines
@@ -42,11 +52,35 @@ final class HealthKitSyncEngine {
             let dayStart = calendar.startOfDay(for: date)
             
             // Load this day's snapshot from SwiftData
-            let existingSnapshots = (try? snapshotRepo.fetchSnapshots(days: 1, endingAt: dayStart)) ?? []
+            let existingSnapshots: [DailyHealthSnapshot]
+            do {
+                existingSnapshots = try snapshotRepo.fetchSnapshots(days: 1, endingAt: dayStart)
+            } catch {
+                PipelineDiagnosticsLogger.log(
+                    modelContext: modelContext,
+                    stage: "HealthKitSyncEngine.syncPastDays.fetchExistingSnapshot",
+                    isSuccess: false,
+                    summary: "Failed to fetch existing snapshot for \(dayStart).",
+                    error: error
+                )
+                existingSnapshots = []
+            }
             guard var snapshot = existingSnapshots.first(where: { calendar.isDate($0.date, inSameDayAs: dayStart) }) else { continue }
             
             // Fetch past 42 days of historical snapshots (which already have raw data from Pass 1!)
-            let pastSnapshots = (try? snapshotRepo.fetchSnapshots(days: 42, endingAt: dayStart)) ?? []
+            let pastSnapshots: [DailyHealthSnapshot]
+            do {
+                pastSnapshots = try snapshotRepo.fetchSnapshots(days: 42, endingAt: dayStart)
+            } catch {
+                PipelineDiagnosticsLogger.log(
+                    modelContext: modelContext,
+                    stage: "HealthKitSyncEngine.syncPastDays.fetchHistory",
+                    isSuccess: false,
+                    summary: "Failed to fetch historical snapshots for \(dayStart).",
+                    error: error
+                )
+                pastSnapshots = []
+            }
             let historicalSnapshots = pastSnapshots.filter { !calendar.isDate($0.date, inSameDayAs: dayStart) }
             
             // Run computation pipeline
@@ -70,8 +104,26 @@ final class HealthKitSyncEngine {
             snapshot.activityLoad = metrics.strain.components["activity_load"]
             snapshot.trainingLoadRatio = metrics.strain.components["training_load_ratio"]
 
-            try snapshotRepo.saveDailySnapshot(snapshot)
+            do {
+                try snapshotRepo.saveDailySnapshot(snapshot)
+            } catch {
+                PipelineDiagnosticsLogger.log(
+                    modelContext: modelContext,
+                    stage: "HealthKitSyncEngine.syncPastDays.saveComputedSnapshot",
+                    isSuccess: false,
+                    summary: "Failed to save computed daily snapshot for \(dayStart).",
+                    error: error
+                )
+            }
         }
+        
+        // Log a successful sync run
+        PipelineDiagnosticsLogger.log(
+            modelContext: modelContext,
+            stage: "HealthKitSyncEngine.syncPastDays.completed",
+            isSuccess: true,
+            summary: "Successfully synced and computed metrics for past \(days) days."
+        )
     }
 }
 
@@ -100,17 +152,26 @@ final class DailySnapshotBuilder {
         // Populate sleep
         if let sleep = sleep {
             snapshot.sleepHours = Double(sleep.totalSleepMinutes) / 60.0
-            snapshot.sleepEfficiency = sleep.stageMinutes[.inBed].map { inBed in
-                inBed > 0 ? Double(sleep.totalSleepMinutes) / Double(inBed) * 100.0 : 85.0
-            } ?? 85.0
+            let rawEfficiency = sleep.stageMinutes[.inBed].map { inBed in
+                inBed > 0 ? Double(sleep.totalSleepMinutes) / Double(inBed) : 0.85
+            } ?? 0.85
+            snapshot.sleepEfficiency = HealthUnitNormalizer.normalizeSleepEfficiency(rawEfficiency)
             
             let total = Double(sleep.totalSleepMinutes)
             if total > 0 {
-                snapshot.deepSleepPercent = (sleep.stageMinutes[.deep].map { Double($0) } ?? 0.0) / total * 100.0
-                snapshot.remSleepPercent = (sleep.stageMinutes[.rem].map { Double($0) } ?? 0.0) / total * 100.0
+                let rawDeep = (sleep.stageMinutes[.deep].map { Double($0) } ?? 0.0) / total
+                let rawRem = (sleep.stageMinutes[.rem].map { Double($0) } ?? 0.0) / total
+                snapshot.deepSleepPercent = HealthUnitNormalizer.normalizeSleepStagePercent(rawDeep)
+                snapshot.remSleepPercent = HealthUnitNormalizer.normalizeSleepStagePercent(rawRem)
             }
             snapshot.bedtime = sleep.bedtime
             snapshot.wakeTime = sleep.wakeTime
+            
+            // Core Metrics v1.3 sub-metrics
+            snapshot.awakeMinutes = sleep.stageMinutes[.awake].map { Double($0) }
+            snapshot.awakeEpisodeCount = sleep.segments.filter { $0.stage == .awake && $0.end.timeIntervalSince($0.start) >= 120 }.count
+            snapshot.deepSleepMinutes = sleep.stageMinutes[.deep].map { Double($0) }
+            snapshot.remSleepMinutes = sleep.stageMinutes[.rem].map { Double($0) }
         }
 
         // Populate recovery
@@ -127,17 +188,18 @@ final class DailySnapshotBuilder {
             snapshot.workoutCount = strain.workouts.count
             snapshot.workoutDuration = strain.workouts.reduce(0.0) { $0 + $1.end.timeIntervalSince($1.start) } / 60.0
             snapshot.workoutTypes = strain.workouts.map(\.activityName).joined(separator: ",")
+            snapshot.workouts = strain.workouts
         }
 
         // Populate body
         if let body = body {
             snapshot.bodyWeight = body.weightKilograms
-            snapshot.bodyFatPercent = body.bodyFatPercentage
+            snapshot.bodyFatPercent = body.bodyFatPercentage.map { HealthUnitNormalizer.normalizeBodyFatPercentage($0) }
             snapshot.bmi = extended.bmi
         }
 
         // Populate extended
-        snapshot.oxygenSaturation = extended.oxygenSaturation
+        snapshot.oxygenSaturation = extended.oxygenSaturation.map { HealthUnitNormalizer.normalizeOxygenSaturation($0) }
         snapshot.wristTemperature = extended.bodyTemperature
 
         return snapshot
@@ -165,6 +227,15 @@ final class MetricComputationPipeline {
         }
     }
 
+    private func calculateStandardDeviation(_ values: [Double]) -> Double? {
+        guard values.count >= 2 else { return nil }
+        let mean = values.reduce(0.0, +) / Double(values.count)
+        let sumSquaredDiffs = values.map { pow($0 - mean, 2) }.reduce(0.0, +)
+        let variance = sumSquaredDiffs / Double(values.count - 1)
+        let sd = sqrt(variance)
+        return sd > 0 ? sd : nil
+    }
+
     func compute(
         for snapshot: DailyHealthSnapshot,
         history: [DailyHealthSnapshot]
@@ -172,10 +243,7 @@ final class MetricComputationPipeline {
         let calendar = Calendar.current
         
         // 1. Sleep Scoring Engine
-        let pastBedtimes = history.compactMap { snap in
-            snap.bedtime ?? calendar.date(bySettingHour: 23, minute: 30, second: 0, of: snap.date.addingTimeInterval(-86400))
-        }
-        
+        let pastBedtimes = history.compactMap(\.bedtime)
         let todayBedtime = snapshot.bedtime ?? calendar.date(bySettingHour: 23, minute: 30, second: 0, of: snapshot.date.addingTimeInterval(-86400))
         
         let sleepInput = SleepScoreInput(
@@ -183,8 +251,10 @@ final class MetricComputationPipeline {
             sleepTargetMinutes: 450.0,
             todayBedtime: todayBedtime,
             recentBedtimes: pastBedtimes,
-            awakeMinutes: 30.0,
-            awakeEpisodeCount: 1
+            awakeMinutes: snapshot.awakeMinutes,
+            awakeEpisodeCount: snapshot.awakeEpisodeCount,
+            remMinutes: snapshot.remSleepMinutes,
+            deepMinutes: snapshot.deepSleepMinutes
         )
         let sleepScore = SleepScoreEngine().calculate(from: sleepInput)
 
@@ -192,6 +262,9 @@ final class MetricComputationPipeline {
         let hrvHistory = history.compactMap(\.hrvAverage)
         let rhrHistory = history.compactMap(\.restingHeartRate)
         let respHistory = history.compactMap(\.respiratoryRate)
+        
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: snapshot.date) ?? snapshot.date
+        let yesterdayStrain = history.first(where: { calendar.isDate($0.date, inSameDayAs: yesterday) })?.strainScore
         
         let recoveryInput = RecoveryScoreInput(
             hrvToday: snapshot.hrvAverage,
@@ -201,7 +274,7 @@ final class MetricComputationPipeline {
             restingHeartRateBaseline: calculateMedian(rhrHistory),
             rhrHistory: rhrHistory,
             sleepScoreLastNight: sleepScore.value,
-            strainScoreYesterday: history.first?.strainScore,
+            strainScoreYesterday: yesterdayStrain,
             respiratoryRateToday: snapshot.respiratoryRate,
             respiratoryRateBaseline: calculateMedian(respHistory),
             respiratoryRateHistory: respHistory,
@@ -211,12 +284,18 @@ final class MetricComputationPipeline {
         let recoveryScore = RecoveryScoreEngine().calculate(from: recoveryInput)
 
         // 3. Strain Scoring Engine
-        // ATL/CTL/ACWR 统一使用 raw dailyLoad
         let dailyLoadsHistory = history.compactMap(\.dailyLoad)
         var workouts: [WorkoutInput] = []
-        if let duration = snapshot.workoutDuration, duration > 0 {
-            workouts.append(WorkoutInput(durationMinutes: duration, averageHeartRate: snapshot.restingHeartRate.map { $0 + 30.0 }))
+        for w in snapshot.workouts {
+            workouts.append(WorkoutInput(
+                id: w.id,
+                durationMinutes: w.end.timeIntervalSince(w.start) / 60.0,
+                averageHeartRate: w.averageHeartRate
+            ))
         }
+
+        let age = WikiFileService.getAgeFromWiki() ?? 30
+        let maxHeartRate = WikiFileService.getMaxHeartRateFromWiki() ?? Double(max(100, 220 - age))
 
         let strainInput = StrainScoreInput(
             workouts: workouts,
@@ -224,7 +303,7 @@ final class MetricComputationPipeline {
             exerciseMinutesToday: snapshot.workoutDuration,
             stepCount: snapshot.steps,
             restingHR: snapshot.restingHeartRate ?? 60.0,
-            maxHR: 190.0,
+            maxHR: maxHeartRate,
             biologicalSex: nil,
             last28DaysDailyLoads: dailyLoadsHistory,
             recoveryScore: recoveryScore.value
@@ -232,20 +311,24 @@ final class MetricComputationPipeline {
         let strainScore = StrainScoreEngine().calculate(from: strainInput)
 
         // 4. Physiological Stress Index Engine
+        let quietHRSD = calculateStandardDeviation(rhrHistory)
+        let hrvSD = calculateStandardDeviation(hrvHistory)
+        let respRateSD = calculateStandardDeviation(respHistory)
+
         let stressInput = StressIndexInput(
             quietHRToday: snapshot.restingHeartRate,
             quietHRBaseline: calculateMedian(rhrHistory),
-            quietHRSD: nil,
+            quietHRSD: quietHRSD,
             hrvToday: snapshot.hrvAverage,
             hrvBaseline: calculateMedian(hrvHistory),
-            hrvSD: nil,
+            hrvSD: hrvSD,
             respRateToday: snapshot.respiratoryRate,
             respRateBaseline: calculateMedian(respHistory),
-            respRateSD: nil,
+            respRateSD: respRateSD,
             bodyTempDelta: snapshot.wristTemperature.map { $0 - 36.5 },
             sleepScoreLastNight: sleepScore.value,
             strainScoreToday: strainScore.value,
-            isWithinWorkoutWindow: false // Daily summaries calculate quiet averages, workout exclusion is handled real-time
+            isWithinWorkoutWindow: false
         )
         let stressScore = StressIndexEngine().calculate(from: stressInput)
 
@@ -277,7 +360,7 @@ final class MetricComputationPipeline {
             SpO2: snapshot.oxygenSaturation,
             mindfulMinutes: nil,
             napMinutes: nil,
-            trainingLoadStatus: strainScore.trainingLoadStatus // Pass calculated trainingLoadStatus directly
+            trainingLoadStatus: strainScore.trainingLoadStatus
         )
         let energyScore = EnergyBankEngine().calculate(from: energyInput)
 

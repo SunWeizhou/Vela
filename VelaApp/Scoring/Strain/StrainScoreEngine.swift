@@ -187,41 +187,56 @@ public struct StrainScoreEngine: ScoreEngine {
         
         let trainingLoadRatio = chronic28Equivalent > 0 ? acute7 / chronic28Equivalent : 1.0
 
-        let loadStatus: TrainingLoadStatus
-        if trainingLoadRatio < 0.60 {
-            loadStatus = .wellBelow
-            reasons.append("近期训练负荷显著低于过去 28 天平均水平，可能处于减量或停训状态。")
-        } else if trainingLoadRatio <= 0.85 {
-            loadStatus = .below
-            reasons.append("近期训练负荷略低于基线水平。")
-        } else if trainingLoadRatio <= 1.20 {
-            loadStatus = .optimal
-            reasons.append("近期训练负荷处于最佳提升区间，体能正在稳步发展。")
-        } else if trainingLoadRatio <= 1.50 {
-            loadStatus = .elevated
-            reasons.append("近期训练负荷已偏高，建议控制强度，避免连续高负荷。")
+        var baseConfidence: MetricConfidence = input.activeEnergyToday != nil ? .high : .medium
+        
+        if historyToUse.count < 7 {
+            // Insufficient history for ATL/CTL
+            baseConfidence = .low
+            reasons.append("今日负荷计算完成，但由于历史数据不足 7 天，已自动停用近期训练负荷状态评估。")
+            components["recommended_lower"] = Double(recommendedRange(for: input.recoveryScore).lowerBound)
+            components["recommended_upper"] = Double(recommendedRange(for: input.recoveryScore).upperBound)
         } else {
-            loadStatus = .highRisk
-            reasons.append("近期训练负荷显著高于过去 28 天平均水平，建议控制增量，防范运动伤病。")
-        }
+            let loadStatus: TrainingLoadStatus
+            if trainingLoadRatio < 0.60 {
+                loadStatus = .wellBelow
+                reasons.append("近期训练负荷显著低于过去 28 天平均水平，可能处于减量或停训状态。")
+            } else if trainingLoadRatio <= 0.85 {
+                loadStatus = .below
+                reasons.append("近期训练负荷略低于基线水平。")
+            } else if trainingLoadRatio <= 1.20 {
+                loadStatus = .optimal
+                reasons.append("近期训练负荷处于最佳提升区间，体能正在稳步发展。")
+            } else if trainingLoadRatio <= 1.50 {
+                loadStatus = .elevated
+                reasons.append("近期训练负荷已偏高，建议控制强度，避免连续高负荷。")
+            } else {
+                loadStatus = .highRisk
+                reasons.append("近期训练负荷显著高于过去 28 天平均水平，建议控制增量，防范运动伤病。")
+            }
 
-        components["training_load_ratio"] = trainingLoadRatio
-        components["acute_7d_load"] = acute7
-        components["chronic_28d_equivalent"] = chronic28Equivalent
-        let statusCode: Double
-        switch loadStatus {
-        case .wellBelow: statusCode = 0.0
-        case .below: statusCode = 1.0
-        case .optimal: statusCode = 2.0
-        case .elevated: statusCode = 3.0
-        case .highRisk: statusCode = 4.0
+            components["training_load_ratio"] = trainingLoadRatio
+            components["acute_7d_load"] = acute7
+            components["chronic_28d_equivalent"] = chronic28Equivalent
+            let statusCode: Double
+            switch loadStatus {
+            case .wellBelow: statusCode = 0.0
+            case .below: statusCode = 1.0
+            case .optimal: statusCode = 2.0
+            case .elevated: statusCode = 3.0
+            case .highRisk: statusCode = 4.0
+            }
+            components["training_load_status_code"] = statusCode
+            components["recommended_lower"] = Double(recommendedRange(for: input.recoveryScore).lowerBound)
+            components["recommended_upper"] = Double(recommendedRange(for: input.recoveryScore).upperBound)
+            
+            if historyToUse.count < 28 {
+                baseConfidence = .medium
+                reasons.append("由于历史负荷数据少于 28 天，近期训练负荷的基线评估仅为估算（中等置信度）。")
+            }
         }
-        components["training_load_status_code"] = statusCode
-        components["recommended_lower"] = Double(recommendedRange(for: input.recoveryScore).lowerBound)
-        components["recommended_upper"] = Double(recommendedRange(for: input.recoveryScore).upperBound)
 
         let band = ScoringMath.band(for: strainValue)
-        let confidence: MetricConfidence = input.activeEnergyToday != nil ? .high : .medium
+        let confidence = baseConfidence
 
         let dataWindow = DateInterval(start: Calendar.current.date(byAdding: .day, value: -28, to: Date()) ?? Date(), end: Date())
 

@@ -16,73 +16,67 @@ final class HealthDataRefreshService {
 
     func refreshToday(now: Date = Date()) async throws -> DailyHealthSnapshot {
         let context = try await refreshContext(now: now)
-        let sleepTarget = UserDefaults.standard.double(forKey: "vela_sleep_target_hours") * 60
-        let effectiveSleepTarget = sleepTarget > 0 ? sleepTarget : 450
-        let sleepScore = SleepScoreEngine().calculate(
-            from: ScoreEngineFactory.sleep(
-                from: context,
-                sleepTarget: effectiveSleepTarget,
-                todayBedtime: context.sleepSummary?.bedtime,
-                recentBedtimes: []
-            )
-        )
-        let recovery = RecoveryScoreEngine().calculate(
-            from: ScoreEngineFactory.recovery(
-                from: context,
-                sleepScore: sleepScore.score,
-                strainScoreYesterday: nil,
-                hrvHistory: [],
-                rhrHistory: []
-            )
-        )
-        let strain = StrainScoreEngine().calculate(
-            from: await ScoreEngineFactory.strain(
-                from: context,
-                recoveryScore: recovery.score,
-                last28DaysDailyLoads: [],
-                queryService: queryService
-            )
-        )
-        let stress = StressIndexEngine().calculate(
-            from: ScoreEngineFactory.stress(
-                from: context,
-                sleepScore: sleepScore.score,
-                strainScore: strain.score,
-                hrvHistory: [],
-                rhrHistory: []
-            )
-        )
-        let energy = EnergyBankEngine().calculate(
-            from: ScoreEngineFactory.energyBank(
-                from: context,
-                recoveryScore: recovery.score,
-                sleepScore: context.sleepSummary == nil ? nil : sleepScore.score,
-                strainScore: strain.score,
-                stressIndex: stress.stressIndex,
-                strainHistory: []
-            )
-        )
         guard context.hasAnyData else {
-            return DailyHealthSnapshot(
-                date: context.date,
-                sleepScore: nil,
-                recoveryScore: nil,
-                strainScore: nil,
-                stressIndex: nil,
-                morningEnergy: nil,
-                currentEnergy: nil
-            )
+            return DailyHealthSnapshot(date: context.date)
         }
 
-        return DailyHealthSnapshot(
-            date: context.date,
-            sleepScore: context.sleepSummary == nil ? nil : sleepScore.score,
-            recoveryScore: recovery.components.isEmpty ? nil : recovery.score,
-            strainScore: strain.components.isEmpty ? nil : strain.score,
-            stressIndex: stress.components.isEmpty ? nil : stress.stressIndex,
-            morningEnergy: energy.morningEnergy,
-            currentEnergy: energy.currentEnergy
-        )
+        var snapshot = DailyHealthSnapshot(date: context.date)
+        
+        // Populate sleep
+        if let sleep = context.sleepSummary {
+            snapshot.sleepHours = Double(sleep.totalSleepMinutes) / 60.0
+            let rawEfficiency = sleep.stageMinutes[.inBed].map { inBed in
+                inBed > 0 ? Double(sleep.totalSleepMinutes) / Double(inBed) : 0.85
+            } ?? 0.85
+            snapshot.sleepEfficiency = HealthUnitNormalizer.normalizeSleepEfficiency(rawEfficiency)
+            
+            let total = Double(sleep.totalSleepMinutes)
+            if total > 0 {
+                let rawDeep = (sleep.stageMinutes[.deep].map { Double($0) } ?? 0.0) / total
+                let rawRem = (sleep.stageMinutes[.rem].map { Double($0) } ?? 0.0) / total
+                snapshot.deepSleepPercent = HealthUnitNormalizer.normalizeSleepStagePercent(rawDeep)
+                snapshot.remSleepPercent = HealthUnitNormalizer.normalizeSleepStagePercent(rawRem)
+            }
+            snapshot.bedtime = sleep.bedtime
+            snapshot.wakeTime = sleep.wakeTime
+            
+            // Core Metrics v1.3 sub-metrics
+            snapshot.awakeMinutes = sleep.stageMinutes[.awake].map { Double($0) }
+            snapshot.awakeEpisodeCount = sleep.segments.filter { $0.stage == .awake && $0.end.timeIntervalSince($0.start) >= 120 }.count
+            snapshot.deepSleepMinutes = sleep.stageMinutes[.deep].map { Double($0) }
+            snapshot.remSleepMinutes = sleep.stageMinutes[.rem].map { Double($0) }
+        }
+        
+        snapshot.hrvAverage = context.recoveryMetrics.hrvMilliseconds
+        snapshot.restingHeartRate = context.recoveryMetrics.restingHeartRate
+        snapshot.respiratoryRate = context.recoveryMetrics.respiratoryRate
+        
+        snapshot.steps = context.strainToday.stepCount
+        snapshot.activeCalories = context.strainToday.activeEnergyKilocalories
+        snapshot.workoutCount = context.strainToday.workouts.count
+        snapshot.workoutDuration = context.strainToday.workouts.reduce(0.0) { $0 + $1.end.timeIntervalSince($1.start) } / 60.0
+        snapshot.workoutTypes = context.strainToday.workouts.map(\.activityName).joined(separator: ",")
+        snapshot.workouts = context.strainToday.workouts
+        
+        snapshot.bodyWeight = context.bodyMetrics.weightKilograms
+        snapshot.bodyFatPercent = context.bodyMetrics.bodyFatPercentage.map { HealthUnitNormalizer.normalizeBodyFatPercentage($0) }
+        
+        snapshot.oxygenSaturation = context.extendedMetrics.oxygenSaturation.map { HealthUnitNormalizer.normalizeOxygenSaturation($0) }
+        snapshot.wristTemperature = context.extendedMetrics.bodyTemperature
+        
+        // Execute unified scoring pipeline
+        let pipeline = MetricComputationPipeline()
+        let result = pipeline.compute(for: snapshot, history: [])
+        
+        snapshot.sleepScore = result.sleepScore.value
+        snapshot.recoveryScore = result.recovery.value
+        snapshot.strainScore = result.strain.value
+        snapshot.stressIndex = result.stress.value
+        snapshot.morningEnergy = result.energy.components["morningEnergy"]
+        snapshot.currentEnergy = result.energy.value
+        snapshot.energyBank = result.energy.value
+        
+        return snapshot
     }
 
     func refreshContext(now: Date = Date()) async throws -> DailyHealthContext {

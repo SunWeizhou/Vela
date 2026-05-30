@@ -180,19 +180,22 @@ public struct StressIndexEngine: ScoreEngine {
         }
 
         // 4. Temp Stress (10%)
-        let tempDelta = input.bodyTempDelta ?? 0.0
-        let tempStress: Double
-        if abs(tempDelta) < 0.3 {
-            tempStress = 20.0
-        } else if abs(tempDelta) < 0.6 {
-            tempStress = 50.0
-            reasons.append("夜间皮肤温度检测到轻微波动")
+        if let tempDelta = input.bodyTempDelta {
+            let tempStress: Double
+            if abs(tempDelta) < 0.3 {
+                tempStress = 20.0
+            } else if abs(tempDelta) < 0.6 {
+                tempStress = 50.0
+                reasons.append("夜间皮肤温度检测到轻微波动")
+            } else {
+                tempStress = 80.0
+                reasons.append("夜间体温偏差异常，表明系统性生理对抗")
+            }
+            components["temp_stress"] = tempStress
+            componentWeights["temp_stress"] = weights["temp_stress"]!
         } else {
-            tempStress = 80.0
-            reasons.append("夜间体温偏差异常，表明系统性生理对抗")
+            missingInputs.append("bodyTempDelta")
         }
-        components["temp_stress"] = tempStress
-        componentWeights["temp_stress"] = weights["temp_stress"]!
 
         // 5. Sleep Debt Stress (15%)
         let debtStress: Double? = {
