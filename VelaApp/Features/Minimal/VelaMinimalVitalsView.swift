@@ -94,7 +94,10 @@ struct VelaVitalsView: View {
 
     private var biologicalAgeHero: some View {
         let result = biologicalAgeResult
-        let biologicalAge = result.map { String(format: "%.1f", $0.biologicalAge) } ?? "--"
+        let isPhenoAge = result?.isPhenoAge == true
+        let biologicalAge = result?.biologicalAgeEstimate.map { String(format: "%.1f", $0) }
+            ?? result?.healthAgeTrendLabel
+            ?? "--"
         let age = Double(chronologicalAge ?? 0)
         let minAgeRange = chronologicalAge.map { String(format: "%.0f", Double($0) - 7.0) } ?? "--"
         let maxAgeRange = chronologicalAge.map { String(format: "%.0f", Double($0) + 3.0) } ?? "--"
@@ -102,6 +105,9 @@ struct VelaVitalsView: View {
         let deltaText: String = {
             guard let result, chronologicalAge != nil else {
                 return "连接 Apple Health 后生成"
+            }
+            guard result.isPhenoAge else {
+                return "健康年龄趋势 Beta：\(result.healthAgeTrendLabel)"
             }
             let delta = result.biologicalAge - age
             if abs(delta) < 0.05 {
@@ -116,7 +122,7 @@ struct VelaVitalsView: View {
                 Spacer()
                 
                 VStack(spacing: 4) {
-                    Text("生物年龄")
+                    Text(isPhenoAge ? "生物年龄估算" : "健康年龄趋势 Beta")
                         .font(.system(size: 20, weight: .bold))
                         .foregroundStyle(Color(hex: "#1A1917"))
                     
@@ -129,7 +135,7 @@ struct VelaVitalsView: View {
             }
             .overlay(alignment: .trailing) {
                 Button {
-                    // Actions menu
+                    VelaAppState.shared.triggerBloodLog = true
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 16, weight: .bold))
@@ -171,15 +177,17 @@ struct VelaVitalsView: View {
                         .foregroundStyle(result == nil ? Color(hex: "#8E8A80") : Color(hex: "#5B8C6F"))
                         .padding(.top, 4)
 
-                    Text(minAgeRange)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
-                        .offset(x: -78, y: 50)
-                    
-                    Text(maxAgeRange)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
-                        .offset(x: 78, y: 37)
+                    if isPhenoAge {
+                        Text(minAgeRange)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color(hex: "#8E8A80"))
+                            .offset(x: -78, y: 50)
+
+                        Text(maxAgeRange)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color(hex: "#8E8A80"))
+                            .offset(x: 78, y: 37)
+                    }
                 }
                 
                 // End Dot indicator at bottom center
@@ -250,7 +258,7 @@ struct VelaVitalsView: View {
                 Spacer()
                 
                 Button("编辑") {
-                    // Edit action
+                    VelaAppState.shared.triggerBloodLog = true
                 }
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(Color(hex: "#C56B4A")) // Brand Accent

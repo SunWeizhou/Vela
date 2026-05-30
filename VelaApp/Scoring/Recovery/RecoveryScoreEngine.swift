@@ -215,6 +215,22 @@ public struct RecoveryScoreEngine: ScoreEngine {
             reasons.append("血氧饱和度偏低 (\(Int(SpO2))%)，系统性氧合能力下降")
         }
 
+        if input.hrvToday != nil {
+            components["hrv_z_score"] = hrvZ
+        }
+        if input.restingHeartRateToday != nil {
+            components["rhr_z_score"] = rhrZ
+        }
+        if input.respiratoryRateToday != nil, input.respiratoryRateBaseline != nil {
+            components["respiratory_rate_z"] = respiratoryRateZ
+        }
+        if let bodyTempDelta = input.bodyTempDelta {
+            components["body_temp_delta"] = bodyTempDelta
+        }
+        if let SpO2 = input.SpO2 {
+            components["spo2"] = SpO2
+        }
+
         if rhrZ > 2.0 && hrvZ < -1.0 {
             penalty += 8.0
             reasons.append("静息心率显著上升且 HRV 受到抑制，发出红色生理疲劳警报")

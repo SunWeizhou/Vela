@@ -58,6 +58,10 @@ public struct BiologicalAgeResult {
     public var isPhenoAge: Bool
     public var healthAgeTrend: String // "improving" / "stable" / "worsening"
     public var healthAgeTrendScore: Double // -1.0 to +1.0
+
+    public var biologicalAgeEstimate: Double? {
+        isPhenoAge ? biologicalAge : nil
+    }
     
     public var healthAgeTrendLabel: String {
         switch healthAgeTrend {
@@ -85,37 +89,157 @@ public struct BiologicalAgeFactor: Identifiable {
     }
 }
 
+private struct CanonicalPhenoAgeInput {
+    var albumin: Double
+    var creatinine: Double
+    var glucose: Double
+    var crp: Double
+    var lymphocyte: Double
+    var mcv: Double
+    var rdw: Double
+    var alkalinePhosphatase: Double
+    var wbc: Double
+}
+
+private enum PhenoAgeInputValidator {
+    static func canonicalInput(from biomarkers: [BiomarkerRecord]) -> CanonicalPhenoAgeInput? {
+        guard let albumin = canonicalValue(in: biomarkers, matching: ["albumin"], kind: .albumin),
+              let creatinine = canonicalValue(in: biomarkers, matching: ["creatinine"], kind: .creatinine),
+              let glucose = canonicalValue(in: biomarkers, matching: ["glucose"], kind: .glucose),
+              let crp = canonicalValue(in: biomarkers, matching: ["crp", "c-reactive"], kind: .crp),
+              let lymphocyte = canonicalValue(in: biomarkers, matching: ["lymphocyte"], kind: .percentage),
+              let mcv = canonicalValue(in: biomarkers, matching: ["mcv"], kind: .mcv),
+              let rdw = canonicalValue(in: biomarkers, matching: ["rdw"], kind: .percentage),
+              let alkalinePhosphatase = canonicalValue(in: biomarkers, matching: ["alkaline", "alp"], kind: .alkalinePhosphatase),
+              let wbc = canonicalValue(in: biomarkers, matching: ["wbc", "white blood cell"], kind: .wbc) else {
+            return nil
+        }
+
+        guard (1.0...7.0).contains(albumin),
+              (0.1...20.0).contains(creatinine),
+              (20.0...1_000.0).contains(glucose),
+              (0.0...1_000.0).contains(crp),
+              (0.0...100.0).contains(lymphocyte),
+              (40.0...150.0).contains(mcv),
+              (5.0...40.0).contains(rdw),
+              (1.0...2_000.0).contains(alkalinePhosphatase),
+              (0.1...100.0).contains(wbc) else {
+            return nil
+        }
+
+        return CanonicalPhenoAgeInput(
+            albumin: albumin,
+            creatinine: creatinine,
+            glucose: glucose,
+            crp: crp,
+            lymphocyte: lymphocyte,
+            mcv: mcv,
+            rdw: rdw,
+            alkalinePhosphatase: alkalinePhosphatase,
+            wbc: wbc
+        )
+    }
+
+    private enum BiomarkerKind {
+        case albumin
+        case creatinine
+        case glucose
+        case crp
+        case percentage
+        case mcv
+        case alkalinePhosphatase
+        case wbc
+    }
+
+    private static func canonicalValue(
+        in biomarkers: [BiomarkerRecord],
+        matching names: [String],
+        kind: BiomarkerKind
+    ) -> Double? {
+        guard let record = biomarkers.first(where: { record in
+            let name = record.name.lowercased()
+            return names.contains { name.contains($0) }
+        }) else {
+            return nil
+        }
+
+        let unit = normalizedUnit(record.unit)
+        switch kind {
+        case .albumin:
+            if unit == "g/dl" { return record.value }
+            if unit == "g/l" { return record.value / 10.0 }
+        case .creatinine:
+            if unit == "mg/dl" { return record.value }
+            if unit == "umol/l" { return record.value / 88.4 }
+        case .glucose:
+            if unit == "mg/dl" { return record.value }
+            if unit == "mmol/l" { return record.value * 18.0182 }
+        case .crp:
+            if unit == "mg/l" { return record.value }
+            if unit == "mg/dl" { return record.value * 10.0 }
+        case .percentage:
+            if unit == "%" || unit == "percent" { return record.value }
+        case .mcv:
+            if unit == "fl" { return record.value }
+        case .alkalinePhosphatase:
+            if unit == "u/l" || unit == "iu/l" { return record.value }
+        case .wbc:
+            if ["10^3/ul", "x10^3/ul", "k/ul", "10^9/l"].contains(unit) {
+                return record.value
+            }
+        }
+        return nil
+    }
+
+    private static func normalizedUnit(_ unit: String) -> String {
+        unit.lowercased()
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "µ", with: "u")
+            .replacingOccurrences(of: "μ", with: "u")
+            .replacingOccurrences(of: "³", with: "^3")
+    }
+}
+
 public final class BiologicalAgeEngine {
     public init() {}
 
     public func calculate(input: BiologicalAgeInput) -> BiologicalAgeResult {
         var factors: [BiologicalAgeFactor] = []
 
-        // Extract the 9 clinical biomarkers needed for Levine PhenoAge
-        let albumin = input.biomarkers.first { $0.name.lowercased().contains("albumin") }?.value
-        let creatinine = input.biomarkers.first { $0.name.lowercased().contains("creatinine") }?.value
-        let glucose = input.biomarkers.first { $0.name.lowercased().contains("glucose") }?.value
-        let crp = input.biomarkers.first { $0.name.lowercased().contains("crp") || $0.name.lowercased().contains("c-reactive") }?.value
-        let lymphocyte = input.biomarkers.first { $0.name.lowercased().contains("lymphocyte") }?.value
-        let mcv = input.biomarkers.first { $0.name.lowercased().contains("mcv") }?.value
-        let rdw = input.biomarkers.first { $0.name.lowercased().contains("rdw") }?.value
-        let alkPhos = input.biomarkers.first { $0.name.lowercased().contains("alkaline") || $0.name.lowercased().contains("alp") }?.value
-        let wbc = input.biomarkers.first { $0.name.lowercased().contains("wbc") || $0.name.lowercased().contains("white blood cell") }?.value
-
-        let allBiomarkersPresent = [albumin, creatinine, glucose, crp, lymphocyte, mcv, rdw, alkPhos, wbc].allSatisfy { $0 != nil }
-
-        if allBiomarkersPresent,
-           let alb = albumin, let cre = creatinine, let glu = glucose, let cReactive = crp,
-           let lymp = lymphocyte, let mc = mcv, let rd = rdw, let alp = alkPhos, let wb = wbc {
+        if let phenoAgeInput = PhenoAgeInputValidator.canonicalInput(from: input.biomarkers) {
+            let alb = phenoAgeInput.albumin
+            let cre = phenoAgeInput.creatinine
+            let glu = phenoAgeInput.glucose
+            let cReactive = phenoAgeInput.crp
+            let lymp = phenoAgeInput.lymphocyte
+            let mc = phenoAgeInput.mcv
+            let rd = phenoAgeInput.rdw
+            let alp = phenoAgeInput.alkalinePhosphatase
+            let wb = phenoAgeInput.wbc
             
             // ── Levine PhenoAge Clinical Estimation Mode ──
             let age = input.chronologicalAge
-            let lnCRP = log(max(cReactive, 0.01))
-            
-            // Cox Proportional Hazard xb linear predictor
-            let xb = -9.9269 + 0.0413 * age - 0.0055 * alb + 0.0916 * cre + 0.0039 * glu + 0.0895 * lnCRP - 0.0120 * lymp + 0.0268 * mc + 0.3306 * rd + 0.0019 * alp + 0.0554 * wb
-            let S = exp(-exp(xb))
-            let phenoAge = 141.50 + log(-log(S) / 0.005) / 0.09015
+            let modelAlbumin = alb * 10.0 // g/dL -> g/L
+            let modelCreatinine = cre * 88.4 // mg/dL -> umol/L
+            let modelGlucose = glu / 18.0182 // mg/dL -> mmol/L
+            let modelCRP = cReactive / 10.0 // mg/L -> mg/dL
+            let lnCRP = log(max(modelCRP, 0.001))
+
+            // Liu et al. PhenoAge model, using the paper's canonical units.
+            let xb = -19.907
+                - 0.0336 * modelAlbumin
+                + 0.0095 * modelCreatinine
+                + 0.1953 * modelGlucose
+                + 0.0954 * lnCRP
+                - 0.0120 * lymp
+                + 0.0268 * mc
+                + 0.3306 * rd
+                + 0.00188 * alp
+                + 0.0554 * wb
+                + 0.0804 * age
+            let mortality = 1.0 - exp((-1.51714 * exp(xb)) / 0.0076927)
+            let survival = max(1.0 - mortality, Double.leastNonzeroMagnitude)
+            let phenoAge = 141.50 + log(-0.00553 * log(survival)) / 0.09165
             
             // Map factors for display
             let bms = [

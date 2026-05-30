@@ -621,6 +621,75 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertEqual(result.confidence, .low)
     }
 
+    func testRecoveryComponentsExposeNegativeHRVZScoreWhenBelowBaseline() throws {
+        let result = RecoveryScoreEngine().calculate(from: RecoveryScoreInput(
+            hrvToday: 35,
+            hrvBaseline: 50,
+            hrvHistory: [48, 49, 50, 51, 52, 49, 50],
+            restingHeartRateToday: 62,
+            restingHeartRateBaseline: 60,
+            rhrHistory: [59, 60, 61, 60, 59, 61, 60],
+            sleepScoreLastNight: 75,
+            strainScoreYesterday: 45,
+            respiratoryRateToday: 16,
+            respiratoryRateBaseline: 14,
+            respiratoryRateHistory: [13.8, 14.0, 14.2, 14.1, 13.9],
+            bodyTempDelta: 0.4,
+            SpO2: 97
+        ))
+
+        XCTAssertLessThan(try XCTUnwrap(result.components["hrv_z_score"]), 0)
+        XCTAssertNotNil(result.components["rhr_z_score"])
+        XCTAssertNotNil(result.components["respiratory_rate_z"])
+        XCTAssertEqual(result.components["body_temp_delta"], 0.4)
+        XCTAssertEqual(result.components["spo2"], 97)
+    }
+
+    func testBodyInterpreterConsumesRecoveryHRVZScore() {
+        let recovery = RecoveryScoreEngine().calculate(from: RecoveryScoreInput(
+            hrvToday: 35,
+            hrvBaseline: 50,
+            hrvHistory: [48, 49, 50, 51, 52, 49, 50],
+            restingHeartRateToday: 62,
+            restingHeartRateBaseline: 60,
+            rhrHistory: [59, 60, 61, 60, 59, 61, 60],
+            sleepScoreLastNight: 75,
+            strainScoreYesterday: 45
+        ))
+        var dashboard = DashboardSummary.preview()
+        dashboard.recovery = recovery
+        dashboard.recoveryMetrics = RecoveryMetricSummary(
+            hrvMilliseconds: 35,
+            restingHeartRate: 62
+        )
+
+        let interpretation = BodyInterpreterEngine().interpret(
+            dashboard: dashboard,
+            wiki: [:],
+            activePlan: nil
+        )
+
+        XCTAssertEqual(interpretation.primaryLimiter.metricName, "HRV Z-Score")
+        XCTAssertLessThan(interpretation.primaryLimiter.currentValue, 0)
+    }
+
+    func testSleepComponentsExposeCompatibilityFields() {
+        let result = SleepScoreEngine().calculate(from: SleepScoreInput(
+            totalSleepMinutes: 420,
+            awakeMinutes: 30,
+            awakeEpisodeCount: 3,
+            remMinutes: 84,
+            deepMinutes: 63,
+            inBedMinutes: 450
+        ))
+
+        XCTAssertEqual(result.components["sleep_efficiency"] ?? 0, 93.33, accuracy: 0.01)
+        XCTAssertEqual(result.components["rem_pct"] ?? 0, 20, accuracy: 0.01)
+        XCTAssertEqual(result.components["deep_pct"] ?? 0, 15, accuracy: 0.01)
+        XCTAssertEqual(result.components["awake_minutes"], 30)
+        XCTAssertEqual(result.components["awake_episode_count"], 3)
+    }
+
     // MARK: - Strain Score: Spec-required tests
 
     func testStrainNoHRWorkoutUsesActivityFallback() {
@@ -661,6 +730,40 @@ final class ScoringEngineTests: XCTestCase {
             XCTAssertGreaterThan(ratio, 0)
         }
         XCTAssertEqual(result.confidence, .high)
+    }
+
+    func testStrainTrainingLoadRatioUsesMostRecentSixHistoryDays() {
+        let oldLowLoads = Array(repeating: 10.0, count: 22)
+        let recentHighLoads = Array(repeating: 120.0, count: 6)
+
+        let result = StrainScoreEngine().calculate(from: StrainScoreInput(
+            activeEnergyToday: 600,
+            exerciseMinutesToday: 30,
+            last28DaysDailyLoads: oldLowLoads + recentHighLoads
+        ))
+
+        XCTAssertGreaterThan(result.components["training_load_ratio"] ?? 0, 2.5)
+    }
+
+    func testStrainWorkoutDayDiscountsActivityAlreadyRepresentedByWorkout() {
+        let result = StrainScoreEngine().calculate(from: StrainScoreInput(
+            workouts: [
+                WorkoutInput(durationMinutes: 60, averageHeartRate: 155)
+            ],
+            activeEnergyToday: 600,
+            exerciseMinutesToday: 60,
+            stepCount: 10_000,
+            restingHR: 60,
+            maxHR: 190,
+            last28DaysDailyLoads: Array(repeating: 60, count: 28)
+        ))
+
+        XCTAssertEqual(result.components["raw_activity_load"] ?? 0, 57, accuracy: 0.01)
+        XCTAssertLessThan(result.components["activity_load"] ?? 100, 30)
+        XCTAssertLessThan(
+            result.components["daily_load"] ?? 1_000,
+            (result.components["workout_load"] ?? 0) + (result.components["raw_activity_load"] ?? 0)
+        )
     }
 
     // MARK: - Stress Index: Spec-required tests
@@ -705,7 +808,7 @@ final class ScoringEngineTests: XCTestCase {
 
     func testStressRHRElevationIncreasesIndex() {
         let engine = StressIndexEngine()
-        let result = engine.calculate(from: StressIndexInput(
+        let elevated = engine.calculate(from: StressIndexInput(
             bodyTempDelta: 0.1,
             isWithinWorkoutWindow: false,
             heartRateElevationScore: 85,
@@ -713,9 +816,16 @@ final class ScoringEngineTests: XCTestCase {
             sleepDebtStressScore: 30,
             recentStrainStressScore: 40
         ))
+        let baseline = engine.calculate(from: StressIndexInput(
+            bodyTempDelta: 0.1,
+            isWithinWorkoutWindow: false,
+            heartRateElevationScore: 20,
+            hrvSuppressionScore: 20,
+            sleepDebtStressScore: 30,
+            recentStrainStressScore: 40
+        ))
 
-        // High heart rate elevation → high stress
-        XCTAssertGreaterThan(result.value ?? 0, 50)
+        XCTAssertGreaterThan(elevated.value ?? 0, baseline.value ?? 0)
     }
 
     func testStressTemperatureAnomalyAddsComponent() {
@@ -740,6 +850,19 @@ final class ScoringEngineTests: XCTestCase {
 
         // High body temp delta → higher stress index
         XCTAssertGreaterThan(highTemp.value ?? 0, normalTemp.value ?? 0)
+    }
+
+    func testStressLegacyComponentScoresAreNotReinterpretedAsRawVitals() {
+        let result = StressIndexEngine().calculate(from: StressIndexInput(
+            heartRateElevationScore: 32,
+            hrvSuppressionScore: 36,
+            sleepDebtStressScore: 25,
+            recentStrainStressScore: 40
+        ))
+
+        XCTAssertEqual(result.components["rhr_stress"], 32)
+        XCTAssertEqual(result.components["hrv_stress"], 36)
+        XCTAssertLessThan(result.stressIndex, 50)
     }
 
     // MARK: - Energy Bank: Spec-required tests
@@ -794,6 +917,126 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertGreaterThan(recharged.currentEnergy, noRecharge.currentEnergy)
     }
 
+    func testEnergyHighAcuteLowChronicLoadProducesNegativeTSBAndHighACWR() {
+        let history = Array(repeating: 20.0, count: 35) + Array(repeating: 120.0, count: 6)
+        let result = EnergyBankEngine().calculate(from: EnergyBankInput(
+            recoveryScore: 70,
+            sleepScore: 75,
+            strainScore: 120,
+            stressIndex: 35,
+            strainHistory: history
+        ))
+
+        XCTAssertLessThan(result.components["tsb"] ?? 0, 0)
+        XCTAssertGreaterThan(result.components["acwr"] ?? 0, 1.5)
+        XCTAssertNotNil(result.components["atl"])
+        XCTAssertNotNil(result.components["ctl"])
+    }
+
+    func testBiologicalAgeConvertsSupportedLabUnitsToCanonicalValues() {
+        let canonical = BiologicalAgeEngine().calculate(input: BiologicalAgeInput(
+            chronologicalAge: 40,
+            biomarkers: makePhenoAgeBiomarkers()
+        ))
+        let converted = BiologicalAgeEngine().calculate(input: BiologicalAgeInput(
+            chronologicalAge: 40,
+            biomarkers: makePhenoAgeBiomarkers(
+                albumin: (43, "g/L"),
+                creatinine: (88.4, "umol/L"),
+                glucose: (5.5, "mmol/L"),
+                crp: (0.2, "mg/dL")
+            )
+        ))
+
+        XCTAssertTrue(canonical.isPhenoAge)
+        XCTAssertTrue(converted.isPhenoAge)
+        XCTAssertEqual(converted.biologicalAge, canonical.biologicalAge, accuracy: 0.05)
+    }
+
+    func testBiologicalAgeRejectsUnsupportedLabUnits() {
+        let result = BiologicalAgeEngine().calculate(input: BiologicalAgeInput(
+            chronologicalAge: 40,
+            biomarkers: makePhenoAgeBiomarkers(glucose: (5.5, "unknown"))
+        ))
+
+        XCTAssertFalse(result.isPhenoAge)
+    }
+
+    func testBiologicalAgeBetaModeDoesNotExposeAgeEstimate() {
+        let result = BiologicalAgeEngine().calculate(input: BiologicalAgeInput(
+            chronologicalAge: 40,
+            restingHR: 58,
+            vo2Max: 44
+        ))
+
+        XCTAssertFalse(result.isPhenoAge)
+        XCTAssertNil(result.biologicalAgeEstimate)
+    }
+
+    @MainActor
+    func testDailySummarySnapshotPreservesSleepCompatibilityFields() {
+        let date = Date(timeIntervalSince1970: 1_779_000_000)
+        let sleepSummary = SleepSummary(
+            date: date,
+            totalSleepMinutes: 420,
+            bedtime: date.addingTimeInterval(-8 * 60 * 60),
+            wakeTime: date,
+            stageMinutes: [.deep: 90, .rem: 110, .awake: 30, .inBed: 450],
+            segments: [],
+            sleepScore: nil
+        )
+        let sleepScore = SleepScoreEngine().calculate(from: ScoreEngineFactory.sleep(
+            from: DailyHealthContext(
+                date: date,
+                sleepSummary: sleepSummary,
+                recoveryMetrics: RecoveryMetricSummary(),
+                recoveryBaseline: RecoveryMetricSummary(),
+                strainToday: StrainActivitySummary(workouts: []),
+                strainBaselineDaily: StrainActivitySummary(workouts: []),
+                bodyMetrics: BodyMetricsSummary()
+            ),
+            sleepTarget: 450,
+            todayBedtime: sleepSummary.bedtime,
+            recentBedtimes: []
+        ))
+        let context = DailyHealthContext(
+            date: date,
+            sleepSummary: sleepSummary,
+            recoveryMetrics: RecoveryMetricSummary(),
+            recoveryBaseline: RecoveryMetricSummary(),
+            strainToday: StrainActivitySummary(workouts: []),
+            strainBaselineDaily: StrainActivitySummary(workouts: []),
+            bodyMetrics: BodyMetricsSummary()
+        )
+        var dashboard = DashboardSummary.preview(date: date)
+        dashboard.sleepScore = sleepScore
+
+        let snapshot = DailySummaryUseCase().makeSnapshot(from: dashboard, context: context, date: date)
+
+        XCTAssertNotNil(snapshot.deepSleepPercent)
+        XCTAssertNotNil(snapshot.remSleepPercent)
+        XCTAssertNotNil(snapshot.sleepEfficiency)
+    }
+
+    @MainActor
+    func testHistoricalDashboardStressUsesLegacyComponentMode() {
+        let snapshot = DailyHealthSnapshot(
+            date: Date(timeIntervalSince1970: 1_779_000_000),
+            sleepScore: 75,
+            recoveryScore: 78,
+            strainScore: 12,
+            stressIndex: 32,
+            morningEnergy: 85,
+            currentEnergy: 65
+        )
+
+        let dashboard = DailySummaryUseCase().makeDashboardFromRecord(
+            DailyHealthSummaryRecord(snapshot: snapshot)
+        )
+
+        XCTAssertLessThan(dashboard.stress.stressIndex, 50)
+    }
+
     // MARK: - DailyPlanLimiter: Spec-required tests
 
     func testDailyPlanLimiterSickJournalFlagForcesRest() {
@@ -827,9 +1070,8 @@ final class ScoringEngineTests: XCTestCase {
             lastUpdated: Date()
         )
 
-        let plan = DailyPlanEngine.recommendation(for: dashboard)
-        // With high recovery/sleep, expect train plan
-        XCTAssertEqual(plan.kind, .train)
+        let plan = DailyPlanEngine.recommendation(for: dashboard, journalFlags: ["sick"])
+        XCTAssertEqual(plan.kind, .rest)
         XCTAssertFalse(plan.primaryActionTitle.isEmpty)
     }
 
@@ -897,6 +1139,25 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertLessThan(r, -0.9)
         XCTAssertGreaterThan(r, -1.01)
     }
+}
+
+private func makePhenoAgeBiomarkers(
+    albumin: (Double, String) = (4.3, "g/dL"),
+    creatinine: (Double, String) = (1.0, "mg/dL"),
+    glucose: (Double, String) = (99.1, "mg/dL"),
+    crp: (Double, String) = (2.0, "mg/L")
+) -> [BiomarkerRecord] {
+    [
+        BiomarkerRecord(name: "Albumin", value: albumin.0, unit: albumin.1, referenceMin: 3.5, referenceMax: 5.0),
+        BiomarkerRecord(name: "Creatinine", value: creatinine.0, unit: creatinine.1, referenceMin: 0.6, referenceMax: 1.2),
+        BiomarkerRecord(name: "Glucose", value: glucose.0, unit: glucose.1, referenceMin: 70, referenceMax: 100),
+        BiomarkerRecord(name: "CRP", value: crp.0, unit: crp.1, referenceMin: 0, referenceMax: 3),
+        BiomarkerRecord(name: "Lymphocyte", value: 30, unit: "%", referenceMin: 20, referenceMax: 40),
+        BiomarkerRecord(name: "MCV", value: 90, unit: "fL", referenceMin: 80, referenceMax: 100),
+        BiomarkerRecord(name: "RDW", value: 13, unit: "%", referenceMin: 11, referenceMax: 15),
+        BiomarkerRecord(name: "Alkaline Phosphatase", value: 80, unit: "U/L", referenceMin: 44, referenceMax: 147),
+        BiomarkerRecord(name: "WBC", value: 6, unit: "10^3/uL", referenceMin: 4, referenceMax: 11)
+    ]
 }
 
 private struct StubLLMProvider: LLMProvider {

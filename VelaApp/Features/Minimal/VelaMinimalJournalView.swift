@@ -304,8 +304,19 @@ struct VelaJournalView: View {
                 .buttonStyle(.plain)
                 
                 // Ellipsis actions
-                Button {
-                    // Actions
+                Menu {
+                    Button("记录咖啡因") {
+                        showCaffeineLogger = true
+                    }
+                    Button("记录饮水") {
+                        showWaterLogger = true
+                    }
+                    Button("记录心情") {
+                        showMoodLogger = true
+                    }
+                    Button("记录饮酒") {
+                        showAlcoholLogger = true
+                    }
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 16, weight: .bold))

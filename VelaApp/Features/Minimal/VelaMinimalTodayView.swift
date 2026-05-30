@@ -54,6 +54,10 @@ struct VelaTodayView: View {
             : dashboard.dailyInsight
     }
 
+    private var todayShareText: String {
+        "\(dateHeaderString(for: dashboardVM.selectedDate))\n恢复 \(Int(dashboard.recovery.score.rounded())) · 睡眠 \(Int(dashboard.sleepScore.score.rounded())) · 负荷 \(Int(dashboard.strain.score.rounded()))\n\(coachMessage)"
+    }
+
     // Dynamic Weather Sync States
     @State private var weatherTemp: String = "--"
     @State private var weatherLocation: String = "天气数据待同步"
@@ -192,9 +196,7 @@ struct VelaTodayView: View {
             
             HStack(spacing: 12) {
                 // Share button
-                Button {
-                    // Action
-                } label: {
+                ShareLink(item: todayShareText) {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 18, weight: .medium))
                         .foregroundStyle(Color(hex: "#1A1917"))
@@ -869,6 +871,7 @@ struct CalendarOverviewSheetView: View {
     @State private var selectedMetric: String = "恢复"
     @State private var calendarYear = Calendar.current.component(.year, from: Date())
     @State private var calendarMonth = Calendar.current.component(.month, from: Date())
+    @State private var showCalendarInfo = false
     
     let metrics = ["耗力", "恢复", "睡眠", "压力", "能量", "营养"]
     let weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
@@ -1045,7 +1048,7 @@ struct CalendarOverviewSheetView: View {
                 Spacer()
                 
                 Button {
-                    // Info modal
+                    showCalendarInfo = true
                 } label: {
                     Image(systemName: "info.circle")
                         .font(.system(size: 18, weight: .semibold))
@@ -1063,6 +1066,11 @@ struct CalendarOverviewSheetView: View {
         .onAppear {
             calendarYear = Calendar.current.component(.year, from: dashboardVM.selectedDate)
             calendarMonth = Calendar.current.component(.month, from: dashboardVM.selectedDate)
+        }
+        .alert("日历指标说明", isPresented: $showCalendarInfo) {
+            Button("知道了", role: .cancel) {}
+        } message: {
+            Text("选择顶部指标可查看每日趋势。圆环越完整，表示该指标分数越高；没有圆环表示当天缺少对应数据。")
         }
     }
     

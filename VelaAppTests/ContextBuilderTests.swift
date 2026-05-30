@@ -120,6 +120,46 @@ final class ContextBuilderTests: XCTestCase {
         XCTAssertTrue(jsonString?.contains("energy_bank") ?? false)
     }
 
+    func testContextEnvelopeDoesNotDropCoreMetricCompatibilityFields() {
+        var dashboard = DashboardSummary.preview()
+        dashboard.sleepScore = SleepScoreEngine().calculate(from: SleepScoreInput(
+            totalSleepMinutes: 420,
+            awakeMinutes: 30,
+            awakeEpisodeCount: 3,
+            remMinutes: 84,
+            deepMinutes: 63,
+            inBedMinutes: 450
+        ))
+        dashboard.recovery = RecoveryScoreEngine().calculate(from: RecoveryScoreInput(
+            hrvToday: 35,
+            hrvBaseline: 50,
+            hrvHistory: [48, 49, 50, 51, 52, 49, 50],
+            restingHeartRateToday: 62,
+            restingHeartRateBaseline: 60,
+            rhrHistory: [59, 60, 61, 60, 59, 61, 60],
+            sleepScoreLastNight: dashboard.sleepScore.score,
+            strainScoreYesterday: 45
+        ))
+        dashboard.energy = EnergyBankEngine().calculate(from: EnergyBankInput(
+            recoveryScore: dashboard.recovery.score,
+            sleepScore: dashboard.sleepScore.score,
+            strainScore: 120,
+            stressIndex: 35,
+            strainHistory: Array(repeating: 20.0, count: 35) + Array(repeating: 120.0, count: 6)
+        ))
+
+        let (envelope, _) = AIContextBuilder().build(
+            dashboard: dashboard,
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:]
+        )
+
+        XCTAssertNotEqual(envelope.recovery["hrv_z_score"], "N/A")
+        XCTAssertNotEqual(envelope.energyBank["tsb_freshness"], "N/A")
+        XCTAssertNotEqual(envelope.sleep["deep_pct"], "N/A")
+    }
+
     // MARK: - Typed Context Schema
 
     func testTypedContextIsCodable() {

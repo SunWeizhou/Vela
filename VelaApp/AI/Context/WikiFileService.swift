@@ -295,6 +295,24 @@ enum WikiFileService {
         }
         return nil
     }
+
+    static func getMaxHeartRateFromWiki() -> Double? {
+        let dictionary = loadDictionary()
+        guard let profileContent = dictionary["profile.md"] else { return nil }
+
+        let pattern = "(?i)(?:max(?:imum)?\\s*heart\\s*rate|max\\s*hr|最大心率)\\s*[:：]\\s*(\\d+(?:\\.\\d+)?)"
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(
+                in: profileContent,
+                range: NSRange(profileContent.startIndex..<profileContent.endIndex, in: profileContent)
+              ),
+              let range = Range(match.range(at: 1), in: profileContent),
+              let maxHeartRate = Double(profileContent[range]),
+              (100...240).contains(maxHeartRate) else {
+            return nil
+        }
+        return maxHeartRate
+    }
 }
 
 enum WikiUpdateMode: String, Hashable {

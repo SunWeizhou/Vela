@@ -151,7 +151,9 @@ public struct StrainScoreEngine: ScoreEngine {
         let steps = input.stepCount ?? 0.0
         let exerciseMin = input.exerciseMinutesToday ?? 0.0
         
-        let activityLoad = 0.02 * activeEnergy + 0.0015 * steps + 0.5 * exerciseMin
+        let rawActivityLoad = 0.02 * activeEnergy + 0.0015 * steps + 0.5 * exerciseMin
+        let activityMultiplier = input.workouts.isEmpty ? 1.0 : 0.35
+        let activityLoad = rawActivityLoad * activityMultiplier
 
         // Total daily load
         let dailyLoad = totalWorkoutLoad + activityLoad
@@ -166,6 +168,12 @@ public struct StrainScoreEngine: ScoreEngine {
         
         components["workout_load"] = totalWorkoutLoad
         components["activity_load"] = activityLoad
+        components["raw_activity_load"] = rawActivityLoad
+        components["activity_multiplier"] = activityMultiplier
+        components["daily_load"] = dailyLoad
+        components["steps_raw"] = steps
+        components["active_energy_raw"] = activeEnergy
+        components["exercise_minutes_raw"] = exerciseMin
         
         componentWeights["workout_load"] = 0.60
         componentWeights["activity_load"] = 0.40
@@ -177,9 +185,9 @@ public struct StrainScoreEngine: ScoreEngine {
         reasons.append("非运动日常活动负荷为 \(Int(activityLoad)) (步数: \(Int(steps)), 活动能量: \(Int(activeEnergy)) kcal)")
 
         // 4. Training Load Status (ATL / CTL)
-        let acute7 = dailyLoad + input.last28DaysDailyLoads.prefix(6).reduce(0, +)
+        let acute7 = dailyLoad + input.last28DaysDailyLoads.suffix(6).reduce(0, +)
         
-        let chronicHistory = Array(input.last28DaysDailyLoads.prefix(28))
+        let chronicHistory = Array(input.last28DaysDailyLoads.suffix(28))
         let chronicSum = chronicHistory.reduce(0, +)
         let chronic28Equivalent = chronicHistory.isEmpty ? baselineDailyLoad * 7.0 : chronicSum / 4.0
         

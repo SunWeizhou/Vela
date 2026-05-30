@@ -36,10 +36,11 @@ final class HealthDataRefreshService {
             )
         )
         let strain = StrainScoreEngine().calculate(
-            from: ScoreEngineFactory.strain(
+            from: await ScoreEngineFactory.strain(
                 from: context,
                 recoveryScore: recovery.score,
-                last28DaysDailyLoads: []
+                last28DaysDailyLoads: [],
+                queryService: queryService
             )
         )
         let stress = StressIndexEngine().calculate(

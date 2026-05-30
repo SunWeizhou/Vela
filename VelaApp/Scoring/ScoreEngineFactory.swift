@@ -54,26 +54,40 @@ enum ScoreEngineFactory {
 
     // MARK: - Strain
 
+    @MainActor
     static func strain(
         from context: DailyHealthContext,
         recoveryScore: Double,
-        last28DaysDailyLoads: [Double]
-    ) -> StrainScoreInput {
-        let workoutInputs = context.strainToday.workouts.map { w in
-            WorkoutInput(
-                id: w.id,
-                durationMinutes: w.end.timeIntervalSince(w.start) / 60.0,
-                averageHeartRate: w.averageHeartRate,
-                heartRateSamples: []
-            )
+        last28DaysDailyLoads: [Double],
+        queryService: HealthQueryService,
+        profileAge: Int? = nil,
+        profileMaxHeartRate: Double? = nil
+    ) async -> StrainScoreInput {
+        var workoutInputs: [WorkoutInput] = []
+        for workout in context.strainToday.workouts {
+            let heartRateSamples = (try? await queryService.heartRateSamples(
+                start: workout.start,
+                end: workout.end
+            )) ?? []
+            workoutInputs.append(WorkoutInput(
+                id: workout.id,
+                durationMinutes: workout.end.timeIntervalSince(workout.start) / 60.0,
+                averageHeartRate: workout.averageHeartRate,
+                heartRateSamples: heartRateSamples.map(\.bpm)
+            ))
         }
+        let age = profileAge ?? WikiFileService.getAgeFromWiki() ?? context.extendedMetrics.age ?? 30
+        let maxHeartRate = profileMaxHeartRate
+            ?? WikiFileService.getMaxHeartRateFromWiki()
+            ?? Double(max(100, 220 - age))
+
         return StrainScoreInput(
             workouts: workoutInputs,
             activeEnergyToday: context.strainToday.activeEnergyKilocalories,
             exerciseMinutesToday: context.strainToday.exerciseMinutes,
             stepCount: context.strainToday.stepCount,
             restingHR: context.recoveryMetrics.restingHeartRate ?? 60.0,
-            maxHR: 190.0,
+            maxHR: maxHeartRate,
             biologicalSex: context.extendedMetrics.biologicalSex,
             last28DaysDailyLoads: last28DaysDailyLoads,
             recoveryScore: recoveryScore

@@ -1,6 +1,12 @@
 import Foundation
 
+public enum StressIndexInputMode: Hashable {
+    case rawVitals
+    case legacyComponentScores
+}
+
 public struct StressIndexInput: Hashable {
+    public var mode: StressIndexInputMode
     public var quietHRToday: Double?
     public var quietHRBaseline: Double?
     public var quietHRSD: Double?
@@ -26,6 +32,7 @@ public struct StressIndexInput: Hashable {
     public var recentStrainStressScore: Double?
 
     public init(
+        mode: StressIndexInputMode? = nil,
         quietHRToday: Double? = nil,
         quietHRBaseline: Double? = nil,
         quietHRSD: Double? = nil,
@@ -44,6 +51,11 @@ public struct StressIndexInput: Hashable {
         sleepDebtStressScore: Double? = nil,
         recentStrainStressScore: Double? = nil
     ) {
+        self.mode = mode ?? (
+            quietHRToday != nil || hrvToday != nil || respRateToday != nil
+                ? .rawVitals
+                : .legacyComponentScores
+        )
         self.quietHRToday = quietHRToday
         self.quietHRBaseline = quietHRBaseline
         self.quietHRSD = quietHRSD
@@ -107,38 +119,54 @@ public struct StressIndexEngine: ScoreEngine {
         }
 
         // 1. RHR quiet stress (25%)
-        if let quietHR = input.quietHRToday ?? input.heartRateElevationScore {
-            let baseline = input.quietHRBaseline ?? (input.quietHRToday != nil ? quietHR : 60.0)
-            let sd = input.quietHRSD ?? max(2.5, baseline * 0.04)
-            let rhrZ = (quietHR - baseline) / sd
-            let rhrStress = ScoringMath.clamp(50.0 + 18.0 * rhrZ, min: 0, max: 100)
-            components["rhr_stress"] = rhrStress
-            componentWeights["rhr_stress"] = weights["rhr_stress"]!
-            
-            if rhrZ > 1.2 {
-                reasons.append("静息心率出现异常上升")
+        switch input.mode {
+        case .rawVitals:
+            if let quietHR = input.quietHRToday {
+                let baseline = input.quietHRBaseline ?? quietHR
+                let sd = input.quietHRSD ?? max(2.5, baseline * 0.04)
+                let rhrZ = (quietHR - baseline) / sd
+                let rhrStress = ScoringMath.clamp(50.0 + 18.0 * rhrZ, min: 0, max: 100)
+                components["rhr_stress"] = rhrStress
+                componentWeights["rhr_stress"] = weights["rhr_stress"]!
+
+                if rhrZ > 1.2 {
+                    reasons.append("静息心率出现异常上升")
+                }
+            } else {
+                missingInputs.append("quietHRToday")
             }
-        } else {
-            missingInputs.append("quietHRToday")
+        case .legacyComponentScores:
+            if let rhrStress = input.heartRateElevationScore {
+                components["rhr_stress"] = ScoringMath.clamp(rhrStress)
+                componentWeights["rhr_stress"] = weights["rhr_stress"]!
+            }
         }
 
         // 2. HRV quiet stress (25%)
-        if let hrvToday = input.hrvToday ?? input.hrvSuppressionScore {
-            let baseline = input.hrvBaseline ?? (input.hrvToday != nil ? hrvToday : 40.0)
-            let sd = input.hrvSD ?? max(0.01, log(max(baseline, 1.0)) * 0.12)
-            let lnToday = log(max(hrvToday, 1.0))
-            let lnBaseline = log(max(baseline, 1.0))
-            let hrvZ = (lnToday - lnBaseline) / sd
-            
-            let hrvStress = ScoringMath.clamp(50.0 - 18.0 * hrvZ, min: 0, max: 100)
-            components["hrv_stress"] = hrvStress
-            componentWeights["hrv_stress"] = weights["hrv_stress"]!
-            
-            if hrvZ < -1.2 {
-                reasons.append("今日 HRV 出现明显抑制")
+        switch input.mode {
+        case .rawVitals:
+            if let hrvToday = input.hrvToday {
+                let baseline = input.hrvBaseline ?? hrvToday
+                let sd = input.hrvSD ?? max(0.01, log(max(baseline, 1.0)) * 0.12)
+                let lnToday = log(max(hrvToday, 1.0))
+                let lnBaseline = log(max(baseline, 1.0))
+                let hrvZ = (lnToday - lnBaseline) / sd
+
+                let hrvStress = ScoringMath.clamp(50.0 - 18.0 * hrvZ, min: 0, max: 100)
+                components["hrv_stress"] = hrvStress
+                componentWeights["hrv_stress"] = weights["hrv_stress"]!
+
+                if hrvZ < -1.2 {
+                    reasons.append("今日 HRV 出现明显抑制")
+                }
+            } else {
+                missingInputs.append("hrvToday")
             }
-        } else {
-            missingInputs.append("hrvToday")
+        case .legacyComponentScores:
+            if let hrvStress = input.hrvSuppressionScore {
+                components["hrv_stress"] = ScoringMath.clamp(hrvStress)
+                componentWeights["hrv_stress"] = weights["hrv_stress"]!
+            }
         }
 
         // 3. Respiratory Rate Stress (15%)
@@ -167,18 +195,26 @@ public struct StressIndexEngine: ScoreEngine {
         componentWeights["temp_stress"] = weights["temp_stress"]!
 
         // 5. Sleep Debt Stress (15%)
-        if let sleepScore = input.sleepScoreLastNight ?? input.sleepDebtStressScore.map({ 100.0 - $0 }) {
-            let debtStress = ScoringMath.clamp(100.0 - sleepScore, min: 0, max: 100)
+        let debtStress: Double? = {
+            switch input.mode {
+            case .rawVitals:
+                return input.sleepScoreLastNight.map { ScoringMath.clamp(100.0 - $0) }
+            case .legacyComponentScores:
+                return input.sleepDebtStressScore.map { ScoringMath.clamp($0) }
+            }
+        }()
+        if let debtStress {
             components["sleep_debt_stress"] = debtStress
             componentWeights["sleep_debt_stress"] = weights["sleep_debt_stress"]!
             
-            if sleepScore < 60 {
+            if debtStress > 40 {
                 reasons.append("睡眠缺失增加了全天候的皮质醇及生理压力敏感性")
             }
         }
 
         // 6. Load Stress (10%)
-        if let strain = input.strainScoreToday ?? input.recentStrainStressScore {
+        let strain = input.mode == .rawVitals ? input.strainScoreToday : input.recentStrainStressScore
+        if let strain {
             components["load_stress"] = strain
             componentWeights["load_stress"] = weights["load_stress"]!
         }

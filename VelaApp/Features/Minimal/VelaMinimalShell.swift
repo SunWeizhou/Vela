@@ -108,6 +108,11 @@ struct VelaShell: View {
         .sheet(isPresented: $appState.triggerWeightLog) {
             WeightLogSheetView()
         }
+        .sheet(isPresented: $appState.triggerBloodLog) {
+            BloodLogSheetView()
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
         .sheet(isPresented: $appState.triggerWorkoutLog) {
             WorkoutLogSheetView()
                 .presentationDetents([.medium])

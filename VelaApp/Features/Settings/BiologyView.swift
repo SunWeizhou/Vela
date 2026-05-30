@@ -54,7 +54,10 @@ struct BiologyView: View {
                             .foregroundStyle(VelaTheme.accent)
                             .tracking(1.5)
                         
-                        Text(L10n.t("Biological Age", "生物年龄"))
+                        Text(bioAgeResult.isPhenoAge
+                            ? L10n.t("Biological Age Estimate", "生物年龄估算")
+                            : L10n.t("Health Age Trend Beta", "健康年龄趋势 Beta")
+                        )
                             .font(.system(size: 28, weight: .bold, design: .rounded))
                             .foregroundStyle(VelaTheme.primaryText)
                     }
@@ -147,12 +150,15 @@ struct BiologyView: View {
         let result = bioAgeResult
         let chronologicalAge = Double(chronologicalAge ?? 0)
         let diff = chronologicalAge - result.biologicalAge
+        let isPositive = result.isPhenoAge
+            ? result.biologicalAge <= chronologicalAge
+            : result.healthAgeTrend != "worsening"
         
         return VStack(spacing: 20) {
             ZStack {
                 // Glow Backdrop
                 Circle()
-                    .fill(result.biologicalAge <= chronologicalAge ? VelaTheme.recovery.opacity(0.08) : VelaTheme.stress.opacity(0.08))
+                    .fill(isPositive ? VelaTheme.recovery.opacity(0.08) : VelaTheme.stress.opacity(0.08))
                     .frame(width: 170, height: 170)
                     .blur(radius: 20)
                 
@@ -171,7 +177,7 @@ struct BiologyView: View {
                     .trim(from: 0.0, to: 0.75 * CGFloat(result.overallScore / 100))
                     .stroke(
                         LinearGradient(
-                            colors: result.biologicalAge <= chronologicalAge 
+                            colors: isPositive
                                 ? [VelaTheme.accent, VelaTheme.recovery] 
                                 : [VelaTheme.energy, VelaTheme.stress],
                             startPoint: .leading,
@@ -186,9 +192,9 @@ struct BiologyView: View {
                 let progressAngle = 135.0 + (result.overallScore / 100.0) * 270.0
                 let radius = 170.0 / 2.0
                 Circle()
-                    .fill(result.biologicalAge <= chronologicalAge ? VelaTheme.recovery : VelaTheme.stress)
+                    .fill(isPositive ? VelaTheme.recovery : VelaTheme.stress)
                     .frame(width: 14, height: 14)
-                    .shadow(color: result.biologicalAge <= chronologicalAge ? VelaTheme.recovery : VelaTheme.stress, radius: 6)
+                    .shadow(color: isPositive ? VelaTheme.recovery : VelaTheme.stress, radius: 6)
                     .offset(
                         x: cos(CGFloat(progressAngle * .pi / 180.0)) * radius,
                         y: sin(CGFloat(progressAngle * .pi / 180.0)) * radius
@@ -196,36 +202,49 @@ struct BiologyView: View {
                 
                 // Center Data Display
                 VStack(spacing: 2) {
-                    Text(String(format: "%.1f", result.biologicalAge))
-                        .font(.system(size: 40, weight: .black, design: .rounded))
-                        .foregroundStyle(VelaTheme.primaryText)
-                        .monospacedDigit()
-                    
-                    Text(L10n.t("Years Old", "岁 (生物年龄)"))
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(VelaTheme.mutedText)
-                        .tracking(1)
-                    
-                    HStack(spacing: 4) {
-                        Image(systemName: result.biologicalAge <= chronologicalAge ? "arrow.down.forward.and.arrow.up.backward" : "arrow.up.forward.and.arrow.down.backward")
-                        Text(String(format: "%.1f", chronologicalAge))
-                            .bold()
+                    if result.isPhenoAge {
+                        Text(String(format: "%.1f", result.biologicalAge))
+                            .font(.system(size: 40, weight: .black, design: .rounded))
+                            .foregroundStyle(VelaTheme.primaryText)
+                            .monospacedDigit()
+
+                        Text(L10n.t("Years Old", "岁 (生物年龄)"))
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(VelaTheme.mutedText)
+                            .tracking(1)
+
+                        HStack(spacing: 4) {
+                            Image(systemName: isPositive ? "arrow.down.forward.and.arrow.up.backward" : "arrow.up.forward.and.arrow.down.backward")
+                            Text(String(format: "%.1f", chronologicalAge))
+                                .bold()
+                        }
+                        .font(.system(size: 12))
+                        .foregroundStyle(VelaTheme.secondaryText)
+                        .padding(.top, 4)
+                    } else {
+                        Text(result.healthAgeTrendLabel)
+                            .font(.system(size: 28, weight: .black, design: .rounded))
+                            .foregroundStyle(VelaTheme.primaryText)
+
+                        Text(L10n.t("Health Age Trend Beta", "健康年龄趋势 Beta"))
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(VelaTheme.mutedText)
+                            .tracking(1)
                     }
-                    .font(.system(size: 12))
-                    .foregroundStyle(VelaTheme.secondaryText)
-                    .padding(.top, 4)
                 }
             }
             .frame(width: 200, height: 200)
             
             // Age Comparison Banner
             HStack(spacing: 8) {
-                Image(systemName: diff >= 0 ? "leaf.fill" : "exclamationmark.triangle.fill")
-                    .foregroundStyle(diff >= 0 ? VelaTheme.recovery : VelaTheme.stress)
+                Image(systemName: isPositive ? "leaf.fill" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(isPositive ? VelaTheme.recovery : VelaTheme.stress)
                 
-                Text(diff >= 0
-                    ? L10n.t(String(format: "You are running %.1f years younger!", diff), String(format: "你的生理年龄年轻了 %.1f 岁！", diff))
-                    : L10n.t(String(format: "You are running %.1f years older.", -diff), String(format: "你的生理年龄偏高了 %.1f 岁。", -diff))
+                Text(result.isPhenoAge
+                    ? (diff >= 0
+                        ? L10n.t(String(format: "You are running %.1f years younger!", diff), String(format: "你的生理年龄年轻了 %.1f 岁！", diff))
+                        : L10n.t(String(format: "You are running %.1f years older.", -diff), String(format: "你的生理年龄偏高了 %.1f 岁。", -diff)))
+                    : L10n.t("Health Age Trend Beta: \(result.healthAgeTrendLabel)", "健康年龄趋势 Beta：\(result.healthAgeTrendLabel)")
                 )
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(VelaTheme.primaryText)
@@ -234,11 +253,11 @@ struct BiologyView: View {
             .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(diff >= 0 ? VelaTheme.recovery.opacity(0.08) : VelaTheme.stress.opacity(0.08))
+                    .fill(isPositive ? VelaTheme.recovery.opacity(0.08) : VelaTheme.stress.opacity(0.08))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(diff >= 0 ? VelaTheme.recovery.opacity(0.15) : VelaTheme.stress.opacity(0.15), lineWidth: 1)
+                    .stroke(isPositive ? VelaTheme.recovery.opacity(0.15) : VelaTheme.stress.opacity(0.15), lineWidth: 1)
             )
         }
         .padding(.vertical, 24)

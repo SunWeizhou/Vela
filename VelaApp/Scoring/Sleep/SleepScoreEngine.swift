@@ -200,6 +200,24 @@ public struct SleepScoreEngine: ScoreEngine {
         components["buysse_architecture"] = detail.architectureScore
         components["buysse_continuity"] = detail.continuityScore
 
+        if let totalSleep = input.totalSleepMinutes, totalSleep > 0 {
+            let inBed = input.inBedMinutes ?? (totalSleep + (input.awakeMinutes ?? 0))
+            if inBed > 0 {
+                components["sleep_efficiency"] = totalSleep / inBed * 100.0
+            }
+            if let remMinutes = input.remMinutes {
+                components["rem_pct"] = remMinutes / totalSleep * 100.0
+            }
+            if let deepMinutes = input.deepMinutes {
+                components["deep_pct"] = deepMinutes / totalSleep * 100.0
+            }
+        }
+        if let awakeMinutes = input.awakeMinutes {
+            components["awake_minutes"] = awakeMinutes
+            let awakeCount = input.awakeEpisodeCount ?? (awakeMinutes > 0 ? max(1, Int(awakeMinutes / 8)) : 0)
+            components["awake_episode_count"] = Double(awakeCount)
+        }
+
         let dataWindow = DateInterval(start: Calendar.current.date(byAdding: .day, value: -13, to: Date()) ?? Date(), end: Date())
 
         return MetricResult(

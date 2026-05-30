@@ -81,7 +81,7 @@ final class DailySummaryUseCase {
         }()
 
         let strainHistory42 = snapshots42.compactMap { $0.strainScore }
-        let last28DaysLoads = Array(strainHistory42.prefix(28))
+        let last28DaysLoads = Array(strainHistory42.suffix(28))
 
         // Get pastEpisodes to compute bedtime history for sleep engine
         let thirtyDays = DateRangeQuery.recentDays(30, endingAt: now, calendar: calendar)
@@ -112,10 +112,11 @@ final class DailySummaryUseCase {
         )
 
         let strain = StrainScoreEngine().calculate(
-            from: ScoreEngineFactory.strain(
+            from: await ScoreEngineFactory.strain(
                 from: context,
                 recoveryScore: recovery.score,
-                last28DaysDailyLoads: last28DaysLoads
+                last28DaysDailyLoads: last28DaysLoads,
+                queryService: queryService
             )
         )
 
@@ -239,10 +240,11 @@ final class DailySummaryUseCase {
                 )
             )
             let strain = StrainScoreEngine().calculate(
-                from: ScoreEngineFactory.strain(
+                from: await ScoreEngineFactory.strain(
                     from: context,
                     recoveryScore: recovery.score,
-                    last28DaysDailyLoads: []
+                    last28DaysDailyLoads: [],
+                    queryService: queryService
                 )
             )
             let stress = StressIndexEngine().calculate(
@@ -340,10 +342,11 @@ final class DailySummaryUseCase {
                 )
             )
             let strain = StrainScoreEngine().calculate(
-                from: ScoreEngineFactory.strain(
+                from: await ScoreEngineFactory.strain(
                     from: context,
                     recoveryScore: recovery.score,
-                    last28DaysDailyLoads: []
+                    last28DaysDailyLoads: [],
+                    queryService: queryService
                 )
             )
             let stress = StressIndexEngine().calculate(
@@ -474,7 +477,7 @@ final class DailySummaryUseCase {
         notificationService.checkAndAlertAbnormalMetrics(snapshot: snapshot, baselines: baselines)
     }
 
-    private func makeSnapshot(
+    func makeSnapshot(
         from dashboard: DashboardSummary,
         context: DailyHealthContext,
         date: Date
@@ -590,7 +593,7 @@ final class DailySummaryUseCase {
         try? modelContext.save()
     }
 
-    private func makeDashboardFromRecord(_ record: DailyHealthSummaryRecord) -> DashboardSummary {
+    func makeDashboardFromRecord(_ record: DailyHealthSummaryRecord) -> DashboardSummary {
         let sleepScoreVal = record.sleepScore ?? 75.0
         let recoveryScoreVal = record.recoveryScore ?? 78.0
         let strainScoreVal = record.strainScore ?? 12.0
@@ -639,6 +642,7 @@ final class DailySummaryUseCase {
         ))
         
         let stress = StressIndexEngine().calculate(from: StressIndexInput(
+            mode: .legacyComponentScores,
             heartRateElevationScore: stressIndexVal * 0.8,
             hrvSuppressionScore: stressIndexVal * 0.9,
             sleepDebtStressScore: max(0, 100 - sleepScoreVal),

@@ -28,7 +28,24 @@ struct DashboardSummary: Hashable {
     }
 
     static func empty(date: Date = Date()) -> DashboardSummary {
-        DashboardSummary(
+        func emptyMetric(name: String, reason: String) -> MetricResult {
+            MetricResult(
+                name: name,
+                value: nil,
+                band: .low,
+                confidence: .low,
+                components: [:],
+                componentWeights: [:],
+                reasons: [reason],
+                missingInputs: ["healthData"],
+                dataWindow: DateInterval(start: date, duration: 86400),
+                source: .derived,
+                algorithmVersion: "1.0.0",
+                lastUpdated: date
+            )
+        }
+
+        return DashboardSummary(
             date: date,
             sleepSummary: SleepSummary(
                 date: date,
@@ -79,14 +96,9 @@ struct DashboardSummary: Hashable {
                 sleepHeartRate: nil,
                 respiratoryRate: nil
             ),
-            strain: StrainScoreEngine().calculate(from: StrainScoreInput()),
-            stress: StressIndexEngine().calculate(from: StressIndexInput()),
-            energy: EnergyBankEngine().calculate(from: EnergyBankInput(
-                recoveryScore: nil,
-                sleepScore: nil,
-                strainScore: nil,
-                stressIndex: nil
-            )),
+            strain: emptyMetric(name: "Strain Score", reason: "Strain data unavailable."),
+            stress: emptyMetric(name: "Physiological Stress Index", reason: "Stress data unavailable."),
+            energy: emptyMetric(name: "Energy Bank", reason: "Energy data unavailable."),
             healthAge: HealthAgeTrendEngine().calculate(from: HealthAgeTrendInput(factors: [])),
             bodyMetrics: BodyMetricsSummary(
                 vo2Max: nil,
@@ -122,6 +134,7 @@ private extension ExtendedHealthMetrics {
 }
 
 enum DailyPlanKind: String, Codable, Hashable {
+    case rest
     case recovery
     case train
     case maintain
@@ -166,8 +179,30 @@ struct DailyPlanRecommendation: Codable, Hashable {
 }
 
 enum DailyPlanEngine {
-    static func recommendation(for dashboard: DashboardSummary) -> DailyPlanRecommendation {
+    static func recommendation(
+        for dashboard: DashboardSummary,
+        journalFlags: Set<String> = []
+    ) -> DailyPlanRecommendation {
         let limiter = mainLimiter(for: dashboard)
+
+        if !journalFlags.isDisjoint(with: ["sick", "injured"]) {
+            return DailyPlanRecommendation(
+                kind: .rest,
+                accent: .recovery,
+                title: L10n.t("Make today a rest day", "今天安排休息"),
+                body: L10n.t(
+                    "Your journal reports illness or injury. Skip training and focus on recovery. Seek medical advice if symptoms are significant or persistent.",
+                    "你的日志记录了生病或受伤。今天停止训练，专注恢复。如果症状明显或持续，请咨询医生。"
+                ),
+                primaryActionTitle: L10n.t("Plan a rest day", "规划休息日"),
+                secondaryActionTitle: nil,
+                coachQuestion: L10n.t(
+                    "Build a rest-day recovery plan for me. My journal reports illness or injury, so do not prescribe training.",
+                    "请为我制定休息日恢复计划。我的日志记录了生病或受伤，因此不要安排训练。"
+                ),
+                limiter: nil
+            )
+        }
 
         if !dashboard.recovery.hasData {
             return DailyPlanRecommendation(

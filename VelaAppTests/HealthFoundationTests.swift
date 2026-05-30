@@ -67,6 +67,45 @@ final class HealthFoundationTests: XCTestCase {
         XCTAssertNil(snapshot.strainScore)
         XCTAssertNil(snapshot.stressIndex)
     }
+
+    @MainActor
+    func testScoreEngineFactoryLoadsWorkoutHeartRateSamplesAndDerivesMaxHRFromProfileAge() async {
+        let start = Date(timeIntervalSince1970: 1_779_000_000)
+        let end = start.addingTimeInterval(30 * 60)
+        let queryService = WorkoutHeartRateQueryService(samples: [
+            HeartRateSample(date: start, bpm: 120),
+            HeartRateSample(date: end, bpm: 155)
+        ])
+        let context = DailyHealthContext(
+            date: start,
+            sleepSummary: nil,
+            recoveryMetrics: RecoveryMetricSummary(restingHeartRate: 60),
+            recoveryBaseline: RecoveryMetricSummary(),
+            strainToday: StrainActivitySummary(
+                workouts: [
+                    WorkoutSummary(
+                        start: start,
+                        end: end,
+                        activityName: "Run",
+                        averageHeartRate: 138
+                    )
+                ]
+            ),
+            strainBaselineDaily: StrainActivitySummary(workouts: []),
+            bodyMetrics: BodyMetricsSummary()
+        )
+
+        let input = await ScoreEngineFactory.strain(
+            from: context,
+            recoveryScore: 70,
+            last28DaysDailyLoads: [],
+            queryService: queryService,
+            profileAge: 40
+        )
+
+        XCTAssertEqual(input.workouts.first?.heartRateSamples, [120, 155])
+        XCTAssertEqual(input.maxHR, 180)
+    }
 }
 
 private struct EmptyHealthQueryService: HealthQueryService {
@@ -101,4 +140,17 @@ private struct EmptyHealthQueryService: HealthQueryService {
     func workoutRoute(workoutId: UUID) async throws -> [RouteCoordinate] {
         []
     }
+}
+
+private struct WorkoutHeartRateQueryService: HealthQueryService {
+    var samples: [HeartRateSample]
+
+    func sleepSummary(in range: DateRangeQuery) async throws -> SleepSummary? { nil }
+    func sleepEpisodes(in range: DateRangeQuery) async throws -> [SleepSummary] { [] }
+    func recoveryMetrics(in range: DateRangeQuery) async throws -> RecoveryMetricSummary { RecoveryMetricSummary() }
+    func strainSummary(in range: DateRangeQuery) async throws -> StrainActivitySummary { StrainActivitySummary(workouts: []) }
+    func bodyMetrics(in range: DateRangeQuery) async throws -> BodyMetricsSummary { BodyMetricsSummary() }
+    func recentWorkouts(limit: Int) async throws -> [WorkoutSummary] { [] }
+    func heartRateSamples(start: Date, end: Date) async throws -> [HeartRateSample] { samples }
+    func workoutRoute(workoutId: UUID) async throws -> [RouteCoordinate] { [] }
 }

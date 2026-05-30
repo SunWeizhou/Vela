@@ -172,8 +172,6 @@ enum ResponseLengthPolicy {
     static func forQuery(_ text: String, lang: AppLanguage) -> ResponseLengthPolicy {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
-        if isCasual(trimmed) { return .casual }
-
         let summaryPatterns = [
             "分析今天的数据", "今日总结", "身体怎么样", "今日状态", "早间简报", "每日简报",
             "daily report", "daily summary", "analyze my day", "morning brief",
@@ -182,6 +180,7 @@ enum ResponseLengthPolicy {
         for pattern in summaryPatterns {
             if trimmed.contains(pattern) { return .full }
         }
+        if isCasual(trimmed) { return .casual }
         return .focused
     }
 

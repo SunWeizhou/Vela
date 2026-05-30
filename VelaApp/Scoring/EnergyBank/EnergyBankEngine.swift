@@ -113,6 +113,18 @@ public struct EnergyBankEngine: ScoreEngine {
         morningEnergy = ScoringMath.clamp(morningEnergy, min: 0, max: 100)
         components["morningEnergy"] = morningEnergy
 
+        let chargeEfficiency = calculateChargeEfficiency(from: input)
+        components["charge_efficiency"] = chargeEfficiency
+
+        let trainingLoad = calculateTrainingLoad(
+            strainHistory: input.strainHistory,
+            todayStrain: input.strainScore ?? 0.0
+        )
+        components["atl"] = trainingLoad.atl
+        components["ctl"] = trainingLoad.ctl
+        components["tsb"] = trainingLoad.tsb
+        components["acwr"] = trainingLoad.acwr
+
         // 3. Day Drain Calculations
         let strainScore = input.strainScore ?? 0.0
         let stressIndex = input.stressIndex ?? 0.0
@@ -182,5 +194,63 @@ public struct EnergyBankEngine: ScoreEngine {
             algorithmVersion: "1.0.0",
             lastUpdated: Date()
         )
+    }
+
+    private func calculateChargeEfficiency(from input: EnergyBankInput) -> Double {
+        guard let hrvToday = input.hrvToday,
+              let hrvBaseline = input.hrvBaseline,
+              hrvBaseline > 0,
+              let rhrToday = input.rhrToday,
+              let rhrBaseline = input.rhrBaseline,
+              rhrBaseline > 0 else {
+            return 0.6
+        }
+
+        let hrvRatio = hrvToday / hrvBaseline
+        let hrvScore: Double
+        switch hrvRatio {
+        case ..<0.8: hrvScore = 0.2
+        case ..<0.9: hrvScore = 0.4
+        case ..<1.1: hrvScore = 0.7
+        case ..<1.3: hrvScore = 0.9
+        default: hrvScore = 1.0
+        }
+
+        let rhrRatio = rhrToday / rhrBaseline
+        let rhrScore: Double
+        switch rhrRatio {
+        case ..<0.90: rhrScore = 1.0
+        case ..<0.95: rhrScore = 0.9
+        case ..<1.05: rhrScore = 0.7
+        case ..<1.10: rhrScore = 0.4
+        default: rhrScore = 0.2
+        }
+
+        return 0.6 * hrvScore + 0.4 * rhrScore
+    }
+
+    private func calculateTrainingLoad(
+        strainHistory: [Double]?,
+        todayStrain: Double
+    ) -> (atl: Double, ctl: Double, tsb: Double, acwr: Double) {
+        let history = strainHistory ?? []
+        let loadsIncludingToday = history + [todayStrain]
+        let acuteLoads = loadsIncludingToday.suffix(7)
+        let chronicLoads = loadsIncludingToday.suffix(42)
+        let chronic28Loads = loadsIncludingToday.suffix(28)
+
+        let atl = average(acuteLoads)
+        let ctl = average(chronicLoads)
+        let acute7 = acuteLoads.reduce(0, +)
+        let chronic28Equivalent = chronic28Loads.reduce(0, +) / 4.0
+        let acwr = chronic28Equivalent > 0 ? acute7 / chronic28Equivalent : 1.0
+
+        return (atl: atl, ctl: ctl, tsb: ctl - atl, acwr: acwr)
+    }
+
+    private func average<S: Sequence>(_ values: S) -> Double where S.Element == Double {
+        let values = Array(values)
+        guard !values.isEmpty else { return 0 }
+        return values.reduce(0, +) / Double(values.count)
     }
 }
