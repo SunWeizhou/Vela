@@ -1,7 +1,18 @@
 import Foundation
 
-// MARK: - Tag Correlation Model
+struct HabitCorrelationInsight: Codable, Hashable, Identifiable {
+    var id: String { "\(habit)_\(outcome)_lag\(lagDays)" }
+    var habit: String
+    var outcome: String
+    var lagDays: Int
+    var correlation: Double
+    var sampleSize: Int
+    var confidence: MetricConfidence
+    var direction: String // "positive" / "negative" / "neutral"
+    var explanation: String
+}
 
+// Struct to retain old class usage compatibility if needed, but primary calculations will be returned here
 struct TagCorrelation: Identifiable, Hashable, Codable {
     var id: String { tag }
     var tag: String
@@ -11,8 +22,6 @@ struct TagCorrelation: Identifiable, Hashable, Codable {
     var avgStrainScore: Double
     var avgHRV: Double
     var avgRHR: Double
-
-    /// Days without this tag — used for baseline comparison
     var withoutCount: Int = 0
     var withoutAvgSleepScore: Double = 0
     var withoutAvgRecoveryScore: Double = 0
@@ -20,37 +29,192 @@ struct TagCorrelation: Identifiable, Hashable, Codable {
     var withoutAvgHRV: Double = 0
     var withoutAvgRHR: Double = 0
 
-    /// Positive means the tag is associated with BETTER scores
     var sleepScoreDelta: Double { avgSleepScore - withoutAvgSleepScore }
     var recoveryScoreDelta: Double { avgRecoveryScore - withoutAvgRecoveryScore }
     var strainScoreDelta: Double { avgStrainScore - withoutAvgStrainScore }
-
-    /// Overall impact: average of sleep and recovery deltas (higher = better)
-    var overallImpact: Double {
-        (sleepScoreDelta + recoveryScoreDelta) / 2.0
-    }
+    var overallImpact: Double { (sleepScoreDelta + recoveryScoreDelta) / 2.0 }
 }
 
-// MARK: - Journal Correlation Engine
-
 struct JournalCorrelationEngine {
+    init() {}
 
-    /// For each unique tag across `journalEntries`, compute average health scores
-    /// on days that tag appeared vs days it did not, using `snapshots` as the score source.
-    func correlateTags(
+    private func ranks(for X: [Double]) -> [Double] {
+        let indexed = X.enumerated().map { (index: $0.offset, value: $0.element) }
+        let sorted = indexed.sorted { $0.value < $1.value }
+        var ranks = [Double](repeating: 0.0, count: X.count)
+        
+        var i = 0
+        while i < sorted.count {
+            var j = i
+            while j < sorted.count && sorted[j].value == sorted[i].value {
+                j += 1
+            }
+            let rankSum = Double((i + 1 + j)) / 2.0 - 0.5
+            for k in i..<j {
+                ranks[sorted[k].index] = rankSum
+            }
+            i = j
+        }
+        return ranks
+    }
+
+    private func pearsonCorrelation(_ X: [Double], _ Y: [Double]) -> Double {
+        let N = Double(X.count)
+        guard N > 0 else { return 0.0 }
+        let meanX = X.reduce(0, +) / N
+        let meanY = Y.reduce(0, +) / N
+        
+        var num = 0.0
+        var denX = 0.0
+        var denY = 0.0
+        for i in 0..<X.count {
+            let dx = X[i] - meanX
+            let dy = Y[i] - meanY
+            num += dx * dy
+            denX += dx * dx
+            denY += dy * dy
+        }
+        guard denX > 0 && denY > 0 else { return 0.0 }
+        return num / sqrt(denX * denY)
+    }
+
+    func spearmanCorrelation(_ X: [Double], _ Y: [Double]) -> Double {
+        let rankX = ranks(for: X)
+        let rankY = ranks(for: Y)
+        return pearsonCorrelation(rankX, rankY)
+    }
+
+    private func dayKey(for date: Date, calendar: Calendar) -> String {
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return [
+            components.year ?? 0,
+            components.month ?? 0,
+            components.day ?? 0
+        ]
+        .map { String(format: "%02d", $0) }
+        .joined(separator: "-")
+    }
+
+    /// Calculate lagged correlations between journal tags and health outcomes
+    func calculateInsights(
         journalEntries: [JournalEntryRecord],
         snapshots: [DailyHealthSnapshot],
         calendar: Calendar = .current
-    ) -> [TagCorrelation] {
-        // Build a date-keyed lookup for snapshots
+    ) -> [HabitCorrelationInsight] {
         var snapshotByDay: [String: DailyHealthSnapshot] = [:]
         for snap in snapshots {
             let key = dayKey(for: snap.date, calendar: calendar)
             snapshotByDay[key] = snap
         }
 
-        // Collect all unique tags and map them to the NEXT day (T+1) to capture lagged physiological impacts
-        var tagDays: [String: Set<String>] = [:]  // tag -> Set<dayKey of T+1>
+        // Get all unique tags
+        let allTags = Set(journalEntries.flatMap { $0.tags })
+        let allDaysSortedKeys = snapshotByDay.keys.sorted()
+        
+        var insights: [HabitCorrelationInsight] = []
+
+        // Outcome key paths or mappings
+        let outcomes = [
+            ("HRV", { (snap: DailyHealthSnapshot) -> Double? in snap.hrvAverage }),
+            ("RHR", { (snap: DailyHealthSnapshot) -> Double? in snap.restingHeartRate }),
+            ("Sleep Score", { (snap: DailyHealthSnapshot) -> Double? in snap.sleepScore }),
+            ("Recovery Score", { (snap: DailyHealthSnapshot) -> Double? in snap.recoveryScore })
+        ]
+
+        for tag in allTags {
+            for outcome in outcomes {
+                for lag in [0, 1] { // Lag 0 (same day/night), Lag 1 (next day)
+                    var tagSeries: [Double] = []
+                    var outcomeSeries: [Double] = []
+
+                    for key in allDaysSortedKeys {
+                        guard let targetDate = calendar.date(from: parseDateComponents(from: key)) else { continue }
+                        guard let sampleDate = calendar.date(byAdding: .day, value: -lag, to: targetDate) else { continue }
+                        
+                        let sampleKey = dayKey(for: sampleDate, calendar: calendar)
+                        let isTagLogged = journalEntries.contains { entry in
+                            calendar.isDate(entry.createdAt, inSameDayAs: sampleDate) && entry.tags.contains(tag)
+                        }
+
+                        if let outcomeVal = snapshotByDay[key].flatMap(outcome.1) {
+                            tagSeries.append(isTagLogged ? 1.0 : 0.0)
+                            outcomeSeries.append(outcomeVal)
+                        }
+                    }
+
+                    // Sample size requirements (N >= 14)
+                    let n = tagSeries.count
+                    guard n >= 14 else { continue }
+
+                    // Compute Point-Biserial Correlation (which is standard Pearson correlation between binary and continuous)
+                    let r = pearsonCorrelation(tagSeries, outcomeSeries)
+                    
+                    // Filter weak correlations (abs(r) < 0.20)
+                    guard abs(r) >= 0.20 else { continue }
+
+                    let confidence: MetricConfidence
+                    if n >= 60 {
+                        confidence = .high
+                    } else if n >= 28 {
+                        confidence = .medium
+                    } else {
+                        confidence = .low
+                    }
+
+                    let strength: String
+                    if abs(r) >= 0.50 {
+                        strength = L10n.t("strong", "强")
+                    } else if abs(r) >= 0.35 {
+                        strength = L10n.t("moderate", "中等")
+                    } else {
+                        strength = L10n.t("weak", "弱")
+                    }
+
+                    let dir = r > 0 ? "positive" : "negative"
+                    let dirText = r > 0 ? L10n.t("positive correlation", "正相关") : L10n.t("negative correlation", "负相关")
+                    
+                    let lagText = lag == 0 ? L10n.t("same-day", "当天") : L10n.t("next-day", "次日")
+                    let explanation = L10n.t(
+                        "Over the last \(n) days, logging '\(tag)' has a \(strength) \(dirText) with \(lagText) \(outcome.0). This represents correlation only, not clinical causation.",
+                        "在过去 \(n) 天的数据分析中，记录习惯标签「\(tag)」与\(lagText)\(outcome.0)表现出\(strength)的\(dirText)。本提示仅代表关联度，并不代表因果关系。"
+                    )
+
+                    insights.append(HabitCorrelationInsight(
+                        habit: tag,
+                        outcome: outcome.0,
+                        lagDays: lag,
+                        correlation: r,
+                        sampleSize: n,
+                        confidence: confidence,
+                        direction: dir,
+                        explanation: explanation
+                    ))
+                }
+            }
+        }
+
+        return insights.sorted { abs($0.correlation) > abs($1.correlation) }
+    }
+
+    private func parseDateComponents(from string: String) -> DateComponents {
+        let parts = string.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return DateComponents() }
+        return DateComponents(year: parts[0], month: parts[1], day: parts[2])
+    }
+
+    // Preserve old correlateTags method signature for backward compatibility
+    func correlateTags(
+        journalEntries: [JournalEntryRecord],
+        snapshots: [DailyHealthSnapshot],
+        calendar: Calendar = .current
+    ) -> [TagCorrelation] {
+        var snapshotByDay: [String: DailyHealthSnapshot] = [:]
+        for snap in snapshots {
+            let key = dayKey(for: snap.date, calendar: calendar)
+            snapshotByDay[key] = snap
+        }
+
+        var tagDays: [String: Set<String>] = [:]
         for entry in journalEntries {
             if let nextDay = calendar.date(byAdding: .day, value: 1, to: entry.createdAt) {
                 let key = dayKey(for: nextDay, calendar: calendar)
@@ -60,9 +224,7 @@ struct JournalCorrelationEngine {
             }
         }
 
-        // Days that have snapshot data (the universe of comparable days)
         let allDays = Set(snapshotByDay.keys)
-
         var results: [TagCorrelation] = []
 
         for (tag, daysWithTag) in tagDays {
@@ -71,14 +233,12 @@ struct JournalCorrelationEngine {
 
             guard daysWith.count >= 2 else { continue }
 
-            // Scores for days WITH this tag
             let withSleep = daysWith.compactMap { snapshotByDay[$0]?.sleepScore }
             let withRecovery = daysWith.compactMap { snapshotByDay[$0]?.recoveryScore }
             let withStrain = daysWith.compactMap { snapshotByDay[$0]?.strainScore }
             let withHRV = daysWith.compactMap { snapshotByDay[$0]?.hrvAverage }
             let withRHR = daysWith.compactMap { snapshotByDay[$0]?.restingHeartRate }
 
-            // Scores for days WITHOUT this tag
             let withoutSleep = daysWithout.compactMap { snapshotByDay[$0]?.sleepScore }
             let withoutRecovery = daysWithout.compactMap { snapshotByDay[$0]?.recoveryScore }
             let withoutStrain = daysWithout.compactMap { snapshotByDay[$0]?.strainScore }
@@ -102,64 +262,33 @@ struct JournalCorrelationEngine {
             ))
         }
 
-        // Sort by absolute impact (biggest difference, positive or negative, first)
         return results.sorted { abs($0.overallImpact) > abs($1.overallImpact) }
-    }
-
-    /// Return the top N correlations by absolute impact.
-    func topCorrelations(correlations: [TagCorrelation], limit: Int = 5) -> [TagCorrelation] {
-        Array(correlations.prefix(limit))
-    }
-
-    /// Format correlations as Markdown for inclusion in the AI system prompt.
-    func formatCorrelationsForAI(_ correlations: [TagCorrelation]) -> String {
-        guard !correlations.isEmpty else { return "" }
-
-        var lines: [String] = [
-            "## 日记标签相关性分析 (Journal Tag Correlation Analysis)",
-            "",
-            "以下是你记录的日记标签与健康指标之间的相关性分析。基于过去30天的数据：",
-            "",
-            "| 标签 | 次数 | 睡眠评分 | 恢复评分 | 负荷评分 | 影响 |",
-            "|------|------|----------|----------|----------|------|",
-        ]
-
-        for c in correlations {
-            let impactEmoji: String
-            if c.overallImpact > 3 {
-                impactEmoji = ":white_check_mark: 正向"
-            } else if c.overallImpact < -3 {
-                impactEmoji = ":warning: 负向"
-            } else {
-                impactEmoji = ":arrow_right: 中性"
-            }
-
-            lines.append(
-                "| \(c.tag) | \(c.count)天 | \(String(format: "%.0f", c.avgSleepScore)) | \(String(format: "%.0f", c.avgRecoveryScore)) | \(String(format: "%.0f", c.avgStrainScore)) | \(impactEmoji) |"
-            )
-        }
-
-        lines.append("")
-        lines.append("**分析提示**: 正向标签（如冥想、补水）可能与更高的恢复/睡眠评分相关联，负向标签（如酒精、夜宵）可能与评分下降有关。请在回答中主动结合这些相关性与当前数据进行交叉分析。")
-
-        return lines.joined(separator: "\n")
-    }
-
-    // MARK: - Helpers
-
-    private func dayKey(for date: Date, calendar: Calendar) -> String {
-        let components = calendar.dateComponents([.year, .month, .day], from: date)
-        return [
-            components.year ?? 0,
-            components.month ?? 0,
-            components.day ?? 0
-        ]
-        .map { String(format: "%02d", $0) }
-        .joined(separator: "-")
     }
 
     private func averageOf(_ values: [Double]) -> Double {
         guard !values.isEmpty else { return 0 }
         return values.reduce(0, +) / Double(values.count)
+    }
+
+    /// Returns the top N correlations sorted by absolute impact magnitude.
+    func topCorrelations(correlations: [TagCorrelation], limit: Int = 5) -> [TagCorrelation] {
+        var result = correlations
+            .filter { abs($0.overallImpact) > 1.0 }
+        result.sort { abs($0.overallImpact) > abs($1.overallImpact) }
+        return Array(result.prefix(limit))
+    }
+
+    /// Formats correlation data as a human-readable string for AI context injection.
+    func formatCorrelationsForAI(_ correlations: [TagCorrelation]) -> String {
+        guard !correlations.isEmpty else { return "" }
+        var lines: [String] = ["Journal tag correlations with next-day health metrics:"]
+        for c in correlations {
+            let direction = c.overallImpact > 0 ? "positive" : "negative"
+            lines.append("- '\(c.tag)': \(direction) impact, "
+                + "sleep Δ\(String(format: "%.1f", c.sleepScoreDelta)), "
+                + "recovery Δ\(String(format: "%.1f", c.recoveryScoreDelta)) "
+                + "(n=\(c.count))")
+        }
+        return lines.joined(separator: "\n")
     }
 }

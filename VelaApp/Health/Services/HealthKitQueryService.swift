@@ -227,50 +227,50 @@ final class HealthKitQueryService: HealthQueryService {
         m.biologicalSex = chars.biologicalSex
 
         // Body
-        m.heightCm = try await mostRecentQuantity(.height, unit: .meterUnit(with: .centi), range: range)
-        m.bmi = try await mostRecentQuantity(.bodyMassIndex, unit: .count(), range: range)
+        m.heightCm = try? await mostRecentQuantity(.height, unit: .meterUnit(with: .centi), range: range)
+        m.bmi = try? await mostRecentQuantity(.bodyMassIndex, unit: .count(), range: range)
 
         // Cardiovascular
-        m.walkingHeartRateAvg = try await averageQuantity(.walkingHeartRateAverage, unit: HKUnit.count().unitDivided(by: .minute()), range: range)
-        m.oxygenSaturation = try await mostRecentQuantity(.oxygenSaturation, unit: .percent(), range: range).map { $0 * 100 }
-        m.bloodPressureSystolic = try await mostRecentQuantity(.bloodPressureSystolic, unit: .millimeterOfMercury(), range: range)
-        m.bloodPressureDiastolic = try await mostRecentQuantity(.bloodPressureDiastolic, unit: .millimeterOfMercury(), range: range)
+        m.walkingHeartRateAvg = try? await averageQuantity(.walkingHeartRateAverage, unit: HKUnit.count().unitDivided(by: .minute()), range: range)
+        m.oxygenSaturation = (try? await mostRecentQuantity(.oxygenSaturation, unit: .percent(), range: range)).map { $0 * 100 }
+        m.bloodPressureSystolic = try? await mostRecentQuantity(.bloodPressureSystolic, unit: .millimeterOfMercury(), range: range)
+        m.bloodPressureDiastolic = try? await mostRecentQuantity(.bloodPressureDiastolic, unit: .millimeterOfMercury(), range: range)
 
         // Metabolic
-        m.bloodGlucose = try await mostRecentQuantity(.bloodGlucose, unit: HKUnit(from: "mg/dL"), range: range)
+        m.bloodGlucose = try? await mostRecentQuantity(.bloodGlucose, unit: HKUnit(from: "mg/dL"), range: range)
 
         // Mobility & gait
-        m.walkingSpeed = try await averageQuantity(.walkingSpeed, unit: HKUnit.meter().unitDivided(by: .second()), range: range)
-        m.walkingStepLength = try await averageQuantity(.walkingStepLength, unit: .meter(), range: range)
-        m.walkingAsymmetry = try await averageQuantity(.walkingAsymmetryPercentage, unit: .percent(), range: range).map { $0 * 100 }
-        m.walkingDoubleSupport = try await averageQuantity(.walkingDoubleSupportPercentage, unit: .percent(), range: range).map { $0 * 100 }
-        m.walkingSteadiness = try await averageQuantity(.appleWalkingSteadiness, unit: .percent(), range: range).map { $0 * 100 }
-        m.stairAscentSpeed = try await averageQuantity(.stairAscentSpeed, unit: HKUnit.meter().unitDivided(by: .second()), range: range)
-        m.stairDescentSpeed = try await averageQuantity(.stairDescentSpeed, unit: HKUnit.meter().unitDivided(by: .second()), range: range)
-        m.sixMinuteWalkDistance = try await mostRecentQuantity(.sixMinuteWalkTestDistance, unit: .meter(), range: range)
+        m.walkingSpeed = try? await averageQuantity(.walkingSpeed, unit: HKUnit.meter().unitDivided(by: .second()), range: range)
+        m.walkingStepLength = try? await averageQuantity(.walkingStepLength, unit: .meter(), range: range)
+        m.walkingAsymmetry = (try? await averageQuantity(.walkingAsymmetryPercentage, unit: .percent(), range: range)).map { $0 * 100 }
+        m.walkingDoubleSupport = (try? await averageQuantity(.walkingDoubleSupportPercentage, unit: .percent(), range: range)).map { $0 * 100 }
+        m.walkingSteadiness = (try? await averageQuantity(.appleWalkingSteadiness, unit: .percent(), range: range)).map { $0 * 100 }
+        m.stairAscentSpeed = try? await averageQuantity(.stairAscentSpeed, unit: HKUnit.meter().unitDivided(by: .second()), range: range)
+        m.stairDescentSpeed = try? await averageQuantity(.stairDescentSpeed, unit: HKUnit.meter().unitDivided(by: .second()), range: range)
+        m.sixMinuteWalkDistance = try? await mostRecentQuantity(.sixMinuteWalkTestDistance, unit: .meter(), range: range)
 
         // Activity totals
-        m.exerciseMinutes = try await sumQuantity(.appleExerciseTime, unit: .minute(), range: range).map { Int($0) }
-        m.standMinutes = try await sumQuantity(.appleStandTime, unit: .minute(), range: range).map { Int($0) }
-        m.flightsClimbed = try await sumQuantity(.flightsClimbed, unit: .count(), range: range).map { Int($0) }
-        m.distanceKm = try await sumQuantity(.distanceWalkingRunning, unit: .meterUnit(with: .kilo), range: range)
-        m.cyclingDistanceKm = try await sumQuantity(.distanceCycling, unit: .meterUnit(with: .kilo), range: range)
+        m.exerciseMinutes = (try? await sumQuantity(.appleExerciseTime, unit: .minute(), range: range)).map { Int($0) }
+        m.standMinutes = (try? await sumQuantity(.appleStandTime, unit: .minute(), range: range)).map { Int($0) }
+        m.flightsClimbed = (try? await sumQuantity(.flightsClimbed, unit: .count(), range: range)).map { Int($0) }
+        m.distanceKm = try? await sumQuantity(.distanceWalkingRunning, unit: .meterUnit(with: .kilo), range: range)
+        m.cyclingDistanceKm = try? await sumQuantity(.distanceCycling, unit: .meterUnit(with: .kilo), range: range)
 
         // Environment
-        m.environmentalNoisedB = try await averageQuantity(.environmentalAudioExposure, unit: .decibelAWeightedSoundPressureLevel(), range: range)
-        m.headphoneNoisedB = try await averageQuantity(.headphoneAudioExposure, unit: .decibelAWeightedSoundPressureLevel(), range: range)
-        m.timeInDaylight = try await sumQuantity(.timeInDaylight, unit: .minute(), range: range)
+        m.environmentalNoisedB = try? await averageQuantity(.environmentalAudioExposure, unit: .decibelAWeightedSoundPressureLevel(), range: range)
+        m.headphoneNoisedB = try? await averageQuantity(.headphoneAudioExposure, unit: .decibelAWeightedSoundPressureLevel(), range: range)
+        m.timeInDaylight = try? await sumQuantity(.timeInDaylight, unit: .minute(), range: range)
 
         // Temperature
-        m.bodyTemperature = try await mostRecentQuantity(.bodyTemperature, unit: .degreeCelsius(), range: range)
+        m.bodyTemperature = try? await mostRecentQuantity(.bodyTemperature, unit: .degreeCelsius(), range: range)
 
         // Nutrition
-        m.waterMl = try await sumQuantity(.dietaryWater, unit: .literUnit(with: .milli), range: range)
-        m.caffeineMg = try await sumQuantity(.dietaryCaffeine, unit: .gramUnit(with: .milli), range: range)
-        m.dietaryEnergyKcal = try await sumQuantity(.dietaryEnergyConsumed, unit: .kilocalorie(), range: range)
-        m.dietaryProteinG = try await sumQuantity(.dietaryProtein, unit: .gram(), range: range)
-        m.dietaryCarbsG = try await sumQuantity(.dietaryCarbohydrates, unit: .gram(), range: range)
-        m.dietaryFatG = try await sumQuantity(.dietaryFatTotal, unit: .gram(), range: range)
+        m.waterMl = try? await sumQuantity(.dietaryWater, unit: .literUnit(with: .milli), range: range)
+        m.caffeineMg = try? await sumQuantity(.dietaryCaffeine, unit: .gramUnit(with: .milli), range: range)
+        m.dietaryEnergyKcal = try? await sumQuantity(.dietaryEnergyConsumed, unit: .kilocalorie(), range: range)
+        m.dietaryProteinG = try? await sumQuantity(.dietaryProtein, unit: .gram(), range: range)
+        m.dietaryCarbsG = try? await sumQuantity(.dietaryCarbohydrates, unit: .gram(), range: range)
+        m.dietaryFatG = try? await sumQuantity(.dietaryFatTotal, unit: .gram(), range: range)
 
         // Wellness
         // Mindful sessions — category type, sum durations manually
@@ -286,7 +286,7 @@ final class HealthKitQueryService: HealthQueryService {
 
         // Sleep breathing disturbances (iOS 18+)
         if #available(iOS 18.0, *) {
-            m.sleepBreathingDisturbances = try await averageQuantity(.appleSleepingBreathingDisturbances, unit: HKUnit.count().unitDivided(by: .hour()), range: range)
+            m.sleepBreathingDisturbances = try? await averageQuantity(.appleSleepingBreathingDisturbances, unit: HKUnit.count().unitDivided(by: .hour()), range: range)
         }
 
         return m

@@ -1,248 +1,296 @@
 import Foundation
 
-struct SleepScoreInput: Hashable {
-    var totalSleepMinutes: Double?
-    var sleepTargetMinutes: Double
-    var bedtimeOffsetMinutes: Double?
-    var wakeOffsetMinutes: Double?
-    // New fields for the 5-dimension framework
-    var remMinutes: Double?
-    var deepMinutes: Double?
-    var awakeMinutes: Double?
-    var awakeCount: Int?
-    var inBedMinutes: Double?
+public struct SleepScoreInput: Hashable {
+    public var totalSleepMinutes: Double?
+    public var sleepTargetMinutes: Double
+    public var todayBedtime: Date?
+    public var recentBedtimes: [Date] // recent bedtimes (e.g. up to 13 nights)
+    public var awakeMinutes: Double?
+    public var awakeEpisodeCount: Int? // segments >= 2 minutes
+    
+    // Legacy support fields
+    public var remMinutes: Double?
+    public var deepMinutes: Double?
+    public var inBedMinutes: Double?
+    public var bedtimeOffsetMinutes: Double?
+    public var wakeOffsetMinutes: Double?
 
-    init(
+    public init(
         totalSleepMinutes: Double?,
         sleepTargetMinutes: Double = 450,
-        bedtimeOffsetMinutes: Double?,
-        wakeOffsetMinutes: Double?,
+        todayBedtime: Date? = nil,
+        recentBedtimes: [Date] = [],
+        awakeMinutes: Double? = nil,
+        awakeEpisodeCount: Int? = nil,
         remMinutes: Double? = nil,
         deepMinutes: Double? = nil,
-        awakeMinutes: Double? = nil,
-        awakeCount: Int? = nil,
-        inBedMinutes: Double? = nil
+        inBedMinutes: Double? = nil,
+        bedtimeOffsetMinutes: Double? = nil,
+        wakeOffsetMinutes: Double? = nil
     ) {
         self.totalSleepMinutes = totalSleepMinutes
         self.sleepTargetMinutes = sleepTargetMinutes
-        self.bedtimeOffsetMinutes = bedtimeOffsetMinutes
-        self.wakeOffsetMinutes = wakeOffsetMinutes
+        self.todayBedtime = todayBedtime
+        self.recentBedtimes = recentBedtimes
+        self.awakeMinutes = awakeMinutes
+        self.awakeEpisodeCount = awakeEpisodeCount
         self.remMinutes = remMinutes
         self.deepMinutes = deepMinutes
-        self.awakeMinutes = awakeMinutes
-        self.awakeCount = awakeCount
         self.inBedMinutes = inBedMinutes
+        self.bedtimeOffsetMinutes = bedtimeOffsetMinutes
+        self.wakeOffsetMinutes = wakeOffsetMinutes
     }
 }
 
-// Based on: Buysse (2014) "Sleep Health: Can We Define It? Does It Matter?"
-// Framework: 5 dimensions of sleep health — Duration, Efficiency, Timing, Architecture, Continuity
-// Each dimension scored 0-20, total 0-100
-struct SleepScoreEngine: ScoreEngine {
-    private let weights = [
-        "duration_score": 0.25,
-        "efficiency_score": 0.20,
-        "regularity_score": 0.20,
-        "architecture_score": 0.20,
-        "continuity_score": 0.15
-    ]
+public struct SleepDetailAnalysis: Codable, Hashable {
+    public var durationScore: Double
+    public var efficiencyScore: Double
+    public var regularityScore: Double
+    public var architectureScore: Double
+    public var continuityScore: Double
+}
 
-    func calculate(from input: SleepScoreInput) -> StandardScoreResult {
+public struct SleepScoreEngine: ScoreEngine {
+    public typealias Input = SleepScoreInput
+    public typealias Output = MetricResult
+
+    public init() {}
+
+    private func minutesFromNoon(_ date: Date) -> Double {
+        let calendar = Calendar.current
+        let h = calendar.component(.hour, from: date)
+        let m = calendar.component(.minute, from: date)
+        var minutes = Double(h * 60 + m)
+        if minutes < 12 * 60 {
+            minutes += 24 * 60
+        }
+        return minutes
+    }
+
+    private func calculateMedian(_ values: [Double]) -> Double? {
+        guard !values.isEmpty else { return nil }
+        let sorted = values.sorted()
+        if sorted.count % 2 == 1 {
+            return sorted[sorted.count / 2]
+        } else {
+            return (sorted[sorted.count / 2 - 1] + sorted[sorted.count / 2]) / 2.0
+        }
+    }
+
+    public func calculate(from input: SleepScoreInput) -> MetricResult {
         var components: [String: Double] = [:]
+        var componentWeights: [String: Double] = [:]
         var reasons: [String] = []
-        var metrics: [String: Double] = [:]
+        var missingInputs: [String] = []
 
-        // 1. Duration (Buysse Dimension 1)
-        // NSF recommendation: adults 7-9h (420-540 min)
-        if let totalSleepMinutes = input.totalSleepMinutes, input.sleepTargetMinutes > 0 {
-            let ratio = totalSleepMinutes / input.sleepTargetMinutes
-            let score = durationScore(ratio: ratio)
-            components["duration_score"] = score
-            metrics["total_sleep_minutes"] = totalSleepMinutes
-            metrics["sleep_target_minutes"] = input.sleepTargetMinutes
-            metrics["duration_ratio"] = ratio
+        let target = input.sleepTargetMinutes > 0 ? input.sleepTargetMinutes : 450
 
-            let hours = Int(totalSleepMinutes) / 60
-            let mins = Int(totalSleepMinutes) % 60
-            if ratio >= 0.9 && ratio <= 1.1 {
-                reasons.append("Sleep duration \(hours)h \(mins)m — within target range")
-            } else if ratio < 0.9 {
-                reasons.append("Sleep duration \(hours)h \(mins)m — below target by \(Int((1.0 - ratio) * 100))%")
-            } else {
-                reasons.append("Sleep duration \(hours)h \(mins)m — above target")
-            }
-        } else {
-            reasons.append("Sleep duration unavailable; score is based on remaining metrics.")
-        }
-
-        // 2. Efficiency (Buysse Dimension 2)
-        // Efficiency = total sleep / total in-bed time
+        // 1. Duration Score (0 - 50)
+        var durationScore: Double? = nil
         if let totalSleep = input.totalSleepMinutes {
-            let inBed = input.inBedMinutes ?? (totalSleep + (input.awakeMinutes ?? 0))
-            if inBed > 0 {
-                let efficiency = totalSleep / inBed
-                let score = efficiencyScore(efficiency: efficiency)
-                components["efficiency_score"] = score
-                metrics["sleep_efficiency"] = efficiency * 100
-
-                if efficiency >= 0.90 {
-                    reasons.append("Sleep efficiency \(Int(efficiency * 100))% — excellent")
-                } else if efficiency >= 0.80 {
-                    reasons.append("Sleep efficiency \(Int(efficiency * 100))% — acceptable")
-                } else {
-                    reasons.append("Sleep efficiency \(Int(efficiency * 100))% — too much time awake in bed")
-                }
+            if totalSleep >= (target - 30) && totalSleep <= (target + 60) {
+                durationScore = 50.0
+            } else if totalSleep < (target - 30) {
+                let range = (target - 30) - 240
+                let progress = range > 0 ? (totalSleep - 240) / range : 0
+                durationScore = 50.0 * ScoringMath.clamp(progress, min: 0, max: 1)
+            } else {
+                let progress = 1.0 - (totalSleep - (target + 60)) / 240.0
+                durationScore = 50.0 * ScoringMath.clamp(progress, min: 0.35, max: 1)
             }
+            components["duration"] = durationScore!
+            componentWeights["duration"] = 50.0
+            
+            let hrs = Int(totalSleep) / 60
+            let mins = Int(totalSleep) % 60
+            reasons.append("睡眠时长 \(hrs)小时\(mins)分钟（目标 \(Int(target) / 60)小时）")
+        } else {
+            missingInputs.append("totalSleepMinutes")
+            reasons.append("缺少睡眠时长数据")
         }
 
-        // 3. Timing/Regularity (Buysse Dimension 3)
-        if let bedtimeOffset = input.bedtimeOffsetMinutes, let wakeOffset = input.wakeOffsetMinutes {
-            let avgOffset = (abs(bedtimeOffset) + abs(wakeOffset)) / 2
-            let score = regularityScore(offsetMinutes: avgOffset)
-            components["regularity_score"] = score
-            metrics["bedtime_offset_minutes"] = abs(bedtimeOffset)
-            metrics["wake_offset_minutes"] = abs(wakeOffset)
-            metrics["avg_timing_offset"] = avgOffset
-
-            if avgOffset <= 30 {
-                reasons.append("Sleep timing very consistent (±\(Int(avgOffset)) min)")
-            } else if avgOffset <= 60 {
-                reasons.append("Sleep timing fairly regular")
-            } else {
-                reasons.append("Irregular sleep timing — \(Int(avgOffset)) min off baseline")
+        // 2. Consistency Score (0 - 30)
+        var consistencyScore: Double? = nil
+        if input.recentBedtimes.count >= 5, let todayBedtime = input.todayBedtime {
+            let baselineBedtimesMinutes = input.recentBedtimes.map { minutesFromNoon($0) }
+            if let baselineMedian = calculateMedian(baselineBedtimesMinutes) {
+                let todayBedtimeMinutes = minutesFromNoon(todayBedtime)
+                let diff = abs(todayBedtimeMinutes - baselineMedian)
+                
+                if diff <= 30 {
+                    consistencyScore = 30.0
+                } else if diff <= 60 {
+                    consistencyScore = 24.0
+                } else if diff <= 90 {
+                    consistencyScore = 18.0
+                } else if diff <= 120 {
+                    consistencyScore = 12.0
+                } else if diff <= 180 {
+                    consistencyScore = 6.0
+                } else {
+                    consistencyScore = 0.0
+                }
+                components["consistency"] = consistencyScore!
+                componentWeights["consistency"] = 30.0
+                
+                reasons.append("入睡一致性差异约为 \(Int(diff))分钟（基线参考过去 \(input.recentBedtimes.count)晚）")
             }
         } else {
-            reasons.append("Sleep timing baseline unavailable; regularity was not scored.")
-        }
-
-        // 4. Architecture (Buysse Dimension 4)
-        // Ideal: REM ~20-25% of total sleep, Deep ~15-20%
-        if let totalSleep = input.totalSleepMinutes, totalSleep > 0 {
-            let rem = input.remMinutes ?? 0
-            let deep = input.deepMinutes ?? 0
-
-            if rem > 0 || deep > 0 {
-                let remPct = rem / totalSleep
-                let deepPct = deep / totalSleep
-                let score = architectureScore(remPct: remPct, deepPct: deepPct)
-                components["architecture_score"] = score
-                metrics["rem_pct"] = remPct * 100
-                metrics["deep_pct"] = deepPct * 100
-
-                var archReasons: [String] = []
-                if remPct < 0.15 { archReasons.append("low REM") }
-                if deepPct < 0.10 { archReasons.append("low deep sleep") }
-                if archReasons.isEmpty {
-                    reasons.append("Sleep architecture balanced (REM \(Int(remPct * 100))%, Deep \(Int(deepPct * 100))%)")
-                } else {
-                    reasons.append("Sleep architecture: \(archReasons.joined(separator: ", "))")
-                }
+            if input.todayBedtime == nil {
+                missingInputs.append("todayBedtime")
+            }
+            if input.recentBedtimes.count < 5 {
+                missingInputs.append("recentBedtimesHistory")
+                reasons.append("最近 13 晚有效睡眠记录不足 5 晚，一致性得分已降级")
             }
         }
 
-        // 5. Continuity (Buysse Dimension 5)
+        // 3. Interruption Score (0 - 20)
+        var interruptionScore: Double? = nil
         if let awakeMinutes = input.awakeMinutes {
-            let awakeCount = input.awakeCount ?? (awakeMinutes > 0 ? max(1, Int(awakeMinutes / 8)) : 0)
-            let score = continuityScore(awakeMinutes: awakeMinutes, awakeCount: awakeCount)
-            components["continuity_score"] = score
-            metrics["awake_minutes"] = awakeMinutes
-            metrics["awake_count"] = Double(awakeCount)
-
-            if awakeMinutes <= 15 {
-                reasons.append("Excellent sleep continuity — minimal wake time")
-            } else if awakeMinutes <= 30 {
-                reasons.append("Good sleep continuity")
-            } else {
-                reasons.append("Fragmented sleep — \(Int(awakeMinutes)) min awake during night")
-            }
+            let awakeCount = input.awakeEpisodeCount ?? (awakeMinutes > 0 ? max(1, Int(awakeMinutes / 8)) : 0)
+            let penalty = 0.45 * awakeMinutes + 2.5 * Double(awakeCount)
+            interruptionScore = ScoringMath.clamp(20.0 - penalty, min: 0, max: 20)
+            
+            components["interruption"] = interruptionScore!
+            componentWeights["interruption"] = 20.0
+            
+            reasons.append("睡眠中断 \(Int(awakeMinutes))分钟（醒来频率 \(awakeCount)次）")
+        } else {
+            missingInputs.append("awakeMinutes")
+            reasons.append("缺少睡眠阶段中断数据")
         }
 
-        let weighted = ScoringMath.weightedAverage(components: components, weights: weights)
-        let score = weighted?.score ?? 0
+        // Renormalization
+        let availableWeight = componentWeights.values.reduce(0, +)
+        let sumScore = components.reduce(0) { $0 + $1.value }
+        
+        let finalValue: Double?
+        if availableWeight > 0 {
+            finalValue = ScoringMath.clamp((sumScore / availableWeight) * 100.0, min: 0, max: 100)
+        } else {
+            finalValue = nil
+        }
 
-        return StandardScoreResult(
-            score: score,
-            band: ScoringMath.band(for: score),
-            confidence: ScoringMath.confidence(available: components.count, expected: weights.count),
+        // Mapped Band & Confidence
+        let band: MetricBand
+        if let val = finalValue {
+            band = ScoringMath.band(for: val)
+        } else {
+            band = .low
+        }
+
+        let confidence: MetricConfidence
+        if components.count == 3 {
+            confidence = .high
+        } else if components.count >= 2 {
+            confidence = .medium
+        } else {
+            confidence = .low
+        }
+
+        // Add disclaimers
+        reasons.append("睡眠分析根据 Apple 公开结构建模，非官方指标。")
+
+        // 4. Preserve Buysse 5-Dimension Legacy Analysis under components/metrics
+        let detail = calculateLegacyBuysse(from: input)
+        components["buysse_duration"] = detail.durationScore
+        components["buysse_efficiency"] = detail.efficiencyScore
+        components["buysse_regularity"] = detail.regularityScore
+        components["buysse_architecture"] = detail.architectureScore
+        components["buysse_continuity"] = detail.continuityScore
+
+        let dataWindow = DateInterval(start: Calendar.current.date(byAdding: .day, value: -13, to: Date()) ?? Date(), end: Date())
+
+        return MetricResult(
+            name: "Sleep Score",
+            value: finalValue,
+            band: band,
+            confidence: confidence,
             components: components,
-            weights: weighted?.normalizedWeights ?? [:],
+            componentWeights: componentWeights,
             reasons: reasons,
-            metrics: metrics
+            missingInputs: missingInputs,
+            dataWindow: dataWindow,
+            source: .healthKit,
+            algorithmVersion: "1.0.0",
+            lastUpdated: Date()
         )
     }
 
-    // MARK: - Dimension Scorers
-
-    /// Duration: smooth logistic curve centered on target
-    private func durationScore(ratio: Double) -> Double {
-        if ratio >= 0.95 && ratio <= 1.05 { return 95 }
-        if ratio >= 0.90 && ratio <= 1.10 { return 85 }
-        if ratio < 0.60 { return 10 }
-        if ratio > 1.30 { return 60 } // Oversleeping penalty (less severe)
-
-        // Sigmoid-like for deficit
-        if ratio < 1.0 {
-            return 10 + 85 * pow(ratio, 3)
-        }
-        // Mild penalty for oversleeping
-        return max(60, 95 - (ratio - 1.0) * 100)
-    }
-
-    /// Efficiency: WHO guideline ≥85% is normal, clinical ≥90% is good
-    private func efficiencyScore(efficiency: Double) -> Double {
-        if efficiency >= 0.95 { return 95 }
-        if efficiency >= 0.90 { return 85 }
-        if efficiency >= 0.85 { return 70 }
-        if efficiency >= 0.80 { return 55 }
-        if efficiency >= 0.70 { return 35 }
-        return 15
-    }
-
-    /// Regularity: offset from personal median bedtime/waketime
-    private func regularityScore(offsetMinutes: Double) -> Double {
-        if offsetMinutes <= 15 { return 95 }
-        if offsetMinutes <= 30 { return 85 }
-        if offsetMinutes <= 45 { return 72 }
-        if offsetMinutes <= 60 { return 60 }
-        if offsetMinutes <= 90 { return 40 }
-        return 20
-    }
-
-    /// Architecture: REM + Deep stage proportions
-    private func architectureScore(remPct: Double, deepPct: Double) -> Double {
-        // REM ideal: 20-25%, Deep ideal: 15-20%
-        let remScore: Double
-        switch remPct {
-        case 0.20...0.25: remScore = 50
-        case 0.15..<0.20, 0.25...0.30: remScore = 40
-        case 0.10..<0.15: remScore = 25
-        default: remScore = 10
+    private func calculateLegacyBuysse(from input: SleepScoreInput) -> SleepDetailAnalysis {
+        // Implement simple fallback 5D scoring based on input values
+        let dur: Double
+        if let totalSleep = input.totalSleepMinutes {
+            let target = input.sleepTargetMinutes > 0 ? input.sleepTargetMinutes : 450
+            let ratio = totalSleep / target
+            if ratio >= 0.95 && ratio <= 1.05 { dur = 20 }
+            else if ratio >= 0.90 && ratio <= 1.10 { dur = 18 }
+            else if ratio < 0.60 { dur = 4 }
+            else if ratio > 1.30 { dur = 12 }
+            else { dur = 20 * pow(ratio, 3) }
+        } else {
+            dur = 15
         }
 
-        let deepScore: Double
-        switch deepPct {
-        case 0.15...0.20: deepScore = 50
-        case 0.10..<0.15, 0.20...0.25: deepScore = 40
-        case 0.05..<0.10: deepScore = 25
-        default: deepScore = 10
+        let eff: Double
+        if let totalSleep = input.totalSleepMinutes {
+            let awake = input.awakeMinutes ?? 0
+            let inBed = input.inBedMinutes ?? (totalSleep + awake)
+            if inBed > 0 {
+                let ratio = totalSleep / inBed
+                if ratio >= 0.95 { eff = 20 }
+                else if ratio >= 0.90 { eff = 18 }
+                else if ratio >= 0.85 { eff = 15 }
+                else if ratio >= 0.80 { eff = 12 }
+                else { eff = 6 }
+            } else { eff = 15 }
+        } else {
+            eff = 15
         }
 
-        return remScore + deepScore
-    }
+        let reg: Double
+        if let bOffset = input.bedtimeOffsetMinutes, let wOffset = input.wakeOffsetMinutes {
+            let avgOffset = (abs(bOffset) + abs(wOffset)) / 2
+            if avgOffset <= 15 { reg = 20 }
+            else if avgOffset <= 30 { reg = 18 }
+            else if avgOffset <= 45 { reg = 15 }
+            else if avgOffset <= 60 { reg = 12 }
+            else { reg = 8 }
+        } else {
+            reg = 15
+        }
 
-    /// Continuity: awake time and awake count during sleep period
-    private func continuityScore(awakeMinutes: Double, awakeCount: Int) -> Double {
-        let timePenalty: Double
-        if awakeMinutes <= 10 { timePenalty = 0 }
-        else if awakeMinutes <= 20 { timePenalty = 15 }
-        else if awakeMinutes <= 40 { timePenalty = 35 }
-        else { timePenalty = 55 }
+        let arch: Double
+        if let totalSleep = input.totalSleepMinutes, totalSleep > 0 {
+            let rem = input.remMinutes ?? 0
+            let deep = input.deepMinutes ?? 0
+            let remPct = rem / totalSleep
+            let deepPct = deep / totalSleep
+            
+            let remS = (0.20...0.25).contains(remPct) ? 10.0 : ((0.15..<0.20).contains(remPct) || (0.25...0.30).contains(remPct) ? 8.0 : 5.0)
+            let deepS = (0.15...0.20).contains(deepPct) ? 10.0 : ((0.10..<0.15).contains(deepPct) || (0.20...0.25).contains(deepPct) ? 8.0 : 5.0)
+            arch = remS + deepS
+        } else {
+            arch = 15
+        }
 
-        let countPenalty: Double
-        if awakeCount <= 1 { countPenalty = 0 }
-        else if awakeCount <= 3 { countPenalty = 10 }
-        else { countPenalty = 25 }
+        let cont: Double
+        if let awakeMinutes = input.awakeMinutes {
+            let awakeCount = input.awakeEpisodeCount ?? (awakeMinutes > 0 ? max(1, Int(awakeMinutes / 8)) : 0)
+            let tPenalty = awakeMinutes <= 10 ? 0.0 : (awakeMinutes <= 20 ? 3.0 : (awakeMinutes <= 40 ? 7.0 : 11.0))
+            let cPenalty = awakeCount <= 1 ? 0.0 : (awakeCount <= 3 ? 2.0 : 5.0)
+            cont = max(2.0, 20.0 - tPenalty - cPenalty)
+        } else {
+            cont = 15
+        }
 
-        return max(10, 95 - timePenalty - countPenalty)
+        return SleepDetailAnalysis(
+            durationScore: dur,
+            efficiencyScore: eff,
+            regularityScore: reg,
+            architectureScore: arch,
+            continuityScore: cont
+        )
     }
 }

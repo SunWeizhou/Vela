@@ -1,88 +1,244 @@
 import Foundation
 
-struct StressIndexInput: Hashable {
-    var heartRateElevationScore: Double?
-    var hrvSuppressionScore: Double?
-    var sleepDebtStressScore: Double?
-    var recentStrainStressScore: Double?
-}
+public struct StressIndexInput: Hashable {
+    public var quietHRToday: Double?
+    public var quietHRBaseline: Double?
+    public var quietHRSD: Double?
+    
+    public var hrvToday: Double?
+    public var hrvBaseline: Double?
+    public var hrvSD: Double?
+    
+    public var respRateToday: Double?
+    public var respRateBaseline: Double?
+    public var respRateSD: Double?
+    
+    public var bodyTempDelta: Double?
+    public var sleepScoreLastNight: Double?
+    public var strainScoreToday: Double?
+    
+    public var isWithinWorkoutWindow: Bool // inside workout window or 90 minutes post-workout
 
-enum StressBand: String, Codable, Hashable {
-    case calm = "Calm"
-    case normal = "Normal"
-    case elevated = "Elevated"
-    case high = "High"
-}
+    // Legacy fields for backward compatibility
+    public var heartRateElevationScore: Double?
+    public var hrvSuppressionScore: Double?
+    public var sleepDebtStressScore: Double?
+    public var recentStrainStressScore: Double?
 
-struct StressIndexResult: Codable, Hashable {
-    var stressIndex: Double
-    var band: StressBand
-    var confidence: ScoreConfidence
-    var components: [String: Double]
-    var weights: [String: Double]
-    var reasons: [String]
-    var metrics: [String: Double]
-    var configVersion: String = VelaAppMetadata.configVersion
-
-    var hasData: Bool { !components.isEmpty }
-}
-
-struct StressIndexEngine: ScoreEngine {
-    private let weights = [
-        "heart_rate": 0.40,
-        "hrv": 0.35,
-        "sleep_debt": 0.15,
-        "recent_strain": 0.10
-    ]
-
-    func calculate(from input: StressIndexInput) -> StressIndexResult {
-        var components: [String: Double] = [:]
-        var reasons: [String] = []
-
-        if let value = input.heartRateElevationScore {
-            components["heart_rate"] = ScoringMath.clamp(value)
-            reasons.append("Heart rate elevation proxy was included")
-        }
-        if let value = input.hrvSuppressionScore {
-            components["hrv"] = ScoringMath.clamp(value)
-            reasons.append("HRV suppression proxy was included")
-        }
-        if let value = input.sleepDebtStressScore {
-            components["sleep_debt"] = ScoringMath.clamp(value)
-            reasons.append("Sleep debt context was included")
-        }
-        if let value = input.recentStrainStressScore {
-            components["recent_strain"] = ScoringMath.clamp(value)
-            reasons.append("Recent strain context was included")
-        }
-        if components.isEmpty {
-            reasons.append("Stress proxy data unavailable.")
-        }
-
-        let weighted = ScoringMath.weightedAverage(components: components, weights: weights)
-        let stressIndex = weighted?.score ?? 0
-
-        return StressIndexResult(
-            stressIndex: stressIndex,
-            band: stressBand(for: stressIndex),
-            confidence: ScoringMath.confidence(available: components.count, expected: weights.count),
-            components: components,
-            weights: weighted?.normalizedWeights ?? [:],
-            reasons: reasons,
-            metrics: components
-        )
+    public init(
+        quietHRToday: Double? = nil,
+        quietHRBaseline: Double? = nil,
+        quietHRSD: Double? = nil,
+        hrvToday: Double? = nil,
+        hrvBaseline: Double? = nil,
+        hrvSD: Double? = nil,
+        respRateToday: Double? = nil,
+        respRateBaseline: Double? = nil,
+        respRateSD: Double? = nil,
+        bodyTempDelta: Double? = nil,
+        sleepScoreLastNight: Double? = nil,
+        strainScoreToday: Double? = nil,
+        isWithinWorkoutWindow: Bool = false,
+        heartRateElevationScore: Double? = nil,
+        hrvSuppressionScore: Double? = nil,
+        sleepDebtStressScore: Double? = nil,
+        recentStrainStressScore: Double? = nil
+    ) {
+        self.quietHRToday = quietHRToday
+        self.quietHRBaseline = quietHRBaseline
+        self.quietHRSD = quietHRSD
+        self.hrvToday = hrvToday
+        self.hrvBaseline = hrvBaseline
+        self.hrvSD = hrvSD
+        self.respRateToday = respRateToday
+        self.respRateBaseline = respRateBaseline
+        self.respRateSD = respRateSD
+        self.bodyTempDelta = bodyTempDelta
+        self.sleepScoreLastNight = sleepScoreLastNight
+        self.strainScoreToday = strainScoreToday
+        self.isWithinWorkoutWindow = isWithinWorkoutWindow
+        self.heartRateElevationScore = heartRateElevationScore
+        self.hrvSuppressionScore = hrvSuppressionScore
+        self.sleepDebtStressScore = sleepDebtStressScore
+        self.recentStrainStressScore = recentStrainStressScore
     }
+}
 
-    private func stressBand(for index: Double) -> StressBand {
-        switch index {
-        case ..<25:
-            return .calm
-        case ..<50:
-            return .normal
-        case ..<75:
-            return .elevated
-        default:
-            return .high
+public struct StressIndexEngine: ScoreEngine {
+    public typealias Input = StressIndexInput
+    public typealias Output = MetricResult
+
+    public init() {}
+
+    public func calculate(from input: StressIndexInput) -> MetricResult {
+        var components: [String: Double] = [:]
+        var componentWeights: [String: Double] = [:]
+        var reasons: [String] = []
+        var missingInputs: [String] = []
+
+        let weights = [
+            "rhr_stress": 0.25,
+            "hrv_stress": 0.25,
+            "resp_stress": 0.15,
+            "temp_stress": 0.10,
+            "sleep_debt_stress": 0.15,
+            "load_stress": 0.10
+        ]
+
+        // Check if inside workout/post-workout window (exercise exclusion rule)
+        if input.isWithinWorkoutWindow {
+            reasons.append("静息生理压力指标已自动排除运动窗口及运动后 90 分钟的自主神经恢复期。")
+            let dataWindow = DateInterval(start: Calendar.current.date(byAdding: .hour, value: -2, to: Date()) ?? Date(), end: Date())
+            
+            return MetricResult(
+                name: "Physiological Stress Index",
+                value: nil, // Excluded
+                band: .low,
+                confidence: .low,
+                components: [:],
+                componentWeights: [:],
+                reasons: reasons,
+                missingInputs: ["quietWindow"],
+                dataWindow: dataWindow,
+                source: .derived,
+                algorithmVersion: "1.0.0",
+                lastUpdated: Date()
+            )
         }
+
+        // 1. RHR quiet stress (25%)
+        if let quietHR = input.quietHRToday ?? input.heartRateElevationScore {
+            let baseline = input.quietHRBaseline ?? (input.quietHRToday != nil ? quietHR : 60.0)
+            let sd = input.quietHRSD ?? max(2.5, baseline * 0.04)
+            let rhrZ = (quietHR - baseline) / sd
+            let rhrStress = ScoringMath.clamp(50.0 + 18.0 * rhrZ, min: 0, max: 100)
+            components["rhr_stress"] = rhrStress
+            componentWeights["rhr_stress"] = weights["rhr_stress"]!
+            
+            if rhrZ > 1.2 {
+                reasons.append("静息心率出现异常上升")
+            }
+        } else {
+            missingInputs.append("quietHRToday")
+        }
+
+        // 2. HRV quiet stress (25%)
+        if let hrvToday = input.hrvToday ?? input.hrvSuppressionScore {
+            let baseline = input.hrvBaseline ?? (input.hrvToday != nil ? hrvToday : 40.0)
+            let sd = input.hrvSD ?? max(0.01, log(max(baseline, 1.0)) * 0.12)
+            let lnToday = log(max(hrvToday, 1.0))
+            let lnBaseline = log(max(baseline, 1.0))
+            let hrvZ = (lnToday - lnBaseline) / sd
+            
+            let hrvStress = ScoringMath.clamp(50.0 - 18.0 * hrvZ, min: 0, max: 100)
+            components["hrv_stress"] = hrvStress
+            componentWeights["hrv_stress"] = weights["hrv_stress"]!
+            
+            if hrvZ < -1.2 {
+                reasons.append("今日 HRV 出现明显抑制")
+            }
+        } else {
+            missingInputs.append("hrvToday")
+        }
+
+        // 3. Respiratory Rate Stress (15%)
+        if let respToday = input.respRateToday {
+            let baseline = input.respRateBaseline ?? respToday
+            let sd = input.respRateSD ?? 1.0
+            let respZ = (respToday - baseline) / sd
+            let respStress = ScoringMath.clamp(50.0 + 15.0 * respZ, min: 0, max: 100)
+            components["resp_stress"] = respStress
+            componentWeights["resp_stress"] = weights["resp_stress"]!
+        }
+
+        // 4. Temp Stress (10%)
+        let tempDelta = input.bodyTempDelta ?? 0.0
+        let tempStress: Double
+        if abs(tempDelta) < 0.3 {
+            tempStress = 20.0
+        } else if abs(tempDelta) < 0.6 {
+            tempStress = 50.0
+            reasons.append("夜间皮肤温度检测到轻微波动")
+        } else {
+            tempStress = 80.0
+            reasons.append("夜间体温偏差异常，表明系统性生理对抗")
+        }
+        components["temp_stress"] = tempStress
+        componentWeights["temp_stress"] = weights["temp_stress"]!
+
+        // 5. Sleep Debt Stress (15%)
+        if let sleepScore = input.sleepScoreLastNight ?? input.sleepDebtStressScore.map({ 100.0 - $0 }) {
+            let debtStress = ScoringMath.clamp(100.0 - sleepScore, min: 0, max: 100)
+            components["sleep_debt_stress"] = debtStress
+            componentWeights["sleep_debt_stress"] = weights["sleep_debt_stress"]!
+            
+            if sleepScore < 60 {
+                reasons.append("睡眠缺失增加了全天候的皮质醇及生理压力敏感性")
+            }
+        }
+
+        // 6. Load Stress (10%)
+        if let strain = input.strainScoreToday ?? input.recentStrainStressScore {
+            components["load_stress"] = strain
+            componentWeights["load_stress"] = weights["load_stress"]!
+        }
+
+        // Calculate Weighted Sum
+        let totalWeight = componentWeights.values.reduce(0, +)
+        let sumScore = components.reduce(0.0) { partial, item in
+            partial + (item.value * (componentWeights[item.key] ?? 0.0))
+        }
+
+        let stressValue: Double?
+        if totalWeight > 0 {
+            stressValue = ScoringMath.clamp(sumScore / totalWeight, min: 0, max: 100)
+        } else {
+            stressValue = nil
+        }
+
+        // Mapped Band
+        let band: MetricBand
+        if let val = stressValue {
+            if val < 25 {
+                band = .veryLow // calm
+            } else if val < 50 {
+                band = .low // normal
+            } else if val < 75 {
+                band = .normal // elevated
+            } else {
+                band = .high // high
+            }
+        } else {
+            band = .low
+        }
+
+        // Confidence
+        let confidence: MetricConfidence
+        if components.count >= 5 {
+            confidence = .high
+        } else if components.count >= 3 {
+            confidence = .medium
+        } else {
+            confidence = .low
+        }
+
+        reasons.append("这是生理压力代理指标，反映自主神经平衡状态，并非心理压力临床诊断。")
+
+        let dataWindow = DateInterval(start: Calendar.current.date(byAdding: .hour, value: -24, to: Date()) ?? Date(), end: Date())
+
+        return MetricResult(
+            name: "Physiological Stress Index",
+            value: stressValue,
+            band: band,
+            confidence: confidence,
+            components: components,
+            componentWeights: componentWeights,
+            reasons: reasons,
+            missingInputs: missingInputs,
+            dataWindow: dataWindow,
+            source: .derived,
+            algorithmVersion: "1.0.0",
+            lastUpdated: Date()
+        )
     }
 }

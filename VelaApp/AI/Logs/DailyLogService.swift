@@ -11,14 +11,14 @@ private struct DailyBodyDataSnapshot: Encodable {
     var date: String
     var generatedAt: Date
     var source: String
-    var recovery: StandardScoreResult
+    var recovery: MetricResult
     var sleepSummary: SleepSummary
-    var sleepScore: StandardScoreResult
+    var sleepScore: MetricResult
     var recoveryMetrics: RecoveryMetricSummary
     var recoveryBaseline: RecoveryMetricSummary
-    var strain: StrainScoreResult
-    var stress: StressIndexResult
-    var energy: EnergyBankResult
+    var strain: MetricResult
+    var stress: MetricResult
+    var energy: MetricResult
     var healthAge: HealthAgeTrendResult
     var bodyMetrics: BodyMetricsSummary
     var extendedMetrics: ExtendedHealthMetrics
@@ -273,7 +273,7 @@ enum DailyLogService {
         if dashboard.strain.targetStatus == .aboveTarget, dashboard.strain.hasData {
             insights.append("- Strain is above the recommended range. Watch for overtraining.")
         }
-        if dashboard.stress.band == .elevated || dashboard.stress.band == .high, dashboard.stress.hasData {
+        if dashboard.stress.band == .normal || dashboard.stress.band == .high || dashboard.stress.band == .veryHigh, dashboard.stress.hasData {
             insights.append("- Stress proxy is elevated. HRV or heart rate may indicate physiological strain.")
         }
         if dashboard.energy.status == .depleted || dashboard.energy.status == .low, dashboard.energy.hasData {

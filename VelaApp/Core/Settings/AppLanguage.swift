@@ -46,16 +46,18 @@ enum L10n {
     }
 }
 
-func localizedBand(_ band: ScoreBand) -> String {
+func localizedBand(_ band: MetricBand) -> String {
     guard AppLanguage.stored.isChinese else { return band.rawValue }
     switch band {
+    case .veryLow: return "很低"
     case .low: return "偏低"
-    case .moderate: return "中等"
-    case .high: return "较高"
+    case .normal: return "正常"
+    case .high: return "偏高"
+    case .veryHigh: return "很高"
     }
 }
 
-func localizedConfidence(_ confidence: ScoreConfidence) -> String {
+func localizedConfidence(_ confidence: MetricConfidence) -> String {
     guard AppLanguage.stored.isChinese else { return confidence.rawValue }
     switch confidence {
     case .high: return "高"
@@ -73,13 +75,13 @@ func localizedTarget(_ status: StrainTargetStatus) -> String {
     }
 }
 
-func localizedStressBand(_ band: StressBand) -> String {
+func localizedStressBand(_ band: MetricBand) -> String {
     guard AppLanguage.stored.isChinese else { return band.rawValue }
     switch band {
-    case .calm: return "平稳"
-    case .normal: return "正常"
-    case .elevated: return "升高"
-    case .high: return "偏高"
+    case .veryLow: return "平稳"
+    case .low: return "正常"
+    case .normal: return "升高"
+    case .high, .veryHigh: return "偏高"
     }
 }
 

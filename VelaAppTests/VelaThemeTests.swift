@@ -45,14 +45,19 @@ final class VelaThemeTests: XCTestCase {
 
     func testDailyPlanRecommendsRecoveryWhenScoreLow() {
         var dashboard = DashboardSummary.preview()
-        dashboard.recovery = StandardScoreResult(
-            score: 35,
+        dashboard.recovery = MetricResult(
+            name: "Recovery Score",
+            value: 35,
             band: .low,
             confidence: .high,
-            components: ["hrv": 35],
-            weights: ["hrv": 1],
+            components: ["hrv": 35, "hrv_z_score": -2.0],
+            componentWeights: ["hrv": 1],
             reasons: ["HRV significantly below personal baseline"],
-            metrics: ["hrv_z_score": -2.0]
+            missingInputs: [],
+            dataWindow: DateInterval(start: Date().addingTimeInterval(-86400), end: Date()),
+            source: .healthKit,
+            algorithmVersion: VelaAppMetadata.configVersion,
+            lastUpdated: Date()
         )
         let plan = DailyPlanEngine.recommendation(for: dashboard)
         XCTAssertEqual(plan.kind, .recovery)

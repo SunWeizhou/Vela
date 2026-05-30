@@ -915,20 +915,22 @@ struct VelaMetricDetailView: View {
     }
 
     // MARK: - Evidence / Limiting Factors Fallback Helpers
-    private func scoreBandLabel(_ band: ScoreBand) -> String {
+    private func scoreBandLabel(_ band: MetricBand) -> String {
         switch band {
+        case .veryLow: return "很低"
         case .low: return "低"
-        case .moderate: return "中等"
+        case .normal: return "正常"
         case .high: return "高"
+        case .veryHigh: return "很高"
         }
     }
 
-    private func stressBandLabel(_ band: StressBand) -> String {
+    private func stressBandLabel(_ band: MetricBand) -> String {
         switch band {
-        case .calm: return "平静"
-        case .normal: return "正常"
-        case .elevated: return "偏高"
-        case .high: return "高"
+        case .veryLow: return "平静"
+        case .low: return "正常"
+        case .normal: return "偏高"
+        case .high, .veryHigh: return "高"
         }
     }
 

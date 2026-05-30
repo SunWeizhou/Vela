@@ -3,13 +3,13 @@ import Foundation
 struct DashboardSummary: Hashable {
     var date: Date
     var sleepSummary: SleepSummary
-    var sleepScore: StandardScoreResult
-    var recovery: StandardScoreResult
+    var sleepScore: MetricResult
+    var recovery: MetricResult
     var recoveryMetrics: RecoveryMetricSummary
     var recoveryBaseline: RecoveryMetricSummary
-    var strain: StrainScoreResult
-    var stress: StressIndexResult
-    var energy: EnergyBankResult
+    var strain: MetricResult
+    var stress: MetricResult
+    var energy: MetricResult
     var healthAge: HealthAgeTrendResult
     var bodyMetrics: BodyMetricsSummary
     var extendedMetrics: ExtendedHealthMetrics
@@ -39,23 +39,33 @@ struct DashboardSummary: Hashable {
                 segments: [],
                 sleepScore: nil
             ),
-            sleepScore: StandardScoreResult(
-                score: 0,
+            sleepScore: MetricResult(
+                name: "Sleep Score",
+                value: 0,
                 band: .low,
                 confidence: .low,
                 components: [:],
-                weights: [:],
+                componentWeights: [:],
                 reasons: ["Sleep data unavailable."],
-                metrics: [:]
+                missingInputs: ["sleepSummary"],
+                dataWindow: DateInterval(start: date, duration: 86400),
+                source: .derived,
+                algorithmVersion: "1.0.0",
+                lastUpdated: date
             ),
-            recovery: StandardScoreResult(
-                score: 0,
+            recovery: MetricResult(
+                name: "Recovery Score",
+                value: 0,
                 band: .low,
                 confidence: .low,
                 components: [:],
-                weights: [:],
+                componentWeights: [:],
                 reasons: ["Recovery data unavailable."],
-                metrics: [:]
+                missingInputs: ["recoveryMetrics"],
+                dataWindow: DateInterval(start: date, duration: 86400),
+                source: .derived,
+                algorithmVersion: "1.0.0",
+                lastUpdated: date
             ),
             recoveryMetrics: RecoveryMetricSummary(
                 hrvMilliseconds: nil,
@@ -69,33 +79,13 @@ struct DashboardSummary: Hashable {
                 sleepHeartRate: nil,
                 respiratoryRate: nil
             ),
-            strain: StrainScoreEngine().calculate(from: StrainScoreInput(
-                activeEnergyToday: nil,
-                activeEnergyBaseline: nil,
-                exerciseMinutesToday: nil,
-                exerciseMinutesBaseline: nil,
-                workoutIntensityLoad: nil,
-                recoveryScore: nil,
-                stepCount: nil
-            )),
-            stress: StressIndexEngine().calculate(from: StressIndexInput(
-                heartRateElevationScore: nil,
-                hrvSuppressionScore: nil,
-                sleepDebtStressScore: nil,
-                recentStrainStressScore: nil
-            )),
+            strain: StrainScoreEngine().calculate(from: StrainScoreInput()),
+            stress: StressIndexEngine().calculate(from: StressIndexInput()),
             energy: EnergyBankEngine().calculate(from: EnergyBankInput(
                 recoveryScore: nil,
                 sleepScore: nil,
                 strainScore: nil,
-                stressIndex: nil,
-                hrvToday: nil,
-                hrvBaseline: nil,
-                rhrToday: nil,
-                rhrBaseline: nil,
-                sleepHours: nil,
-                strainHistory: nil,
-                bodyTempDelta: nil
+                stressIndex: nil
             )),
             healthAge: HealthAgeTrendEngine().calculate(from: HealthAgeTrendInput(factors: [])),
             bodyMetrics: BodyMetricsSummary(

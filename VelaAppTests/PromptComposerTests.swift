@@ -88,9 +88,9 @@ final class PromptComposerTests: XCTestCase {
 
     func testResponseLengthPolicyClassifiesCorrectly() {
         XCTAssertEqual(ResponseLengthPolicy.forQuery("Hi", lang: .english), .casual)
-        XCTAssertEqual(ResponseLengthPolicy.forQuery("你好", lang: .chinese), .casual)
-        XCTAssertEqual(ResponseLengthPolicy.forQuery("谢谢", lang: .chinese), .casual)
-        XCTAssertEqual(ResponseLengthPolicy.forQuery("分析今天的数据", lang: .chinese), .full)
+        XCTAssertEqual(ResponseLengthPolicy.forQuery("你好", lang: .simplifiedChinese), .casual)
+        XCTAssertEqual(ResponseLengthPolicy.forQuery("谢谢", lang: .simplifiedChinese), .casual)
+        XCTAssertEqual(ResponseLengthPolicy.forQuery("分析今天的数据", lang: .simplifiedChinese), .full)
         XCTAssertEqual(ResponseLengthPolicy.forQuery("daily report please", lang: .english), .full)
         XCTAssertEqual(ResponseLengthPolicy.forQuery("Should I train today?", lang: .english), .focused)
     }

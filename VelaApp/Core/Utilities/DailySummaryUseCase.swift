@@ -71,12 +71,29 @@ final class DailySummaryUseCase {
         let sleepTarget = UserDefaults.standard.double(forKey: "vela_sleep_target_hours") * 60
         let effectiveSleepTarget = sleepTarget > 0 ? sleepTarget : 450
 
+        // Query last 42 days of history for strain and other calculations
+        let snapshots42: [DailyHealthSnapshot] = {
+            if let modelContext = modelContext {
+                let snapshotRepo = HealthSnapshotRepository(modelContext: modelContext, calendar: calendar)
+                return (try? snapshotRepo.fetchSnapshots(days: 42, endingAt: now)) ?? []
+            }
+            return []
+        }()
+
+        let strainHistory42 = snapshots42.compactMap { $0.strainScore }
+        let last28DaysLoads = Array(strainHistory42.prefix(28))
+
+        // Get pastEpisodes to compute bedtime history for sleep engine
+        let thirtyDays = DateRangeQuery.recentDays(30, endingAt: now, calendar: calendar)
+        let episodes = (try? await queryService.sleepEpisodes(in: thirtyDays)) ?? []
+        let pastEpisodes = episodes.filter { !calendar.isDate($0.date, inSameDayAs: now) }
+
         let sleepScore = SleepScoreEngine().calculate(
             from: ScoreEngineFactory.sleep(
                 from: context,
                 sleepTarget: effectiveSleepTarget,
-                bedtimeOffsetMinutes: sleepTimingBaseline?.bedtimeOffset,
-                wakeOffsetMinutes: sleepTimingBaseline?.wakeOffset
+                todayBedtime: context.sleepSummary?.bedtime,
+                recentBedtimes: pastEpisodes.compactMap(\.bedtime)
             )
         )
         let resolvedSleepSummary = ScoreEngineFactory.resolvedSleepSummary(
@@ -97,7 +114,8 @@ final class DailySummaryUseCase {
         let strain = StrainScoreEngine().calculate(
             from: ScoreEngineFactory.strain(
                 from: context,
-                recoveryScore: recovery.score
+                recoveryScore: recovery.score,
+                last28DaysDailyLoads: last28DaysLoads
             )
         )
 
@@ -105,7 +123,9 @@ final class DailySummaryUseCase {
             from: ScoreEngineFactory.stress(
                 from: context,
                 sleepScore: sleepScore.score,
-                strainScore: strain.score
+                strainScore: strain.score,
+                hrvHistory: hrvHistory,
+                rhrHistory: rhrHistory
             )
         )
 
@@ -116,7 +136,7 @@ final class DailySummaryUseCase {
                 sleepScore: context.sleepSummary == nil ? nil : sleepScore.score,
                 strainScore: strain.score,
                 stressIndex: stress.stressIndex,
-                strainHistory: nil
+                strainHistory: strainHistory42
             )
         )
 
@@ -205,8 +225,8 @@ final class DailySummaryUseCase {
                 from: ScoreEngineFactory.sleep(
                     from: context,
                     sleepTarget: 450,
-                    bedtimeOffsetMinutes: nil,
-                    wakeOffsetMinutes: nil
+                    todayBedtime: context.sleepSummary?.bedtime,
+                    recentBedtimes: []
                 )
             )
             let recovery = RecoveryScoreEngine().calculate(
@@ -219,10 +239,20 @@ final class DailySummaryUseCase {
                 )
             )
             let strain = StrainScoreEngine().calculate(
-                from: ScoreEngineFactory.strain(from: context, recoveryScore: recovery.score)
+                from: ScoreEngineFactory.strain(
+                    from: context,
+                    recoveryScore: recovery.score,
+                    last28DaysDailyLoads: []
+                )
             )
             let stress = StressIndexEngine().calculate(
-                from: ScoreEngineFactory.stress(from: context, sleepScore: sleepScore.score, strainScore: strain.score)
+                from: ScoreEngineFactory.stress(
+                    from: context,
+                    sleepScore: sleepScore.score,
+                    strainScore: strain.score,
+                    hrvHistory: [],
+                    rhrHistory: []
+                )
             )
             let energy = EnergyBankEngine().calculate(
                 from: ScoreEngineFactory.energyBank(
@@ -231,11 +261,16 @@ final class DailySummaryUseCase {
                     sleepScore: context.sleepSummary == nil ? nil : sleepScore.score,
                     strainScore: strain.score,
                     stressIndex: stress.stressIndex,
-                    strainHistory: nil
+                    strainHistory: []
                 )
             )
             let healthAge = HealthAgeTrendEngine().calculate(
-                from: ScoreEngineFactory.healthAge(from: context, recovery: recovery, sleepScore: sleepScore, strain: strain)
+                from: ScoreEngineFactory.healthAge(
+                    from: context,
+                    recovery: recovery,
+                    sleepScore: sleepScore,
+                    strain: strain
+                )
             )
             let dashboard = DashboardSummary(
                 date: context.date,
@@ -291,8 +326,8 @@ final class DailySummaryUseCase {
                 from: ScoreEngineFactory.sleep(
                     from: context,
                     sleepTarget: 450,
-                    bedtimeOffsetMinutes: nil,
-                    wakeOffsetMinutes: nil
+                    todayBedtime: nil,
+                    recentBedtimes: []
                 )
             )
             let recovery = RecoveryScoreEngine().calculate(
@@ -305,10 +340,20 @@ final class DailySummaryUseCase {
                 )
             )
             let strain = StrainScoreEngine().calculate(
-                from: ScoreEngineFactory.strain(from: context, recoveryScore: recovery.score)
+                from: ScoreEngineFactory.strain(
+                    from: context,
+                    recoveryScore: recovery.score,
+                    last28DaysDailyLoads: []
+                )
             )
             let stress = StressIndexEngine().calculate(
-                from: ScoreEngineFactory.stress(from: context, sleepScore: sleepScore.score, strainScore: strain.score)
+                from: ScoreEngineFactory.stress(
+                    from: context,
+                    sleepScore: sleepScore.score,
+                    strainScore: strain.score,
+                    hrvHistory: [],
+                    rhrHistory: []
+                )
             )
             let energy = EnergyBankEngine().calculate(
                 from: ScoreEngineFactory.energyBank(
@@ -317,7 +362,7 @@ final class DailySummaryUseCase {
                     sleepScore: context.sleepSummary == nil ? nil : sleepScore.score,
                     strainScore: strain.score,
                     stressIndex: stress.stressIndex,
-                    strainHistory: nil
+                    strainHistory: []
                 )
             )
             let healthAge = HealthAgeTrendEngine().calculate(
@@ -468,9 +513,9 @@ final class DailySummaryUseCase {
     }
 
     private func dailyInsight(
-        recovery: StandardScoreResult,
-        sleepScore: StandardScoreResult,
-        strain: StrainScoreResult,
+        recovery: MetricResult,
+        sleepScore: MetricResult,
+        strain: MetricResult,
         source: DashboardSummary.DataSource
     ) -> String {
         if source == .healthKit {
@@ -553,34 +598,44 @@ final class DailySummaryUseCase {
         let morningEnergyVal = record.morningEnergy ?? 85.0
         let currentEnergyVal = record.currentEnergy ?? 65.0
         
-        let sleepScore = StandardScoreResult(
-            score: sleepScoreVal,
-            band: sleepScoreVal >= 85 ? .high : (sleepScoreVal >= 70 ? .moderate : .low),
+        let sleepScore = MetricResult(
+            name: "Sleep Score",
+            value: sleepScoreVal,
+            band: ScoringMath.band(for: sleepScoreVal),
             confidence: .high,
             components: ["duration": sleepScoreVal],
-            weights: ["duration": 1.0],
+            componentWeights: ["duration": 1.0],
             reasons: [L10n.t("Sleep duration meets target.", "睡眠时长达到目标。")],
-            metrics: ["sleep_efficiency": (record.sleepEfficiency ?? 0.88) * 100.0]
+            missingInputs: [],
+            dataWindow: DateInterval(start: record.date.addingTimeInterval(-86400), end: record.date),
+            source: .healthKit,
+            algorithmVersion: "1.0.0",
+            lastUpdated: record.date
         )
         
-        let recovery = StandardScoreResult(
-            score: recoveryScoreVal,
-            band: recoveryScoreVal >= 66 ? .high : (recoveryScoreVal >= 33 ? .moderate : .low),
+        let recovery = MetricResult(
+            name: "Recovery Score",
+            value: recoveryScoreVal,
+            band: ScoringMath.band(for: recoveryScoreVal),
             confidence: .high,
             components: ["hrv": recoveryScoreVal],
-            weights: ["hrv": 1.0],
+            componentWeights: ["hrv": 1.0],
             reasons: [L10n.t("HRV is stable within baseline.", "HRV 稳定在基线内。")],
-            metrics: ["hrv_z_score": 0.5]
+            missingInputs: [],
+            dataWindow: DateInterval(start: record.date.addingTimeInterval(-86400), end: record.date),
+            source: .healthKit,
+            algorithmVersion: "1.0.0",
+            lastUpdated: record.date
         )
         
         let strain = StrainScoreEngine().calculate(from: StrainScoreInput(
             activeEnergyToday: record.activeCalories,
-            activeEnergyBaseline: 500,
             exerciseMinutesToday: record.workoutDuration,
+            stepCount: record.steps,
+            activeEnergyBaseline: 500,
             exerciseMinutesBaseline: 35,
             workoutIntensityLoad: strainScoreVal * 4,
-            recoveryScore: recoveryScoreVal,
-            stepCount: record.steps
+            recoveryScore: recoveryScoreVal
         ))
         
         let stress = StressIndexEngine().calculate(from: StressIndexInput(

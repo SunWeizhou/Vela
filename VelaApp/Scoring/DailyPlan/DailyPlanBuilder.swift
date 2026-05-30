@@ -341,7 +341,7 @@ struct DailyPlanBuilder {
         energy: Double,
         tsb: Double,
         sleep: Double,
-        confidence: ScoreConfidence
+        confidence: MetricConfidence
     ) -> DailyState {
         if confidence == .low { return .unknown }
         if recovery > 75 && energy > 60 && tsb > 5 && sleep > 80 { return .great }

@@ -95,19 +95,47 @@ enum BackgroundTaskManager {
                 let sleepTarget = UserDefaults.standard.double(forKey: "vela_sleep_target_hours") * 60
                 let effectiveSleepTarget = sleepTarget > 0 ? sleepTarget : 450
                 let sleepScore = SleepScoreEngine().calculate(
-                    from: ScoreEngineFactory.sleep(from: context, sleepTarget: effectiveSleepTarget, bedtimeOffsetMinutes: nil, wakeOffsetMinutes: nil)
+                    from: ScoreEngineFactory.sleep(
+                        from: context,
+                        sleepTarget: effectiveSleepTarget,
+                        todayBedtime: context.sleepSummary?.bedtime,
+                        recentBedtimes: []
+                    )
                 )
                 let recovery = RecoveryScoreEngine().calculate(
-                    from: ScoreEngineFactory.recovery(from: context, sleepScore: sleepScore.score, strainScoreYesterday: nil, hrvHistory: [], rhrHistory: [])
+                    from: ScoreEngineFactory.recovery(
+                        from: context,
+                        sleepScore: sleepScore.score,
+                        strainScoreYesterday: nil,
+                        hrvHistory: [],
+                        rhrHistory: []
+                    )
                 )
                 let strain = StrainScoreEngine().calculate(
-                    from: ScoreEngineFactory.strain(from: context, recoveryScore: recovery.score)
+                    from: ScoreEngineFactory.strain(
+                        from: context,
+                        recoveryScore: recovery.score,
+                        last28DaysDailyLoads: []
+                    )
                 )
                 let stress = StressIndexEngine().calculate(
-                    from: ScoreEngineFactory.stress(from: context, sleepScore: sleepScore.score, strainScore: strain.score)
+                    from: ScoreEngineFactory.stress(
+                        from: context,
+                        sleepScore: sleepScore.score,
+                        strainScore: strain.score,
+                        hrvHistory: [],
+                        rhrHistory: []
+                    )
                 )
                 let energy = EnergyBankEngine().calculate(
-                    from: ScoreEngineFactory.energyBank(from: context, recoveryScore: recovery.score, sleepScore: context.sleepSummary == nil ? nil : sleepScore.score, strainScore: strain.score, stressIndex: stress.stressIndex, strainHistory: nil)
+                    from: ScoreEngineFactory.energyBank(
+                        from: context,
+                        recoveryScore: recovery.score,
+                        sleepScore: context.sleepSummary == nil ? nil : sleepScore.score,
+                        strainScore: strain.score,
+                        stressIndex: stress.stressIndex,
+                        strainHistory: []
+                    )
                 )
                 let healthAge = HealthAgeTrendEngine().calculate(
                     from: ScoreEngineFactory.healthAge(from: context, recovery: recovery, sleepScore: sleepScore, strain: strain)

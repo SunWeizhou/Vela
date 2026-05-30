@@ -33,8 +33,8 @@ enum PreviewDataFactory {
         // Strain
         let strainInput = StrainScoreInput(
             activeEnergyToday: 420,
-            activeEnergyBaseline: 500,
             exerciseMinutesToday: 28,
+            activeEnergyBaseline: 500,
             exerciseMinutesBaseline: 35,
             workoutIntensityLoad: 42,
             recoveryScore: recovery.score

@@ -35,7 +35,7 @@ enum HealthAgeTrendLabel: String, Codable, Hashable {
 struct HealthAgeTrendResult: Codable, Hashable {
     var trendScore: Double
     var label: HealthAgeTrendLabel
-    var confidence: ScoreConfidence
+    var confidence: MetricConfidence
     var positiveFactors: [String]
     var negativeFactors: [String]
     var reasons: [String]
@@ -83,7 +83,7 @@ struct HealthAgeTrendEngine: ScoreEngine {
         return .stable
     }
 
-    private func confidence(for factorCount: Int) -> ScoreConfidence {
+    private func confidence(for factorCount: Int) -> MetricConfidence {
         if factorCount >= 5 { return .high }
         if factorCount >= 3 { return .medium }
         return .low

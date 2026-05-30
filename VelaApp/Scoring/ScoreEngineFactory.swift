@@ -9,17 +9,19 @@ enum ScoreEngineFactory {
     static func sleep(
         from context: DailyHealthContext,
         sleepTarget: Double,
-        bedtimeOffsetMinutes: Double?,
-        wakeOffsetMinutes: Double?
+        todayBedtime: Date?,
+        recentBedtimes: [Date]
     ) -> SleepScoreInput {
-        SleepScoreInput(
+        let awakeCount = context.sleepSummary?.segments.filter { $0.stage == .awake && $0.end.timeIntervalSince($0.start) >= 120 }.count
+        return SleepScoreInput(
             totalSleepMinutes: context.sleepSummary.map { Double($0.totalSleepMinutes) },
             sleepTargetMinutes: sleepTarget,
-            bedtimeOffsetMinutes: bedtimeOffsetMinutes,
-            wakeOffsetMinutes: wakeOffsetMinutes,
+            todayBedtime: todayBedtime ?? context.sleepSummary?.bedtime,
+            recentBedtimes: recentBedtimes,
+            awakeMinutes: context.sleepSummary?.stageMinutes[.awake].map { Double($0) },
+            awakeEpisodeCount: awakeCount,
             remMinutes: context.sleepSummary?.stageMinutes[.rem].map { Double($0) },
             deepMinutes: context.sleepSummary?.stageMinutes[.deep].map { Double($0) },
-            awakeMinutes: context.sleepSummary?.stageMinutes[.awake].map { Double($0) },
             inBedMinutes: context.sleepSummary?.stageMinutes[.inBed].map { Double($0) }
         )
     }
@@ -40,8 +42,13 @@ enum ScoreEngineFactory {
             restingHeartRateToday: context.recoveryMetrics.restingHeartRate,
             restingHeartRateBaseline: context.recoveryBaseline.restingHeartRate,
             rhrHistory: rhrHistory,
-            sleepScoreLastNight: context.sleepSummary == nil ? nil : sleepScore,
-            strainScoreYesterday: strainScoreYesterday
+            sleepScoreLastNight: sleepScore,
+            strainScoreYesterday: strainScoreYesterday,
+            respiratoryRateToday: context.recoveryMetrics.respiratoryRate,
+            respiratoryRateBaseline: context.recoveryBaseline.respiratoryRate,
+            respiratoryRateHistory: [],
+            bodyTempDelta: context.extendedMetrics.bodyTemperature.map { $0 - 36.5 },
+            SpO2: context.extendedMetrics.oxygenSaturation
         )
     }
 
@@ -49,20 +56,27 @@ enum ScoreEngineFactory {
 
     static func strain(
         from context: DailyHealthContext,
-        recoveryScore: Double
+        recoveryScore: Double,
+        last28DaysDailyLoads: [Double]
     ) -> StrainScoreInput {
-        let workoutLoad = context.strainToday.workouts
-            .compactMap(\.averageHeartRate)
-            .max()
-            .map { ScoringMath.clamp(($0 - 90) / 80 * 100) }
+        let workoutInputs = context.strainToday.workouts.map { w in
+            WorkoutInput(
+                id: w.id,
+                durationMinutes: w.end.timeIntervalSince(w.start) / 60.0,
+                averageHeartRate: w.averageHeartRate,
+                heartRateSamples: []
+            )
+        }
         return StrainScoreInput(
+            workouts: workoutInputs,
             activeEnergyToday: context.strainToday.activeEnergyKilocalories,
-            activeEnergyBaseline: context.strainBaselineDaily.activeEnergyKilocalories,
             exerciseMinutesToday: context.strainToday.exerciseMinutes,
-            exerciseMinutesBaseline: context.strainBaselineDaily.exerciseMinutes,
-            workoutIntensityLoad: workoutLoad ?? (context.strainToday.workouts.isEmpty ? nil : 45),
-            recoveryScore: recoveryScore,
-            stepCount: context.strainToday.stepCount
+            stepCount: context.strainToday.stepCount,
+            restingHR: context.recoveryMetrics.restingHeartRate ?? 60.0,
+            maxHR: 190.0,
+            biologicalSex: context.extendedMetrics.biologicalSex,
+            last28DaysDailyLoads: last28DaysDailyLoads,
+            recoveryScore: recoveryScore
         )
     }
 
@@ -71,30 +85,28 @@ enum ScoreEngineFactory {
     static func stress(
         from context: DailyHealthContext,
         sleepScore: Double?,
-        strainScore: Double
+        strainScore: Double,
+        hrvHistory: [Double],
+        rhrHistory: [Double]
     ) -> StressIndexInput {
-        StressIndexInput(
-            heartRateElevationScore: stressHeartRateScore(
-                today: context.recoveryMetrics.restingHeartRate,
-                baseline: context.recoveryBaseline.restingHeartRate
-            ),
-            hrvSuppressionScore: stressHRVScore(
-                today: context.recoveryMetrics.hrvMilliseconds,
-                baseline: context.recoveryBaseline.hrvMilliseconds
-            ),
-            sleepDebtStressScore: context.sleepSummary == nil ? nil : max(0, 100 - (sleepScore ?? 0)),
-            recentStrainStressScore: strainScore
+        let quietHRSD = rhrHistory.isEmpty ? nil : Double(10)
+        let hrvSD = hrvHistory.isEmpty ? nil : Double(15)
+        
+        return StressIndexInput(
+            quietHRToday: context.recoveryMetrics.restingHeartRate,
+            quietHRBaseline: context.recoveryBaseline.restingHeartRate,
+            quietHRSD: quietHRSD,
+            hrvToday: context.recoveryMetrics.hrvMilliseconds,
+            hrvBaseline: context.recoveryBaseline.hrvMilliseconds,
+            hrvSD: hrvSD,
+            respRateToday: context.recoveryMetrics.respiratoryRate,
+            respRateBaseline: context.recoveryBaseline.respiratoryRate,
+            respRateSD: nil,
+            bodyTempDelta: context.extendedMetrics.bodyTemperature.map { $0 - 36.5 },
+            sleepScoreLastNight: sleepScore,
+            strainScoreToday: strainScore,
+            isWithinWorkoutWindow: false
         )
-    }
-
-    private static func stressHeartRateScore(today: Double?, baseline: Double?) -> Double? {
-        guard let today, let baseline, baseline > 0 else { return nil }
-        return ScoringMath.clamp(((today - baseline) / baseline) * 250 + 35)
-    }
-
-    private static func stressHRVScore(today: Double?, baseline: Double?) -> Double? {
-        guard let today, let baseline, baseline > 0 else { return nil }
-        return ScoringMath.clamp(((baseline - today) / baseline) * 250 + 35)
     }
 
     // MARK: - Energy Bank
@@ -118,7 +130,13 @@ enum ScoreEngineFactory {
             rhrBaseline: context.recoveryBaseline.restingHeartRate,
             sleepHours: context.sleepSummary.map { Double($0.totalSleepMinutes) / 60.0 },
             strainHistory: strainHistory,
-            bodyTempDelta: context.extendedMetrics.bodyTemperature.map { $0 - 36.5 }
+            bodyTempDelta: context.extendedMetrics.bodyTemperature.map { $0 - 36.5 },
+            hoursSinceWake: 8.0,
+            respiratoryRateZ: nil,
+            SpO2: context.extendedMetrics.oxygenSaturation,
+            mindfulMinutes: context.extendedMetrics.mindfulMinutes,
+            napMinutes: nil,
+            trainingLoadStatus: nil
         )
     }
 
@@ -126,9 +144,9 @@ enum ScoreEngineFactory {
 
     static func healthAge(
         from context: DailyHealthContext,
-        recovery: StandardScoreResult,
-        sleepScore: StandardScoreResult,
-        strain: StrainScoreResult
+        recovery: MetricResult,
+        sleepScore: MetricResult,
+        strain: MetricResult
     ) -> HealthAgeTrendInput {
         var factors: [HealthAgeTrendFactor] = []
         if let vo2 = context.bodyMetrics.vo2Max {

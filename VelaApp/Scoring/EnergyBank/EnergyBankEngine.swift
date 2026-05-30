@@ -1,267 +1,186 @@
 import Foundation
 
-struct EnergyBankInput: Hashable {
-    var recoveryScore: Double?
-    var sleepScore: Double?
-    var strainScore: Double?
-    var stressIndex: Double?
+public struct EnergyBankInput: Hashable {
+    public var recoveryScore: Double?
+    public var sleepScore: Double?
+    public var strainScore: Double?
+    public var stressIndex: Double?
 
-    // Research-backed inputs for charge/discharge model
-    var hrvToday: Double?          // HRV in ms (RMSSD)
-    var hrvBaseline: Double?        // 7-day rolling average
-    var rhrToday: Double?           // RHR in bpm
-    var rhrBaseline: Double?        // 7-day rolling average
-    var sleepHours: Double?         // Total sleep duration in hours
-    var strainHistory: [Double]?    // Last 42 days of strain scores
-    var bodyTempDelta: Double?      // Deviation from baseline temp (°C)
+    public var hrvToday: Double?
+    public var hrvBaseline: Double?
+    public var rhrToday: Double?
+    public var rhrBaseline: Double?
+    public var sleepHours: Double?
+    public var strainHistory: [Double]?
+    public var bodyTempDelta: Double?
+    
+    // New fields for Core Metrics v1
+    public var hoursSinceWake: Double?
+    public var respiratoryRateZ: Double?
+    public var SpO2: Double?
+    public var mindfulMinutes: Double?
+    public var napMinutes: Double?
+    public var trainingLoadStatus: TrainingLoadStatus?
+
+    public init(
+        recoveryScore: Double?,
+        sleepScore: Double?,
+        strainScore: Double?,
+        stressIndex: Double?,
+        hrvToday: Double? = nil,
+        hrvBaseline: Double? = nil,
+        rhrToday: Double? = nil,
+        rhrBaseline: Double? = nil,
+        sleepHours: Double? = nil,
+        strainHistory: [Double]? = nil,
+        bodyTempDelta: Double? = nil,
+        hoursSinceWake: Double? = nil,
+        respiratoryRateZ: Double? = nil,
+        SpO2: Double? = nil,
+        mindfulMinutes: Double? = nil,
+        napMinutes: Double? = nil,
+        trainingLoadStatus: TrainingLoadStatus? = nil
+    ) {
+        self.recoveryScore = recoveryScore
+        self.sleepScore = sleepScore
+        self.strainScore = strainScore
+        self.stressIndex = stressIndex
+        self.hrvToday = hrvToday
+        self.hrvBaseline = hrvBaseline
+        self.rhrToday = rhrToday
+        self.rhrBaseline = rhrBaseline
+        self.sleepHours = sleepHours
+        self.strainHistory = strainHistory
+        self.bodyTempDelta = bodyTempDelta
+        self.hoursSinceWake = hoursSinceWake
+        self.respiratoryRateZ = respiratoryRateZ
+        self.SpO2 = SpO2
+        self.mindfulMinutes = mindfulMinutes
+        self.napMinutes = napMinutes
+        self.trainingLoadStatus = trainingLoadStatus
+    }
 }
 
-enum EnergyBankStatus: String, Codable, Hashable {
-    case depleted = "Depleted"
-    case low = "Low"
-    case stable = "Stable"
-    case strong = "Strong"
-}
+public struct EnergyBankEngine: ScoreEngine {
+    public typealias Input = EnergyBankInput
+    public typealias Output = MetricResult
 
-struct EnergyBankResult: Codable, Hashable {
-    var morningEnergy: Double
-    var currentEnergy: Double
-    var status: EnergyBankStatus
-    var confidence: ScoreConfidence
-    var components: [String: Double]
-    var reasons: [String]
-    var metrics: [String: Double]
-    var configVersion: String = VelaAppMetadata.configVersion
+    public init() {}
 
-    var hasData: Bool { !components.isEmpty }
-}
-
-struct EnergyBankEngine: ScoreEngine {
-    func calculate(from input: EnergyBankInput) -> EnergyBankResult {
-        let recovery = input.recoveryScore.map { ScoringMath.clamp($0) }
-        let sleep = input.sleepScore.map { ScoringMath.clamp($0) }
-        let strain = input.strainScore.map { ScoringMath.clamp($0) } ?? 0
-        let stress = input.stressIndex.map { ScoringMath.clamp($0) } ?? 0
-
+    public func calculate(from input: EnergyBankInput) -> MetricResult {
         var components: [String: Double] = [:]
         var reasons: [String] = []
-        var metrics: [String: Double] = [:]
+        var missingInputs: [String] = []
 
-        if let recovery {
-            components["recovery"] = recovery
+        // 1. Overnight Stability (100 base)
+        var overnightStability = 100.0
+        if let bodyTempDelta = input.bodyTempDelta, bodyTempDelta > 0.5 {
+            overnightStability -= 15.0
+            reasons.append("夜间体温升高，扣除稳定性基准分")
+        }
+        if let rrZ = input.respiratoryRateZ, rrZ > 1.5 {
+            overnightStability -= 10.0
+        }
+        if let spO2 = input.SpO2, spO2 < 94 {
+            overnightStability -= 10.0
+        }
+        components["overnight_stability"] = overnightStability
+
+        // 2. Morning Energy (0.45 Recovery + 0.35 Sleep + 0.20 Stability)
+        var morningEnergy = 50.0
+        let rec = input.recoveryScore
+        let slp = input.sleepScore
+
+        if let rec, let slp {
+            morningEnergy = 0.45 * rec + 0.35 * slp + 0.20 * overnightStability
+            components["recovery"] = rec
+            components["sleep"] = slp
+        } else if let rec {
+            morningEnergy = 0.70 * rec + 0.30 * overnightStability
+            components["recovery"] = rec
+            missingInputs.append("sleepScore")
+            reasons.append("睡眠数据缺失，早间能量根据恢复度估算")
+        } else if let slp {
+            morningEnergy = 0.70 * slp + 0.30 * overnightStability
+            components["sleep"] = slp
+            missingInputs.append("recoveryScore")
+            reasons.append("恢复度数据缺失，早间能量根据睡眠评分估算")
         } else {
-            reasons.append("Recovery score unavailable.")
+            morningEnergy = overnightStability
+            missingInputs.append("recoveryScore")
+            missingInputs.append("sleepScore")
         }
+        morningEnergy = ScoringMath.clamp(morningEnergy, min: 0, max: 100)
+        components["morningEnergy"] = morningEnergy
 
-        if let sleep {
-            components["sleep"] = sleep
-        } else {
-            reasons.append("Sleep score unavailable.")
-        }
-
-        // ── Firstbeat-Inspired Charge Efficiency ──
-        // During sleep: high HRV + low RHR = parasympathetic dominance = good charge
-        // During sleep: low HRV + high RHR = sympathetic residual = poor charge
-        let chargeEfficiency = computeChargeEfficiency(input)
-        metrics["charge_efficiency"] = chargeEfficiency
-        if input.hrvToday != nil, input.hrvBaseline != nil {
-            if chargeEfficiency >= 0.8 {
-                reasons.append("Sleep charge was efficient — strong parasympathetic recovery.")
-            } else if chargeEfficiency < 0.5 {
-                reasons.append("Sleep charge was inefficient — possible sympathetic residual.")
-            }
-        }
-
-        // ── Morning Energy (Base Charge) ──
-        let morningEnergy: Double
-        if let recovery, let sleep {
-            // Weighted by charge efficiency: better charge = more morning energy
-            let baseEnergy = (0.55 * recovery) + (0.30 * sleep) + (0.15 * chargeEfficiency * 100)
-            morningEnergy = ScoringMath.clamp(baseEnergy)
-            reasons.append("Morning energy: recovery + sleep + HRV-based charge efficiency.")
-            components["charge_efficiency"] = chargeEfficiency * 100
-        } else if let recovery {
-            morningEnergy = recovery
-            reasons.append("Morning energy used recovery only (sleep unavailable).")
-        } else if let sleep {
-            morningEnergy = sleep
-            reasons.append("Morning energy used sleep only (recovery unavailable).")
-        } else {
-            morningEnergy = 0
-            reasons.append("Morning energy unavailable.")
-        }
-
-        // ── TRIMP-Inspired ATL / CTL / TSB ──
-        let atlCtl = computeATLCTL(strainHistory: input.strainHistory, todayStrain: strain)
-        metrics["atl"] = atlCtl.atl
-        metrics["ctl"] = atlCtl.ctl
-        metrics["tsb"] = atlCtl.tsb
-
-        if atlCtl.hasHistory {
-            if atlCtl.tsb < -15 {
-                reasons.append("Training Stress Balance negative — accumulated fatigue may impair energy.")
-            } else if atlCtl.tsb > 10 {
-                reasons.append("Positive TSB — training freshness may boost perceived energy.")
-            }
-        }
-
-        // ── Energy Drain Calculation ──
-        // 1. Strain drain — non-linear (TRIMP-like exponential weighting)
-        let strainDrain: Double
-        if strain > 60 {
-            strainDrain = 0.45 * strain + 0.15 * (strain - 60) // extra penalty for high strain
-        } else {
-            strainDrain = 0.40 * strain
-        }
-        metrics["strain_drain"] = strainDrain
-
-        // 2. Stress drain
-        let stressDrain = 0.25 * stress
-        metrics["stress_drain"] = stressDrain
-
-        // 2b. Cumulative Fatigue / ACWR drain (Windt & Gabbett 2016)
-        // High ACWR (>1.5) representing acute workload spikes increases injury risk and cumulative systemic fatigue,
-        // accelerating the daily energy bank baseline discharge.
-        var acwrDrain = 0.0
-        if atlCtl.ctl > 0 {
-            let acwr = atlCtl.atl / atlCtl.ctl
-            metrics["acwr"] = acwr
-            if acwr > 1.5 {
-                acwrDrain = min(20.0, (acwr - 1.5) * 20.0) // up to 20 pts penalty
-                reasons.append("Acute-to-Chronic Workload Ratio high (ACWR=\(String(format: "%.2f", acwr))) — accelerated discharge due to cumulative fatigue")
-            }
-        }
-        metrics["acwr_drain"] = acwrDrain
-
-        // 3. Allostatic load adjustment (elevated body temp → systemic stress)
-        var allostaticDrain: Double = 0
-        if let tempDelta = input.bodyTempDelta, abs(tempDelta) > 0.5 {
-            allostaticDrain = min(15, abs(tempDelta) * 8) // up to ~15pts for fever-level temp
-            metrics["allostatic_drain"] = allostaticDrain
-            reasons.append("Elevated body temperature suggests systemic load — energy adjusted.")
-        }
-
-        // 4. Sleep debt drain (short sleep = energy penalty)
-        var sleepDebtDrain: Double = 0
-        if let sleepHours = input.sleepHours, sleepHours < 6 {
-            sleepDebtDrain = (6 - sleepHours) * 5 // up to ~15pts for very short sleep
-            metrics["sleep_debt_drain"] = sleepDebtDrain
-        }
-
-        let totalDrain = strainDrain + stressDrain + acwrDrain + allostaticDrain + sleepDebtDrain
-        let currentEnergy = ScoringMath.clamp(morningEnergy - totalDrain)
-        reasons.append("Current energy = morning energy − strain drain − stress drain − allostatic/sleep adjustments.")
-
-        return EnergyBankResult(
-            morningEnergy: morningEnergy,
-            currentEnergy: currentEnergy,
-            status: status(for: currentEnergy),
-            confidence: ScoringMath.confidence(available: components.count, expected: 2),
-            components: components,
-            reasons: reasons,
-            metrics: metrics
-        )
-    }
-
-    // MARK: - Firstbeat Charge/Discharge Assessment
-
-    /// Calculates how efficiently the body "charged" during sleep.
-    /// Returns 0.0–1.0 where 1.0 = optimal parasympathetic recovery.
-    /// Based on: high HRV + low RHR = parasympathetic dominance = good recovery
-    /// (Firstbeat absolute recovery vector; Plews/Buchheit HRV principles)
-    private func computeChargeEfficiency(_ input: EnergyBankInput) -> Double {
-        guard let hrvToday = input.hrvToday,
-              let hrvBaseline = input.hrvBaseline,
-              hrvBaseline > 0,
-              let rhrToday = input.rhrToday,
-              let rhrBaseline = input.rhrBaseline,
-              rhrBaseline > 0 else {
-            return 0.6 // default: assume moderate charge when no data
-        }
-
-        // HRV: higher than baseline = good (parasympathetic)
-        let hrvRatio = hrvToday / hrvBaseline
-        let hrvScore: Double
-        switch hrvRatio {
-        case ..<0.8:  hrvScore = 0.2  // significantly suppressed
-        case ..<0.9:  hrvScore = 0.4
-        case ..<1.1:  hrvScore = 0.7  // near baseline
-        case ..<1.3:  hrvScore = 0.9  // above baseline
-        default:      hrvScore = 1.0  // significantly elevated
-        }
-
-        // RHR: lower than baseline = good (efficient)
-        let rhrRatio = rhrToday / rhrBaseline
-        let rhrScore: Double
-        switch rhrRatio {
-        case ..<0.90: rhrScore = 1.0  // significantly lower
-        case ..<0.95: rhrScore = 0.9
-        case ..<1.05: rhrScore = 0.7  // near baseline
-        case ..<1.10: rhrScore = 0.4
-        default:      rhrScore = 0.2  // significantly elevated
-        }
-
-        // Weighted: HRV is the stronger signal per Firstbeat/Whoop research
-        return (0.6 * hrvScore) + (0.4 * rhrScore)
-    }
-
-    // MARK: - TRIMP / Banister ATL · CTL · TSB
-
-    private struct ATLCTLResult {
-        var atl: Double
-        var ctl: Double
-        var tsb: Double
-        var hasHistory: Bool
-    }
-
-    /// Computes Acute Training Load (7-day), Chronic Training Load (42-day),
-    /// and Training Stress Balance from strain history.
-    /// Based on Banister's impulse-response model with exponential decay.
-    private func computeATLCTL(strainHistory: [Double]?, todayStrain: Double) -> ATLCTLResult {
-        guard let history = strainHistory, !history.isEmpty else {
-            return ATLCTLResult(atl: todayStrain, ctl: todayStrain, tsb: 0, hasHistory: false)
-        }
-
-        // Exponential decay constants (standard Banister values)
-        let tauA = 7.0   // ATL time constant (days)
-        let tauC = 42.0  // CTL time constant (days)
-
-        var atl = 0.0
-        var ctl = 0.0
-
-        // Iterate from oldest to newest
-        let allStrains = history + [todayStrain]
-        for (i, strain) in allStrains.enumerated() {
-            let daysAgo = Double(allStrains.count - 1 - i)
-            let decayA = exp(-daysAgo / tauA)
-            let decayC = exp(-daysAgo / tauC)
-            atl += strain * decayA
-            ctl += strain * decayC
-        }
-
-        // Normalize
-        let normA = allStrains.indices.reduce(0.0) { $0 + exp(-Double(allStrains.count - 1 - $1) / tauA) }
-        let normC = allStrains.indices.reduce(0.0) { $0 + exp(-Double(allStrains.count - 1 - $1) / tauC) }
-        atl = normA > 0 ? atl / normA : atl
-        ctl = normC > 0 ? ctl / normC : ctl
-
-        let tsb = ctl - atl
-
-        return ATLCTLResult(atl: atl, ctl: ctl, tsb: tsb, hasHistory: true)
-    }
-
-    // MARK: - Status
-
-    private func status(for energy: Double) -> EnergyBankStatus {
-        switch energy {
-        case ..<25:
-            return .depleted
-        case ..<50:
-            return .low
-        case ..<75:
-            return .stable
+        // 3. Day Drain Calculations
+        let strainScore = input.strainScore ?? 0.0
+        let stressIndex = input.stressIndex ?? 0.0
+        
+        let strainDrain = 0.35 * strainScore
+        let stressDrain = 0.25 * stressIndex
+        
+        let hoursSinceWake = input.hoursSinceWake ?? 8.0
+        let timeDrain = ScoringMath.clamp(hoursSinceWake / 16.0 * 12.0, min: 0, max: 12.0)
+        
+        // Training Load status drain
+        let loadDrain: Double
+        switch input.trainingLoadStatus {
+        case .elevated:
+            loadDrain = 5.0
+            reasons.append("检测到积累性训练负荷升高，加速能量消耗")
+        case .highRisk:
+            loadDrain = 10.0
+            reasons.append("近期负荷激增，身体处于高敏感疲劳状态，加速日间能量流失")
         default:
-            return .strong
+            loadDrain = 0.0
         }
+
+        // 4. Recharge behaviors
+        let mindful = input.mindfulMinutes ?? 0.0
+        let nap = input.napMinutes ?? 0.0
+        let recharge = min(8.0, mindful * 0.15 + nap * 0.20)
+        if recharge > 0 {
+            reasons.append("今日通过静心/小憩补充了 \(String(format: "%.1f", recharge)) 点身体能量")
+        }
+
+        // Current Energy
+        let currentEnergy = ScoringMath.clamp(morningEnergy - strainDrain - stressDrain - timeDrain - loadDrain + recharge, min: 0, max: 100)
+
+        components["strain_drain"] = strainDrain
+        components["stress_drain"] = stressDrain
+        components["time_drain"] = timeDrain
+        components["load_drain"] = loadDrain
+        components["recharge"] = recharge
+
+        let band: MetricBand
+        if currentEnergy < 25 {
+            band = .veryLow // depleted
+        } else if currentEnergy < 50 {
+            band = .low // low
+        } else if currentEnergy < 75 {
+            band = .normal // stable
+        } else {
+            band = .high // strong
+        }
+
+        reasons.append("能量电池是全天体能代理估算值，主要用于规划今日运动与恢复，非医学诊断。")
+
+        let dataWindow = DateInterval(start: Calendar.current.date(byAdding: .hour, value: -12, to: Date()) ?? Date(), end: Date())
+
+        return MetricResult(
+            name: "Energy Bank",
+            value: currentEnergy,
+            band: band,
+            confidence: (rec != nil && slp != nil) ? .high : .medium,
+            components: components,
+            componentWeights: [:],
+            reasons: reasons,
+            missingInputs: missingInputs,
+            dataWindow: dataWindow,
+            source: .derived,
+            algorithmVersion: "1.0.0",
+            lastUpdated: Date()
+        )
     }
 }
