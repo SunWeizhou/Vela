@@ -306,8 +306,8 @@ struct DataCoverageView: View {
             return AppLanguage.stored.isChinese ? "未授权 · 相关判断置信度会下降" : "Not authorized · related judgments lose confidence"
         }
         return AppLanguage.stored.isChinese
-            ? "7天 \(signal.sampleCount7d) 条 · 30天 \(signal.sampleCount30d) 条"
-            : "7d \(signal.sampleCount7d) samples · 30d \(signal.sampleCount30d) samples"
+            ? "7天 \(signal.sampleCount7d) 条 · 30天 \(signal.sampleCount30d) 条 · \(signal.confidenceImpact)"
+            : "7d \(signal.sampleCount7d) samples · 30d \(signal.sampleCount30d) samples · \(signal.confidenceImpact)"
     }
 
     private func groupColor(_ group: CoverageGroup) -> Color {

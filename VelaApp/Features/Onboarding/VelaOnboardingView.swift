@@ -129,9 +129,7 @@ struct VelaOnboardingView: View {
                         Alert(
                             title: Text(L10n.t("Unable to Authorize Apple Health", "无法授权 Apple 健康")),
                             message: Text(authError ?? L10n.t("Vela requires Health permissions to analyze your wellness indices.", "Vela 需要健康权限来分析您的生理与运动数据。")),
-                            dismissButton: .default(Text(L10n.t("OK", "好的"))) {
-                                onboardingCompleted = true
-                            }
+                            dismissButton: .default(Text(L10n.t("OK", "好的")))
                         )
                     }
 

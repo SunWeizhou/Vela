@@ -30,7 +30,8 @@ enum TrainingDecisionEngine {
         _ dashboard: DashboardSummary,
         journalFlags: Set<String> = [],
         activePlan: TrainingPlanRecord? = nil,
-        history: [DailyHealthSnapshot] = []
+        history: [DailyHealthSnapshot] = [],
+        strengthWorkouts: [StrengthWorkoutRecord] = []
     ) -> TrainingDecision {
         // 1. Determine training load confidence & values
         // If history is insufficient (less than 7 records), training load metrics are low/unavailable
@@ -57,6 +58,16 @@ enum TrainingDecisionEngine {
         )
         
         let limiterResult = DailyPlanLimiterEngine().calculate(input: limiterInput)
+        let localFatigue = TrainingAnalyticsService().computeLocalFatigue(workouts: strengthWorkouts)
+        let adaptation = RecoveryTrainingAdapter().adapt(input: RecoveryTrainingInput(
+            recoveryScore: dashboard.recovery.score,
+            sleepScore: dashboard.sleepScore.score,
+            hrvZScore: dashboard.recovery.metrics["hrv_z_score"],
+            restingHRZScore: dashboard.recovery.metrics["rhr_z_score"],
+            tsb: tsb,
+            energyScore: dashboard.energy.currentEnergy,
+            localFatigue: localFatigue
+        ))
         
         // 3. Fallback/Integrate with DailyPlanEngine.recommendation logic
         let legacyLimiter = mainLimiter(for: dashboard)
@@ -207,11 +218,18 @@ enum TrainingDecisionEngine {
             atl: atl,
             ctl: ctl,
             tsb: tsb,
-            volumeMultiplier: limiterResult.volumeMultiplier,
-            maxIntensity: limiterResult.maxIntensity,
-            recommendedTrainingType: limiterResult.recommendedTrainingType,
-            whyThis: limiterResult.whyThis
+            volumeMultiplier: min(limiterResult.volumeMultiplier, adaptation.volumeMultiplier),
+            maxIntensity: stricterIntensity(limiterResult.maxIntensity, adaptation.recommendedIntensity),
+            recommendedTrainingType: adaptation.suggestedFocus,
+            whyThis: [limiterResult.whyThis, adaptation.modifiedWorkoutDescription]
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
         )
+    }
+
+    private static func stricterIntensity(_ lhs: String, _ rhs: String) -> String {
+        let rank = ["rest": 0, "low": 1, "moderate": 2, "high": 3]
+        return (rank[lhs.lowercased()] ?? 2) <= (rank[rhs.lowercased()] ?? 2) ? lhs : rhs
     }
     
     private static func mainLimiter(for dashboard: DashboardSummary) -> DailyPlanLimiter? {

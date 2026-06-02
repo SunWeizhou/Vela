@@ -328,4 +328,64 @@ final class ContextBuilderTests: XCTestCase {
         }
         PersistenceWriteGate.shared.setReadOnly(false)
     }
+
+    func testContextBuilderIncludesExpandedStrengthTrainingOverview() throws {
+        let generatedAt = Date(timeIntervalSince1970: 2_000_000)
+        let prior = StrengthWorkoutRecord(
+            title: "Push",
+            startedAt: generatedAt.addingTimeInterval(-3 * 86_400),
+            durationMinutes: 45,
+            exercises: [
+                StrengthExerciseLog(name: "杠铃卧推", equipment: "barbell", sets: [
+                    StrengthSetLog(repetitions: 8, weightKilograms: 80, rpe: 8)
+                ])
+            ]
+        )
+        let latest = StrengthWorkoutRecord(
+            title: "Push Progression",
+            startedAt: generatedAt.addingTimeInterval(-3_600),
+            durationMinutes: 50,
+            exercises: [
+                StrengthExerciseLog(name: "杠铃卧推", equipment: "barbell", sets: [
+                    StrengthSetLog(repetitions: 8, weightKilograms: 90, rpe: 8)
+                ])
+            ]
+        )
+
+        let (envelope, _) = AIContextBuilder().build(
+            dashboard: .preview(date: generatedAt),
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:],
+            strengthWorkouts: [prior, latest],
+            generatedAt: generatedAt
+        )
+        let strength = try XCTUnwrap(envelope.strengthTraining)
+
+        XCTAssertEqual(strength["sessions_7d"], "2")
+        XCTAssertEqual(strength["sessions_14d"], "2")
+        XCTAssertTrue(strength["recent_prs"]?.contains("杠铃卧推") ?? false)
+        XCTAssertTrue(strength["local_fatigue"]?.contains("chest") ?? false)
+        XCTAssertFalse(strength["training_adaptation"].isNilOrEmpty)
+    }
+
+    func testTypedContextBuilderReturnsEmptyStrengthOverviewWithoutWorkouts() {
+        let (context, _) = AIContextBuilder().buildTyped(
+            dashboard: .preview(),
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:],
+            strengthWorkouts: []
+        )
+
+        XCTAssertEqual(context.strengthTraining?.sessions7d, 0)
+        XCTAssertEqual(context.strengthTraining?.sessions14d, 0)
+        XCTAssertTrue(context.strengthTraining?.recentPRs.isEmpty ?? false)
+    }
+}
+
+private extension Optional where Wrapped == String {
+    var isNilOrEmpty: Bool {
+        self?.isEmpty ?? true
+    }
 }

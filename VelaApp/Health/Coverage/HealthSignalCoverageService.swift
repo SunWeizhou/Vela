@@ -106,6 +106,19 @@ public struct HealthSignalCoverage: Identifiable, Codable, Hashable {
     public var isAvailable: Bool {
         authorizationState == .authorized && sampleCount30d > 0
     }
+
+    public var confidenceImpact: String {
+        switch (authorizationState, freshness, quality) {
+        case (.authorized, .live, .enough), (.authorized, .today, .enough):
+            return AppLanguage.stored.isChinese ? "可用于高置信度判断" : "Supports high-confidence judgments"
+        case (.authorized, .recent, _), (.authorized, _, .partial):
+            return AppLanguage.stored.isChinese ? "可用，但会降低判断置信度" : "Available, with reduced confidence"
+        case (.notDetermined, _, _):
+            return AppLanguage.stored.isChinese ? "尚未请求权限，相关判断不可用" : "Permission not requested; related judgments are unavailable"
+        default:
+            return AppLanguage.stored.isChinese ? "数据缺失，相关判断不可用" : "Missing data; related judgments are unavailable"
+        }
+    }
 }
 
 @MainActor
@@ -229,9 +242,10 @@ public final class HealthSignalCoverageService {
                 let latestDate = samples.first?.startDate
                 
                 // Now run a query to count all samples in 30d and 7d
+                let countPredicate = HKQuery.predicateForSamples(withStart: start30d, end: now, options: .strictStartDate)
                 let allQuery = HKSampleQuery(
                     sampleType: sampleType,
-                    predicate: pred30d,
+                    predicate: countPredicate,
                     limit: HKObjectQueryNoLimit,
                     sortDescriptors: nil
                 ) { _, allSamples, allErr in

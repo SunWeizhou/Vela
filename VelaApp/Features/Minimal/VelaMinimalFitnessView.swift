@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Combine
 
 // MARK: - VelaTrainingView — Bevel Replica Fitness Tab
 // Double-Month thinned activity heatmaps × Area workouts summary × Target safe-zone Exertion workload chart
@@ -11,6 +12,7 @@ struct VelaTrainingView: View {
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     @ObservedObject private var appState = VelaAppState.shared
     @Query(sort: \StrengthWorkoutRecord.startedAt, order: .reverse) private var strengthWorkouts: [StrengthWorkoutRecord]
+    @Query(sort: \WorkoutEventRecord.startedAt, order: .reverse) private var localWorkoutEvents: [WorkoutEventRecord]
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
 
@@ -34,6 +36,10 @@ struct VelaTrainingView: View {
                 fitnessHeader
                 
                 // 2. Double-Month Thinned Activity Heatmap Card
+                trainingIntelligenceCard
+
+                muscleVolumeCard
+
                 activityHeatmapCard
                 
                 // 3. Activity Summary Card (活动摘要 with orange filled area curve)
@@ -388,10 +394,129 @@ struct VelaTrainingView: View {
         "请结合我过去 30 天的 Apple 健康训练记录、耗力趋势、恢复、睡眠和能量，分析训练状态并给出下一次训练建议。"
     }
 
+    private var recentStrengthSummary: RecentTrainingSummary {
+        TrainingAnalyticsService().buildRecentSummary(workouts: strengthWorkouts, days: 7)
+    }
+
+    private var trainingAdaptation: TrainingAdaptationRecommendation {
+        RecoveryTrainingAdapter().adapt(input: RecoveryTrainingInput(
+            recoveryScore: dashboard.recovery.score,
+            sleepScore: dashboard.sleepScore.score,
+            hrvZScore: dashboard.recovery.metrics["hrv_z_score"],
+            restingHRZScore: dashboard.recovery.metrics["rhr_z_score"],
+            tsb: dashboard.energy.metrics["tsb"],
+            energyScore: dashboard.energy.currentEnergy,
+            localFatigue: recentStrengthSummary.localFatigue
+        ))
+    }
+
+    private var trainingIntelligenceCard: some View {
+        let recommendation = trainingAdaptation
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("今日训练建议", systemImage: recommendation.shouldTrain ? "figure.strengthtraining.traditional" : "figure.cooldown")
+                    .font(.system(size: 15, weight: .bold))
+                Spacer()
+                Text("\(Int((recommendation.volumeMultiplier * 100).rounded()))% 容量")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Color(hex: "#C56B4A"))
+            }
+            Text(recommendation.shouldTrain ? "建议训练 · \(recommendation.recommendedIntensity)" : "建议恢复或休息")
+                .font(.system(size: 20, weight: .bold))
+            Text(recommendation.reasons.joined(separator: " "))
+                .font(.system(size: 12))
+                .foregroundStyle(Color(hex: "#8E8A80"))
+            if !recommendation.avoidMuscleGroups.isEmpty {
+                Text("今天避开：\(recommendation.avoidMuscleGroups.joined(separator: "、"))")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Color(hex: "#FF3B30"))
+            }
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 22).fill(Color.white))
+    }
+
+    private var muscleVolumeCard: some View {
+        let summary = recentStrengthSummary
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("过去 7 天肌群有效组")
+                    .font(.system(size: 15, weight: .bold))
+                Spacer()
+                Text("\(summary.sessions) 次力量训练")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color(hex: "#8E8A80"))
+            }
+            if summary.muscleGroupSets.isEmpty {
+                Text("完成力量训练后，这里会显示肌群训练量和局部疲劳。")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(hex: "#8E8A80"))
+            } else {
+                ForEach(summary.muscleGroupSets.sorted { $0.key < $1.key }, id: \.key) { muscle, sets in
+                    HStack {
+                        Text(muscle)
+                        Spacer()
+                        Text("\(sets) 组")
+                            .foregroundStyle(sets >= 18 ? Color(hex: "#FF3B30") : (sets < 6 ? Color(hex: "#4285F4") : Color(hex: "#34C759")))
+                    }
+                    .font(.system(size: 12, weight: .bold))
+                }
+            }
+            if !summary.recentPRs.isEmpty {
+                Divider()
+                Text("近期 PR：\(summary.recentPRs.prefix(3).map(\.summary).joined(separator: " · "))")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Color(hex: "#C56B4A"))
+            }
+            if let latest = summary.lastWorkoutSummary {
+                Divider()
+                Text("最近一次：\(latest)")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(hex: "#8E8A80"))
+            }
+            if !exerciseProgressLines.isEmpty {
+                Divider()
+                Text("常练动作进步")
+                    .font(.system(size: 12, weight: .bold))
+                ForEach(exerciseProgressLines.prefix(3), id: \.self) { line in
+                    Text(line)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color(hex: "#8E8A80"))
+                }
+            }
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 22).fill(Color.white))
+    }
+
+    private var exerciseProgressLines: [String] {
+        let exercises = strengthWorkouts
+            .sorted { $0.startedAt > $1.startedAt }
+            .flatMap { workout in workout.exercises.map { (workout.startedAt, $0) } }
+        let grouped = Dictionary(grouping: exercises, by: { $0.1.name })
+        return grouped.compactMap { name, entries in
+            guard let latestDate = entries.map(\.0).max() else { return nil }
+            let latest = peakEstimatedOneRepMax(entries.filter { $0.0 == latestDate }.map(\.1))
+            let prior = peakEstimatedOneRepMax(entries.filter { $0.0 < latestDate }.map(\.1))
+            guard latest > 0 else { return nil }
+            if prior > 0 {
+                return "\(name)：e1RM \(Int(latest.rounded())) kg（\(String(format: "%+.0f", latest - prior)) kg）"
+            }
+            return "\(name)：e1RM \(Int(latest.rounded())) kg（建立基线）"
+        }.sorted()
+    }
+
+    private func peakEstimatedOneRepMax(_ exercises: [StrengthExerciseLog]) -> Double {
+        exercises.flatMap(\.sets)
+            .filter { !$0.isWarmup && $0.weightKilograms > 0 && $0.repetitions >= 1 && $0.repetitions <= 12 }
+            .map { $0.weightKilograms * (1 + Double($0.repetitions) / 30) }
+            .max() ?? 0
+    }
+
     private var recentWorkoutsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Apple 健康训练记录")
+                Text("统一训练记录")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(Color(hex: "#1A1917"))
                 Spacer()
@@ -544,7 +669,22 @@ struct VelaTrainingView: View {
         loadRealFitnessData()
         await dashboardVM.refresh(modelContext: modelContext, force: force)
         loadRealFitnessData()
-        recentWorkouts = (try? await HealthKitQueryService().recentWorkouts(limit: 30)) ?? []
+        let healthKit = (try? await HealthKitQueryService().recentWorkouts(limit: 30)) ?? []
+        let local = localWorkoutEvents.map {
+            WorkoutSummary(
+                id: $0.id,
+                start: $0.startedAt,
+                end: $0.endedAt,
+                activityName: $0.activityType,
+                energyKilocalories: $0.energyKilocalories,
+                averageHeartRate: $0.averageHeartRate,
+                source: $0.source,
+                rpe: $0.rpe
+            )
+        }
+        let localIDs = Set(local.map(\.id))
+        recentWorkouts = (healthKit.filter { !localIDs.contains($0.id) } + local)
+            .sorted { $0.start > $1.start }
     }
 
     private func loadRealFitnessData() {
@@ -677,8 +817,10 @@ struct VelaTrainingView: View {
 
 private struct StrengthExerciseDraft: Identifiable {
     var id = UUID()
+    var exerciseDefinitionId: UUID?
     var name = ""
     var equipment = "杠铃"
+    var primaryMuscleGroup: String?
     var sets: [StrengthSetDraft] = [StrengthSetDraft()]
 }
 
@@ -687,20 +829,46 @@ private struct StrengthSetDraft: Identifiable {
     var repetitions = 10
     var weightKilograms = 20.0
     var isWarmup = false
+    var rpe: Double?
+    var rir: Double?
+    var isCompleted = false
+    var completedAt: Date?
+}
+
+private struct RestTimerState {
+    var endsAt: Date
+    var exerciseName: String
+    var setNumber: Int
 }
 
 struct StrengthWorkoutLogSheetView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var dashboardVM: DashboardViewModel
+    @Query(sort: \StrengthWorkoutRecord.startedAt, order: .reverse) private var workoutHistory: [StrengthWorkoutRecord]
+    @Query(sort: \WorkoutTemplateRecord.title) private var persistedTemplates: [WorkoutTemplateRecord]
     
     @State private var title = "力量训练"
-    @State private var durationMinutes = 60
+    @State private var startedAt = Date()
     @State private var notes = ""
     @State private var exertionScore: Double = 7.0
-    @State private var exercises = [StrengthExerciseDraft()]
+    @State private var exercises: [StrengthExerciseDraft] = []
+    @State private var showExercisePicker = false
+    @State private var showDiscardConfirmation = false
+    @State private var restTimer: RestTimerState?
+    @State private var restSecondsRemaining = 0
+    @State private var saveError: String?
+    @State private var completedSummary: StrengthWorkoutAnalysis?
+    @State private var completedWorkout: StrengthWorkoutRecord?
+    @State private var closeAfterSummary = false
+    @State private var now = Date()
 
     private let equipmentOptions = ["杠铃", "哑铃", "固定器械", "绳索", "壶铃", "自重", "其他"]
+    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    private var durationMinutes: Int {
+        max(1, Int(now.timeIntervalSince(startedAt) / 60))
+    }
 
     var body: some View {
         NavigationStack {
@@ -708,12 +876,16 @@ struct StrengthWorkoutLogSheetView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     sessionCard
 
+                    if let restTimer {
+                        restTimerCard(restTimer)
+                    }
+
                     ForEach($exercises) { $exercise in
                         exerciseCard(exercise: $exercise)
                     }
 
                     Button {
-                        exercises.append(StrengthExerciseDraft())
+                        showExercisePicker = true
                     } label: {
                         Label("添加动作", systemImage: "plus.circle.fill")
                             .font(.system(size: 14, weight: .bold))
@@ -732,13 +904,55 @@ struct StrengthWorkoutLogSheetView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button("放弃") { showDiscardConfirmation = true }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") { save() }
+                    Button("完成") { save() }
                         .disabled(validExercises.isEmpty)
                 }
             }
+        }
+        .onReceive(timer) { date in
+            now = date
+            if let restTimer {
+                restSecondsRemaining = max(0, Int(restTimer.endsAt.timeIntervalSince(date).rounded(.up)))
+                if restSecondsRemaining == 0 { self.restTimer = nil }
+            }
+        }
+        .task {
+            try? ExerciseLibraryService.seedDefaultsIfNeeded(modelContext: modelContext)
+        }
+        .sheet(isPresented: $showExercisePicker) {
+            ExercisePickerSheet { definition in
+                addExercise(definition)
+            }
+        }
+        .sheet(item: $completedSummary, onDismiss: {
+            if closeAfterSummary { dismiss() }
+        }) { summary in
+            StrengthWorkoutSummarySheet(
+                summary: summary,
+                workout: completedWorkout,
+                onSaveTemplate: saveCompletedWorkoutAsTemplate,
+                onDone: {
+                    closeAfterSummary = true
+                    completedSummary = nil
+                }
+            )
+        }
+        .confirmationDialog("要放弃这次训练吗？", isPresented: $showDiscardConfirmation, titleVisibility: .visible) {
+            Button("放弃训练", role: .destructive) { dismiss() }
+            Button("继续训练", role: .cancel) {}
+        } message: {
+            Text("尚未完成的组不会保存。")
+        }
+        .alert("无法保存训练", isPresented: Binding(
+            get: { saveError != nil },
+            set: { if !$0 { saveError = nil } }
+        )) {
+            Button("好", role: .cancel) { saveError = nil }
+        } message: {
+            Text(saveError ?? "")
         }
     }
 
@@ -746,8 +960,18 @@ struct StrengthWorkoutLogSheetView: View {
         VStack(alignment: .leading, spacing: 12) {
             TextField("训练名称", text: $title)
                 .font(.system(size: 18, weight: .bold))
-            Stepper("时长 \(durationMinutes) 分钟", value: $durationMinutes, in: 5...240, step: 5)
-                .font(.system(size: 14, weight: .semibold))
+            HStack {
+                Label("\(durationMinutes) 分钟", systemImage: "timer")
+                    .font(.system(size: 14, weight: .semibold))
+                Spacer()
+                Menu("从模板开始") {
+                    Button("空白训练") { exercises = [] }
+                    ForEach(availableTemplates) { template in
+                        Button(template.title) { applyTemplate(template) }
+                    }
+                }
+                .font(.system(size: 13, weight: .bold))
+            }
             
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
@@ -796,6 +1020,12 @@ struct StrengthWorkoutLogSheetView: View {
             }
             .pickerStyle(.menu)
 
+            if let previous = previousPerformance(for: exercise.wrappedValue.name) {
+                Text("上次表现：\(previous)")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color(hex: "#8E8A80"))
+            }
+
             ForEach(exercise.sets) { set in
                 strengthSetRow(set: set, exercise: exercise)
             }
@@ -808,6 +1038,21 @@ struct StrengthWorkoutLogSheetView: View {
                     .foregroundStyle(Color(hex: "#C56B4A"))
             }
             .buttonStyle(.plain)
+
+            if let last = exercise.wrappedValue.sets.last {
+                Button {
+                    var copy = last
+                    copy.id = UUID()
+                    copy.isCompleted = false
+                    copy.completedAt = nil
+                    exercise.wrappedValue.sets.append(copy)
+                } label: {
+                    Label("复制上一组", systemImage: "plus.square.on.square")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Color(hex: "#8E8A80"))
+                }
+                .buttonStyle(.plain)
+            }
         }
         .padding(16)
         .background(RoundedRectangle(cornerRadius: 20).fill(Color.white))
@@ -817,32 +1062,61 @@ struct StrengthWorkoutLogSheetView: View {
         set: Binding<StrengthSetDraft>,
         exercise: Binding<StrengthExerciseDraft>
     ) -> some View {
-        HStack(spacing: 10) {
-            Toggle("热身", isOn: set.isWarmup)
-                .font(.system(size: 11, weight: .medium))
-                .toggleStyle(.button)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Toggle("热身", isOn: set.isWarmup)
+                    .font(.system(size: 11, weight: .medium))
+                    .toggleStyle(.button)
 
-            TextField("kg", value: set.weightKilograms, format: .number.precision(.fractionLength(0...1)))
-                .keyboardType(.decimalPad)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 72)
+                TextField("kg", value: set.weightKilograms, format: .number.precision(.fractionLength(0...1)))
+                    .keyboardType(.decimalPad)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 62)
 
-            Text("kg ×")
-                .font(.system(size: 12))
-                .foregroundStyle(Color(hex: "#8E8A80"))
+                Text("kg ×")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(hex: "#8E8A80"))
 
-            Stepper("\(set.wrappedValue.repetitions) 次", value: set.repetitions, in: 1...100)
-                .font(.system(size: 12, weight: .semibold))
+                Stepper("\(set.wrappedValue.repetitions)", value: set.repetitions, in: 1...100)
+                    .font(.system(size: 12, weight: .semibold))
 
-            if exercise.wrappedValue.sets.count > 1 {
                 Button {
-                    exercise.wrappedValue.sets.removeAll { $0.id == set.wrappedValue.id }
+                    complete(set: set, in: exercise)
                 } label: {
-                    Image(systemName: "minus.circle")
-                        .foregroundStyle(Color(hex: "#BFB9AC"))
+                    Image(systemName: set.wrappedValue.isCompleted ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(set.wrappedValue.isCompleted ? Color(hex: "#34C759") : Color(hex: "#C56B4A"))
+                        .font(.system(size: 20))
                 }
                 .buttonStyle(.plain)
             }
+
+            HStack(spacing: 8) {
+                quickAdjust("-2.5") { set.wrappedValue.weightKilograms = max(0, set.wrappedValue.weightKilograms - 2.5) }
+                quickAdjust("+2.5") { set.wrappedValue.weightKilograms += 2.5 }
+                quickAdjust("-1次") { set.wrappedValue.repetitions = max(1, set.wrappedValue.repetitions - 1) }
+                quickAdjust("+1次") { set.wrappedValue.repetitions += 1 }
+                Spacer()
+                Menu("RPE \(set.wrappedValue.rpe.map { String(Int($0)) } ?? "-")") {
+                    ForEach(6...10, id: \.self) { value in
+                        Button("\(value)") { set.wrappedValue.rpe = Double(value) }
+                    }
+                }
+                Menu("RIR \(set.wrappedValue.rir.map { String(Int($0)) } ?? "-")") {
+                    ForEach(0...5, id: \.self) { value in
+                        Button("\(value)") { set.wrappedValue.rir = Double(value) }
+                    }
+                }
+                if exercise.wrappedValue.sets.count > 1 {
+                    Button {
+                        exercise.wrappedValue.sets.removeAll { $0.id == set.wrappedValue.id }
+                    } label: {
+                        Image(systemName: "trash")
+                            .foregroundStyle(Color(hex: "#BFB9AC"))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .font(.system(size: 11, weight: .bold))
         }
     }
 
@@ -851,13 +1125,19 @@ struct StrengthWorkoutLogSheetView: View {
             let name = exercise.name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else { return nil }
             return StrengthExerciseLog(
+                exerciseDefinitionId: exercise.exerciseDefinitionId,
                 name: name,
                 equipment: exercise.equipment,
+                primaryMuscleGroup: exercise.primaryMuscleGroup,
                 sets: exercise.sets.map {
                     StrengthSetLog(
                         repetitions: $0.repetitions,
                         weightKilograms: max(0, $0.weightKilograms),
-                        isWarmup: $0.isWarmup
+                        isWarmup: $0.isWarmup,
+                        rpe: $0.rpe,
+                        rir: $0.rir,
+                        isCompleted: $0.isCompleted,
+                        completedAt: $0.completedAt
                     )
                 }
             )
@@ -867,35 +1147,260 @@ struct StrengthWorkoutLogSheetView: View {
     private func save() {
         let record = StrengthWorkoutRecord(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "力量训练" : title,
+            startedAt: startedAt,
             durationMinutes: durationMinutes,
             notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
             exercises: validExercises
         )
         modelContext.insert(record)
-        
-        // Companion WorkoutEventRecord
-        let event = WorkoutEventRecord(
-            source: "strengthLog",
-            startedAt: record.startedAt,
-            endedAt: record.endedAt,
-            activityType: record.title,
-            energyKilocalories: Double(durationMinutes) * 6.0, // Estimate 6 kcal/min for gym training
-            rpe: exertionScore,
-            linkedStrengthWorkoutId: record.id
-        )
-        modelContext.insert(event)
-        
         do {
-            try modelContext.save()
+            let analysis = TrainingAnalyticsService().summarizeWorkout(
+                record,
+                history: workoutHistory,
+                exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
+            )
+            record.analyticsJSON = (try? String(data: JSONEncoder().encode(analysis), encoding: .utf8)) ?? "{}"
+            _ = try WorkoutAggregationService.shared.upsertWorkoutEvent(
+                from: record,
+                modelContext: modelContext,
+                sessionRPE: exertionScore
+            )
             VelaAppState.shared.markLocalDataChanged()
+            completedWorkout = record
+            completedSummary = analysis
             Task {
                 await dashboardVM.refresh(modelContext: modelContext)
             }
         } catch {
-            print("Failed to save strength workout: \(error)")
+            modelContext.delete(record)
+            saveError = "训练暂时无法保存，请稍后再试。\(error.localizedDescription)"
         }
-        dismiss()
     }
+
+    private func addExercise(_ definition: ExerciseDefinitionRecord) {
+        exercises.append(StrengthExerciseDraft(
+            exerciseDefinitionId: definition.id,
+            name: definition.name,
+            equipment: localizedEquipment(definition.equipment),
+            primaryMuscleGroup: definition.primaryMuscleGroup
+        ))
+    }
+
+    private func applyTemplate(_ template: WorkoutTemplateRecord) {
+        title = template.title
+        exercises = template.exercises.map { item in
+            let definition = ExerciseLibraryService.defaultDefinitions().first { $0.name == item.name }
+            return StrengthExerciseDraft(
+                exerciseDefinitionId: definition?.id,
+                name: item.name,
+                equipment: localizedEquipment(definition?.equipment ?? "other"),
+                primaryMuscleGroup: definition?.primaryMuscleGroup,
+                sets: (0..<max(1, item.targetSets)).map { _ in StrengthSetDraft(rpe: item.targetRPE) }
+            )
+        }
+    }
+
+    private var availableTemplates: [WorkoutTemplateRecord] {
+        let persistedTitles = Set(persistedTemplates.map(\.title))
+        return persistedTemplates + ExerciseLibraryService.defaultTemplates().filter { !persistedTitles.contains($0.title) }
+    }
+
+    private func localizedEquipment(_ value: String) -> String {
+        switch value.lowercased() {
+        case "barbell": return "杠铃"
+        case "dumbbell": return "哑铃"
+        case "machine": return "固定器械"
+        case "cable": return "绳索"
+        case "kettlebell": return "壶铃"
+        case "bodyweight": return "自重"
+        default: return "其他"
+        }
+    }
+
+    private func previousPerformance(for exerciseName: String) -> String? {
+        guard !exerciseName.isEmpty,
+              let previous = workoutHistory.lazy.flatMap(\.exercises).first(where: { $0.name == exerciseName }) else {
+            return nil
+        }
+        return previous.sets.filter { !$0.isWarmup }.prefix(3).map {
+            "\($0.weightKilograms.formatted(.number.precision(.fractionLength(0...1))))kg × \($0.repetitions)"
+        }.joined(separator: "，")
+    }
+
+    private func complete(set: Binding<StrengthSetDraft>, in exercise: Binding<StrengthExerciseDraft>) {
+        set.wrappedValue.isCompleted.toggle()
+        set.wrappedValue.completedAt = set.wrappedValue.isCompleted ? Date() : nil
+        guard set.wrappedValue.isCompleted,
+              let index = exercise.wrappedValue.sets.firstIndex(where: { $0.id == set.wrappedValue.id }) else { return }
+        restTimer = RestTimerState(endsAt: Date().addingTimeInterval(90), exerciseName: exercise.wrappedValue.name, setNumber: index + 1)
+        restSecondsRemaining = 90
+    }
+
+    private func quickAdjust(_ label: String, action: @escaping () -> Void) -> some View {
+        Button(label, action: action)
+            .buttonStyle(.bordered)
+            .controlSize(.mini)
+    }
+
+    private func restTimerCard(_ timer: RestTimerState) -> some View {
+        HStack {
+            Image(systemName: "timer")
+            Text("\(timer.exerciseName) 第 \(timer.setNumber) 组休息")
+            Spacer()
+            Text("\(restSecondsRemaining)s").monospacedDigit()
+            Button("跳过") { restTimer = nil }
+        }
+        .font(.system(size: 13, weight: .bold))
+        .foregroundStyle(Color(hex: "#C56B4A"))
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 18).fill(Color.white))
+    }
+
+    private func saveCompletedWorkoutAsTemplate() {
+        guard let workout = completedWorkout else { return }
+        modelContext.insert(WorkoutTemplateRecord(
+            title: workout.title,
+            goal: "custom",
+            notes: workout.notes,
+            exercises: workout.exercises.map {
+                WorkoutTemplateExercise(
+                    exerciseDefinitionId: $0.exerciseDefinitionId,
+                    name: $0.name,
+                    targetSets: max(1, $0.sets.filter { !$0.isWarmup }.count),
+                    targetReps: $0.sets.first.map { "\($0.repetitions)" } ?? "8-12",
+                    targetRPE: $0.sets.compactMap(\.rpe).first,
+                    restSeconds: 90
+                )
+            },
+            estimatedDurationMinutes: workout.durationMinutes
+        ))
+        try? modelContext.save()
+    }
+}
+
+private struct ExercisePickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Query(sort: \ExerciseDefinitionRecord.name) private var customDefinitions: [ExerciseDefinitionRecord]
+    @State private var query = ""
+    let onSelect: (ExerciseDefinitionRecord) -> Void
+
+    private var definitions: [ExerciseDefinitionRecord] {
+        let defaults = ExerciseLibraryService.defaultDefinitions()
+        let names = Set(customDefinitions.map(\.name))
+        return ExerciseLibraryService.search(query, in: customDefinitions + defaults.filter { !names.contains($0.name) })
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(definitions) { definition in
+                    Button {
+                        onSelect(definition)
+                        dismiss()
+                    } label: {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(definition.name)
+                            Text("\(definition.primaryMuscleGroup) · \(definition.equipment)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   !definitions.contains(where: { $0.name == query }) {
+                    Button("新增自定义动作「\(query)」") {
+                        let definition = ExerciseDefinitionRecord(
+                            name: query,
+                            primaryMuscleGroup: "other",
+                            equipment: "other",
+                            movementPattern: "other",
+                            isCustom: true
+                        )
+                        modelContext.insert(definition)
+                        try? modelContext.save()
+                        onSelect(definition)
+                        dismiss()
+                    }
+                }
+            }
+            .searchable(text: $query, prompt: "搜索动作或肌群")
+            .navigationTitle("添加动作")
+        }
+        .task {
+            try? ExerciseLibraryService.seedDefaultsIfNeeded(modelContext: modelContext)
+        }
+    }
+}
+
+private struct StrengthWorkoutSummarySheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let summary: StrengthWorkoutAnalysis
+    let workout: StrengthWorkoutRecord?
+    let onSaveTemplate: () -> Void
+    let onDone: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(workout?.title ?? "训练总结")
+                        .font(.system(size: 24, weight: .bold))
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                        metric("时长", "\(workout?.durationMinutes ?? 0) 分钟")
+                        metric("总容量", "\(Int(summary.totalVolumeKg.rounded())) kg")
+                        metric("总组数", "\(summary.totalSets)")
+                        metric("有效组", "\(summary.effectiveSets)")
+                        metric("总次数", "\(summary.totalReps)")
+                        metric("训练密度", "\(Int(summary.densityKgPerMinute.rounded())) kg/min")
+                    }
+                    summaryCard("肌群组数", summary.muscleGroupSets.sorted { $0.key < $1.key }.map { "\($0.key): \($0.value) 组" }.joined(separator: "\n"))
+                    summaryCard("e1RM", summary.estimatedOneRepMaxByExercise.sorted { $0.key < $1.key }.map { "\($0.key): \(Int($0.value.rounded())) kg" }.joined(separator: "\n"))
+                    summaryCard("PR", summary.personalRecords.isEmpty ? "历史数据不足，完成更多训练后会自动识别 PR。" : summary.personalRecords.map(\.summary).joined(separator: "\n"))
+                    summaryCard("恢复建议", "补充水分和蛋白质，优先保证今晚睡眠。明天根据恢复、HRV 和局部肌群疲劳调整容量。")
+                    summaryCard("饮食建议", "训练后安排一餐蛋白质和碳水，优先补水。若今天总摄入不足，在睡前补足恢复所需营养。")
+                    summaryCard("下次训练建议", "先查看明天的恢复分、睡眠和局部肌群疲劳。高疲劳肌群至少降低容量，必要时改练其他部位或主动恢复。")
+                    Button("保存为模板", action: onSaveTemplate)
+                        .buttonStyle(.bordered)
+                }
+                .padding(16)
+            }
+            .background(Color(hex: "#F5F3F0"))
+            .navigationTitle("Workout Summary")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") {
+                        onDone()
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private func metric(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value).font(.system(size: 15, weight: .bold))
+            Text(title).font(.caption).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 14).fill(.white))
+    }
+
+    private func summaryCard(_ title: String, _ body: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.system(size: 14, weight: .bold))
+            Text(body.isEmpty ? "暂无数据" : body).font(.system(size: 13)).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 16).fill(.white))
+    }
+}
+
+extension StrengthWorkoutAnalysis: Identifiable {
+    var id: String { summaryText + "\(totalSets)" }
 }
 
 struct StrengthWorkoutDetailView: View {

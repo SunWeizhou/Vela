@@ -1371,6 +1371,125 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertEqual(result.confidence, .low)
         XCTAssertTrue(result.reasons.contains { $0.contains("不足 7 天") })
     }
+
+    func testTrainingAnalyticsCalculatesEffectiveVolumeMusclesE1RMAndPRs() {
+        let workout = StrengthWorkoutRecord(
+            title: "Push",
+            startedAt: Date(timeIntervalSince1970: 2_000),
+            durationMinutes: 40,
+            exercises: [
+                StrengthExerciseLog(
+                    name: "杠铃卧推",
+                    equipment: "barbell",
+                    sets: [
+                        StrengthSetLog(repetitions: 10, weightKilograms: 20, isWarmup: true),
+                        StrengthSetLog(repetitions: 8, weightKilograms: 100, rpe: 8)
+                    ]
+                )
+            ]
+        )
+        let history = [
+            StrengthWorkoutRecord(
+                title: "Push",
+                startedAt: Date(timeIntervalSince1970: 1_000),
+                durationMinutes: 45,
+                exercises: [
+                    StrengthExerciseLog(
+                        name: "杠铃卧推",
+                        equipment: "barbell",
+                        sets: [StrengthSetLog(repetitions: 8, weightKilograms: 90, rpe: 8)]
+                    )
+                ]
+            )
+        ]
+
+        let analysis = TrainingAnalyticsService().summarizeWorkout(
+            workout,
+            history: history,
+            exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
+        )
+
+        XCTAssertEqual(analysis.totalVolumeKg, 800, accuracy: 0.001)
+        XCTAssertEqual(analysis.totalSets, 2)
+        XCTAssertEqual(analysis.effectiveSets, 1)
+        XCTAssertEqual(analysis.totalReps, 18)
+        XCTAssertEqual(analysis.muscleGroupSets["chest"], 1)
+        XCTAssertEqual(analysis.estimatedOneRepMaxByExercise["杠铃卧推"] ?? 0, 126.67, accuracy: 0.01)
+        XCTAssertFalse(analysis.personalRecords.isEmpty)
+    }
+
+    func testTrainingAnalyticsGracefullyHandlesEmptyWorkout() {
+        let analysis = TrainingAnalyticsService().summarizeWorkout(
+            StrengthWorkoutRecord(title: "Empty", durationMinutes: 0, exercises: []),
+            history: [],
+            exerciseLibrary: []
+        )
+
+        XCTAssertEqual(analysis.totalVolumeKg, 0)
+        XCTAssertEqual(analysis.effectiveSets, 0)
+        XCTAssertEqual(analysis.densityKgPerMinute, 0)
+        XCTAssertTrue(analysis.personalRecords.isEmpty)
+    }
+
+    func testRecoveryTrainingAdapterReducesVolumeAndAvoidsFatiguedMuscles() {
+        let recommendation = RecoveryTrainingAdapter().adapt(
+            input: RecoveryTrainingInput(
+                recoveryScore: 38,
+                sleepScore: 58,
+                hrvZScore: -1.8,
+                restingHRZScore: 1.2,
+                tsb: -18,
+                localFatigue: [
+                    "legs": LocalMuscleFatigue(
+                        muscleGroup: "legs",
+                        setsLast48h: 10,
+                        setsLast7d: 20,
+                        volumeLast7d: 8_000
+                    )
+                ],
+                plannedFocus: "legs"
+            )
+        )
+
+        XCTAssertFalse(recommendation.shouldTrain)
+        XCTAssertLessThanOrEqual(recommendation.volumeMultiplier, 0.4)
+        XCTAssertNotEqual(recommendation.recommendedIntensity, "high")
+        XCTAssertTrue(recommendation.avoidMuscleGroups.contains("legs"))
+        XCTAssertFalse(recommendation.reasons.isEmpty)
+    }
+
+    func testRecoveryTrainingAdapterKeepsNormalTrainingWhenSignalsAreStrong() {
+        let recommendation = RecoveryTrainingAdapter().adapt(
+            input: RecoveryTrainingInput(
+                recoveryScore: 88,
+                sleepScore: 84,
+                hrvZScore: 0.3,
+                restingHRZScore: -0.2,
+                tsb: 4
+            )
+        )
+
+        XCTAssertTrue(recommendation.shouldTrain)
+        XCTAssertGreaterThanOrEqual(recommendation.volumeMultiplier, 1)
+        XCTAssertEqual(recommendation.recommendedIntensity, "high")
+    }
+
+    func testRecoveryTrainingAdapterAvoidsHighIntensityWhenSleepAndHRVArePoor() {
+        let recommendation = RecoveryTrainingAdapter().adapt(
+            input: RecoveryTrainingInput(
+                recoveryScore: 84,
+                sleepScore: 59,
+                hrvZScore: -1.4,
+                restingHRZScore: 0.2,
+                tsb: 2
+            )
+        )
+
+        XCTAssertTrue(recommendation.shouldTrain)
+        XCTAssertNotEqual(recommendation.recommendedIntensity, "high")
+        XCTAssertTrue(recommendation.reasons.contains { $0.contains("Sleep") })
+        XCTAssertTrue(recommendation.reasons.contains { $0.contains("HRV") })
+    }
 }
 
 private func makePhenoAgeBiomarkers(

@@ -109,4 +109,118 @@ final class WorkoutAggregationTests: XCTestCase {
         XCTAssertEqual(running?.source, "healthKit")
         XCTAssertEqual(running?.averageHeartRate, 150)
     }
+
+    @MainActor
+    func testStrengthWorkoutUpsertCreatesOneEventAndAggregatesDailySummary() throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = ModelContext(container)
+        let calendar = Calendar(identifier: .gregorian)
+        let startedAt = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 2, hour: 18)))
+        let workout = StrengthWorkoutRecord(
+            title: "Push",
+            startedAt: startedAt,
+            durationMinutes: 50,
+            exercises: [
+                StrengthExerciseLog(name: "杠铃卧推", equipment: "barbell", sets: [
+                    StrengthSetLog(repetitions: 8, weightKilograms: 80, rpe: 8)
+                ])
+            ]
+        )
+        context.insert(workout)
+
+        try WorkoutAggregationService.shared.upsertWorkoutEvent(
+            from: workout,
+            modelContext: context,
+            sessionRPE: 8,
+            calendar: calendar
+        )
+        try WorkoutAggregationService.shared.upsertWorkoutEvent(
+            from: workout,
+            modelContext: context,
+            sessionRPE: 8,
+            calendar: calendar
+        )
+
+        let events = try context.fetch(FetchDescriptor<WorkoutEventRecord>())
+        let summaries = try context.fetch(FetchDescriptor<DailyHealthSummaryRecord>())
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events.first?.linkedStrengthWorkoutId, workout.id)
+        XCTAssertEqual(summaries.first?.workoutCount, 1)
+        XCTAssertEqual(summaries.first?.workoutDuration, 50)
+        XCTAssertGreaterThan(summaries.first?.workoutLoad ?? 0, 0)
+    }
+
+    @MainActor
+    func testStrengthWorkoutLinksActivePlanDayAndMarksItCompleted() throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = ModelContext(container)
+        let calendar = Calendar(identifier: .gregorian)
+        let startedAt = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 2, hour: 18)))
+        let planDay = TrainingDay(
+            weekNumber: 1,
+            dayNumber: 1,
+            title: "Push",
+            description: "Chest and triceps",
+            focus: "strength",
+            durationMinutes: 45,
+            intensity: "moderate"
+        )
+        let plan = TrainingPlanRecord(title: "Hypertrophy", goalDescription: "Build muscle", startDate: startedAt, days: [planDay])
+        let workout = StrengthWorkoutRecord(title: "Push", startedAt: startedAt, durationMinutes: 50, exercises: [])
+        context.insert(plan)
+        context.insert(workout)
+
+        try WorkoutAggregationService.shared.upsertWorkoutEvent(
+            from: workout,
+            modelContext: context,
+            sessionRPE: 7,
+            calendar: calendar
+        )
+
+        let linkedDay = try XCTUnwrap(plan.days.first)
+        XCTAssertTrue(linkedDay.isCompleted)
+        XCTAssertNotNil(linkedDay.completedAt)
+        XCTAssertEqual(linkedDay.linkedWorkoutEventIds.count, 1)
+        XCTAssertNotNil(linkedDay.adherenceScore)
+    }
+
+    @MainActor
+    func testHealthKitWorkoutMirrorIsIdempotentAndPreservesManualEvents() throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = ModelContext(container)
+        let calendar = Calendar(identifier: .gregorian)
+        let startedAt = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 2, hour: 7)))
+        let healthKitWorkout = WorkoutSummary(
+            id: UUID(),
+            start: startedAt,
+            end: startedAt.addingTimeInterval(30 * 60),
+            activityName: "Running",
+            energyKilocalories: 280,
+            averageHeartRate: 148,
+            source: "healthKit"
+        )
+        context.insert(WorkoutEventRecord(
+            source: "manual",
+            startedAt: startedAt.addingTimeInterval(60 * 60),
+            endedAt: startedAt.addingTimeInterval(90 * 60),
+            activityType: "Yoga"
+        ))
+
+        try WorkoutAggregationService.shared.upsertHealthKitWorkoutEvents(
+            [healthKitWorkout],
+            modelContext: context,
+            calendar: calendar
+        )
+        try WorkoutAggregationService.shared.upsertHealthKitWorkoutEvents(
+            [healthKitWorkout],
+            modelContext: context,
+            calendar: calendar
+        )
+
+        let events = try context.fetch(FetchDescriptor<WorkoutEventRecord>())
+        XCTAssertEqual(events.count, 2)
+        XCTAssertEqual(events.filter { $0.source == "healthKit" }.first?.linkedHealthKitWorkoutId, healthKitWorkout.id)
+        XCTAssertEqual(events.filter { $0.source == "healthKit" }.first?.averageHeartRate, 148)
+        XCTAssertEqual(events.filter { $0.source == "manual" }.count, 1)
+    }
 }

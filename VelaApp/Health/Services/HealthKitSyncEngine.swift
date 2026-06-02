@@ -138,6 +138,37 @@ final class HealthKitSyncEngine {
             isSuccess: true,
             summary: "Successfully synced and computed metrics for past \(days) days."
         )
+        try? syncTrainingIntelligenceInsights(endingAt: endDate)
+    }
+
+    private func syncTrainingIntelligenceInsights(endingAt endDate: Date) throws {
+        let snapshots = try HealthSnapshotRepository(modelContext: modelContext, calendar: calendar)
+            .fetchSnapshots(days: 60, endingAt: endDate)
+        let strengthWorkouts = try modelContext.fetch(FetchDescriptor<StrengthWorkoutRecord>())
+        let foodLogs = try modelContext.fetch(FetchDescriptor<FoodLogRecord>())
+        let journalEntries = try modelContext.fetch(FetchDescriptor<JournalEntryRecord>())
+        let service = TrainingResponseInsightService()
+        _ = try service.captureTrainingResponses(
+            modelContext: modelContext,
+            snapshots: snapshots,
+            workouts: strengthWorkouts,
+            calendar: calendar
+        )
+        let responses = try modelContext.fetch(FetchDescriptor<TrainingResponseRecord>())
+        _ = try service.persistWeeklyBodyReportIfNeeded(
+            modelContext: modelContext,
+            snapshots: snapshots,
+            foodLogs: foodLogs,
+            journalEntries: journalEntries,
+            strengthWorkouts: strengthWorkouts,
+            trainingResponses: responses,
+            endingAt: endDate,
+            calendar: calendar
+        )
+        _ = try service.proposeStableTrainingResponses(
+            modelContext: modelContext,
+            responses: responses
+        )
     }
 }
 
@@ -205,6 +236,11 @@ final class DailySnapshotBuilder {
             // Consolidate workouts using WorkoutAggregationService
             let aggregated: [WorkoutSummary]
             if let modelContext = modelContext {
+                try? WorkoutAggregationService.shared.upsertHealthKitWorkoutEvents(
+                    strain.workouts,
+                    modelContext: modelContext,
+                    calendar: calendar
+                )
                 aggregated = WorkoutAggregationService.shared.aggregateWorkouts(
                     healthKitWorkouts: strain.workouts,
                     for: dayStart,

@@ -98,11 +98,18 @@ struct GeneratedAIReport: Codable, Hashable {
 
 struct StrengthTrainingContext: Codable, Hashable {
     var sessions7d: Int
+    var sessions14d: Int
     var hardSets7d: Int
+    var hardSets14d: Int
     var volume7dKg: Double
+    var volume14dKg: Double
     var muscleGroupSets7d: [String: Int]
+    var muscleGroupSets14d: [String: Int]
+    var recentPRs: [String]
+    var localFatigue: [String: LocalMuscleFatigue]
     var recentExerciseProgress: [ExerciseProgressSummary]
     var lastSessionSummary: String
+    var trainingAdaptation: String
 }
 
 struct ExerciseProgressSummary: Codable, Hashable {

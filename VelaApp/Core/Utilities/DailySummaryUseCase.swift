@@ -269,6 +269,7 @@ final class DailySummaryUseCase {
         
         var activePlan: TrainingPlanRecord? = nil
         var journalFlags: Set<String> = []
+        var recentStrengthWorkouts: [StrengthWorkoutRecord] = []
         if let modelContext {
             let activePlanFetch = FetchDescriptor<TrainingPlanRecord>(
                 predicate: #Predicate<TrainingPlanRecord> { $0.isActive }
@@ -288,6 +289,11 @@ final class DailySummaryUseCase {
                     }
                 }
             }
+            let recentStrengthStart = calendar.date(byAdding: .day, value: -14, to: now) ?? now
+            let strengthFetch = FetchDescriptor<StrengthWorkoutRecord>(
+                predicate: #Predicate<StrengthWorkoutRecord> { $0.startedAt >= recentStrengthStart }
+            )
+            recentStrengthWorkouts = (try? modelContext.fetch(strengthFetch)) ?? []
         }
         journalFlags.formUnion(ActiveStatusSettings.journalFlags(now: now))
 
@@ -312,7 +318,8 @@ final class DailySummaryUseCase {
             dashboard,
             journalFlags: journalFlags,
             activePlan: activePlan,
-            history: snapshots42
+            history: snapshots42,
+            strengthWorkouts: recentStrengthWorkouts
         )
         
         let persistedSnapshot = makeSnapshot(from: dashboard, context: context, date: now)

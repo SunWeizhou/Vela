@@ -340,6 +340,10 @@ struct StrengthSetLog: Identifiable, Codable, Hashable {
     var repetitions: Int
     var weightKilograms: Double
     var isWarmup: Bool = false
+    var rpe: Double?
+    var rir: Double?
+    var isCompleted: Bool?
+    var completedAt: Date?
 
     var volumeKilograms: Double {
         guard !isWarmup else { return 0 }
@@ -349,8 +353,10 @@ struct StrengthSetLog: Identifiable, Codable, Hashable {
 
 struct StrengthExerciseLog: Identifiable, Codable, Hashable {
     var id: UUID = UUID()
+    var exerciseDefinitionId: UUID?
     var name: String
     var equipment: String
+    var primaryMuscleGroup: String?
     var sets: [StrengthSetLog]
 
     var volumeKilograms: Double {
@@ -366,6 +372,12 @@ final class StrengthWorkoutRecord {
     var durationMinutes: Int
     var notes: String
     @Attribute(.externalStorage) var exercisesData: Data
+    var linkedWorkoutEventId: UUID?
+    var sourceTemplateId: UUID?
+    var planDayId: UUID?
+    var sessionRPE: Double?
+    var completedAt: Date?
+    var analyticsJSON: String?
 
     init(
         id: UUID = UUID(),
@@ -381,6 +393,12 @@ final class StrengthWorkoutRecord {
         self.durationMinutes = durationMinutes
         self.notes = notes
         exercisesData = (try? JSONEncoder().encode(exercises)) ?? Data("[]".utf8)
+        linkedWorkoutEventId = nil
+        sourceTemplateId = nil
+        planDayId = nil
+        sessionRPE = nil
+        completedAt = endedAt
+        analyticsJSON = nil
     }
 
     var exercises: [StrengthExerciseLog] {
@@ -408,6 +426,193 @@ final class StrengthWorkoutRecord {
 
     var totalVolumeKilograms: Double {
         exercises.reduce(0) { $0 + $1.volumeKilograms }
+    }
+}
+
+@Model
+final class ExerciseDefinitionRecord {
+    @Attribute(.unique) var id: UUID
+    var name: String
+    var aliasesJSON: String
+    var primaryMuscleGroup: String
+    var secondaryMuscleGroupsJSON: String
+    var equipment: String
+    var movementPattern: String
+    var isCustom: Bool
+    var createdAt: Date
+    var updatedAt: Date
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        aliases: [String] = [],
+        primaryMuscleGroup: String,
+        secondaryMuscleGroups: [String] = [],
+        equipment: String,
+        movementPattern: String,
+        isCustom: Bool = false,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.name = name
+        self.aliasesJSON = Self.encode(aliases)
+        self.primaryMuscleGroup = primaryMuscleGroup
+        self.secondaryMuscleGroupsJSON = Self.encode(secondaryMuscleGroups)
+        self.equipment = equipment
+        self.movementPattern = movementPattern
+        self.isCustom = isCustom
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    var aliases: [String] {
+        get { Self.decode(aliasesJSON) }
+        set { aliasesJSON = Self.encode(newValue) }
+    }
+
+    var secondaryMuscleGroups: [String] {
+        get { Self.decode(secondaryMuscleGroupsJSON) }
+        set { secondaryMuscleGroupsJSON = Self.encode(newValue) }
+    }
+
+    private static func encode(_ values: [String]) -> String {
+        guard let data = try? JSONEncoder().encode(values) else { return "[]" }
+        return String(data: data, encoding: .utf8) ?? "[]"
+    }
+
+    private static func decode(_ value: String) -> [String] {
+        guard let data = value.data(using: .utf8) else { return [] }
+        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+    }
+}
+
+struct WorkoutTemplateExercise: Codable, Hashable, Identifiable {
+    var id: UUID = UUID()
+    var exerciseDefinitionId: UUID?
+    var name: String
+    var targetSets: Int
+    var targetReps: String
+    var targetRPE: Double?
+    var restSeconds: Int
+    var notes: String?
+}
+
+@Model
+final class WorkoutTemplateRecord {
+    @Attribute(.unique) var id: UUID
+    var title: String
+    var goal: String
+    var notes: String
+    var exercisesJSON: String
+    var estimatedDurationMinutes: Int
+    var createdAt: Date
+    var updatedAt: Date
+    var lastUsedAt: Date?
+
+    init(
+        id: UUID = UUID(),
+        title: String,
+        goal: String = "",
+        notes: String = "",
+        exercises: [WorkoutTemplateExercise],
+        estimatedDurationMinutes: Int = 60,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date(),
+        lastUsedAt: Date? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.goal = goal
+        self.notes = notes
+        self.exercisesJSON = Self.encode(exercises)
+        self.estimatedDurationMinutes = estimatedDurationMinutes
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.lastUsedAt = lastUsedAt
+    }
+
+    var exercises: [WorkoutTemplateExercise] {
+        get {
+            guard let data = exercisesJSON.data(using: .utf8) else { return [] }
+            return (try? JSONDecoder().decode([WorkoutTemplateExercise].self, from: data)) ?? []
+        }
+        set { exercisesJSON = Self.encode(newValue) }
+    }
+
+    private static func encode(_ values: [WorkoutTemplateExercise]) -> String {
+        guard let data = try? JSONEncoder().encode(values) else { return "[]" }
+        return String(data: data, encoding: .utf8) ?? "[]"
+    }
+}
+
+@Model
+final class TrainingResponseRecord {
+    @Attribute(.unique) var id: UUID
+    var workoutId: UUID
+    var date: Date
+    var nextDayDate: Date
+    var primaryMuscleGroupsJSON: String
+    var totalEffectiveSets: Int
+    var totalVolumeKg: Double
+    var sessionRPE: Double?
+    var nextDayRecoveryDelta: Double?
+    var nextDayHRVDelta: Double?
+    var nextDayRHRDelta: Double?
+    var nextDaySleepScore: Double?
+    var subjectiveTagsJSON: String
+    var createdAt: Date
+
+    init(
+        id: UUID = UUID(),
+        workoutId: UUID,
+        date: Date,
+        nextDayDate: Date,
+        primaryMuscleGroups: [String],
+        totalEffectiveSets: Int,
+        totalVolumeKg: Double,
+        sessionRPE: Double? = nil,
+        nextDayRecoveryDelta: Double? = nil,
+        nextDayHRVDelta: Double? = nil,
+        nextDayRHRDelta: Double? = nil,
+        nextDaySleepScore: Double? = nil,
+        subjectiveTags: [String] = [],
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.workoutId = workoutId
+        self.date = date
+        self.nextDayDate = nextDayDate
+        self.primaryMuscleGroupsJSON = Self.encode(primaryMuscleGroups)
+        self.totalEffectiveSets = totalEffectiveSets
+        self.totalVolumeKg = totalVolumeKg
+        self.sessionRPE = sessionRPE
+        self.nextDayRecoveryDelta = nextDayRecoveryDelta
+        self.nextDayHRVDelta = nextDayHRVDelta
+        self.nextDayRHRDelta = nextDayRHRDelta
+        self.nextDaySleepScore = nextDaySleepScore
+        self.subjectiveTagsJSON = Self.encode(subjectiveTags)
+        self.createdAt = createdAt
+    }
+
+    var primaryMuscleGroups: [String] {
+        get { Self.decode(primaryMuscleGroupsJSON) }
+        set { primaryMuscleGroupsJSON = Self.encode(newValue) }
+    }
+
+    var subjectiveTags: [String] {
+        get { Self.decode(subjectiveTagsJSON) }
+        set { subjectiveTagsJSON = Self.encode(newValue) }
+    }
+
+    private static func encode(_ values: [String]) -> String {
+        guard let data = try? JSONEncoder().encode(values) else { return "[]" }
+        return String(data: data, encoding: .utf8) ?? "[]"
+    }
+
+    private static func decode(_ value: String) -> [String] {
+        guard let data = value.data(using: .utf8) else { return [] }
+        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
     }
 }
 
@@ -757,6 +962,31 @@ public struct TrainingDay: Codable, Hashable, Identifiable {
         self.actualSummaryJSON = actualSummaryJSON
         self.adherenceScore = adherenceScore
     }
+
+    enum CodingKeys: String, CodingKey {
+        case id, weekNumber, dayNumber, title, description, focus, durationMinutes, intensity
+        case isCompleted, completedAt, loggedStrain, linkedWorkoutEventIds
+        case plannedExercisesJSON, actualSummaryJSON, adherenceScore
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        weekNumber = try container.decode(Int.self, forKey: .weekNumber)
+        dayNumber = try container.decode(Int.self, forKey: .dayNumber)
+        title = try container.decode(String.self, forKey: .title)
+        description = try container.decode(String.self, forKey: .description)
+        focus = try container.decode(String.self, forKey: .focus)
+        durationMinutes = try container.decode(Int.self, forKey: .durationMinutes)
+        intensity = try container.decode(String.self, forKey: .intensity)
+        isCompleted = try container.decodeIfPresent(Bool.self, forKey: .isCompleted) ?? false
+        completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
+        loggedStrain = try container.decodeIfPresent(Double.self, forKey: .loggedStrain)
+        linkedWorkoutEventIds = try container.decodeIfPresent([UUID].self, forKey: .linkedWorkoutEventIds) ?? []
+        plannedExercisesJSON = try container.decodeIfPresent(String.self, forKey: .plannedExercisesJSON) ?? "[]"
+        actualSummaryJSON = try container.decodeIfPresent(String.self, forKey: .actualSummaryJSON) ?? "{}"
+        adherenceScore = try container.decodeIfPresent(Double.self, forKey: .adherenceScore)
+    }
 }
 
 @Model
@@ -852,10 +1082,18 @@ public final class WorkoutEventRecord {
     public var source: String // "healthKit" | "manual" | "strengthLog"
     public var startedAt: Date
     public var endedAt: Date
+    public var dayIdentifier: String = ""
     public var activityType: String
+    public var title: String = ""
+    public var durationMinutes: Double = 0
     public var energyKilocalories: Double?
+    public var averageHeartRate: Double?
     public var rpe: Double?
     public var linkedStrengthWorkoutId: UUID?
+    public var linkedHealthKitWorkoutId: UUID?
+    public var linkedTrainingPlanDayId: UUID?
+    public var createdAt: Date = Date()
+    public var updatedAt: Date = Date()
 
     public init(
         id: UUID = UUID(),
@@ -863,17 +1101,32 @@ public final class WorkoutEventRecord {
         startedAt: Date,
         endedAt: Date,
         activityType: String,
+        title: String? = nil,
         energyKilocalories: Double? = nil,
+        averageHeartRate: Double? = nil,
         rpe: Double? = nil,
-        linkedStrengthWorkoutId: UUID? = nil
+        linkedStrengthWorkoutId: UUID? = nil,
+        linkedHealthKitWorkoutId: UUID? = nil,
+        linkedTrainingPlanDayId: UUID? = nil,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date(),
+        calendar: Calendar = .current
     ) {
         self.id = id
         self.source = source
         self.startedAt = startedAt
         self.endedAt = endedAt
+        self.dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: startedAt, calendar: calendar)
         self.activityType = activityType
+        self.title = title ?? activityType
+        self.durationMinutes = max(0, endedAt.timeIntervalSince(startedAt) / 60)
         self.energyKilocalories = energyKilocalories
+        self.averageHeartRate = averageHeartRate
         self.rpe = rpe
         self.linkedStrengthWorkoutId = linkedStrengthWorkoutId
+        self.linkedHealthKitWorkoutId = linkedHealthKitWorkoutId
+        self.linkedTrainingPlanDayId = linkedTrainingPlanDayId
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
     }
 }

@@ -50,7 +50,7 @@ struct AIContextBuilder {
                 ext: dashboard.extendedMetrics,
                 body: dashboard.bodyMetrics
             ),
-            strengthTraining: buildStrengthTrainingDict(strengthWorkouts, generatedAt: generatedAt)
+            strengthTraining: buildStrengthTrainingDict(strengthWorkouts, dashboard: dashboard, generatedAt: generatedAt)
         )
 
         let contextJSON = (try? String(data: JSONEncoder().encode(envelope), encoding: .utf8)) ?? "{}"
@@ -196,7 +196,7 @@ struct AIContextBuilder {
             training: training,
             nutrition: nutrition,
             extendedMetrics: extended,
-            strengthTraining: buildTypedStrengthTraining(strengthWorkouts, generatedAt: generatedAt),
+            strengthTraining: buildTypedStrengthTraining(strengthWorkouts, dashboard: dashboard, generatedAt: generatedAt),
             recentTrends: ["note": "v2 typed context"],
             weeklyTrends: weeklyTrends.isEmpty ? ["note": "No weekly trend data available yet."] : weeklyTrends,
             journalEntries: journalEntries.map { "\($0.tags.joined(separator: "|")): \($0.text)" },
@@ -246,7 +246,11 @@ struct AIContextBuilder {
         ]
     }
 
-    private func buildStrengthTrainingDict(_ workouts: [StrengthWorkoutRecord], generatedAt: Date) -> [String: String] {
+    private func buildStrengthTrainingDict(
+        _ workouts: [StrengthWorkoutRecord],
+        dashboard: DashboardSummary,
+        generatedAt: Date
+    ) -> [String: String] {
         let sevenDaysAgo = generatedAt.addingTimeInterval(-7 * 24 * 3600)
         let fourteenDaysAgo = generatedAt.addingTimeInterval(-14 * 24 * 3600)
 
@@ -334,17 +338,32 @@ struct AIContextBuilder {
             .map { pair in "\(pair.key): \(pair.value) sets" }
             .joined(separator: ", ")
 
+        let analytics = TrainingAnalyticsService()
+        let recent7d = analytics.buildRecentSummary(workouts: workouts, days: 7, endingAt: generatedAt)
+        let recent14d = analytics.buildRecentSummary(workouts: workouts, days: 14, endingAt: generatedAt)
+        let adaptation = trainingAdaptation(dashboard: dashboard, localFatigue: recent7d.localFatigue)
         return [
             "sessions_7d": "\(sessions7d)",
+            "sessions_14d": "\(recent14d.sessions)",
             "hard_sets_7d": "\(hardSets7d)",
+            "hard_sets_14d": "\(recent14d.effectiveSets)",
             "volume_7d_kg": String(format: "%.1f", volume7dKg),
+            "volume_14d_kg": String(format: "%.1f", recent14d.volumeKg),
             "muscle_groups_7d": muscleGroupStr,
+            "muscle_groups_14d": formatMuscleGroups(recent14d.muscleGroupSets),
+            "recent_prs": recent14d.recentPRs.map(\.summary).joined(separator: "\n"),
+            "local_fatigue": formatFatigue(recent7d.localFatigue),
+            "training_adaptation": adaptation.modifiedWorkoutDescription + " " + adaptation.reasons.joined(separator: " "),
             "exercise_progress_14d": progressList.isEmpty ? "No exercise data." : progressList,
             "last_session_summary": lastSessionStr
         ]
     }
 
-    private func buildTypedStrengthTraining(_ workouts: [StrengthWorkoutRecord], generatedAt: Date) -> StrengthTrainingContext {
+    private func buildTypedStrengthTraining(
+        _ workouts: [StrengthWorkoutRecord],
+        dashboard: DashboardSummary,
+        generatedAt: Date
+    ) -> StrengthTrainingContext {
         let sevenDaysAgo = generatedAt.addingTimeInterval(-7 * 24 * 3600)
         let fourteenDaysAgo = generatedAt.addingTimeInterval(-14 * 24 * 3600)
 
@@ -432,14 +451,50 @@ struct AIContextBuilder {
             lastSessionStr = "\(lastSession.title) on \(dateStr): \(lastSession.exerciseCount) exercises (\(exerciseSummaries)), \(lastSession.totalSetCount) sets total, volume \(Int(lastSession.totalVolumeKilograms))kg."
         }
 
+        let analytics = TrainingAnalyticsService()
+        let recent7d = analytics.buildRecentSummary(workouts: workouts, days: 7, endingAt: generatedAt)
+        let recent14d = analytics.buildRecentSummary(workouts: workouts, days: 14, endingAt: generatedAt)
+        let adaptation = trainingAdaptation(dashboard: dashboard, localFatigue: recent7d.localFatigue)
         return StrengthTrainingContext(
             sessions7d: sessions7d,
+            sessions14d: recent14d.sessions,
             hardSets7d: hardSets7d,
+            hardSets14d: recent14d.effectiveSets,
             volume7dKg: volume7dKg,
+            volume14dKg: recent14d.volumeKg,
             muscleGroupSets7d: muscleGroupSets7d,
+            muscleGroupSets14d: recent14d.muscleGroupSets,
+            recentPRs: recent14d.recentPRs.map(\.summary),
+            localFatigue: recent7d.localFatigue,
             recentExerciseProgress: progressList,
-            lastSessionSummary: lastSessionStr
+            lastSessionSummary: lastSessionStr,
+            trainingAdaptation: adaptation.modifiedWorkoutDescription + " " + adaptation.reasons.joined(separator: " ")
         )
+    }
+
+    private func trainingAdaptation(
+        dashboard: DashboardSummary,
+        localFatigue: [String: LocalMuscleFatigue]
+    ) -> TrainingAdaptationRecommendation {
+        RecoveryTrainingAdapter().adapt(input: RecoveryTrainingInput(
+            recoveryScore: dashboard.recovery.score,
+            sleepScore: dashboard.sleepScore.score,
+            hrvZScore: dashboard.recovery.metrics["hrv_z_score"],
+            restingHRZScore: dashboard.recovery.metrics["rhr_z_score"],
+            tsb: dashboard.energy.metrics["tsb"],
+            energyScore: dashboard.energy.currentEnergy,
+            localFatigue: localFatigue
+        ))
+    }
+
+    private func formatMuscleGroups(_ values: [String: Int]) -> String {
+        values.sorted { $0.key < $1.key }.map { "\($0.key): \($0.value) sets" }.joined(separator: ", ")
+    }
+
+    private func formatFatigue(_ values: [String: LocalMuscleFatigue]) -> String {
+        values.values.sorted { $0.muscleGroup < $1.muscleGroup }.map {
+            "\($0.muscleGroup): \($0.fatigueLevel), \($0.setsLast48h) sets/48h, \($0.setsLast7d) sets/7d"
+        }.joined(separator: "\n")
     }
 
     private func inferMuscleGroup(exerciseName: String) -> String {

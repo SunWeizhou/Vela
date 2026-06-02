@@ -305,4 +305,136 @@ final class PersistenceFoundationTests: XCTestCase {
         XCTAssertEqual(viewModel.dashboard.recovery.score, 61)
         XCTAssertNotNil(viewModel.lastUpdated)
     }
+
+    @MainActor
+    func testTrainingIntelligenceModelsPersistInVelaSchema() throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = ModelContext(container)
+        let exercise = ExerciseDefinitionRecord(
+            name: "杠铃卧推",
+            aliases: ["bench press", "卧推"],
+            primaryMuscleGroup: "chest",
+            secondaryMuscleGroups: ["triceps"],
+            equipment: "barbell",
+            movementPattern: "push"
+        )
+        let template = WorkoutTemplateRecord(
+            title: "Push Day",
+            goal: "hypertrophy",
+            exercises: [
+                WorkoutTemplateExercise(name: "杠铃卧推", targetSets: 4, targetReps: "6-8", targetRPE: 8, restSeconds: 120)
+            ]
+        )
+        let response = TrainingResponseRecord(
+            workoutId: UUID(),
+            date: Date(),
+            nextDayDate: Date().addingTimeInterval(86_400),
+            primaryMuscleGroups: ["chest"],
+            totalEffectiveSets: 4,
+            totalVolumeKg: 3_200,
+            sessionRPE: 8
+        )
+
+        context.insert(exercise)
+        context.insert(template)
+        context.insert(response)
+        try context.save()
+
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ExerciseDefinitionRecord>()).first?.aliases, ["bench press", "卧推"])
+        XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutTemplateRecord>()).first?.exercises.first?.targetSets, 4)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<TrainingResponseRecord>()).first?.primaryMuscleGroups, ["chest"])
+    }
+
+    @MainActor
+    func testExerciseLibrarySeedsDefaultsAndTemplatesIdempotently() throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = ModelContext(container)
+
+        try ExerciseLibraryService.seedDefaultsIfNeeded(modelContext: context)
+        try ExerciseLibraryService.seedDefaultsIfNeeded(modelContext: context)
+
+        let exercises = try context.fetch(FetchDescriptor<ExerciseDefinitionRecord>())
+        let templates = try context.fetch(FetchDescriptor<WorkoutTemplateRecord>())
+        XCTAssertGreaterThanOrEqual(exercises.count, 30)
+        XCTAssertEqual(Set(exercises.map(\.name)).count, exercises.count)
+        XCTAssertEqual(Set(templates.map(\.title)), Set(["Push Day", "Pull Day", "Leg Day", "Upper Body", "Lower Body", "Full Body"]))
+    }
+
+    @MainActor
+    func testTrainingResponsePipelineCapturesNextDayChangesAndBuildsWeeklyReport() throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = ModelContext(container)
+        let calendar = Calendar(identifier: .gregorian)
+        let workoutDay = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 1, hour: 18)))
+        let nextDay = try XCTUnwrap(calendar.date(byAdding: .day, value: 1, to: workoutDay))
+        let workout = StrengthWorkoutRecord(
+            title: "Leg Day",
+            startedAt: workoutDay,
+            durationMinutes: 55,
+            exercises: [
+                StrengthExerciseLog(
+                    name: "深蹲",
+                    equipment: "barbell",
+                    primaryMuscleGroup: "quads",
+                    sets: [StrengthSetLog(repetitions: 8, weightKilograms: 80, rpe: 8)]
+                )
+            ]
+        )
+        context.insert(workout)
+
+        let service = TrainingResponseInsightService()
+        let created = try service.captureTrainingResponses(
+            modelContext: context,
+            snapshots: [
+                DailyHealthSnapshot(date: workoutDay, sleepScore: 82, recoveryScore: 76, hrvAverage: 62, restingHeartRate: 54),
+                DailyHealthSnapshot(date: nextDay, sleepScore: 68, recoveryScore: 61, hrvAverage: 55, restingHeartRate: 59)
+            ],
+            workouts: [workout],
+            calendar: calendar
+        )
+        let report = service.buildWeeklyBodyReport(
+            snapshots: [
+                DailyHealthSnapshot(date: workoutDay, sleepScore: 82, recoveryScore: 76),
+                DailyHealthSnapshot(date: nextDay, sleepScore: 68, recoveryScore: 61)
+            ],
+            foodLogs: [],
+            journalEntries: [],
+            strengthWorkouts: [workout],
+            trainingResponses: try context.fetch(FetchDescriptor<TrainingResponseRecord>()),
+            endingAt: nextDay,
+            calendar: calendar
+        )
+
+        let response = try XCTUnwrap(context.fetch(FetchDescriptor<TrainingResponseRecord>()).first)
+        XCTAssertEqual(created, 1)
+        XCTAssertEqual(response.nextDayRecoveryDelta, -15)
+        XCTAssertEqual(response.nextDayHRVDelta, -7)
+        XCTAssertEqual(response.nextDayRHRDelta, 5)
+        XCTAssertEqual(response.primaryMuscleGroups, ["quads"])
+        XCTAssertTrue(report.markdown.contains("Leg Day"))
+        XCTAssertTrue(report.markdown.contains("训练后次日反应"))
+    }
+
+    func testTrainingDayDecodesLegacyJSONWithoutClosedLoopFields() throws {
+        let json = """
+        {
+          "id": "C485EA30-48B8-4F4F-B52C-7951A30C6764",
+          "weekNumber": 1,
+          "dayNumber": 2,
+          "title": "Pull",
+          "description": "Back and biceps",
+          "focus": "strength",
+          "durationMinutes": 45,
+          "intensity": "moderate",
+          "isCompleted": false
+        }
+        """
+
+        let day = try JSONDecoder().decode(TrainingDay.self, from: Data(json.utf8))
+
+        XCTAssertTrue(day.linkedWorkoutEventIds.isEmpty)
+        XCTAssertEqual(day.plannedExercisesJSON, "[]")
+        XCTAssertEqual(day.actualSummaryJSON, "{}")
+        XCTAssertNil(day.adherenceScore)
+    }
 }

@@ -232,6 +232,7 @@ struct WorkoutLogSheetView: View {
     @State private var durationMinutes: Double = 30.0
     @State private var caloriesBurned: Double = 250.0
     @State private var exertionScore: Double = 5.0
+    @State private var saveError: String?
     
     let sports = ["跑步", "力量训练", "骑行", "游泳", "瑜伽", "HIIT", "步行"]
     
@@ -328,8 +329,9 @@ struct WorkoutLogSheetView: View {
                     
                     // Save Button
                     Button {
-                        saveWorkoutToSwiftData()
-                        dismiss()
+                        if saveWorkoutToSwiftData() {
+                            dismiss()
+                        }
                     } label: {
                         Text("保存活动")
                             .font(.system(size: 16, weight: .bold))
@@ -346,10 +348,17 @@ struct WorkoutLogSheetView: View {
             }
         }
         .background(Color(hex: "#F5F3F0").ignoresSafeArea())
+        .alert("无法保存活动", isPresented: Binding(
+            get: { saveError != nil },
+            set: { if !$0 { saveError = nil } }
+        )) {
+            Button("好", role: .cancel) { saveError = nil }
+        } message: {
+            Text(saveError ?? "")
+        }
     }
     
-    private func saveWorkoutToSwiftData() {
-        let calendar = Calendar.current
+    private func saveWorkoutToSwiftData() -> Bool {
         let end = Date()
         let start = end.addingTimeInterval(-durationMinutes * 60)
         
@@ -365,12 +374,17 @@ struct WorkoutLogSheetView: View {
         modelContext.insert(workoutEvent)
         
         do {
+            try WorkoutAggregationService.shared.aggregateDay(date: start, modelContext: modelContext)
             try modelContext.save()
+            VelaAppState.shared.markLocalDataChanged()
             Task {
                 await dashboardVM.refresh(modelContext: modelContext)
             }
+            return true
         } catch {
-            print("Failed to save manual workout event: \(error)")
+            modelContext.delete(workoutEvent)
+            saveError = "活动暂时无法保存，请稍后再试。\(error.localizedDescription)"
+            return false
         }
     }
 }
