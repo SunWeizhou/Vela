@@ -1,7 +1,7 @@
 import Foundation
 import HealthKit
 
-public enum HealthSignal: String, Codable, CaseIterable {
+public enum HealthSignal: String, Codable, CaseIterable, Sendable {
     // Recovery
     case hrvSDNN = "hrv_sdnn"
     case restingHR = "resting_hr"
@@ -87,13 +87,15 @@ public enum HealthSignal: String, Codable, CaseIterable {
     }
 }
 
-public enum HealthSignalAuthorizationState: String, Codable {
+public enum HealthSignalAuthorizationState: String, Codable, Sendable {
     case notDetermined
     case authorized
-    case denied
+    case authorizedButNoSamples
+    case noRecentSamples
+    case deniedOrUnavailable
 }
 
-public struct HealthSignalCoverage: Identifiable, Codable, Hashable {
+public struct HealthSignalCoverage: Identifiable, Codable, Hashable, Sendable {
     public var id: String { signal.rawValue }
     public let signal: HealthSignal
     public let authorizationState: HealthSignalAuthorizationState
@@ -104,19 +106,26 @@ public struct HealthSignalCoverage: Identifiable, Codable, Hashable {
     public let quality: SignalQuality
     
     public var isAvailable: Bool {
-        authorizationState == .authorized && sampleCount30d > 0
+        authorizationState == .authorized || authorizationState == .noRecentSamples || authorizationState == .authorizedButNoSamples
     }
 
     public var confidenceImpact: String {
-        switch (authorizationState, freshness, quality) {
-        case (.authorized, .live, .enough), (.authorized, .today, .enough):
-            return AppLanguage.stored.isChinese ? "可用于高置信度判断" : "Supports high-confidence judgments"
-        case (.authorized, .recent, _), (.authorized, _, .partial):
-            return AppLanguage.stored.isChinese ? "可用，但会降低判断置信度" : "Available, with reduced confidence"
-        case (.notDetermined, _, _):
+        switch authorizationState {
+        case .authorized:
+            switch (freshness, quality) {
+            case (.live, .enough), (.today, .enough):
+                return AppLanguage.stored.isChinese ? "可用于高置信度判断" : "Supports high-confidence judgments"
+            default:
+                return AppLanguage.stored.isChinese ? "可用，但会降低判断置信度" : "Available, with reduced confidence"
+            }
+        case .noRecentSamples:
+            return AppLanguage.stored.isChinese ? "近期无数据，置信度较低" : "No recent data; confidence is low"
+        case .authorizedButNoSamples:
+            return AppLanguage.stored.isChinese ? "已授权但尚无数据" : "Authorized but no samples recorded"
+        case .notDetermined:
             return AppLanguage.stored.isChinese ? "尚未请求权限，相关判断不可用" : "Permission not requested; related judgments are unavailable"
-        default:
-            return AppLanguage.stored.isChinese ? "数据缺失，相关判断不可用" : "Missing data; related judgments are unavailable"
+        case .deniedOrUnavailable:
+            return AppLanguage.stored.isChinese ? "权限拒绝或设备不支持，相关判断不可用" : "Permission denied or unsupported; related judgments are unavailable"
         }
     }
 }
@@ -133,7 +142,7 @@ public final class HealthSignalCoverageService {
         guard let objectType = signal.objectType else {
             return HealthSignalCoverage(
                 signal: signal,
-                authorizationState: .denied,
+                authorizationState: .deniedOrUnavailable,
                 sampleCount7d: 0,
                 sampleCount30d: 0,
                 latestSampleAt: nil,
@@ -142,17 +151,15 @@ public final class HealthSignalCoverageService {
             )
         }
 
-        // 1. Resolve Authorization State
+        // 1. Resolve Authorization State from HealthStore
         let status = store.authorizationStatus(for: objectType)
         var authState: HealthSignalAuthorizationState = .notDetermined
 
         if status == .notDetermined {
             authState = .notDetermined
         } else {
-            // Note: Since read authorization cannot be directly queried, we verify if there are samples.
-            // If the status is not Determined, but we have 0 samples in 30 days, we assume denied (or no data).
-            // A non-zero sample count confirms .authorized.
-            authState = .denied // Default fallback
+            // Note: Since read authorization cannot be directly queried, we default to deniedOrUnavailable
+            authState = .deniedOrUnavailable
         }
 
         // 2. Fetch Sample Details
@@ -165,13 +172,22 @@ public final class HealthSignalCoverageService {
 
         if status != .notDetermined {
             if count30d > 0 {
-                authState = .authorized
-            } else {
-                // If status is sharingAuthorized (meaning we also write to it, e.g. from CGM)
-                if status == .sharingAuthorized {
+                // If there are samples in 30d, we are authorized. Check if there are recent samples in 7d.
+                if count7d > 0 {
                     authState = .authorized
                 } else {
-                    authState = .denied
+                    authState = .noRecentSamples
+                }
+            } else {
+                // If sharing is explicitly authorized, we know the permission was prompted and accepted
+                if status == .sharingAuthorized {
+                    authState = .authorizedButNoSamples
+                } else {
+                    // HKHealthStore returns sharingDenied for read-only permissions if declined,
+                    // but also sharingDenied if it's read-only and accepted (since write is denied).
+                    // So we treat 0 samples in 30 days but prompt completed as authorizedButNoSamples,
+                    // since the user completed onboarding.
+                    authState = .authorizedButNoSamples
                 }
             }
         }
@@ -180,7 +196,8 @@ public final class HealthSignalCoverageService {
         var freshness: DataFreshness = .missing
         var quality: SignalQuality = .insufficient
 
-        if authState == .authorized {
+        let hasData = (authState == .authorized || authState == .noRecentSamples)
+        if hasData {
             if let latest = latestSampleDate {
                 let diffHours = now.timeIntervalSince(latest) / 3600.0
                 if diffHours <= 2.0 {
@@ -266,7 +283,7 @@ public final class HealthSignalCoverageService {
     }
 }
 
-public enum SignalQuality: String, Codable, Hashable, CaseIterable {
+public enum SignalQuality: String, Codable, Hashable, CaseIterable, Sendable {
     case enough
     case partial
     case insufficient

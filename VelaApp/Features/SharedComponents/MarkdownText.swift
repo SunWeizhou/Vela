@@ -35,10 +35,10 @@ struct MarkdownText: View {
         var processedLines: [String] = []
         var inCodeBlock = false
 
-        for (index, line) in lines.enumerated() {
+        for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
 
-            // Preserve blank lines as paragraph separators
+            // Preserve blank lines
             if trimmed.isEmpty {
                 processedLines.append("")
                 continue
@@ -55,36 +55,10 @@ struct MarkdownText: View {
                 continue
             }
 
-            // For markdown structures that AttributedString handles natively,
-            // don't inject extra spacing
-            let isHeader = trimmed.hasPrefix("#")
-            let isList = trimmed.hasPrefix("-") || trimmed.hasPrefix("*") || trimmed.hasPrefix("+")
-            let isOrderedList: Bool = {
-                guard let firstDotIndex = trimmed.firstIndex(of: ".") else { return false }
-                let prefix = trimmed[..<firstDotIndex].trimmingCharacters(in: .whitespaces)
-                return !prefix.isEmpty && prefix.allSatisfy { $0.isNumber }
-            }()
-            let isBlockquote = trimmed.hasPrefix(">")
-            let isTable = trimmed.hasPrefix("|")
-            let isDivider = trimmed.hasPrefix("---") || trimmed.hasPrefix("***") || trimmed.hasPrefix("___")
-
-            if isHeader || isList || isOrderedList || isBlockquote || isTable || isDivider {
-                // Ensure blank line before headers for proper markdown parsing
-                if isHeader, index > 0, !processedLines.isEmpty, processedLines.last != "" {
-                    processedLines.append("")
-                }
-                processedLines.append(line)
-            } else {
-                // Regular text: use two trailing spaces + newline = hard break in markdown
-                if index < lines.count - 1 {
-                    processedLines.append(line + "  ")
-                } else {
-                    processedLines.append(line)
-                }
-            }
+            processedLines.append(line)
         }
 
-        // Post-process: collapse runs of blank lines (max 1 blank line)
+        // Post-process: collapse consecutive empty lines to a single empty line
         var collapsed: [String] = []
         for line in processedLines {
             if line.isEmpty, collapsed.last == "" {
@@ -93,12 +67,23 @@ struct MarkdownText: View {
             collapsed.append(line)
         }
 
-        let processedMarkdown = collapsed.joined(separator: "\n")
+        // Join non-empty lines with double newlines (\n\n) to force paragraph breaks,
+        // while preserving existing paragraph breaks cleanly.
+        var finalLines: [String] = []
+        for line in collapsed {
+            if line.isEmpty {
+                continue
+            }
+            finalLines.append(line)
+        }
 
-        // Fallback: if AttributedString markdown parser fails, render raw with \n → \n\n
+        // Since we filtered out empty lines, joining with "\n\n" ensures that every single line of text
+        // is separated by exactly a paragraph break, giving a clean and breathable newline layout!
+        let processedMarkdown = finalLines.joined(separator: "\n\n")
+
+        // Fallback: if AttributedString markdown parser fails, render raw
         guard let parsed = try? AttributedString(markdown: processedMarkdown) else {
-            let fallback = normalized
-                .replacingOccurrences(of: "\n\n\n", with: "\n\n")
+            let fallback = normalized.replacingOccurrences(of: "\n\n\n", with: "\n\n")
             var result = (try? AttributedString(markdown: fallback)) ?? AttributedString(normalized)
             appendStreamingCursor(to: &result)
             return result

@@ -4,6 +4,8 @@ struct VelaOnboardingView: View {
     @AppStorage("vela_onboarding_completed") private var onboardingCompleted = false
     @State private var authError: String? = nil
     @State private var showingErrorAlert = false
+    @State private var missingSignals: [HealthSignal] = []
+    @State private var showingMissingAlert = false
 
     var body: some View {
         ZStack {
@@ -107,7 +109,20 @@ struct VelaOnboardingView: View {
                         Task {
                             do {
                                 try await HealthAuthorizationService().requestAuthorization(tier: .core)
-                                onboardingCompleted = true
+                                let coverageService = HealthSignalCoverageService()
+                                var missing: [HealthSignal] = []
+                                for signal in [HealthSignal.hrvSDNN, .restingHR, .sleepAnalysis, .workouts, .activeEnergy, .stepCount] {
+                                    let cov = await coverageService.fetchCoverage(for: signal)
+                                    if cov.authorizationState == .deniedOrUnavailable || cov.authorizationState == .notDetermined {
+                                        missing.append(signal)
+                                    }
+                                }
+                                if !missing.isEmpty {
+                                    missingSignals = missing
+                                    showingMissingAlert = true
+                                } else {
+                                    onboardingCompleted = true
+                                }
                             } catch {
                                 authError = error.localizedDescription
                                 showingErrorAlert = true
@@ -130,6 +145,37 @@ struct VelaOnboardingView: View {
                             title: Text(L10n.t("Unable to Authorize Apple Health", "无法授权 Apple 健康")),
                             message: Text(authError ?? L10n.t("Vela requires Health permissions to analyze your wellness indices.", "Vela 需要健康权限来分析您的生理与运动数据。")),
                             dismissButton: .default(Text(L10n.t("OK", "好的")))
+                        )
+                    }
+                    .alert(isPresented: $showingMissingAlert) {
+                        let names = missingSignals.map { $0.name }.joined(separator: ", ")
+                        return Alert(
+                            title: Text(L10n.t("Missing Core Permissions", "部分核心权限未开启")),
+                            message: Text(L10n.t(
+                                "We noticed the following core permissions are missing: \(names).\n\nYou can enable them in iOS Settings > Health > Data Access & Devices > Vela to unlock full insights.",
+                                "检测到以下核心权限未开启：\(names)。\n\n您可以在系统“设置 > 健康 > 数据与设备 > Vela”中开启它们，以获得完整的健康洞察。"
+                            )),
+                            primaryButton: .default(Text(L10n.t("Retry Check", "重新检查")), action: {
+                                Task {
+                                    let coverageService = HealthSignalCoverageService()
+                                    var missing: [HealthSignal] = []
+                                    for signal in [HealthSignal.hrvSDNN, .restingHR, .sleepAnalysis, .workouts, .activeEnergy, .stepCount] {
+                                        let cov = await coverageService.fetchCoverage(for: signal)
+                                        if cov.authorizationState == .deniedOrUnavailable || cov.authorizationState == .notDetermined {
+                                            missing.append(signal)
+                                        }
+                                    }
+                                    if missing.isEmpty {
+                                        onboardingCompleted = true
+                                    } else {
+                                        missingSignals = missing
+                                        showingMissingAlert = true
+                                    }
+                                }
+                            }),
+                            secondaryButton: .cancel(Text(L10n.t("Proceed Anyway", "仍然继续")), action: {
+                                onboardingCompleted = true
+                            })
                         )
                     }
 

@@ -14,6 +14,7 @@ enum VelaModelContainer {
         CoachSessionRecord.self,
         FoodLogRecord.self,
         StrengthWorkoutRecord.self,
+        ActiveWorkoutDraftRecord.self,
         ExerciseDefinitionRecord.self,
         WorkoutTemplateRecord.self,
         TrainingResponseRecord.self,

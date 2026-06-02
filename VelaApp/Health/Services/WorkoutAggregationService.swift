@@ -182,9 +182,6 @@ public final class WorkoutAggregationService {
         record.activeCalories = max(record.activeCalories ?? 0, energy)
         record.workoutLoad = load
         record.dailyLoad = dailyLoad
-        if dailyLoad > 0 {
-            record.strainScore = 100 * (1 - exp(-0.75 * dailyLoad / 100))
-        }
         record.updatedAt = Date()
     }
 
@@ -211,37 +208,54 @@ public final class WorkoutAggregationService {
             predicate: #Predicate<TrainingPlanRecord> { $0.isActive }
         )
         let plans = try modelContext.fetch(descriptor)
+        let linker = TrainingPlanLinkingService()
+        
         for plan in plans {
             let planStart = calendar.startOfDay(for: plan.startDate)
-            let workoutDay = calendar.startOfDay(for: event.startedAt)
-            guard let delta = calendar.dateComponents([.day], from: planStart, to: workoutDay).day, delta >= 0 else { continue }
-            let weekNumber = delta / 7 + 1
-            let dayNumber = delta % 7 + 1
-            guard let index = plan.days.firstIndex(where: { $0.weekNumber == weekNumber && $0.dayNumber == dayNumber }) else { continue }
-            var day = plan.days[index]
-            if !day.linkedWorkoutEventIds.contains(event.id) {
-                day.linkedWorkoutEventIds.append(event.id)
+            var bestMatchIndex: Int?
+            var bestMatchScore = 0.0
+            
+            for (index, day) in plan.days.enumerated() {
+                let expectedDate = calendar.date(byAdding: .day, value: (day.weekNumber - 1) * 7 + (day.dayNumber - 1), to: planStart) ?? planStart
+                let score = linker.calculateMatchScore(
+                    event: event,
+                    planDay: day,
+                    strengthWorkout: strengthWorkout,
+                    expectedDate: expectedDate,
+                    calendar: calendar
+                )
+                if score > bestMatchScore {
+                    bestMatchScore = score
+                    bestMatchIndex = index
+                }
             }
-            day.isCompleted = true
-            day.completedAt = event.endedAt
-            day.loggedStrain = event.durationMinutes * (event.rpe ?? 5) * 0.3
-            day.adherenceScore = day.durationMinutes > 0
-                ? min(1.5, event.durationMinutes / Double(day.durationMinutes))
-                : 1
-            let actual = [
-                "title": event.title,
-                "duration_minutes": event.durationMinutes.formatted(.number.precision(.fractionLength(0))),
-                "source": event.source
-            ]
-            if let data = try? JSONEncoder().encode(actual),
-               let json = String(data: data, encoding: .utf8) {
-                day.actualSummaryJSON = json
+            
+            if let index = bestMatchIndex, linker.isHighConfidenceMatch(score: bestMatchScore) {
+                var day = plan.days[index]
+                if !day.linkedWorkoutEventIds.contains(event.id) {
+                    day.linkedWorkoutEventIds.append(event.id)
+                }
+                day.isCompleted = true
+                day.completedAt = event.endedAt
+                day.loggedStrain = event.durationMinutes * (event.rpe ?? 5) * 0.3
+                day.adherenceScore = day.durationMinutes > 0
+                    ? min(1.5, event.durationMinutes / Double(day.durationMinutes))
+                    : 1
+                let actual = [
+                    "title": event.title,
+                    "duration_minutes": event.durationMinutes.formatted(.number.precision(.fractionLength(0))),
+                    "source": event.source
+                ]
+                if let data = try? JSONEncoder().encode(actual),
+                   let json = String(data: data, encoding: .utf8) {
+                    day.actualSummaryJSON = json
+                }
+                plan.days[index] = day
+                plan.updatedAt = Date()
+                event.linkedTrainingPlanDayId = day.id
+                strengthWorkout.planDayId = day.id
+                break
             }
-            plan.days[index] = day
-            plan.updatedAt = Date()
-            event.linkedTrainingPlanDayId = day.id
-            strengthWorkout.planDayId = day.id
-            break
         }
     }
 }

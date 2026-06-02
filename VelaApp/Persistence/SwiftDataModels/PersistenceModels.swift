@@ -354,6 +354,7 @@ struct StrengthSetLog: Identifiable, Codable, Hashable {
 struct StrengthExerciseLog: Identifiable, Codable, Hashable {
     var id: UUID = UUID()
     var exerciseDefinitionId: UUID?
+    var exerciseCanonicalKey: String?
     var name: String
     var equipment: String
     var primaryMuscleGroup: String?
@@ -430,8 +431,54 @@ final class StrengthWorkoutRecord {
 }
 
 @Model
+final class ActiveWorkoutDraftRecord {
+    @Attribute(.unique) var id: UUID
+    var title: String
+    var startedAt: Date
+    var templateId: UUID?
+    @Attribute(.externalStorage) var exercisesJSON: String
+    var notes: String
+    var lastUpdated: Date
+
+    init(
+        id: UUID = UUID(),
+        title: String,
+        startedAt: Date = Date(),
+        templateId: UUID? = nil,
+        exercisesJSON: String = "[]",
+        notes: String = "",
+        lastUpdated: Date = Date()
+    ) {
+        self.id = id
+        self.title = title
+        self.startedAt = startedAt
+        self.templateId = templateId
+        self.exercisesJSON = exercisesJSON
+        self.notes = notes
+        self.lastUpdated = lastUpdated
+    }
+
+    @Transient
+    var exercises: [StrengthExerciseLog] {
+        get {
+            guard let data = exercisesJSON.data(using: .utf8) else { return [] }
+            return (try? JSONDecoder().decode([StrengthExerciseLog].self, from: data)) ?? []
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue),
+               let str = String(data: data, encoding: .utf8) {
+                exercisesJSON = str
+            } else {
+                exercisesJSON = "[]"
+            }
+        }
+    }
+}
+
+@Model
 final class ExerciseDefinitionRecord {
     @Attribute(.unique) var id: UUID
+    var canonicalKey: String = ""
     var name: String
     var aliasesJSON: String
     var primaryMuscleGroup: String
@@ -444,6 +491,7 @@ final class ExerciseDefinitionRecord {
 
     init(
         id: UUID = UUID(),
+        canonicalKey: String = "",
         name: String,
         aliases: [String] = [],
         primaryMuscleGroup: String,
@@ -455,6 +503,7 @@ final class ExerciseDefinitionRecord {
         updatedAt: Date = Date()
     ) {
         self.id = id
+        self.canonicalKey = canonicalKey.isEmpty ? name.toCanonicalKey() : canonicalKey
         self.name = name
         self.aliasesJSON = Self.encode(aliases)
         self.primaryMuscleGroup = primaryMuscleGroup
@@ -490,6 +539,7 @@ final class ExerciseDefinitionRecord {
 struct WorkoutTemplateExercise: Codable, Hashable, Identifiable {
     var id: UUID = UUID()
     var exerciseDefinitionId: UUID?
+    var exerciseCanonicalKey: String?
     var name: String
     var targetSets: Int
     var targetReps: String
@@ -910,7 +960,7 @@ final class FoodLogRecord {
     }
 }
 
-public struct TrainingDay: Codable, Hashable, Identifiable {
+public struct TrainingDay: Codable, Hashable, Identifiable, Sendable {
     public var id: UUID
     public var weekNumber: Int      // 1-indexed
     public var dayNumber: Int       // 1-7 (1 = Monday, 7 = Sunday)
@@ -1128,5 +1178,57 @@ public final class WorkoutEventRecord {
         self.linkedTrainingPlanDayId = linkedTrainingPlanDayId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+}
+
+extension String {
+    public func toCanonicalKey() -> String {
+        let mapping: [String: String] = [
+            "杠铃卧推": "barbell_bench_press",
+            "哑铃卧推": "dumbbell_bench_press",
+            "上斜卧推": "incline_bench_press",
+            "双杠臂屈伸": "dips",
+            "绳索夹胸": "cable_fly",
+            "器械推胸": "chest_press",
+            "引体向上": "pull_ups",
+            "高位下拉": "lat_pulldown",
+            "杠铃划船": "barbell_row",
+            "坐姿划船": "seated_row",
+            "单臂哑铃划船": "one_arm_dumbbell_row",
+            "硬拉": "deadlift",
+            "深蹲": "squat",
+            "腿举": "leg_press",
+            "罗马尼亚硬拉": "romanian_deadlift",
+            "腿屈伸": "leg_extension",
+            "腿弯举": "leg_curl",
+            "保加利亚分腿蹲": "bulgarian_split_squat",
+            "臀推": "hip_thrust",
+            "推举": "overhead_press",
+            "哑铃侧平举": "lateral_raise",
+            "俯身飞鸟": "rear_delt_fly",
+            "面拉": "face_pull",
+            "阿诺德推举": "arnold_press",
+            "杠铃弯举": "barbell_curl",
+            "哑铃弯举": "dumbbell_curl",
+            "绳索下压": "triceps_pushdown",
+            "窄距卧推": "close_grip_bench_press",
+            "臂屈伸": "triceps_extension",
+            "卷腹": "crunch",
+            "悬垂举腿": "hanging_leg_raise",
+            "平板支撑": "plank",
+            "pallof press": "pallof_press"
+        ]
+        let trimmed = self.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if let mapped = mapping[trimmed] {
+            return mapped
+        }
+        for (key, val) in mapping {
+            if trimmed.contains(key.lowercased()) {
+                return val
+            }
+        }
+        return trimmed
+            .replacingOccurrences(of: " ", with: "_")
+            .filter { $0.isLetter || $0.isNumber || $0 == "_" }
     }
 }

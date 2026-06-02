@@ -177,14 +177,149 @@ struct TrainingResponseInsightService {
         let weekJournalEntries = journalEntries.filter { $0.createdAt >= start && $0.createdAt < end }
         let recoveryAverage = average(weekSnapshots.compactMap(\.recoveryScore))
         let sleepAverage = average(weekSnapshots.compactMap(\.sleepScore))
+        
         let responseSummary = weekResponses.isEmpty
             ? "暂无足够的训练后次日数据。"
             : weekResponses.map {
                 let muscles = $0.primaryMuscleGroups.isEmpty ? "未分类肌群" : $0.primaryMuscleGroups.joined(separator: "/")
                 return "\(muscles)：恢复 \(formattedDelta($0.nextDayRecoveryDelta))，HRV \(formattedDelta($0.nextDayHRVDelta))，RHR \(formattedDelta($0.nextDayRHRDelta))"
             }.joined(separator: "\n")
+            
         let workoutTitles = weekWorkouts.isEmpty ? "暂无力量训练" : weekWorkouts.map(\.title).joined(separator: "、")
         let journalTags = Set(weekJournalEntries.flatMap(\.tags)).sorted().joined(separator: "、")
+        
+        // --- 1. 睡眠-训练表现分析 (Sleep vs Performance) ---
+        var sleepPerformanceAnalysis = "样本不足（近一周需要至少 2 次力量训练且前一日有睡眠分记录）"
+        if weekWorkouts.count >= 2 {
+            var sleepScoresWithRPE: [(sleep: Double, rpe: Double)] = []
+            for workout in weekWorkouts {
+                let workoutDay = calendar.startOfDay(for: workout.startedAt)
+                let previousDay = calendar.date(byAdding: .day, value: -1, to: workoutDay) ?? workoutDay
+                let prevDayID = DailyHealthSummaryRecord.dayIdentifier(for: previousDay, calendar: calendar)
+                
+                if let snap = snapshots.first(where: { DailyHealthSummaryRecord.dayIdentifier(for: $0.date, calendar: calendar) == prevDayID }),
+                   let sleep = snap.sleepScore {
+                    let setRPEs = workout.exercises.flatMap(\.sets).compactMap(\.rpe)
+                    let rpe = workout.sessionRPE ?? average(setRPEs) ?? 7.0
+                    sleepScoresWithRPE.append((sleep, rpe))
+                }
+            }
+            
+            if sleepScoresWithRPE.count >= 2 {
+                let highSleep = sleepScoresWithRPE.filter { $0.sleep >= 75 }
+                let lowSleep = sleepScoresWithRPE.filter { $0.sleep < 75 }
+                
+                if !highSleep.isEmpty && !lowSleep.isEmpty {
+                    let avgRPEHigh = highSleep.map(\.rpe).reduce(0, +) / Double(highSleep.count)
+                    let avgRPELow = lowSleep.map(\.rpe).reduce(0, +) / Double(lowSleep.count)
+                    let diff = avgRPELow - avgRPEHigh
+                    if diff > 0 {
+                        sleepPerformanceAnalysis = "高睡眠质量（睡眠分 >= 75）的日子里，力量训练主观疲劳 RPE 平均低 \(String(format: "%.1f", diff)) 分，表现出更佳的体能状态。"
+                    } else {
+                        sleepPerformanceAnalysis = "睡眠充足与不足时的训练疲劳度无明显差异，可能受其他心理、营养等因素的代偿影响。"
+                    }
+                } else {
+                    let avgSleep = sleepScoresWithRPE.map(\.sleep).reduce(0, +) / Double(sleepScoresWithRPE.count)
+                    sleepPerformanceAnalysis = "近一周训练日前一晚的睡眠分较为单一（平均 \(String(format: "%.0f", avgSleep)) 分），相关性分析尚不显著。"
+                }
+            }
+        }
+        
+        // --- 2. 饮食-恢复分析 (Diet vs Recovery) ---
+        var dietRecoveryAnalysis = "样本不足（近一周需要至少 3 条餐食记录）"
+        if weekFoodLogs.count >= 3 {
+            var daysWithFoodLogs = Set<String>()
+            for log in weekFoodLogs {
+                daysWithFoodLogs.insert(DailyHealthSummaryRecord.dayIdentifier(for: log.createdAt, calendar: calendar))
+            }
+            
+            var recoveryWithFood: [Double] = []
+            var recoveryWithoutFood: [Double] = []
+            
+            for snap in weekSnapshots {
+                let dayID = DailyHealthSummaryRecord.dayIdentifier(for: snap.date, calendar: calendar)
+                if let rec = snap.recoveryScore {
+                    if daysWithFoodLogs.contains(dayID) {
+                        recoveryWithFood.append(rec)
+                    } else {
+                        recoveryWithoutFood.append(rec)
+                    }
+                }
+            }
+            
+            if !recoveryWithFood.isEmpty && !recoveryWithoutFood.isEmpty {
+                let avgWith = recoveryWithFood.reduce(0, +) / Double(recoveryWithFood.count)
+                let avgWithout = recoveryWithoutFood.reduce(0, +) / Double(recoveryWithoutFood.count)
+                let diff = avgWith - avgWithout
+                if diff > 0 {
+                    dietRecoveryAnalysis = "进行了完整餐食记录的日子里，当天的生理恢复分平均比未记录餐食的日子高出 \(String(format: "%.1f", diff)) 分，提示规律进食可能加速生理系统重建。"
+                } else {
+                    dietRecoveryAnalysis = "饮食记录与今日恢复无明显线性相关，建议继续保持营养追踪。"
+                }
+            } else {
+                dietRecoveryAnalysis = "本周饮食追踪记录分布较为单一，建议增加记录频率以辅助生理恢复分析。"
+            }
+        }
+        
+        // --- 3. 生理压力源相关分析 (咖啡因/压力/熬夜/酒精) ---
+        var stressorAnalysis = "样本不足（近一周需要至少 2 条带压力源标签的日志记录以分析关联）"
+        if weekJournalEntries.count >= 2 {
+            var caffeineImpact: [Double] = []
+            var stressImpact: [Double] = []
+            var lateImpact: [Double] = []
+            var alcoholImpact: [Double] = []
+            
+            for entry in weekJournalEntries {
+                let dayID = DailyHealthSummaryRecord.dayIdentifier(for: entry.createdAt, calendar: calendar)
+                guard let snap = weekSnapshots.first(where: { DailyHealthSummaryRecord.dayIdentifier(for: $0.date, calendar: calendar) == dayID }),
+                      let recovery = snap.recoveryScore else { continue }
+                
+                let tags = entry.tags.map { $0.lowercased() }
+                if tags.contains(where: { $0.contains("caffeine") || $0.contains("coffee") || $0.contains("咖啡") }) {
+                    caffeineImpact.append(recovery)
+                }
+                if tags.contains(where: { $0.contains("stress") || $0.contains("压力") || $0.contains("焦虑") }) {
+                    stressImpact.append(recovery)
+                }
+                if tags.contains(where: { $0.contains("late") || $0.contains("熬夜") || $0.contains("晚睡") }) {
+                    lateImpact.append(recovery)
+                }
+                if tags.contains(where: { $0.contains("alcohol") || $0.contains("酒") || $0.contains("啤酒") || $0.contains("饮酒") }) {
+                    alcoholImpact.append(recovery)
+                }
+            }
+            
+            var findings: [String] = []
+            let normalRecovery = recoveryAverage ?? 70.0
+            
+            if !lateImpact.isEmpty {
+                let avg = lateImpact.reduce(0, +) / Double(lateImpact.count)
+                let diff = avg - normalRecovery
+                findings.append("熬夜日子平均恢复分为 \(String(format: "%.1f", avg))（比日常平均变动 \(String(format: "%+.1f", diff))）")
+            }
+            if !alcoholImpact.isEmpty {
+                let avg = alcoholImpact.reduce(0, +) / Double(alcoholImpact.count)
+                let diff = avg - normalRecovery
+                findings.append("饮酒日子平均恢复分为 \(String(format: "%.1f", avg))（比日常平均变动 \(String(format: "%+.1f", diff))）")
+            }
+            if !stressImpact.isEmpty {
+                let avg = stressImpact.reduce(0, +) / Double(stressImpact.count)
+                let diff = avg - normalRecovery
+                findings.append("高压力日子平均恢复分为 \(String(format: "%.1f", avg))（比日常平均变动 \(String(format: "%+.1f", diff))）")
+            }
+            if !caffeineImpact.isEmpty {
+                let avg = caffeineImpact.reduce(0, +) / Double(caffeineImpact.count)
+                let diff = avg - normalRecovery
+                findings.append("摄入咖啡因日子平均恢复分为 \(String(format: "%.1f", avg))（比日常平均变动 \(String(format: "%+.1f", diff))）")
+            }
+            
+            if !findings.isEmpty {
+                stressorAnalysis = "- " + findings.joined(separator: "\n- ")
+            } else {
+                stressorAnalysis = "已记录日志，但暂不包含咖啡因、熬夜、高压力或酒精等显著生理相关标签，生理压力源相关性暂不显著。"
+            }
+        }
+
         let markdown = """
         # 每周身体报告
 
@@ -202,7 +337,19 @@ struct TrainingResponseInsightService {
 
         ## 训练后次日反应
         \(responseSummary)
+
+        ## 进阶关联分析
+
+        ### 睡眠与训练表现关联
+        \(sleepPerformanceAnalysis)
+
+        ### 饮食与恢复关联
+        \(dietRecoveryAnalysis)
+
+        ### 生理压力源相关分析（咖啡因/压力/熬夜/酒精与生理恢复）
+        \(stressorAnalysis)
         """
+        
         return WeeklyBodyReport(
             generatedAt: endDate,
             markdown: markdown,

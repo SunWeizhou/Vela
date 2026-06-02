@@ -8,6 +8,14 @@
 
 /* Begin PBXBuildFile section */
 		030D51E11F504938A9EED418 /* ArcProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32407F306A454D93A254BB24 /* ArcProgressView.swift */; };
+		0B1009010000000000000901 /* TrainingIntelligenceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1009020000000000000902 /* TrainingIntelligenceModels.swift */; };
+		0B1009110000000000000911 /* StrengthWorkoutLogSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1009120000000000000912 /* StrengthWorkoutLogSheetView.swift */; };
+		0B1009130000000000000913 /* StrengthWorkoutDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1009140000000000000914 /* StrengthWorkoutDetailView.swift */; };
+		0B1009150000000000000915 /* FitnessActivitySummaryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1009160000000000000916 /* FitnessActivitySummaryDetailView.swift */; };
+		0B1009030000000000000903 /* ExerciseLibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1009040000000000000904 /* ExerciseLibraryService.swift */; };
+		0B1009050000000000000905 /* TrainingAnalyticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1009060000000000000906 /* TrainingAnalyticsService.swift */; };
+		0B1009070000000000000907 /* RecoveryTrainingAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1009080000000000000908 /* RecoveryTrainingAdapter.swift */; };
+		0B1009090000000000000909 /* TrainingPlanLinkingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B10090A000000000000090A /* TrainingPlanLinkingService.swift */; };
 		0B0000010000000000000001 /* VelaThemeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000020000000000000002 /* VelaThemeTests.swift */; };
 		0B0000290000000000000029 /* HealthFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000300000000000000030 /* HealthFoundationTests.swift */; };
 		0B0000310000000000000031 /* PersistenceFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000320000000000000032 /* PersistenceFoundationTests.swift */; };
@@ -187,6 +195,14 @@
 		0B1001370000000000000037 /* SleepScoreEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/Sleep/SleepScoreEngine.swift; sourceTree = "<group>"; };
 		0B1001380000000000000038 /* RecoveryScoreEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/Recovery/RecoveryScoreEngine.swift; sourceTree = "<group>"; };
 		0B1001390000000000000039 /* StrainScoreEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/Strain/StrainScoreEngine.swift; sourceTree = "<group>"; };
+		0B1009020000000000000902 /* TrainingIntelligenceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingIntelligence/Models/TrainingIntelligenceModels.swift; sourceTree = "<group>"; };
+		0B1009040000000000000904 /* ExerciseLibraryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingIntelligence/Services/ExerciseLibraryService.swift; sourceTree = "<group>"; };
+		0B1009060000000000000906 /* TrainingAnalyticsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingIntelligence/Services/TrainingAnalyticsService.swift; sourceTree = "<group>"; };
+		0B1009080000000000000908 /* RecoveryTrainingAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingIntelligence/Services/RecoveryTrainingAdapter.swift; sourceTree = "<group>"; };
+		0B10090A000000000000090A /* TrainingPlanLinkingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingIntelligence/Services/TrainingPlanLinkingService.swift; sourceTree = "<group>"; };
+		0B1009120000000000000912 /* StrengthWorkoutLogSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingIntelligence/Views/StrengthWorkoutLogSheetView.swift; sourceTree = "<group>"; };
+		0B1009140000000000000914 /* StrengthWorkoutDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingIntelligence/Views/StrengthWorkoutDetailView.swift; sourceTree = "<group>"; };
+		0B1009160000000000000916 /* FitnessActivitySummaryDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingIntelligence/Views/FitnessActivitySummaryDetailView.swift; sourceTree = "<group>"; };
 		0B1001400000000000000040 /* StressIndexEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/Stress/StressIndexEngine.swift; sourceTree = "<group>"; };
 		0B1001410000000000000041 /* EnergyBankEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/EnergyBank/EnergyBankEngine.swift; sourceTree = "<group>"; };
 		0B1001420000000000000042 /* HealthAgeTrendEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/HealthAge/HealthAgeTrendEngine.swift; sourceTree = "<group>"; };
@@ -310,6 +326,14 @@
 			isa = PBXGroup;
 			children = (
 				0B1001900000000000000090 /* VelaQuickActionsSheet.swift */,
+				0B1009020000000000000902 /* TrainingIntelligenceModels.swift */,
+				0B1009040000000000000904 /* ExerciseLibraryService.swift */,
+				0B1009060000000000000906 /* TrainingAnalyticsService.swift */,
+				0B1009080000000000000908 /* RecoveryTrainingAdapter.swift */,
+				0B10090A000000000000090A /* TrainingPlanLinkingService.swift */,
+				0B1009120000000000000912 /* StrengthWorkoutLogSheetView.swift */,
+				0B1009140000000000000914 /* StrengthWorkoutDetailView.swift */,
+				0B1009160000000000000916 /* FitnessActivitySummaryDetailView.swift */,
 				0B1001910000000000000091 /* WeightLogSheetView.swift */,
 				0B1001A100000000000000A1 /* HealthUnitNormalizer.swift */,
 				0B1001A200000000000000A2 /* PipelineDiagnostics.swift */,
@@ -583,6 +607,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				0B1000900000000000000090 /* VelaQuickActionsSheet.swift in Sources */,
+				0B1009010000000000000901 /* TrainingIntelligenceModels.swift in Sources */,
+				0B1009030000000000000903 /* ExerciseLibraryService.swift in Sources */,
+				0B1009050000000000000905 /* TrainingAnalyticsService.swift in Sources */,
+				0B1009070000000000000907 /* RecoveryTrainingAdapter.swift in Sources */,
+				0B1009090000000000000909 /* TrainingPlanLinkingService.swift in Sources */,
+				0B1009110000000000000911 /* StrengthWorkoutLogSheetView.swift in Sources */,
+				0B1009130000000000000913 /* StrengthWorkoutDetailView.swift in Sources */,
+				0B1009150000000000000915 /* FitnessActivitySummaryDetailView.swift in Sources */,
 				0B1000910000000000000091 /* WeightLogSheetView.swift in Sources */,
 				0B1000A100000000000000A1 /* HealthUnitNormalizer.swift in Sources */,
 				0B1000A200000000000000A2 /* PipelineDiagnostics.swift in Sources */,
