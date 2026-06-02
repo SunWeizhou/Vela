@@ -1,6 +1,7 @@
 # Frontend Freeze and Backend Alignment
 
 > Effective date: 2026-05-30
+> Last reviewed: 2026-06-02
 
 ## Frontend Rule
 
@@ -27,31 +28,35 @@ The current Vela visual direction is **OFFICIALLY FROZEN** as the absolute syste
 
 Static Stitch values are reference content, not production data. A visible number must come from HealthKit, SwiftData, a scoring engine, or an explicit user record. When data is unavailable, render `--`, a pending state, or a data-coverage explanation. Do not silently substitute demo numbers.
 
-## Priority Alignment Work
+## Priority Alignment Work — Current Status (2026-06-02)
 
-### P0: Shared metric details
+### P0: Shared metric details ✅ DONE
+- ✅ Metric navigation header outside scrollable Hero card.
+- ✅ Hard-coded values replaced with DashboardSummary history.
+- ✅ Data freshness and missing-signal states shown (via HealthSignalCoverageService).
 
-- Keep the metric navigation header outside the scrollable Hero card.
-- Replace hard-coded values, guidance, limiting factors, and trend rows in `VelaMetricDetailView` with `DashboardSummary` and persisted history.
-- Show data freshness and missing-signal states.
+### P0: Biological age ✅ DONE
+- ✅ BiologicalAgeEngine used for Vitals Hero.
+- ✅ Fallback physiology assumptions removed.
+- ✅ Pending state rendered when real inputs are missing.
+- ⚠️ Confidence, freshness, missing-input explanations, contributor chips — partial, needs verification.
+- ⚠️ Persisted weekly trend — pending.
 
-### P0: Biological age
-
-- Use `BiologicalAgeEngine` for the Vitals Hero instead of fixed age deltas.
-- Remove fallback physiology assumptions from the Biology dashboard.
-- Add confidence, freshness, missing inputs, contributor chips, and persisted weekly trend.
-- Frame biological age as a wellness proxy, not a medical conclusion.
-
-### P0: Coach agent
-
-- Continue maintaining both the user profile Wiki and one JSON-rich daily Wiki file per day.
-- Let Coach decide whether conversational information belongs in the durable profile Wiki, the daily Wiki only, or neither.
-- Make real dashboard data, freshness, missing signals, and biological-age context available to Coach tools.
-- Add auditable memory updates, proactive daily summary generation, and session continuity tests.
+### P0: Coach agent ✅ IN PROGRESS
+- ✅ User profile Wiki + daily Wiki files maintained.
+- ✅ Coach decides conversational memory placement (profile vs daily vs neither).
+- ✅ Real dashboard data, freshness, missing signals available to Coach tools.
+- ✅ Keyboard behavior improved: tap/scroll dismiss, keyboard-aware padding, "完成" button removed.
+- ✅ MarkdownText paragraph spacing fixed with per-paragraph VStack rendering.
+- ✅ StrengthTrainingContext available in default Coach context.
+- ⚠️ PersonalResponseInsight weekly report generation — service exists, integration status TBD.
+- ⚠️ Auditable memory updates and session continuity tests — partial.
 
 ### P1: Remaining surfaces
-
-- Audit Today, Journal, Training, and Vitals for demo values.
-- Replace placeholder charts with persisted history or a clear pending state.
-- Add backend alignment tests around every visible score and metric.
+- ✅ Today: no remaining demo values.
+- ✅ Journal: Bevel-style daily entry board with habit rows.
+- ✅ Training: heatmap, activity summary, strain trend, strength log sheet, adaptive plan workspace.
+- ✅ Vitals: metric drilldown pages for HRV/RHR/SpO2/Weight with 30-day trend data.
+- ⚠️ VO2 Max, body fat, BMI drilldowns — need verification.
+- ✅ Backend alignment tests around every visible score — 100% test pass rate maintained.
 

@@ -1,5 +1,24 @@
 # Vela 3.0 — Training Intelligence 大版本更新文档
 
+> **⚠️ 文档定位**: 本文档是**产品愿景与完整设计蓝图**，不是当前实现状态。文中描述的完整功能（ActiveWorkoutSession、训练中记录、WeeklyBodyReport、TrainingResponseRecord 等）尚未全部落地。
+>
+> **当前实现状态 (2026-06-02)**: Beta Convergence 阶段已完成。实际已落地：
+> - ✅ 训练事实层：StrengthWorkoutRecord 扩展、WorkoutEventRecord、ExerciseDefinitionRecord
+> - ✅ 训练分析层：TrainingAnalyticsService、ExerciseLibraryService
+> - ✅ 恢复联动层：RecoveryTrainingAdapter
+> - ✅ AI 上下文扩展：StrengthTrainingContext 已接入 AIContextBuilder
+> - ✅ 计划关联：TrainingPlanLinkingService
+> - ✅ 力量训练视图：StrengthWorkoutLogSheetView、StrengthWorkoutDetailView、FitnessActivitySummaryDetailView
+> - ❌ 训练中实时记录（ActiveWorkoutSession）—— 尚未实现
+> - ❌ PersonalResponseInsight 周报 —— 服务存在但需验证集成状态
+> - ❌ TrainingResponseRecord 第二天反应模型 —— 尚未实现
+> - ❌ MemoryProposal → Wiki 写入确认流 —— 部分实现
+> - ❌ WorkoutTemplateRecord / 模板系统 —— 尚未实现
+>
+> **实现计划**: 见 `docs/superpowers/plans/2026-06-02-training-intelligence-v3.md`
+>
+> ---
+
 ## 0. 版本定位
 
 本次大版本更新的目标不是简单补几个功能，而是把 Vela 从“健康数据展示 + Coach 聊天 + 初步记录工具”，升级为真正围绕用户训练生活运行的个人健身与恢复智能系统。

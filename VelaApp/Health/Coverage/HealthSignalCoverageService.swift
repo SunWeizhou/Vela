@@ -109,6 +109,20 @@ public struct HealthSignalCoverage: Identifiable, Codable, Hashable, Sendable {
         authorizationState == .authorized || authorizationState == .noRecentSamples || authorizationState == .authorizedButNoSamples
     }
 
+    /// Permission has been resolved (user has interacted with the permission prompt).
+    public var isPermissionResolved: Bool {
+        authorizationState != .notDetermined
+    }
+
+    /// Signal has enough recent data to be analytically usable for high-confidence judgments.
+    /// Stale data (noRecentSamples) or authorized-but-empty signals are NOT analytically usable.
+    public var analyticallyUsable: Bool {
+        authorizationState == .authorized &&
+        freshness != .missing &&
+        freshness != .stale &&
+        quality != .insufficient
+    }
+
     public var confidenceImpact: String {
         switch authorizationState {
         case .authorized:

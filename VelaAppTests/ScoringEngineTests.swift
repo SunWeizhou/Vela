@@ -1487,8 +1487,12 @@ final class ScoringEngineTests: XCTestCase {
 
         XCTAssertTrue(recommendation.shouldTrain)
         XCTAssertNotEqual(recommendation.recommendedIntensity, "high")
-        XCTAssertTrue(recommendation.reasons.contains { $0.contains("Sleep") })
-        XCTAssertTrue(recommendation.reasons.contains { $0.contains("HRV") })
+        // Reason texts are locale-dependent (Chinese or English); check for key terms in either language
+        let allReasons = recommendation.reasons.joined()
+        let hasSleepReason = allReasons.contains("Sleep") || allReasons.contains("睡眠")
+        let hasHRVReason = allReasons.contains("HRV")
+        XCTAssertTrue(hasSleepReason, "Expected reason about sleep, got: \(recommendation.reasons)")
+        XCTAssertTrue(hasHRVReason, "Expected reason about HRV, got: \(recommendation.reasons)")
     }
 }
 

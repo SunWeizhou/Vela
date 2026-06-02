@@ -262,12 +262,12 @@ final class WorkoutAggregationTests: XCTestCase {
         XCTAssertGreaterThan(definitions.count, 0)
 
         for def in definitions {
-            XCTAssertFalse((def.canonicalKey ?? "").isEmpty)
+            XCTAssertFalse(def.canonicalKey.isEmpty, "Exercise '\(def.name)' missing canonicalKey")
         }
 
         // 3. Verify lookup using canonicalKey
         let firstDef = try XCTUnwrap(definitions.first)
-        let key = firstDef.canonicalKey ?? ""
+        let key = firstDef.canonicalKey
         let descriptor = FetchDescriptor<ExerciseDefinitionRecord>(
             predicate: #Predicate<ExerciseDefinitionRecord> { $0.canonicalKey == key }
         )
@@ -321,7 +321,35 @@ final class WorkoutAggregationTests: XCTestCase {
         )
         XCTAssertTrue(linker.isHighConfidenceMatch(score: highConfidenceScore))
 
-        // Case 2: Rest day mismatch (should return 0.0)
+        // Case 2: Wrong muscle group — same day, strength focus, but trained legs instead of chest (Low Confidence)
+        let legWorkout = StrengthWorkoutRecord(
+            title: "Leg Day",
+            startedAt: baseDate,
+            durationMinutes: 50,
+            exercises: [
+                StrengthExerciseLog(name: "深蹲", equipment: "barbell", primaryMuscleGroup: "quads", sets: [])
+            ]
+        )
+
+        let legEvent = WorkoutEventRecord(
+            source: "strengthLog",
+            startedAt: baseDate,
+            endedAt: baseDate.addingTimeInterval(50 * 60),
+            activityType: "Leg Day",
+            linkedStrengthWorkoutId: legWorkout.id
+        )
+
+        let wrongMuscleScore = linker.calculateMatchScore(
+            event: legEvent,
+            planDay: activePlanDay,
+            strengthWorkout: legWorkout,
+            expectedDate: baseDate,
+            calendar: calendar
+        )
+        XCTAssertFalse(linker.isHighConfidenceMatch(score: wrongMuscleScore),
+                       "Wrong muscle group should NOT be a high-confidence plan match (score: \(wrongMuscleScore))")
+
+        // Case 3: Rest day mismatch (should return 0.0)
         let restPlanDay = TrainingDay(
             weekNumber: 1,
             dayNumber: 2,
@@ -386,5 +414,89 @@ final class WorkoutAggregationTests: XCTestCase {
         XCTAssertEqual(HealthSignalAuthorizationState.authorizedButNoSamples.rawValue, "authorizedButNoSamples")
         XCTAssertEqual(HealthSignalAuthorizationState.noRecentSamples.rawValue, "noRecentSamples")
         XCTAssertEqual(HealthSignalAuthorizationState.deniedOrUnavailable.rawValue, "deniedOrUnavailable")
+    }
+
+    @MainActor
+    func testCoveragePermissionResolvedVsAnalyticallyUsable() throws {
+        // A signal that is authorized with fresh enough data and sufficient quality
+        var coverage = HealthSignalCoverage(
+            signal: .hrvSDNN,
+            authorizationState: .authorized,
+            sampleCount7d: 14,
+            sampleCount30d: 60,
+            latestSampleAt: Date(),
+            freshness: .today,
+            quality: .enough
+        )
+        XCTAssertTrue(coverage.isPermissionResolved)
+        XCTAssertTrue(coverage.analyticallyUsable)
+        XCTAssertTrue(coverage.isAvailable)
+        // confidenceImpact is locale-dependent; check key terms
+        XCTAssertTrue(
+            coverage.confidenceImpact.contains("high-confidence") ||
+            coverage.confidenceImpact.contains("高置信度"),
+            "authorized + fresh data should report high confidence. Got: \(coverage.confidenceImpact)")
+
+        // Authorized but no recent samples — permission resolved, NOT analytically usable
+        coverage = HealthSignalCoverage(
+            signal: .hrvSDNN,
+            authorizationState: .noRecentSamples,
+            sampleCount7d: 0,
+            sampleCount30d: 3,
+            latestSampleAt: Date().addingTimeInterval(-14 * 86_400),
+            freshness: .stale,
+            quality: .insufficient
+        )
+        XCTAssertTrue(coverage.isPermissionResolved)
+        XCTAssertFalse(coverage.analyticallyUsable,
+                       "noRecentSamples should NOT be analytically usable")
+        XCTAssertTrue(coverage.isAvailable,
+                       "noRecentSamples is still 'available' for permission purposes")
+        // confidenceImpact is locale-dependent; check for either language's "low confidence" keyword
+        XCTAssertTrue(
+            coverage.confidenceImpact.contains("low") ||
+            coverage.confidenceImpact.contains("较低") ||
+            coverage.confidenceImpact.contains("置信度较低"),
+            "noRecentSamples should cite low confidence. Got: \(coverage.confidenceImpact)")
+
+        // Authorized but no samples at all — permission resolved, NOT analytically usable
+        coverage = HealthSignalCoverage(
+            signal: .restingHR,
+            authorizationState: .authorizedButNoSamples,
+            sampleCount7d: 0,
+            sampleCount30d: 0,
+            latestSampleAt: nil,
+            freshness: .missing,
+            quality: .insufficient
+        )
+        XCTAssertTrue(coverage.isPermissionResolved)
+        XCTAssertFalse(coverage.analyticallyUsable,
+                       "authorizedButNoSamples should NOT be analytically usable")
+
+        // Not determined — NOT permission resolved, NOT usable
+        coverage = HealthSignalCoverage(
+            signal: .vo2Max,
+            authorizationState: .notDetermined,
+            sampleCount7d: 0,
+            sampleCount30d: 0,
+            latestSampleAt: nil,
+            freshness: .missing,
+            quality: .insufficient
+        )
+        XCTAssertFalse(coverage.isPermissionResolved)
+        XCTAssertFalse(coverage.analyticallyUsable)
+
+        // Denied — permission resolved, NOT usable
+        coverage = HealthSignalCoverage(
+            signal: .sleepAnalysis,
+            authorizationState: .deniedOrUnavailable,
+            sampleCount7d: 0,
+            sampleCount30d: 0,
+            latestSampleAt: nil,
+            freshness: .missing,
+            quality: .insufficient
+        )
+        XCTAssertTrue(coverage.isPermissionResolved)
+        XCTAssertFalse(coverage.analyticallyUsable)
     }
 }

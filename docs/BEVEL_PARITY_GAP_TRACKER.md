@@ -1,7 +1,34 @@
 # Bevel Parity Gap Tracker
 
-> Updated: 2026-05-30
+> Updated: 2026-06-02
 > Purpose: concrete page-by-page parity tracker for turning Vela from a Bevel-like shell into a Bevel-class daily health product.
+
+## Current Status Summary
+
+| Surface | Parity | Notes |
+|---------|--------|-------|
+| Home / Today | ✅ High | Readiness cockpit, 3 rings, daily insight, stress/energy cards |
+| Journal | ✅ High | Daily checklist board, date strip, habit rows, recent records |
+| Fitness / Training | ✅ High | Heatmap, activity summary, strain trend, training readiness, strength log |
+| Vitals | ✅ High | Recovery ring, HRV/RHR/Sleep HR/SpO2/Weight rows, metric detail pages |
+| Coach / Intelligence | ✅ Medium | Chat with streaming, action hub, Wiki status, artifacts; keyboard behavior improved |
+| Sleep | ✅ High | Dedicated sleep panel: score, stages, timeline, 7D trend |
+| Settings / Biology | ✅ Medium | Manual lab entry, biological age engine, data coverage |
+| Training Intelligence v3 | 🟡 Beta | Models + services done; ActiveWorkoutSession, templates, response records pending |
+
+## Recent Progress (2026-05-30 → 2026-06-02)
+
+- ✅ Training Intelligence v3 Beta Convergence: modular split, draft layer, linking service, coverage states
+- ✅ Coach chat paragraph spacing fix (MarkdownText rewritten with per-paragraph VStack)
+- ✅ Keyboard behavior: tap-to-dismiss, scroll-to-dismiss, keyboard-aware padding
+- ✅ Keyboard "完成" toolbar button removed
+- ✅ AdaptiveTrainingEngine: TSB override logic for training day adjustment
+- ✅ StrengthWorkoutLogSheetView: active set completion, RPE/RIR, quick adjustments
+- ✅ FitnessActivitySummaryDetailView: 30-day activity detail with trend chart
+- ✅ WorkoutAggregationService: unified workout event upsert and day aggregation
+- ✅ TrainingAnalyticsService: volume, effective sets, muscle group mapping, e1RM, PR detection
+- ✅ RecoveryTrainingAdapter: recovery-gated volume/intensity adjustment
+- ✅ 100% test pass rate maintained throughout
 
 ## Root Cause
 

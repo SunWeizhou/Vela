@@ -42,9 +42,9 @@ struct DataCoverageView: View {
 
     private var overallScoreCard: some View {
         let total = coverageGroups.flatMap(\.signals).count
-        let available = coverageGroups.flatMap(\.signals).filter { $0.isAvailable }.count
-        let pct = total > 0 ? Int(Double(available) / Double(total) * 100) : 0
-        let missing = total - available
+        let usable = coverageGroups.flatMap(\.signals).filter { $0.analyticallyUsable }.count
+        let pct = total > 0 ? Int(Double(usable) / Double(total) * 100) : 0
+        let missing = total - usable
 
         return VelaHeroSurface(tint: coverageColor(pct)) {
             VStack(alignment: .leading, spacing: 14) {
@@ -70,8 +70,8 @@ struct DataCoverageView: View {
                             .font(.headline.weight(.semibold))
                             .foregroundStyle(VelaTheme.primaryText)
                         Text(AppLanguage.stored.isChinese
-                             ? "\(available)/\(total) 个健康信号可用，\(missing) 个需要补齐或授权。"
-                             : "\(available)/\(total) health signals are available; \(missing) need data or permission."
+                             ? "\(usable)/\(total) 个信号可分析，\(missing) 个需补齐或授权。"
+                             : "\(usable)/\(total) signals analytically usable; \(missing) need data or permission."
                         )
                         .font(.subheadline)
                         .foregroundStyle(VelaTheme.secondaryText)
@@ -109,10 +109,10 @@ struct DataCoverageView: View {
     // MARK: - Group Card
 
     private func coverageGroupCard(_ group: CoverageGroup) -> some View {
-        let available = group.signals.filter { $0.isAvailable }.count
+        let usable = group.signals.filter { $0.analyticallyUsable }.count
         let total = group.signals.count
         let staleOrMissing = group.signals.filter { $0.freshness == .stale || $0.freshness == .missing }.count
-        let pct = total > 0 ? Int(Double(available) / Double(total) * 100) : 0
+        let pct = total > 0 ? Int(Double(usable) / Double(total) * 100) : 0
         let tint = groupColor(group)
 
         return VelaGlassCard {
@@ -130,8 +130,8 @@ struct DataCoverageView: View {
                             .font(.headline.weight(.semibold))
                             .foregroundStyle(VelaTheme.primaryText)
                         Text(AppLanguage.stored.isChinese
-                             ? "\(available)/\(total) 个信号可用 · \(staleOrMissing) 个陈旧或缺失"
-                             : "\(available)/\(total) signals available · \(staleOrMissing) stale or missing"
+                             ? "\(usable)/\(total) 个信号可分析 · \(staleOrMissing) 个陈旧或缺失"
+                             : "\(usable)/\(total) signals analytically usable · \(staleOrMissing) stale or missing"
                         )
                         .font(.caption)
                         .foregroundStyle(VelaTheme.secondaryText)

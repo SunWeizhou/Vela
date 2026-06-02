@@ -1,24 +1,27 @@
 # PRD.md
 # Project Vela — Local-first AI Health Coach for Apple Health
 
-> Updated: 2026-05-23  
-> Current product target: Bevel 3.0-class health companion, differentiated by local-first architecture and a user-readable, agent-maintained Wiki. Research basis: `docs/BEVEL_3_RESEARCH.md`. Full product blueprint: `docs/VELA_FULL_STRENGTH_PRODUCT_BLUEPRINT.md`.
+> Updated: 2026-06-02
+> Current product target: Bevel 3.0-class health companion, differentiated by local-first architecture, a user-readable agent-maintained Wiki, and Training Intelligence engine. Research basis: `docs/BEVEL_3_RESEARCH.md`. Full product blueprint: `docs/VELA_FULL_STRENGTH_PRODUCT_BLUEPRINT.md`.
 
 ## 0. 当前构建状态
 
-截至 2026-05-23，Vela 已不再是 MVP 骨架，而是一个可在真机运行的本地优先健康助手：
+截至 2026-06-02，Vela 已是一个在真机运行的本地优先健康助手，Training Intelligence v3 Beta Convergence 已完成：
 
-- iOS SwiftUI + SwiftData + HealthKit 主工程可编译通过；
-- 已有 Home / Journal / Fitness / Vitals / `+` Intelligence 五个主 Tab，Sleep / Recovery / Strain 作为能力和详情页继续存在；
-- 已实现 Sleep、Recovery、Strain、Stress、Energy Bank、Health Age、Biological Age 等评分引擎；
+- iOS SwiftUI + SwiftData + HealthKit 主工程可编译通过，全部测试通过（100% pass rate）；
+- 已有 Home / Journal / Fitness / Vitals / `+` Intelligence 五个主 Tab；
+- 已实现 Sleep、Recovery、Strain、Stress、Energy Bank、Health Age、Biological Age 等 10+ 评分引擎；
 - 已实现 HealthKit 多维数据读取、日摘要缓存、AI 报告、Journal、Coach session、训练计划、生物标志物记录；
-- 已实现 DeepSeek Provider、Kimi Vision Food Photo Analyzer、结构化 FoodLog、AIContextBuilder、流式 Coach、Coach Personality、Agent tools、Web Search Service；
+- 已实现 Claude API（VelaBackend）+ DeepSeek Provider + Kimi Vision Food Photo Analyzer；
+- 已实现结构化 FoodLog、AIContextBuilder、流式 Coach、Coach Personality、Agent tools、Web Search；
 - 已实现 user Wiki、夜间 Wiki 同步 Agent、晨间简报、主动洞察、通知配置；
-- Home 已加入 Daily Plan 与 Readiness Brief，用“状态、原因、下一步行动”承接 Bevel-style daily loop；
-- 2026-05-23 当前 UI 已从旧 dark dashboard 转向 Bevel-like 浅色系统：Home 首屏、Tab bar、共享卡片材质、Journal / Fitness / Vitals / Intelligence 主入口正在按同一视觉语言收敛；
-- 真机镜像体验显示旧构建仍偏深色卡片，最新浅色构建需要重新安装到手机后继续逐页校准。
+- Home 已加入 Daily Plan 与 Readiness Brief，用”状态、原因、下一步行动”承接 Bevel-style daily loop；
+- **VelaBackend** (Vapor 4 + Fluent + SQLite + JWT) 提供 Coach chat、Today Plan、Training Adaptations 等路由；
+- **Training Intelligence v3** 模块已落地：TrainingAnalyticsService、RecoveryTrainingAdapter、ExerciseLibraryService、TrainingPlanLinkingService、力量训练视图；
+- 真机 UI 采用暖白 `#F5F3F0` 画布 + 白卡驾驶舱 + 毛玻璃胶囊底栏的 Bevel Parity 视觉标准；
+- 键盘交互已优化为微信式体验：点空白区/下滑收起键盘，键盘弹出时聊天区整体上移。
 
-本 PRD 后续按“已具备基础能力，继续打磨成完整产品”来定义，而不是按从零开发定义。
+本 PRD 已从”从零开发”阶段过渡到”持续打磨完整产品”阶段。未来的产品边界和优先级以 `docs/VELA_FULL_STRENGTH_PRODUCT_BLUEPRINT.md` 和 `docs/VELA_TRAINING_INTELLIGENCE_V3.md` 为准。
 
 ## 1. 产品概述
 
@@ -508,56 +511,53 @@ Stitch MCP + Stitch Skills 用于：
 
 ## 9. 里程碑定义
 
-### M0 — 文档与设计约束
-- 完成 PRD；
-- 完成技术架构；
-- 完成 Agent Spec；
-- 完成 Stitch Brief。
+### M0 — 文档与设计约束 ✅
+- ✅ PRD, 技术架构, Agent Spec, Stitch Brief
 
-### M1 — HealthKit 数据层
-- 授权；
-- 查询；
-- 数据标准化；
-- 本地存储。
+### M1 — HealthKit 数据层 ✅
+- ✅ 授权, 查询, 数据标准化, 本地存储
 
-### M2 — 核心 UI
-- Home；
-- Sleep；
-- Recovery；
-- Strain。
+### M2 — 核心 UI ✅
+- ✅ Home, Sleep, Recovery, Strain
 
-### M3 — 扩展模块
-- Stress；
-- Energy Bank；
-- Health Age Trend；
-- Journal。
+### M3 — 扩展模块 ✅
+- ✅ Stress, Energy Bank, Health Age Trend, Journal
 
-### M4 — AI Coach
-- DeepSeek Provider；
-- Prompt / agent.md；
-- 上下文组装；
-- 固定报告；
-- 历史报告存储。
+### M4 — AI Coach ✅
+- ✅ DeepSeek Provider, Prompt/agent.md, 上下文组装, 固定报告, 历史报告存储
+- ✅ VelaBackend (Vapor 4) 提供 Claude API 代理
 
-### M5 — 体验打磨
-- UI 细化；
-- 错误处理；
-- 评分参数调优；
-- 真机长期试用。
+### M5 — Training Intelligence Beta Convergence ✅
+- ✅ TrainingAnalyticsService, RecoveryTrainingAdapter, ExerciseLibraryService
+- ✅ StrengthWorkoutLogSheetView, FitnessActivitySummaryDetailView
+- ✅ 训练事实层、分析层、恢复联动层模型
+
+### M6 — Training Intelligence Full (进行中)
+- ❌ ActiveWorkoutSession 实时训练记录
+- ❌ WorkoutTemplateRecord 模板系统
+- ❌ TrainingResponseRecord 第二天反应模型
+- ❌ WeeklyBodyReport 个人身体理解系统
+- ❌ MemoryProposal → Wiki 确认流产品化
+
+### M7 — Bevel Parity 打磨 (进行中)
+- ✅ 首页 cockpit, 白卡驾驶舱, 三环仪表
+- ✅ 指标详情页 (Strain/Recovery/Sleep/Stress/Energy)
+- ✅ Vitals 单指标详情 (HRV/RHR/Sleep HR/SpO2/Weight)
+- ⚠️ Biological Age 置信度/新鲜度/贡献因子
+- ⚠️ VO₂ Max / Body Fat / BMI drilldowns
 
 ---
 
 ## 10. 产品最终判断
-Vela 的第一阶段目标不是“商业化成功”，而是：
-- 做出一个你自己真愿意每天使用的 App；
-- 完成一次高质量 iOS + HealthKit + AI Agent 的完整产品实践；
-- 为未来 App Store、创业化或家庭健康扩展保留空间。
+Vela 的第一阶段目标不是”商业化成功”，而是：
+- ✅ 做出一个你自己真愿意每天使用的 App；
+- ✅ 完成一次高质量 iOS + HealthKit + AI Agent 的完整产品实践；
+- 🟡 为未来 App Store、创业化或家庭健康扩展保留空间。
 
-## 11. 当前优先级
+## 11. 当前优先级（2026-06-02）
 
-1. Intelligence 工作台：把 Coach 从聊天页升级为 chat + check-ins + Wiki + artifacts + tools。
-2. Home 首屏收敛：状态、原因、今日计划、数据置信度。
-3. Training 计划实体化：日历、训练卡、恢复感知改期。
-4. Biology 可信化：手动血检、置信度、新鲜度、健康记录路线。
-5. Nutrition 产品化：已完成照片识别后的结构化保存和回看，继续补齐份量编辑、置信度、日/周营养趋势。
-6. 真机体验打磨：底部安全区、长文本、空状态、后台任务、通知。
+1. **Training Intelligence 完善**: ActiveWorkoutSession 训练中体验、模板系统、反应模型。
+2. **Personal Body Intelligence**: WeeklyBodyReport、MemoryProposal → Wiki 确认流产品化。
+3. **Coach 体验打磨**: PersonalResponseInsight 周报集成验证、session continuity。
+4. **Biology 可信化**: 置信度、新鲜度、贡献因子、健康记录路线。
+5. **真机体验打磨**: 底部安全区、长文本、空状态、后台任务、通知。

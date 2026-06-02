@@ -32,9 +32,31 @@ final class TrainingPlanLinkingService: Sendable {
 
         let focus = planDay.focus.lowercased()
         let eventActivity = event.activityType.lowercased()
+        let isStrengthEvent = event.linkedStrengthWorkoutId != nil
+            || eventActivity.contains("strength") || eventActivity.contains("weight")
+            || eventActivity.contains("健身") || eventActivity.contains("力量")
 
-        if focus == "strength" && (eventActivity.contains("strength") || eventActivity.contains("weight") || eventActivity.contains("健身") || eventActivity.contains("力量") || event.linkedStrengthWorkoutId != nil) {
-            score += 25.0
+        // Strength focus match: base 15 pts, full 25 pts only when verified via strength workout
+        if focus == "strength" {
+            if isStrengthEvent {
+                score += 15.0
+                // Additional +10 if we have a linked strength workout (verified via muscle/context)
+                if let sw = strengthWorkout, !sw.exercises.isEmpty {
+                    let workoutMuscles = Set(sw.exercises.compactMap { $0.primaryMuscleGroup?.lowercased() })
+                    let planDayTitle = planDay.title.lowercased()
+                    let planDayDesc = planDay.description.lowercased()
+                    let musclesMatchPlan = workoutMuscles.contains { muscle in
+                        planDayTitle.contains(muscle) || planDayDesc.contains(muscle)
+                    }
+                    // Full strength match bonus: needs both a linked workout AND muscle/title alignment
+                    if musclesMatchPlan {
+                        score += 10.0 // 15 + 10 = 25 total
+                    } else {
+                        // linked strength workout exists but targets wrong muscles: no bonus
+                        score -= 5.0 // penalty for wrong muscle group
+                    }
+                }
+            }
         } else if focus == "cardio" && (eventActivity.contains("run") || eventActivity.contains("cycle") || eventActivity.contains("swim") || eventActivity.contains("cardio") || eventActivity.contains("跑步") || eventActivity.contains("有氧") || eventActivity.contains("骑行")) {
             score += 25.0
         } else if focus == "flexibility" && (eventActivity.contains("yoga") || eventActivity.contains("stretch") || eventActivity.contains("瑜伽") || eventActivity.contains("拉伸")) {
@@ -71,6 +93,10 @@ final class TrainingPlanLinkingService: Sendable {
         return score
     }
 
+    /// Threshold for high-confidence plan-to-workout matching.
+    /// Same-day alone (40) + generic strength match (15) = 55 → below threshold.
+    /// Same-day + strength with muscle/title alignment (65+) → high confidence.
+    /// Same-day + exact title match (55) → high confidence only with additional match.
     func isHighConfidenceMatch(score: Double) -> Bool {
         return score >= 65.0
     }
