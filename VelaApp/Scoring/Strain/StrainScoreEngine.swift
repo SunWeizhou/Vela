@@ -93,17 +93,20 @@ public struct WorkoutInput: Codable, Hashable {
     public var durationMinutes: Double
     public var averageHeartRate: Double?
     public var heartRateSamples: [Double] = []
+    public var rpe: Double?
 
     public init(
         id: UUID = UUID(),
         durationMinutes: Double,
         averageHeartRate: Double? = nil,
-        heartRateSamples: [Double] = []
+        heartRateSamples: [Double] = [],
+        rpe: Double? = nil
     ) {
         self.id = id
         self.durationMinutes = durationMinutes
         self.averageHeartRate = averageHeartRate
         self.heartRateSamples = heartRateSamples
+        self.rpe = rpe
     }
 }
 
@@ -222,8 +225,11 @@ public struct StrainScoreEngine: ScoreEngine {
                     trimp = workout.durationMinutes * clampedHRR * 0.75 * exp(1.80 * clampedHRR)
                 }
                 workoutLoad = trimp
+            } else if let rpe = workout.rpe {
+                // Method C: Foster's session RPE scaled to TRIMP units (duration * rpe * 0.3)
+                workoutLoad = workout.durationMinutes * rpe * 0.3
             } else {
-                // Method C: duration fallback
+                // Method D: duration fallback
                 workoutLoad = workout.durationMinutes * 1.5
             }
             totalWorkoutLoad += workoutLoad

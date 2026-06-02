@@ -717,6 +717,12 @@ public struct TrainingDay: Codable, Hashable, Identifiable {
     public var isCompleted: Bool
     public var completedAt: Date?
     public var loggedStrain: Double?
+    
+    // Closed-loop training additions
+    public var linkedWorkoutEventIds: [UUID]
+    public var plannedExercisesJSON: String
+    public var actualSummaryJSON: String
+    public var adherenceScore: Double?
 
     public init(
         id: UUID = UUID(),
@@ -729,7 +735,11 @@ public struct TrainingDay: Codable, Hashable, Identifiable {
         intensity: String,
         isCompleted: Bool = false,
         completedAt: Date? = nil,
-        loggedStrain: Double? = nil
+        loggedStrain: Double? = nil,
+        linkedWorkoutEventIds: [UUID] = [],
+        plannedExercisesJSON: String = "[]",
+        actualSummaryJSON: String = "{}",
+        adherenceScore: Double? = nil
     ) {
         self.id = id
         self.weekNumber = weekNumber
@@ -742,6 +752,10 @@ public struct TrainingDay: Codable, Hashable, Identifiable {
         self.isCompleted = isCompleted
         self.completedAt = completedAt
         self.loggedStrain = loggedStrain
+        self.linkedWorkoutEventIds = linkedWorkoutEventIds
+        self.plannedExercisesJSON = plannedExercisesJSON
+        self.actualSummaryJSON = actualSummaryJSON
+        self.adherenceScore = adherenceScore
     }
 }
 
@@ -829,5 +843,37 @@ public final class BiomarkerRecord {
         self.referenceMin = referenceMin
         self.referenceMax = referenceMax
         self.sourceDocumentName = sourceDocumentName
+    }
+}
+
+@Model
+public final class WorkoutEventRecord {
+    @Attribute(.unique) public var id: UUID
+    public var source: String // "healthKit" | "manual" | "strengthLog"
+    public var startedAt: Date
+    public var endedAt: Date
+    public var activityType: String
+    public var energyKilocalories: Double?
+    public var rpe: Double?
+    public var linkedStrengthWorkoutId: UUID?
+
+    public init(
+        id: UUID = UUID(),
+        source: String,
+        startedAt: Date,
+        endedAt: Date,
+        activityType: String,
+        energyKilocalories: Double? = nil,
+        rpe: Double? = nil,
+        linkedStrengthWorkoutId: UUID? = nil
+    ) {
+        self.id = id
+        self.source = source
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.activityType = activityType
+        self.energyKilocalories = energyKilocalories
+        self.rpe = rpe
+        self.linkedStrengthWorkoutId = linkedStrengthWorkoutId
     }
 }

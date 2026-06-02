@@ -67,12 +67,26 @@ final class EveningWikiSyncAgent: ObservableObject {
         do {
             let wiki = WikiFileService.loadDictionary()
 
+            let foodLogs = (try? modelContext.fetch(
+                FetchDescriptor<FoodLogRecord>(
+                    sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+                )
+            )) ?? []
+            let fourteenDaysAgo = Date().addingTimeInterval(-14 * 24 * 3600)
+            let strengthWorkouts = (try? modelContext.fetch(
+                FetchDescriptor<StrengthWorkoutRecord>(
+                    predicate: #Predicate<StrengthWorkoutRecord> { $0.startedAt >= fourteenDaysAgo },
+                    sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+                )
+            )) ?? []
             let (context, contextMeta) = (services?.contextBuilder ?? AIContextBuilder()).build(
                 dashboard: dashboard,
                 journalEntries: [],
                 historicalReports: [],
                 userWiki: wiki,
-                weeklyTrends: (try? HealthSnapshotRepository(modelContext: modelContext).buildWeeklyTrendSummary()) ?? [:]
+                weeklyTrends: (try? HealthSnapshotRepository(modelContext: modelContext).buildWeeklyTrendSummary()) ?? [:],
+                foodLogs: Array(foodLogs.prefix(8)),
+                strengthWorkouts: strengthWorkouts
             )
 
             let prompt = buildSyncPrompt(

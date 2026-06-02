@@ -226,6 +226,7 @@ struct AlpacaView: View {
 struct WorkoutLogSheetView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var dashboardVM: DashboardViewModel
     
     @State private var selectedSport = "跑步"
     @State private var durationMinutes: Double = 30.0
@@ -351,45 +352,25 @@ struct WorkoutLogSheetView: View {
         let calendar = Calendar.current
         let end = Date()
         let start = end.addingTimeInterval(-durationMinutes * 60)
-        let targetDay = calendar.startOfDay(for: end)
-        let workout = WorkoutSummary(
-            start: start,
-            end: end,
-            activityName: selectedSport,
+        
+        let workoutEvent = WorkoutEventRecord(
+            source: "manual",
+            startedAt: start,
+            endedAt: end,
+            activityType: selectedSport,
             energyKilocalories: caloriesBurned,
-            source: "manual"
+            rpe: exertionScore
         )
         
-        let descriptor = FetchDescriptor<DailyHealthSummaryRecord>()
+        modelContext.insert(workoutEvent)
+        
         do {
-            let all = try modelContext.fetch(descriptor)
-            if let todaySummary = all.first(where: { calendar.isDate($0.date, inSameDayAs: targetDay) }) {
-                var workouts = todaySummary.toSnapshot().workouts
-                workouts.append(workout)
-                todaySummary.workoutsData = try? JSONEncoder().encode(workouts)
-                todaySummary.workoutCount = workouts.count
-                todaySummary.workoutTypes = Set(workouts.map(\.activityName)).sorted().joined(separator: ", ")
-                todaySummary.workoutDuration = (todaySummary.workoutDuration ?? 0) + durationMinutes
-                todaySummary.activeCalories = (todaySummary.activeCalories ?? 0) + caloriesBurned
-                todaySummary.activeMinutes = (todaySummary.activeMinutes ?? 0) + durationMinutes
-                todaySummary.strainScore = min(100.0, max(todaySummary.strainScore ?? 0.0, exertionScore * 10.0))
-                todaySummary.updatedAt = Date()
-            } else {
-                let newSummary = DailyHealthSummaryRecord(snapshot: DailyHealthSnapshot(
-                    date: targetDay,
-                    strainScore: exertionScore * 10.0,
-                    activeCalories: caloriesBurned,
-                    activeMinutes: durationMinutes,
-                    workoutCount: 1,
-                    workoutTypes: selectedSport,
-                    workoutDuration: durationMinutes,
-                    workouts: [workout]
-                ), calendar: calendar)
-                modelContext.insert(newSummary)
-            }
             try modelContext.save()
+            Task {
+                await dashboardVM.refresh(modelContext: modelContext)
+            }
         } catch {
-            print("Failed to save workout summary: \(error)")
+            print("Failed to save manual workout event: \(error)")
         }
     }
 }

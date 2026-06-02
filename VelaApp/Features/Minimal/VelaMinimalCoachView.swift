@@ -1,13 +1,13 @@
 import Charts
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 enum VelaCapabilityAvailability {
     static let cloudKitSyncEnabled = false
 }
 
 // MARK: - VelaSettingsView — 我的 / Settings (Bevel Replica matching Screenshot 3)
-// profile row × General Group (Account, Wiki, Models, Appearance, Notification, Custom, Shortcuts, Language) × Data Group (Sources, CGM, iCloud) × Whats New
 
 struct VelaSettingsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -27,9 +27,14 @@ struct VelaSettingsView: View {
     @AppStorage("vela_app_language") private var languageRaw = AppLanguage.simplifiedChinese.rawValue
     @AppStorage("vela_daily_calorie_target") private var dailyCalorieTarget = 2000
     @AppStorage(SleepTargetSettings.hoursKey) private var sleepTargetHours = SleepTargetSettings.defaultHours
+    @AppStorage("vela_coach_personality") private var coachPersonalityRaw = CoachPersonality.guardian.rawValue
     
     // AI Model settings
     @AppStorage("vela_coach_text_model") private var textModel = "DeepSeek V4 Pro"
+
+    private var currentCoachPersonalityName: String {
+        CoachPersonality(rawValue: coachPersonalityRaw)?.displayName ?? CoachPersonality.guardian.displayName
+    }
 
     var body: some View {
         ScrollView {
@@ -37,7 +42,7 @@ struct VelaSettingsView: View {
                 // Profile Row (Card style)
                 profileCardRow
                 
-                // 1. 通用 (General) Group matching Screenshot 3 + User Wiki + AI Models
+                // 1. 通用 (General) Group matching Screenshot 3 + User Wiki + AI Models + Coach Style + Agent Automation
                 VStack(alignment: .leading, spacing: 8) {
                     Text("通用")
                         .font(.system(size: 13, weight: .bold))
@@ -61,6 +66,18 @@ struct VelaSettingsView: View {
                             settingsRow(icon: "cpu.fill", iconBg: Color(hex: "#5C6BC0"), title: "AI 智能模型设置", value: textModel)
                         }
                         
+                        Divider().padding(.leading, 56)
+
+                        NavigationLink(destination: CoachPersonalitySettingsView()) {
+                            settingsRow(icon: "brain.head.profile", iconBg: Color(hex: "#FF5E3A"), title: "教练风格", value: currentCoachPersonalityName)
+                        }
+
+                        Divider().padding(.leading, 56)
+
+                        NavigationLink(destination: AgentAutomationSettingsView()) {
+                            settingsRow(icon: "sparkles", iconBg: Color(hex: "#FFCC00"), title: "Agent 自动技能", value: "已配置")
+                        }
+
                         Divider().padding(.leading, 56)
                         
                         NavigationLink(destination: AppearanceSettingsView()) {
@@ -123,10 +140,28 @@ struct VelaSettingsView: View {
                         NavigationLink(destination: CGMSettingsView()) {
                             settingsRow(icon: "scope", iconBg: Color(hex: "#30A2FF"), title: "管理 CGM", value: "Apple 健康")
                         }
+
+                        Divider().padding(.leading, 56)
+
+                        NavigationLink(destination: DataCoverageView()) {
+                            settingsRow(icon: "waveform.path.ecg.rectangle", iconBg: Color(hex: "#5C6BC0"), title: "数据覆盖", value: "信号质量")
+                        }
+
+                        Divider().padding(.leading, 56)
+
+                        NavigationLink(destination: TrustCenterView()) {
+                            settingsRow(icon: "checkmark.shield.fill", iconBg: Color(hex: "#34C759"), title: "信任中心", value: "运行日志")
+                        }
+
+                        Divider().padding(.leading, 56)
+
+                        NavigationLink(destination: ExportDataSettingsView()) {
+                            settingsRow(icon: "square.and.arrow.up.fill", iconBg: Color(hex: "#8E8A80"), title: "数据导出", value: "JSON 格式")
+                        }
                         
                         if VelaCapabilityAvailability.cloudKitSyncEnabled {
                             Divider().padding(.leading, 56)
-
+ 
                             NavigationLink(destination: iCloudSyncSettingsView()) {
                                 settingsRow(icon: "icloud.fill", iconBg: Color(hex: "#007AFF"), title: "iCloud 同步", value: "已接入")
                             }
@@ -820,14 +855,61 @@ struct DataSourceSettingsView: View {
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     @State private var isSyncing = false
     @State private var lastSync: Date?
+    @State private var authErrorMessage: String?
+    @State private var successTier: HealthPermissionTier?
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                Text("已同步健康传感器")
+            VStack(alignment: .leading, spacing: 20) {
+                // Tier Permissions Request Cards
+                Text("健康数据权限请求")
                     .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Color(hex: "#1A1917"))
                     .padding(.leading, 16)
                     .padding(.top, 16)
+
+                VStack(spacing: 12) {
+                    tierRequestCard(
+                        tier: .core,
+                        title: "1. 核心权限 (Core)",
+                        desc: "睡眠分析、心率变异性(HRV)、静息心率、日常心率、呼吸频率、活动能量、日常训练、步数、体能训练。",
+                        color: Color(hex: "#FF2D55")
+                    )
+
+                    tierRequestCard(
+                        tier: .enhanced,
+                        title: "2. 增强权限 (Enhanced)",
+                        desc: "最大摄氧量(VO2Max)、体重、体脂率、去脂体重、血氧饱和度、腕部温度。",
+                        color: Color(hex: "#AF52DE")
+                    )
+
+                    tierRequestCard(
+                        tier: .advanced,
+                        title: "3. 高级权限 (Advanced)",
+                        desc: "血糖检测(CGM)、收缩压/舒张压、膳食水分、膳食摄入(能量、蛋白质、碳水、脂肪)、步态与步行稳定性、正念专注时间、睡眠呼吸紊乱(iOS 18+)。",
+                        color: Color(hex: "#30A2FF")
+                    )
+                }
+                .padding(.horizontal, 16)
+
+                if let authErrorMessage {
+                    Text(authErrorMessage)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.red)
+                        .padding(.horizontal, 16)
+                }
+
+                if let successTier {
+                    Text("成功向系统请求 \(successTier == .core ? "核心" : (successTier == .enhanced ? "增强" : "高级")) 权限！")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Color(hex: "#34C759"))
+                        .padding(.horizontal, 16)
+                }
+
+                Text("已同步健康传感器")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .padding(.leading, 16)
                 
                 VStack(spacing: 0) {
                     sensorRow(
@@ -865,12 +947,50 @@ struct DataSourceSettingsView: View {
                 .buttonStyle(.plain)
                 .disabled(isSyncing)
                 .padding(.horizontal, 16)
-                
-                Spacer()
+                .padding(.bottom, 30)
             }
         }
         .background(Color(hex: "#F5F3F0"))
         .navigationTitle("健康数据源")
+    }
+
+    private func tierRequestCard(tier: HealthPermissionTier, title: String, desc: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Color(hex: "#1A1917"))
+                Spacer()
+                Button {
+                    Task {
+                        do {
+                            authErrorMessage = nil
+                            successTier = nil
+                            try await HealthAuthorizationService().requestAuthorization(tier: tier)
+                            successTier = tier
+                        } catch {
+                            authErrorMessage = "权限授权失败: \(error.localizedDescription)"
+                        }
+                    }
+                } label: {
+                    Text("请求授权")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(color))
+                }
+                .buttonStyle(.plain)
+            }
+
+            Text(desc)
+                .font(.system(size: 12))
+                .foregroundStyle(Color(hex: "#8E8A80"))
+                .lineSpacing(2)
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
     }
 
     private var appleHealthStatus: String {
@@ -1184,5 +1304,225 @@ struct WhatsNewSettingsView: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white))
+    }
+}
+
+// MARK: - CoachPersonalitySettingsView
+
+struct CoachPersonalitySettingsView: View {
+    @AppStorage("vela_coach_personality") private var coachPersonalityRaw = CoachPersonality.guardian.rawValue
+    @State private var selectedPersonality: CoachPersonality = .guardian
+
+    var body: some View {
+        Form {
+            Section(header: Text("选择教练风格 (Coach Style)")) {
+                ForEach(CoachPersonality.allCases) { personality in
+                    Button {
+                        selectedPersonality = personality
+                        coachPersonalityRaw = personality.rawValue
+                        CoachPersonality.current = personality
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: personality.icon)
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(Color.white)
+                                .frame(width: 28, height: 28)
+                                .background(personality.tint)
+                                .clipShape(Circle())
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(personality.displayName)
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundStyle(Color(hex: "#1A1917"))
+                                Text(personality.description)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Color(hex: "#8E8A80"))
+                                    .multilineTextAlignment(.leading)
+                            }
+                            Spacer()
+                            if selectedPersonality == personality {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(Color(hex: "#C56B4A"))
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+        }
+        .background(Color(hex: "#F5F3F0"))
+        .navigationTitle("AI 教练风格")
+        .onAppear {
+            selectedPersonality = CoachPersonality(rawValue: coachPersonalityRaw) ?? .guardian
+        }
+    }
+}
+
+// MARK: - AgentAutomationSettingsView
+
+struct AgentAutomationSettingsView: View {
+    @StateObject private var agentConfig = AutoAgentConfig.shared
+    @AppStorage("vela_app_language") private var languageRaw = AppLanguage.simplifiedChinese.rawValue
+    
+    private var isChinese: Bool {
+        AppLanguage(rawValue: languageRaw)?.isChinese ?? true
+    }
+    
+    var body: some View {
+        Form {
+            Section(header: Text("Agent 技能自动执行")) {
+                ForEach(agentConfig.skillList(isChinese: isChinese)) { skill in
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 12) {
+                            Image(systemName: skill.icon)
+                                .font(.body)
+                                .foregroundStyle(Color(hex: "#C56B4A"))
+                                .frame(width: 28)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(isChinese ? skill.name : skill.enName)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(Color(hex: "#1A1917"))
+                                Text(skill.schedule)
+                                    .font(.caption2)
+                                    .foregroundStyle(Color(hex: "#8E8A80"))
+                            }
+
+                            Spacer()
+
+                            Toggle("", isOn: Binding(
+                                get: { skill.isEnabled },
+                                set: { new in
+                                    var config = agentConfig
+                                    config[keyPath: skill.configKey] = new
+                                }
+                            ))
+                            .labelsHidden()
+                            .tint(Color(hex: "#C56B4A"))
+                        }
+
+                        Text(isChinese ? skill.description : skill.enDescription)
+                            .font(.caption)
+                            .foregroundStyle(Color(hex: "#8E8A80"))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.vertical, 6)
+                }
+            }
+        }
+        .navigationTitle("Agent 自动化技能")
+    }
+}
+
+// MARK: - ExportDataSettingsView
+
+struct ExportDataSettingsView: View {
+    @Environment(\.modelContext) private var modelContext
+    @State private var showExporter = false
+    @State private var exportData: Data?
+    @State private var statusMessage = ""
+    @State private var isError = false
+    
+    var body: some View {
+        Form {
+            Section(header: Text("数据导出与备份")) {
+                Text("Vela 始终秉持 Local-first 理念，你的所有健康数据都保留在设备本地。为了数据迁移或备份，你可以将健康摘要与日志导出为 JSON 文件。数据在导出过程中不会离开你的设备。")
+                    .font(.footnote)
+                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .padding(.vertical, 4)
+                
+                Button {
+                    exportData = exportHealthData(modelContext: modelContext)
+                    if exportData != nil {
+                        showExporter = true
+                    } else {
+                        statusMessage = "生成导出数据失败。"
+                        isError = true
+                    }
+                } label: {
+                    Label("导出本地健康数据 (JSON)", systemImage: "doc.text.fill")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(Color.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Color(hex: "#C56B4A")))
+                }
+                .buttonStyle(.plain)
+                
+                if !statusMessage.isEmpty {
+                    Text(statusMessage)
+                        .font(.footnote)
+                        .foregroundStyle(isError ? .red : .green)
+                }
+            }
+        }
+        .navigationTitle("数据导出")
+        .fileExporter(
+            isPresented: $showExporter,
+            document: exportData.flatMap { JSONExportDocument(data: $0) },
+            contentType: .json,
+            defaultFilename: "vela_health_export_\(Date().formatted(.iso8601).prefix(10)).json"
+        ) { result in
+            switch result {
+            case .success(let url):
+                statusMessage = "导出成功至: \(url.lastPathComponent)"
+                isError = false
+            case .failure(let error):
+                statusMessage = "导出失败: \(error.localizedDescription)"
+                isError = true
+            }
+        }
+    }
+    
+    private func exportHealthData(modelContext: ModelContext) -> Data? {
+        let repo = SwiftDataDailyHealthSummaryRepository(modelContext: modelContext)
+        let range = DateRangeQuery.recentDays(90, endingAt: Date(), calendar: .current)
+        let records = (try? repo.fetch(in: range)) ?? []
+
+        let exportRecords: [[String: Any]] = records.map { record in
+            [
+                "date": record.date.formatted(.iso8601),
+                "sleep_score": record.sleepScore as Any,
+                "recovery_score": record.recoveryScore as Any,
+                "strain_score": record.strainScore as Any,
+                "stress_index": record.stressIndex as Any,
+                "morning_energy": record.morningEnergy as Any,
+                "current_energy": record.currentEnergy as Any
+            ]
+        }
+
+        let export: [String: Any] = [
+            "app": "Vela",
+            "export_date": Date().formatted(.iso8601),
+            "config_version": VelaAppMetadata.configVersion,
+            "record_count": exportRecords.count,
+            "records": exportRecords
+        ]
+
+        return try? JSONSerialization.data(withJSONObject: export, options: [.prettyPrinted, .sortedKeys])
+    }
+}
+
+// MARK: - JSONExportDocument
+
+struct JSONExportDocument: FileDocument {
+    static let readableContentTypes: [UTType] = [.json]
+
+    let data: Data
+
+    init(data: Data) {
+        self.data = data
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        self.data = data
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
     }
 }

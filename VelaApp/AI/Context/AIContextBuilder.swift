@@ -10,6 +10,7 @@ struct AIContextBuilder {
         userWiki: [String: String],
         weeklyTrends: [String: String] = [:],
         foodLogs: [FoodLogRecord] = [],
+        strengthWorkouts: [StrengthWorkoutRecord] = [],
         generatedAt: Date = Date()
     ) -> (envelope: AgentContextEnvelope, metadata: ContextSnapshotMetadata) {
         let envelope = AgentContextEnvelope(
@@ -48,7 +49,8 @@ struct AIContextBuilder {
             extendedMetrics: ExtendedMetricsContextBuilder().build(
                 ext: dashboard.extendedMetrics,
                 body: dashboard.bodyMetrics
-            )
+            ),
+            strengthTraining: buildStrengthTrainingDict(strengthWorkouts, generatedAt: generatedAt)
         )
 
         let contextJSON = (try? String(data: JSONEncoder().encode(envelope), encoding: .utf8)) ?? "{}"
@@ -60,7 +62,7 @@ struct AIContextBuilder {
             includedSections: [
                 "today_summary", "sleep", "recovery", "strain", "workouts",
                 "stress", "energy_bank", "health_age_trend", "nutrition",
-                "journal", "user_wiki", "extended_metrics"
+                "journal", "user_wiki", "extended_metrics", "strength_training"
             ],
             redactedFields: []
         )
@@ -76,6 +78,7 @@ struct AIContextBuilder {
         userWiki: [String: String],
         weeklyTrends: [String: String] = [:],
         foodLogs: [FoodLogRecord] = [],
+        strengthWorkouts: [StrengthWorkoutRecord] = [],
         generatedAt: Date = Date()
     ) -> (context: TypedAgentContext, metadata: ContextSnapshotMetadata) {
         let hrvMs = dashboard.recoveryMetrics.hrvMilliseconds
@@ -193,6 +196,7 @@ struct AIContextBuilder {
             training: training,
             nutrition: nutrition,
             extendedMetrics: extended,
+            strengthTraining: buildTypedStrengthTraining(strengthWorkouts, generatedAt: generatedAt),
             recentTrends: ["note": "v2 typed context"],
             weeklyTrends: weeklyTrends.isEmpty ? ["note": "No weekly trend data available yet."] : weeklyTrends,
             journalEntries: journalEntries.map { "\($0.tags.joined(separator: "|")): \($0.text)" },
@@ -209,7 +213,7 @@ struct AIContextBuilder {
             schemaVersion: AIContextBuilder.schemaVersion,
             generatedAt: generatedAt,
             hash: hash,
-            includedSections: ["recovery", "sleep", "strain", "stress", "energy_bank", "training", "nutrition", "extended_metrics"],
+            includedSections: ["recovery", "sleep", "strain", "stress", "energy_bank", "training", "nutrition", "extended_metrics", "strength_training"],
             redactedFields: []
         )
 
@@ -240,5 +244,224 @@ struct AIContextBuilder {
             "recent_total_macros": "P\(totalProtein) C\(totalCarbs) F\(totalFat) Fiber\(totalFiber)",
             "source_note": "Structured food logs may come from Kimi vision analysis, Coach tools, or manual entry."
         ]
+    }
+
+    private func buildStrengthTrainingDict(_ workouts: [StrengthWorkoutRecord], generatedAt: Date) -> [String: String] {
+        let sevenDaysAgo = generatedAt.addingTimeInterval(-7 * 24 * 3600)
+        let fourteenDaysAgo = generatedAt.addingTimeInterval(-14 * 24 * 3600)
+
+        let workouts7d = workouts.filter { $0.startedAt >= sevenDaysAgo && $0.startedAt <= generatedAt }
+        let workouts14d = workouts.filter { $0.startedAt >= fourteenDaysAgo && $0.startedAt <= generatedAt }
+
+        let sessions7d = workouts7d.count
+        
+        var hardSets7d = 0
+        var volume7dKg = 0.0
+        var muscleGroupSets7d: [String: Int] = [
+            "chest": 0, "back": 0, "legs": 0, "shoulders": 0, "arms": 0, "core": 0, "other": 0
+        ]
+
+        for workout in workouts7d {
+            for exercise in workout.exercises {
+                let muscleGroup = inferMuscleGroup(exerciseName: exercise.name)
+                for set in exercise.sets {
+                    if !set.isWarmup {
+                        hardSets7d += 1
+                        volume7dKg += Double(set.repetitions) * set.weightKilograms
+                        muscleGroupSets7d[muscleGroup, default: 0] += 1
+                    }
+                }
+            }
+        }
+
+        // Exercise progress in past 14 days
+        var exerciseStats: [String: (sets: Int, maxWeight: Double, max1RM: Double)] = [:]
+        for workout in workouts14d {
+            for exercise in workout.exercises {
+                let name = exercise.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !name.isEmpty else { continue }
+                
+                var setsCount = 0
+                var localMaxWeight = 0.0
+                var localMax1RM = 0.0
+                
+                for set in exercise.sets {
+                    if !set.isWarmup {
+                        setsCount += 1
+                        if set.weightKilograms > localMaxWeight {
+                            localMaxWeight = set.weightKilograms
+                        }
+                        let epley1RM = set.weightKilograms * (1.0 + Double(set.repetitions) / 30.0)
+                        if epley1RM > localMax1RM {
+                            localMax1RM = epley1RM
+                        }
+                    }
+                }
+                
+                if setsCount > 0 {
+                    let current = exerciseStats[name] ?? (sets: 0, maxWeight: 0.0, max1RM: 0.0)
+                    exerciseStats[name] = (
+                        sets: current.sets + setsCount,
+                        maxWeight: max(current.maxWeight, localMaxWeight),
+                        max1RM: max(current.max1RM, localMax1RM)
+                    )
+                }
+            }
+        }
+
+        let progressList = exerciseStats.map { (name, stats) in
+            "\(name): \(stats.sets) sets, max \(stats.maxWeight)kg, peak 1RM \(String(format: "%.1f", stats.max1RM))kg"
+        }.sorted().joined(separator: "\n")
+
+        // Last session summary
+        var lastSessionStr = "No strength training sessions logged in the past 14 days."
+        if let lastSession = workouts.sorted(by: { $0.startedAt > $1.startedAt }).first {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .short
+            let dateStr = formatter.string(from: lastSession.startedAt)
+            
+            let exerciseSummaries = lastSession.exercises.map { exercise in
+                let workingSets = exercise.sets.filter { !$0.isWarmup }
+                return "\(exercise.name) (\(workingSets.count) hard sets)"
+            }.joined(separator: ", ")
+            
+            lastSessionStr = "\(lastSession.title) on \(dateStr): \(lastSession.exerciseCount) exercises (\(exerciseSummaries)), \(lastSession.totalSetCount) sets total, volume \(Int(lastSession.totalVolumeKilograms))kg."
+        }
+
+        let muscleGroupStr = muscleGroupSets7d
+            .sorted(by: { $0.key < $1.key })
+            .map { pair in "\(pair.key): \(pair.value) sets" }
+            .joined(separator: ", ")
+
+        return [
+            "sessions_7d": "\(sessions7d)",
+            "hard_sets_7d": "\(hardSets7d)",
+            "volume_7d_kg": String(format: "%.1f", volume7dKg),
+            "muscle_groups_7d": muscleGroupStr,
+            "exercise_progress_14d": progressList.isEmpty ? "No exercise data." : progressList,
+            "last_session_summary": lastSessionStr
+        ]
+    }
+
+    private func buildTypedStrengthTraining(_ workouts: [StrengthWorkoutRecord], generatedAt: Date) -> StrengthTrainingContext {
+        let sevenDaysAgo = generatedAt.addingTimeInterval(-7 * 24 * 3600)
+        let fourteenDaysAgo = generatedAt.addingTimeInterval(-14 * 24 * 3600)
+
+        let workouts7d = workouts.filter { $0.startedAt >= sevenDaysAgo && $0.startedAt <= generatedAt }
+        let workouts14d = workouts.filter { $0.startedAt >= fourteenDaysAgo && $0.startedAt <= generatedAt }
+
+        let sessions7d = workouts7d.count
+        
+        var hardSets7d = 0
+        var volume7dKg = 0.0
+        var muscleGroupSets7d: [String: Int] = [
+            "chest": 0, "back": 0, "legs": 0, "shoulders": 0, "arms": 0, "core": 0, "other": 0
+        ]
+
+        for workout in workouts7d {
+            for exercise in workout.exercises {
+                let muscleGroup = inferMuscleGroup(exerciseName: exercise.name)
+                for set in exercise.sets {
+                    if !set.isWarmup {
+                        hardSets7d += 1
+                        volume7dKg += Double(set.repetitions) * set.weightKilograms
+                        muscleGroupSets7d[muscleGroup, default: 0] += 1
+                    }
+                }
+            }
+        }
+
+        // Exercise progress in past 14 days
+        var exerciseStats: [String: (sets: Int, maxWeight: Double, max1RM: Double)] = [:]
+        for workout in workouts14d {
+            for exercise in workout.exercises {
+                let name = exercise.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !name.isEmpty else { continue }
+                
+                var setsCount = 0
+                var localMaxWeight = 0.0
+                var localMax1RM = 0.0
+                
+                for set in exercise.sets {
+                    if !set.isWarmup {
+                        setsCount += 1
+                        if set.weightKilograms > localMaxWeight {
+                            localMaxWeight = set.weightKilograms
+                        }
+                        let epley1RM = set.weightKilograms * (1.0 + Double(set.repetitions) / 30.0)
+                        if epley1RM > localMax1RM {
+                            localMax1RM = epley1RM
+                        }
+                    }
+                }
+                
+                if setsCount > 0 {
+                    let current = exerciseStats[name] ?? (sets: 0, maxWeight: 0.0, max1RM: 0.0)
+                    exerciseStats[name] = (
+                        sets: current.sets + setsCount,
+                        maxWeight: max(current.maxWeight, localMaxWeight),
+                        max1RM: max(current.max1RM, localMax1RM)
+                    )
+                }
+            }
+        }
+
+        let progressList = exerciseStats.map { (name, stats) in
+            ExerciseProgressSummary(
+                exerciseName: name,
+                setsCount: stats.sets,
+                maxWeightKg: stats.maxWeight,
+                estimated1RMPeakKg: stats.max1RM
+            )
+        }.sorted(by: { $0.exerciseName < $1.exerciseName })
+
+        // Last session summary
+        var lastSessionStr = "No strength training sessions logged in the past 14 days."
+        if let lastSession = workouts.sorted(by: { $0.startedAt > $1.startedAt }).first {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .short
+            let dateStr = formatter.string(from: lastSession.startedAt)
+            
+            let exerciseSummaries = lastSession.exercises.map { exercise in
+                let workingSets = exercise.sets.filter { !$0.isWarmup }
+                return "\(exercise.name) (\(workingSets.count) hard sets)"
+            }.joined(separator: ", ")
+            
+            lastSessionStr = "\(lastSession.title) on \(dateStr): \(lastSession.exerciseCount) exercises (\(exerciseSummaries)), \(lastSession.totalSetCount) sets total, volume \(Int(lastSession.totalVolumeKilograms))kg."
+        }
+
+        return StrengthTrainingContext(
+            sessions7d: sessions7d,
+            hardSets7d: hardSets7d,
+            volume7dKg: volume7dKg,
+            muscleGroupSets7d: muscleGroupSets7d,
+            recentExerciseProgress: progressList,
+            lastSessionSummary: lastSessionStr
+        )
+    }
+
+    private func inferMuscleGroup(exerciseName: String) -> String {
+        let name = exerciseName.lowercased()
+        if name.contains("bench") || name.contains("chest") || name.contains("fly") || name.contains("pushup") || name.contains("pec") || name.contains("incline press") || name.contains("decline press") {
+            return "chest"
+        }
+        if name.contains("row") || name.contains("pullup") || name.contains("pulldown") || name.contains("deadlift") || name.contains("lats") || name.contains("chinup") || name.contains("shrug") || name.contains("back") {
+            return "back"
+        }
+        if name.contains("squat") || name.contains("lunge") || name.contains("leg press") || name.contains("leg curl") || name.contains("leg extension") || name.contains("calf") || name.contains("quad") || name.contains("hamstring") || name.contains("glute") || name.contains("hip thrust") || name.contains("thigh") {
+            return "legs"
+        }
+        if name.contains("shoulder") || name.contains("overhead") || name.contains("lateral raise") || name.contains("delt") || name.contains("military press") || name.contains("arnold press") {
+            return "shoulders"
+        }
+        if name.contains("bicep") || name.contains("tricep") || name.contains("curl") || name.contains("dip") || name.contains("arm") {
+            return "arms"
+        }
+        if name.contains("abs") || name.contains("plank") || name.contains("crunch") || name.contains("situp") || name.contains("sit-up") || name.contains("oblique") || name.contains("twist") || name.contains("abdominal") || name.contains("core") {
+            return "core"
+        }
+        return "other"
     }
 }

@@ -102,15 +102,38 @@ struct StrainActivitySummary: Codable, Hashable {
     var workouts: [WorkoutSummary]
 }
 
-struct WorkoutSummary: Identifiable, Codable, Hashable {
-    var id = UUID()
-    var start: Date
-    var end: Date
-    var activityName: String
-    var energyKilocalories: Double?
-    var averageHeartRate: Double?
-    var distanceMeters: Double?
-    var source: String? = nil
+public struct WorkoutSummary: Identifiable, Codable, Hashable {
+    public var id: UUID
+    public var start: Date
+    public var end: Date
+    public var activityName: String
+    public var energyKilocalories: Double?
+    public var averageHeartRate: Double?
+    public var distanceMeters: Double?
+    public var source: String?
+    public var rpe: Double?
+
+    public init(
+        id: UUID = UUID(),
+        start: Date,
+        end: Date,
+        activityName: String,
+        energyKilocalories: Double? = nil,
+        averageHeartRate: Double? = nil,
+        distanceMeters: Double? = nil,
+        source: String? = nil,
+        rpe: Double? = nil
+    ) {
+        self.id = id
+        self.start = start
+        self.end = end
+        self.activityName = activityName
+        self.energyKilocalories = energyKilocalories
+        self.averageHeartRate = averageHeartRate
+        self.distanceMeters = distanceMeters
+        self.source = source
+        self.rpe = rpe
+    }
 }
 
 struct BodyMetricsSummary: Codable, Hashable {

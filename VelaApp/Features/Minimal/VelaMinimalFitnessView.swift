@@ -692,9 +692,12 @@ private struct StrengthSetDraft: Identifiable {
 struct StrengthWorkoutLogSheetView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var dashboardVM: DashboardViewModel
+    
     @State private var title = "力量训练"
     @State private var durationMinutes = 60
     @State private var notes = ""
+    @State private var exertionScore: Double = 7.0
     @State private var exercises = [StrengthExerciseDraft()]
 
     private let equipmentOptions = ["杠铃", "哑铃", "固定器械", "绳索", "壶铃", "自重", "其他"]
@@ -745,6 +748,25 @@ struct StrengthWorkoutLogSheetView: View {
                 .font(.system(size: 18, weight: .bold))
             Stepper("时长 \(durationMinutes) 分钟", value: $durationMinutes, in: 5...240, step: 5)
                 .font(.system(size: 14, weight: .semibold))
+            
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("自觉竭力程度 (RPE):")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color(hex: "#1A1917"))
+                    Spacer()
+                    Text("\(Int(exertionScore)) / 10")
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color(hex: "#C56B4A"))
+                }
+                Slider(value: $exertionScore, in: 1...10, step: 1)
+                    .tint(Color(hex: "#C56B4A"))
+                Text("1 = 极轻松，10 = 力竭且无任何保留组。用于重算今日负荷。")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color(hex: "#8E8A80"))
+            }
+            .padding(.top, 4)
+
             TextField("训练备注（可选）", text: $notes, axis: .vertical)
                 .font(.system(size: 13))
                 .lineLimit(2...4)
@@ -850,8 +872,28 @@ struct StrengthWorkoutLogSheetView: View {
             exercises: validExercises
         )
         modelContext.insert(record)
-        try? modelContext.save()
-        VelaAppState.shared.markLocalDataChanged()
+        
+        // Companion WorkoutEventRecord
+        let event = WorkoutEventRecord(
+            source: "strengthLog",
+            startedAt: record.startedAt,
+            endedAt: record.endedAt,
+            activityType: record.title,
+            energyKilocalories: Double(durationMinutes) * 6.0, // Estimate 6 kcal/min for gym training
+            rpe: exertionScore,
+            linkedStrengthWorkoutId: record.id
+        )
+        modelContext.insert(event)
+        
+        do {
+            try modelContext.save()
+            VelaAppState.shared.markLocalDataChanged()
+            Task {
+                await dashboardVM.refresh(modelContext: modelContext)
+            }
+        } catch {
+            print("Failed to save strength workout: \(error)")
+        }
         dismiss()
     }
 }

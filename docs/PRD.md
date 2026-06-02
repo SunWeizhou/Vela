@@ -253,14 +253,14 @@ Vela 的策略从“复刻 Bevel 核心结构”升级为“学习 Bevel 3.0 的
 5. AI 睡眠解读；
 6. 简化 Sleep Score。
 
-##### Sleep Score v0.1
-第一版主要基于：
-- 睡眠总时长是否接近目标；
-- 睡眠规律性；
-- 夜间清醒时间和睡眠阶段比例保留为可扩展因子，当前不重度参与评分。
+##### Sleep Score v1.0 (Apple/Levine 兼容)
+基于多维睡眠特征与基线评估的 0-100 综合模型：
+- **Duration Score (0–50)**：评估睡眠时长相对目标的完成度，接近睡眠目标（默认 7.5 小时）得满分，偏低重度惩罚，偏高轻度扣分。
+- **Consistency Score (0–30)**：基于 circular time 算法评估入睡和起床时间，相对近 13 晚个人常态基线的偏离程度。
+- **Interruption Score (0–20)**：结合夜间清醒时长 (awakeMinutes) 与醒来次数进行中断惩罚。
 
 ##### 页面结构建议
-- 顶部 Sleep Score；
+- 顶部 Sleep Score 环；
 - 昨夜摘要；
 - Sleep Stage Chart；
 - 入睡 / 起床指标；
@@ -274,18 +274,18 @@ Vela 的策略从“复刻 Bevel 核心结构”升级为“学习 Bevel 3.0 的
 ##### 必须展示
 - Recovery 总分 0–100；
 - 状态标签：Low / Moderate / High；
-- 评分解释；
-- 分项贡献；
+- 评分解释与主要驱动原因；
+- 分项贡献占比；
 - 近 30 天趋势；
 - 指标详情图表。
 
-##### Recovery v0.1 因子
-- HRV Score
-- Resting Heart Rate Score
-- Sleep Score
-- Prior Strain Score
-
-具体权重不在第一版写死，采用可配置系数。
+##### Recovery v1.0 (Robust Baseline 个人偏差模型)
+采用 28 天滚动中位数 (Median) 与绝对中位偏差 (MAD) 建立 robust 基线 z-score 评估：
+- **HRV Component (35%)**：采用对数转换 (log transform) 评估 SDNN，防范过度训练引发的 Parasympathetic Rebound（副交感反弹扣分限制）。
+- **RHR Component (25%)**：评估静息心率偏离 z-score，低于基线加分，高于基线扣分。
+- **Sleep Component (25%)**：直接由昨晚 Sleep Score 转换贡献。
+- **Prior Strain Component (15%)**：昨日活动负荷对今天恢复的合理折损。
+- **Red Flag Modifiers (异常扣分项)**：体温异常升高 (bodyTempDelta >= 0.5°C)、SpO2 偏低 (<94%)、呼吸率异常升高 (respiratoryRateZ >= 1.5) 进行综合扣分修正。
 
 ##### 页面结构建议
 - 顶部 Recovery Ring / Number；
@@ -302,81 +302,68 @@ Vela 的策略从“复刻 Bevel 核心结构”升级为“学习 Bevel 3.0 的
 #### 6.1.6 Strain 页面
 
 ##### 目标
-构建接近 Bevel / Whoop 的全天负荷视图。
+构建全天生理耗力负荷与长期训练状态双层评估体系。
 
 ##### 必须展示
-1. 今日 Strain 总分；
-2. Strain 进度环或能量条；
-3. 今日所有 Workout；
-4. 活动能量；
-5. AI 运动建议；
-6. 今天是否达到推荐负荷。
+1. 今日 Daily Strain 总分 (0-100)；
+2. 耗力进度条或负荷目标区；
+3. 今日 Workouts（包含每次运动的心率分布）；
+4. 步数与非运动活动热量；
+5. 近期负荷可持续性 (Training Load Status)；
+6. AI 训练强度与调整建议。
 
-##### Strain v0.1 设计原则
-综合：
-- Workout Load；
-- Active Energy；
-- Exercise Time；
-- Workout HR profile。
-
-第一版要做“全天负荷”，哪怕算法仍是粗糙版。
+##### Daily Strain & Training Load v1.0
+- **Daily Strain Score (0–100)**：每日综合耗力。将 Workout Load（心率区间 Zone/TRIMP 积分）与 Non-workout Load（步数、活动热量、锻炼时间积分）相加得到 dailyLoad，随后基于 exponential decay 模型 `100 * (1 - exp(-0.75 * (dailyLoad / baseline)))` 稳定映射至 0-100。
+- **Training Load Status (ACWR)**：计算最近 7 天急性负荷 (acute) 与前 28 天慢性负荷 (chronic) 的比例。判定训练负荷健康度：wellBelow (低负荷)、below (减量)、optimal (最佳区间 0.85-1.2)、elevated (过度)、highRisk (高风险 >1.5)，防范伤病风险。
 
 ---
 
 #### 6.1.7 Stress 页面 / Stress 卡片
 
-##### 第一版定义
-Stress 是“生理压力代理指标”，不是医学压力诊断。
+##### 生理压力指数 Physiological Stress Index v1.0
+生理学压力状态的综合量度，明确界定为生理压力代理，而不是医学心理压力诊断。
 
-##### 输入
-- HRV 短期波动；
-- Heart Rate 相对基线偏移；
-- 当前活动上下文；
-- 睡眠不足与近期活动负荷。
+##### 算法架构
+融合 6 因子生理学权重模型：
+- RHRStress (25%)：评估低活动心率相对基线偏离。
+- HRVStress (25%)：评估 HRV 抑制程度（低于基线则高压）。
+- RespStress (15%)：评估呼吸率相对偏离。
+- TempStress (10%)：体温偏离修正。
+- SleepDebtStress (15%)：由睡眠不足加权。
+- LoadStress (10%)：由今日 Strain 物理负荷加权。
+- **运动屏蔽规则**：运动期间以及运动后 90 分钟内自动屏蔽压力计算，以排除物理训练心率干扰。
 
 ##### 展示
 - 今日 Stress Index；
 - 日内 Stress 变化曲线；
-- 当前状态描述；
-- AI 解读。
+- 当前状态描述 (Calm / Normal / Elevated / High)；
+- AI 生理压力成因解读。
 
 ---
 
 #### 6.1.8 Energy Bank
 
-##### 第一版定义
-把 Sleep、Recovery、Strain、Stress 汇总成“身体电量”。
+##### 身体能量电池 v1.0
+综合多维指标，模拟人体可用“电量”的充放电模型。
 
-##### 第一版展示
-- Morning Energy；
-- Current Energy；
-- 文本解释；
-- 后续再做更细粒度完整日内曲线。
+##### 算法流程
+1. **Morning Energy (初始电量)**：清晨醒来时的身体电量，基于 `0.45 * RecoveryScore + 0.35 * SleepScore + 0.20 * OvernightStability` 计算。
+2. **Day Drain (日内消耗)**：电量随一天活动逐渐递减：
+   - 物理活动消耗：`0.35 * StrainScore`
+   - 生理紧绷消耗：`0.25 * StressIndex`
+   - 时间自然衰减：基于醒来时间 `hoursSinceWake / 16 * 12` 扣减
+   - 训练累积负荷消耗：依据 Training Load Status（超负荷额外扣减 5-10 分）
+3. **Recharge (充电补偿)**：记录 Mindful Minutes (正念正向补电) 或 nap (小憩) 进行能量修复 (上限 +8)。
+4. **当前能量**：截断在 `0-100` 范围，展示 Depleted / Low / Stable / Strong 状态。
 
 ---
 
 #### 6.1.9 Biological Age / Health Age Trend
 
-##### 第一版策略
-不输出强结论式“你的生理年龄是 X 岁”，而输出：
-- Health Age Trend；
-- 长期健康趋势 Beta；
-- 体现趋势改善 / 恶化方向。
-
-##### 可参考输入
-- VO₂ Max；
-- Resting Heart Rate baseline；
-- HRV baseline；
-- Weight trend；
-- Body Fat；
-- Lean Body Mass；
-- 睡眠与活动长期趋势。
-
-##### 页面表达
-- Health Age Trend Beta；
-- 当前趋势：Improving / Stable / Worsening；
-- 影响趋势的主要因子；
-- AI 长期健康解释。
+##### 生理与健康年龄评估 v1.0
+解耦为两个核心表达层，保持严谨与科学：
+- **Health Age Trend (健康趋势 Beta)**：利用 VO₂ Max、RHR、睡眠、步数、体脂、肌肉量等可穿戴核心指标的 90 天滚动趋势方向，综合评定当前健康轨迹为：Improving (改善)、Stable (稳定) 或 Worsening (恶化)，引导用户关注正向行为。
+- **Biological Age Estimate (Levine PhenoAge 临床化验模式)**：仅在用户手动录入足够且高保真的 9 项临床化验指标时启用 (albumin 蛋白, creatinine 肌酐, glucose 血糖, CRP 反应蛋白, lymphocytePercent 淋巴百分比, MCV 平均红细胞体积, RDW 红细胞分布宽度, alkalinePhosphatase 碱性磷酸酶, WBC 白细胞计数)。基于 PhenoAge 经典衰老模型和严格单位换算，输出具有学术支撑的生物年龄估计，无足够化验单时强制显示 pending state/缺省指引，拒绝盲目猜测。
 
 ---
 

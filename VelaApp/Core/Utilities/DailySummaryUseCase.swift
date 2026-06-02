@@ -133,7 +133,18 @@ final class DailySummaryUseCase {
         // Get raw workout list from HealthKit for the current day to preserve sample details
         let todayRange = DateRangeQuery.today(containing: now, calendar: calendar)
         let todayStrainSummary = try? await queryService.strainSummary(in: todayRange)
-        let workouts = todayStrainSummary?.workouts ?? []
+        let rawHKWorkouts = todayStrainSummary?.workouts ?? []
+        let workouts: [WorkoutSummary]
+        if let modelContext = modelContext {
+            workouts = WorkoutAggregationService.shared.aggregateWorkouts(
+                healthKitWorkouts: rawHKWorkouts,
+                for: now,
+                modelContext: modelContext,
+                calendar: calendar
+            )
+        } else {
+            workouts = rawHKWorkouts
+        }
         let liveExtended = (try? await queryService.extendedMetrics(in: todayRange)) ?? ExtendedHealthMetrics()
         
         let resolvedSleep = try? await queryService.sleepSummary(in: DateRangeQuery.recentDays(2, endingAt: now, calendar: calendar))

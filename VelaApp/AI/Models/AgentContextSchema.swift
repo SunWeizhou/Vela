@@ -18,6 +18,7 @@ struct AgentContextEnvelope: Codable, Hashable {
     var userWiki: [String: String]
     var agentInstruction: [String: String]
     var extendedMetrics: [String: String]
+    var strengthTraining: [String: String]?
 
     enum CodingKeys: String, CodingKey {
         case metadata
@@ -37,6 +38,7 @@ struct AgentContextEnvelope: Codable, Hashable {
         case userWiki = "user_wiki"
         case agentInstruction = "agent_instruction"
         case extendedMetrics = "extended_metrics"
+        case strengthTraining = "strength_training"
     }
 }
 
@@ -90,4 +92,22 @@ struct GeneratedAIReport: Codable, Hashable {
     var markdownContent: String
     var contextSnapshot: String
     var createdAt: Date
+}
+
+// MARK: - Strength Training Context
+
+struct StrengthTrainingContext: Codable, Hashable {
+    var sessions7d: Int
+    var hardSets7d: Int
+    var volume7dKg: Double
+    var muscleGroupSets7d: [String: Int]
+    var recentExerciseProgress: [ExerciseProgressSummary]
+    var lastSessionSummary: String
+}
+
+struct ExerciseProgressSummary: Codable, Hashable {
+    var exerciseName: String
+    var setsCount: Int
+    var maxWeightKg: Double
+    var estimated1RMPeakKg: Double
 }

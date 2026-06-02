@@ -2,6 +2,8 @@ import SwiftUI
 
 struct VelaOnboardingView: View {
     @AppStorage("vela_onboarding_completed") private var onboardingCompleted = false
+    @State private var authError: String? = nil
+    @State private var showingErrorAlert = false
 
     var body: some View {
         ZStack {
@@ -102,7 +104,15 @@ struct VelaOnboardingView: View {
                 // CTA buttons
                 VStack(spacing: 14) {
                     Button {
-                        onboardingCompleted = true
+                        Task {
+                            do {
+                                try await HealthAuthorizationService().requestAuthorization(tier: .core)
+                                onboardingCompleted = true
+                            } catch {
+                                authError = error.localizedDescription
+                                showingErrorAlert = true
+                            }
+                        }
                     } label: {
                         Text(L10n.t("Connect Apple Health", "连接 Apple 健康"))
                             .font(.system(.body, design: .rounded).weight(.bold))
@@ -115,6 +125,15 @@ struct VelaOnboardingView: View {
                             .fill(VelaTheme.recovery)
                     )
                     .padding(.horizontal, 24)
+                    .alert(isPresented: $showingErrorAlert) {
+                        Alert(
+                            title: Text(L10n.t("Unable to Authorize Apple Health", "无法授权 Apple 健康")),
+                            message: Text(authError ?? L10n.t("Vela requires Health permissions to analyze your wellness indices.", "Vela 需要健康权限来分析您的生理与运动数据。")),
+                            dismissButton: .default(Text(L10n.t("OK", "好的"))) {
+                                onboardingCompleted = true
+                            }
+                        )
+                    }
 
                     Button {
                         onboardingCompleted = true

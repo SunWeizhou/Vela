@@ -132,7 +132,8 @@ enum ScoreEngineFactory {
                 id: workout.id,
                 durationMinutes: workout.end.timeIntervalSince(workout.start) / 60.0,
                 averageHeartRate: workout.averageHeartRate,
-                heartRateSamples: heartRateSamples.map(\.bpm)
+                heartRateSamples: heartRateSamples.map(\.bpm),
+                rpe: workout.rpe
             ))
         }
         let age = profileAge

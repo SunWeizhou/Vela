@@ -34,11 +34,12 @@ final class HealthKitSyncEngine {
             let dayStart = calendar.startOfDay(for: date)
             guard dayStart >= recentRefreshCutoff || !cachedDays.contains(dayStart) else { continue }
             
-            // Build raw daily snapshot from HealthKit
+            // Build raw daily snapshot from HealthKit and local workouts
             let snapshot = await DailySnapshotBuilder.buildSnapshot(
                 for: dayStart,
                 queryService: queryService,
-                calendar: calendar
+                calendar: calendar,
+                modelContext: modelContext
             )
             
             // Save the raw snapshot
@@ -145,7 +146,8 @@ final class DailySnapshotBuilder {
     static func buildSnapshot(
         for date: Date,
         queryService: HealthQueryService,
-        calendar: Calendar
+        calendar: Calendar,
+        modelContext: ModelContext? = nil
     ) async -> DailyHealthSnapshot {
         let dayStart = calendar.startOfDay(for: date)
         let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
@@ -199,10 +201,24 @@ final class DailySnapshotBuilder {
             snapshot.steps = strain.stepCount
             snapshot.activeCalories = strain.activeEnergyKilocalories
             snapshot.activeMinutes = strain.exerciseMinutes
-            snapshot.workoutCount = strain.workouts.count
-            snapshot.workoutDuration = strain.workouts.reduce(0.0) { $0 + $1.end.timeIntervalSince($1.start) } / 60.0
-            snapshot.workoutTypes = strain.workouts.map(\.activityName).joined(separator: ",")
-            snapshot.workouts = strain.workouts
+            
+            // Consolidate workouts using WorkoutAggregationService
+            let aggregated: [WorkoutSummary]
+            if let modelContext = modelContext {
+                aggregated = WorkoutAggregationService.shared.aggregateWorkouts(
+                    healthKitWorkouts: strain.workouts,
+                    for: dayStart,
+                    modelContext: modelContext,
+                    calendar: calendar
+                )
+            } else {
+                aggregated = strain.workouts
+            }
+            
+            snapshot.workoutCount = aggregated.count
+            snapshot.workoutDuration = aggregated.reduce(0.0) { $0 + $1.end.timeIntervalSince($1.start) } / 60.0
+            snapshot.workoutTypes = Set(aggregated.map(\.activityName)).sorted().joined(separator: ", ")
+            snapshot.workouts = aggregated
         }
 
         // Populate body
@@ -304,7 +320,8 @@ final class MetricComputationPipeline {
             workouts.append(WorkoutInput(
                 id: w.id,
                 durationMinutes: w.end.timeIntervalSince(w.start) / 60.0,
-                averageHeartRate: w.averageHeartRate
+                averageHeartRate: w.averageHeartRate,
+                rpe: w.rpe
             ))
         }
 

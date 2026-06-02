@@ -619,6 +619,13 @@ final class CoachChatVM: ObservableObject {
                 sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
             )
         )) ?? []
+        let fourteenDaysAgo = Date().addingTimeInterval(-14 * 24 * 3600)
+        let strengthWorkouts = (try? modelContext.fetch(
+            FetchDescriptor<StrengthWorkoutRecord>(
+                predicate: #Predicate<StrengthWorkoutRecord> { $0.startedAt >= fourteenDaysAgo },
+                sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+            )
+        )) ?? []
         let (context, _) = (services?.contextBuilder ?? AIContextBuilder()).build(
             dashboard: dashboard,
             journalEntries: journalEntries.prefix(12).map { JournalContextEntry(tags: $0.tags, text: $0.note) },
@@ -633,7 +640,8 @@ final class CoachChatVM: ObservableObject {
             },
             userWiki: wiki,
             weeklyTrends: weeklyTrends,
-            foodLogs: Array(foodLogs.prefix(8))
+            foodLogs: Array(foodLogs.prefix(8)),
+            strengthWorkouts: strengthWorkouts
         )
         let contextJSON = (try? String(data: JSONEncoder().encode(context), encoding: .utf8)) ?? "{}"
 

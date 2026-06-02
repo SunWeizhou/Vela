@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - Typed Metric Value
 
-enum DataFreshness: String, Codable, Hashable, CaseIterable {
+public enum DataFreshness: String, Codable, Hashable, CaseIterable, Sendable {
     case live
     case today
     case recent
@@ -10,14 +10,14 @@ enum DataFreshness: String, Codable, Hashable, CaseIterable {
     case missing
 }
 
-enum DataConfidence: String, Codable, Hashable, CaseIterable {
+public enum DataConfidence: String, Codable, Hashable, CaseIterable, Sendable {
     case high
     case medium
     case low
     case unavailable
 }
 
-enum HealthDataSource: String, Codable, Hashable, CaseIterable {
+public enum HealthDataSource: String, Codable, Hashable, CaseIterable, Sendable {
     case healthKit
     case userProvided
     case aiEstimated
@@ -173,6 +173,7 @@ struct TypedAgentContext: Codable, Hashable {
     var training: TrainingContext
     var nutrition: NutritionContext
     var extendedMetrics: ExtendedMetricsContext
+    var strengthTraining: StrengthTrainingContext?
 
     var recentTrends: [String: String]
     var weeklyTrends: [String: String]
@@ -180,3 +181,4 @@ struct TypedAgentContext: Codable, Hashable {
     var historicalReports: [String]
     var userWiki: [String: String]
 }
+
