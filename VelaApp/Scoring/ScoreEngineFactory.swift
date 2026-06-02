@@ -1,5 +1,64 @@
 import Foundation
 
+enum UserProfileSettings {
+    static let ageKey = "vela_user_age"
+    static let weightKey = "vela_user_weight"
+    static let heightKey = "vela_user_height"
+    static let maxHeartRateKey = "vela_max_hr"
+
+    static func age(defaults: UserDefaults = .standard) -> Int? {
+        guard let value = defaults.object(forKey: ageKey) as? NSNumber else { return nil }
+        let age = value.intValue
+        return (10...100).contains(age) ? age : nil
+    }
+
+    static func maxHeartRate(defaults: UserDefaults = .standard) -> Double? {
+        guard let value = defaults.object(forKey: maxHeartRateKey) as? NSNumber else { return nil }
+        return validatedMaxHeartRate(value.doubleValue)
+    }
+
+    static func weightKilograms(defaults: UserDefaults = .standard) -> Double? {
+        guard let value = defaults.object(forKey: weightKey) as? NSNumber else { return nil }
+        let weight = value.doubleValue
+        return (25...350).contains(weight) ? weight : nil
+    }
+
+    static func heightCentimeters(defaults: UserDefaults = .standard) -> Double? {
+        guard let value = defaults.object(forKey: heightKey) as? NSNumber else { return nil }
+        let height = value.doubleValue
+        return (100...250).contains(height) ? height : nil
+    }
+
+    static func bodyMassIndex(weightKilograms: Double?, heightCentimeters: Double?) -> Double? {
+        guard let weightKilograms,
+              let heightCentimeters,
+              (25...350).contains(weightKilograms),
+              (100...250).contains(heightCentimeters) else { return nil }
+        let heightMeters = heightCentimeters / 100
+        return weightKilograms / (heightMeters * heightMeters)
+    }
+
+    static func inferredMaxHeartRate(age: Int) -> Double {
+        Double(max(100, 220 - age))
+    }
+
+    static func resolvedMaxHeartRate(
+        age: Int,
+        explicit: Double? = nil,
+        wiki: Double? = nil,
+        defaults: UserDefaults = .standard
+    ) -> Double {
+        explicit.flatMap(validatedMaxHeartRate)
+            ?? maxHeartRate(defaults: defaults)
+            ?? wiki.flatMap(validatedMaxHeartRate)
+            ?? inferredMaxHeartRate(age: age)
+    }
+
+    private static func validatedMaxHeartRate(_ value: Double) -> Double? {
+        (100...240).contains(value) ? value : nil
+    }
+}
+
 /// Factory that builds each scoring engine's Input from a DailyHealthContext + historical data.
 /// This extracts the input-building logic from DashboardSummary.healthKit().
 enum ScoreEngineFactory {
@@ -76,10 +135,16 @@ enum ScoreEngineFactory {
                 heartRateSamples: heartRateSamples.map(\.bpm)
             ))
         }
-        let age = profileAge ?? WikiFileService.getAgeFromWiki() ?? context.extendedMetrics.age ?? 30
-        let maxHeartRate = profileMaxHeartRate
-            ?? WikiFileService.getMaxHeartRateFromWiki()
-            ?? Double(max(100, 220 - age))
+        let age = profileAge
+            ?? UserProfileSettings.age()
+            ?? WikiFileService.getAgeFromWiki()
+            ?? context.extendedMetrics.age
+            ?? 30
+        let maxHeartRate = UserProfileSettings.resolvedMaxHeartRate(
+            age: age,
+            explicit: profileMaxHeartRate,
+            wiki: WikiFileService.getMaxHeartRateFromWiki()
+        )
 
         return StrainScoreInput(
             workouts: workoutInputs,

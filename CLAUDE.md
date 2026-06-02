@@ -9,7 +9,7 @@ Vela 是一个 local-first 的 iOS 健康分析 App（SwiftUI + SwiftData + Heal
 - **Target**: `Vela`
 - **Scheme**: `Vela`
 - **Bundle ID**: `com.sunweizhou.Vela`
-- **Deployment**: iPhone 00008140-00164DE022C3801C
+- **Deployment**: iPhone B1B2A1DB-2B5C-5C02-A222-B051240A22EA
 - **Project**: `/Users/sunweizhou/Desktop/AI Project/Vela/Vela.xcodeproj`
 - **Backend**: `/Users/sunweizhou/Desktop/AI Project/Vela/VelaBackend` (Vapor 4, SQLite)
 
@@ -18,7 +18,7 @@ Vela 是一个 local-first 的 iOS 健康分析 App（SwiftUI + SwiftData + Heal
 ```bash
 # 构建到手机（先确认手机已连接）
 cd "/Users/sunweizhou/Desktop/AI Project/Vela"
-DEVICE="00008140-00164DE022C3801C"
+DEVICE="B1B2A1DB-2B5C-5C02-A222-B051240A22EA"
 xcodebuild -project Vela.xcodeproj -scheme Vela -destination "id=$DEVICE" -configuration Debug -allowProvisioningUpdates build
 
 # 推送已构建产物到手机（只改 Swift 代码时可直接执行）

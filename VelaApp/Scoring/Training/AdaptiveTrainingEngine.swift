@@ -92,8 +92,6 @@ enum AdaptiveTrainingEngine {
         day: TrainingDay,
         interpretation: BodyInterpretation
     ) -> AdjustedDay? {
-        let recoveryScore = interpretation.readinessScore
-        let tsb = 0.0  // TSB is a current-state metric; for future days, use fatigue level
         let fatigueLevel = interpretation.fatigueLevel
 
         // Skip rest days — no adjustment needed

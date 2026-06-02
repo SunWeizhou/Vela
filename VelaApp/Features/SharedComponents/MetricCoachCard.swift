@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 struct MetricCoachCard: View {
@@ -73,6 +74,8 @@ struct MetricCoachCard: View {
                             .font(.footnote)
                             .foregroundStyle(VelaTheme.stress)
                             .padding(.vertical, 4)
+                    } else if hasFinished {
+                        MetricCoachAdviceView(advice: MetricCoachAdviceFormatter.parse(streamText))
                     } else {
                         MarkdownText(markdown: streamText, isStreaming: isStreaming)
                             .font(.subheadline)
@@ -150,10 +153,20 @@ struct MetricCoachCard: View {
 
                 let systemPrompt = AppLanguage.stored.isChinese ? """
                 你是 Vela，一位世界顶级私人健康教练和运动科学家。你正在为用户提供针对特定身体指标 (\(focus.title)) 的定制化行动建议。
-                你的语言风格必须极其专业、精准、简洁、充满人情味。
+                你的语言风格必须专业、精准、简洁、充满人情味。不要诊断疾病，不要把单次测量解释为确定结论。
+                使用 Markdown，严格按以下结构输出：
+                ### 结论
+                用 1-2 句说明今天该保持、减载还是关注变化。
+                ### 依据
+                最多 3 个项目符号，只引用最相关的数据。
+                ### 今天行动
+                给出 1 个明确、可执行的动作。
+                总长度控制在 220 个中文字符以内。
                 """ : """
                 You are Vela, a world-class personal health coach. You are giving the user hyper-personalized, expert advice about their \(focus.title) metric.
-                Keep your style professional, concise, empathetic, and highly actionable.
+                Keep your style professional, concise, empathetic, and highly actionable. Do not diagnose medical conditions or overinterpret one reading.
+                Use Markdown with exactly three sections: ### Conclusion, ### Evidence, and ### Today's Action.
+                Keep Evidence to at most 3 bullets, Today's Action to one concrete step, and the total response under 140 words.
                 """
 
                 let metricsPrompt = """
@@ -164,6 +177,13 @@ struct MetricCoachCard: View {
                 - Recovery Readiness Score: \(Int(dashboard.recovery.score))
                 - Sleep Quality Score: \(Int(dashboard.sleepScore.score))
                 - Daily Physical Strain: \(Int(dashboard.strain.score))
+                - Physiological Stress Index: \(Int(dashboard.stress.stressIndex))
+                - Current Energy Bank: \(Int(dashboard.energy.currentEnergy))
+                - Acute Training Load (ATL): \(dashboard.energy.metrics["atl"].map { String(format: "%.1f", $0) } ?? "N/A")
+                - Chronic Training Load (CTL): \(dashboard.energy.metrics["ctl"].map { String(format: "%.1f", $0) } ?? "N/A")
+                - Training Stress Balance (TSB): \(dashboard.energy.metrics["tsb"].map { String(format: "%.1f", $0) } ?? "N/A")
+                - Acute:Chronic Workload Ratio (ACWR): \(dashboard.energy.metrics["acwr"].map { String(format: "%.2f", $0) } ?? "N/A")
+                - Training Load Ratio: \(dashboard.strain.metrics["training_load_ratio"].map { String(format: "%.2f", $0) } ?? "N/A")
                 - Heart Rate Variability (HRV): \(dashboard.recoveryMetrics.hrvMilliseconds.map { "\(Int($0))ms" } ?? "N/A")
                 - Resting Heart Rate (RHR): \(dashboard.recoveryMetrics.restingHeartRate.map { "\(Int($0))bpm" } ?? "N/A")
                 - Sleep Heart Rate: \(dashboard.recoveryMetrics.sleepHeartRate.map { "\(Int($0))bpm" } ?? "N/A")
@@ -208,6 +228,184 @@ struct MetricCoachCard: View {
         return AppLanguage.stored.isChinese
             ? "请基于当前\(focus.title)数据，先给结论，再说明依据，最后给我今天最重要的一步行动。"
             : "Analyze my current \(focus.title) data. Start with the conclusion, then evidence, then the single most important action for today."
+    }
+}
+
+struct MetricCoachAdvice: Equatable {
+    var conclusion: String
+    var evidence: [String]
+    var action: String
+
+    var totalCharacterCount: Int {
+        conclusion.count + evidence.reduce(0) { $0 + $1.count } + action.count
+    }
+}
+
+enum MetricCoachAdviceFormatter {
+    static func parse(_ raw: String) -> MetricCoachAdvice {
+        let cleaned = cleanedMarkdown(raw)
+        if let structured = structuredSections(in: cleaned) {
+            return makeAdvice(
+                conclusion: structured.conclusion,
+                evidence: sentences(in: structured.evidence),
+                action: structured.action
+            )
+        }
+
+        let fallbackSentences = sentences(in: cleaned)
+        guard let conclusion = fallbackSentences.first else {
+            return MetricCoachAdvice(conclusion: "", evidence: [], action: "")
+        }
+        guard fallbackSentences.count > 1 else {
+            return makeAdvice(conclusion: conclusion, evidence: [], action: conclusion)
+        }
+
+        return makeAdvice(
+            conclusion: conclusion,
+            evidence: Array(fallbackSentences.dropFirst().dropLast()),
+            action: fallbackSentences.last ?? conclusion
+        )
+    }
+
+    private static func makeAdvice(
+        conclusion: String,
+        evidence: [String],
+        action: String
+    ) -> MetricCoachAdvice {
+        MetricCoachAdvice(
+            conclusion: bounded(clean(conclusion), limit: 56),
+            evidence: Array(evidence.map(clean).filter { !$0.isEmpty }.prefix(3)).map {
+                bounded($0, limit: 34)
+            },
+            action: bounded(clean(action), limit: 56)
+        )
+    }
+
+    private static func structuredSections(
+        in text: String
+    ) -> (conclusion: String, evidence: String, action: String)? {
+        guard
+            let conclusion = markerRange(for: ["结论", "Conclusion"], in: text),
+            let evidence = markerRange(for: ["依据", "Evidence"], in: text, after: conclusion.upperBound),
+            let action = markerRange(
+                for: ["今天行动", "今日行动", "Today's Action", "Today’s Action", "Action"],
+                in: text,
+                after: evidence.upperBound
+            )
+        else {
+            return nil
+        }
+
+        return (
+            String(text[conclusion.upperBound..<evidence.lowerBound]),
+            String(text[evidence.upperBound..<action.lowerBound]),
+            String(text[action.upperBound...])
+        )
+    }
+
+    private static func markerRange(
+        for candidates: [String],
+        in text: String,
+        after start: String.Index? = nil
+    ) -> Range<String.Index>? {
+        let searchRange = (start ?? text.startIndex)..<text.endIndex
+        return candidates
+            .compactMap { text.range(of: $0, options: [.caseInsensitive], range: searchRange) }
+            .min { $0.lowerBound < $1.lowerBound }
+    }
+
+    private static func cleanedMarkdown(_ raw: String) -> String {
+        raw
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .replacingOccurrences(of: "#", with: "")
+            .replacingOccurrences(of: "**", with: "")
+            .replacingOccurrences(of: "__", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func sentences(in text: String) -> [String] {
+        var sentences: [String] = []
+        var current = ""
+
+        for character in text {
+            current.append(character)
+            if "。！？!?；;\n".contains(character) {
+                let sentence = clean(current)
+                if !sentence.isEmpty {
+                    sentences.append(sentence)
+                }
+                current = ""
+            }
+        }
+
+        let trailing = clean(current)
+        if !trailing.isEmpty {
+            sentences.append(trailing)
+        }
+        return sentences
+    }
+
+    private static func clean(_ value: String) -> String {
+        var result = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        while let first = result.first, "-*+•:：".contains(first) {
+            result.removeFirst()
+            result = result.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return result
+    }
+
+    private static func bounded(_ value: String, limit: Int) -> String {
+        guard value.count > limit else { return value }
+        return String(value.prefix(max(limit - 1, 0))) + "…"
+    }
+}
+
+private struct MetricCoachAdviceView: View {
+    let advice: MetricCoachAdvice
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            section(title: AppLanguage.stored.isChinese ? "结论" : "Conclusion") {
+                Text(advice.conclusion)
+            }
+
+            if !advice.evidence.isEmpty {
+                section(title: AppLanguage.stored.isChinese ? "依据" : "Evidence") {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(advice.evidence, id: \.self) { item in
+                            HStack(alignment: .top, spacing: 6) {
+                                Circle()
+                                    .fill(VelaTheme.accent)
+                                    .frame(width: 5, height: 5)
+                                    .padding(.top, 6)
+                                Text(item)
+                            }
+                        }
+                    }
+                }
+            }
+
+            section(title: AppLanguage.stored.isChinese ? "今天行动" : "Today's Action") {
+                Text(advice.action)
+            }
+        }
+        .font(.subheadline)
+        .foregroundStyle(VelaTheme.secondaryText)
+        .lineSpacing(3)
+        .padding(.top, 4)
+    }
+
+    private func section<Content: View>(
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(VelaTheme.primaryText)
+            content()
+        }
     }
 }
 

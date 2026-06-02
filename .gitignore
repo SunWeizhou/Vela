@@ -22,3 +22,6 @@ scratch/
 StitchExports/
 新前端/
 stitch_vela_ios_26_liquid_glass/
+
+# SQLite databases
+*.sqlite

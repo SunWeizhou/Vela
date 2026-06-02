@@ -65,6 +65,7 @@ struct DashboardSummary: Hashable {
 
     enum DataSource: String, Hashable {
         case healthKit = "HealthKit"
+        case cache = "Cached HealthKit"
         case empty = "Empty"
         case preview = "Preview"
     }
@@ -245,6 +246,25 @@ enum DailyPlanEngine {
                 coachQuestion: L10n.t(
                     "Build a rest-day recovery plan for me. My journal reports illness or injury, so do not prescribe training.",
                     "请为我制定休息日恢复计划。我的日志记录了生病或受伤，因此不要安排训练。"
+                ),
+                limiter: nil
+            )
+        }
+
+        if journalFlags.contains("resting") {
+            return DailyPlanRecommendation(
+                kind: .rest,
+                accent: .recovery,
+                title: L10n.t("Keep today as a rest day", "今天保持休息"),
+                body: L10n.t(
+                    "You marked today as a rest period. Skip planned training and focus on recovery habits.",
+                    "你已将今天标记为休息期。暂停计划训练，优先安排恢复习惯。"
+                ),
+                primaryActionTitle: L10n.t("Plan a rest day", "规划休息日"),
+                secondaryActionTitle: nil,
+                coachQuestion: L10n.t(
+                    "Build a rest-day recovery plan for me. I marked today as a rest period, so do not prescribe training.",
+                    "请为我制定休息日恢复计划。我已将今天标记为休息期，因此不要安排训练。"
                 ),
                 limiter: nil
             )
@@ -480,7 +500,7 @@ enum CoachSnapshotDirective {
         formatter.calendar = calendar
         formatter.timeZone = calendar.timeZone
         formatter.locale = AppLanguage.stored.isChinese ? Locale(identifier: "zh_CN") : Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "HH:mm"
+        formatter.dateFormat = "yyyy-MM-dd HH:mm XXX"
         return formatter.string(from: date)
     }
 }

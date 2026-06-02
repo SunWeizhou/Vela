@@ -539,7 +539,9 @@ struct BloodLogSheetView: View {
     @State private var errorMsg: String? = nil
     
     private let commonBiomarkers = [
-        "Vitamin D", "Cortisol", "Ferritin", "Cholesterol", "Testosterone", "TSH", "HbA1c"
+        "Albumin", "Creatinine", "Glucose", "CRP", "Lymphocyte Percentage", "MCV", "RDW",
+        "Alkaline Phosphatase", "WBC", "Vitamin D", "Cortisol", "Ferritin", "Cholesterol",
+        "Testosterone", "TSH", "HbA1c"
     ]
     
     var body: some View {
@@ -656,6 +658,42 @@ struct BloodLogSheetView: View {
     
     private func autoFillDefaults(for bName: String) {
         switch bName {
+        case "Albumin":
+            unit = "g/dL"
+            refMinString = "3.5"
+            refMaxString = "5.0"
+        case "Creatinine":
+            unit = "mg/dL"
+            refMinString = "0.6"
+            refMaxString = "1.2"
+        case "Glucose":
+            unit = "mg/dL"
+            refMinString = "70"
+            refMaxString = "100"
+        case "CRP":
+            unit = "mg/L"
+            refMinString = "0"
+            refMaxString = "3"
+        case "Lymphocyte Percentage":
+            unit = "%"
+            refMinString = "20"
+            refMaxString = "40"
+        case "MCV":
+            unit = "fL"
+            refMinString = "80"
+            refMaxString = "100"
+        case "RDW":
+            unit = "%"
+            refMinString = "11"
+            refMaxString = "15"
+        case "Alkaline Phosphatase":
+            unit = "U/L"
+            refMinString = "44"
+            refMaxString = "147"
+        case "WBC":
+            unit = "10^3/uL"
+            refMinString = "4"
+            refMaxString = "11"
         case "Vitamin D":
             unit = "ng/mL"
             refMinString = "30"
@@ -705,6 +743,16 @@ struct BloodLogSheetView: View {
             UINotificationFeedbackGenerator().notificationOccurred(.error)
             return
         }
+        guard !unit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            errorMsg = L10n.t("Unit is required.", "请输入单位。")
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            return
+        }
+        guard rMin <= rMax else {
+            errorMsg = L10n.t("Reference minimum must not exceed maximum.", "标准下限不能高于上限。")
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            return
+        }
         
         let isOptimal = val >= rMin && val <= rMax
         let record = BiomarkerRecord(
@@ -718,9 +766,14 @@ struct BloodLogSheetView: View {
         )
         
         modelContext.insert(record)
-        
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
-        dismiss()
+
+        do {
+            try modelContext.save()
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            dismiss()
+        } catch {
+            errorMsg = L10n.t("Could not save biomarker.", "指标保存失败，请重试。")
+        }
     }
 }
 

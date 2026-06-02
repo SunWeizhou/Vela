@@ -98,7 +98,8 @@ struct EnergyBankContextBuilder: DomainContextBuilder {
             "charge_efficiency": dashboard.energy.metrics["charge_efficiency"].map { String(format: "%.0f%%", $0 * 100) } ?? "N/A",
             "atl_7day": dashboard.energy.metrics["atl"].map { String(format: "%.0f", $0) } ?? "N/A",
             "ctl_42day": dashboard.energy.metrics["ctl"].map { String(format: "%.0f", $0) } ?? "N/A",
-            "tsb_freshness": dashboard.energy.metrics["tsb"].map { String(format: "%+.0f", $0) } ?? "N/A"
+            "tsb_freshness": dashboard.energy.metrics["tsb"].map { String(format: "%+.0f", $0) } ?? "N/A",
+            "acwr_ratio": dashboard.energy.metrics["acwr"].map { String(format: "%.2f", $0) } ?? "N/A"
         ]
     }
 }

@@ -131,7 +131,6 @@ struct JournalCorrelationEngine {
                         guard let targetDate = calendar.date(from: parseDateComponents(from: key)) else { continue }
                         guard let sampleDate = calendar.date(byAdding: .day, value: -lag, to: targetDate) else { continue }
                         
-                        let sampleKey = dayKey(for: sampleDate, calendar: calendar)
                         let isTagLogged = journalEntries.contains { entry in
                             calendar.isDate(entry.createdAt, inSameDayAs: sampleDate) && entry.tags.contains(tag)
                         }

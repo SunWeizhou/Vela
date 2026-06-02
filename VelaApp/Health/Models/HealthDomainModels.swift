@@ -21,6 +21,7 @@ struct DailyHealthSnapshot: Identifiable, Hashable {
     var sleepEfficiency: Double?
     var steps: Double?
     var activeCalories: Double?
+    var activeMinutes: Double?
     var workoutCount: Int?
     var workoutTypes: String?
     var workoutDuration: Double?
@@ -34,6 +35,10 @@ struct DailyHealthSnapshot: Identifiable, Hashable {
     var workoutLoad: Double?
     var activityLoad: Double?
     var trainingLoadRatio: Double?
+    var atl: Double?
+    var ctl: Double?
+    var tsb: Double?
+    var acwr: Double?
     var bedtime: Date?
     var wakeTime: Date?
     var awakeMinutes: Double?
@@ -105,6 +110,7 @@ struct WorkoutSummary: Identifiable, Codable, Hashable {
     var energyKilocalories: Double?
     var averageHeartRate: Double?
     var distanceMeters: Double?
+    var source: String? = nil
 }
 
 struct BodyMetricsSummary: Codable, Hashable {
@@ -175,9 +181,14 @@ struct HeartRateSample: Identifiable, Codable, Hashable {
     var bpm: Double
 }
 
+struct BloodGlucoseReading: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var date: Date
+    var milligramsPerDeciliter: Double
+}
+
 struct RouteCoordinate: Identifiable, Codable, Hashable {
     var id = UUID()
     var latitude: Double
     var longitude: Double
 }
-

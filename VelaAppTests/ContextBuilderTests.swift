@@ -3,13 +3,22 @@ import XCTest
 
 final class ContextBuilderTests: XCTestCase {
 
+    func testDeepSeekModelResolvesDisplayNamesToOfficialAPIIdentifiers() {
+        XCTAssertEqual(DeepSeekTextModel(displayName: "DeepSeek V4 Flash").apiIdentifier, "deepseek-v4-flash")
+        XCTAssertEqual(DeepSeekTextModel(displayName: "DeepSeek V4 Pro").apiIdentifier, "deepseek-v4-pro")
+    }
+
+    func testDeepSeekModelFallsBackToProForUnknownStoredValue() {
+        XCTAssertEqual(DeepSeekTextModel(displayName: "legacy-model").apiIdentifier, "deepseek-v4-pro")
+    }
+
     // MARK: - Schema Snapshot
 
     func testContextBuilderProducesStableHash() {
         let builder = AIContextBuilder()
 
         let dashboard = DashboardSummary.preview()
-        let (envelope1, meta1) = builder.build(
+        let (_, meta1) = builder.build(
             dashboard: dashboard,
             journalEntries: [],
             historicalReports: [],
@@ -17,7 +26,7 @@ final class ContextBuilderTests: XCTestCase {
             generatedAt: Date(timeIntervalSince1970: 0)
         )
 
-        let (envelope2, meta2) = builder.build(
+        let (_, meta2) = builder.build(
             dashboard: dashboard,
             journalEntries: [],
             historicalReports: [],
@@ -157,6 +166,7 @@ final class ContextBuilderTests: XCTestCase {
 
         XCTAssertNotEqual(envelope.recovery["hrv_z_score"], "N/A")
         XCTAssertNotEqual(envelope.energyBank["tsb_freshness"], "N/A")
+        XCTAssertNotEqual(envelope.energyBank["acwr_ratio"], "N/A")
         XCTAssertNotEqual(envelope.sleep["deep_pct"], "N/A")
     }
 

@@ -93,30 +93,7 @@ struct AdaptiveTrainingManager {
         var records: [TrainingPlanAdaptationRecord] = []
 
         let upcomingDays = plan.days.filter { !$0.isCompleted }
-        for day in upcomingDays.prefix(7) {
-            let adjusted = AdaptiveTrainingEngine.adjustToday(
-                plan: plan,
-                recoveryScore: recoveryScore,
-                energyScore: energyScore,
-                tsb: tsb,
-                sleepScore: sleepScore,
-                stressIndex: stressIndex
-            )
-
-            if let adj = adjusted, adj.adjustment != .keep {
-                records.append(TrainingPlanAdaptationRecord(
-                    planId: plan.id,
-                    dayId: adj.originalDay.id,
-                    adjustment: adj.adjustment,
-                    reason: adj.reason,
-                    suggestedAlternative: adj.suggestedAlternative,
-                    status: .proposed,
-                    originalDayTitle: adj.originalDay.title
-                ))
-            }
-        }
-
-        // Check if a deload week is needed
+        // A deload week applies to each upcoming non-rest day.
         if tsb < -20 && recoveryScore < 40 {
             for day in upcomingDays.prefix(7) {
                 if day.focus != "rest" {
@@ -135,6 +112,28 @@ struct AdaptiveTrainingManager {
                     ))
                 }
             }
+            return records
+        }
+
+        // The legacy readiness input describes today's state, so emit at most
+        // one adaptation instead of duplicating today's record across the week.
+        if let adjusted = AdaptiveTrainingEngine.adjustToday(
+            plan: plan,
+            recoveryScore: recoveryScore,
+            energyScore: energyScore,
+            tsb: tsb,
+            sleepScore: sleepScore,
+            stressIndex: stressIndex
+        ), adjusted.adjustment != .keep {
+            records.append(TrainingPlanAdaptationRecord(
+                planId: plan.id,
+                dayId: adjusted.originalDay.id,
+                adjustment: adjusted.adjustment,
+                reason: adjusted.reason,
+                suggestedAlternative: adjusted.suggestedAlternative,
+                status: .proposed,
+                originalDayTitle: adjusted.originalDay.title
+            ))
         }
 
         return records

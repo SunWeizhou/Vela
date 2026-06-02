@@ -28,11 +28,13 @@ final class VelaServices: ObservableObject {
     }
 
     func deepSeekProvider(apiKey: String) -> DeepSeekProvider {
-        if let cached = providerCache[apiKey] {
+        let model = DeepSeekTextModel.stored.apiIdentifier
+        let cacheKey = "\(apiKey)|\(model)"
+        if let cached = providerCache[cacheKey] {
             return cached
         }
-        let provider = DeepSeekProvider(apiKey: apiKey)
-        providerCache[apiKey] = provider
+        let provider = DeepSeekProvider(apiKey: apiKey, model: model)
+        providerCache[cacheKey] = provider
         return provider
     }
 }

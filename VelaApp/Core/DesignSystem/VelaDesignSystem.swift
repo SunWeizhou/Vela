@@ -484,16 +484,20 @@ struct MessageBubble: View {
     let text: String
     let isUser: Bool
     let time: String
+    var isStreaming = false
 
     var body: some View {
         HStack(spacing: 0) {
             if isUser { Spacer() }
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
-                Text(text)
-                    .font(VelaTheme.subheadline())
+                MarkdownText(
+                    markdown: text,
+                    font: VelaTheme.subheadline(),
+                    color: isUser ? .white : VelaTheme.fg,
+                    isStreaming: isStreaming
+                )
                     .lineSpacing(4)
-                    .foregroundStyle(isUser ? .white : VelaTheme.fg)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                     .background(
@@ -522,10 +526,12 @@ struct MessageBubble: View {
                     )
                     .frame(maxWidth: 280, alignment: isUser ? .trailing : .leading)
 
-                Text(time)
-                    .font(VelaTheme.caption2())
-                    .foregroundStyle(VelaTheme.meta)
-                    .padding(.horizontal, 4)
+                if !time.isEmpty {
+                    Text(time)
+                        .font(VelaTheme.caption2())
+                        .foregroundStyle(VelaTheme.meta)
+                        .padding(.horizontal, 4)
+                }
             }
 
             if !isUser { Spacer() }

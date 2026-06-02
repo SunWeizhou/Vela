@@ -363,7 +363,7 @@ enum VitalsMetricDetailKind {
         case .restingHeartRate:
             return L10n.t("Resting heart rate rising above baseline often indicates stress, fatigue, illness, or poor recovery.", "静息心率高于基线通常提示压力、疲劳、疾病风险或恢复不足。")
         case .sleepHeartRate:
-            return L10n.t("Sleep heart rate helps reveal overnight cardiovascular load and recovery quality.", "睡眠心率能帮助判断夜间心血管负担 and 恢复质量。")
+            return L10n.t("Sleep heart rate helps reveal overnight cardiovascular load and recovery quality.", "睡眠心率能帮助判断夜间心血管负担和恢复质量。")
         case .respiratoryRate:
             return L10n.t("Respiratory rate is useful as a freshness and illness-watch signal when it moves away from baseline.", "呼吸率偏离基线时，可作为状态新鲜度和疾病风险观察信号。")
         case .bloodOxygen:

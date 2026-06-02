@@ -13,6 +13,7 @@ enum VelaModelContainer {
         UserWikiDocumentRecord.self,
         CoachSessionRecord.self,
         FoodLogRecord.self,
+        StrengthWorkoutRecord.self,
         TrainingPlanRecord.self,
         BiomarkerRecord.self,
         MemoryEventRecord.self,

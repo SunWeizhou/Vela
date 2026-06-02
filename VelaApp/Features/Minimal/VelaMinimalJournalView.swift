@@ -57,7 +57,7 @@ struct VelaJournalView: View {
                     VStack(spacing: 10) {
                         // Row 1: 低碳水化合物 (Bread icon + segment)
                         segmentedJournalRow(
-                            icon: "bread.fill",
+                            icon: "fork.knife",
                             title: "低碳水化合物",
                             state: $lowCarbState
                         )
@@ -80,7 +80,7 @@ struct VelaJournalView: View {
                         
                         // Row 4: 添加糖 (Candy icon + segment)
                         segmentedJournalRow(
-                            icon: "candy.fill",
+                            icon: "birthday.cake.fill",
                             title: "添加糖",
                             state: $addedSugarState
                         )
@@ -127,10 +127,10 @@ struct VelaJournalView: View {
         .onAppear {
             loadRealJournalData()
         }
-        .onChange(of: dashboardVM.selectedDate) { _ in
+        .onChange(of: dashboardVM.selectedDate) { _, _ in
             loadRealJournalData()
         }
-        .onChange(of: entries) { _ in
+        .onChange(of: entries) { _, _ in
             loadRealJournalData()
         }
         .sheet(isPresented: $showCaffeineLogger) {

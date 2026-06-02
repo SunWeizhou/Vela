@@ -352,8 +352,8 @@ public final class BiologicalAgeEngine {
                 trend = "stable"
             }
             
-            // Map to a mock biological age that is slightly modified by trend for visual progress
-            let biologicalAge = max(18.0, input.chronologicalAge - trendScore * 3.5)
+            // The beta path exposes trend only. Keep the required storage field factual.
+            let biologicalAge = input.chronologicalAge
             
             let optimalCount = factors.filter { $0.isOptimal }.count
             let suboptimalCount = factors.count - optimalCount

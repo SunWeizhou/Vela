@@ -72,6 +72,23 @@ final class CoachChatVM: ObservableObject {
     private let apiKeyAccount = "deepseek_api_key"
     private let kimiApiKeyAccount = FoodPhotoAnalyzer.keychainAccount
 
+    static func historyBeforeCurrentPrompt(from messages: [ChatMsg], limit: Int) -> [ChatMsg] {
+        Array(messages.filter { !$0.isStreaming }.dropLast().suffix(limit))
+    }
+
+    static func timestampedHistoryContent(
+        for message: ChatMsg,
+        calendar: Calendar = .current
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        let timestamp = formatter.string(from: message.timestamp)
+        return "[Sent at \(timestamp) \(calendar.timeZone.identifier)]\n\(message.content)"
+    }
+
     // MARK: - Key State
 
     func refreshKeyState() {
@@ -576,9 +593,12 @@ final class CoachChatVM: ObservableObject {
             var result: [ChatMessage] = [
                 ChatMessage(role: .system, content: systemPrompt),
             ]
-            let history = messages.filter { !$0.isStreaming }.suffix(6)
+            let history = Self.historyBeforeCurrentPrompt(from: messages, limit: 6)
             for msg in history {
-                result.append(ChatMessage(role: msg.role == .user ? .user : .assistant, content: msg.content))
+                result.append(ChatMessage(
+                    role: msg.role == .user ? .user : .assistant,
+                    content: Self.timestampedHistoryContent(for: msg)
+                ))
             }
             result.append(ChatMessage(role: .user, content: userText))
             return result
@@ -599,7 +619,7 @@ final class CoachChatVM: ObservableObject {
                 sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
             )
         )) ?? []
-        let (context, contextMeta) = (services?.contextBuilder ?? AIContextBuilder()).build(
+        let (context, _) = (services?.contextBuilder ?? AIContextBuilder()).build(
             dashboard: dashboard,
             journalEntries: journalEntries.prefix(12).map { JournalContextEntry(tags: $0.tags, text: $0.note) },
             historicalReports: savedReports.filter { $0.type != "coach_thread" }.prefix(6).map { record in
@@ -649,9 +669,12 @@ final class CoachChatVM: ObservableObject {
         }
 
         // Conversation history (skip streaming, take last 10)
-        let history = messages.filter { !$0.isStreaming }.suffix(10)
+        let history = Self.historyBeforeCurrentPrompt(from: messages, limit: 10)
         for msg in history {
-            result.append(ChatMessage(role: msg.role == .user ? .user : .assistant, content: msg.content))
+            result.append(ChatMessage(
+                role: msg.role == .user ? .user : .assistant,
+                content: Self.timestampedHistoryContent(for: msg)
+            ))
         }
 
         // Focused policy: add a reinforcement directive before the user message
@@ -728,9 +751,14 @@ struct CoachChatPanel: View {
                             .padding(.top, 20)
                         }
 
-                        ForEach(vm.messages) { msg in
+                        ForEach(vm.messages.filter { !$0.isStreaming }) { msg in
                             MiniBubble(message: msg)
                                 .id(msg.id)
+                        }
+
+                        if vm.isStreaming {
+                            MiniStreamingBubble(content: vm.streamingContent)
+                                .id("streaming")
                         }
                     }
                     .padding(16)
@@ -739,6 +767,9 @@ struct CoachChatPanel: View {
                     if let id = vm.messages.last?.id {
                         withAnimation { proxy.scrollTo(id, anchor: .bottom) }
                     }
+                }
+                .onChange(of: vm.streamingContent) {
+                    withAnimation { proxy.scrollTo("streaming", anchor: .bottom) }
                 }
             }
 
@@ -892,6 +923,34 @@ private struct MiniBubble: View {
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(message.role == .user ? VelaTheme.elevatedSurface : VelaTheme.surface)
+        )
+    }
+}
+
+private struct MiniStreamingBubble: View {
+    let content: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Vela")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(VelaTheme.recovery)
+            if content.isEmpty {
+                ProgressView()
+            } else {
+                MarkdownText(
+                    markdown: content,
+                    font: .subheadline,
+                    color: VelaTheme.primaryText,
+                    isStreaming: true
+                )
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(VelaTheme.surface)
         )
     }
 }

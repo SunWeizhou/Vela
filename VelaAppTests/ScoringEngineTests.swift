@@ -277,6 +277,8 @@ final class ScoringEngineTests: XCTestCase {
         )
 
         XCTAssertTrue(directive.contains("19:59"))
+        XCTAssertTrue(directive.contains("2026-05-22"))
+        XCTAssertTrue(directive.contains("+08:00"))
         XCTAssertTrue(directive.contains("恢复 46"))
         XCTAssertTrue(directive.contains("HRV 36ms"))
         XCTAssertTrue(directive.contains("主要限制因素"))
@@ -389,10 +391,44 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(result.wearableScore, 90)
         XCTAssertEqual(result.biomarkerScore, 80.0, accuracy: 0.01) // default neutral
         XCTAssertGreaterThanOrEqual(result.overallScore, 90)
-        XCTAssertLessThanOrEqual(result.biologicalAge, 28.0)
+        XCTAssertFalse(result.isPhenoAge)
+        XCTAssertNil(result.biologicalAgeEstimate)
+        XCTAssertEqual(result.biologicalAge, input.chronologicalAge)
+        XCTAssertEqual(result.healthAgeTrend, "improving")
         XCTAssertGreaterThanOrEqual(result.optimalCount, 3)
         XCTAssertEqual(result.suboptimalCount, 0)
         XCTAssertFalse(result.factors.isEmpty)
+    }
+
+    func testLegacyAdaptiveTrainingManagerDoesNotDuplicateTodaysAdjustmentAcrossWeek() {
+        let days = (1...7).map { dayNumber in
+            TrainingDay(
+                weekNumber: 1,
+                dayNumber: dayNumber,
+                title: "Cardio \(dayNumber)",
+                description: "Run",
+                focus: "cardio",
+                durationMinutes: 45,
+                intensity: "high"
+            )
+        }
+        let plan = TrainingPlanRecord(
+            title: "Weekly plan",
+            goalDescription: "Build endurance",
+            days: days
+        )
+
+        let records = AdaptiveTrainingManager().generateWeekAdjustments(
+            plan: plan,
+            recoveryScore: 60,
+            energyScore: 50,
+            tsb: 0,
+            sleepScore: 80,
+            stressIndex: 20
+        )
+
+        XCTAssertEqual(records.count, 1)
+        XCTAssertEqual(Set(records.map(\.dayId)).count, 1)
     }
 
     func testBiologicalAgeBiomarkersOnly() {

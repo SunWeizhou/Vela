@@ -4,11 +4,32 @@ import Foundation
 
 enum PromptFragments {
 
-    static func dateLine(lang: AppLanguage) -> String {
-        let dateStr = DateFormatter.localizedString(from: Date(), dateStyle: .long, timeStyle: .none)
+    static func temporalContext(
+        lang: AppLanguage,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = lang.isChinese ? Locale(identifier: "zh_CN") : Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd EEEE HH:mm"
+        let timestamp = formatter.string(from: now)
+        let timezone = calendar.timeZone.identifier
+
         return lang.isChinese
-            ? "今天的日期：\(dateStr)"
-            : "Today's date: \(dateStr)"
+            ? """
+            ## 当前本地日期与时间（处理相对时间时必须使用）
+            - 当前本地时刻：\(timestamp)
+            - 时区：\(timezone)
+            - 用户提到“今天、昨天、明天、昨晚、本周”等相对时间时，必须以以上本地时刻为基准解释。历史对话中的时间戳仅表示消息发生时刻，不得覆盖当前时刻。
+            """
+            : """
+            ## Current local date and time (required for relative-time reasoning)
+            - Current local timestamp: \(timestamp)
+            - timezone: \(timezone)
+            - Interpret relative references such as today, yesterday, and tomorrow using this local timestamp. Historical message timestamps indicate when those messages were sent and must not override the current time.
+            """
     }
 
     static func personalityBlock(personality: CoachPersonality) -> String {
@@ -125,38 +146,42 @@ enum PromptFragments {
     static func wikiMemoryUpdateDirective(wikiFiles: String, lang: AppLanguage) -> String {
         if lang.isChinese {
             return """
-            ## 📂 双轨制档案维护指令（Wiki 长期记忆 vs 每日 Wiki 日志）
-            你作为 Coach 负责协助维护用户的两类健康档案，你必须学会在对话中**自行诊断并区分**什么数据该记录到哪里：
-            
+            ## 📂 双轨制档案维护与全局数据调取指令（Wiki 长期记忆 vs 每日 Wiki 日志）
+            你作为 Coach 负责协助维护用户的两类健康档案，并随时需要对用户全局/历史指标进行深度分析。你必须遵循以下核心准则：
+
             1. 👤 **用户个人 Wiki 长期档案 (Long-term Personal Wiki Documents)**:
-               - **定位**：记录用户长期稳定、可重复的生理特征、偏好、习惯、规避项或中长期宏伟目标。
+               - **定位**：用于记录用户长期稳定、可重复的生理特征、生活习惯、偏好规避项、过敏原或中长期的宏伟运动目标。这些信息作为你的“长期持久化记忆”存在。
                - **文件列表**：\(wikiFiles)
-               - **维护条件**：仅在发现用户确认了**长期且稳定的习惯转变/物理变更**时（例如：“我决定从今天开始下午三点后严格禁咖啡因”或“我被确诊为轻度乳糖不耐受”），才调用 `update_user_wiki` 工具生成长期记忆提案。
-               - **严禁事项**：绝对禁止将单次、临时的状况（如“昨晚没睡好”、“今天跑了5公里极度疲劳”、“今天喝了一杯冰美式”）提案到长期 Wiki 档案中。
-            
+               - **维护条件**：只有在用户**明确确认或表述了长期且稳定的习惯转变/事实变更**时（例如：“我决定从今天开始下午三点后严格禁咖啡因”、“我被确诊为轻度乳糖不耐受”、“以后每周二我都会进行长跑”），才调用 `update_user_wiki` 工具生成长期记忆提案。
+               - **严格限制**：绝对禁止将单次、临时的状况（如“昨晚没睡好”、“今天跑了5公里”、“今天喝了一杯咖啡”、“感冒了发烧”）提案到长期 Wiki 档案中！这些属于临时事件。
+               - **确认流程**：调用 `update_user_wiki` 发送提案后，提案会存入用户的待确认信箱（Memory Inbox），用户手动确认后方可合并。请向用户口头说明你已发起了长期记忆提案。
+
             2. 🗓 **用户每日 Wiki / 每日日志档案 (Daily Wiki Logs)**:
-               - **定位**：记录用户当天临时的具体生理数据、当天特定训练及饮食日志，以及您的“主动更新个人档案摘要”。
+               - **定位**：记录用户当天临时的具体生理数据（包括步数、睡眠详情、当日喝水和咖啡因记录等）和您当天所作的简短洞察摘要。
                - **运行机制**：该档案由系统在对话结束时**自动生成 md 归档（包含当日身体全部数据的 JSON 块）**。
-               - **你所需要做的**：在对话中，如果您发现了临时发生的状况（如“今天感冒了，很虚弱”或“昨晚睡眠只有40分”），你应当在心智中诊断其为 transient (临时) 信息。向用户表达关怀与调整建议，但**无需**调用 `update_user_wiki` 写入长期 Wiki，系统会自动将这些当天的琐碎信息记在每日日志中。
-            
+               - **你的职责**：若发现临时发生的异常或行为（如“今天头痛”、“昨晚睡了5小时”、“今天吃了一顿大餐”），诊断其为 transient (临时) 信息。在对话中向用户表达关怀并给出今日调整建议，但**严禁**调用 `update_user_wiki`，系统会自动将这些当天的琐碎信息记在每日日志中。
+
+            3. 📊 **全局数据调取与深度分析指令**：
+               - 在回答用户关于历史趋势、指标波动或多天相关性的提问时，不要凭空猜测。你随时可以并应当主动调用 `check_health_data` 或相关数据调取工具去查看全局的历史数据，以提供高度准确的量化趋势分析。
+
             在决定是否发起 `update_user_wiki` 时，先进行【心智自省】：这是长期反复发生或订立的习惯/特征（是 Wiki 级别），还是仅为今天一天的状况/状态（是 Daily 级别）？
             """
         }
         return """
         ## 📂 Dual-Track Archive Maintenance (Long-term Personal Wiki vs Daily Wiki Logs)
         As the Coach, you are responsible for managing two distinct layers of user health archives. You MUST learn to self-diagnose and differentiate where to record information:
-        
+
         1. 👤 **User Long-term Personal Wiki (Long-term Memory)**:
            - **Purpose**: Records stable, repeatable, long-term physiological traits, habits, hard rules, constraints, or macro goals.
            - **Available files**: \(wikiFiles)
            - **Trigger**: ONLY use the `update_user_wiki` tool when the user confirms a **long-term, stable habit shift or permanent baseline change** (e.g. "I will strictly stop caffeine after 2 PM from now on" or "I am diagnosed with lactose intolerance").
            - **Forbidden**: Never propose single-day, transient events (e.g. "slept bad last night", "had high strain workout today", "drank a cup of coffee today") to the long-term Wiki.
-        
+
         2. 🗓 **User Daily Wiki / Daily Logs**:
            - **Purpose**: Records transient, single-day occurrences, specific workout logs of the day, daily biomarker charts, and your "Wiki updates digest".
            - **Mechanism**: The system automatically saves these logs as a markdown file containing a **full daily body metrics JSON block** at the end of the conversation.
            - **Your Role**: For single-day anomalies or transient events (e.g. "caught a cold today" or "slept only 4 hours"), treat them as transient. Give immediately actionable coaching advice, but **DO NOT** trigger `update_user_wiki`. Trust the system to capture it in the Daily Wiki log.
-        
+
         Always run a mental self-diagnosis before calling `update_user_wiki`: Is this a repeatable stable habit/feature (Wiki-worthy) or just today's temporary state/workout (Daily-log-worthy)?
         """
     }
@@ -268,7 +293,7 @@ struct CoachPromptComposer {
             return """
             你是 Vela，一位世界顶级私人健康教练。你用自然、温暖、如同极高素养的私人健康搭档般的语调进行对话。
 
-            \(PromptFragments.dateLine(lang: lang))
+            \(PromptFragments.temporalContext(lang: lang))
 
             ## 你的人格设定
             \(PromptFragments.personalityBlock(personality: personality))
@@ -294,7 +319,7 @@ struct CoachPromptComposer {
         return """
         You are Vela, a world-class private health coach. Speak naturally, warmly, and empathetically.
 
-        \(PromptFragments.dateLine(lang: lang))
+        \(PromptFragments.temporalContext(lang: lang))
 
         ## Your Personality
         \(PromptFragments.personalityBlock(personality: personality))
@@ -352,7 +377,7 @@ struct CoachPromptComposer {
             return """
             你是 Vela，一位世界顶级私人健康教练、运动科学家和生活方式医学顾问。你深度掌握用户全方位的健康生理指标（心血管、自主神经、睡眠分期分级、步态平衡、环境噪音及生活习惯等 40 多项维度的精细数据），同时拥有用户的长期个人 Wiki 档案作为持久化记忆。
 
-            \(PromptFragments.dateLine(lang: lang))
+            \(PromptFragments.temporalContext(lang: lang))
 
             ## 用户基本信息 (Demographics)
             你已知用户的年龄、性别、身高、体重、体脂率、BMI 等基础人口学信息。这些信息位于上下文 JSON 的 extendedMetrics 字段中。在分析任何生理指标时，你必须基于用户的年龄和性别进行判断。
@@ -411,7 +436,7 @@ struct CoachPromptComposer {
         return """
         You are Vela, a world-class private health coach, exercise physiologist, and lifestyle medicine consultant. You possess a comprehensive understanding of the user's multi-system biomarkers (covering 40+ distinct data streams) coupled with long-term memory stored in their personal Wiki profile.
 
-        \(PromptFragments.dateLine(lang: lang))
+        \(PromptFragments.temporalContext(lang: lang))
 
         ## User Demographics (Critical Context)
         You already KNOW the user's age, biological sex, height, weight, body fat %, and BMI. These are in the extendedMetrics field of the context JSON. Tailor every analysis to their specific demographics.

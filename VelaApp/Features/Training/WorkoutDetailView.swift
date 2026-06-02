@@ -7,6 +7,7 @@ struct WorkoutDetailView: View {
     let workout: WorkoutSummary
     
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var dashboardVM: DashboardViewModel
     @State private var heartRates: [HeartRateSample] = []
     @State private var routeCoordinates: [CLLocationCoordinate2D] = []
     @State private var isLoading = true
@@ -121,7 +122,7 @@ struct WorkoutDetailView: View {
     }
     
     private var statsMetricsRow: some View {
-        HStack(spacing: 10) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 2), spacing: 10) {
             workoutStatTile(
                 title: L10n.t("Duration", "持续时间"),
                 value: formattedDuration(workout.start, workout.end),
@@ -141,6 +142,13 @@ struct WorkoutDetailView: View {
                 value: workout.averageHeartRate.map { "\(Int($0)) bpm" } ?? "--",
                 icon: "heart.fill",
                 color: Color(hex: "#5C6BC0") // Indigo purple
+            )
+
+            workoutStatTile(
+                title: L10n.t("Distance", "距离"),
+                value: formattedDistance,
+                icon: "location.fill",
+                color: Color(hex: "#4CAF50")
             )
         }
     }
@@ -195,6 +203,12 @@ struct WorkoutDetailView: View {
                     .foregroundStyle(Color(hex: "#8E8A80"))
                     .frame(height: 160)
             } else {
+                HStack(spacing: 10) {
+                    heartRateFact(title: L10n.t("Range", "范围"), value: heartRateRangeText)
+                    heartRateFact(title: L10n.t("Peak", "峰值"), value: peakHeartRateText)
+                    heartRateFact(title: L10n.t("Samples", "样本"), value: "\(heartRates.count)")
+                }
+
                 Chart {
                     ForEach(heartRates) { item in
                         AreaMark(
@@ -218,7 +232,7 @@ struct WorkoutDetailView: View {
                     }
                 }
                 .chartXAxis(.hidden)
-                .chartYScale(domain: 80...200)
+                .chartYScale(domain: heartRateDomain)
                 .frame(height: 160)
                 .padding(.top, 6)
             }
@@ -233,6 +247,20 @@ struct WorkoutDetailView: View {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
         )
+    }
+
+    private func heartRateFact(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value)
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(hex: "#1A1917"))
+            Text(title)
+                .font(.system(size: 10))
+                .foregroundStyle(Color(hex: "#8E8A80"))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color(hex: "#F8F6F2")))
     }
     
     private var gpsRouteSection: some View {
@@ -326,6 +354,35 @@ struct WorkoutDetailView: View {
         formatter.timeStyle = .short
         return formatter.string(from: workout.start)
     }
+
+    private var formattedDistance: String {
+        guard let meters = workout.distanceMeters, meters > 0 else { return "--" }
+        if meters >= 1_000 {
+            return String(format: "%.2f km", meters / 1_000)
+        }
+        return "\(Int(meters.rounded())) m"
+    }
+
+    private var heartRateDomain: ClosedRange<Double> {
+        let values = heartRates.map(\.bpm)
+        guard let minimum = values.min(), let maximum = values.max() else {
+            return 60...180
+        }
+        let lower = max(30, floor((minimum - 10) / 10) * 10)
+        let upper = max(lower + 20, ceil((maximum + 10) / 10) * 10)
+        return lower...upper
+    }
+
+    private var heartRateRangeText: String {
+        let values = heartRates.map(\.bpm)
+        guard let minimum = values.min(), let maximum = values.max() else { return "--" }
+        return "\(Int(minimum.rounded()))-\(Int(maximum.rounded())) bpm"
+    }
+
+    private var peakHeartRateText: String {
+        guard let maximum = heartRates.map(\.bpm).max() else { return "--" }
+        return "\(Int(maximum.rounded())) bpm"
+    }
     
     private var formattedHomeDate: String {
         let formatter = DateFormatter()
@@ -366,7 +423,7 @@ struct WorkoutDetailView: View {
     }
     
     private var dashboardVMForWorkout: DashboardSummary {
-        var base = DashboardSummary.preview()
+        var base = dashboardVM.dashboard
         base.workouts = [workout]
         return base
     }
@@ -376,11 +433,7 @@ struct WorkoutDetailView: View {
         
         do {
             let samples = try await queryService.heartRateSamples(start: workout.start, end: workout.end)
-            if !samples.isEmpty {
-                heartRates = samples
-            } else {
-                heartRates = generateSimulatedHeartRates()
-            }
+            heartRates = samples
             
             let route = try await queryService.workoutRoute(workoutId: workout.id)
             if !route.isEmpty {
@@ -389,35 +442,12 @@ struct WorkoutDetailView: View {
                 routeCoordinates = []
             }
         } catch {
-            print("Workout detail loading failed, loading fallbacks: \(error.localizedDescription)")
-            heartRates = generateSimulatedHeartRates()
+            print("Workout detail loading failed: \(error.localizedDescription)")
+            heartRates = []
             routeCoordinates = []
         }
         
         isLoading = false
     }
     
-    private func generateSimulatedHeartRates() -> [HeartRateSample] {
-        var result: [HeartRateSample] = []
-        let duration = workout.end.timeIntervalSince(workout.start)
-        let steps = 15
-        let stepInterval = duration / Double(steps)
-        
-        let avgHR = workout.averageHeartRate ?? 142.0
-        
-        for i in 0..<steps {
-            let offset = Double(i) * stepInterval
-            let date = workout.start.addingTimeInterval(offset)
-            
-            let ratio = Double(i) / Double(steps)
-            let factor = sin(ratio * Double.pi)
-            let randomFluctuation = Double.random(in: -8...8)
-            let bpm = avgHR - 18.0 + (factor * 30.0) + randomFluctuation
-            
-            result.append(HeartRateSample(date: date, bpm: max(80.0, min(195.0, bpm))))
-        }
-        return result
-    }
-    
-
 }

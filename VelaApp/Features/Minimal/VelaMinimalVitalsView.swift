@@ -9,18 +9,23 @@ struct VelaVitalsView: View {
     @Environment(\.velaScrollDirection) private var scrollDirection
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var dashboardVM: DashboardViewModel
+    @ObservedObject private var appState = VelaAppState.shared
     @Query(sort: \BiomarkerRecord.date, order: .reverse) private var biomarkers: [BiomarkerRecord]
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
 
     // Dynamic states for RHR, HRV, Weight, Fat histories
-    @State private var weightHistoryData: [Double] = [0.5]
-    @State private var hrvHistoryData: [Double] = [0.5]
-    @State private var rhrHistoryData: [Double] = [0.5]
-    @State private var fatHistoryData: [Double] = [0.5]
-    
+    @State private var weightHistoryData: [Double] = []
+    @State private var hrvHistoryData: [Double] = []
+    @State private var rhrHistoryData: [Double] = []
+    @State private var respiratoryRateHistoryData: [Double] = []
+    @State private var bloodOxygenHistoryData: [Double] = []
+    @State private var fatHistoryData: [Double] = []
+
     @State private var hrvValueText: String = "--"
     @State private var rhrValueText: String = "--"
+    @State private var respiratoryRateValueText: String = "--"
+    @State private var bloodOxygenValueText: String = "--"
     @State private var weightValueText: String = "--"
     @State private var fatValueText: String = "--"
 
@@ -29,7 +34,7 @@ struct VelaVitalsView: View {
             VStack(alignment: .leading, spacing: 20) {
                 // 1. Biological Age Card (生物年龄 cockpit)
                 biologicalAgeHero
-                
+
                 // 2. Other Biomarkers Section
                 otherBiomarkersSection
             }
@@ -44,6 +49,9 @@ struct VelaVitalsView: View {
             loadRealVitalsData()
         }
         .onChange(of: dashboardVM.selectedDate) {
+            loadRealVitalsData()
+        }
+        .onChange(of: appState.localDataRevision) {
             loadRealVitalsData()
         }
     }
@@ -115,22 +123,22 @@ struct VelaVitalsView: View {
             }
             return String(format: delta < 0 ? "比实际年龄年轻 %.1f 岁" : "比实际年龄高 %.1f 岁", abs(delta))
         }()
-        
+
         return VStack(spacing: 8) {
             // Header
             HStack {
                 Spacer()
-                
+
                 VStack(spacing: 4) {
                     Text(isPhenoAge ? "生物年龄估算" : "健康年龄趋势 Beta")
                         .font(.system(size: 20, weight: .bold))
                         .foregroundStyle(Color(hex: "#1A1917"))
-                    
+
                     Text(selectedDateText)
                         .font(.system(size: 12))
                         .foregroundStyle(Color(hex: "#8E8A80"))
                 }
-                
+
                 Spacer()
             }
             .overlay(alignment: .trailing) {
@@ -160,12 +168,12 @@ struct VelaVitalsView: View {
                     )
                     .rotationEffect(.degrees(90))
                     .frame(width: 220, height: 220)
-                
+
                 // Glowing cell dots visual effect
                 scatteredParticles
                     .frame(width: 140, height: 100)
                     .offset(y: -10)
-                
+
                 // Center dial text values
                 VStack(spacing: 0) {
                     Text(biologicalAge)
@@ -189,7 +197,7 @@ struct VelaVitalsView: View {
                             .offset(x: 78, y: 37)
                     }
                 }
-                
+
                 // End Dot indicator at bottom center
                 Circle()
                     .fill(Color(hex: "#8E8A80"))
@@ -205,7 +213,7 @@ struct VelaVitalsView: View {
             // Top portion has a sky-blue-yellow aura/gradient background
             ZStack {
                 Color.white
-                
+
                 LinearGradient(
                     colors: [
                         Color(hex: "#D0E1FD").opacity(0.4),
@@ -234,7 +242,7 @@ struct VelaVitalsView: View {
                 CGPoint(x: 0.6, y: 0.35), CGPoint(x: 0.7, y: 0.22), CGPoint(x: 0.65, y: 0.48),
                 CGPoint(x: 0.58, y: 0.52), CGPoint(x: 0.72, y: 0.42), CGPoint(x: 0.68, y: 0.3)
             ]
-            
+
             for pt in points {
                 let rect = CGRect(
                     x: pt.x * size.width - 2.5,
@@ -254,9 +262,9 @@ struct VelaVitalsView: View {
                 Text("其他生物标志物")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(Color(hex: "#1A1917"))
-                
+
                 Spacer()
-                
+
                 Button("编辑") {
                     VelaAppState.shared.triggerBloodLog = true
                 }
@@ -264,15 +272,13 @@ struct VelaVitalsView: View {
                 .foregroundStyle(Color(hex: "#C56B4A")) // Brand Accent
             }
             .padding(.horizontal, 2)
-            
+
             VStack(spacing: 12) {
-                // Card 1: 体重 (Weight) - Trigger Weight Sheet
-                Button {
-                    VelaAppState.shared.triggerWeightLog = true
-                } label: {
+                // Card 1: 体重 (Weight)
+                NavigationLink(destination: VelaMetricDetailView(metric: .weight)) {
                     biomarkerRow(
                         title: "体重",
-                        trendText: "稳定",
+                        trendText: syncStatusText(for: weightValueText),
                         trendIcon: "arrow.right",
                         valueText: weightValueText,
                         valueColor: Color(hex: "#1A1917"),
@@ -281,12 +287,12 @@ struct VelaVitalsView: View {
                     )
                 }
                 .buttonStyle(.plain)
-                
+
                 // Card 2: HRV 基线 (HRV Baseline) - Open HRV Detail
                 NavigationLink(destination: VelaMetricDetailView(metric: .hrv)) {
                     biomarkerRow(
                         title: "HRV 基线",
-                        trendText: "稳定",
+                        trendText: syncStatusText(for: hrvValueText),
                         trendIcon: "arrow.right",
                         valueText: hrvValueText,
                         valueColor: Color(hex: "#1A1917"),
@@ -295,12 +301,12 @@ struct VelaVitalsView: View {
                     )
                 }
                 .buttonStyle(.plain)
-                
+
                 // Card 3: RHR 基线 (RHR Baseline) - Open RHR Detail
                 NavigationLink(destination: VelaMetricDetailView(metric: .rhr)) {
                     biomarkerRow(
                         title: "RHR 基线",
-                        trendText: "良好",
+                        trendText: syncStatusText(for: rhrValueText),
                         trendIcon: "arrow.right",
                         valueText: rhrValueText,
                         valueColor: Color(hex: "#5B8C6F"), // Sage Green for healthy RHR
@@ -309,14 +315,40 @@ struct VelaVitalsView: View {
                     )
                 }
                 .buttonStyle(.plain)
-                
-                // Card 4: 体脂 (Body Fat) - Trigger Weight/Fat Sheet
-                Button {
-                    VelaAppState.shared.triggerWeightLog = true
-                } label: {
+
+                // Card 4: 呼吸率 (Respiratory Rate)
+                NavigationLink(destination: VelaMetricDetailView(metric: .respiratoryRate)) {
+                    biomarkerRow(
+                        title: "呼吸率",
+                        trendText: syncStatusText(for: respiratoryRateValueText),
+                        trendIcon: "arrow.right",
+                        valueText: respiratoryRateValueText,
+                        valueColor: Color(hex: "#5B8C6F"),
+                        history: respiratoryRateHistoryData,
+                        graphColor: Color(hex: "#5B8C6F")
+                    )
+                }
+                .buttonStyle(.plain)
+
+                // Card 5: 血氧 (Blood Oxygen)
+                NavigationLink(destination: VelaMetricDetailView(metric: .bloodOxygen)) {
+                    biomarkerRow(
+                        title: "血氧",
+                        trendText: syncStatusText(for: bloodOxygenValueText),
+                        trendIcon: "arrow.right",
+                        valueText: bloodOxygenValueText,
+                        valueColor: Color(hex: "#C56B4A"),
+                        history: bloodOxygenHistoryData,
+                        graphColor: Color(hex: "#C56B4A")
+                    )
+                }
+                .buttonStyle(.plain)
+
+                // Card 6: 体脂 (Body Fat)
+                NavigationLink(destination: VelaMetricDetailView(metric: .bodyFat)) {
                     biomarkerRow(
                         title: "体脂",
-                        trendText: "稳定",
+                        trendText: syncStatusText(for: fatValueText),
                         trendIcon: "arrow.right",
                         valueText: fatValueText,
                         valueColor: Color(hex: "#1A1917"),
@@ -344,23 +376,30 @@ struct VelaVitalsView: View {
                 Text(title)
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Color(hex: "#1A1917"))
-                
+
                 HStack(spacing: 4) {
                     Image(systemName: trendIcon)
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(valueColor)
-                    
+
                     Text("\(trendText) · \(valueText)")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(valueColor)
                 }
             }
-            
+
             Spacer()
-            
-            // Sparkline Line Graph Widget
-            SparklineLineGraph(data: history, color: graphColor, height: 38, width: 90)
-                .padding(.trailing, 4)
+
+            if history.isEmpty {
+                Text("暂无趋势")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .frame(width: 90, alignment: .trailing)
+                    .padding(.trailing, 4)
+            } else {
+                SparklineLineGraph(data: history, color: graphColor, height: 38, width: 90)
+                    .padding(.trailing, 4)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
@@ -382,7 +421,7 @@ struct VelaVitalsView: View {
         let startDate = calendar.date(byAdding: .day, value: -9, to: now) ?? now // Fetch 10 points
         let startOfDay = calendar.startOfDay(for: startDate)
         let endOfDay = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: now) ?? now
-        
+
         // Fetch DailyHealthSummaryRecord from SwiftData
         var descriptor = FetchDescriptor<DailyHealthSummaryRecord>(
             predicate: #Predicate<DailyHealthSummaryRecord> { record in
@@ -391,17 +430,20 @@ struct VelaVitalsView: View {
             sortBy: [SortDescriptor(\DailyHealthSummaryRecord.date, order: .forward)]
         )
         descriptor.fetchLimit = 10
-        
+
         do {
             let records = try modelContext.fetch(descriptor)
-            
+            usePendingDefaults()
+
             if !records.isEmpty {
                 // Extract arrays
                 let rawHRV = records.compactMap { $0.hrvAverage }
                 let rawRHR = records.compactMap { $0.restingHeartRate }
+                let rawRespiratoryRate = records.compactMap { $0.respiratoryRate }
+                let rawBloodOxygen = records.compactMap { $0.oxygenSaturation }
                 let rawWeight = records.compactMap { $0.bodyWeight }
                 let rawFat = records.compactMap { $0.bodyFatPercent }
-                
+
                 // Update latest values from the newest record
                 if let latest = records.last {
                     if let hrv = latest.hrvAverage {
@@ -410,6 +452,12 @@ struct VelaVitalsView: View {
                     if let rhr = latest.restingHeartRate {
                         rhrValueText = String(format: "%.1f bpm", rhr)
                     }
+                    if let respiratoryRate = latest.respiratoryRate {
+                        respiratoryRateValueText = String(format: "%.1f /min", respiratoryRate)
+                    }
+                    if let bloodOxygen = latest.oxygenSaturation {
+                        bloodOxygenValueText = String(format: "%.1f %%", bloodOxygen)
+                    }
                     if let wt = latest.bodyWeight {
                         weightValueText = String(format: "%.1f kg", wt)
                     }
@@ -417,10 +465,12 @@ struct VelaVitalsView: View {
                         fatValueText = String(format: "%.1f %%", fat)
                     }
                 }
-                
+
                 // Normalize to 0...1 for sparklines
                 hrvHistoryData = normalizeData(rawHRV)
                 rhrHistoryData = normalizeData(rawRHR)
+                respiratoryRateHistoryData = normalizeData(rawRespiratoryRate)
+                bloodOxygenHistoryData = normalizeData(rawBloodOxygen)
                 weightHistoryData = normalizeData(rawWeight)
                 fatHistoryData = normalizeData(rawFat)
             } else {
@@ -430,9 +480,9 @@ struct VelaVitalsView: View {
             usePendingDefaults()
         }
     }
-    
+
     private func normalizeData(_ values: [Double]) -> [Double] {
-        guard !values.isEmpty else { return [0.5] }
+        guard !values.isEmpty else { return [] }
         if values.count == 1 { return [0.5] }
         let minVal = values.min() ?? 0
         let maxVal = values.max() ?? 1
@@ -440,24 +490,32 @@ struct VelaVitalsView: View {
         guard diff > 0 else { return values.map { _ in 0.5 } }
         return values.map { ($0 - minVal) / diff }
     }
-    
+
     private func usePendingDefaults() {
-        hrvHistoryData = [0.5]
-        rhrHistoryData = [0.5]
-        weightHistoryData = [0.5]
-        fatHistoryData = [0.5]
-        
+        hrvHistoryData = []
+        rhrHistoryData = []
+        respiratoryRateHistoryData = []
+        bloodOxygenHistoryData = []
+        weightHistoryData = []
+        fatHistoryData = []
+
         hrvValueText = "--"
         rhrValueText = "--"
+        respiratoryRateValueText = "--"
+        bloodOxygenValueText = "--"
         weightValueText = "--"
         fatValueText = "--"
+    }
+
+    private func syncStatusText(for valueText: String) -> String {
+        valueText == "--" ? "暂无数据" : "已同步"
     }
 }
 
 // MARK: - Custom Arc View for Gauge
 struct GaugeScaleArcView: View {
     let size: CGFloat
-    
+
     var body: some View {
         ZStack {
             // Main gauge track arc
@@ -469,7 +527,7 @@ struct GaugeScaleArcView: View {
                 )
                 .rotationEffect(.degrees(90))
                 .frame(width: size, height: size)
-            
+
             // Radial Tick Marks
             ForEach(0..<41) { tick in
                 let angle = 144 + (Double(tick) * 6.3) // Map 41 ticks around the arc

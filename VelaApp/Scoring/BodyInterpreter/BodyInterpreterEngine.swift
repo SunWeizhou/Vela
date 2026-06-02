@@ -127,7 +127,6 @@ struct BodyInterpreterEngine {
     ) -> [FatigueSource] {
         var sources: [FatigueSource] = []
 
-        let recoveryScore = dashboard.recovery.score
         let hrvMs = dashboard.recoveryMetrics.hrvMilliseconds
         let rhrBpm = dashboard.recoveryMetrics.restingHeartRate
         let hrvZScore = dashboard.recovery.metrics["hrv_z_score"] ?? 0
@@ -135,8 +134,6 @@ struct BodyInterpreterEngine {
         let sleepEfficiency = dashboard.sleepScore.metrics["sleep_efficiency"] ?? 0
         let strainScore = dashboard.strain.score
         let stressIndex = dashboard.stress.stressIndex
-        let bodyFat = dashboard.bodyMetrics.bodyFatPercentage
-        let vo2Max = dashboard.bodyMetrics.vo2Max
 
         // Autonomic fatigue: HRV suppressed + RHR elevated
         var autonomicContribution = 0.0
@@ -340,8 +337,6 @@ struct BodyInterpreterEngine {
 
         let sleepScore = dashboard.sleepScore.score
         let strainScore = dashboard.strain.score
-        let stressIndex = dashboard.stress.stressIndex
-        let hrvZScore = dashboard.recovery.metrics["hrv_z_score"] ?? 0
 
         if primary.metricName != "Sleep Score" && sleepScore < 80 {
             limiters.append(PrimaryLimiter(
@@ -376,8 +371,6 @@ struct BodyInterpreterEngine {
         primaryLimiter: PrimaryLimiter,
         wiki: [String: String]
     ) -> TrainingWindow {
-        let recoveryScore = dashboard.recovery.score
-        let energyScore = dashboard.energy.currentEnergy
         let tsb = dashboard.energy.metrics["tsb"] ?? 0
         let sleepScore = dashboard.sleepScore.score
         let lang = AppLanguage.stored

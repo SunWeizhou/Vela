@@ -1,9 +1,43 @@
 import Foundation
 
+enum DeepSeekTextModel: String, CaseIterable, Sendable {
+    static let storageKey = "vela_coach_text_model"
+
+    case flash = "DeepSeek V4 Flash"
+    case pro = "DeepSeek V4 Pro"
+
+    init(displayName: String) {
+        self = Self(rawValue: displayName) ?? .pro
+    }
+
+    static var stored: DeepSeekTextModel {
+        DeepSeekTextModel(
+            displayName: UserDefaults.standard.string(forKey: storageKey) ?? DeepSeekTextModel.pro.rawValue
+        )
+    }
+
+    var apiIdentifier: String {
+        switch self {
+        case .flash: return "deepseek-v4-flash"
+        case .pro: return "deepseek-v4-pro"
+        }
+    }
+}
+
 struct DeepSeekProvider: LLMProvider {
     var apiKey: String
-    var model: String = "deepseek-v4-pro"
-    var endpoint: URL = URL(string: "https://api.deepseek.com/chat/completions")!
+    var model: String
+    var endpoint: URL
+
+    init(
+        apiKey: String,
+        model: String = DeepSeekTextModel.stored.apiIdentifier,
+        endpoint: URL = URL(string: "https://api.deepseek.com/chat/completions")!
+    ) {
+        self.apiKey = apiKey
+        self.model = model
+        self.endpoint = endpoint
+    }
 
     func complete(request: LLMRequest) async throws -> LLMResponse {
         guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {

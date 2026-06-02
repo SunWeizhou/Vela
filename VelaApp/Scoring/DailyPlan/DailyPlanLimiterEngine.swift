@@ -140,13 +140,20 @@ public final class DailyPlanLimiterEngine {
             ))
         }
 
-        // 6. Check Subjective Journal Flags (sick or injured)
+        // 6. Check Subjective Journal Flags and explicit rest status
         if input.journalFlags.contains("sick") || input.journalFlags.contains("injured") {
             limiters.append(PlanLimiter(
                 id: "journal_sick_injured",
                 severity: 3,
                 reason: L10n.t("Self-reported sickness or orthopedic pain", "手记记录了生病或关节伤病"),
                 recommendation: L10n.t("Suspend all training immediately to focus on recovery", "立即停止任何负荷训练，遵医嘱并静养恢复")
+            ))
+        } else if input.journalFlags.contains("resting") {
+            limiters.append(PlanLimiter(
+                id: "status_resting",
+                severity: 3,
+                reason: L10n.t("User selected a rest period", "用户主动选择了休息期"),
+                recommendation: L10n.t("Keep today training-free and focus on recovery habits", "今天暂停训练，优先安排恢复习惯")
             ))
         }
 

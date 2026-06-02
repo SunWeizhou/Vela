@@ -1,5 +1,10 @@
+import Charts
 import SwiftUI
 import SwiftData
+
+enum VelaCapabilityAvailability {
+    static let cloudKitSyncEnabled = false
+}
 
 // MARK: - VelaSettingsView — 我的 / Settings (Bevel Replica matching Screenshot 3)
 // profile row × General Group (Account, Wiki, Models, Appearance, Notification, Custom, Shortcuts, Language) × Data Group (Sources, CGM, iCloud) × Whats New
@@ -12,17 +17,16 @@ struct VelaSettingsView: View {
     @AppStorage("vela_user_age") private var userAge = 30
     @AppStorage("vela_user_weight") private var userWeight = 72.0
     @AppStorage("vela_user_height") private var userHeight = 178.0
-    @AppStorage("vela_max_hr") private var userMaxHR = 190
     
     // Settings toggles
     @AppStorage("vela_dark_mode") private var darkModeRaw = "system"
-    @AppStorage("vela_notifications_enabled") private var notificationsOn = true
-    @AppStorage("vela_morning_brief") private var coachBriefOn = true
-    @AppStorage("vela_evening_sync") private var weeklyReportOn = true
+    @AppStorage("agent_abnormal_metric_alerts") private var abnormalMetricAlertsOn = true
+    @AppStorage("agent_morning_brief_alerts") private var morningBriefOn = true
+    @AppStorage("agent_bedtime_reminders") private var bedtimeRemindersOn = true
     
-    @AppStorage("vela_app_language") private var languageRaw = "zh"
+    @AppStorage("vela_app_language") private var languageRaw = AppLanguage.simplifiedChinese.rawValue
     @AppStorage("vela_daily_calorie_target") private var dailyCalorieTarget = 2000
-    @AppStorage("vela_icloud_sync_enabled") private var icloudSyncEnabled = true
+    @AppStorage(SleepTargetSettings.hoursKey) private var sleepTargetHours = SleepTargetSettings.defaultHours
     
     // AI Model settings
     @AppStorage("vela_coach_text_model") private var textModel = "DeepSeek V4 Pro"
@@ -42,7 +46,7 @@ struct VelaSettingsView: View {
                     
                     VStack(spacing: 0) {
                         NavigationLink(destination: AccountSettingsView()) {
-                            settingsRow(icon: "person.fill", iconBg: Color(hex: "#00A896"), title: "账户", value: "已登录")
+                            settingsRow(icon: "person.fill", iconBg: Color(hex: "#00A896"), title: "账户", value: "本机资料")
                         }
                         
                         Divider().padding(.leading, 56)
@@ -66,25 +70,35 @@ struct VelaSettingsView: View {
                         Divider().padding(.leading, 56)
                         
                         NavigationLink(destination: NotificationSettingsView()) {
-                            settingsRow(icon: "bell.fill", iconBg: Color(hex: "#FF9F0A"), title: "通知", value: notificationsOn ? "已开启" : "已关闭")
+                            settingsRow(
+                                icon: "bell.fill",
+                                iconBg: Color(hex: "#FF9F0A"),
+                                title: "通知",
+                                value: abnormalMetricAlertsOn || morningBriefOn || bedtimeRemindersOn ? "已配置" : "已关闭"
+                            )
                         }
                         
                         Divider().padding(.leading, 56)
                         
                         NavigationLink(destination: CustomizationSettingsView()) {
-                            settingsRow(icon: "slider.horizontal.3", iconBg: Color(hex: "#FF5E3A"), title: "自定义", value: "\(dailyCalorieTarget) kcal")
+                            settingsRow(icon: "slider.horizontal.3", iconBg: Color(hex: "#FF5E3A"), title: "自定义", value: "\(dailyCalorieTarget) kcal · \(SleepTargetSettings.displayHours(sleepTargetHours))")
                         }
                         
                         Divider().padding(.leading, 56)
                         
                         NavigationLink(destination: ShortcutsSettingsView()) {
-                            settingsRow(icon: "command", iconBg: Color(hex: "#FFCC00"), title: "快捷指令", value: "Siri 支持")
+                            settingsRow(icon: "command", iconBg: Color(hex: "#FFCC00"), title: "快捷指令", value: "已接入")
                         }
                         
                         Divider().padding(.leading, 56)
                         
                         NavigationLink(destination: LanguageSettingsView()) {
-                            settingsRow(icon: "globe", iconBg: Color(hex: "#34C759"), title: "语言", value: languageRaw == "zh" ? "简体中文" : "English")
+                            settingsRow(
+                                icon: "globe",
+                                iconBg: Color(hex: "#34C759"),
+                                title: "语言",
+                                value: AppLanguage(rawValue: languageRaw)?.displayName ?? AppLanguage.simplifiedChinese.displayName
+                            )
                         }
                     }
                     .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white))
@@ -107,13 +121,15 @@ struct VelaSettingsView: View {
                         Divider().padding(.leading, 56)
                         
                         NavigationLink(destination: CGMSettingsView()) {
-                            settingsRow(icon: "scope", iconBg: Color(hex: "#30A2FF"), title: "管理 CGM", value: "未配置")
+                            settingsRow(icon: "scope", iconBg: Color(hex: "#30A2FF"), title: "管理 CGM", value: "Apple 健康")
                         }
                         
-                        Divider().padding(.leading, 56)
-                        
-                        NavigationLink(destination: iCloudSyncSettingsView()) {
-                            settingsRow(icon: "icloud.fill", iconBg: Color(hex: "#007AFF"), title: "iCloud 同步", value: icloudSyncEnabled ? "已启用" : "已停用")
+                        if VelaCapabilityAvailability.cloudKitSyncEnabled {
+                            Divider().padding(.leading, 56)
+
+                            NavigationLink(destination: iCloudSyncSettingsView()) {
+                                settingsRow(icon: "icloud.fill", iconBg: Color(hex: "#007AFF"), title: "iCloud 同步", value: "已接入")
+                            }
                         }
                     }
                     .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white))
@@ -130,7 +146,7 @@ struct VelaSettingsView: View {
                     
                     VStack(spacing: 0) {
                         NavigationLink(destination: WhatsNewSettingsView()) {
-                            settingsRow(icon: "sparkles", iconBg: Color(hex: "#5856D6"), title: "最新变化", value: "v2.0.0")
+                            settingsRow(icon: "sparkles", iconBg: Color(hex: "#5856D6"), title: "最新变化", value: "v0.1.0")
                         }
                     }
                     .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white))
@@ -209,10 +225,10 @@ struct VelaSettingsView: View {
             }
             
             VStack(alignment: .leading, spacing: 4) {
-                Text("Weizhou")
+                Text("本机健康资料")
                     .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(Color(hex: "#1A1917"))
-                Text("Vela 创始会员")
+                Text("Local-first 存储")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(Color(hex: "#C56B4A"))
             }
@@ -235,7 +251,22 @@ struct AccountSettingsView: View {
     @AppStorage("vela_user_age") private var userAge = 30
     @AppStorage("vela_user_weight") private var userWeight = 72.0
     @AppStorage("vela_user_height") private var userHeight = 178.0
-    @AppStorage("vela_max_hr") private var userMaxHR = 190
+    @AppStorage("vela_max_hr") private var userMaxHR = 0
+
+    private var inferredMaxHR: Int {
+        Int(UserProfileSettings.inferredMaxHeartRate(age: userAge))
+    }
+
+    private var displayedMaxHR: Int {
+        userMaxHR >= 100 ? userMaxHR : inferredMaxHR
+    }
+
+    private var maxHeartRateBinding: Binding<Int> {
+        Binding(
+            get: { displayedMaxHR },
+            set: { userMaxHR = $0 }
+        )
+    }
     
     var body: some View {
         Form {
@@ -260,7 +291,11 @@ struct AccountSettingsView: View {
                     Text("cm")
                 }
                 
-                Stepper("最大心率: \(userMaxHR) bpm", value: $userMaxHR, in: 100...220)
+                Stepper("最大心率: \(displayedMaxHR) bpm", value: maxHeartRateBinding, in: 100...240)
+
+                Button("使用年龄推断值（\(inferredMaxHR) bpm）") {
+                    userMaxHR = 0
+                }
             }
         }
         .navigationTitle("账户与特征基准")
@@ -406,10 +441,10 @@ struct UserWikiArchiveView: View {
     
     private func initializeDefaultWikiDocs() {
         let docs = [
-            ("profile.md", "基本画像", "## 个人基本生理画像\n- 身份: 30岁男性，互联网研发主管\n- 训练水平: 中等强度，每周运动 3-4 次\n- 作息偏好: 晨型人 (Chronotype: Morning Lark)，偏向早睡早起。\n- 最大摄氧量基准: 42 ml/kg/min"),
-            ("goals.md", "健康与运动目标", "## 2026年核心健康与体能目标\n1. 提升最大摄氧量 (VO2 Max) 至 48 ml/kg/min。\n2. 降低体脂率至 14%，增加约 2kg 净肌肉量。\n3. 优化睡眠效率，减少深夜惊醒，确保每日深睡时长不少于 90 分钟。"),
-            ("diet.md", "饮食偏好与禁忌", "## 膳食偏好与日常规避\n- 规避项: 具有轻度乳糖不耐受，规避牛奶，采用植物奶替代。\n- 咖啡因窗口: 每天下午 3 点后严格避免摄入任何咖啡因。\n- 宏量比例: 高蛋白低碳水配比，以鸡胸肉、牛排及大量绿叶菜为主。"),
-            ("sleep.md", "睡眠卫生与环境", "## 睡眠卫生规程与卧室环境\n- 卧室温度: 严格控制在 21°C，确保绝对黑暗与安静。\n- 床上设备: 22:30 后禁止在床上使用任何带屏幕的电子设备。\n- 辅助手段: 睡前进行 10 分钟正念呼吸拉伸，有助于稳定夜间 HRV。")
+            ("profile.md", "基本画像", "## 个人基本生理画像\n- 年龄: 待补充\n- 训练水平: 待补充\n- 作息偏好: 待补充\n- 最大摄氧量基准: 待补充"),
+            ("goals.md", "健康与运动目标", "## 健康与体能目标\n- 待补充"),
+            ("diet.md", "饮食偏好与禁忌", "## 膳食偏好与日常规避\n- 饮食偏好: 待补充\n- 过敏或不耐受: 待补充\n- 咖啡因窗口: 待补充"),
+            ("sleep.md", "睡眠卫生与环境", "## 睡眠卫生规程与卧室环境\n- 卧室环境: 待补充\n- 睡前习惯: 待补充")
         ]
         
         for (filename, title, content) in docs {
@@ -432,8 +467,8 @@ struct AIModelSettingsView: View {
     @State private var testResultText = ""
     @State private var showSaveSuccess = false
     
-    let textModels = ["DeepSeek V4 Pro", "Kimi 2.6", "Claude 3.5 Sonnet"]
-    let visionModels = ["DeepSeek Vision", "Kimi 2.6", "Claude 3.5 Sonnet"]
+    let textModels = DeepSeekTextModel.allCases.map(\.rawValue)
+    let visionModels = ["Kimi 2.6"]
     
     var body: some View {
         Form {
@@ -473,7 +508,9 @@ struct AIModelSettingsView: View {
             
             Section(header: Text("连接测试与保存")) {
                 Button {
-                    testConnection()
+                    Task {
+                        await testConnection()
+                    }
                 } label: {
                     HStack {
                         if isTesting {
@@ -493,7 +530,6 @@ struct AIModelSettingsView: View {
                 
                 Button("保存配置") {
                     saveKeysToKeychain()
-                    showSaveSuccess = true
                 }
                 .bold()
                 .foregroundStyle(Color.white)
@@ -524,23 +560,55 @@ struct AIModelSettingsView: View {
     }
     
     private func saveKeysToKeychain() {
-        try? KeychainService.shared.save(deepseekKey, account: "deepseek_api_key")
-        try? KeychainService.shared.save(kimiKey, account: FoodPhotoAnalyzer.keychainAccount)
+        do {
+            let trimmedDeepSeekKey = deepseekKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedKimiKey = kimiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if trimmedDeepSeekKey.isEmpty {
+                KeychainService.shared.delete(account: "deepseek_api_key")
+            } else {
+                try KeychainService.shared.save(trimmedDeepSeekKey, account: "deepseek_api_key")
+            }
+
+            if trimmedKimiKey.isEmpty {
+                KeychainService.shared.delete(account: FoodPhotoAnalyzer.keychainAccount)
+            } else {
+                try KeychainService.shared.save(trimmedKimiKey, account: FoodPhotoAnalyzer.keychainAccount)
+            }
+            showSaveSuccess = true
+        } catch {
+            testResultText = "保存失败: \(error.localizedDescription)"
+        }
     }
     
-    private func testConnection() {
+    @MainActor
+    private func testConnection() async {
+        let key = deepseekKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else {
+            testResultText = "测试失败: 请先填写 DeepSeek API 密钥。"
+            return
+        }
+
         isTesting = true
         testResultText = ""
-        
-        Timer.scheduledTimer(withTimeInterval: 1.2, repeats: false) { _ in
-            Task { @MainActor in
-                isTesting = false
-                if deepseekKey.isEmpty {
-                    testResultText = "❌ 测试失败: 请先填写 DeepSeek API 密钥！"
-                } else {
-                    testResultText = "✅ 连接测试成功! 模型延时: 42ms (已通达)"
-                }
-            }
+        defer { isTesting = false }
+
+        do {
+            let startedAt = Date()
+            _ = try await DeepSeekProvider(
+                apiKey: key,
+                model: DeepSeekTextModel(displayName: textModel).apiIdentifier
+            ).complete(
+                request: LLMRequest(
+                    systemPrompt: "You are testing a private health app provider connection.",
+                    userPrompt: "请用一句简短中文确认连接成功。",
+                    contextJSON: "{}"
+                )
+            )
+            let latencyMilliseconds = Int(Date().timeIntervalSince(startedAt) * 1_000)
+            testResultText = "连接测试成功。模型延时: \(latencyMilliseconds)ms"
+        } catch {
+            testResultText = "连接测试失败: \(error.localizedDescription)"
         }
     }
 }
@@ -575,25 +643,75 @@ struct AppearanceSettingsView: View {
 
 // 5. Notification Settings View
 struct NotificationSettingsView: View {
-    @AppStorage("vela_notifications_enabled") private var notificationsOn = true
-    @AppStorage("vela_morning_brief") private var coachBriefOn = true
-    @AppStorage("vela_evening_sync") private var weeklyReportOn = true
+    @AppStorage("agent_abnormal_metric_alerts") private var abnormalMetricAlertsOn = true
+    @AppStorage("agent_morning_brief_alerts") private var morningBriefOn = true
+    @AppStorage("agent_bedtime_reminders") private var bedtimeRemindersOn = true
+    @AppStorage("agent_bedtime_hour") private var bedtimeHour = 22
+    @AppStorage("agent_bedtime_minute") private var bedtimeMinute = 0
+    @State private var authorizationMessage = ""
     
     var body: some View {
         Form {
             Section(header: Text("通知通道")) {
-                Toggle("接收通知推送", isOn: $notificationsOn)
-                Toggle("晨间健康简报", isOn: $coachBriefOn)
-                Toggle("周日周报汇总", isOn: $weeklyReportOn)
+                Toggle("异常指标提醒", isOn: $abnormalMetricAlertsOn)
+                    .onChange(of: abnormalMetricAlertsOn) { _, newValue in
+                        NotificationService.shared.abnormalMetricAlertsEnabled = newValue
+                        requestAuthorizationIfNeeded(enabled: newValue)
+                    }
+                Toggle("晨间健康简报", isOn: $morningBriefOn)
+                    .onChange(of: morningBriefOn) { _, newValue in
+                        NotificationService.shared.morningBriefAlertsEnabled = newValue
+                        requestAuthorizationIfNeeded(enabled: newValue)
+                    }
+                Toggle("睡前提醒", isOn: $bedtimeRemindersOn)
+                    .onChange(of: bedtimeRemindersOn) { _, newValue in
+                        NotificationService.shared.bedtimeRemindersEnabled = newValue
+                        requestAuthorizationIfNeeded(enabled: newValue)
+                    }
+            }
+
+            Section(header: Text("睡前提醒时间")) {
+                Picker("小时", selection: $bedtimeHour) {
+                    ForEach(0..<24, id: \.self) { hour in
+                        Text(String(format: "%02d", hour)).tag(hour)
+                    }
+                }
+                Picker("分钟", selection: $bedtimeMinute) {
+                    ForEach([0, 15, 30, 45], id: \.self) { minute in
+                        Text(String(format: "%02d", minute)).tag(minute)
+                    }
+                }
+                .onChange(of: bedtimeHour) { _, _ in
+                    NotificationService.shared.scheduleBedtimeReminder()
+                }
+                .onChange(of: bedtimeMinute) { _, _ in
+                    NotificationService.shared.scheduleBedtimeReminder()
+                }
+            }
+
+            if !authorizationMessage.isEmpty {
+                Section {
+                    Text(authorizationMessage)
+                        .font(.caption)
+                }
             }
         }
-        .navigationTitle("通知通知")
+        .navigationTitle("通知")
+    }
+
+    private func requestAuthorizationIfNeeded(enabled: Bool) {
+        guard enabled else { return }
+        Task {
+            let granted = await NotificationService.shared.requestAuthorization()
+            authorizationMessage = granted ? "系统通知权限已开启。" : "系统通知权限未开启，请在系统设置中允许 Vela 通知。"
+        }
     }
 }
 
 // 6. Customization Settings View
 struct CustomizationSettingsView: View {
     @AppStorage("vela_daily_calorie_target") private var dailyCalorieTarget = 2000
+    @AppStorage(SleepTargetSettings.hoursKey) private var sleepTargetHours = SleepTargetSettings.defaultHours
     @State private var tempTarget = 2000
     
     var body: some View {
@@ -604,6 +722,18 @@ struct CustomizationSettingsView: View {
                     dailyCalorieTarget = tempTarget
                 }
                 .tint(Color(hex: "#C56B4A"))
+            }
+
+            Section(header: Text("睡眠目标")) {
+                Picker("每晚目标时长", selection: $sleepTargetHours) {
+                    ForEach(SleepTargetSettings.availableHours, id: \.self) { hours in
+                        Text(SleepTargetSettings.displayHours(hours)).tag(hours)
+                    }
+                }
+
+                Text("该目标会用于睡眠评分和睡眠详情展示。")
+                    .font(.caption)
+                    .foregroundStyle(Color(hex: "#8E8A80"))
             }
         }
         .onAppear {
@@ -621,14 +751,14 @@ struct ShortcutsSettingsView: View {
                 Text("Siri 快捷指令与语音集成")
                     .font(.system(size: 20, weight: .bold))
                 
-                Text("Vela 现已全面接入 Apple Shortcuts，您可以在 Siri 或快捷指令 App 中构建工作流：")
+                Text("以下快捷指令已通过 App Intents 接入，可在快捷指令 App 或 Siri 中使用：")
                     .font(.system(size: 14))
                     .foregroundStyle(Color(hex: "#8E8A80"))
                 
                 VStack(alignment: .leading, spacing: 14) {
-                    shortcutGuideRow(command: "“Hey Siri, 记录昨天的饮水”", desc: "自动为您在 SwiftData 补录 350ml 补水值")
-                    shortcutGuideRow(command: "“Hey Siri, 询问我的就绪状态”", desc: "自动为您唤起 Vela Coach 对话框并分析今日精力")
-                    shortcutGuideRow(command: "“Hey Siri, 扫描我的午餐”", desc: "打开快速加号相机扫描识别食物克数")
+                    shortcutGuideRow(command: "查看 Vela 今日状态", desc: "打开首页查看今日恢复、睡眠和训练负荷。")
+                    shortcutGuideRow(command: "询问 Vela 就绪状态", desc: "打开 Coach 并分析今天最重要的行动建议。")
+                    shortcutGuideRow(command: "用 Vela 扫描餐食", desc: "打开餐食拍照分析入口。")
                 }
                 
                 Spacer()
@@ -656,26 +786,26 @@ struct ShortcutsSettingsView: View {
 
 // 8. Language Settings View
 struct LanguageSettingsView: View {
-    @AppStorage("vela_app_language") private var languageRaw = "zh"
+    @AppStorage("vela_app_language") private var languageRaw = AppLanguage.simplifiedChinese.rawValue
     
     var body: some View {
         Form {
             Section(header: Text("多语言选择")) {
-                Button { languageRaw = "zh" } label: {
+                Button { languageRaw = AppLanguage.simplifiedChinese.rawValue } label: {
                     HStack {
                         Text("简体中文")
                             .foregroundStyle(Color(hex: "#1A1917"))
                         Spacer()
-                        if languageRaw == "zh" { Image(systemName: "checkmark").foregroundStyle(Color(hex: "#C56B4A")) }
+                        if languageRaw == AppLanguage.simplifiedChinese.rawValue { Image(systemName: "checkmark").foregroundStyle(Color(hex: "#C56B4A")) }
                     }
                 }
                 
-                Button { languageRaw = "en" } label: {
+                Button { languageRaw = AppLanguage.english.rawValue } label: {
                     HStack {
                         Text("English")
                             .foregroundStyle(Color(hex: "#1A1917"))
                         Spacer()
-                        if languageRaw == "en" { Image(systemName: "checkmark").foregroundStyle(Color(hex: "#C56B4A")) }
+                        if languageRaw == AppLanguage.english.rawValue { Image(systemName: "checkmark").foregroundStyle(Color(hex: "#C56B4A")) }
                     }
                 }
             }
@@ -702,8 +832,8 @@ struct DataSourceSettingsView: View {
                 VStack(spacing: 0) {
                     sensorRow(
                         name: "Apple 健康",
-                        status: isSyncing ? "同步中" : "已连接",
-                        count: lastSync.map { "最近同步：\($0.formatted(date: .omitted, time: .shortened))" } ?? "下拉首页或点击下方按钮同步"
+                        status: appleHealthStatus,
+                        count: appleHealthDetail
                     )
                 }
                 .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white))
@@ -742,6 +872,30 @@ struct DataSourceSettingsView: View {
         .background(Color(hex: "#F5F3F0"))
         .navigationTitle("健康数据源")
     }
+
+    private var appleHealthStatus: String {
+        if isSyncing { return "同步中" }
+        switch dashboardVM.dashboard.source {
+        case .healthKit: return "已同步"
+        case .cache: return "已读取缓存"
+        case .empty: return "待同步"
+        case .preview: return "模拟数据"
+        }
+    }
+
+    private var appleHealthDetail: String {
+        switch dashboardVM.dashboard.source {
+        case .healthKit:
+            return lastSync.map { "最近同步：\($0.formatted(date: .omitted, time: .shortened))" }
+                ?? "已读取 Apple 健康数据"
+        case .cache:
+            return "正在显示最近一次 Apple 健康快照"
+        case .empty:
+            return "未读取到可用健康数据"
+        case .preview:
+            return "当前为调试模拟数据"
+        }
+    }
     
     private func sensorRow(name: String, status: String, count: String) -> some View {
         HStack {
@@ -763,181 +917,219 @@ struct DataSourceSettingsView: View {
     }
 }
 
-// 10. CGM settings view
-struct CGMSettingsView: View {
-    @AppStorage("vela_cgm_configured") private var cgmState = false
-    
-    var body: some View {
-        if !cgmState {
-            VStack(spacing: 14) {
-                Image(systemName: "waveform.path.ecg.rectangle")
-                    .font(.system(size: 36))
-                    .foregroundStyle(Color(hex: "#30A2FF"))
-                Text("尚未配置连续血糖监测")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
-                Text("当前没有可确认的 CGM 数据源。连接真实设备后，这里才会展示血糖曲线和传感器状态。")
-                    .font(.system(size: 13))
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(Color(hex: "#8E8A80"))
-            }
-            .padding(24)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(hex: "#F5F3F0"))
-            .navigationTitle("连续血糖监测 (CGM)")
-        } else {
-            ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                // Header connected box
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Dexcom G7 CGM")
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundStyle(Color(hex: "#1A1917"))
-                        Text("血糖感应监测仪 · 蓝牙配对成功")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Color(hex: "#8E8A80"))
-                    }
-                    Spacer()
-                    Circle()
-                        .fill(Color(hex: "#34C759"))
-                        .frame(width: 12, height: 12)
-                }
-                .padding(16)
-                .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white))
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
-                
-                // GORGEOUS CGM Fluctuating Chart
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack {
-                        Text("24小时血糖波动监测")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(Color(hex: "#1A1917"))
-                        Spacer()
-                        Text("当前: 5.4 mmol/L")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(Color(hex: "#34C759"))
-                    }
-                    
-                    // Bezier glucose simulator
-                    ZStack {
-                        // Highlight target green zone (4.0 to 10.0)
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(hex: "#34C759").opacity(0.08))
-                            .frame(height: 80)
-                            .offset(y: 10)
-                        
-                        // Fluctuating Bezier line
-                        CGMBezierGraph()
-                            .stroke(Color(hex: "#34C759"), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
-                            .frame(height: 120)
-                        
-                        // Horizontal targets
-                        VStack {
-                            Spacer()
-                            Divider() // normal lower bounds
-                            Spacer()
-                        }
-                    }
-                    .frame(height: 120)
-                    
-                    HStack {
-                        Text("06:00")
-                        Spacer()
-                        Text("12:00")
-                        Spacer()
-                        Text("18:00")
-                        Spacer()
-                        Text("24:00")
-                    }
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(Color(hex: "#BFB9AC"))
-                }
-                .padding(16)
-                .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.white))
-                .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
-                
-                // Sensor life stats
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("传感器统计")
-                        .font(.system(size: 14, weight: .bold))
-                    
-                    HStack {
-                        Text("传感器到期剩余天数")
-                        Spacer()
-                        Text("8 天 4 小时")
-                            .font(.system(size: 14, weight: .bold))
-                    }
-                    Divider()
-                    HStack {
-                        Text("警告阈值 (低)")
-                        Spacer()
-                        Text("3.9 mmol/L")
-                            .font(.system(size: 14, weight: .bold))
-                    }
-                    Divider()
-                    HStack {
-                        Text("警告阈值 (高)")
-                        Spacer()
-                        Text("10.0 mmol/L")
-                            .font(.system(size: 14, weight: .bold))
-                    }
-                }
-                .padding(16)
-                .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white))
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
-                
-                Spacer()
-            }
-            .padding(16)
-        }
-            .background(Color(hex: "#F5F3F0"))
-            .navigationTitle("连续血糖监测 (CGM)")
-        }
+struct CGMSettingsSummary {
+    let readings: [BloodGlucoseReading]
+
+    init(readings: [BloodGlucoseReading]) {
+        self.readings = readings.sorted { $0.date < $1.date }
     }
+
+    var latestReading: BloodGlucoseReading? { readings.last }
+    var readingCount: Int { readings.count }
+    var hasReadings: Bool { !readings.isEmpty }
 }
 
-struct CGMBezierGraph: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let width = rect.width
-        let height = rect.height
-        
-        let points: [CGPoint] = [
-            CGPoint(x: 0, y: height * 0.6),
-            CGPoint(x: width * 0.15, y: height * 0.5),
-            CGPoint(x: width * 0.3, y: height * 0.72),
-            CGPoint(x: width * 0.45, y: height * 0.42),
-            CGPoint(x: width * 0.6, y: height * 0.58),
-            CGPoint(x: width * 0.75, y: height * 0.52),
-            CGPoint(x: width * 0.9, y: height * 0.65),
-            CGPoint(x: width, y: height * 0.56)
-        ]
-        
-        path.move(to: points[0])
-        
-        for i in 0..<points.count - 1 {
-            let p1 = points[i]
-            let p2 = points[i+1]
-            let controlPoint1 = CGPoint(x: (p1.x + p2.x) / 2, y: p1.y)
-            let controlPoint2 = CGPoint(x: (p1.x + p2.x) / 2, y: p2.y)
-            path.addCurve(to: p2, control1: controlPoint1, control2: controlPoint2)
+// 10. CGM settings view
+struct CGMSettingsView: View {
+    @State private var readings: [BloodGlucoseReading] = []
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+
+    private var summary: CGMSettingsSummary {
+        CGMSettingsSummary(readings: readings)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                sourceCard
+
+                if isLoading {
+                    ProgressView("正在读取 Apple 健康血糖数据...")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 40)
+                } else if let errorMessage {
+                    emptyCard(message: errorMessage)
+                } else if summary.hasReadings {
+                    latestReadingCard
+                    trendCard
+                } else {
+                    emptyCard(message: "Apple 健康中暂未读取到血糖样本。授权高级健康数据后，如果你的 CGM 已将记录写入 Apple 健康，趋势会自动出现在这里。")
+                }
+
+                Button {
+                    Task { await requestAccessAndReload() }
+                } label: {
+                    Label("请求权限并刷新", systemImage: "arrow.clockwise")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 46)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color(hex: "#30A2FF"))
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(isLoading)
+            }
+            .padding(20)
         }
-        
-        return path
+        .background(Color(hex: "#F5F3F0"))
+        .navigationTitle("连续血糖监测 (CGM)")
+        .task {
+            await reload()
+        }
+    }
+
+    private var sourceCard: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "waveform.path.ecg.rectangle")
+                .font(.system(size: 30))
+                .foregroundStyle(Color(hex: "#30A2FF"))
+                .frame(width: 54, height: 54)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color(hex: "#30A2FF").opacity(0.12))
+                )
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Apple 健康 CGM 数据")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(Color(hex: "#1A1917"))
+                Text("读取已同步到 Apple 健康的血糖样本")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(hex: "#8E8A80"))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(cardBackground)
+    }
+
+    private var latestReadingCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("最新血糖")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(Color(hex: "#8E8A80"))
+
+            if let latest = summary.latestReading {
+                HStack(alignment: .lastTextBaseline, spacing: 6) {
+                    Text(latest.milligramsPerDeciliter.formatted(.number.precision(.fractionLength(0))))
+                        .font(.system(size: 42, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color(hex: "#1A1917"))
+                    Text("mg/dL")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Color(hex: "#8E8A80"))
+                }
+
+                Text("最近更新 \(latest.date.formatted(date: .abbreviated, time: .shortened)) · 近 14 天共 \(summary.readingCount) 条")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(hex: "#8E8A80"))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(cardBackground)
+    }
+
+    private var trendCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("近 14 天趋势")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Color(hex: "#1A1917"))
+
+            Chart(summary.readings) { reading in
+                LineMark(
+                    x: .value("时间", reading.date),
+                    y: .value("血糖", reading.milligramsPerDeciliter)
+                )
+                .foregroundStyle(Color(hex: "#30A2FF"))
+                .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                .interpolationMethod(.catmullRom)
+
+                PointMark(
+                    x: .value("时间", reading.date),
+                    y: .value("血糖", reading.milligramsPerDeciliter)
+                )
+                .foregroundStyle(Color(hex: "#30A2FF"))
+            }
+            .chartXAxis(.hidden)
+            .chartYAxis {
+                AxisMarks(position: .leading)
+            }
+            .frame(height: 190)
+        }
+        .padding(16)
+        .background(cardBackground)
+    }
+
+    private func emptyCard(message: String) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "drop.triangle")
+                .font(.system(size: 32))
+                .foregroundStyle(Color(hex: "#30A2FF"))
+            Text("等待血糖数据")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(Color(hex: "#1A1917"))
+            Text(message)
+                .font(.system(size: 13))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Color(hex: "#8E8A80"))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(24)
+        .background(cardBackground)
+    }
+
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .fill(Color.white)
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+            )
+    }
+
+    @MainActor
+    private func requestAccessAndReload() async {
+        isLoading = true
+        do {
+            try await HealthAuthorizationService().requestAuthorization(tier: .advanced)
+            await reload()
+        } catch {
+            errorMessage = "无法读取 Apple 健康血糖数据：\(error.localizedDescription)"
+            isLoading = false
+        }
+    }
+
+    @MainActor
+    private func reload() async {
+        isLoading = true
+        errorMessage = nil
+        let now = Date()
+        let start = Calendar.current.date(byAdding: .day, value: -14, to: now) ?? now
+
+        do {
+            readings = try await HealthKitQueryService().bloodGlucoseSamples(
+                in: DateRangeQuery(start: start, end: now)
+            )
+        } catch {
+            errorMessage = "无法读取 Apple 健康血糖数据：\(error.localizedDescription)"
+        }
+        isLoading = false
     }
 }
 
 // 9. iCloud Sync Settings View
 struct iCloudSyncSettingsView: View {
-    @AppStorage("vela_icloud_sync_enabled") private var icloudSyncEnabled = true
-    
     var body: some View {
         Form {
             Section(header: Text("iCloud云同步")) {
-                Toggle("启用iCloud自动备份同步", isOn: $icloudSyncEnabled)
-                
-                Text("开启后，您的所有 SwiftData 手记习惯打卡记录、宏量元素记录及训练计划指标都将自动备份并安全同步至您的全部苹果设备。")
+                Text("尚未接入")
+                    .font(.system(size: 15, weight: .bold))
+
+                Text("当前版本只使用本机 SwiftData 存储，尚未配置 CloudKit 同步。接入并验证跨设备合并策略前，不会展示自动备份开关。")
                     .font(.system(size: 11))
                     .foregroundStyle(Color(hex: "#8E8A80"))
             }
@@ -951,18 +1143,19 @@ struct WhatsNewSettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text("Vela v2.0.0 重大更新")
+                Text("Vela v0.1.0 当前能力")
                     .font(.system(size: 22, weight: .bold))
                 
-                Text("欢迎使用全新设计的 local-first 极致体验健康 App：")
+                Text("当前版本已实现以下 local-first 能力：")
                     .font(.system(size: 14))
                     .foregroundStyle(Color(hex: "#8E8A80"))
                 
                 VStack(alignment: .leading, spacing: 16) {
-                    featureUpdateBlock(title: "🚀 iOS 26 弹性滑移动效 Dock 栏", desc: "基于 MatchedGeometry 物理弹性设计的悬浮 Dock 极简滑块指示器。")
-                    featureUpdateBlock(title: "➕ Standalone 独立加号浮动面板", desc: "加号按钮完全剥离浮动于右下角，提供 3×3 极具拟真质感的动作网格。")
-                    featureUpdateBlock(title: "📅 31天多彩日历网格总览", desc: "点击 Today 根部日期一键呼起全景多彩日历评分圆环，椰树 🌴 状态细节还原。")
-                    featureUpdateBlock(title: "⛅ 自动物理天气感应", desc: "基于蜂窝 GeoIP + OpenMeteo 实时查询，零位置权限秒级同步真实温度与市级定位。")
+                    featureUpdateBlock(title: "弹性滑动 Dock 栏", desc: "基于 MatchedGeometry 的悬浮 Dock 滑块指示器。")
+                    featureUpdateBlock(title: "快捷录入面板", desc: "加号面板提供餐食、活动、Coach 与处方入口。")
+                    featureUpdateBlock(title: "健康日历总览", desc: "点击首页日期查看每日评分历史。")
+                    featureUpdateBlock(title: "天气同步", desc: "基于 GeoIP 与 OpenMeteo 查询温度和城市，不申请精确位置权限。")
+                    featureUpdateBlock(title: "食品条码查询", desc: "扫描包装条码后从 Open Food Facts 获取营养数据，并在保存前确认。")
                 }
                 
                 Spacer()

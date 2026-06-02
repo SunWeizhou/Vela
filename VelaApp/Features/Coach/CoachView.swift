@@ -4,11 +4,20 @@ import SwiftData
 // MARK: - VelaCoachView — ChatGPT-Style Coach with DeepSeek AI
 // 中文默认 · 深色模式 · 欢迎区 · 对话气泡 · 打字指示器 · 底部编辑框 · 侧滑历史对话管理
 
+enum CoachPresentationStyle {
+    case embedded
+    case quickCover
+}
+
 struct VelaCoachView: View {
+    var presentation: CoachPresentationStyle = .quickCover
+
     @Environment(\.colorScheme) private var cs
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     @EnvironmentObject private var services: VelaServices
+    @ObservedObject private var appState = VelaAppState.shared
 
     @StateObject private var vm = CoachChatVM()
     @State private var inputText: String = ""
@@ -19,6 +28,9 @@ struct VelaCoachView: View {
     @State private var isRenamingSession = false
     @State private var renamingSession: CoachSessionRecord? = nil
     @State private var renameText = ""
+    @State private var showWikiProfile = false
+    @State private var showModelSettings = false
+    @State private var handledRouteRevision = -1
 
     @Query(
         filter: #Predicate<JournalEntryRecord> { _ in true },
@@ -30,7 +42,19 @@ struct VelaCoachView: View {
         sort: \AIReportRecord.createdAt, order: .reverse
     ) private var savedReports: [AIReportRecord]
 
+    @Query(
+        filter: #Predicate<MemoryEventRecord> { $0.status == "proposed" },
+        sort: \MemoryEventRecord.createdAt, order: .reverse
+    ) private var pendingMemoryProposals: [MemoryEventRecord]
+
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
+
+    private var composerBottomPadding: CGFloat {
+        if presentation == .embedded {
+            return isFocused ? 12 : 88
+        }
+        return 28
+    }
 
     var body: some View {
         ZStack {
@@ -39,6 +63,10 @@ struct VelaCoachView: View {
                 headerView
                     .background(.ultraThinMaterial)
 
+                if !pendingMemoryProposals.isEmpty {
+                    memoryInboxBanner
+                }
+
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(spacing: 20) {
@@ -46,7 +74,7 @@ struct VelaCoachView: View {
                                 welcomeView
                             }
 
-                            ForEach(vm.messages) { msg in
+                            ForEach(vm.messages.filter { !$0.isStreaming }) { msg in
                                 MessageBubble(
                                     text: msg.content,
                                     isUser: msg.role == .user,
@@ -55,14 +83,28 @@ struct VelaCoachView: View {
                             }
 
                             if vm.isStreaming {
-                                TypingIndicator()
-                                    .id("typing")
+                                if vm.streamingContent.isEmpty {
+                                    TypingIndicator()
+                                        .id("typing")
+                                } else {
+                                    MessageBubble(
+                                        text: vm.streamingContent,
+                                        isUser: false,
+                                        time: "",
+                                        isStreaming: true
+                                    )
+                                    .id("streaming")
+                                }
                             }
                         }
                         .padding(.horizontal, VelaTheme.pagePadding)
                         .padding(.vertical, 16)
                     }
                     .scrollIndicators(.hidden)
+                    .scrollDismissesKeyboard(.interactively)
+                    .onTapGesture {
+                        isFocused = false
+                    }
                     .onChange(of: vm.messages.count) { _, _ in
                         if let last = vm.messages.last {
                             withAnimation {
@@ -75,6 +117,12 @@ struct VelaCoachView: View {
                             withAnimation {
                                 proxy.scrollTo("typing", anchor: .bottom)
                             }
+                        }
+                    }
+                    .onChange(of: vm.streamingContent) { _, content in
+                        guard !content.isEmpty else { return }
+                        withAnimation {
+                            proxy.scrollTo("streaming", anchor: .bottom)
                         }
                     }
                 }
@@ -108,18 +156,11 @@ struct VelaCoachView: View {
         }
         .onAppear {
             vm.loadSessions(modelContext: modelContext)
-
-            if VelaAppState.shared.forceNewCoachSession {
-                vm.createNewSession(modelContext: modelContext)
-                VelaAppState.shared.forceNewCoachSession = false
-            }
-
-            if let question = VelaAppState.shared.prefilledCoachQuestion {
-                sendMessage(question)
-                VelaAppState.shared.prefilledCoachQuestion = nil
-            }
-
+            consumePendingRouteIfVisible()
             try? DailyLogService.refresh(dashboard: dashboard)
+        }
+        .onChange(of: appState.coachRouteRevision) { _, _ in
+            consumePendingRouteIfVisible()
         }
         .alert("重命名对话", isPresented: $isRenamingSession) {
             TextField("输入新标题...", text: $renameText)
@@ -131,6 +172,24 @@ struct VelaCoachView: View {
                     vm.renameSession(session, to: renameText, modelContext: modelContext)
                 }
                 renamingSession = nil
+            }
+        }
+        .sheet(isPresented: $showWikiProfile) {
+            NavigationStack {
+                WikiProfileView()
+            }
+        }
+        .sheet(isPresented: $showModelSettings) {
+            NavigationStack {
+                AIModelSettingsView()
+            }
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("完成") {
+                    isFocused = false
+                }
             }
         }
     }
@@ -271,10 +330,10 @@ struct VelaCoachView: View {
                 }
                 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Weizhou")
+                    Text("本机健康资料")
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(Color(hex: "#1A1917"))
-                    Text("Vela 创始会员")
+                    Text("Local-first 存储")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(Color(hex: "#C56B4A"))
                 }
@@ -322,7 +381,7 @@ struct VelaCoachView: View {
 
                 HStack(spacing: 4) {
                     Circle().fill(vm.isReady ? VelaTheme.success : VelaTheme.muted).frame(width: 6, height: 6)
-                    Text(vm.isReady ? "在线" : "未连接")
+                    Text("\(vm.isReady ? "在线" : "未连接") · \(DeepSeekTextModel.stored.rawValue)")
                         .font(VelaTheme.caption2())
                         .foregroundStyle(vm.isReady ? VelaTheme.success : VelaTheme.muted)
                 }
@@ -342,13 +401,79 @@ struct VelaCoachView: View {
                     )
             }
             .buttonStyle(.plain)
+
+            Button {
+                showModelSettings = true
+            } label: {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color(hex: "#C56B4A"))
+                    .frame(width: 36, height: 36)
+                    .background(
+                        Circle().fill(VelaTheme.surface)
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Coach 模型设置")
+
+            if presentation == .quickCover {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(Color(hex: "#C56B4A"))
+                        .frame(width: 36, height: 36)
+                        .background(
+                            Circle().fill(VelaTheme.surface)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("关闭 Coach")
+            }
         }
         .padding(.horizontal, 20)
-        .padding(.top, 56)
+        .padding(.top, 8)
         .padding(.bottom, 12)
     }
 
     // MARK: - Welcome
+
+    private var memoryInboxBanner: some View {
+        Button {
+            showWikiProfile = true
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "brain.head.profile")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color(hex: "#C56B4A"))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("待确认长期记忆")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(VelaTheme.fg)
+                    Text("\(pendingMemoryProposals.count) 条候选内容，确认后才会写入你的档案")
+                        .font(.system(size: 11))
+                        .foregroundStyle(VelaTheme.muted)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(VelaTheme.muted)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color(hex: "#FFF8F2"))
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(Color(hex: "#E8E4DD"))
+                    .frame(height: 0.5)
+            }
+        }
+        .buttonStyle(.plain)
+    }
 
     private var welcomeView: some View {
         VStack(spacing: 20) {
@@ -443,7 +568,7 @@ struct VelaCoachView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .padding(.bottom, 28)
+        .padding(.bottom, composerBottomPadding)
         .background(VelaTheme.bg)
         .overlay(alignment: .top) {
             Rectangle()
@@ -453,6 +578,26 @@ struct VelaCoachView: View {
     }
 
     // MARK: - Actions
+
+    private func consumePendingRouteIfVisible() {
+        let expectedDestination: VelaAppState.CoachRouteDestination = presentation == .embedded
+            ? .embedded
+            : .quickCover
+        guard appState.coachRouteDestination == expectedDestination else { return }
+        guard presentation == .quickCover || appState.selectedTab == VelaAppState.coachTabIndex else { return }
+        guard handledRouteRevision != appState.coachRouteRevision else { return }
+        handledRouteRevision = appState.coachRouteRevision
+
+        if appState.forceNewCoachSession {
+            vm.createNewSession(modelContext: modelContext)
+            appState.forceNewCoachSession = false
+        }
+
+        if let question = appState.prefilledCoachQuestion {
+            sendMessage(question)
+            appState.prefilledCoachQuestion = nil
+        }
+    }
 
     private func sendMessage(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespaces)

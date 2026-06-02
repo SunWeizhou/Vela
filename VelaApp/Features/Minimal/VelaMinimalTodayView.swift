@@ -11,6 +11,7 @@ struct VelaTodayView: View {
     @Environment(\.velaScrollDirection) private var scrollDirection
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var dashboardVM: DashboardViewModel
+    @ObservedObject private var appState = VelaAppState.shared
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
 
@@ -21,22 +22,12 @@ struct VelaTodayView: View {
 
     private var hrvValue: Double { dashboard.recoveryMetrics.hrvMilliseconds ?? 0 }
     private var rhrValue: Double { dashboard.recoveryMetrics.restingHeartRate ?? 0 }
-    
+
     // Stress & Energy
     private var stressLevel: Double { dashboard.stress.stressIndex }
     private var energyScore: Double { dashboard.energy.currentEnergy }
 
-    private var highestStress: String {
-        guard dashboard.stress.hasData else { return "--" }
-        let val = min(98.0, max(stressLevel * 1.28, stressLevel + 16.0))
-        return "\(Int(val.rounded()))"
-    }
-
-    private var lowestStress: String {
-        guard dashboard.stress.hasData else { return "--" }
-        let val = max(8.0, min(stressLevel * 0.48, stressLevel - 14.0))
-        return "\(Int(val.rounded()))"
-    }
+    @AppStorage("vela_daily_calorie_target") private var dailyCalorieTarget = 2000
 
     // Dynamic states for nutrition logs
     @State private var todayCalories: Int = 0
@@ -45,7 +36,7 @@ struct VelaTodayView: View {
     @State private var todayFat: Int = 0
 
     private var calorieFraction: CGFloat {
-        CGFloat(min(1.0, Double(todayCalories) / 2000.0))
+        CGFloat(min(1.0, Double(todayCalories) / Double(max(dailyCalorieTarget, 1))))
     }
 
     private var coachMessage: String {
@@ -78,7 +69,7 @@ struct VelaTodayView: View {
         default: return "beach.umbrella.fill"
         }
     }
-    
+
     private var statusPillColor: Color {
         switch activeStatusRaw {
         case "active": return Color(hex: "#34C759") // Teal green
@@ -87,7 +78,7 @@ struct VelaTodayView: View {
         default: return Color(hex: "#4285F4") // Blue
         }
     }
-    
+
     private var statusPillTitle: String {
         switch activeStatusRaw {
         case "active": return "活跃"
@@ -102,7 +93,7 @@ struct VelaTodayView: View {
             VStack(alignment: .leading, spacing: 16) {
                 // 1. Date Header with Selector & Share & Avatar
                 dateHeaderRow
-                
+
                 if let errorMessage = dashboardVM.errorMessage {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
@@ -126,17 +117,23 @@ struct VelaTodayView: View {
                             .stroke(Color.red.opacity(0.3), lineWidth: 1)
                     )
                 }
-                
+
                 // 2. Horizontal Status & Weather Pills
                 pillsRow
-                
+
                 // 3. White Cockpit Card (Strain, Recovery, Sleep side-by-side rings)
                 cockpitCard
-                
+
+                // 3.5 AI Suggestions Deck
+                aiSuggestionsSection
+
                 // 4. Stress & Energy Section
                 stressAndEnergySection
-                
-                // 5. Nutrition (营养) Section
+
+                // 5. Daily Activity Section
+                dailyActivitySection
+
+                // 6. Nutrition (营养) Section
                 nutritionSection
             }
             .padding(.horizontal, 16)
@@ -146,16 +143,25 @@ struct VelaTodayView: View {
         .scrollIndicators(.hidden)
         .velaTrackScroll(direction: scrollDirection)
         .background(Color(hex: "#F5F3F0")) // Warm canvas base
+        .onAppear {
+            dashboardVM.hydrateFromCache(modelContext: modelContext)
+            loadRealNutritionData()
+        }
         .task {
             await refreshDashboard()
         }
         .refreshable {
-            await refreshDashboard()
+            await refreshDashboard(force: true)
         }
-        .onChange(of: dashboardVM.selectedDate) { _ in
+        .onChange(of: dashboardVM.selectedDate) { _, _ in
+            dashboardVM.hydrateFromCache(modelContext: modelContext)
             Task {
                 await refreshDashboard()
             }
+        }
+        .onChange(of: appState.localDataRevision) { _, _ in
+            dashboardVM.hydrateFromCache(modelContext: modelContext)
+            loadRealNutritionData()
         }
         .sheet(isPresented: $showCalendarOverview) {
             CalendarOverviewSheetView()
@@ -184,11 +190,11 @@ struct VelaTodayView: View {
                     Text(dateHeaderString(for: dashboardVM.selectedDate))
                         .font(.system(size: 24, weight: .bold))
                         .foregroundStyle(Color(hex: "#1A1917"))
-                    
+
                     Image(systemName: "chevron.down")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Color(hex: "#8E8A80"))
-                    
+
                     if dashboard.source == .preview {
                         Text("模拟数据")
                             .font(.system(size: 10, weight: .bold))
@@ -200,9 +206,9 @@ struct VelaTodayView: View {
                 }
             }
             .buttonStyle(.plain)
-            
+
             Spacer()
-            
+
             HStack(spacing: 12) {
                 // Share button
                 ShareLink(item: todayShareText) {
@@ -214,7 +220,7 @@ struct VelaTodayView: View {
                         .shadow(color: Color.black.opacity(0.03), radius: 4, y: 2)
                 }
                 .buttonStyle(.plain)
-                
+
                 // Profile Avatar
                 Button {
                     showSettings = true
@@ -243,7 +249,7 @@ struct VelaTodayView: View {
             return formatMonthDayString(date)
         }
     }
-    
+
     private func formatMonthDayString(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
@@ -262,14 +268,14 @@ struct VelaTodayView: View {
                    let region = json["region"] as? String,
                    let lat = json["latitude"] as? Double,
                    let lon = json["longitude"] as? Double {
-                    
+
                     let weatherUrlString = "https://api.open-meteo.com/v1/forecast?latitude=\(lat)&longitude=\(lon)&current_weather=true"
                     guard let weatherUrl = URL(string: weatherUrlString) else { return }
                     let (weatherData, _) = try await URLSession.shared.data(from: weatherUrl)
                     if let weatherJson = try JSONSerialization.jsonObject(with: weatherData) as? [String: Any],
                        let current = weatherJson["current_weather"] as? [String: Any],
                        let temp = current["temperature"] as? Double {
-                        
+
                         await MainActor.run {
                             self.weatherTemp = "\(Int(temp))°C"
                             self.weatherLocation = "\(city), \(region)"
@@ -294,12 +300,12 @@ struct VelaTodayView: View {
                         Circle()
                             .fill(statusPillColor)
                             .frame(width: 32, height: 32)
-                        
+
                         Image(systemName: statusPillIcon)
                             .font(.system(size: 15))
                             .foregroundStyle(.white)
                     }
-                    
+
                     VStack(alignment: .leading, spacing: 2) {
                         Text(statusPillTitle)
                             .font(.system(size: 13, weight: .bold))
@@ -308,9 +314,9 @@ struct VelaTodayView: View {
                             .font(.system(size: 10))
                             .foregroundStyle(Color(hex: "#8E8A80"))
                     }
-                    
+
                     Spacer()
-                    
+
                     Image(systemName: "chevron.down")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(Color(hex: "#BFB9AC"))
@@ -328,19 +334,19 @@ struct VelaTodayView: View {
                 )
             }
             .buttonStyle(.plain)
-            
+
             // Dynamic Weather status pill (Successfully auto-syncs)
             HStack(spacing: 8) {
                 ZStack {
                     Circle()
                         .fill(Color(hex: "#F1F3F4"))
                         .frame(width: 32, height: 32)
-                    
+
                     Image(systemName: "cloud.sun.fill")
                         .font(.system(size: 14))
                         .foregroundStyle(Color(hex: "#8E8A80"))
                 }
-                
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(weatherTemp)
                         .font(.system(size: 13, weight: .bold))
@@ -350,7 +356,7 @@ struct VelaTodayView: View {
                         .foregroundStyle(Color(hex: "#8E8A80"))
                         .lineLimit(1)
                 }
-                
+
                 Spacer()
             }
             .padding(.horizontal, 10)
@@ -380,17 +386,17 @@ struct VelaTodayView: View {
                         useGradient: false,
                         size: 78,
                         label: "耗力",
-                        valueText: dashboard.strain.hasData ? "\(Int(dashboard.strain.score))%" : "--"
+                        valueText: dashboard.strain.hasData ? VelaMinimalFormatting.roundedPercentage(dashboard.strain.score) : "--"
                     )
                 }
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
-                
+
                 // Vertical divider line
                 Rectangle()
                     .fill(Color(hex: "#E8E4DD"))
                     .frame(width: 0.5, height: 60)
-                
+
                 // Recovery (恢复) - Yellow Green Gradient
                 NavigationLink(destination: VelaMetricDetailView(metric: .recovery)) {
                     BevelScoreRing(
@@ -399,17 +405,17 @@ struct VelaTodayView: View {
                         useGradient: true,
                         size: 78,
                         label: "恢复",
-                        valueText: dashboard.recovery.hasData ? "\(Int(dashboard.recovery.score))%" : "--"
+                        valueText: dashboard.recovery.hasData ? VelaMinimalFormatting.roundedPercentage(dashboard.recovery.score) : "--"
                     )
                 }
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
-                
+
                 // Vertical divider line
                 Rectangle()
                     .fill(Color(hex: "#E8E4DD"))
                     .frame(width: 0.5, height: 60)
-                
+
                 // Sleep (睡眠) - Blue Indigo Gradient
                 NavigationLink(destination: VelaMetricDetailView(metric: .sleep)) {
                     BevelScoreRing(
@@ -418,21 +424,21 @@ struct VelaTodayView: View {
                         useGradient: true,
                         size: 78,
                         label: "睡眠",
-                        valueText: dashboard.sleepScore.hasData ? "\(Int(dashboard.sleepScore.score))%" : "--"
+                        valueText: dashboard.sleepScore.hasData ? VelaMinimalFormatting.roundedPercentage(dashboard.sleepScore.score) : "--"
                     )
                 }
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
             }
             .padding(.top, 8)
-            
+
             // Subtitle / Guidance Box
             VStack(alignment: .leading, spacing: 6) {
                 Text("指导")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(Color(hex: "#8E8A80"))
                     .textCase(.uppercase)
-                
+
                 Text(coachMessage)
                     .font(.system(size: 14))
                     .lineSpacing(4)
@@ -454,6 +460,126 @@ struct VelaTodayView: View {
         )
     }
 
+    // MARK: - AI Suggestions (获取AI建议) Deck
+    private var aiSuggestionsSection: some View {
+        let insights = ProactiveInsightService.evaluate(dashboard: dashboard)
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("AI 智能建议")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Color(hex: "#1A1917"))
+
+                Spacer()
+
+                Text("由 Vela Coach 提供支持")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color(hex: "#8E8A80"))
+            }
+            .padding(.horizontal, 2)
+
+            if insights.isEmpty {
+                // Empty state: Vitals in optimal balance
+                HStack(spacing: 12) {
+                    Circle()
+                        .fill(Color(hex: "#5B8C6F").opacity(0.15))
+                        .frame(width: 36, height: 36)
+                        .overlay(
+                            Image(systemName: "checkmark.shield.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(Color(hex: "#5B8C6F"))
+                        )
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("生理系统状态极佳")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color(hex: "#1A1917"))
+                        Text("所有监测指标（HRV、睡眠、心率等）均处于理想的生理平衡状态。继续保持良好的节奏！")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color(hex: "#8E8A80"))
+                            .lineLimit(2)
+                    }
+
+                    Spacer()
+                }
+                .padding(16)
+                .background(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(Color.white)
+                        .shadow(color: Color.black.opacity(0.02), radius: 4, y: 2)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+                )
+            } else {
+                // Render list of active proactive insight cards
+                ForEach(insights) { insight in
+                    Button {
+                        VelaAppState.shared.routeToCoach(question: insight.coachPresetQuestion)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: insight.severity.icon)
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(insight.severity.color)
+                                    .padding(.top, 1)
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(insight.title)
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundStyle(Color(hex: "#1A1917"))
+
+                                    Text(insight.body)
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(Color(hex: "#6E6A63"))
+                                        .lineSpacing(3)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(Color(hex: "#BFB9AC"))
+                                    .padding(.top, 4)
+                            }
+
+                            if let action = insight.suggestedAction {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "sparkles")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(Color(hex: "#C56B4A"))
+
+                                    Text("建议行动：\(action)")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundStyle(Color(hex: "#C56B4A"))
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(
+                                    Capsule()
+                                        .fill(Color(hex: "#C56B4A").opacity(0.08))
+                                )
+                            }
+                        }
+                        .padding(16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .fill(Color.white)
+                                .shadow(color: Color.black.opacity(0.03), radius: 6, y: 3)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
     // MARK: - Stress & Energy Section
     private var stressAndEnergySection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -461,7 +587,7 @@ struct VelaTodayView: View {
                 .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(Color(hex: "#1A1917"))
                 .padding(.leading, 2)
-            
+
             // 1. Stress Card
             NavigationLink(destination: VelaMetricDetailView(metric: .stress)) {
                 VStack(alignment: .leading, spacing: 14) {
@@ -470,61 +596,38 @@ struct VelaTodayView: View {
                             Circle()
                                 .fill(Color(hex: "#81C784"))
                                 .frame(width: 8, height: 8)
-                            
+
                             Text("今天的压力")
                                 .font(.system(size: 14, weight: .bold))
                                 .foregroundStyle(Color(hex: "#1A1917"))
-                            
+
                             Text(dashboard.stress.hasData ? "已同步" : "暂无数据")
                                 .font(.system(size: 10))
                                 .foregroundStyle(Color(hex: "#8E8A80"))
                         }
-                        
+
                         Spacer()
-                        
+
                         Image(systemName: "arrow.right")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(Color(hex: "#BFB9AC"))
                     }
-                    
+
                     HStack(alignment: .center) {
-                        // Left Stats
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(highestStress)
-                                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                                    .foregroundStyle(Color(hex: "#FF7043"))
-                                Text("最高")
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(Color(hex: "#8E8A80"))
-                            }
-                            
-                            Rectangle()
-                                .fill(Color(hex: "#E8E4DD"))
-                                .frame(width: 0.5, height: 26)
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(lowestStress)
-                                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                                    .foregroundStyle(Color(hex: "#81C784"))
-                                Text("最低")
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(Color(hex: "#8E8A80"))
-                            }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(dashboard.stress.hasData ? "\(Int(stressLevel.rounded()))" : "--")
+                                .font(.system(size: 20, weight: .bold, design: .rounded))
+                                .foregroundStyle(Color(hex: "#FF7043"))
+                            Text("每日指数")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color(hex: "#8E8A80"))
                         }
-                        
+
                         Spacer()
-                        
-                        // Right Sparkline / Gauge
-                        HStack(spacing: 4) {
-                            let stressSegments = [12, 28, 45, 18, 9, 32, 25, 41, 19, 15]
-                            ForEach(0..<stressSegments.count, id: \.self) { idx in
-                                let h = CGFloat(stressSegments[idx] * 24 / 45)
-                                RoundedRectangle(cornerRadius: 1)
-                                    .fill(dashboard.stress.hasData && stressLevel > Double(idx) / 10.0 ? Color(hex: "#FF7043") : Color(hex: "#E8E4DD"))
-                                    .frame(width: 2.5, height: h)
-                            }
-                        }
+
+                        Text("日内曲线暂无")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color(hex: "#8E8A80"))
                     }
                 }
                 .padding(16)
@@ -532,16 +635,16 @@ struct VelaTodayView: View {
                 .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
             }
             .buttonStyle(.plain)
-            
+
             // 2. Energy Card (Bevel High-Fidelity Segmented Battery Card)
             NavigationLink(destination: VelaMetricDetailView(metric: .energy)) {
                 HStack(spacing: 12) {
                     Image(systemName: "bolt.fill")
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(Color(hex: "#34C759")) // Vibrant Bevel green
-                    
+
                     Spacer()
-                    
+
                     // 40 Ticks
                     HStack(spacing: 1.2) {
                         ForEach(0..<40, id: \.self) { idx in
@@ -551,9 +654,9 @@ struct VelaTodayView: View {
                                 .frame(width: 1.8, height: 10)
                         }
                     }
-                    
+
                     Spacer()
-                    
+
                     Text(dashboard.energy.hasData ? "\(Int(energyScore))%" : "--")
                         .font(.system(size: 16, weight: .bold, design: .rounded))
                         .foregroundStyle(Color(hex: "#1A1917"))
@@ -564,6 +667,117 @@ struct VelaTodayView: View {
                 .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
             }
             .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: - Daily Activity Section
+    private var dailyActivitySection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("日常活动")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(Color(hex: "#1A1917"))
+                .padding(.leading, 2)
+
+            VStack(spacing: 0) {
+                ForEach(Array(DailyActivityDetailCatalog.metrics.enumerated()), id: \.element.rawValue) { index, metric in
+                    if index > 0 {
+                        Divider()
+                            .padding(.leading, 60)
+                    }
+
+                    NavigationLink(destination: VelaMetricDetailView(metric: metric)) {
+                        dailyActivityRow(metric)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 2)
+            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
+        }
+    }
+
+    private func dailyActivityRow(_ metric: VelaMetricDetailView.MetricType) -> some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(dailyActivityColor(for: metric).opacity(0.14))
+                .frame(width: 36, height: 36)
+                .overlay(
+                    Image(systemName: dailyActivityIcon(for: metric))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(dailyActivityColor(for: metric))
+                )
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(dailyActivityTitle(for: metric))
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Color(hex: "#1A1917"))
+                Text(dailyActivitySubtitle(for: metric))
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color(hex: "#8E8A80"))
+            }
+
+            Spacer()
+
+            Text(dailyActivityValue(for: metric))
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(hex: "#1A1917"))
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(Color(hex: "#BFB9AC"))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+    }
+
+    private func dailyActivityTitle(for metric: VelaMetricDetailView.MetricType) -> String {
+        switch metric {
+        case .steps: return "步数"
+        case .activeCalories: return "活动消耗"
+        case .activeMinutes: return "活跃时长"
+        default: return metric.rawValue
+        }
+    }
+
+    private func dailyActivitySubtitle(for metric: VelaMetricDetailView.MetricType) -> String {
+        switch metric {
+        case .steps: return "每日基础移动"
+        case .activeCalories: return "训练与日常活动"
+        case .activeMinutes: return "中高强度活动时间"
+        default: return ""
+        }
+    }
+
+    private func dailyActivityIcon(for metric: VelaMetricDetailView.MetricType) -> String {
+        switch metric {
+        case .steps: return "shoeprints.fill"
+        case .activeCalories: return "flame.fill"
+        case .activeMinutes: return "clock.badge.checkmark"
+        default: return "chart.line.uptrend.xyaxis"
+        }
+    }
+
+    private func dailyActivityColor(for metric: VelaMetricDetailView.MetricType) -> Color {
+        switch metric {
+        case .steps: return Color(hex: "#E0A926")
+        case .activeCalories: return VelaTheme.strainColor
+        case .activeMinutes: return VelaTheme.sleepColor
+        default: return VelaTheme.accent
+        }
+    }
+
+    private func dailyActivityValue(for metric: VelaMetricDetailView.MetricType) -> String {
+        let metrics = dashboard.strain.metrics
+        switch metric {
+        case .steps:
+            return metrics["steps_raw"].map { "\(Int($0.rounded())) 步" } ?? "--"
+        case .activeCalories:
+            return metrics["active_energy_raw"].map { "\(Int($0.rounded())) kcal" } ?? "--"
+        case .activeMinutes:
+            return metrics["exercise_minutes_raw"].map { "\(Int($0.rounded())) 分钟" } ?? "--"
+        default:
+            return "--"
         }
     }
 
@@ -581,19 +795,19 @@ struct VelaTodayView: View {
                         Text("\(todayCalories)")
                             .font(.system(size: 32, weight: .bold, design: .rounded))
                             .foregroundStyle(Color(hex: "#1A1917"))
-                        Text("已消耗卡路里 / 目标 2000")
+                        Text("已消耗卡路里 / 目标 \(dailyCalorieTarget)")
                             .font(.system(size: 12))
                             .foregroundStyle(Color(hex: "#8E8A80"))
                     }
-                    
+
                     Spacer()
-                    
+
                     // Smooth Progress Circle
                     ZStack {
                         Circle()
                             .stroke(Color(hex: "#F5F3F0"), lineWidth: 6)
                             .frame(width: 58, height: 58)
-                        
+
                         Circle()
                             .trim(from: 0.0, to: calorieFraction)
                             .stroke(
@@ -606,16 +820,16 @@ struct VelaTodayView: View {
                             )
                             .frame(width: 58, height: 58)
                             .rotationEffect(.degrees(-90))
-                        
+
                         Text("\(Int(calorieFraction * 100))%")
                             .font(.system(size: 11, weight: .bold, design: .rounded))
                             .foregroundStyle(Color(hex: "#1A1917"))
                     }
                 }
-                
+
                 Divider()
                     .background(Color(hex: "#E8E4DD"))
-                
+
                 // Macros (Protein, Carbs, Fat)
                 HStack(spacing: 0) {
                     macroIndicator(title: "蛋白质", target: "90g", current: "\(todayProtein)g", color: Color(hex: "#FF7043"))
@@ -641,11 +855,11 @@ struct VelaTodayView: View {
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Color(hex: "#8E8A80"))
             }
-            
+
             Text(current)
                 .font(.system(size: 18, weight: .bold, design: .rounded))
                 .foregroundStyle(Color(hex: "#1A1917"))
-            
+
             Text("目标 \(target)")
                 .font(.system(size: 10))
                 .foregroundStyle(Color(hex: "#BFB9AC"))
@@ -656,14 +870,14 @@ struct VelaTodayView: View {
     private func loadRealNutritionData() {
         let calendar = Calendar.current
         let start = calendar.startOfDay(for: dashboardVM.selectedDate)
-        
+
         let descriptor = FetchDescriptor<FoodLogRecord>()
         do {
             let allLogs = try modelContext.fetch(descriptor)
             let todayLogs = allLogs.filter { log in
                 calendar.isDate(log.createdAt, inSameDayAs: start)
             }
-            
+
             todayCalories = todayLogs.map(\.totalCalories).reduce(0, +)
             todayProtein = todayLogs.map(\.proteinGrams).reduce(0, +)
             todayCarbs = todayLogs.map(\.carbsGrams).reduce(0, +)
@@ -673,8 +887,8 @@ struct VelaTodayView: View {
         }
     }
 
-    private func refreshDashboard() async {
-        await dashboardVM.refresh(modelContext: modelContext)
+    private func refreshDashboard(force: Bool = false) async {
+        await dashboardVM.refresh(modelContext: modelContext, force: force)
         loadRealNutritionData()
         fetchLocalWeather()
     }
@@ -683,22 +897,22 @@ struct VelaTodayView: View {
 // MARK: - ActiveStatusSelectionSheetView (High fidelity to Screenshot 2)
 struct ActiveStatusSelectionSheetView: View {
     @Environment(\.dismiss) private var dismiss
-    
+
     @Binding var activeStatusRaw: String
     @Binding var activeStatusDuration: String
-    
+
     @State private var tempStatus: String = "resting"
     @State private var tempDuration: String = "明天之前"
-    
+
     let durationOptions = ["明天之前", "1天", "3天", "5天", "7天", "长期"]
-    
+
     var body: some View {
         VStack(spacing: 20) {
             Capsule()
                 .fill(Color(hex: "#E8E4DD"))
                 .frame(width: 36, height: 5)
                 .padding(.top, 8)
-            
+
             HStack {
                 Button {
                     dismiss()
@@ -710,19 +924,19 @@ struct ActiveStatusSelectionSheetView: View {
                         .background(Circle().fill(Color(hex: "#F5F3F0")))
                 }
                 .buttonStyle(.plain)
-                
+
                 Spacer()
-                
+
                 Text("活动状态")
                     .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(Color(hex: "#1A1917"))
-                
+
                 Spacer()
-                
+
                 Color.clear.frame(width: 36, height: 36)
             }
             .padding(.horizontal, 20)
-            
+
             ScrollView {
                 VStack(spacing: 14) {
                     statusOptionCard(
@@ -732,7 +946,7 @@ struct ActiveStatusSelectionSheetView: View {
                         icon: "figure.run",
                         colors: [Color(hex: "#34C759"), Color(hex: "#2ECC71")]
                     )
-                    
+
                     statusOptionCard(
                         id: "sick",
                         title: "生病",
@@ -740,7 +954,7 @@ struct ActiveStatusSelectionSheetView: View {
                         icon: "bed.double.fill",
                         colors: [Color(hex: "#FF9F0A"), Color(hex: "#F1C40F")]
                     )
-                    
+
                     statusOptionCard(
                         id: "injured",
                         title: "受伤",
@@ -748,7 +962,7 @@ struct ActiveStatusSelectionSheetView: View {
                         icon: "bandage.fill",
                         colors: [Color(hex: "#FF3B30"), Color(hex: "#E74C3C")]
                     )
-                    
+
                     statusOptionCard(
                         id: "resting",
                         title: "休息中",
@@ -756,7 +970,7 @@ struct ActiveStatusSelectionSheetView: View {
                         icon: "beach.umbrella.fill",
                         colors: [Color(hex: "#4285F4"), Color(hex: "#3498DB")]
                     )
-                    
+
                     HStack {
                         HStack(spacing: 8) {
                             Image(systemName: "clock")
@@ -766,9 +980,9 @@ struct ActiveStatusSelectionSheetView: View {
                                 .font(.system(size: 14, weight: .bold))
                                 .foregroundStyle(Color(hex: "#1A1917"))
                         }
-                        
+
                         Spacer()
-                        
+
                         Menu {
                             ForEach(durationOptions, id: \.self) { opt in
                                 Button(opt) {
@@ -792,8 +1006,9 @@ struct ActiveStatusSelectionSheetView: View {
                     .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
-                    
+
                     Button {
+                        ActiveStatusSettings.update(status: tempStatus, duration: tempDuration)
                         activeStatusRaw = tempStatus
                         activeStatusDuration = tempDuration
                         dismiss()
@@ -817,7 +1032,7 @@ struct ActiveStatusSelectionSheetView: View {
         }
         .background(Color(hex: "#F5F3F0").ignoresSafeArea())
     }
-    
+
     private func statusOptionCard(id: String, title: String, desc: String, icon: String, colors: [Color]) -> some View {
         Button {
             tempStatus = id
@@ -827,12 +1042,12 @@ struct ActiveStatusSelectionSheetView: View {
                     Circle()
                         .fill(LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing))
                         .frame(width: 44, height: 44)
-                    
+
                     Image(systemName: icon)
                         .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(.white)
                 }
-                
+
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
                         .font(.system(size: 14, weight: .bold))
@@ -841,14 +1056,14 @@ struct ActiveStatusSelectionSheetView: View {
                         .font(.system(size: 12))
                         .foregroundStyle(Color(hex: "#8E8A80"))
                 }
-                
+
                 Spacer()
-                
+
                 ZStack {
                     Circle()
                         .stroke(tempStatus == id ? Color(hex: "#1A1917") : Color(hex: "#E8E4DD"), lineWidth: 1.5)
                         .frame(width: 20, height: 20)
-                    
+
                     if tempStatus == id {
                         Circle()
                             .fill(Color(hex: "#1A1917"))
@@ -876,22 +1091,22 @@ struct CalendarOverviewSheetView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     @Query(sort: \DailyHealthSummaryRecord.date) private var healthRecords: [DailyHealthSummaryRecord]
-    
+
     @State private var selectedMetric: String = "恢复"
     @State private var calendarYear = Calendar.current.component(.year, from: Date())
     @State private var calendarMonth = Calendar.current.component(.month, from: Date())
     @State private var showCalendarInfo = false
-    
+
     let metrics = ["耗力", "恢复", "睡眠", "压力", "能量", "营养"]
     let weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
-    
+
     var body: some View {
         VStack(spacing: 16) {
             Capsule()
                 .fill(Color(hex: "#E8E4DD"))
                 .frame(width: 36, height: 5)
                 .padding(.top, 8)
-            
+
             HStack {
                 Menu {
                     ForEach(0..<12, id: \.self) { offset in
@@ -903,7 +1118,7 @@ struct CalendarOverviewSheetView: View {
                     }
                 } label: {
                     HStack(spacing: 6) {
-                        Text("\(calendarYear)年\(calendarMonth)月")
+                        Text(verbatim: VelaMinimalFormatting.calendarTitle(year: calendarYear, month: calendarMonth))
                             .font(.system(size: 22, weight: .bold))
                             .foregroundStyle(Color(hex: "#1A1917"))
                         Image(systemName: "chevron.down")
@@ -911,9 +1126,9 @@ struct CalendarOverviewSheetView: View {
                             .foregroundStyle(Color(hex: "#1A1917"))
                     }
                 }
-                
+
                 Spacer()
-                
+
                 HStack(spacing: 16) {
                     Button {
                         prevMonth()
@@ -926,7 +1141,7 @@ struct CalendarOverviewSheetView: View {
                             .shadow(color: Color.black.opacity(0.015), radius: 3, y: 1.5)
                     }
                     .buttonStyle(.plain)
-                    
+
                     Button {
                         nextMonth()
                     } label: {
@@ -943,7 +1158,7 @@ struct CalendarOverviewSheetView: View {
             }
             .padding(.horizontal, 20)
             .padding(.top, 4)
-            
+
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
                     ForEach(metrics, id: \.self) { metric in
@@ -970,7 +1185,7 @@ struct CalendarOverviewSheetView: View {
                 .padding(.horizontal, 20)
                 .padding(.vertical, 2)
             }
-            
+
             HStack(spacing: 0) {
                 ForEach(weekdays, id: \.self) { day in
                     Text(day)
@@ -980,22 +1195,22 @@ struct CalendarOverviewSheetView: View {
                 }
             }
             .padding(.horizontal, 10)
-            
+
             let gridLayout = Array(repeating: GridItem(.flexible(), spacing: 0), count: 7)
             let paddingDays = paddingDaysForDisplayedMonth
-            
+
             ScrollView {
                 LazyVGrid(columns: gridLayout, spacing: 14) {
-                    ForEach(0..<paddingDays, id: \.self) { _ in
+                    ForEach((0..<paddingDays).map { "padding-\($0)" }, id: \.self) { _ in
                         Color.clear.frame(height: 52)
                     }
-                    
+
                     ForEach(1...daysInDisplayedMonth, id: \.self) { day in
                         let date = makeDate(year: calendarYear, month: calendarMonth, day: day)
                         let isSelected = Calendar.current.isDate(date, inSameDayAs: dashboardVM.selectedDate)
                         let isFuture = Calendar.current.startOfDay(for: date) > Calendar.current.startOfDay(for: Date())
                         let scoreInfo = scoreInfo(for: date)
-                        
+
                         Button {
                             dashboardVM.selectDate(date)
                             dismiss()
@@ -1005,7 +1220,7 @@ struct CalendarOverviewSheetView: View {
                                     Circle()
                                         .stroke(Color(hex: "#F5F3F0"), lineWidth: 4)
                                         .frame(width: 36, height: 36)
-                                    
+
                                     if let scoreInfo {
                                         Circle()
                                             .trim(from: 0.0, to: CGFloat(scoreInfo.score / 100.0))
@@ -1013,12 +1228,12 @@ struct CalendarOverviewSheetView: View {
                                             .frame(width: 36, height: 36)
                                             .rotationEffect(.degrees(-90))
                                     }
-                                    
+
                                     Text("\(day)")
                                         .font(.system(size: 12, weight: .bold, design: .rounded))
                                         .foregroundStyle(isFuture ? Color(hex: "#BFB9AC") : (isSelected ? Color(hex: "#4285F4") : Color(hex: "#1A1917")))
                                 }
-                                
+
                                 Color.clear.frame(height: 8)
                             }
                             .frame(maxWidth: .infinity)
@@ -1039,7 +1254,7 @@ struct CalendarOverviewSheetView: View {
                 .padding(.horizontal, 10)
                 .padding(.bottom, 20)
             }
-            
+
             HStack {
                 Button {
                     dashboardVM.goToToday()
@@ -1053,9 +1268,9 @@ struct CalendarOverviewSheetView: View {
                         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(hex: "#E8F0FE")))
                 }
                 .buttonStyle(.plain)
-                
+
                 Spacer()
-                
+
                 Button {
                     showCalendarInfo = true
                 } label: {
@@ -1082,7 +1297,7 @@ struct CalendarOverviewSheetView: View {
             Text("选择顶部指标可查看每日趋势。圆环越完整，表示该指标分数越高；没有圆环表示当天缺少对应数据。")
         }
     }
-    
+
     private var displayedMonthDate: Date {
         makeDate(year: calendarYear, month: calendarMonth, day: 1)
     }
@@ -1100,7 +1315,7 @@ struct CalendarOverviewSheetView: View {
         let currentMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: Date())) ?? Date()
         return displayedMonthDate < currentMonth
     }
-    
+
     private func makeDate(year: Int, month: Int, day: Int) -> Date {
         var comp = DateComponents()
         comp.year = year
@@ -1108,7 +1323,7 @@ struct CalendarOverviewSheetView: View {
         comp.day = day
         return Calendar.current.date(from: comp) ?? Date()
     }
-    
+
     private func prevMonth() {
         if calendarMonth == 1 {
             calendarMonth = 12
@@ -1117,7 +1332,7 @@ struct CalendarOverviewSheetView: View {
             calendarMonth -= 1
         }
     }
-    
+
     private func nextMonth() {
         guard canMoveToNextMonth else { return }
         if calendarMonth == 12 {
@@ -1127,7 +1342,7 @@ struct CalendarOverviewSheetView: View {
             calendarMonth += 1
         }
     }
-    
+
     private func monthTitle(for date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")

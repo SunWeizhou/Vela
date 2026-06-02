@@ -1,4 +1,11 @@
 import SwiftUI
+import UIKit
+
+enum VelaNavigationVisibility {
+    static func shouldShowBottomBar(keyboardVisible: Bool) -> Bool {
+        !keyboardVisible
+    }
+}
 
 // MARK: - VelaScrollTracking
 // Kept for child view compatibility. Without binding injection these are no-ops.
@@ -45,6 +52,7 @@ struct VelaShell: View {
     @State private var showPlusSheet = false
     @State private var showCoach     = false
     @State private var showSettings  = false
+    @State private var keyboardVisible = false
 
     @ObservedObject private var appState = VelaAppState.shared
     @Namespace private var tabAnimation
@@ -52,7 +60,7 @@ struct VelaShell: View {
     // MARK: - Tab Enum
 
     enum VelaTab: Int, CaseIterable, Hashable {
-        case today, journal, training, vitals
+        case today, training, vitals, coach
     }
 
     // MARK: - Body
@@ -63,27 +71,32 @@ struct VelaShell: View {
                 // Background Warm Canvas
                 VelaTheme.bg.ignoresSafeArea()
 
-                // Tab Content View Controller
-                Group {
-                    switch selectedTab {
-                    case .today:
+                // Keep the primary surfaces mounted so cached SwiftData content
+                // is already hydrated when the user switches tabs.
+                ZStack {
+                    tabSurface(.today) {
                         VelaTodayView(showCoach: $showCoach, showSettings: $showSettings)
-                    case .journal:
-                        VelaJournalView()
-                    case .training:
+                    }
+                    tabSurface(.training) {
                         VelaTrainingView()
-                    case .vitals:
+                    }
+                    tabSurface(.vitals) {
                         VelaVitalsView()
+                    }
+                    tabSurface(.coach) {
+                        VelaCoachView(presentation: .embedded)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .ignoresSafeArea(.all, edges: .bottom)
+                .ignoresSafeArea(.container, edges: .bottom)
 
                 // "玻璃胶囊导航 + 右侧独立玻璃圆形 +" Side-by-Side Glass Tab Bar
-                bottomGlassNavBar
-                    .padding(.bottom, 8)
+                if VelaNavigationVisibility.shouldShowBottomBar(keyboardVisible: keyboardVisible) {
+                    bottomGlassNavBar
+                        .padding(.bottom, 8)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
-            .ignoresSafeArea(.keyboard, edges: .bottom)
         }
         .onReceive(appState.$showCoachHub) { show in
             if show {
@@ -92,44 +105,65 @@ struct VelaShell: View {
                 appState.showCoachHub = false
             }
         }
-        .sheet(isPresented: $showPlusSheet) {
+        .onReceive(appState.$selectedTab) { tab in
+            guard let next = VelaTab(rawValue: tab), selectedTab != next else { return }
+            selectedTab = next
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            withAnimation(.easeOut(duration: 0.2)) {
+                keyboardVisible = true
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            withAnimation(.easeOut(duration: 0.2)) {
+                keyboardVisible = false
+            }
+        }
+        .sheet(isPresented: $showPlusSheet, onDismiss: appState.runDeferredQuickAction) {
             PlusActionSheet()
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(VelaTheme.bg)
         }
-        .sheet(isPresented: $showCoach) {
-            VelaCoachView()
-                .presentationDetents([.large])
+        .fullScreenCover(isPresented: $showCoach) {
+            VelaCoachView(presentation: .quickCover)
         }
         .sheet(isPresented: $showSettings) {
             NavigationStack { VelaSettingsView() }
         }
-        .sheet(isPresented: $appState.triggerWeightLog) {
+        .sheet(isPresented: $appState.triggerWeightLog, onDismiss: appState.markLocalDataChanged) {
             WeightLogSheetView()
         }
-        .sheet(isPresented: $appState.triggerBloodLog) {
+        .sheet(isPresented: $appState.triggerBloodLog, onDismiss: appState.markLocalDataChanged) {
             BloodLogSheetView()
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
-        .sheet(isPresented: $appState.triggerWorkoutLog) {
+        .sheet(isPresented: $appState.triggerWorkoutLog, onDismiss: appState.markLocalDataChanged) {
             WorkoutLogSheetView()
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Color(hex: "#F5F3F0"))
         }
-        .sheet(isPresented: $appState.triggerFoodSearch) {
+        .sheet(isPresented: $appState.triggerFoodSearch, onDismiss: appState.markLocalDataChanged) {
             FoodSearchSheetView()
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Color(hex: "#F5F3F0"))
         }
-        .sheet(isPresented: $appState.triggerFoodScanner) {
-            FoodScannerSimulatorView(type: appState.scannerType)
+        .sheet(isPresented: $appState.triggerFoodScanner, onDismiss: appState.markLocalDataChanged) {
+            FoodScannerView(type: appState.scannerType)
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Color(hex: "#F5F3F0"))
+        }
+        .sheet(isPresented: $appState.triggerJournal, onDismiss: appState.markLocalDataChanged) {
+            NavigationStack {
+                VelaJournalView()
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+            .presentationBackground(Color(hex: "#F5F3F0"))
         }
         .tint(VelaTheme.accent)
     }
@@ -138,7 +172,7 @@ struct VelaShell: View {
     
     private var bottomGlassNavBar: some View {
         HStack(spacing: 12) {
-            // 1. Frosted Glass Capsule for 4 Tabs
+            // 1. Frosted Glass Capsule for primary tabs
             HStack(spacing: 0) {
                 ForEach(VelaTab.allCases, id: \.self) { tab in
                     customTabButton(tab)
@@ -184,11 +218,23 @@ struct VelaShell: View {
 
     // MARK: - Individual Tab Button with Premium Sliding Highlight
 
+    private func tabSurface<Content: View>(
+        _ tab: VelaTab,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .opacity(selectedTab == tab ? 1 : 0)
+            .allowsHitTesting(selectedTab == tab)
+            .accessibilityHidden(selectedTab != tab)
+            .zIndex(selectedTab == tab ? 1 : 0)
+    }
+
     private func customTabButton(_ tab: VelaTab) -> some View {
         let isActive = selectedTab == tab
         return Button {
             withAnimation(.spring(response: 0.35, dampingFraction: 0.78, blendDuration: 0)) {
                 selectedTab = tab
+                appState.selectedTab = tab.rawValue
             }
         } label: {
             VStack(spacing: 3) {
@@ -217,18 +263,18 @@ struct VelaShell: View {
     private func iconName(for tab: VelaTab) -> String {
         switch tab {
         case .today:    "sun.max"
-        case .journal:  "book.pages"
         case .training: "figure.run"
         case .vitals:   "heart.text.square"
+        case .coach:    "sparkles"
         }
     }
 
     private func label(for tab: VelaTab) -> String {
         switch tab {
         case .today:    "首页"
-        case .journal:  "手记"
         case .training: "健身"
         case .vitals:   "体征"
+        case .coach:    "Coach"
         }
     }
 }

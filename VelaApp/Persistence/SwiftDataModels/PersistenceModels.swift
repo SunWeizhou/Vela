@@ -26,6 +26,7 @@ final class DailyHealthSummaryRecord {
     var sleepEfficiency: Double?
     var steps: Double?
     var activeCalories: Double?
+    var activeMinutes: Double?
     var workoutCount: Int?
     var workoutTypes: String?
     var workoutDuration: Double?
@@ -39,6 +40,10 @@ final class DailyHealthSummaryRecord {
     var workoutLoad: Double?
     var activityLoad: Double?
     var trainingLoadRatio: Double?
+    var atl: Double?
+    var ctl: Double?
+    var tsb: Double?
+    var acwr: Double?
     var bedtime: Date?
     var wakeTime: Date?
     
@@ -68,6 +73,7 @@ final class DailyHealthSummaryRecord {
         sleepEfficiency: Double? = nil,
         steps: Double? = nil,
         activeCalories: Double? = nil,
+        activeMinutes: Double? = nil,
         workoutCount: Int? = nil,
         workoutTypes: String? = nil,
         workoutDuration: Double? = nil,
@@ -81,6 +87,10 @@ final class DailyHealthSummaryRecord {
         workoutLoad: Double? = nil,
         activityLoad: Double? = nil,
         trainingLoadRatio: Double? = nil,
+        atl: Double? = nil,
+        ctl: Double? = nil,
+        tsb: Double? = nil,
+        acwr: Double? = nil,
         bedtime: Date? = nil,
         wakeTime: Date? = nil,
         awakeMinutes: Double? = nil,
@@ -111,6 +121,7 @@ final class DailyHealthSummaryRecord {
         self.sleepEfficiency = sleepEfficiency
         self.steps = steps
         self.activeCalories = activeCalories
+        self.activeMinutes = activeMinutes
         self.workoutCount = workoutCount
         self.workoutTypes = workoutTypes
         self.workoutDuration = workoutDuration
@@ -124,6 +135,10 @@ final class DailyHealthSummaryRecord {
         self.workoutLoad = workoutLoad
         self.activityLoad = activityLoad
         self.trainingLoadRatio = trainingLoadRatio
+        self.atl = atl
+        self.ctl = ctl
+        self.tsb = tsb
+        self.acwr = acwr
         self.bedtime = bedtime
         self.wakeTime = wakeTime
         self.awakeMinutes = awakeMinutes
@@ -159,6 +174,7 @@ final class DailyHealthSummaryRecord {
             sleepEfficiency: snapshot.sleepEfficiency,
             steps: snapshot.steps,
             activeCalories: snapshot.activeCalories,
+            activeMinutes: snapshot.activeMinutes,
             workoutCount: snapshot.workoutCount,
             workoutTypes: snapshot.workoutTypes,
             workoutDuration: snapshot.workoutDuration,
@@ -172,6 +188,10 @@ final class DailyHealthSummaryRecord {
             workoutLoad: snapshot.workoutLoad,
             activityLoad: snapshot.activityLoad,
             trainingLoadRatio: snapshot.trainingLoadRatio,
+            atl: snapshot.atl,
+            ctl: snapshot.ctl,
+            tsb: snapshot.tsb,
+            acwr: snapshot.acwr,
             bedtime: snapshot.bedtime,
             wakeTime: snapshot.wakeTime,
             awakeMinutes: snapshot.awakeMinutes,
@@ -183,6 +203,16 @@ final class DailyHealthSummaryRecord {
     }
 
     func apply(snapshot: DailyHealthSnapshot, calendar: Calendar = .current, updatedAt: Date = Date()) {
+        let snapshotWorkoutIDs = Set(snapshot.workouts.map(\.id))
+        let preservedManualWorkouts = decodedWorkouts().filter {
+            $0.source == "manual" && !snapshotWorkoutIDs.contains($0.id)
+        }
+        let mergedWorkouts = snapshot.workouts + preservedManualWorkouts
+        let preservedManualEnergy = preservedManualWorkouts.compactMap(\.energyKilocalories).reduce(0, +)
+        let preservedManualDuration = preservedManualWorkouts.reduce(0) {
+            $0 + $1.end.timeIntervalSince($1.start) / 60.0
+        }
+
         date = calendar.startOfDay(for: snapshot.date)
         dayIdentifier = Self.dayIdentifier(for: date, calendar: calendar)
         sleepScore = snapshot.sleepScore
@@ -200,10 +230,13 @@ final class DailyHealthSummaryRecord {
         remSleepPercent = snapshot.remSleepPercent
         sleepEfficiency = snapshot.sleepEfficiency
         steps = snapshot.steps
-        activeCalories = snapshot.activeCalories
-        workoutCount = snapshot.workoutCount
-        workoutTypes = snapshot.workoutTypes
-        workoutDuration = snapshot.workoutDuration
+        activeCalories = Self.adding(snapshot.activeCalories, preservedManualEnergy)
+        activeMinutes = Self.adding(snapshot.activeMinutes, preservedManualDuration)
+        workoutCount = mergedWorkouts.isEmpty ? snapshot.workoutCount : mergedWorkouts.count
+        workoutTypes = mergedWorkouts.isEmpty
+            ? snapshot.workoutTypes
+            : Set(mergedWorkouts.map(\.activityName)).sorted().joined(separator: ", ")
+        workoutDuration = Self.adding(snapshot.workoutDuration, preservedManualDuration)
         bodyWeight = snapshot.bodyWeight
         bodyFatPercent = snapshot.bodyFatPercent
         bmi = snapshot.bmi
@@ -214,13 +247,17 @@ final class DailyHealthSummaryRecord {
         workoutLoad = snapshot.workoutLoad
         activityLoad = snapshot.activityLoad
         trainingLoadRatio = snapshot.trainingLoadRatio
+        atl = snapshot.atl
+        ctl = snapshot.ctl
+        tsb = snapshot.tsb
+        acwr = snapshot.acwr
         bedtime = snapshot.bedtime
         wakeTime = snapshot.wakeTime
         awakeMinutes = snapshot.awakeMinutes
         awakeEpisodeCount = snapshot.awakeEpisodeCount
         deepSleepMinutes = snapshot.deepSleepMinutes
         remSleepMinutes = snapshot.remSleepMinutes
-        workoutsData = try? JSONEncoder().encode(snapshot.workouts)
+        workoutsData = try? JSONEncoder().encode(mergedWorkouts)
         configVersion = VelaAppMetadata.configVersion
         self.updatedAt = updatedAt
     }
@@ -237,10 +274,6 @@ final class DailyHealthSummaryRecord {
     }
 
     func toSnapshot() -> DailyHealthSnapshot {
-        var wList: [WorkoutSummary] = []
-        if let wData = workoutsData, let decoded = try? JSONDecoder().decode([WorkoutSummary].self, from: wData) {
-            wList = decoded
-        }
         return DailyHealthSnapshot(
             date: date,
             createdAt: createdAt,
@@ -260,6 +293,7 @@ final class DailyHealthSummaryRecord {
             sleepEfficiency: sleepEfficiency,
             steps: steps,
             activeCalories: activeCalories,
+            activeMinutes: activeMinutes,
             workoutCount: workoutCount,
             workoutTypes: workoutTypes,
             workoutDuration: workoutDuration,
@@ -273,14 +307,107 @@ final class DailyHealthSummaryRecord {
             workoutLoad: workoutLoad,
             activityLoad: activityLoad,
             trainingLoadRatio: trainingLoadRatio,
+            atl: atl,
+            ctl: ctl,
+            tsb: tsb,
+            acwr: acwr,
             bedtime: bedtime,
             wakeTime: wakeTime,
             awakeMinutes: awakeMinutes,
             awakeEpisodeCount: awakeEpisodeCount,
             deepSleepMinutes: deepSleepMinutes,
             remSleepMinutes: remSleepMinutes,
-            workouts: wList
+            workouts: decodedWorkouts()
         )
+    }
+
+    private func decodedWorkouts() -> [WorkoutSummary] {
+        guard let workoutsData,
+              let decoded = try? JSONDecoder().decode([WorkoutSummary].self, from: workoutsData) else {
+            return []
+        }
+        return decoded
+    }
+
+    private static func adding(_ base: Double?, _ increment: Double) -> Double? {
+        guard base != nil || increment != 0 else { return nil }
+        return (base ?? 0) + increment
+    }
+}
+
+struct StrengthSetLog: Identifiable, Codable, Hashable {
+    var id: UUID = UUID()
+    var repetitions: Int
+    var weightKilograms: Double
+    var isWarmup: Bool = false
+
+    var volumeKilograms: Double {
+        guard !isWarmup else { return 0 }
+        return Double(repetitions) * weightKilograms
+    }
+}
+
+struct StrengthExerciseLog: Identifiable, Codable, Hashable {
+    var id: UUID = UUID()
+    var name: String
+    var equipment: String
+    var sets: [StrengthSetLog]
+
+    var volumeKilograms: Double {
+        sets.reduce(0) { $0 + $1.volumeKilograms }
+    }
+}
+
+@Model
+final class StrengthWorkoutRecord {
+    @Attribute(.unique) var id: UUID
+    var title: String
+    var startedAt: Date
+    var durationMinutes: Int
+    var notes: String
+    @Attribute(.externalStorage) var exercisesData: Data
+
+    init(
+        id: UUID = UUID(),
+        title: String,
+        startedAt: Date = Date(),
+        durationMinutes: Int,
+        notes: String = "",
+        exercises: [StrengthExerciseLog]
+    ) {
+        self.id = id
+        self.title = title
+        self.startedAt = startedAt
+        self.durationMinutes = durationMinutes
+        self.notes = notes
+        exercisesData = (try? JSONEncoder().encode(exercises)) ?? Data("[]".utf8)
+    }
+
+    var exercises: [StrengthExerciseLog] {
+        get { (try? JSONDecoder().decode([StrengthExerciseLog].self, from: exercisesData)) ?? [] }
+        set { exercisesData = (try? JSONEncoder().encode(newValue)) ?? Data("[]".utf8) }
+    }
+
+    var endedAt: Date {
+        startedAt.addingTimeInterval(TimeInterval(durationMinutes * 60))
+    }
+
+    var exerciseCount: Int {
+        exercises.count
+    }
+
+    var totalSetCount: Int {
+        exercises.reduce(0) { $0 + $1.sets.count }
+    }
+
+    var totalRepetitionCount: Int {
+        exercises.reduce(0) { exerciseTotal, exercise in
+            exerciseTotal + exercise.sets.reduce(0) { $0 + $1.repetitions }
+        }
+    }
+
+    var totalVolumeKilograms: Double {
+        exercises.reduce(0) { $0 + $1.volumeKilograms }
     }
 }
 
@@ -446,6 +573,7 @@ enum PersistenceSchemaVersion {
 
 enum FoodLogSource: String, Codable, CaseIterable {
     case photoAnalysis = "photo_analysis"
+    case barcodeLookup = "barcode_lookup"
     case manual
     case coachTool = "coach_tool"
 }

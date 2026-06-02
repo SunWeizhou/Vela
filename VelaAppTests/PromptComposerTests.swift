@@ -44,6 +44,46 @@ final class PromptComposerTests: XCTestCase {
         XCTAssertTrue(prompt.contains("update_user_wiki"))
     }
 
+    func testTemporalContextIncludesLocalDateWeekdayTimeAndTimezone() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = Locale(identifier: "zh_CN")
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let now = calendar.date(
+            from: DateComponents(year: 2026, month: 6, day: 1, hour: 14, minute: 35)
+        )!
+
+        let context = PromptFragments.temporalContext(
+            lang: .simplifiedChinese,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertTrue(context.contains("2026-06-01"))
+        XCTAssertTrue(context.contains("星期一"))
+        XCTAssertTrue(context.contains("14:35"))
+        XCTAssertTrue(context.contains("Asia/Shanghai"))
+        XCTAssertTrue(context.contains("今天、昨天、明天"))
+    }
+
+    func testCasualPromptIncludesTemporalContext() {
+        let composer = CoachPromptComposer(
+            lang: .english,
+            personality: personality,
+            wikiText: "",
+            baselinePrompt: "",
+            activePlan: nil,
+            contextJSON: "",
+            correlationText: "",
+            wikiFiles: ""
+        )
+
+        let prompt = composer.compose(for: .casual)
+
+        XCTAssertTrue(prompt.contains("Current local date and time"))
+        XCTAssertTrue(prompt.contains("timezone"))
+        XCTAssertTrue(prompt.contains("today, yesterday, and tomorrow"))
+    }
+
     func testFullPromptContainsAllSections() {
         let composer = CoachPromptComposer(
             lang: lang,

@@ -53,6 +53,7 @@ final class HealthDataRefreshService {
         
         snapshot.steps = context.strainToday.stepCount
         snapshot.activeCalories = context.strainToday.activeEnergyKilocalories
+        snapshot.activeMinutes = context.strainToday.exerciseMinutes
         snapshot.workoutCount = context.strainToday.workouts.count
         snapshot.workoutDuration = context.strainToday.workouts.reduce(0.0) { $0 + $1.end.timeIntervalSince($1.start) } / 60.0
         snapshot.workoutTypes = context.strainToday.workouts.map(\.activityName).joined(separator: ",")

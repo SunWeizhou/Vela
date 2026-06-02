@@ -4,7 +4,7 @@ import Foundation
 /// - sleepEfficiency: 0...1 (proportion)
 /// - deepSleepPercent: 0...1 (proportion)
 /// - remSleepPercent: 0...1 (proportion)
-/// - bodyFatPercentage: 0...1 (proportion)
+/// - bodyFatPercentage: 0...100 (percentage)
 /// - oxygenSaturation: 0...100 (percentage, e.g. 98.0)
 /// - walkingAsymmetry: 0...100 (percentage)
 /// - walkingDoubleSupport: 0...100 (percentage)

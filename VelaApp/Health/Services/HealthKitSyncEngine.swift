@@ -21,9 +21,18 @@ final class HealthKitSyncEngine {
         // Pass 1: Build and save the raw daily snapshots from HealthKit for the last (42 + days)
         // This ensures the database already has raw data for rolling baseline calculations in Pass 2!
         let totalDaysToSync = 42 + days
+        let cachedSnapshots = (try? snapshotRepo.fetchSnapshots(days: totalDaysToSync, endingAt: endDate)) ?? []
+        let cachedDays = Set(cachedSnapshots.map { calendar.startOfDay(for: $0.date) })
+        let recentRefreshCutoff = calendar.date(
+            byAdding: .day,
+            value: -1,
+            to: calendar.startOfDay(for: endDate)
+        ) ?? calendar.startOfDay(for: endDate)
+
         for i in (0..<totalDaysToSync).reversed() {
             guard let date = calendar.date(byAdding: .day, value: -i, to: endDate) else { continue }
             let dayStart = calendar.startOfDay(for: date)
+            guard dayStart >= recentRefreshCutoff || !cachedDays.contains(dayStart) else { continue }
             
             // Build raw daily snapshot from HealthKit
             let snapshot = await DailySnapshotBuilder.buildSnapshot(
@@ -103,6 +112,10 @@ final class HealthKitSyncEngine {
             snapshot.workoutLoad = metrics.strain.components["workout_load"]
             snapshot.activityLoad = metrics.strain.components["activity_load"]
             snapshot.trainingLoadRatio = metrics.strain.components["training_load_ratio"]
+            snapshot.atl = metrics.energy.components["atl"]
+            snapshot.ctl = metrics.energy.components["ctl"]
+            snapshot.tsb = metrics.energy.components["tsb"]
+            snapshot.acwr = metrics.energy.components["acwr"]
 
             do {
                 try snapshotRepo.saveDailySnapshot(snapshot)
@@ -185,6 +198,7 @@ final class DailySnapshotBuilder {
         if let strain = strain {
             snapshot.steps = strain.stepCount
             snapshot.activeCalories = strain.activeEnergyKilocalories
+            snapshot.activeMinutes = strain.exerciseMinutes
             snapshot.workoutCount = strain.workouts.count
             snapshot.workoutDuration = strain.workouts.reduce(0.0) { $0 + $1.end.timeIntervalSince($1.start) } / 60.0
             snapshot.workoutTypes = strain.workouts.map(\.activityName).joined(separator: ",")
@@ -248,7 +262,7 @@ final class MetricComputationPipeline {
         
         let sleepInput = SleepScoreInput(
             totalSleepMinutes: snapshot.sleepHours.map { $0 * 60.0 },
-            sleepTargetMinutes: 450.0,
+            sleepTargetMinutes: SleepTargetSettings.targetMinutes(),
             todayBedtime: todayBedtime,
             recentBedtimes: pastBedtimes,
             awakeMinutes: snapshot.awakeMinutes,
@@ -294,13 +308,16 @@ final class MetricComputationPipeline {
             ))
         }
 
-        let age = WikiFileService.getAgeFromWiki() ?? 30
-        let maxHeartRate = WikiFileService.getMaxHeartRateFromWiki() ?? Double(max(100, 220 - age))
+        let age = UserProfileSettings.age() ?? WikiFileService.getAgeFromWiki() ?? 30
+        let maxHeartRate = UserProfileSettings.resolvedMaxHeartRate(
+            age: age,
+            wiki: WikiFileService.getMaxHeartRateFromWiki()
+        )
 
         let strainInput = StrainScoreInput(
             workouts: workouts,
             activeEnergyToday: snapshot.activeCalories,
-            exerciseMinutesToday: snapshot.workoutDuration,
+            exerciseMinutesToday: snapshot.activeMinutes ?? snapshot.workoutDuration,
             stepCount: snapshot.steps,
             restingHR: snapshot.restingHeartRate ?? 60.0,
             maxHR: maxHeartRate,

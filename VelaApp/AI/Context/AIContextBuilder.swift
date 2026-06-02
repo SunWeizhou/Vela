@@ -30,7 +30,7 @@ struct AIContextBuilder {
             energyBank: EnergyBankContextBuilder().build(from: dashboard),
             healthAgeTrend: HealthAgeContextBuilder().build(from: dashboard),
             recentTrends: [
-                "note": "Recent trend calculations are v0.1 placeholders until enough cached history exists."
+                "note": "Recent trends require enough cached history. No trend is reported until sufficient snapshots exist."
             ],
             weeklyTrends: weeklyTrends.isEmpty ? ["note": "No weekly trend data available yet. Historical snapshots require a few days of data."] : weeklyTrends,
             nutrition: buildNutritionDict(foodLogs),

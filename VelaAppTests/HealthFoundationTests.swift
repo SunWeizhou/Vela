@@ -1,3 +1,4 @@
+import SwiftData
 import XCTest
 @testable import Vela
 
@@ -106,6 +107,32 @@ final class HealthFoundationTests: XCTestCase {
         XCTAssertEqual(input.workouts.first?.heartRateSamples, [120, 155])
         XCTAssertEqual(input.maxHR, 180)
     }
+
+    @MainActor
+    func testSyncEngineOnlyRefreshesRecentDaysWhenHistoricalSnapshotsAlreadyExist() async throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = ModelContext(container)
+        let calendar = Calendar(identifier: .gregorian)
+        let endDate = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 5, day: 31, hour: 12)))
+        let repository = HealthSnapshotRepository(modelContext: context, calendar: calendar)
+
+        for offset in 0..<56 {
+            let date = try XCTUnwrap(calendar.date(byAdding: .day, value: -offset, to: endDate))
+            try repository.saveDailySnapshot(DailyHealthSnapshot(date: date, dailyLoad: 20))
+        }
+
+        let queryService = CountingHealthQueryService()
+        try await HealthKitSyncEngine(
+            queryService: queryService,
+            modelContext: context,
+            calendar: calendar
+        ).syncPastDays(14, endingAt: endDate)
+
+        XCTAssertEqual(queryService.sleepSummaryCallCount, 2)
+        XCTAssertEqual(queryService.recoveryMetricsCallCount, 2)
+        XCTAssertEqual(queryService.strainSummaryCallCount, 2)
+        XCTAssertEqual(queryService.bodyMetricsCallCount, 2)
+    }
 }
 
 private struct EmptyHealthQueryService: HealthQueryService {
@@ -152,5 +179,39 @@ private struct WorkoutHeartRateQueryService: HealthQueryService {
     func bodyMetrics(in range: DateRangeQuery) async throws -> BodyMetricsSummary { BodyMetricsSummary() }
     func recentWorkouts(limit: Int) async throws -> [WorkoutSummary] { [] }
     func heartRateSamples(start: Date, end: Date) async throws -> [HeartRateSample] { samples }
+    func workoutRoute(workoutId: UUID) async throws -> [RouteCoordinate] { [] }
+}
+
+@MainActor
+private final class CountingHealthQueryService: HealthQueryService {
+    private(set) var sleepSummaryCallCount = 0
+    private(set) var recoveryMetricsCallCount = 0
+    private(set) var strainSummaryCallCount = 0
+    private(set) var bodyMetricsCallCount = 0
+
+    func sleepSummary(in range: DateRangeQuery) async throws -> SleepSummary? {
+        sleepSummaryCallCount += 1
+        return nil
+    }
+
+    func sleepEpisodes(in range: DateRangeQuery) async throws -> [SleepSummary] { [] }
+
+    func recoveryMetrics(in range: DateRangeQuery) async throws -> RecoveryMetricSummary {
+        recoveryMetricsCallCount += 1
+        return RecoveryMetricSummary()
+    }
+
+    func strainSummary(in range: DateRangeQuery) async throws -> StrainActivitySummary {
+        strainSummaryCallCount += 1
+        return StrainActivitySummary(workouts: [])
+    }
+
+    func bodyMetrics(in range: DateRangeQuery) async throws -> BodyMetricsSummary {
+        bodyMetricsCallCount += 1
+        return BodyMetricsSummary()
+    }
+
+    func recentWorkouts(limit: Int) async throws -> [WorkoutSummary] { [] }
+    func heartRateSamples(start: Date, end: Date) async throws -> [HeartRateSample] { [] }
     func workoutRoute(workoutId: UUID) async throws -> [RouteCoordinate] { [] }
 }

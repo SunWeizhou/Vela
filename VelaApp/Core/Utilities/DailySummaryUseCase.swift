@@ -1,6 +1,51 @@
 import Foundation
 import SwiftData
 
+enum ActiveStatusSettings {
+    static let statusKey = "vela_active_status"
+    static let durationKey = "vela_active_status_duration"
+    static let expiresAtKey = "vela_active_status_expires_at"
+
+    static func update(
+        status: String,
+        duration: String,
+        now: Date = Date(),
+        defaults: UserDefaults = .standard,
+        calendar: Calendar = .current
+    ) {
+        defaults.set(status, forKey: statusKey)
+        defaults.set(duration, forKey: durationKey)
+        if let expiresAt = expirationDate(for: duration, now: now, calendar: calendar) {
+            defaults.set(expiresAt, forKey: expiresAtKey)
+        } else {
+            defaults.removeObject(forKey: expiresAtKey)
+        }
+    }
+
+    static func journalFlags(now: Date = Date(), defaults: UserDefaults = .standard) -> Set<String> {
+        guard defaults.object(forKey: statusKey) != nil else { return [] }
+        let status = defaults.string(forKey: statusKey) ?? "resting"
+        guard ["sick", "injured", "resting"].contains(status) else { return [] }
+        if let expiresAt = defaults.object(forKey: expiresAtKey) as? Date, expiresAt <= now {
+            return []
+        }
+        return [status]
+    }
+
+    private static func expirationDate(for duration: String, now: Date, calendar: Calendar) -> Date? {
+        if duration == "长期" {
+            return nil
+        }
+        if duration == "明天之前" {
+            return calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))
+        }
+        guard let days = Int(duration.replacingOccurrences(of: "天", with: "")) else {
+            return calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))
+        }
+        return calendar.date(byAdding: .day, value: days, to: now)
+    }
+}
+
 @MainActor
 final class DailySummaryUseCase {
     private let refreshService: HealthDataRefreshService
@@ -70,7 +115,7 @@ final class DailySummaryUseCase {
                 let dayStart = calendar.startOfDay(for: now)
                 let range = DateRangeQuery(start: dayStart, end: calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart)
                 if let record = (try? repo.fetch(in: range))?.first {
-                    return makeDashboardFromRecord(record)
+                    return makeDashboardFromRecord(record, source: .preview)
                 }
             }
             return PreviewDataFactory.makeDashboard(date: now)
@@ -89,8 +134,23 @@ final class DailySummaryUseCase {
         let todayRange = DateRangeQuery.today(containing: now, calendar: calendar)
         let todayStrainSummary = try? await queryService.strainSummary(in: todayRange)
         let workouts = todayStrainSummary?.workouts ?? []
+        let liveExtended = (try? await queryService.extendedMetrics(in: todayRange)) ?? ExtendedHealthMetrics()
         
         let resolvedSleep = try? await queryService.sleepSummary(in: DateRangeQuery.recentDays(2, endingAt: now, calendar: calendar))
+        let profileWeight = UserProfileSettings.weightKilograms()
+        let profileHeight = UserProfileSettings.heightCentimeters()
+        let resolvedWeight = snapshot.bodyWeight ?? profileWeight
+        var extendedMetrics = liveExtended
+        extendedMetrics.age = extendedMetrics.age ?? UserProfileSettings.age()
+        extendedMetrics.heightCm = extendedMetrics.heightCm ?? profileHeight
+        extendedMetrics.bmi = snapshot.bmi
+            ?? extendedMetrics.bmi
+            ?? UserProfileSettings.bodyMassIndex(
+                weightKilograms: resolvedWeight,
+                heightCentimeters: extendedMetrics.heightCm
+            )
+        extendedMetrics.oxygenSaturation = snapshot.oxygenSaturation ?? extendedMetrics.oxygenSaturation
+        extendedMetrics.bodyTemperature = snapshot.wristTemperature ?? extendedMetrics.bodyTemperature
         
         let recoveryMetrics = RecoveryMetricSummary(
             hrvMilliseconds: snapshot.hrvAverage,
@@ -113,21 +173,18 @@ final class DailySummaryUseCase {
             recoveryBaseline: recoveryBaseline,
             strainToday: StrainActivitySummary(
                 activeEnergyKilocalories: snapshot.activeCalories,
-                exerciseMinutes: snapshot.workoutDuration,
+                exerciseMinutes: snapshot.activeMinutes ?? snapshot.workoutDuration,
                 stepCount: snapshot.steps,
                 workouts: workouts
             ),
             strainBaselineDaily: StrainActivitySummary(workouts: []),
             bodyMetrics: BodyMetricsSummary(
                 vo2Max: nil,
-                weightKilograms: snapshot.bodyWeight,
+                weightKilograms: resolvedWeight,
                 bodyFatPercentage: snapshot.bodyFatPercent,
                 leanBodyMassKilograms: nil
             ),
-            extendedMetrics: ExtendedHealthMetrics(
-                oxygenSaturation: snapshot.oxygenSaturation,
-                bodyTemperature: snapshot.wristTemperature
-            )
+            extendedMetrics: extendedMetrics
         )
         
         // 6. Run engines on computed context (strictly local snapshot + local raw baseline history)
@@ -139,7 +196,7 @@ final class DailySummaryUseCase {
         let sleepScore = SleepScoreEngine().calculate(
             from: ScoreEngineFactory.sleep(
                 from: context,
-                sleepTarget: 450,
+                sleepTarget: SleepTargetSettings.targetMinutes(),
                 todayBedtime: context.sleepSummary?.bedtime ?? snapshot.bedtime,
                 recentBedtimes: recentBedtimes
             )
@@ -221,6 +278,7 @@ final class DailySummaryUseCase {
                 }
             }
         }
+        journalFlags.formUnion(ActiveStatusSettings.journalFlags(now: now))
 
         var dashboard = DashboardSummary(
             date: context.date,
@@ -330,7 +388,7 @@ final class DailySummaryUseCase {
             let sleepScore = SleepScoreEngine().calculate(
                 from: ScoreEngineFactory.sleep(
                     from: context,
-                    sleepTarget: 450,
+                    sleepTarget: SleepTargetSettings.targetMinutes(),
                     todayBedtime: context.sleepSummary?.bedtime,
                     recentBedtimes: []
                 )
@@ -432,7 +490,7 @@ final class DailySummaryUseCase {
             let sleepScore = SleepScoreEngine().calculate(
                 from: ScoreEngineFactory.sleep(
                     from: context,
-                    sleepTarget: 450,
+                    sleepTarget: SleepTargetSettings.targetMinutes(),
                     todayBedtime: nil,
                     recentBedtimes: []
                 )
@@ -608,6 +666,7 @@ final class DailySummaryUseCase {
             sleepEfficiency: sleepMetrics["sleep_efficiency"].map { HealthUnitNormalizer.normalizeSleepEfficiency($0 / 100.0) },
             steps: strainMetrics["steps_raw"],
             activeCalories: strainMetrics["active_energy_raw"],
+            activeMinutes: strainMetrics["exercise_minutes_raw"],
             workoutCount: dashboard.workouts.isEmpty ? nil : dashboard.workouts.count,
             workoutTypes: dashboard.workouts.isEmpty ? nil : Set(dashboard.workouts.map(\.activityName)).sorted().joined(separator: ", "),
             workoutDuration: dashboard.workouts.isEmpty ? nil : dashboard.workouts.reduce(0) { $0 + $1.end.timeIntervalSince($1.start) } / 60.0,
@@ -621,6 +680,10 @@ final class DailySummaryUseCase {
             workoutLoad: strainMetrics["workout_load"],
             activityLoad: strainMetrics["activity_load"],
             trainingLoadRatio: strainMetrics["training_load_ratio"],
+            atl: dashboard.energy.metrics["atl"],
+            ctl: dashboard.energy.metrics["ctl"],
+            tsb: dashboard.energy.metrics["tsb"],
+            acwr: dashboard.energy.metrics["acwr"],
             awakeMinutes: context.sleepSummary?.stageMinutes[.awake].map { Double($0) },
             awakeEpisodeCount: context.sleepSummary?.segments.filter { $0.stage == .awake && $0.end.timeIntervalSince($0.start) >= 120 }.count,
             deepSleepMinutes: context.sleepSummary?.stageMinutes[.deep].map { Double($0) },
@@ -691,6 +754,7 @@ final class DailySummaryUseCase {
                 sleepEfficiency: 0.88 + sin(seed * 0.2) * 0.05,
                 steps: steps,
                 activeCalories: activeCalories,
+                activeMinutes: 20 + abs(sin(seed * 0.5)) * 45,
                 workoutCount: offset % 3 == 0 ? 1 : 0,
                 workoutTypes: offset % 3 == 0 ? "跑步" : nil,
                 workoutDuration: offset % 3 == 0 ? 35.0 : 0.0,
@@ -707,102 +771,110 @@ final class DailySummaryUseCase {
         }
         try? modelContext.save()
     }
+#endif
 
-    func makeDashboardFromRecord(_ record: DailyHealthSummaryRecord) -> DashboardSummary {
-        let sleepScoreVal = record.sleepScore ?? 75.0
-        let recoveryScoreVal = record.recoveryScore ?? 78.0
-        let strainScoreVal = record.strainScore ?? 12.0
-        let stressIndexVal = record.stressIndex ?? 32.0
-        let morningEnergyVal = record.morningEnergy ?? 85.0
-        let currentEnergyVal = record.currentEnergy ?? 65.0
-        
-        let sleepScore = MetricResult(
-            name: "Sleep Score",
-            value: sleepScoreVal,
-            band: ScoringMath.band(for: sleepScoreVal),
-            confidence: .high,
-            components: ["duration": sleepScoreVal],
-            componentWeights: ["duration": 1.0],
-            reasons: [L10n.t("Sleep duration meets target.", "睡眠时长达到目标。")],
-            missingInputs: [],
-            dataWindow: DateInterval(start: record.date.addingTimeInterval(-86400), end: record.date),
-            source: .healthKit,
-            algorithmVersion: "1.0.0",
-            lastUpdated: record.date
-        )
-        
-        let recovery = MetricResult(
-            name: "Recovery Score",
-            value: recoveryScoreVal,
-            band: ScoringMath.band(for: recoveryScoreVal),
-            confidence: .high,
-            components: ["hrv": recoveryScoreVal],
-            componentWeights: ["hrv": 1.0],
-            reasons: [L10n.t("HRV is stable within baseline.", "HRV 稳定在基线内。")],
-            missingInputs: [],
-            dataWindow: DateInterval(start: record.date.addingTimeInterval(-86400), end: record.date),
-            source: .healthKit,
-            algorithmVersion: "1.0.0",
-            lastUpdated: record.date
-        )
-        
-        let strain = StrainScoreEngine().calculate(from: StrainScoreInput(
-            activeEnergyToday: record.activeCalories,
-            exerciseMinutesToday: record.workoutDuration,
-            stepCount: record.steps,
-            activeEnergyBaseline: 500,
-            exerciseMinutesBaseline: 35,
-            workoutIntensityLoad: strainScoreVal * 4,
-            recoveryScore: recoveryScoreVal
-        ))
-        
-        let stress = StressIndexEngine().calculate(from: StressIndexInput(
-            mode: .legacyComponentScores,
-            heartRateElevationScore: stressIndexVal * 0.8,
-            hrvSuppressionScore: stressIndexVal * 0.9,
-            sleepDebtStressScore: max(0, 100 - sleepScoreVal),
-            recentStrainStressScore: strainScoreVal
-        ))
-        
-        let energy = EnergyBankEngine().calculate(from: EnergyBankInput(
-            recoveryScore: recoveryScoreVal,
-            sleepScore: sleepScoreVal,
-            strainScore: strainScoreVal,
-            stressIndex: stressIndexVal,
-            hrvToday: record.hrvAverage ?? 50.0,
-            hrvBaseline: 48.0,
-            rhrToday: record.restingHeartRate ?? 60.0,
-            rhrBaseline: 58.0,
-            sleepHours: record.sleepHours ?? 7.5,
-            strainHistory: nil,
-            bodyTempDelta: 0.0
-        ))
-        
+    func loadCachedDashboard(
+        for date: Date = Date(),
+        modelContext: ModelContext
+    ) throws -> DashboardSummary? {
+        let dayStart = calendar.startOfDay(for: date)
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+        let records = try SwiftDataDailyHealthSummaryRepository(modelContext: modelContext)
+            .fetch(in: DateRangeQuery(start: dayStart, end: dayEnd))
+        guard let record = records.last else { return nil }
+        return makeDashboardFromRecord(record)
+    }
+
+    func makeDashboardFromRecord(
+        _ record: DailyHealthSummaryRecord,
+        source: DashboardSummary.DataSource = .cache
+    ) -> DashboardSummary {
+        let totalSleepMinutes = max(Int((record.sleepHours ?? 0) * 60), 0)
+        let deepMinutes = Int(record.deepSleepMinutes ?? percentMinutes(record.deepSleepPercent, total: totalSleepMinutes))
+        let remMinutes = Int(record.remSleepMinutes ?? percentMinutes(record.remSleepPercent, total: totalSleepMinutes))
+        let awakeMinutes = Int(record.awakeMinutes ?? 0)
+        let coreMinutes = max(totalSleepMinutes - deepMinutes - remMinutes, 0)
         let sleepSummary = SleepSummary(
             date: record.date,
-            totalSleepMinutes: Int((record.sleepHours ?? 7.5) * 60),
-            bedtime: calendar.date(bySettingHour: 23, minute: 30, second: 0, of: record.date.addingTimeInterval(-86_400)),
-            wakeTime: calendar.date(bySettingHour: 7, minute: 0, second: 0, of: record.date),
-            stageMinutes: [
-                .deep: Int((record.sleepHours ?? 7.5) * 60 * 0.18),
-                .rem: Int((record.sleepHours ?? 7.5) * 60 * 0.22),
-                .core: Int((record.sleepHours ?? 7.5) * 60 * 0.50),
-                .awake: Int((record.sleepHours ?? 7.5) * 60 * 0.10)
-            ],
+            totalSleepMinutes: totalSleepMinutes,
+            bedtime: record.bedtime,
+            wakeTime: record.wakeTime,
+            stageMinutes: compactStageMinutes([
+                .deep: deepMinutes,
+                .rem: remMinutes,
+                .core: coreMinutes,
+                .awake: awakeMinutes
+            ]),
             segments: [],
-            sleepScore: sleepScoreVal
+            sleepScore: record.sleepScore
         )
-        
-        let dailyInsightText = recoveryScoreVal >= 70
-            ? L10n.t("Recovery is strong today. Excellent window for focused training.", "今天恢复精力充沛。非常适合进行高强度或有针对性的训练。")
-            : (recoveryScoreVal >= 40
-                ? L10n.t("Recovery is moderate. Keep training controlled and protect sleep tonight.", "恢复中等。建议进行中低强度训练，并优先保证今晚睡眠。")
-                : L10n.t("Recovery is low. Prioritize active rest and hydration.", "恢复偏低。建议彻底休息或进行温和拉伸，注意补水。"))
-        
+
+        let sleep = cachedMetric(
+            name: "Sleep Score",
+            value: record.sleepScore,
+            components: compactComponents([
+                "duration_minutes": Double(totalSleepMinutes),
+                "sleep_efficiency": percentValue(record.sleepEfficiency),
+                "deep_pct": percentValue(record.deepSleepPercent),
+                "rem_pct": percentValue(record.remSleepPercent),
+                "awake_minutes": record.awakeMinutes,
+                "awake_episode_count": record.awakeEpisodeCount.map(Double.init)
+            ]),
+            updatedAt: record.updatedAt
+        )
+        let recovery = cachedMetric(
+            name: "Recovery Score",
+            value: record.recoveryScore,
+            components: compactComponents([
+                "hrv_ms": record.hrvAverage,
+                "rhr_bpm": record.restingHeartRate,
+                "respiratory_rate": record.respiratoryRate,
+                "spo2": percentValue(record.oxygenSaturation)
+            ]),
+            updatedAt: record.updatedAt
+        )
+        let targetRange = recommendedStrainRange(for: record.recoveryScore)
+        let strain = cachedMetric(
+            name: "Strain Score",
+            value: record.strainScore,
+            components: compactComponents([
+                "daily_load": record.dailyLoad,
+                "workout_load": record.workoutLoad,
+                "activity_load": record.activityLoad,
+                "training_load_ratio": record.trainingLoadRatio,
+                "steps_raw": record.steps,
+                "active_energy_raw": record.activeCalories,
+                "exercise_minutes_raw": record.activeMinutes ?? record.workoutDuration,
+                "recommended_lower": Double(targetRange.lowerBound),
+                "recommended_upper": Double(targetRange.upperBound)
+            ]),
+            updatedAt: record.updatedAt
+        )
+        let stress = cachedMetric(
+            name: "Physiological Stress Index",
+            value: record.stressIndex,
+            components: compactComponents(["stress_index": record.stressIndex]),
+            updatedAt: record.updatedAt
+        )
+        let energy = cachedMetric(
+            name: "Energy Bank",
+            value: record.currentEnergy ?? record.energyBank,
+            components: compactComponents([
+                "morningEnergy": record.morningEnergy,
+                "currentEnergy": record.currentEnergy ?? record.energyBank,
+                "atl": record.atl,
+                "ctl": record.ctl,
+                "tsb": record.tsb,
+                "acwr": record.acwr
+            ]),
+            updatedAt: record.updatedAt
+        )
+        let snapshot = record.toSnapshot()
+
         return DashboardSummary(
             date: record.date,
             sleepSummary: sleepSummary,
-            sleepScore: sleepScore,
+            sleepScore: sleep,
             recovery: recovery,
             recoveryMetrics: RecoveryMetricSummary(
                 hrvMilliseconds: record.hrvAverage,
@@ -810,27 +882,106 @@ final class DailySummaryUseCase {
                 sleepHeartRate: nil,
                 respiratoryRate: record.respiratoryRate
             ),
-            recoveryBaseline: RecoveryMetricSummary(
-                hrvMilliseconds: 48.0,
-                restingHeartRate: 58.0,
-                sleepHeartRate: nil,
-                respiratoryRate: 14.0
-            ),
+            recoveryBaseline: RecoveryMetricSummary(),
             strain: strain,
             stress: stress,
             energy: energy,
-            healthAge: HealthAgeTrendEngine().calculate(from: HealthAgeTrendInput(factors: [])),
+            healthAge: cachedHealthAgeTrend(record.healthAge),
             bodyMetrics: BodyMetricsSummary(
                 vo2Max: nil,
                 weightKilograms: record.bodyWeight,
                 bodyFatPercentage: record.bodyFatPercent,
                 leanBodyMassKilograms: nil
             ),
-            extendedMetrics: ExtendedHealthMetrics(age: 28, biologicalSex: "male", heightCm: 175),
-            workouts: [],
-            dailyInsight: dailyInsightText,
-            source: .preview
+            extendedMetrics: ExtendedHealthMetrics(
+                bmi: record.bmi,
+                oxygenSaturation: record.oxygenSaturation,
+                bodyTemperature: record.wristTemperature
+            ),
+            workouts: snapshot.workouts,
+            dailyInsight: L10n.t(
+                "Showing your latest saved Apple Health snapshot while Vela checks for updates.",
+                "正在显示最近一次 Apple 健康快照，Vela 会在后台检查更新。"
+            ),
+            source: source
         )
     }
-#endif
+
+    private func cachedMetric(
+        name: String,
+        value: Double?,
+        components: [String: Double],
+        updatedAt: Date
+    ) -> MetricResult {
+        var resolvedComponents = components
+        if let value {
+            resolvedComponents["cached_score"] = value
+        }
+        return MetricResult(
+            name: name,
+            value: value,
+            band: value.map(ScoringMath.band(for:)) ?? .low,
+            confidence: value == nil ? .low : .medium,
+            components: resolvedComponents,
+            componentWeights: [:],
+            reasons: [L10n.t("Loaded from the latest saved Apple Health snapshot.", "已读取最近一次保存的 Apple 健康快照。")],
+            missingInputs: value == nil ? ["cachedValue"] : [],
+            dataWindow: DateInterval(start: calendar.startOfDay(for: updatedAt), end: updatedAt),
+            source: .derived,
+            algorithmVersion: VelaAppMetadata.configVersion,
+            lastUpdated: updatedAt
+        )
+    }
+
+    private func compactComponents(_ values: [String: Double?]) -> [String: Double] {
+        values.reduce(into: [:]) { result, pair in
+            if let value = pair.value {
+                result[pair.key] = value
+            }
+        }
+    }
+
+    private func compactStageMinutes(_ values: [SleepStage: Int]) -> [SleepStage: Int] {
+        values.filter { $0.value > 0 }
+    }
+
+    private func percentMinutes(_ value: Double?, total: Int) -> Double {
+        guard let value else { return 0 }
+        return (value <= 1 ? value : value / 100) * Double(total)
+    }
+
+    private func percentValue(_ value: Double?) -> Double? {
+        guard let value else { return nil }
+        return value <= 1 ? value * 100 : value
+    }
+
+    private func recommendedStrainRange(for recoveryScore: Double?) -> ClosedRange<Int> {
+        guard let recoveryScore else { return 40...70 }
+        if recoveryScore < 40 { return 15...40 }
+        if recoveryScore < 70 { return 35...65 }
+        return 55...85
+    }
+
+    private func cachedHealthAgeTrend(_ score: Double?) -> HealthAgeTrendResult {
+        guard let score else {
+            return HealthAgeTrendEngine().calculate(from: HealthAgeTrendInput(factors: []))
+        }
+        let label: HealthAgeTrendLabel
+        if score >= 0.35 {
+            label = .improving
+        } else if score <= -0.35 {
+            label = .worsening
+        } else {
+            label = .stable
+        }
+        return HealthAgeTrendResult(
+            trendScore: score,
+            label: label,
+            confidence: .medium,
+            positiveFactors: [],
+            negativeFactors: [],
+            reasons: [L10n.t("Loaded from the latest saved trend snapshot.", "已读取最近一次保存的趋势快照。")],
+            metrics: ["trend_score": score]
+        )
+    }
 }

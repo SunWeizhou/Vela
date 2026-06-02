@@ -184,9 +184,11 @@ final class NotificationService {
         content.sound = .default
         content.categoryIdentifier = VelaNotificationCategory.bedtimeReminder.identifier
 
+        let scheduledHour = bedtimeHour
+        let scheduledMinute = bedtimeMinute
         var dateComponents = DateComponents()
-        dateComponents.hour = bedtimeHour
-        dateComponents.minute = bedtimeMinute
+        dateComponents.hour = scheduledHour
+        dateComponents.minute = scheduledMinute
 
         let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
         let request = UNNotificationRequest(
@@ -195,11 +197,11 @@ final class NotificationService {
             trigger: trigger
         )
 
-        center.add(request) { [weak self] error in
+        center.add(request) { [logger] error in
             if let error {
-                self?.logger.error("Failed to schedule bedtime reminder: \(error.localizedDescription)")
+                logger.error("Failed to schedule bedtime reminder: \(error.localizedDescription)")
             } else {
-                self?.logger.info("Bedtime reminder scheduled for \(self?.bedtimeHour ?? 22):\(String(format: "%02d", self?.bedtimeMinute ?? 0))")
+                logger.info("Bedtime reminder scheduled for \(scheduledHour):\(String(format: "%02d", scheduledMinute))")
             }
         }
     }

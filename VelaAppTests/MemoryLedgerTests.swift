@@ -17,9 +17,10 @@ final class MemoryLedgerTests: XCTestCase {
         modelContext = modelContainer.mainContext
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         modelContext = nil
         modelContainer = nil
+        try await super.tearDown()
     }
 
     // MARK: - Create Proposal

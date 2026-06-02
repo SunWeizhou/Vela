@@ -27,6 +27,7 @@ enum ToolFactory {
             WebSearchTool(),
             UpdateWikiTool(modelContext: modelContext),
             HealthDataTool(dashboard: dashboard),
+            StrengthWorkoutHistoryTool(modelContext: modelContext),
             JournalCorrelationTool(),
             FoodLogTool(modelContext: modelContext),
             TrainingPlanTool(decision: dashboard.trainingDecision),

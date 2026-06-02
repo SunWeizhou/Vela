@@ -213,7 +213,7 @@ struct HealthDataTool: AgentTool {
             "properties": .object([
                 "metric": .object([
                     "type": .string("string"),
-                    "description": .string("The metric to retrieve. One of: sleep_score, recovery_score, strain_score, stress_index, hrv_avg, rhr_avg, energy_bank, health_age, steps, active_calories, sleep_hours, sleep_efficiency, rem_percent, deep_percent, resting_hr, workouts_today."),
+                    "description": .string("The metric to retrieve. One of: sleep_score, recovery_score, strain_score, stress_index, hrv_avg, rhr_avg, energy_bank, health_age, steps, active_calories, sleep_hours, sleep_efficiency, rem_percent, deep_percent, resting_hr, respiratory_rate, spo2, body_temperature, atl, ctl, tsb, acwr, training_load_ratio, workouts_today."),
                 ]),
             ]),
             "required": .array([.string("metric")]),
@@ -274,29 +274,57 @@ struct HealthDataTool: AgentTool {
             response.value = dashboard.energy.value
             response.unit = "pts"
             response.confidence = dashboard.energy.confidence.rawValue
+        case "atl", "ctl", "tsb", "acwr":
+            response.value = dashboard.energy.metrics[metric.lowercased()]
+            response.unit = metric.lowercased() == "acwr" ? "ratio" : "AU"
+            response.confidence = response.value == nil ? "unavailable" : dashboard.energy.confidence.rawValue
+        case "training_load_ratio":
+            response.value = dashboard.strain.metrics["training_load_ratio"]
+            response.unit = "ratio"
+            response.confidence = response.value == nil ? "unavailable" : dashboard.strain.confidence.rawValue
         case "steps":
             response.value = dashboard.strain.metrics["steps_raw"]
             response.unit = "steps"
-            response.confidence = "high"
+            response.confidence = response.value == nil ? "unavailable" : dashboard.strain.confidence.rawValue
         case "active_calories":
             response.value = dashboard.strain.metrics["active_energy_raw"]
             response.unit = "kcal"
-            response.confidence = "high"
+            response.confidence = response.value == nil ? "unavailable" : dashboard.strain.confidence.rawValue
         case "sleep_hours":
             response.value = dashboard.sleepSummary.totalSleepMinutes > 0 ? Double(dashboard.sleepSummary.totalSleepMinutes) / 60.0 : nil
             response.unit = "hours"
-            response.confidence = "high"
+            response.confidence = response.value == nil ? "unavailable" : dashboard.sleepScore.confidence.rawValue
         case "sleep_efficiency":
             response.value = dashboard.sleepScore.metrics["sleep_efficiency"]
             response.unit = "%"
-            response.confidence = "high"
+            response.confidence = response.value == nil ? "unavailable" : dashboard.sleepScore.confidence.rawValue
         case "rem_percent":
             response.value = dashboard.sleepScore.metrics["rem_pct"]
             response.unit = "%"
-            response.confidence = "high"
+            response.confidence = response.value == nil ? "unavailable" : dashboard.sleepScore.confidence.rawValue
         case "deep_percent":
             response.value = dashboard.sleepScore.metrics["deep_pct"]
             response.unit = "%"
+            response.confidence = response.value == nil ? "unavailable" : dashboard.sleepScore.confidence.rawValue
+        case "health_age":
+            response.value = dashboard.healthAge.trendScore
+            response.unit = "trend_score"
+            response.confidence = dashboard.healthAge.confidence.rawValue
+        case "respiratory_rate":
+            response.value = dashboard.recoveryMetrics.respiratoryRate
+            response.unit = "breaths/min"
+            response.confidence = response.value == nil ? "unavailable" : dashboard.recovery.confidence.rawValue
+        case "spo2":
+            response.value = dashboard.extendedMetrics.oxygenSaturation
+            response.unit = "%"
+            response.confidence = response.value == nil ? "unavailable" : "high"
+        case "body_temperature":
+            response.value = dashboard.extendedMetrics.bodyTemperature
+            response.unit = "C"
+            response.confidence = response.value == nil ? "unavailable" : "high"
+        case "workouts_today":
+            response.value = Double(dashboard.workouts.count)
+            response.unit = "workouts"
             response.confidence = "high"
         default:
             return "Unknown metric '\(metric)'"
@@ -309,6 +337,70 @@ struct HealthDataTool: AgentTool {
     }
 }
 
+struct StrengthWorkoutHistoryTool: AgentTool {
+    let name = "get_strength_workout_history"
+    let description = "Retrieve recent locally logged strength workouts with exercises, equipment, sets, repetitions, weights, and calculated training volume. Use this when the user asks about gym progress, lifting history, exercise selection, or volume trends."
+
+    nonisolated(unsafe) let modelContext: ModelContext
+
+    var parameters: [String: Value] {
+        [
+            "type": .string("object"),
+            "properties": .object([
+                "limit": .object([
+                    "type": .string("integer"),
+                    "description": .string("Maximum number of recent sessions to return. Defaults to 8 and is capped at 20."),
+                ]),
+            ]),
+        ]
+    }
+
+    func execute(arguments: String) async throws -> String {
+        let limit: Int = {
+            guard let data = arguments.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return 8
+            }
+            return min(max(json["limit"] as? Int ?? 8, 1), 20)
+        }()
+
+        return await MainActor.run {
+            let descriptor = FetchDescriptor<StrengthWorkoutRecord>(
+                sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+            )
+            let records = Array(((try? modelContext.fetch(descriptor)) ?? []).prefix(limit))
+            let payload = records.map { record in
+                StrengthWorkoutHistoryPayload(
+                    title: record.title,
+                    startedAt: record.startedAt,
+                    durationMinutes: record.durationMinutes,
+                    exerciseCount: record.exerciseCount,
+                    totalSets: record.totalSetCount,
+                    totalRepetitions: record.totalRepetitionCount,
+                    totalVolumeKilograms: record.totalVolumeKilograms,
+                    exercises: record.exercises
+                )
+            }
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            guard let data = try? encoder.encode(payload) else { return "[]" }
+            return String(data: data, encoding: .utf8) ?? "[]"
+        }
+    }
+}
+
+private struct StrengthWorkoutHistoryPayload: Encodable {
+    var title: String
+    var startedAt: Date
+    var durationMinutes: Int
+    var exerciseCount: Int
+    var totalSets: Int
+    var totalRepetitions: Int
+    var totalVolumeKilograms: Double
+    var exercises: [StrengthExerciseLog]
+}
+
 /// Generates a personalized training plan based on today's recovery, strain,
 /// energy bank (ATL/CTL/TSB), sleep, and stress scores. The tool returns a
 /// structured readiness context that the LLM uses to craft the final plan.
@@ -316,7 +408,7 @@ struct TrainingPlanTool: AgentTool {
     let name = "generate_training_plan"
     let description = "Generate a personalized training plan recommendation based on today's physiological readiness (recovery, strain, energy bank, sleep, stress) and the user's Wiki goals. Use this when the user asks about workout plans, training recommendations, or whether they should train today."
 
-    nonisolated(unsafe) let decision: TrainingDecision
+    let decision: TrainingDecision
 
     var parameters: [String: Value] {
         [

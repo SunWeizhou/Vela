@@ -205,6 +205,7 @@ final class HealthKitQueryService: HealthQueryService {
                 range: DateRangeQuery(start: workout.startDate, end: workout.endDate)
             )
             summaries.append(WorkoutSummary(
+                id: workout.uuid,
                 start: workout.startDate,
                 end: workout.endDate,
                 activityName: workout.workoutActivityType.displayName,
@@ -415,7 +416,7 @@ final class HealthKitQueryService: HealthQueryService {
         let rawWorkouts: [HKWorkout] = try await withCheckedThrowingContinuation { continuation in
             let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
             let query = HKSampleQuery(sampleType: .workoutType(), predicate: nil, limit: limit, sortDescriptors: [sort]) { _, samples, error in
-                if let error {
+                if error != nil {
                     continuation.resume(returning: [])
                     return
                 }
@@ -453,7 +454,7 @@ final class HealthKitQueryService: HealthQueryService {
             let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
             let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
             let query = HKSampleQuery(sampleType: heartRateType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, error in
-                if let error {
+                if error != nil {
                     continuation.resume(returning: [])
                     return
                 }
@@ -464,6 +465,49 @@ final class HealthKitQueryService: HealthQueryService {
                     )
                 } ?? []
                 continuation.resume(returning: hrSamples)
+            }
+            healthStore.execute(query)
+        }
+    }
+
+    func bloodGlucoseSamples(in range: DateRangeQuery) async throws -> [BloodGlucoseReading] {
+        guard let glucoseType = HKObjectType.quantityType(forIdentifier: .bloodGlucose) else {
+            return []
+        }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let predicate = HKQuery.predicateForSamples(
+                withStart: range.start,
+                end: range.end,
+                options: []
+            )
+            let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+            let query = HKSampleQuery(
+                sampleType: glucoseType,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [sort]
+            ) { _, samples, error in
+                if let error {
+                    let nsError = error as NSError
+                    if nsError.domain == HKErrorDomain && (nsError.code == 4 || nsError.code == 3) {
+                        continuation.resume(returning: [])
+                    } else if error.localizedDescription.contains("No data available") {
+                        continuation.resume(returning: [])
+                    } else {
+                        continuation.resume(throwing: error)
+                    }
+                    return
+                }
+
+                let unit = HKUnit(from: "mg/dL")
+                let readings = (samples as? [HKQuantitySample])?.map { sample in
+                    BloodGlucoseReading(
+                        date: sample.startDate,
+                        milligramsPerDeciliter: sample.quantity.doubleValue(for: unit)
+                    )
+                } ?? []
+                continuation.resume(returning: readings)
             }
             healthStore.execute(query)
         }
@@ -492,17 +536,44 @@ final class HealthKitQueryService: HealthQueryService {
         guard let route = routes.first else { return [] }
         
         return try await withCheckedThrowingContinuation { continuation in
-            var coords: [RouteCoordinate] = []
+            let accumulator = WorkoutRouteAccumulator()
             let query = HKWorkoutRouteQuery(route: route) { _, locations, done, error in
                 if let locations = locations {
-                    coords.append(contentsOf: locations.map { RouteCoordinate(latitude: $0.coordinate.latitude, longitude: $0.coordinate.longitude) })
+                    accumulator.append(
+                        locations.map {
+                            RouteCoordinate(
+                                latitude: $0.coordinate.latitude,
+                                longitude: $0.coordinate.longitude
+                            )
+                        }
+                    )
                 }
-                if done {
-                    continuation.resume(returning: coords)
+                if done || error != nil, let coordinates = accumulator.finish() {
+                    continuation.resume(returning: error == nil ? coordinates : [])
                 }
             }
             healthStore.execute(query)
         }
+    }
+}
+
+private final class WorkoutRouteAccumulator: @unchecked Sendable {
+    private let lock = NSLock()
+    private var coordinates: [RouteCoordinate] = []
+    private var isFinished = false
+
+    func append(_ newCoordinates: [RouteCoordinate]) {
+        lock.lock()
+        coordinates.append(contentsOf: newCoordinates)
+        lock.unlock()
+    }
+
+    func finish() -> [RouteCoordinate]? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !isFinished else { return nil }
+        isFinished = true
+        return coordinates
     }
 }
 

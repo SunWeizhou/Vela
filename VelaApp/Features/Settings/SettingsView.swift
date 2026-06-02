@@ -262,8 +262,8 @@ struct SettingsView: View {
                                 .foregroundStyle(VelaTheme.secondaryText)
                             Spacer()
                             Picker("", selection: $sleepTargetHours) {
-                                ForEach(5...10, id: \.self) { h in
-                                    Text("\(h)h").tag(Double(h))
+                                ForEach(SleepTargetSettings.availableHours, id: \.self) { hours in
+                                    Text(SleepTargetSettings.displayHours(hours)).tag(hours)
                                 }
                             }
                             .pickerStyle(.menu)

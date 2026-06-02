@@ -97,6 +97,17 @@ struct WeightLogSheetView: View {
             UINotificationFeedbackGenerator().notificationOccurred(.error)
             return
         }
+        let trimmedBodyFat = bodyFatString.trimmingCharacters(in: .whitespacesAndNewlines)
+        let bodyFatValue: Double?
+        if trimmedBodyFat.isEmpty {
+            bodyFatValue = nil
+        } else if let value = Double(trimmedBodyFat), value > 0, value <= 100 {
+            bodyFatValue = value
+        } else {
+            errorMsg = AppLanguage.stored.isChinese ? "请输入 0 到 100 之间的有效体脂率。" : "Please enter a valid body fat percentage between 0 and 100."
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            return
+        }
 
         // 1. Save weight as BiomarkerRecord
         let weightRecord = BiomarkerRecord(
@@ -111,7 +122,7 @@ struct WeightLogSheetView: View {
         modelContext.insert(weightRecord)
 
         // 2. Save body fat if available
-        if let fatVal = Double(bodyFatString), fatVal > 0 {
+        if let fatVal = bodyFatValue {
             let fatRecord = BiomarkerRecord(
                 name: "Body Fat",
                 value: fatVal,
@@ -132,9 +143,18 @@ struct WeightLogSheetView: View {
         )
         if let summaries = try? modelContext.fetch(summaryDescriptor), let first = summaries.first {
             first.bodyWeight = weightVal
-            if let fatVal = Double(bodyFatString), fatVal > 0 {
+            if let fatVal = bodyFatValue {
                 first.bodyFatPercent = fatVal
             }
+        } else {
+            modelContext.insert(
+                DailyHealthSummaryRecord(
+                    dayIdentifier: dayId,
+                    date: calendar.startOfDay(for: date),
+                    bodyWeight: weightVal,
+                    bodyFatPercent: bodyFatValue
+                )
+            )
         }
 
         do {

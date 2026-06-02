@@ -1,5 +1,7 @@
 import SwiftUI
 import SwiftData
+import UIKit
+@preconcurrency import AVFoundation
 
 // MARK: - PlusActionSheet — Bevel Replica Quick Actions
 // 3×3 circle buttons grid × Dual-eye AI Mascot center × Bottom circle cancel button
@@ -24,54 +26,42 @@ struct PlusActionSheet: View {
             ) {
                 // Row 1
                 circleActionButton(icon: "square.and.pencil", label: "描述食物") {
-                    VelaAppState.shared.routeToCoach(question: "描述我今天吃的中餐...")
-                    dismiss()
+                    deferAction(.coach("描述我今天吃的中餐..."))
                 }
                 
                 circleActionButton(icon: "photo.badge.plus", label: "导入食物") {
-                    VelaAppState.shared.scannerType = "library"
-                    VelaAppState.shared.triggerFoodScanner = true
-                    dismiss()
+                    deferAction(.foodScanner("library"))
                 }
                 
                 circleActionButton(icon: "camera.fill", label: "拍摄食物") {
-                    VelaAppState.shared.scannerType = "camera"
-                    VelaAppState.shared.triggerFoodScanner = true
-                    dismiss()
+                    deferAction(.foodScanner("camera"))
                 }
                 
                 // Row 2
                 circleActionButton(icon: "barcode.viewfinder", label: "扫描食物") {
-                    VelaAppState.shared.scannerType = "barcode"
-                    VelaAppState.shared.triggerFoodScanner = true
-                    dismiss()
+                    deferAction(.foodScanner("barcode"))
                 }
                 
                 // Center: Vela AI Mascot (Indigo Sparkles Gradient Circle) - now Coach
                 mascotCenterButton(label: "Coach") {
-                    VelaAppState.shared.routeToCoach(question: nil)
-                    dismiss()
+                    deferAction(.coach(nil))
                 }
                 
-                circleActionButton(icon: "magnifyingglass", label: "搜索食物") {
-                    VelaAppState.shared.triggerFoodSearch = true
-                    dismiss()
+                circleActionButton(icon: "book.pages.fill", label: "手记") {
+                    deferAction(.journal)
                 }
                 
                 // Row 3
                 circleActionButton(icon: "wand.and.stars", label: "智能处方") {
-                    VelaAppState.shared.routeToCoach(question: "帮我根据今日状态生成一份运动健康处方模版")
-                    dismiss()
+                    deferAction(.coach("帮我根据今日状态生成一份运动健康处方模版"))
                 }
                 
                 circleActionButton(icon: "list.bullet.clipboard.fill", label: "查看模版") {
-                    VelaAppState.shared.routeToCoach(question: "我有哪些已保存的运动与习惯处方模版？")
-                    dismiss()
+                    deferAction(.coach("我有哪些已保存的运动与习惯处方模版？"))
                 }
                 
                 circleActionButton(icon: "figure.run", label: "记录活动") {
-                    VelaAppState.shared.triggerWorkoutLog = true
-                    dismiss()
+                    deferAction(.workoutLog)
                 }
             }
             .padding(.horizontal, 24)
@@ -95,6 +85,11 @@ struct PlusActionSheet: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(hex: "#F5F3F0")) // Warm canvas base
+    }
+
+    private func deferAction(_ action: VelaAppState.DeferredQuickAction) {
+        VelaAppState.shared.deferQuickActionUntilSheetDismisses(action)
+        dismiss()
     }
 
     // MARK: - Standard Circular Action Button
@@ -354,26 +349,42 @@ struct WorkoutLogSheetView: View {
     
     private func saveWorkoutToSwiftData() {
         let calendar = Calendar.current
-        let targetDay = calendar.startOfDay(for: Date())
+        let end = Date()
+        let start = end.addingTimeInterval(-durationMinutes * 60)
+        let targetDay = calendar.startOfDay(for: end)
+        let workout = WorkoutSummary(
+            start: start,
+            end: end,
+            activityName: selectedSport,
+            energyKilocalories: caloriesBurned,
+            source: "manual"
+        )
         
         let descriptor = FetchDescriptor<DailyHealthSummaryRecord>()
         do {
             let all = try modelContext.fetch(descriptor)
             if let todaySummary = all.first(where: { calendar.isDate($0.date, inSameDayAs: targetDay) }) {
-                todaySummary.workoutCount = (todaySummary.workoutCount ?? 0) + 1
+                var workouts = todaySummary.toSnapshot().workouts
+                workouts.append(workout)
+                todaySummary.workoutsData = try? JSONEncoder().encode(workouts)
+                todaySummary.workoutCount = workouts.count
+                todaySummary.workoutTypes = Set(workouts.map(\.activityName)).sorted().joined(separator: ", ")
                 todaySummary.workoutDuration = (todaySummary.workoutDuration ?? 0) + durationMinutes
                 todaySummary.activeCalories = (todaySummary.activeCalories ?? 0) + caloriesBurned
+                todaySummary.activeMinutes = (todaySummary.activeMinutes ?? 0) + durationMinutes
                 todaySummary.strainScore = min(100.0, max(todaySummary.strainScore ?? 0.0, exertionScore * 10.0))
                 todaySummary.updatedAt = Date()
             } else {
-                let newSummary = DailyHealthSummaryRecord(
-                    dayIdentifier: DailyHealthSummaryRecord.dayIdentifier(for: targetDay, calendar: calendar),
+                let newSummary = DailyHealthSummaryRecord(snapshot: DailyHealthSnapshot(
                     date: targetDay,
                     strainScore: exertionScore * 10.0,
                     activeCalories: caloriesBurned,
+                    activeMinutes: durationMinutes,
                     workoutCount: 1,
-                    workoutDuration: durationMinutes
-                )
+                    workoutTypes: selectedSport,
+                    workoutDuration: durationMinutes,
+                    workouts: [workout]
+                ), calendar: calendar)
                 modelContext.insert(newSummary)
             }
             try modelContext.save()
@@ -506,17 +517,19 @@ struct FoodSearchSheetView: View {
     }
 }
 
-// 3. Food Camera/Library Scanner Simulator View
-struct FoodScannerSimulatorView: View {
+// 3. Food Camera/Library Scanner
+struct FoodScannerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     let type: String
-    
-    @State private var scanProgress = 0.0
-    @State private var isScanning = true
-    @State private var scanResultName = "香煎三明治与煎蛋"
-    @State private var scanResultCal = 340
-    @State private var isCompleted = false
+
+    @State private var selectedImage: UIImage?
+    @State private var showImagePicker = false
+    @State private var isAnalyzing = false
+    @State private var result: FoodAnalysisResult?
+    @State private var errorMessage: String?
+    @State private var scannedBarcode: String?
+    @State private var barcodeScannerID = UUID()
     
     var body: some View {
         VStack(spacing: 24) {
@@ -541,140 +554,465 @@ struct FoodScannerSimulatorView: View {
             }
             .padding(.horizontal, 20)
             
-            if isScanning {
-                VStack(spacing: 20) {
-                    ZStack {
-                        Circle()
-                            .stroke(Color(hex: "#E8E4DD"), lineWidth: 2)
-                            .frame(width: 140, height: 140)
-                        
-                        Circle()
-                            .trim(from: 0.0, to: CGFloat(scanProgress))
-                            .stroke(Color(hex: "#C56B4A"), style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                            .frame(width: 140, height: 140)
-                            .rotationEffect(.degrees(-90))
-                        
-                        Image(systemName: type == "barcode" ? "barcode.viewfinder" : "camera.metering.matrix")
-                            .font(.system(size: 40))
-                            .foregroundStyle(Color(hex: "#C56B4A"))
-                    }
-                    .onAppear {
-                        startScanProgress()
-                    }
-                    
-                    Text("AI 图像处理中，正在提取宏量元素数据...")
-                        .font(.system(size: 13, weight: .bold))
+            if isAnalyzing {
+                VStack(spacing: 16) {
+                    ProgressView()
+                        .tint(Color(hex: "#C56B4A"))
+                    Text(type == "barcode" ? "正在查询食品条码..." : "正在用 Kimi 视觉模型分析餐食...")
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Color(hex: "#8E8A80"))
                 }
                 .padding(.vertical, 40)
+            } else if let result {
+                resultContent(result)
+            } else if type == "barcode" {
+                barcodeScannerContent
             } else {
-                // Scan Complete!
-                VStack(spacing: 24) {
-                    ZStack {
-                        Circle()
-                            .fill(Color(hex: "#34C759").opacity(0.1))
-                            .frame(width: 72, height: 72)
-                        
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 48))
-                            .foregroundStyle(Color(hex: "#34C759"))
-                    }
-                    
-                    VStack(spacing: 6) {
-                        Text("解析识别成功！")
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundStyle(Color(hex: "#1A1917"))
-                        Text("发现 1 项食物: \(scanResultName)")
-                            .font(.system(size: 14))
-                            .foregroundStyle(Color(hex: "#8E8A80"))
-                    }
-                    
-                    HStack(spacing: 20) {
-                        VStack {
-                            Text("\(scanResultCal)")
-                                .font(.system(size: 24, weight: .bold, design: .rounded))
-                                .foregroundStyle(Color(hex: "#C56B4A"))
-                            Text("卡路里")
-                                .font(.system(size: 11))
-                                .foregroundStyle(Color(hex: "#8E8A80"))
-                        }
-                        
-                        VStack {
-                            Text("18g")
-                                .font(.system(size: 24, weight: .bold, design: .rounded))
-                                .foregroundStyle(Color(hex: "#1A1917"))
-                            Text("蛋白质")
-                                .font(.system(size: 11))
-                                .foregroundStyle(Color(hex: "#8E8A80"))
-                        }
-                        
-                        VStack {
-                            Text("32g")
-                                .font(.system(size: 24, weight: .bold, design: .rounded))
-                                .foregroundStyle(Color(hex: "#1A1917"))
-                            Text("碳水")
-                                .font(.system(size: 11))
-                                .foregroundStyle(Color(hex: "#8E8A80"))
-                        }
-                    }
-                    .padding(.vertical, 16)
-                    .frame(maxWidth: .infinity)
-                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white))
-                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
-                    .padding(.horizontal, 20)
-                    
-                    Button {
-                        saveScannedFoodToSwiftData()
-                        dismiss()
-                    } label: {
-                        Text("确认并记录")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
-                            .background(RoundedRectangle(cornerRadius: 25, style: .continuous).fill(Color(hex: "#34C759")))
-                            .shadow(color: Color(hex: "#34C759").opacity(0.2), radius: 6, y: 3)
-                            .padding(.horizontal, 20)
-                    }
-                    .buttonStyle(.plain)
+                VStack(spacing: 16) {
+                    Image(systemName: type == "camera" ? "camera.fill" : "photo.on.rectangle")
+                        .font(.system(size: 44))
+                        .foregroundStyle(Color(hex: "#C56B4A"))
+
+                    Text("使用真实照片分析营养")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(Color(hex: "#1A1917"))
+
+                    Text("图片会在你确认后发送给 Kimi 视觉模型。需要先在设置中添加 Kimi API Key。")
+                        .font(.system(size: 13))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .padding(.horizontal, 20)
                 }
+                .padding(.vertical, 24)
+            }
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.system(size: 13))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Color(hex: "#FF3B30"))
+                    .padding(.horizontal, 20)
+            }
+
+            if type != "barcode", result == nil, !isAnalyzing {
+                Button(type == "camera" ? "打开相机" : "从相册选择") {
+                    openImagePicker()
+                }
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+                .background(RoundedRectangle(cornerRadius: 25, style: .continuous).fill(Color(hex: "#C56B4A")))
+                .padding(.horizontal, 20)
+                .buttonStyle(.plain)
             }
         }
         .background(Color(hex: "#F5F3F0").ignoresSafeArea())
-    }
-    
-    private func startScanProgress() {
-        Task { @MainActor in
-            scanProgress = 0.0
-            isScanning = true
-            for _ in 0..<25 {
-                try? await Task.sleep(nanoseconds: 50_000_000) // 0.05 seconds
-                scanProgress += 0.04
-            }
-            withAnimation {
-                isScanning = false
+        .sheet(isPresented: $showImagePicker) {
+            ImagePicker(sourceType: imagePickerSourceType, selectedImage: $selectedImage)
+                .ignoresSafeArea()
+        }
+        .onChange(of: selectedImage) { _, newImage in
+            guard let newImage else { return }
+            Task {
+                await analyze(image: newImage)
             }
         }
     }
-    
-    private func saveScannedFoodToSwiftData() {
-        let item = FoodLogItem(name: scanResultName, portion: "1份", calories: scanResultCal)
-        let record = FoodLogRecord(
-            mealName: "扫描导入",
-            foods: [item],
-            totalCalories: scanResultCal,
-            proteinGrams: 18,
-            carbsGrams: 32,
-            fatGrams: 12,
-            fiberGrams: 2,
-            healthScore: "B+",
-            source: .photoAnalysis
+
+    private var barcodeScannerContent: some View {
+        VStack(spacing: 14) {
+            BarcodeScannerView(
+                onCode: lookupBarcode,
+                onError: { errorMessage = $0 }
+            )
+            .id(barcodeScannerID)
+            .frame(height: 220)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+            }
+            .padding(.horizontal, 20)
+
+            Text(scannedBarcode.map { "已识别条码：\($0)" } ?? "将包装条码放入取景框内")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(Color(hex: "#8E8A80"))
+
+            Text("营养数据来自 Open Food Facts。记录前请核对包装标示。")
+                .font(.system(size: 12))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Color(hex: "#8E8A80"))
+                .padding(.horizontal, 20)
+
+            if scannedBarcode != nil {
+                Button("重新扫描") {
+                    scannedBarcode = nil
+                    errorMessage = nil
+                    barcodeScannerID = UUID()
+                }
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(Color(hex: "#C56B4A"))
+            }
+        }
+    }
+
+    private func resultContent(_ result: FoodAnalysisResult) -> some View {
+        VStack(spacing: 14) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 44))
+                .foregroundStyle(Color(hex: "#34C759"))
+
+            Text("解析完成，请确认后记录")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(Color(hex: "#1A1917"))
+
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(Array(result.foods.enumerated()), id: \.offset) { _, food in
+                    Text("\(food.name) · \(food.portion) · \(food.calories) kcal")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color(hex: "#1A1917"))
+                }
+                Divider()
+                Text("总计 \(result.totalCalories) kcal · 蛋白质 \(result.macros.protein)g · 碳水 \(result.macros.carbs)g · 脂肪 \(result.macros.fat)g")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Color(hex: "#8E8A80"))
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
+            .padding(.horizontal, 20)
+
+            Button("确认并记录") {
+                save(result: result)
+            }
+            .font(.system(size: 16, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 50)
+            .background(RoundedRectangle(cornerRadius: 25, style: .continuous).fill(Color(hex: "#34C759")))
+            .padding(.horizontal, 20)
+            .buttonStyle(.plain)
+
+            Button("重新选择") {
+                self.result = nil
+                selectedImage = nil
+                openImagePicker()
+            }
+            .font(.system(size: 14, weight: .bold))
+            .foregroundStyle(Color(hex: "#C56B4A"))
+        }
+    }
+
+    private var imagePickerSourceType: UIImagePickerController.SourceType {
+        type == "camera" ? .camera : .photoLibrary
+    }
+
+    private func openImagePicker() {
+        guard UIImagePickerController.isSourceTypeAvailable(imagePickerSourceType) else {
+            errorMessage = type == "camera" ? "当前设备没有可用相机。" : "当前设备无法访问相册。"
+            return
+        }
+        errorMessage = nil
+        showImagePicker = true
+    }
+
+    @MainActor
+    private func analyze(image: UIImage) async {
+        guard let apiKey = try? KeychainService.shared.read(account: FoodPhotoAnalyzer.keychainAccount),
+              !apiKey.isEmpty else {
+            errorMessage = "请先在设置中添加 Kimi API Key。"
+            return
+        }
+
+        isAnalyzing = true
+        errorMessage = nil
+        defer { isAnalyzing = false }
+
+        do {
+            result = try await FoodPhotoAnalyzer(apiKey: apiKey).analyzeFoodPhoto(image)
+        } catch {
+            errorMessage = "餐食分析失败：\(error.localizedDescription)"
+        }
+    }
+
+    private func save(result: FoodAnalysisResult) {
+        let source: FoodLogSource = type == "barcode" ? .barcodeLookup : .photoAnalysis
+        let journalPrefix = type == "barcode" ? "[Barcode Lookup]" : "[Photo Analysis]"
+        let foodLog = FoodLogRecord(
+            analysis: result,
+            mealName: defaultMealName(for: Date()),
+            source: source
         )
-        modelContext.insert(record)
+        modelContext.insert(foodLog)
+        modelContext.insert(
+            JournalEntryRecord(
+                createdAt: Date(),
+                tags: ["food", "meal"],
+                note: "\(journalPrefix) \(result.plainTextSummary())",
+                value: Double(result.totalCalories),
+                unit: "kcal"
+            )
+        )
+
         do {
             try modelContext.save()
+            dismiss()
         } catch {
-            print("Failed to save scanned food: \(error)")
+            errorMessage = "营养记录保存失败，请重试。"
         }
+    }
+
+    private func defaultMealName(for date: Date, calendar: Calendar = .current) -> String {
+        switch calendar.component(.hour, from: date) {
+        case 5..<11: return "Breakfast"
+        case 11..<16: return "Lunch"
+        case 16..<22: return "Dinner"
+        default: return "Snack"
+        }
+    }
+
+    private func lookupBarcode(_ barcode: String) {
+        guard scannedBarcode == nil else { return }
+        scannedBarcode = barcode
+        isAnalyzing = true
+        errorMessage = nil
+
+        Task {
+            do {
+                result = try await BarcodeFoodLookupService().lookup(barcode: barcode)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isAnalyzing = false
+        }
+    }
+}
+
+// MARK: - Barcode Food Lookup
+
+struct BarcodeFoodLookupService: Sendable {
+    static let endpoint = URL(string: "https://world.openfoodfacts.org/api/v2/product")!
+
+    func lookup(barcode: String) async throws -> FoodAnalysisResult {
+        let normalized = barcode.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else {
+            throw BarcodeFoodLookupError.invalidBarcode
+        }
+
+        let url = Self.endpoint
+            .appendingPathComponent(normalized)
+            .appendingPathExtension("json")
+            .appending(queryItems: [
+                URLQueryItem(
+                    name: "fields",
+                    value: "code,product_name,product_name_zh,serving_size,nutrition_grades,nutriments"
+                )
+            ])
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 12
+        request.setValue("Vela-iOS/0.1", forHTTPHeaderField: "User-Agent")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw BarcodeFoodLookupError.requestFailed
+        }
+        return try Self.decodeProduct(data: data, barcode: normalized)
+    }
+
+    static func decodeProduct(data: Data, barcode: String) throws -> FoodAnalysisResult {
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              (root["status"] as? NSNumber)?.intValue == 1,
+              let product = root["product"] as? [String: Any] else {
+            throw BarcodeFoodLookupError.productNotFound
+        }
+
+        let localizedName = (product["product_name_zh"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallbackName = (product["product_name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let name = [localizedName, fallbackName].compactMap({ $0 }).first(where: { !$0.isEmpty }) else {
+            throw BarcodeFoodLookupError.productNotFound
+        }
+
+        let nutriments = product["nutriments"] as? [String: Any] ?? [:]
+        let usesServingValues = number(in: nutriments, key: "energy-kcal_serving") != nil
+        let suffix = usesServingValues ? "_serving" : "_100g"
+        let portion = usesServingValues
+            ? ((product["serving_size"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? "1份"
+            : "100g"
+        let calories = roundedInt(number(in: nutriments, key: "energy-kcal\(suffix)"))
+        let protein = roundedInt(number(in: nutriments, key: "proteins\(suffix)"))
+        let carbs = roundedInt(number(in: nutriments, key: "carbohydrates\(suffix)"))
+        let fat = roundedInt(number(in: nutriments, key: "fat\(suffix)"))
+        let fiber = roundedInt(number(in: nutriments, key: "fiber\(suffix)"))
+        let grade = (product["nutrition_grades"] as? String)?.lowercased()
+
+        return FoodAnalysisResult(
+            foods: [IdentifiedFood(name: name, portion: portion, calories: calories)],
+            totalCalories: calories,
+            macros: MacroBreakdown(protein: protein, carbs: carbs, fat: fat, fiber: fiber),
+            healthScore: healthScore(for: grade),
+            suggestions: ["营养数据来自 Open Food Facts，请核对包装标示。"],
+            rawAnalysis: "Open Food Facts barcode lookup: \(barcode)"
+        )
+    }
+
+    private static func number(in values: [String: Any], key: String) -> Double? {
+        (values[key] as? NSNumber)?.doubleValue
+    }
+
+    private static func roundedInt(_ value: Double?) -> Int {
+        Int((value ?? 0).rounded())
+    }
+
+    private static func healthScore(for nutritionGrade: String?) -> String {
+        switch nutritionGrade {
+        case "a", "b": return "good"
+        case "d", "e": return "needs_improvement"
+        default: return "moderate"
+        }
+    }
+}
+
+enum BarcodeFoodLookupError: LocalizedError {
+    case invalidBarcode
+    case requestFailed
+    case productNotFound
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidBarcode:
+            return "未识别到有效条码，请重新扫描。"
+        case .requestFailed:
+            return "食品条码查询失败，请检查网络后重试。"
+        case .productNotFound:
+            return "Open Food Facts 暂无该食品，请使用拍照或搜索录入。"
+        }
+    }
+}
+
+struct BarcodeScannerView: UIViewControllerRepresentable {
+    let onCode: (String) -> Void
+    let onError: (String) -> Void
+
+    func makeUIViewController(context: Context) -> BarcodeScannerViewController {
+        BarcodeScannerViewController(onCode: onCode, onError: onError)
+    }
+
+    func updateUIViewController(_ uiViewController: BarcodeScannerViewController, context: Context) {}
+
+    static func dismantleUIViewController(_ uiViewController: BarcodeScannerViewController, coordinator: Void) {
+        uiViewController.stopScanning()
+    }
+}
+
+final class BarcodeScannerViewController: UIViewController, @preconcurrency AVCaptureMetadataOutputObjectsDelegate {
+    private let captureSession = AVCaptureSession()
+    private let sessionQueue = DispatchQueue(label: "com.sunweizhou.Vela.barcode-scanner")
+    private let onCode: (String) -> Void
+    private let onError: (String) -> Void
+    private var previewLayer: AVCaptureVideoPreviewLayer?
+    private var didEmitCode = false
+    private var isConfigured = false
+
+    init(onCode: @escaping (String) -> Void, onError: @escaping (String) -> Void) {
+        self.onCode = onCode
+        self.onError = onError
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        requestCameraAndStart()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        previewLayer?.frame = view.bounds
+    }
+
+    func stopScanning() {
+        let captureSession = captureSession
+        sessionQueue.async {
+            if captureSession.isRunning {
+                captureSession.stopRunning()
+            }
+        }
+    }
+
+    private func requestCameraAndStart() {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            configureAndStart()
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    granted ? self.configureAndStart() : self.onError("未获得相机权限，请在系统设置中允许 Vela 使用相机。")
+                }
+            }
+        case .denied, .restricted:
+            onError("未获得相机权限，请在系统设置中允许 Vela 使用相机。")
+        @unknown default:
+            onError("当前设备无法使用相机扫描条码。")
+        }
+    }
+
+    private func configureAndStart() {
+        if !isConfigured {
+            guard let camera = AVCaptureDevice.default(for: .video) else {
+                onError("当前设备没有可用相机。")
+                return
+            }
+            do {
+                let input = try AVCaptureDeviceInput(device: camera)
+                let output = AVCaptureMetadataOutput()
+                guard captureSession.canAddInput(input), captureSession.canAddOutput(output) else {
+                    onError("当前设备无法启动条码扫描。")
+                    return
+                }
+                captureSession.addInput(input)
+                captureSession.addOutput(output)
+                output.setMetadataObjectsDelegate(self, queue: .main)
+                output.metadataObjectTypes = [.ean8, .ean13, .upce, .code128]
+
+                let previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
+                previewLayer.videoGravity = .resizeAspectFill
+                previewLayer.frame = view.bounds
+                view.layer.addSublayer(previewLayer)
+                self.previewLayer = previewLayer
+                isConfigured = true
+            } catch {
+                onError("当前设备无法启动相机：\(error.localizedDescription)")
+                return
+            }
+        }
+
+        let captureSession = captureSession
+        sessionQueue.async {
+            if !captureSession.isRunning {
+                captureSession.startRunning()
+            }
+        }
+    }
+
+    func metadataOutput(
+        _ output: AVCaptureMetadataOutput,
+        didOutput metadataObjects: [AVMetadataObject],
+        from connection: AVCaptureConnection
+    ) {
+        guard !didEmitCode,
+              let code = metadataObjects
+                .compactMap({ $0 as? AVMetadataMachineReadableCodeObject })
+                .compactMap(\.stringValue)
+                .first else { return }
+        didEmitCode = true
+        stopScanning()
+        onCode(code)
     }
 }

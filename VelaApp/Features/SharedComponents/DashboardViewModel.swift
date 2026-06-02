@@ -51,7 +51,7 @@ enum VitalsTrendMetric {
         case .activeCalories:
             return record.activeCalories
         case .activeMinutes:
-            return record.workoutDuration
+            return record.activeMinutes ?? record.workoutDuration
         }
     }
 }
@@ -128,48 +128,113 @@ final class DashboardViewModel: ObservableObject {
     private let useCase: DailySummaryUseCase
     private let services: VelaServices?
     private var refreshTask: Task<Void, Never>?
+    private var refreshTaskDate: Date?
+    private var lastRefreshAttemptAt: Date?
+    private var lastRefreshAttemptDate: Date?
 
     init(useCase: DailySummaryUseCase = DailySummaryUseCase(), services: VelaServices? = nil) {
         self.useCase = useCase
         self.services = services
     }
 
-    func refresh(modelContext: ModelContext? = nil) async {
-        refreshTask?.cancel()
+    @discardableResult
+    func hydrateFromCache(modelContext: ModelContext) -> Bool {
+        do {
+            guard let cached = try useCase.loadCachedDashboard(
+                for: selectedDate,
+                modelContext: modelContext
+            ) else {
+                if !Calendar.current.isDate(dashboard.date, inSameDayAs: selectedDate) {
+                    dashboard = .empty(date: selectedDate)
+                    lastUpdated = nil
+                }
+                return false
+            }
+            dashboard = cached
+            lastUpdated = cached.recovery.lastUpdated
+            computeStreaK(modelContext: modelContext)
+            computeWeeklyComparison(modelContext: modelContext)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    func refresh(modelContext: ModelContext? = nil, force: Bool = false) async {
+        if let modelContext,
+           dashboard.source == .empty || !Calendar.current.isDate(dashboard.date, inSameDayAs: selectedDate) {
+            hydrateFromCache(modelContext: modelContext)
+        }
+
+        if let runningTask = refreshTask {
+            let runningDate = refreshTaskDate
+            await runningTask.value
+            if let runningDate,
+               !Calendar.current.isDate(runningDate, inSameDayAs: selectedDate) {
+                await refresh(modelContext: modelContext, force: force)
+            }
+            return
+        }
+
+        if !force,
+           let lastRefreshAttemptDate,
+           Calendar.current.isDate(lastRefreshAttemptDate, inSameDayAs: selectedDate),
+           !HealthCachePolicy.dashboard.isStale(lastUpdatedAt: lastRefreshAttemptAt) {
+            return
+        }
+
+        let requestedDate = selectedDate
+        lastRefreshAttemptDate = requestedDate
+        lastRefreshAttemptAt = Date()
+        refreshTaskDate = requestedDate
         refreshTask = Task { [weak self] in
             guard let self else { return }
-            isLoading = true
-            errorMessage = nil
-            currentError = nil
-            do {
-                dashboard = try await useCase.loadDashboard(for: selectedDate, modelContext: modelContext)
-                if Calendar.current.isDateInToday(dashboard.date) {
-                    try? DailyLogService.refresh(dashboard: dashboard)
-                }
-                lastUpdated = Date()
-                let generator = UIImpactFeedbackGenerator(style: .light)
-                generator.impactOccurred()
-                if let mc = modelContext {
-                    computeStreaK(modelContext: mc)
-                    computeWeeklyComparison(modelContext: mc)
-                }
-            } catch {
-                let message = error.localizedDescription
-                if message.contains("HKErrorDomain") || message.contains("health") {
-                    errorMessage = AppLanguage.stored.isChinese
-                        ? "健康数据读取失败，请检查 Health 权限设置。下拉刷新重试。"
-                        : "Health data read failed. Check Health permissions and pull to refresh."
-                } else {
-                    errorMessage = AppLanguage.stored.isChinese
-                        ? "数据加载失败：\(message)。下拉刷新重试。"
-                        : "Data load failed: \(message). Pull to refresh."
-                }
-                currentError = (error as? VelaError) ?? .unknown(underlying: error)
-                dashboard = .empty(date: selectedDate)
-            }
-            isLoading = false
+            await performRefresh(for: requestedDate, modelContext: modelContext)
+            refreshTask = nil
+            refreshTaskDate = nil
         }
         await refreshTask?.value
+    }
+
+    private func performRefresh(for requestedDate: Date, modelContext: ModelContext?) async {
+        isLoading = true
+        errorMessage = nil
+        currentError = nil
+        defer { isLoading = false }
+
+        do {
+            let refreshedDashboard = try await useCase.loadDashboard(
+                for: requestedDate,
+                modelContext: modelContext
+            )
+            guard Calendar.current.isDate(selectedDate, inSameDayAs: requestedDate) else { return }
+            dashboard = refreshedDashboard
+            if Calendar.current.isDateInToday(dashboard.date) {
+                try? DailyLogService.refresh(dashboard: dashboard)
+            }
+            lastUpdated = Date()
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.impactOccurred()
+            if let modelContext {
+                computeStreaK(modelContext: modelContext)
+                computeWeeklyComparison(modelContext: modelContext)
+            }
+        } catch {
+            let message = error.localizedDescription
+            if message.contains("HKErrorDomain") || message.contains("health") {
+                errorMessage = AppLanguage.stored.isChinese
+                    ? "健康数据读取失败，请检查 Health 权限设置。下拉刷新重试。"
+                    : "Health data read failed. Check Health permissions and pull to refresh."
+            } else {
+                errorMessage = AppLanguage.stored.isChinese
+                    ? "数据加载失败：\(message)。下拉刷新重试。"
+                    : "Data load failed: \(message). Pull to refresh."
+            }
+            currentError = (error as? VelaError) ?? .unknown(underlying: error)
+            if !Calendar.current.isDate(dashboard.date, inSameDayAs: requestedDate) {
+                dashboard = .empty(date: requestedDate)
+            }
+        }
     }
 
     private func computeStreaK(modelContext: ModelContext) {

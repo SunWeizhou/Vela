@@ -26,8 +26,6 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>UIUserInterfaceStyle</key>
-	<string>Light</string>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
 	<key>UIStatusBarStyle</key>
@@ -38,6 +36,10 @@
 	<string>Vela reads Apple Health summaries to calculate wellness trends on device.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Vela may save derived wellness summaries locally; it does not write raw HealthKit samples.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Vela uses the camera only when you choose to photograph a meal for nutrition analysis.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Vela reads a meal photo only when you choose one for nutrition analysis.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
@@ -58,9 +60,5 @@
 		<key>UISceneConfigurations</key>
 		<dict/>
 	</dict>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Vela requests location permission to query real-time weather and coordinate workouts locally.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Vela requests location permission to query real-time weather and coordinate workouts locally.</string>
 </dict>
 </plist>
