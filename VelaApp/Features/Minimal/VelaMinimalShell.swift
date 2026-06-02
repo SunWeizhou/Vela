@@ -7,6 +7,10 @@ enum VelaNavigationVisibility {
     }
 }
 
+enum VelaNavigationMotion {
+    static let destinationFadeDuration = 0.18
+}
+
 // MARK: - VelaScrollTracking
 // Kept for child view compatibility. Without binding injection these are no-ops.
 
@@ -62,9 +66,7 @@ struct VelaShell: View {
     // MARK: - Tab Enum
 
     enum VelaTab: Int, CaseIterable, Hashable {
-        case today, training, vitals, coach, quickAdd
-
-        static let contentTabs: [VelaTab] = [.today, .training, .vitals, .coach]
+        case today, training, vitals, coach
     }
 
     // MARK: - Body
@@ -121,19 +123,19 @@ struct VelaShell: View {
             WorkoutLogSheetView()
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
-                .presentationBackground(Color(hex: "#F5F3F0"))
+                .presentationBackground(VelaTheme.bg)
         }
         .sheet(isPresented: $appState.triggerFoodSearch, onDismiss: appState.markLocalDataChanged) {
             FoodSearchSheetView()
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
-                .presentationBackground(Color(hex: "#F5F3F0"))
+                .presentationBackground(VelaTheme.bg)
         }
         .sheet(isPresented: $appState.triggerFoodScanner, onDismiss: appState.markLocalDataChanged) {
             FoodScannerView(type: appState.scannerType)
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
-                .presentationBackground(Color(hex: "#F5F3F0"))
+                .presentationBackground(VelaTheme.bg)
         }
         .sheet(isPresented: $appState.triggerJournal, onDismiss: appState.markLocalDataChanged) {
             NavigationStack {
@@ -141,7 +143,7 @@ struct VelaShell: View {
             }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
-            .presentationBackground(Color(hex: "#F5F3F0"))
+            .presentationBackground(VelaTheme.bg)
         }
         .tint(VelaTheme.accent)
     }
@@ -159,19 +161,24 @@ struct VelaShell: View {
     private var nativeTabNavigation: some View {
         TabView(selection: nativeTabSelection) {
             Tab(label(for: .today), systemImage: iconName(for: .today), value: VelaTab.today) {
-                VelaTodayView(showCoach: $showCoach, showSettings: $showSettings)
+                nativeTabSurface(.today) {
+                    VelaTodayView(showCoach: $showCoach, showSettings: $showSettings)
+                }
             }
             Tab(label(for: .training), systemImage: iconName(for: .training), value: VelaTab.training) {
-                VelaTrainingView()
+                nativeTabSurface(.training) {
+                    VelaTrainingView()
+                }
             }
             Tab(label(for: .vitals), systemImage: iconName(for: .vitals), value: VelaTab.vitals) {
-                VelaVitalsView()
+                nativeTabSurface(.vitals) {
+                    VelaVitalsView()
+                }
             }
             Tab(label(for: .coach), systemImage: iconName(for: .coach), value: VelaTab.coach) {
-                VelaCoachView(presentation: .embedded, vm: services.coachChat)
-            }
-            Tab(label(for: .quickAdd), systemImage: iconName(for: .quickAdd), value: VelaTab.quickAdd, role: .search) {
-                Color.clear
+                nativeTabSurface(.coach) {
+                    VelaCoachView(presentation: .embedded, vm: services.coachChat)
+                }
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
@@ -184,11 +191,7 @@ struct VelaShell: View {
             set: { candidate in
                 let result = VelaTabSelection.resolve(candidate: candidate, current: selectedTab)
                 selectedTab = result.selectedTab
-                if result.shouldPresentQuickActions {
-                    showPlusSheet = true
-                } else {
-                    appState.selectedTab = result.selectedTab.rawValue
-                }
+                appState.selectedTab = result.selectedTab.rawValue
             }
         )
     }
@@ -228,51 +231,26 @@ struct VelaShell: View {
         }
     }
 
-    // MARK: - Side-by-Side Navigation Bar ("玻璃胶囊导航 + 右侧独立玻璃圆形 +")
+    // MARK: - Legacy Floating Glass Navigation
     
     private var bottomGlassNavBar: some View {
-        HStack(spacing: 12) {
-            // 1. Frosted Glass Capsule for primary tabs
-            HStack(spacing: 0) {
-                ForEach(VelaTab.contentTabs, id: \.self) { tab in
-                    customTabButton(tab)
-                }
+        HStack(spacing: 0) {
+            ForEach(VelaTabSelection.contentTabs, id: \.self) { tab in
+                customTabButton(tab)
             }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 5)
-            .background(
-                Capsule()
-                    .fill(Color.white.opacity(0.12))
-                    .velaInteractiveGlass(in: Capsule())
-            )
-            .overlay(
-                Capsule()
-                    .stroke(Color.white.opacity(0.18), lineWidth: 0.5)
-            )
-            .shadow(color: Color.black.opacity(0.04), radius: 8, y: 4)
-
-            // 2. Independent Circular Glass Plus Button
-            Button {
-                showPlusSheet = true
-            } label: {
-                ZStack {
-                    Circle()
-                        .fill(Color.white.opacity(0.12))
-                        .velaInteractiveGlass(in: Circle())
-                    
-                    Image(systemName: "plus")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(Color(hex: "#1A1917"))
-                }
-                .frame(width: 50, height: 50)
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(0.18), lineWidth: 0.5)
-                )
-                .shadow(color: Color.black.opacity(0.04), radius: 8, y: 4)
-            }
-            .buttonStyle(.plain)
         }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 5)
+        .background(
+            Capsule()
+                .fill(VelaTheme.cardBg.opacity(0.12))
+                .velaInteractiveGlass(in: Capsule())
+        )
+        .overlay(
+            Capsule()
+                .stroke(VelaTheme.cardBg.opacity(0.18), lineWidth: 0.5)
+        )
+        .shadow(color: Color.black.opacity(0.04), radius: 8, y: 4)
         .padding(.horizontal, 16)
     }
 
@@ -284,6 +262,7 @@ struct VelaShell: View {
     ) -> some View {
         content()
             .opacity(selectedTab == tab ? 1 : 0)
+            .animation(.easeInOut(duration: VelaNavigationMotion.destinationFadeDuration), value: selectedTab)
             .allowsHitTesting(selectedTab == tab)
             .accessibilityHidden(selectedTab != tab)
             .zIndex(selectedTab == tab ? 1 : 0)
@@ -292,7 +271,7 @@ struct VelaShell: View {
     private func customTabButton(_ tab: VelaTab) -> some View {
         let isActive = selectedTab == tab
         return Button {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.78, blendDuration: 0)) {
+            withAnimation(.easeInOut(duration: VelaNavigationMotion.destinationFadeDuration)) {
                 selectedTab = tab
                 appState.selectedTab = tab.rawValue
             }
@@ -304,14 +283,14 @@ struct VelaShell: View {
                 Text(label(for: tab))
                     .font(.system(size: 9, weight: .bold))
             }
-            .foregroundStyle(isActive ? Color(hex: "#1A1917") : Color(hex: "#8E8A80"))
+            .foregroundStyle(isActive ? VelaTheme.fg : VelaTheme.muted)
             .frame(maxWidth: .infinity)
             .frame(height: 46)
             .background(
                 ZStack {
                     if isActive {
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(Color(hex: "#E8E4DD").opacity(0.48))
+                            .fill(VelaTheme.borderSoft.opacity(0.48))
                             .matchedGeometryEffect(id: "activeTabHighlight", in: tabAnimation)
                     }
                 }
@@ -326,7 +305,6 @@ struct VelaShell: View {
         case .training: "figure.run"
         case .vitals:   "heart.text.square"
         case .coach:    "sparkles"
-        case .quickAdd: "plus"
         }
     }
 
@@ -336,8 +314,16 @@ struct VelaShell: View {
         case .training: "健身"
         case .vitals:   "体征"
         case .coach:    "Coach"
-        case .quickAdd: "添加"
         }
+    }
+
+    private func nativeTabSurface<Content: View>(
+        _ tab: VelaTab,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .opacity(selectedTab == tab ? 1 : 0)
+            .animation(.easeInOut(duration: VelaNavigationMotion.destinationFadeDuration), value: selectedTab)
     }
 }
 
@@ -347,13 +333,13 @@ enum VelaTabSelection {
         var shouldPresentQuickActions: Bool
     }
 
+    static let contentTabs: [VelaShell.VelaTab] = [.today, .training, .vitals, .coach]
+
     static func resolve(
         candidate: VelaShell.VelaTab,
         current: VelaShell.VelaTab
     ) -> Result {
-        guard candidate == .quickAdd else {
-            return Result(selectedTab: candidate, shouldPresentQuickActions: false)
-        }
-        return Result(selectedTab: current, shouldPresentQuickActions: true)
+        Result(selectedTab: candidate, shouldPresentQuickActions: false)
     }
+
 }

@@ -20,24 +20,29 @@ enum VelaTheme {
         return UIColor(red: CGFloat(r)/255, green: CGFloat(g)/255, blue: CGFloat(b)/255, alpha: CGFloat(a)/255)
     }
 
+    private static func adaptiveUIColor(_ light: String, _ dark: String) -> UIColor {
+        UIColor { $0.userInterfaceStyle == .dark ? hex(dark) : hex(light) }
+    }
+
     private static func adaptive(_ light: String, _ dark: String) -> Color {
-        Color(UIColor { $0.userInterfaceStyle == .dark ? hex(dark) : hex(light) })
+        Color(adaptiveUIColor(light, dark))
     }
 
     // MARK: - Surface
 
-    static let bg            = adaptive("#F5F3F0", "#100F0D")
-    static let surface       = adaptive("#F2F0ED", "#1C1B18")
-    static let cardBg        = adaptive("#FFFFFF", "#0A0908")
-    static let elevatedBg    = adaptive("#F8F7F4", "#161512")
-    static let groupedBg     = adaptive("#F5F3F0", "#100F0D")
+    static let backgroundUIColor = adaptiveUIColor("#FFFFFF", "#000000")
+    static let bg            = Color(backgroundUIColor)
+    static let surface       = adaptive("#F2F2F7", "#1C1C1E")
+    static let cardBg        = adaptive("#FFFFFF", "#1C1C1E")
+    static let elevatedBg    = adaptive("#F9F9FB", "#2C2C2E")
+    static let groupedBg     = adaptive("#F2F2F7", "#000000")
 
     // MARK: - Foreground
 
-    static let fg            = adaptive("#1A1917", "#F2EFE8")
-    static let fg2           = adaptive("#6E6A63", "#BFB9AC")
-    static let muted         = adaptive("#8E8A80", "#7E7A70")
-    static let meta          = adaptive("#BFB9AC", "#6E6A63")
+    static let fg            = adaptive("#1C1C1E", "#F2F2F7")
+    static let fg2           = adaptive("#636366", "#AEAEB2")
+    static let muted         = adaptive("#8E8E93", "#8E8E93")
+    static let meta          = adaptive("#AEAEB2", "#636366")
 
     // MARK: - Accent
 
@@ -48,8 +53,8 @@ enum VelaTheme {
 
     // MARK: - Borders
 
-    static let border        = adaptive("#D5D0C8", "#444038")
-    static let borderSoft    = adaptive("#E8E4DD", "#2E2B25")
+    static let border        = adaptive("#D1D1D6", "#48484A")
+    static let borderSoft    = adaptive("#E5E5EA", "#2C2C2E")
 
     // MARK: - Semantic Colors
 
@@ -350,7 +355,7 @@ extension VelaTheme {
     static let microFont: Font = .system(size: 12, weight: .regular, design: .default)
 
     // Old misc
-    static let subtleFill = Color(white: 0).opacity(0.06)
+    static let subtleFill = adaptive("#0F000000", "#1FFFFFFF")
     static let strongControl = accent
     static let cardBackground = cardBg
     static let heroCardBackground = elevatedBg

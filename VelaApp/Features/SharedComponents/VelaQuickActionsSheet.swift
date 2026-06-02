@@ -74,17 +74,17 @@ struct PlusActionSheet: View {
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
                     .frame(width: 58, height: 58)
-                    .background(Circle().fill(Color.white))
+                    .background(Circle().fill(VelaTheme.cardBg))
                     .shadow(color: Color.black.opacity(0.04), radius: 6, y: 3)
-                    .overlay(Circle().stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
+                    .overlay(Circle().stroke(VelaTheme.borderSoft, lineWidth: 0.5))
             }
             .buttonStyle(.plain)
             .padding(.bottom, 24)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(hex: "#F5F3F0")) // Warm canvas base
+        .background(VelaTheme.bg) // Warm canvas base
     }
 
     private func deferAction(_ action: VelaAppState.DeferredQuickAction) {
@@ -98,22 +98,22 @@ struct PlusActionSheet: View {
             VStack(spacing: 8) {
                 ZStack {
                     Circle()
-                        .fill(Color.white)
+                        .fill(VelaTheme.cardBg)
                         .frame(width: 60, height: 60)
                         .shadow(color: Color.black.opacity(0.02), radius: 4, y: 2)
                     
                     Circle()
-                        .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+                        .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
                         .frame(width: 60, height: 60)
                     
                     Image(systemName: icon)
                         .font(.system(size: 20))
-                        .foregroundStyle(Color(hex: "#1A1917"))
+                        .foregroundStyle(VelaTheme.fg)
                 }
                 
                 Text(label)
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
                     .lineLimit(1)
             }
         }
@@ -146,7 +146,7 @@ struct PlusActionSheet: View {
                 
                 Text(label)
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
                     .lineLimit(1)
             }
         }
@@ -239,21 +239,21 @@ struct WorkoutLogSheetView: View {
     var body: some View {
         VStack(spacing: 20) {
             Capsule()
-                .fill(Color(hex: "#E8E4DD"))
+                .fill(VelaTheme.borderSoft)
                 .frame(width: 36, height: 5)
                 .padding(.top, 8)
             
             HStack {
                 Text("记录运动活动")
                     .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
                 Spacer()
                 Button {
                     dismiss()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 24))
-                        .foregroundStyle(Color(hex: "#BFB9AC"))
+                        .foregroundStyle(VelaTheme.meta)
                 }
                 .buttonStyle(.plain)
             }
@@ -265,7 +265,7 @@ struct WorkoutLogSheetView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("运动类型")
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(Color(hex: "#8E8A80"))
+                            .foregroundStyle(VelaTheme.muted)
                         
                         Picker("运动类型", selection: $selectedSport) {
                             ForEach(sports, id: \.self) { sport in
@@ -281,15 +281,15 @@ struct WorkoutLogSheetView: View {
                         HStack {
                             Text("时长")
                                 .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(Color(hex: "#8E8A80"))
+                                .foregroundStyle(VelaTheme.muted)
                             Spacer()
                             Text("\(Int(durationMinutes)) 分钟")
                                 .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(Color(hex: "#C56B4A"))
+                                .foregroundStyle(VelaTheme.accent)
                         }
                         
                         Slider(value: $durationMinutes, in: 5...120, step: 5)
-                            .tint(Color(hex: "#C56B4A"))
+                            .tint(VelaTheme.accent)
                     }
                     .padding(.horizontal, 20)
                     
@@ -298,15 +298,15 @@ struct WorkoutLogSheetView: View {
                         HStack {
                             Text("活跃热量消耗")
                                 .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(Color(hex: "#8E8A80"))
+                                .foregroundStyle(VelaTheme.muted)
                             Spacer()
                             Text("\(Int(caloriesBurned)) kcal")
                                 .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(Color(hex: "#C56B4A"))
+                                .foregroundStyle(VelaTheme.accent)
                         }
                         
                         Slider(value: $caloriesBurned, in: 50...1000, step: 25)
-                            .tint(Color(hex: "#C56B4A"))
+                            .tint(VelaTheme.accent)
                     }
                     .padding(.horizontal, 20)
                     
@@ -315,15 +315,15 @@ struct WorkoutLogSheetView: View {
                         HStack {
                             Text("耗力感官评分 (RPE)")
                                 .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(Color(hex: "#8E8A80"))
+                                .foregroundStyle(VelaTheme.muted)
                             Spacer()
                             Text("\(Int(exertionScore)) / 10")
                                 .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(Color(hex: "#C56B4A"))
+                                .foregroundStyle(VelaTheme.accent)
                         }
                         
                         Slider(value: $exertionScore, in: 1...10, step: 1)
-                            .tint(Color(hex: "#C56B4A"))
+                            .tint(VelaTheme.accent)
                     }
                     .padding(.horizontal, 20)
                     
@@ -338,8 +338,8 @@ struct WorkoutLogSheetView: View {
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
-                            .background(RoundedRectangle(cornerRadius: 25, style: .continuous).fill(Color(hex: "#C56B4A")))
-                            .shadow(color: Color(hex: "#C56B4A").opacity(0.2), radius: 6, y: 3)
+                            .background(RoundedRectangle(cornerRadius: 25, style: .continuous).fill(VelaTheme.accent))
+                            .shadow(color: VelaTheme.accent.opacity(0.2), radius: 6, y: 3)
                             .padding(.horizontal, 20)
                             .padding(.top, 10)
                     }
@@ -347,7 +347,7 @@ struct WorkoutLogSheetView: View {
                 }
             }
         }
-        .background(Color(hex: "#F5F3F0").ignoresSafeArea())
+        .background(VelaTheme.bg.ignoresSafeArea())
         .alert("无法保存活动", isPresented: Binding(
             get: { saveError != nil },
             set: { if !$0 { saveError = nil } }
@@ -418,21 +418,21 @@ struct FoodSearchSheetView: View {
     var body: some View {
         VStack(spacing: 16) {
             Capsule()
-                .fill(Color(hex: "#E8E4DD"))
+                .fill(VelaTheme.borderSoft)
                 .frame(width: 36, height: 5)
                 .padding(.top, 8)
             
             HStack {
                 Text("搜索常见食物")
                     .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
                 Spacer()
                 Button {
                     dismiss()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 24))
-                        .foregroundStyle(Color(hex: "#BFB9AC"))
+                        .foregroundStyle(VelaTheme.meta)
                 }
                 .buttonStyle(.plain)
             }
@@ -441,13 +441,13 @@ struct FoodSearchSheetView: View {
             // Search field
             HStack {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
                 TextField("搜索膳食...", text: $searchText)
                     .font(.system(size: 15))
             }
             .padding(12)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.cardBg))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
             .padding(.horizontal, 20)
             
             ScrollView {
@@ -461,24 +461,24 @@ struct FoodSearchSheetView: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(name)
                                         .font(.system(size: 15, weight: .bold))
-                                        .foregroundStyle(Color(hex: "#1A1917"))
+                                        .foregroundStyle(VelaTheme.fg)
                                     Text("P: \(prot)g · C: \(carb)g · F: \(fat)g")
                                         .font(.system(size: 11))
-                                        .foregroundStyle(Color(hex: "#8E8A80"))
+                                        .foregroundStyle(VelaTheme.muted)
                                 }
                                 
                                 Spacer()
                                 
                                 Text("\(cal) kcal")
                                     .font(.system(size: 14, weight: .bold, design: .rounded))
-                                    .foregroundStyle(Color(hex: "#C56B4A"))
+                                    .foregroundStyle(VelaTheme.accent)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 6)
-                                    .background(Capsule().fill(Color(hex: "#FFF3E0")))
+                                    .background(Capsule().fill(VelaTheme.accent.opacity(0.12)))
                             }
                             .padding(14)
-                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white))
-                            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
+                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.cardBg))
+                            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
                             .padding(.horizontal, 20)
                         }
                         .buttonStyle(.plain)
@@ -487,7 +487,7 @@ struct FoodSearchSheetView: View {
                 .padding(.bottom, 20)
             }
         }
-        .background(Color(hex: "#F5F3F0").ignoresSafeArea())
+        .background(VelaTheme.bg.ignoresSafeArea())
     }
     
     private func logFoodItem(name: String, cal: Int, prot: Int, carb: Int, fat: Int) {
@@ -529,21 +529,21 @@ struct FoodScannerView: View {
     var body: some View {
         VStack(spacing: 24) {
             Capsule()
-                .fill(Color(hex: "#E8E4DD"))
+                .fill(VelaTheme.borderSoft)
                 .frame(width: 36, height: 5)
                 .padding(.top, 8)
             
             HStack {
                 Text(type == "camera" ? "智能拍照识别" : (type == "library" ? "相册导入解析" : "条形码扫描"))
                     .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
                 Spacer()
                 Button {
                     dismiss()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 24))
-                        .foregroundStyle(Color(hex: "#BFB9AC"))
+                        .foregroundStyle(VelaTheme.meta)
                 }
                 .buttonStyle(.plain)
             }
@@ -552,10 +552,10 @@ struct FoodScannerView: View {
             if isAnalyzing {
                 VStack(spacing: 16) {
                     ProgressView()
-                        .tint(Color(hex: "#C56B4A"))
+                        .tint(VelaTheme.accent)
                     Text(type == "barcode" ? "正在查询食品条码..." : "正在用 Kimi 视觉模型分析餐食...")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .foregroundStyle(VelaTheme.muted)
                 }
                 .padding(.vertical, 40)
             } else if let result {
@@ -566,16 +566,16 @@ struct FoodScannerView: View {
                 VStack(spacing: 16) {
                     Image(systemName: type == "camera" ? "camera.fill" : "photo.on.rectangle")
                         .font(.system(size: 44))
-                        .foregroundStyle(Color(hex: "#C56B4A"))
+                        .foregroundStyle(VelaTheme.accent)
 
                     Text("使用真实照片分析营养")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(Color(hex: "#1A1917"))
+                        .foregroundStyle(VelaTheme.fg)
 
                     Text("图片会在你确认后发送给 Kimi 视觉模型。需要先在设置中添加 Kimi API Key。")
                         .font(.system(size: 13))
                         .multilineTextAlignment(.center)
-                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .foregroundStyle(VelaTheme.muted)
                         .padding(.horizontal, 20)
                 }
                 .padding(.vertical, 24)
@@ -597,12 +597,12 @@ struct FoodScannerView: View {
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
-                .background(RoundedRectangle(cornerRadius: 25, style: .continuous).fill(Color(hex: "#C56B4A")))
+                .background(RoundedRectangle(cornerRadius: 25, style: .continuous).fill(VelaTheme.accent))
                 .padding(.horizontal, 20)
                 .buttonStyle(.plain)
             }
         }
-        .background(Color(hex: "#F5F3F0").ignoresSafeArea())
+        .background(VelaTheme.bg.ignoresSafeArea())
         .sheet(isPresented: $showImagePicker) {
             ImagePicker(sourceType: imagePickerSourceType, selectedImage: $selectedImage)
                 .ignoresSafeArea()
@@ -626,18 +626,18 @@ struct FoodScannerView: View {
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+                    .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
             }
             .padding(.horizontal, 20)
 
             Text(scannedBarcode.map { "已识别条码：\($0)" } ?? "将包装条码放入取景框内")
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(Color(hex: "#8E8A80"))
+                .foregroundStyle(VelaTheme.muted)
 
             Text("营养数据来自 Open Food Facts。记录前请核对包装标示。")
                 .font(.system(size: 12))
                 .multilineTextAlignment(.center)
-                .foregroundStyle(Color(hex: "#8E8A80"))
+                .foregroundStyle(VelaTheme.muted)
                 .padding(.horizontal, 20)
 
             if scannedBarcode != nil {
@@ -647,7 +647,7 @@ struct FoodScannerView: View {
                     barcodeScannerID = UUID()
                 }
                 .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(Color(hex: "#C56B4A"))
+                .foregroundStyle(VelaTheme.accent)
             }
         }
     }
@@ -660,23 +660,23 @@ struct FoodScannerView: View {
 
             Text("解析完成，请确认后记录")
                 .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(Color(hex: "#1A1917"))
+                .foregroundStyle(VelaTheme.fg)
 
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(Array(result.foods.enumerated()), id: \.offset) { _, food in
                     Text("\(food.name) · \(food.portion) · \(food.calories) kcal")
                         .font(.system(size: 13))
-                        .foregroundStyle(Color(hex: "#1A1917"))
+                        .foregroundStyle(VelaTheme.fg)
                 }
                 Divider()
                 Text("总计 \(result.totalCalories) kcal · 蛋白质 \(result.macros.protein)g · 碳水 \(result.macros.carbs)g · 脂肪 \(result.macros.fat)g")
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
             .padding(.horizontal, 20)
 
             Button("确认并记录") {
@@ -696,7 +696,7 @@ struct FoodScannerView: View {
                 openImagePicker()
             }
             .font(.system(size: 14, weight: .bold))
-            .foregroundStyle(Color(hex: "#C56B4A"))
+            .foregroundStyle(VelaTheme.accent)
         }
     }
 

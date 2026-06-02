@@ -1,6 +1,7 @@
 import XCTest
 import HealthKit
 import SwiftData
+import UIKit
 @testable import Vela
 
 final class VelaThemeTests: XCTestCase {
@@ -504,14 +505,8 @@ final class VelaThemeTests: XCTestCase {
         XCTAssertFalse(VelaNavigationVisibility.shouldShowBottomBar(keyboardVisible: true))
     }
 
-    func testNativeQuickActionTabPresentsSheetWithoutReplacingSelectedContent() {
-        let result = VelaTabSelection.resolve(
-            candidate: .quickAdd,
-            current: .vitals
-        )
-
-        XCTAssertEqual(result.selectedTab, .vitals)
-        XCTAssertTrue(result.shouldPresentQuickActions)
+    func testNativeDestinationTabsExcludeQuickAction() {
+        XCTAssertEqual(VelaTabSelection.contentTabs, [.today, .training, .vitals, .coach])
     }
 
     func testNativeContentTabSelectionReplacesSelectedContent() {
@@ -522,6 +517,55 @@ final class VelaThemeTests: XCTestCase {
 
         XCTAssertEqual(result.selectedTab, .coach)
         XCTAssertFalse(result.shouldPresentQuickActions)
+    }
+
+    func testDestinationTransitionUsesRestrainedOpacityDuration() {
+        XCTAssertEqual(VelaNavigationMotion.destinationFadeDuration, 0.18, accuracy: 0.001)
+    }
+
+    func testThemeBackgroundUsesAppleWhiteAndBlackCanvases() {
+        assertColor(
+            VelaTheme.backgroundUIColor.resolvedColor(
+                with: UITraitCollection(userInterfaceStyle: .light)
+            ),
+            red: 1,
+            green: 1,
+            blue: 1
+        )
+        assertColor(
+            VelaTheme.backgroundUIColor.resolvedColor(
+                with: UITraitCollection(userInterfaceStyle: .dark)
+            ),
+            red: 0,
+            green: 0,
+            blue: 0
+        )
+    }
+
+    private func assertColor(
+        _ color: UIColor,
+        red: CGFloat,
+        green: CGFloat,
+        blue: CGFloat,
+        alpha: CGFloat = 1
+    ) {
+        var actualRed: CGFloat = 0
+        var actualGreen: CGFloat = 0
+        var actualBlue: CGFloat = 0
+        var actualAlpha: CGFloat = 0
+
+        XCTAssertTrue(
+            color.getRed(
+                &actualRed,
+                green: &actualGreen,
+                blue: &actualBlue,
+                alpha: &actualAlpha
+            )
+        )
+        XCTAssertEqual(actualRed, red, accuracy: 0.001)
+        XCTAssertEqual(actualGreen, green, accuracy: 0.001)
+        XCTAssertEqual(actualBlue, blue, accuracy: 0.001)
+        XCTAssertEqual(actualAlpha, alpha, accuracy: 0.001)
     }
 
     func testEmbeddedCoachComposerClearsFloatingNavigationWhenKeyboardIsHidden() {
