@@ -23,6 +23,9 @@ struct VelaCoachView: View {
     @State private var inputText: String = ""
     @FocusState private var isFocused: Bool
 
+    // Keyboard tracking — only used for Tab Bar padding, not for manual layout shift
+    @State private var isKeyboardVisible: Bool = false
+
     // Drawer state management
     @State private var showHistoryDrawer = false
     @State private var isRenamingSession = false
@@ -48,13 +51,6 @@ struct VelaCoachView: View {
     ) private var pendingMemoryProposals: [MemoryEventRecord]
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
-
-    private var composerBottomPadding: CGFloat {
-        if presentation == .embedded {
-            return isFocused ? 12 : 88
-        }
-        return 28
-    }
 
     var body: some View {
         ZStack {
@@ -99,12 +95,13 @@ struct VelaCoachView: View {
                         }
                         .padding(.horizontal, VelaTheme.pagePadding)
                         .padding(.vertical, 16)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            isFocused = false
+                        }
                     }
                     .scrollIndicators(.hidden)
-                    .scrollDismissesKeyboard(.interactively)
-                    .onTapGesture {
-                        isFocused = false
-                    }
+                    .scrollDismissesKeyboard(.immediately)
                     .onChange(of: vm.messages.count) { _, _ in
                         if let last = vm.messages.last {
                             withAnimation {
@@ -132,6 +129,7 @@ struct VelaCoachView: View {
             .background(VelaTheme.bg)
             .blur(radius: showHistoryDrawer ? 3 : 0)
             .disabled(showHistoryDrawer)
+            .padding(.bottom, presentation == .embedded && !isKeyboardVisible ? 64 : 0)
 
             // Transparent backdrop for drawer
             if showHistoryDrawer {
@@ -159,6 +157,16 @@ struct VelaCoachView: View {
             consumePendingRouteIfVisible()
             try? DailyLogService.refresh(dashboard: dashboard)
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            withAnimation(.easeOut(duration: 0.2)) {
+                isKeyboardVisible = true
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            withAnimation(.easeOut(duration: 0.2)) {
+                isKeyboardVisible = false
+            }
+        }
         .onChange(of: appState.coachRouteRevision) { _, _ in
             consumePendingRouteIfVisible()
         }
@@ -182,14 +190,6 @@ struct VelaCoachView: View {
         .sheet(isPresented: $showModelSettings) {
             NavigationStack {
                 AIModelSettingsView()
-            }
-        }
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("完成") {
-                    isFocused = false
-                }
             }
         }
     }
@@ -568,7 +568,6 @@ struct VelaCoachView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .padding(.bottom, composerBottomPadding)
         .background(VelaTheme.bg)
         .overlay(alignment: .top) {
             Rectangle()
@@ -616,6 +615,7 @@ struct VelaCoachView: View {
             )
         }
     }
+
 }
 
 // MARK: - FlexStack (wrapping HStack for suggestion chips)

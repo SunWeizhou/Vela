@@ -10,27 +10,35 @@ struct MarkdownText: View {
     private let timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        Text(attributedContent)
-            .font(font)
-            .foregroundStyle(color)
-            .textSelection(.enabled)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .fixedSize(horizontal: false, vertical: true)
-            .onReceive(timer) { _ in
-                if isStreaming {
-                    blink.toggle()
-                }
+        let paragraphs = parsedParagraphs
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, attrStr in
+                Text(attrStr)
+                    .font(font)
+                    .foregroundStyle(color)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+        }
+        .onReceive(timer) { _ in
+            if isStreaming {
+                blink.toggle()
+            }
+        }
     }
 
-    /// Parse each line as inline markdown, join with paragraph breaks.
-    /// A single \n is invisible in AttributedString markdown, so we convert
-    /// consecutive non-empty lines to use \n\n (paragraph break) for visible separation.
-    private var attributedContent: AttributedString {
+    // MARK: - Paragraph Splitting
+
+    /// Splits raw markdown into paragraphs (separated by blank lines),
+    /// parses each paragraph individually via AttributedString(markdown:),
+    /// and appends the streaming cursor to the final paragraph.
+    private var parsedParagraphs: [AttributedString] {
         let normalized = markdown
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
 
+        // Phase 1 — split into lines, preserving code blocks
         let lines = normalized.components(separatedBy: "\n")
         var processedLines: [String] = []
         var inCodeBlock = false
@@ -38,7 +46,6 @@ struct MarkdownText: View {
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
 
-            // Preserve blank lines
             if trimmed.isEmpty {
                 processedLines.append("")
                 continue
@@ -58,7 +65,7 @@ struct MarkdownText: View {
             processedLines.append(line)
         }
 
-        // Post-process: collapse consecutive empty lines to a single empty line
+        // Phase 2 — collapse consecutive blank lines into one
         var collapsed: [String] = []
         for line in processedLines {
             if line.isEmpty, collapsed.last == "" {
@@ -67,32 +74,48 @@ struct MarkdownText: View {
             collapsed.append(line)
         }
 
-        // Join non-empty lines with double newlines (\n\n) to force paragraph breaks,
-        // while preserving existing paragraph breaks cleanly.
-        var finalLines: [String] = []
+        // Phase 3 — group into paragraphs (blank lines are the separator)
+        var paragraphGroups: [[String]] = []
+        var current: [String] = []
+
         for line in collapsed {
             if line.isEmpty {
-                continue
+                if !current.isEmpty {
+                    paragraphGroups.append(current)
+                    current = []
+                }
+            } else {
+                current.append(line)
             }
-            finalLines.append(line)
+        }
+        if !current.isEmpty {
+            paragraphGroups.append(current)
         }
 
-        // Since we filtered out empty lines, joining with "\n\n" ensures that every single line of text
-        // is separated by exactly a paragraph break, giving a clean and breathable newline layout!
-        let processedMarkdown = finalLines.joined(separator: "\n\n")
+        // Phase 4 — parse each paragraph group into an AttributedString
+        // Lines within the same paragraph are joined with single \n
+        // so AttributedString markdown parser applies soft wrapping within
+        // the paragraph while keeping inline markdown (bold, italic) working.
+        var result: [AttributedString] = []
+        for (index, group) in paragraphGroups.enumerated() {
+            let paraText = group.joined(separator: "\n")
+            let isLast = index == paragraphGroups.count - 1
 
-        // Fallback: if AttributedString markdown parser fails, render raw
-        guard let parsed = try? AttributedString(markdown: processedMarkdown) else {
-            let fallback = normalized.replacingOccurrences(of: "\n\n\n", with: "\n\n")
-            var result = (try? AttributedString(markdown: fallback)) ?? AttributedString(normalized)
-            appendStreamingCursor(to: &result)
-            return result
+            if let parsed = try? AttributedString(markdown: paraText) {
+                var attrStr = parsed
+                if isLast { appendStreamingCursor(to: &attrStr) }
+                result.append(attrStr)
+            } else {
+                var plain = AttributedString(paraText)
+                if isLast { appendStreamingCursor(to: &plain) }
+                result.append(plain)
+            }
         }
 
-        var result = parsed
-        appendStreamingCursor(to: &result)
         return result
     }
+
+    // MARK: - Streaming Cursor
 
     private func appendStreamingCursor(to result: inout AttributedString) {
         if isStreaming && blink {
