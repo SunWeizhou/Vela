@@ -97,6 +97,8 @@
 		0B1000A300000000000000A3 /* WorkoutDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001A300000000000000A3 /* WorkoutDetailView.swift */; };
 		0B1001800000000000000080 /* PersonalBaselineEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001810000000000000081 /* PersonalBaselineEngine.swift */; };
 		0B1001820000000000000082 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001830000000000000083 /* NotificationService.swift */; };
+		0B1001840000000000000084 /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001850000000000000085 /* LocationManager.swift */; };
+		0B1001890000000000000089 /* WeatherService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B10018D000000000000008D /* WeatherService.swift */; };
 		0B1001A400000000000000A4 /* DomainContextBuilders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001A500000000000000A5 /* DomainContextBuilders.swift */; };
 		0B1001A600000000000000A6 /* PreviewDataFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001A700000000000000A7 /* PreviewDataFactory.swift */; };
 		0B1001B100000000000000B1 /* VelaError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001B000000000000000B0 /* VelaError.swift */; };
@@ -236,6 +238,8 @@
 		0B1001750000000000000075 /* JournalCorrelationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/Correlation/JournalCorrelationEngine.swift; sourceTree = "<group>"; };
 		0B1001810000000000000081 /* PersonalBaselineEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/PersonalBaselineEngine.swift; sourceTree = "<group>"; };
 		0B1001830000000000000083 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Services/NotificationService.swift; sourceTree = "<group>"; };
+		0B1001850000000000000085 /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Services/LocationManager.swift; sourceTree = "<group>"; };
+		0B10018D000000000000008D /* WeatherService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Services/WeatherService.swift; sourceTree = "<group>"; };
 		0B1001860000000000000086 /* TrainingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Training/TrainingView.swift; sourceTree = "<group>"; };
 		0B1001870000000000000087 /* TrainingCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Training/TrainingCalendarView.swift; sourceTree = "<group>"; };
 		0B1001880000000000000088 /* BiologyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Settings/BiologyView.swift; sourceTree = "<group>"; };
@@ -425,6 +429,8 @@
 				0B1001730000000000000073 /* BackgroundTaskManager.swift */,
 				087BEB3E31344B8EA6E94717 /* AgentSkillsConfig.swift */,
 				0B1001830000000000000083 /* NotificationService.swift */,
+				0B1001850000000000000085 /* LocationManager.swift */,
+				0B10018D000000000000008D /* WeatherService.swift */,
 				0B1001860000000000000086 /* TrainingView.swift */,
 				0B1001870000000000000087 /* TrainingCalendarView.swift */,
 				0B1001880000000000000088 /* BiologyView.swift */,
@@ -703,6 +709,8 @@
 				43BEF779AE284532AACC77E8 /* AgentSkillsConfig.swift in Sources */,
 				0B1000730000000000000073 /* BackgroundTaskManager.swift in Sources */,
 				0B1001820000000000000082 /* NotificationService.swift in Sources */,
+				0B1001840000000000000084 /* LocationManager.swift in Sources */,
+				0B1001890000000000000089 /* WeatherService.swift in Sources */,
 				0B1000860000000000000086 /* TrainingView.swift in Sources */,
 				0B1000870000000000000087 /* TrainingCalendarView.swift in Sources */,
 				0B1000880000000000000088 /* BiologyView.swift in Sources */,

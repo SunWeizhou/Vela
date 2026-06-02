@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import CoreLocation
 
 // MARK: - VelaTodayView — Bevel Replica Today Tab
 // Warm off-white background (#F5F3F0) × Premium White Cockpit cards with precise shadows
@@ -12,6 +13,7 @@ struct VelaTodayView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     @ObservedObject private var appState = VelaAppState.shared
+    @ObservedObject private var locationManager = LocationManager.shared
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
 
@@ -146,6 +148,7 @@ struct VelaTodayView: View {
         .onAppear {
             dashboardVM.hydrateFromCache(modelContext: modelContext)
             loadRealNutritionData()
+            locationManager.requestPermission()
         }
         .task {
             await refreshDashboard()
@@ -162,6 +165,9 @@ struct VelaTodayView: View {
         .onChange(of: appState.localDataRevision) { _, _ in
             dashboardVM.hydrateFromCache(modelContext: modelContext)
             loadRealNutritionData()
+        }
+        .onChange(of: locationManager.location) { _, _ in
+            fetchLocalWeather()
         }
         .sheet(isPresented: $showCalendarOverview) {
             CalendarOverviewSheetView()
@@ -257,35 +263,85 @@ struct VelaTodayView: View {
         return formatter.string(from: date)
     }
 
-    // MARK: - Weather Sync network engine (IP-Geo + OpenMeteo)
+    // MARK: - Weather Sync
     private func fetchLocalWeather() {
         Task {
+            let cached = WeatherLocationStore.load()
+            let live = await weatherLocationSnapshot(
+                for: locationManager.location,
+                fallbackDisplayName: cached?.displayName
+            )
+
+            guard let location = WeatherLocationPolicy.preferredSnapshot(
+                live: live,
+                cached: cached
+            ) else {
+                return
+            }
+
+            if live != nil {
+                WeatherLocationStore.save(location)
+            }
+
             do {
-                guard let ipUrl = URL(string: "https://ipapi.co/json/") else { return }
-                let (ipData, _) = try await URLSession.shared.data(from: ipUrl)
-                if let json = try JSONSerialization.jsonObject(with: ipData) as? [String: Any],
-                   let city = json["city"] as? String,
-                   let region = json["region"] as? String,
-                   let lat = json["latitude"] as? Double,
-                   let lon = json["longitude"] as? Double {
-
-                    let weatherUrlString = "https://api.open-meteo.com/v1/forecast?latitude=\(lat)&longitude=\(lon)&current_weather=true"
-                    guard let weatherUrl = URL(string: weatherUrlString) else { return }
-                    let (weatherData, _) = try await URLSession.shared.data(from: weatherUrl)
-                    if let weatherJson = try JSONSerialization.jsonObject(with: weatherData) as? [String: Any],
-                       let current = weatherJson["current_weather"] as? [String: Any],
-                       let temp = current["temperature"] as? Double {
-
-                        await MainActor.run {
-                            self.weatherTemp = "\(Int(temp))°C"
-                            self.weatherLocation = "\(city), \(region)"
-                        }
-                    }
+                let weather = try await WeatherService.shared.fetchWeather(
+                    latitude: location.latitude,
+                    longitude: location.longitude
+                )
+                guard !Task.isCancelled else {
+                    return
                 }
+
+                weatherTemp = "\(Int(weather.temperature.rounded()))°C"
+                weatherLocation = location.displayName
             } catch {
-                print("Failed to sync weather locally: \(error)")
+                print("Failed to sync weather locally: \(error.localizedDescription)")
             }
         }
+    }
+
+    private func weatherLocationSnapshot(
+        for location: CLLocation?,
+        fallbackDisplayName: String?
+    ) async -> WeatherLocationSnapshot? {
+        guard let location else {
+            return nil
+        }
+
+        let placemark = try? await CLGeocoder()
+            .reverseGeocodeLocation(location)
+            .first
+        let locationName = weatherLocationName(
+            locality: placemark?.locality,
+            administrativeArea: placemark?.administrativeArea,
+            fallback: fallbackDisplayName
+        )
+
+        return WeatherLocationSnapshot(
+            latitude: location.coordinate.latitude,
+            longitude: location.coordinate.longitude,
+            displayName: locationName,
+            capturedAt: location.timestamp
+        )
+    }
+
+    private func weatherLocationName(
+        locality: String?,
+        administrativeArea: String?,
+        fallback: String?
+    ) -> String {
+        let parts = [locality, administrativeArea]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+        let uniqueParts = parts.reduce(into: [String]()) { result, item in
+            if !result.contains(item) {
+                result.append(item)
+            }
+        }
+
+        return uniqueParts.isEmpty
+            ? fallback ?? "当前位置"
+            : uniqueParts.joined(separator: ", ")
     }
 
     // MARK: - Status & Weather Pills Row

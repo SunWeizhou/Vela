@@ -5,6 +5,80 @@ import UIKit
 @testable import Vela
 
 final class VelaThemeTests: XCTestCase {
+    func testTodayWeatherSyncDoesNotUseNetworkExitGeolocation() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let todayViewURL = repositoryRoot
+            .appendingPathComponent("VelaApp")
+            .appendingPathComponent("Features")
+            .appendingPathComponent("Minimal")
+            .appendingPathComponent("VelaMinimalTodayView.swift")
+        let todayViewSource = try String(contentsOf: todayViewURL, encoding: .utf8)
+
+        XCTAssertFalse(todayViewSource.contains("ipapi.co"))
+    }
+
+    func testWeatherLocationPolicyPrefersLiveDeviceLocation() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let live = WeatherLocationSnapshot(
+            latitude: 31.23,
+            longitude: 121.47,
+            displayName: "上海市",
+            capturedAt: now
+        )
+        let cached = WeatherLocationSnapshot(
+            latitude: 39.90,
+            longitude: 116.40,
+            displayName: "北京市",
+            capturedAt: now.addingTimeInterval(-60)
+        )
+
+        XCTAssertEqual(
+            WeatherLocationPolicy.preferredSnapshot(live: live, cached: cached, now: now),
+            live
+        )
+    }
+
+    func testWeatherLocationPolicyUsesRecentDeviceCacheWhileWaitingForLiveLocation() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let cached = WeatherLocationSnapshot(
+            latitude: 31.23,
+            longitude: 121.47,
+            displayName: "上海市",
+            capturedAt: now.addingTimeInterval(-60)
+        )
+
+        XCTAssertEqual(
+            WeatherLocationPolicy.preferredSnapshot(live: nil, cached: cached, now: now),
+            cached
+        )
+    }
+
+    func testWeatherLocationPolicyDoesNotInventFallbackWhenDeviceCacheIsMissing() {
+        XCTAssertNil(
+            WeatherLocationPolicy.preferredSnapshot(
+                live: nil,
+                cached: nil,
+                now: Date(timeIntervalSince1970: 1_800_000_000)
+            )
+        )
+    }
+
+    func testWeatherLocationPolicyRejectsStaleDeviceCache() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let stale = WeatherLocationSnapshot(
+            latitude: 31.23,
+            longitude: 121.47,
+            displayName: "上海市",
+            capturedAt: now.addingTimeInterval(-(WeatherLocationPolicy.cacheTTL + 1))
+        )
+
+        XCTAssertNil(
+            WeatherLocationPolicy.preferredSnapshot(live: nil, cached: stale, now: now)
+        )
+    }
+
     func testThemeDefinesStableProductIdentity() {
         XCTAssertEqual(VelaAppMetadata.name, "Vela")
         XCTAssertEqual(VelaAppMetadata.minimumOSVersion, "17.0")

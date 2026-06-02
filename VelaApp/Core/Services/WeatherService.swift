@@ -1,6 +1,58 @@
 import Foundation
 import Combine
 
+struct WeatherLocationSnapshot: Codable, Equatable {
+    var latitude: Double
+    var longitude: Double
+    var displayName: String
+    var capturedAt: Date
+}
+
+enum WeatherLocationPolicy {
+    static let cacheTTL: TimeInterval = 7 * 24 * 60 * 60
+
+    static func preferredSnapshot(
+        live: WeatherLocationSnapshot?,
+        cached: WeatherLocationSnapshot?,
+        now: Date = Date()
+    ) -> WeatherLocationSnapshot? {
+        if let live {
+            return live
+        }
+
+        guard let cached else {
+            return nil
+        }
+
+        let age = now.timeIntervalSince(cached.capturedAt)
+        guard age >= 0, age <= cacheTTL else {
+            return nil
+        }
+
+        return cached
+    }
+}
+
+enum WeatherLocationStore {
+    private static let snapshotKey = "vela_weather_location_snapshot"
+
+    static func load(defaults: UserDefaults = .standard) -> WeatherLocationSnapshot? {
+        guard let data = defaults.data(forKey: snapshotKey) else {
+            return nil
+        }
+
+        return try? JSONDecoder().decode(WeatherLocationSnapshot.self, from: data)
+    }
+
+    static func save(_ snapshot: WeatherLocationSnapshot, defaults: UserDefaults = .standard) {
+        guard let data = try? JSONEncoder().encode(snapshot) else {
+            return
+        }
+
+        defaults.set(data, forKey: snapshotKey)
+    }
+}
+
 struct VelaWeather: Hashable, Codable {
     var temperature: Double
     var humidity: Double
