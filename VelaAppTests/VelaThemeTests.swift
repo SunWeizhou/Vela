@@ -504,6 +504,72 @@ final class VelaThemeTests: XCTestCase {
         XCTAssertFalse(VelaNavigationVisibility.shouldShowBottomBar(keyboardVisible: true))
     }
 
+    func testNativeQuickActionTabPresentsSheetWithoutReplacingSelectedContent() {
+        let result = VelaTabSelection.resolve(
+            candidate: .quickAdd,
+            current: .vitals
+        )
+
+        XCTAssertEqual(result.selectedTab, .vitals)
+        XCTAssertTrue(result.shouldPresentQuickActions)
+    }
+
+    func testNativeContentTabSelectionReplacesSelectedContent() {
+        let result = VelaTabSelection.resolve(
+            candidate: .coach,
+            current: .today
+        )
+
+        XCTAssertEqual(result.selectedTab, .coach)
+        XCTAssertFalse(result.shouldPresentQuickActions)
+    }
+
+    func testEmbeddedCoachComposerClearsFloatingNavigationWhenKeyboardIsHidden() {
+        XCTAssertGreaterThanOrEqual(
+            CoachChatLayout.bottomClearance(presentation: .embedded, keyboardVisible: false),
+            88
+        )
+    }
+
+    func testEmbeddedCoachComposerDoesNotDoubleReserveNativeTabBarSpace() {
+        XCTAssertEqual(
+            CoachChatLayout.bottomClearance(
+                presentation: .embedded,
+                keyboardVisible: false,
+                usesOverlayNavigation: false
+            ),
+            0
+        )
+    }
+
+    func testCoachComposerDoesNotReserveFloatingNavigationSpaceWhileKeyboardIsVisible() {
+        XCTAssertEqual(
+            CoachChatLayout.bottomClearance(presentation: .embedded, keyboardVisible: true),
+            0
+        )
+        XCTAssertEqual(
+            CoachChatLayout.bottomClearance(presentation: .quickCover, keyboardVisible: false),
+            0
+        )
+    }
+
+    @MainActor
+    func testVelaServicesKeepsOneCoachChatVMLifetime() {
+        let services = VelaServices()
+
+        XCTAssertTrue(services.coachChat === services.coachChat)
+    }
+
+    func testCoachRequestRetriesAfterBackgroundInterruption() {
+        XCTAssertTrue(CoachRequestContinuity.shouldRetryAfterInterruption(isAppActive: false))
+        XCTAssertFalse(CoachRequestContinuity.shouldRetryAfterInterruption(isAppActive: true))
+    }
+
+    func testDeepSeekStreamRequiresTerminalEventBeforeAcceptingResponse() {
+        XCTAssertFalse(DeepSeekStreamCompletion.isComplete(didReceiveDone: false))
+        XCTAssertTrue(DeepSeekStreamCompletion.isComplete(didReceiveDone: true))
+    }
+
     func testCGMSettingsSummaryUsesLatestChronologicalReading() {
         let older = BloodGlucoseReading(
             date: Date(timeIntervalSince1970: 1_000),

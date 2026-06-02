@@ -9,8 +9,22 @@ enum CoachPresentationStyle {
     case quickCover
 }
 
+enum CoachChatLayout {
+    static let bottomAnchorID = "coach-chat-bottom"
+
+    static func bottomClearance(
+        presentation: CoachPresentationStyle,
+        keyboardVisible: Bool,
+        usesOverlayNavigation: Bool = true
+    ) -> CGFloat {
+        presentation == .embedded && !keyboardVisible && usesOverlayNavigation ? 92 : 0
+    }
+}
+
 struct VelaCoachView: View {
-    var presentation: CoachPresentationStyle = .quickCover
+    var presentation: CoachPresentationStyle
+    var usesOverlayNavigation: Bool
+    @ObservedObject var vm: CoachChatVM
 
     @Environment(\.colorScheme) private var cs
     @Environment(\.dismiss) private var dismiss
@@ -19,7 +33,6 @@ struct VelaCoachView: View {
     @EnvironmentObject private var services: VelaServices
     @ObservedObject private var appState = VelaAppState.shared
 
-    @StateObject private var vm = CoachChatVM()
     @State private var inputText: String = ""
     @FocusState private var isFocused: Bool
 
@@ -51,6 +64,16 @@ struct VelaCoachView: View {
     ) private var pendingMemoryProposals: [MemoryEventRecord]
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
+
+    init(
+        presentation: CoachPresentationStyle = .quickCover,
+        usesOverlayNavigation: Bool = false,
+        vm: CoachChatVM
+    ) {
+        self.presentation = presentation
+        self.usesOverlayNavigation = usesOverlayNavigation
+        self.vm = vm
+    }
 
     var body: some View {
         ZStack {
@@ -92,6 +115,10 @@ struct VelaCoachView: View {
                                     .id("streaming")
                                 }
                             }
+
+                            Color.clear
+                                .frame(height: 1)
+                                .id(CoachChatLayout.bottomAnchorID)
                         }
                         .padding(.horizontal, VelaTheme.pagePadding)
                         .padding(.vertical, 16)
@@ -103,33 +130,38 @@ struct VelaCoachView: View {
                     .scrollIndicators(.hidden)
                     .scrollDismissesKeyboard(.immediately)
                     .onChange(of: vm.messages.count) { _, _ in
-                        if let last = vm.messages.last {
-                            withAnimation {
-                                proxy.scrollTo(last.id, anchor: .bottom)
-                            }
-                        }
+                        scrollToBottom(using: proxy)
                     }
                     .onChange(of: vm.isStreaming) { _, streaming in
-                        if streaming {
-                            withAnimation {
-                                proxy.scrollTo("typing", anchor: .bottom)
-                            }
-                        }
+                        guard streaming else { return }
+                        scrollToBottom(using: proxy)
                     }
                     .onChange(of: vm.streamingContent) { _, content in
                         guard !content.isEmpty else { return }
-                        withAnimation {
-                            proxy.scrollTo("streaming", anchor: .bottom)
-                        }
+                        scrollToBottom(using: proxy)
+                    }
+                    .onChange(of: isKeyboardVisible) { _, visible in
+                        guard visible else { return }
+                        scrollToBottom(using: proxy)
+                    }
+                    .onChange(of: isFocused) { _, focused in
+                        guard focused else { return }
+                        scrollToBottom(using: proxy)
                     }
                 }
-
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
                 composerView
+                    .padding(.bottom, CoachChatLayout.bottomClearance(
+                        presentation: presentation,
+                        keyboardVisible: isKeyboardVisible,
+                        usesOverlayNavigation: usesOverlayNavigation
+                    ))
+                    .background(VelaTheme.bg)
             }
             .background(VelaTheme.bg)
             .blur(radius: showHistoryDrawer ? 3 : 0)
             .disabled(showHistoryDrawer)
-            .padding(.bottom, presentation == .embedded && !isKeyboardVisible ? 64 : 0)
 
             // Transparent backdrop for drawer
             if showHistoryDrawer {
@@ -578,6 +610,15 @@ struct VelaCoachView: View {
 
     // MARK: - Actions
 
+    private func scrollToBottom(using proxy: ScrollViewProxy) {
+        Task { @MainActor in
+            await Task.yield()
+            withAnimation {
+                proxy.scrollTo(CoachChatLayout.bottomAnchorID, anchor: .bottom)
+            }
+        }
+    }
+
     private func consumePendingRouteIfVisible() {
         let expectedDestination: VelaAppState.CoachRouteDestination = presentation == .embedded
             ? .embedded
@@ -603,17 +644,15 @@ struct VelaCoachView: View {
         guard !trimmed.isEmpty, !vm.isStreaming else { return }
         inputText = ""
 
-        Task {
-            await vm.send(
-                text: trimmed,
-                dashboard: dashboard,
-                modelContext: modelContext,
-                journalEntries: journalEntries,
-                savedReports: savedReports,
-                focus: .general,
-                services: services
-            )
-        }
+        vm.submit(
+            text: trimmed,
+            dashboard: dashboard,
+            modelContext: modelContext,
+            journalEntries: journalEntries,
+            savedReports: savedReports,
+            focus: .general,
+            services: services
+        )
     }
 
 }

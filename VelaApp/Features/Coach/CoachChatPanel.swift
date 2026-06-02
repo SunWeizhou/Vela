@@ -19,6 +19,37 @@ struct CoachContextFocus: Hashable, Sendable {
     }
 }
 
+enum CoachRequestContinuity {
+    static func shouldRetryAfterInterruption(isAppActive: Bool) -> Bool {
+        !isAppActive
+    }
+}
+
+@MainActor
+private final class CoachResponseBackgroundLease {
+    private var identifier: UIBackgroundTaskIdentifier = .invalid
+    private var expirationHandler: (() -> Void)?
+
+    func begin(expirationHandler: @escaping () -> Void) {
+        end()
+        self.expirationHandler = expirationHandler
+        identifier = UIApplication.shared.beginBackgroundTask(withName: "CoachResponse") { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.expirationHandler?()
+                self.end()
+            }
+        }
+    }
+
+    func end() {
+        guard identifier != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(identifier)
+        identifier = .invalid
+        expirationHandler = nil
+    }
+}
+
 // MARK: - Unified ViewModel
 
 @MainActor
@@ -60,6 +91,7 @@ final class CoachChatVM: ObservableObject {
     @Published var streamingContent: String = ""
     /// True while the food photo is being analyzed by the vision LLM.
     @Published var isAnalyzingFood = false
+    @Published private(set) var isAwaitingForegroundRetry = false
 
     let quickQuestions: [String] = [
         L10n.t("Today's training advice", "今天的训练建议"),
@@ -71,6 +103,20 @@ final class CoachChatVM: ObservableObject {
     private let keychain = KeychainService.shared
     private let apiKeyAccount = "deepseek_api_key"
     private let kimiApiKeyAccount = FoodPhotoAnalyzer.keychainAccount
+    private let backgroundLease = CoachResponseBackgroundLease()
+    private var pendingRequest: PendingRequest?
+    private var activeResponseTask: Task<Void, Never>?
+    private var isAppActive = true
+    private weak var serviceHost: VelaServices?
+
+    private struct PendingRequest {
+        var text: String
+        var dashboard: DashboardSummary
+        var modelContext: ModelContext
+        var journalEntries: [JournalEntryRecord]
+        var savedReports: [AIReportRecord]
+        var focus: CoachContextFocus
+    }
 
     static func historyBeforeCurrentPrompt(from messages: [ChatMsg], limit: Int) -> [ChatMsg] {
         Array(messages.filter { !$0.isStreaming }.dropLast().suffix(limit))
@@ -227,6 +273,8 @@ final class CoachChatVM: ObservableObject {
             self.currentSession = list.first
         }
         
+        guard !isStreaming, !isAwaitingForegroundRetry else { return }
+
         if let currentSession {
             if let data = currentSession.serializedMessages.data(using: .utf8),
                let decoded = try? JSONDecoder().decode([ChatMsg].self, from: data) {
@@ -311,7 +359,7 @@ final class CoachChatVM: ObservableObject {
 
     // MARK: - Send
 
-    func send(
+    func submit(
         text: String,
         dashboard: DashboardSummary,
         modelContext: ModelContext,
@@ -319,16 +367,81 @@ final class CoachChatVM: ObservableObject {
         savedReports: [AIReportRecord],
         focus: CoachContextFocus = .general,
         services: VelaServices? = nil
+    ) {
+        guard activeResponseTask == nil else { return }
+        serviceHost = services
+        pendingRequest = PendingRequest(
+            text: text,
+            dashboard: dashboard,
+            modelContext: modelContext,
+            journalEntries: journalEntries,
+            savedReports: savedReports,
+            focus: focus
+        )
+        startPendingRequest(appendingUserMessage: true)
+    }
+
+    func handleAppActiveChange(isActive: Bool) {
+        isAppActive = isActive
+        guard isActive, isAwaitingForegroundRetry else { return }
+        startPendingRequest(appendingUserMessage: false)
+    }
+
+    private func startPendingRequest(appendingUserMessage: Bool) {
+        guard activeResponseTask == nil, let pendingRequest else { return }
+        isAwaitingForegroundRetry = false
+        activeResponseTask = Task { [weak self] in
+            guard let self else { return }
+            await self.send(
+                text: pendingRequest.text,
+                dashboard: pendingRequest.dashboard,
+                modelContext: pendingRequest.modelContext,
+                journalEntries: pendingRequest.journalEntries,
+                savedReports: pendingRequest.savedReports,
+                focus: pendingRequest.focus,
+                services: self.serviceHost,
+                appendingUserMessage: appendingUserMessage
+            )
+            self.activeResponseTask = nil
+            if self.isAwaitingForegroundRetry {
+                if self.isAppActive {
+                    self.startPendingRequest(appendingUserMessage: false)
+                }
+            } else {
+                self.pendingRequest = nil
+            }
+        }
+    }
+
+    private func handleBackgroundTimeExpired() {
+        guard activeResponseTask != nil else { return }
+        isAwaitingForegroundRetry = true
+        activeResponseTask?.cancel()
+    }
+
+    func send(
+        text: String,
+        dashboard: DashboardSummary,
+        modelContext: ModelContext,
+        journalEntries: [JournalEntryRecord],
+        savedReports: [AIReportRecord],
+        focus: CoachContextFocus = .general,
+        services: VelaServices? = nil,
+        appendingUserMessage: Bool = true
     ) async {
         let userText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !userText.isEmpty, !isStreaming else { return }
         draft = ""
         refreshKeyState()
 
-        messages.append(ChatMsg(role: .user, content: userText))
+        messages.removeAll { $0.isStreaming }
+        streamingContent = ""
+        if appendingUserMessage {
+            messages.append(ChatMsg(role: .user, content: userText))
+        }
 
         // Auto rename title if it was default on the first query
-        if let current = currentSession, (current.title == "新对话" || current.title == "New Chat" || current.title == "New Session" || current.title.isEmpty) {
+        if appendingUserMessage, let current = currentSession, (current.title == "新对话" || current.title == "New Chat" || current.title == "New Session" || current.title.isEmpty) {
             let cleanQuery = userText.trimmingCharacters(in: .whitespacesAndNewlines)
             let displayTitle = String(cleanQuery.prefix(12)) + (cleanQuery.count > 12 ? "..." : "")
             current.title = displayTitle.isEmpty ? "新对话" : displayTitle
@@ -347,6 +460,11 @@ final class CoachChatVM: ObservableObject {
         }
 
         isStreaming = true
+        backgroundLease.begin { [weak self] in
+            self?.handleBackgroundTimeExpired()
+        }
+        defer { backgroundLease.end() }
+
         let assistantId = UUID()
         messages.append(ChatMsg(id: assistantId, role: .assistant, content: "", isStreaming: true))
 
@@ -502,10 +620,17 @@ final class CoachChatVM: ObservableObject {
             )
 
             isReady = true
+            isAwaitingForegroundRetry = false
         } catch {
             streamingContent = ""
-            if let idx = messages.firstIndex(where: { $0.id == assistantId }) {
-                messages[idx] = ChatMsg(id: assistantId, role: .assistant, content: error.localizedDescription)
+            messages.removeAll { $0.id == assistantId }
+            let shouldRetry = pendingRequest != nil
+                && (isAwaitingForegroundRetry
+                    || CoachRequestContinuity.shouldRetryAfterInterruption(isAppActive: isAppActive))
+            if shouldRetry {
+                isAwaitingForegroundRetry = true
+            } else {
+                messages.append(ChatMsg(id: assistantId, role: .assistant, content: error.localizedDescription))
             }
             persistThread(modelContext: modelContext)
         }

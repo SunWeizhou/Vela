@@ -24,6 +24,12 @@ enum DeepSeekTextModel: String, CaseIterable, Sendable {
     }
 }
 
+enum DeepSeekStreamCompletion {
+    static func isComplete(didReceiveDone: Bool) -> Bool {
+        didReceiveDone
+    }
+}
+
 struct DeepSeekProvider: LLMProvider {
     var apiKey: String
     var model: String
@@ -141,8 +147,13 @@ struct DeepSeekProvider: LLMProvider {
                         throw LLMProviderError.requestFailed("DeepSeek request failed with status \(httpResponse.statusCode).")
                     }
 
+                    var didReceiveDone = false
                     for try await line in bytes.lines {
-                        guard line.hasPrefix("data: "), !line.hasPrefix("data: [DONE]") else { continue }
+                        if line.trimmingCharacters(in: .whitespacesAndNewlines) == "data: [DONE]" {
+                            didReceiveDone = true
+                            break
+                        }
+                        guard line.hasPrefix("data: ") else { continue }
                         let json = String(line.dropFirst(6))
                         guard let data = json.data(using: .utf8),
                               let chunk = try? JSONDecoder().decode(DeepSeekStreamChunk.self, from: data),
@@ -150,9 +161,12 @@ struct DeepSeekProvider: LLMProvider {
                               !delta.isEmpty else { continue }
                         continuation.yield(delta)
                     }
+                    guard DeepSeekStreamCompletion.isComplete(didReceiveDone: didReceiveDone) else {
+                        throw LLMProviderError.invalidResponse
+                    }
                     continuation.finish()
                 } catch is CancellationError {
-                    continuation.finish()
+                    continuation.finish(throwing: CancellationError())
                 } catch {
                     continuation.finish(throwing: error)
                 }

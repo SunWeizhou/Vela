@@ -41,13 +41,15 @@ extension View {
     }
 }
 
-// MARK: - VelaShell — Unified Floating Glass Navigation
+// MARK: - VelaShell — Native iOS 26 Navigation with Legacy Fallback
 //
-// iOS 26 & iOS 18+: Uses ZStack content switcher + "玻璃胶囊导航 + 右侧独立玻璃圆形 +" side-by-side layout.
-// Automatically leverages native iOS 26 Liquid Glass material effect with smooth spring slide animations.
-// Completely bypasses native system tab bar to prevent overlap, duplication, and tap lag.
+// iOS 26 uses the system Liquid Glass tab bar and its native scroll minimization.
+// Earlier releases keep the custom floating glass navigation.
 
 struct VelaShell: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var services: VelaServices
+
     @State private var selectedTab: VelaTab = .today
     @State private var showPlusSheet = false
     @State private var showCoach     = false
@@ -60,43 +62,16 @@ struct VelaShell: View {
     // MARK: - Tab Enum
 
     enum VelaTab: Int, CaseIterable, Hashable {
-        case today, training, vitals, coach
+        case today, training, vitals, coach, quickAdd
+
+        static let contentTabs: [VelaTab] = [.today, .training, .vitals, .coach]
     }
 
     // MARK: - Body
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .bottom) {
-                // Background Warm Canvas
-                VelaTheme.bg.ignoresSafeArea()
-
-                // Keep the primary surfaces mounted so cached SwiftData content
-                // is already hydrated when the user switches tabs.
-                ZStack {
-                    tabSurface(.today) {
-                        VelaTodayView(showCoach: $showCoach, showSettings: $showSettings)
-                    }
-                    tabSurface(.training) {
-                        VelaTrainingView()
-                    }
-                    tabSurface(.vitals) {
-                        VelaVitalsView()
-                    }
-                    tabSurface(.coach) {
-                        VelaCoachView(presentation: .embedded)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .ignoresSafeArea(.container, edges: .bottom)
-
-                // "玻璃胶囊导航 + 右侧独立玻璃圆形 +" Side-by-Side Glass Tab Bar
-                if VelaNavigationVisibility.shouldShowBottomBar(keyboardVisible: keyboardVisible) {
-                    bottomGlassNavBar
-                        .padding(.bottom, 8)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
+            navigationSurface
         }
         .onReceive(appState.$showCoachHub) { show in
             if show {
@@ -119,6 +94,9 @@ struct VelaShell: View {
                 keyboardVisible = false
             }
         }
+        .onChange(of: scenePhase) { _, phase in
+            services.coachChat.handleAppActiveChange(isActive: phase == .active)
+        }
         .sheet(isPresented: $showPlusSheet, onDismiss: appState.runDeferredQuickAction) {
             PlusActionSheet()
                 .presentationDetents([.medium])
@@ -126,7 +104,7 @@ struct VelaShell: View {
                 .presentationBackground(VelaTheme.bg)
         }
         .fullScreenCover(isPresented: $showCoach) {
-            VelaCoachView(presentation: .quickCover)
+            VelaCoachView(presentation: .quickCover, vm: services.coachChat)
         }
         .sheet(isPresented: $showSettings) {
             NavigationStack { VelaSettingsView() }
@@ -168,13 +146,95 @@ struct VelaShell: View {
         .tint(VelaTheme.accent)
     }
 
+    @ViewBuilder
+    private var navigationSurface: some View {
+        if #available(iOS 26.0, *) {
+            nativeTabNavigation
+        } else {
+            legacyFloatingNavigation
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private var nativeTabNavigation: some View {
+        TabView(selection: nativeTabSelection) {
+            Tab(label(for: .today), systemImage: iconName(for: .today), value: VelaTab.today) {
+                VelaTodayView(showCoach: $showCoach, showSettings: $showSettings)
+            }
+            Tab(label(for: .training), systemImage: iconName(for: .training), value: VelaTab.training) {
+                VelaTrainingView()
+            }
+            Tab(label(for: .vitals), systemImage: iconName(for: .vitals), value: VelaTab.vitals) {
+                VelaVitalsView()
+            }
+            Tab(label(for: .coach), systemImage: iconName(for: .coach), value: VelaTab.coach) {
+                VelaCoachView(presentation: .embedded, vm: services.coachChat)
+            }
+            Tab(label(for: .quickAdd), systemImage: iconName(for: .quickAdd), value: VelaTab.quickAdd, role: .search) {
+                Color.clear
+            }
+        }
+        .tabBarMinimizeBehavior(.onScrollDown)
+        .toolbar(keyboardVisible ? .hidden : .visible, for: .tabBar)
+    }
+
+    private var nativeTabSelection: Binding<VelaTab> {
+        Binding(
+            get: { selectedTab },
+            set: { candidate in
+                let result = VelaTabSelection.resolve(candidate: candidate, current: selectedTab)
+                selectedTab = result.selectedTab
+                if result.shouldPresentQuickActions {
+                    showPlusSheet = true
+                } else {
+                    appState.selectedTab = result.selectedTab.rawValue
+                }
+            }
+        )
+    }
+
+    private var legacyFloatingNavigation: some View {
+        ZStack(alignment: .bottom) {
+            VelaTheme.bg.ignoresSafeArea()
+
+            // Keep legacy primary surfaces mounted so cached SwiftData content
+            // is already hydrated when the user switches tabs.
+            ZStack {
+                tabSurface(.today) {
+                    VelaTodayView(showCoach: $showCoach, showSettings: $showSettings)
+                }
+                tabSurface(.training) {
+                    VelaTrainingView()
+                }
+                tabSurface(.vitals) {
+                    VelaVitalsView()
+                }
+                tabSurface(.coach) {
+                    VelaCoachView(
+                        presentation: .embedded,
+                        usesOverlayNavigation: true,
+                        vm: services.coachChat
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .ignoresSafeArea(.container, edges: .bottom)
+
+            if VelaNavigationVisibility.shouldShowBottomBar(keyboardVisible: keyboardVisible) {
+                bottomGlassNavBar
+                    .padding(.bottom, 8)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+    }
+
     // MARK: - Side-by-Side Navigation Bar ("玻璃胶囊导航 + 右侧独立玻璃圆形 +")
     
     private var bottomGlassNavBar: some View {
         HStack(spacing: 12) {
             // 1. Frosted Glass Capsule for primary tabs
             HStack(spacing: 0) {
-                ForEach(VelaTab.allCases, id: \.self) { tab in
+                ForEach(VelaTab.contentTabs, id: \.self) { tab in
                     customTabButton(tab)
                 }
             }
@@ -266,6 +326,7 @@ struct VelaShell: View {
         case .training: "figure.run"
         case .vitals:   "heart.text.square"
         case .coach:    "sparkles"
+        case .quickAdd: "plus"
         }
     }
 
@@ -275,6 +336,24 @@ struct VelaShell: View {
         case .training: "健身"
         case .vitals:   "体征"
         case .coach:    "Coach"
+        case .quickAdd: "添加"
         }
+    }
+}
+
+enum VelaTabSelection {
+    struct Result {
+        var selectedTab: VelaShell.VelaTab
+        var shouldPresentQuickActions: Bool
+    }
+
+    static func resolve(
+        candidate: VelaShell.VelaTab,
+        current: VelaShell.VelaTab
+    ) -> Result {
+        guard candidate == .quickAdd else {
+            return Result(selectedTab: candidate, shouldPresentQuickActions: false)
+        }
+        return Result(selectedTab: current, shouldPresentQuickActions: true)
     }
 }

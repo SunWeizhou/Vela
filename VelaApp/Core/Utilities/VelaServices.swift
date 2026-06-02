@@ -6,6 +6,7 @@ final class VelaServices: ObservableObject {
     let refreshService: HealthDataRefreshService
     let contextBuilder: AIContextBuilder
     let dailySummaryUseCase: DailySummaryUseCase
+    let coachChat = CoachChatVM()
 
     /// WebSearchService uses a private singleton — expose via computed property.
     var webSearchService: WebSearchService { .shared }
