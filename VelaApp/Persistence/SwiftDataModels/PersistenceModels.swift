@@ -558,6 +558,22 @@ struct WorkoutTemplateExercise: Codable, Hashable, Identifiable {
     var notes: String?
 }
 
+enum StrengthWorkoutTemplateParser {
+    static func reps(from targetReps: String, fallback: Int = 10) -> Int {
+        let trimmed = targetReps.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let exact = Int(trimmed) { return exact }
+
+        let normalized = trimmed.replacingOccurrences(of: " ", with: "").lowercased()
+        if let range = normalized.range(of: #"(?<=x)\d+"#, options: .regularExpression) {
+            return Int(normalized[range]) ?? fallback
+        }
+        if let range = normalized.range(of: #"\d+"#, options: .regularExpression) {
+            return Int(normalized[range]) ?? fallback
+        }
+        return fallback
+    }
+}
+
 @Model
 final class WorkoutTemplateRecord {
     @Attribute(.unique) var id: UUID
@@ -1302,13 +1318,13 @@ public struct TrainingDay: Codable, Hashable, Identifiable, Sendable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
-        weekNumber = try container.decode(Int.self, forKey: .weekNumber)
-        dayNumber = try container.decode(Int.self, forKey: .dayNumber)
-        title = try container.decode(String.self, forKey: .title)
-        description = try container.decode(String.self, forKey: .description)
-        focus = try container.decode(String.self, forKey: .focus)
-        durationMinutes = try container.decode(Int.self, forKey: .durationMinutes)
-        intensity = try container.decode(String.self, forKey: .intensity)
+        weekNumber = try container.decodeIfPresent(Int.self, forKey: .weekNumber) ?? 1
+        dayNumber = try container.decodeIfPresent(Int.self, forKey: .dayNumber) ?? 1
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+        description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
+        focus = try container.decodeIfPresent(String.self, forKey: .focus) ?? "strength"
+        durationMinutes = try container.decodeIfPresent(Int.self, forKey: .durationMinutes) ?? 0
+        intensity = try container.decodeIfPresent(String.self, forKey: .intensity) ?? "moderate"
         isCompleted = try container.decodeIfPresent(Bool.self, forKey: .isCompleted) ?? false
         completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
         loggedStrain = try container.decodeIfPresent(Double.self, forKey: .loggedStrain)

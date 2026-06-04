@@ -183,6 +183,46 @@ final class ContextBuilderTests: XCTestCase {
         XCTAssertTrue(typed.metadata.includedSections.contains("body_model_profile"))
     }
 
+    @MainActor
+    func testAIContextIncludesBodyModelStateWhenAvailable() {
+        let generatedAt = makeDate()
+        let dashboard = DashboardSummary.preview(date: generatedAt)
+        let onboarding = OnboardingState(
+            isCompleted: true,
+            goalProfile: UserGoalProfile(primaryGoal: "performance", experienceLevel: "intermediate"),
+            trainingPreference: TrainingPreferenceProfile(trainingStyle: "strength", weeklyTrainingDays: 4, sessionDurationMinutes: 60),
+            equipmentProfile: EquipmentProfile(equipment: ["gym"])
+        )
+        let bodyModelState = BodyModelBuilder().build(
+            onboarding: onboarding,
+            dailySummaries: [],
+            journalEntries: [
+                JournalEntryRecord(
+                    createdAt: generatedAt.addingTimeInterval(-86_400),
+                    tags: ["behavior:alcohol", "intensity:medium"],
+                    note: "晚餐喝酒"
+                )
+            ],
+            strengthWorkouts: [makeWorkout(start: generatedAt.addingTimeInterval(-2 * 86_400))],
+            trainingResponses: [],
+            asOf: generatedAt
+        )
+
+        let result = AIContextBuilder().build(
+            dashboard: dashboard,
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:],
+            onboardingState: onboarding,
+            bodyModelState: bodyModelState,
+            generatedAt: generatedAt
+        )
+
+        XCTAssertEqual(result.envelope.userWiki["body_model.maturity"], "seed")
+        XCTAssertTrue((result.envelope.userWiki["body_model.uncertain_areas"] ?? "").contains("behavior_pairs"))
+        XCTAssertTrue(result.metadata.includedSections.contains("body_model_state"))
+    }
+
     func testUncompletedSetsAreNotCountedAsEffectiveSets() {
         let generatedAt = makeDate()
         let workout = makeMixedCompletionWorkout(start: generatedAt.addingTimeInterval(-3600))
@@ -382,5 +422,54 @@ final class ContextBuilderTests: XCTestCase {
         XCTAssertTrue(state.readinessDecision.reasons.contains { $0.localizedCaseInsensitiveContains("HRV") })
         XCTAssertTrue(state.actions.contains { $0.kind == .recovery })
         XCTAssertEqual(state.dataConfidence, .high)
+    }
+
+    func testTodayCommandConfidenceDropsWhenKeySignalIsUnavailable() {
+        let generatedAt = makeDate()
+        var dashboard = DashboardSummary.preview(date: generatedAt)
+        dashboard.recovery = MetricResult(
+            name: "Recovery Score",
+            value: 72,
+            band: .normal,
+            confidence: .high,
+            components: ["sleep": 72],
+            componentWeights: ["sleep": 1],
+            reasons: ["Recovery available."],
+            missingInputs: [],
+            dataWindow: DateInterval(start: generatedAt, duration: 86_400),
+            source: .derived,
+            algorithmVersion: "test",
+            lastUpdated: generatedAt
+        )
+        dashboard.recoveryMetrics = RecoveryMetricSummary(
+            hrvMilliseconds: nil,
+            restingHeartRate: 58,
+            sleepHeartRate: nil,
+            respiratoryRate: nil
+        )
+
+        let state = TodayCommandBuilder.build(from: dashboard, generatedAt: generatedAt)
+
+        XCTAssertEqual(state.keySignals.first(where: { $0.id == "hrv" })?.confidence, .unavailable)
+        XCTAssertEqual(state.dataConfidence, .low)
+    }
+
+    func testLegacyJournalCorrelationRequiresEnoughTaggedDays() {
+        let base = makeDate()
+        let entries = [
+            JournalEntryRecord(createdAt: base.addingTimeInterval(-86_400), tags: ["alcohol"], note: "drink"),
+            JournalEntryRecord(createdAt: base.addingTimeInterval(-2 * 86_400), tags: ["alcohol"], note: "drink")
+        ]
+        let snapshots = (0..<10).map { offset in
+            DailyHealthSnapshot(
+                date: base.addingTimeInterval(Double(-offset) * 86_400),
+                sleepScore: 80,
+                recoveryScore: 75
+            )
+        }
+
+        let correlations = JournalCorrelationEngine().correlateTags(journalEntries: entries, snapshots: snapshots)
+
+        XCTAssertTrue(correlations.isEmpty)
     }
 }

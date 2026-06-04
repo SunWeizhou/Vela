@@ -105,10 +105,8 @@ struct VelaCoachView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(spacing: 20) {
-                            coachArtifactDashboard
-
                             if vm.messages.isEmpty {
-                                welcomeView
+                                welcomeViewWithArtifact
                             }
 
                             ForEach(vm.messages.filter { !$0.isStreaming }) { msg in
@@ -526,114 +524,68 @@ struct VelaCoachView: View {
         .buttonStyle(.plain)
     }
 
-    private var welcomeView: some View {
-        VStack(spacing: 20) {
-            Spacer().frame(height: 40)
+    private var welcomeViewWithArtifact: some View {
+        VStack(spacing: 24) {
+            Spacer().frame(height: 10)
 
-            ZStack {
-                Circle()
-                    .fill(Color.white)
-                    .frame(width: 76, height: 76)
-                    .overlay(Circle().stroke(Color(hex: "#E5E5EA"), lineWidth: 0.8))
-                    .shadow(color: Color.black.opacity(0.04), radius: 8, y: 3)
+            // Alpaca Logo & Title
+            VStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 76, height: 76)
+                        .overlay(Circle().stroke(Color(hex: "#E5E5EA"), lineWidth: 0.8))
+                        .shadow(color: Color.black.opacity(0.04), radius: 8, y: 3)
 
-                AlpacaView(
-                    strokeColor: Color(hex: "#007AFF"),
-                    size: 58,
-                    lineWidth: 2.6
-                )
-            }
+                    AlpacaView(
+                        strokeColor: Color(hex: "#007AFF"),
+                        size: 58,
+                        lineWidth: 2.6
+                    )
+                }
 
-            Text("Coach")
-                .font(VelaTheme.title2())
-                .foregroundStyle(VelaTheme.fg)
-
-            Text("你的 AI 身体智能代理。可以讨论训练、恢复、睡眠、营养，我会根据你的健康数据给出个性化建议。")
-                .font(VelaTheme.subheadline())
-                .foregroundStyle(VelaTheme.muted)
-                .multilineTextAlignment(.center)
-                .lineSpacing(4)
-
-            FlexStack(spacing: 8) {
-                ForEach(vm.quickQuestions, id: \.self) { text in
-                    Button(text) {
-                        sendMessage(text)
-                    }
-                    .font(VelaTheme.subheadline())
+                Text("Coach")
+                    .font(VelaTheme.title2())
                     .foregroundStyle(VelaTheme.fg)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(VelaTheme.surface)
-                            .overlay(
-                                Capsule(style: .continuous)
-                                    .stroke(VelaTheme.border, lineWidth: 0.5)
-                            )
-                    )
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
 
-    private var coachArtifactDashboard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VelaHeroCard(
-                title: "Active Coach OS",
-                subtitle: todayCommandState.summary,
-                systemImage: "sparkles",
-                accent: VelaTheme.accent
-            ) {
-                HStack(spacing: 10) {
-                    MetricScoreCard(
-                        title: "Readiness",
-                        value: todayCommandState.readinessDecision.displayTitle,
-                        subtitle: "\(Int((todayCommandState.readinessDecision.confidence * 100).rounded()))% confidence",
-                        accent: readinessColor(todayCommandState.readinessDecision.decision),
-                        confidence: todayCommandState.dataConfidence
-                    )
-
-                    MetricScoreCard(
-                        title: "Artifacts",
-                        value: "\(coachArtifacts.count)",
-                        subtitle: coachArtifacts.isEmpty ? "local brief only" : "saved coach outputs",
-                        accent: VelaTheme.accent
-                    )
-                }
-
-                if let artifact = todayCommandState.coachArtifact {
-                    CoachArtifactCard(artifact: artifact, compact: true) { action in
-                        handleArtifactAction(action, artifact: artifact)
-                    }
-                }
+                Text("你的 AI 身体智能代理。你可以与我讨论训练、恢复、睡眠或营养，我将基于你的健康数据为你提供个性化建议。")
+                    .font(VelaTheme.subheadline())
+                    .foregroundStyle(VelaTheme.muted)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(4)
+                    .padding(.horizontal, 20)
             }
 
-            if !coachArtifacts.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Artifact Inbox")
-                        .font(VelaTheme.caption1())
-                        .fontWeight(.bold)
-                        .foregroundStyle(VelaTheme.muted)
-                        .textCase(.uppercase)
-                        .padding(.leading, 2)
+            // Quick Suggestions
+            VStack(alignment: .leading, spacing: 10) {
+                Text("快捷提问 / QUICK SUGGESTIONS")
+                    .font(VelaTheme.caption2())
+                    .fontWeight(.bold)
+                    .foregroundStyle(VelaTheme.muted)
+                    .tracking(0.5)
+                    .padding(.leading, 4)
 
-                    ForEach(coachArtifacts.prefix(3)) { record in
-                        CoachArtifactCard(artifact: record.artifact, compact: true) { action in
-                            handleArtifactAction(action, artifact: record.artifact)
+                FlexStack(spacing: 8) {
+                    ForEach(vm.quickQuestions, id: \.self) { text in
+                        Button(text) {
+                            sendMessage(text)
                         }
+                        .font(VelaTheme.subheadline())
+                        .foregroundStyle(VelaTheme.fg)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(VelaTheme.surface)
+                                .overlay(
+                                    Capsule(style: .continuous)
+                                        .stroke(VelaTheme.border, lineWidth: 0.5)
+                                )
+                        )
+                        .buttonStyle(.plain)
                     }
                 }
             }
-        }
-    }
-
-    private func readinessColor(_ decision: ReadinessDecisionKind) -> Color {
-        switch decision {
-        case .keep: return VelaTheme.success
-        case .reduce: return Color(hex: "#FF9F0A")
-        case .swap: return Color(hex: "#5C6BC0")
-        case .recover: return VelaTheme.sleep
         }
     }
 

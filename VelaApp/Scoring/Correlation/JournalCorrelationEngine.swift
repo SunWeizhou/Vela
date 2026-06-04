@@ -230,7 +230,7 @@ struct JournalCorrelationEngine {
             let daysWith = daysWithTag.intersection(allDays)
             let daysWithout = allDays.subtracting(daysWith)
 
-            guard daysWith.count >= 2 else { continue }
+            guard allDays.count >= 14, daysWith.count >= 6 else { continue }
 
             let withSleep = daysWith.compactMap { snapshotByDay[$0]?.sleepScore }
             let withRecovery = daysWith.compactMap { snapshotByDay[$0]?.recoveryScore }

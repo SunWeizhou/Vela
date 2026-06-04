@@ -336,6 +336,16 @@ struct XunjiTrainingImportService: Sendable {
                 exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
             )
             workout.analyticsJSON = (try? String(data: encoder.encode(analysis), encoding: .utf8)) ?? "{}"
+            let artifactHash = ContentHash.hash("xunji-\(normalized.externalID)-\(workout.analyticsJSON ?? "")")
+            let existingArtifacts = try modelContext.fetch(FetchDescriptor<CoachArtifactRecord>())
+            if !existingArtifacts.contains(where: { $0.sourceContextHash == artifactHash }) {
+                modelContext.insert(CoachArtifactRecord(artifact: CoachArtifact.postWorkoutReview(
+                    workout: workout,
+                    summary: analysis,
+                    readinessDecision: "xunji_import",
+                    sourceContextHash: artifactHash
+                )))
+            }
 
             let event: WorkoutEventRecord
             if let existingEvent = existingEvents.first(where: { $0.linkedStrengthWorkoutId == workout.id && $0.source == "xunji" }) {

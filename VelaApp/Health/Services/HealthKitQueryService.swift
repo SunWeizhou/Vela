@@ -43,11 +43,16 @@ final class HealthKitQueryService: HealthQueryService {
     }
 
     func recoveryMetrics(in range: DateRangeQuery) async throws -> RecoveryMetricSummary {
-        try await RecoveryMetricSummary(
-            hrvMilliseconds: averageQuantity(.heartRateVariabilitySDNN, unit: .secondUnit(with: .milli), range: range),
-            restingHeartRate: averageQuantity(.restingHeartRate, unit: HKUnit.count().unitDivided(by: .minute()), range: range),
-            sleepHeartRate: averageQuantity(.heartRate, unit: HKUnit.count().unitDivided(by: .minute()), range: range),
-            respiratoryRate: averageQuantity(.respiratoryRate, unit: HKUnit.count().unitDivided(by: .minute()), range: range)
+        async let hrv = averageQuantity(.heartRateVariabilitySDNN, unit: .secondUnit(with: .milli), range: range)
+        async let rhr = averageQuantity(.restingHeartRate, unit: HKUnit.count().unitDivided(by: .minute()), range: range)
+        async let sleepHR = sleepHeartRate(in: range)
+        async let respiratoryRate = averageQuantity(.respiratoryRate, unit: HKUnit.count().unitDivided(by: .minute()), range: range)
+
+        return try await RecoveryMetricSummary(
+            hrvMilliseconds: hrv,
+            restingHeartRate: rhr,
+            sleepHeartRate: sleepHR,
+            respiratoryRate: respiratoryRate
         )
     }
 
@@ -197,20 +202,16 @@ final class HealthKitQueryService: HealthQueryService {
             healthStore.execute(query)
         }
 
+        let heartRates = (try? await averageHeartRates(for: rawWorkouts)) ?? [:]
         var summaries: [WorkoutSummary] = []
         for workout in rawWorkouts {
-            let workoutHR: Double? = try? await averageQuantity(
-                .heartRate,
-                unit: HKUnit.count().unitDivided(by: .minute()),
-                range: DateRangeQuery(start: workout.startDate, end: workout.endDate)
-            )
             summaries.append(WorkoutSummary(
                 id: workout.uuid,
                 start: workout.startDate,
                 end: workout.endDate,
                 activityName: workout.workoutActivityType.displayName,
                 energyKilocalories: workout.totalEnergyBurned?.doubleValue(for: .kilocalorie()),
-                averageHeartRate: workoutHR,
+                averageHeartRate: heartRates[workout.uuid],
                 distanceMeters: workout.totalDistance?.doubleValue(for: .meter())
             ))
         }
@@ -425,24 +426,48 @@ final class HealthKitQueryService: HealthQueryService {
             healthStore.execute(query)
         }
 
+        let heartRates = (try? await averageHeartRates(for: rawWorkouts)) ?? [:]
         var summaries: [WorkoutSummary] = []
         for workout in rawWorkouts {
-            let workoutHR: Double? = try? await averageQuantity(
-                .heartRate,
-                unit: HKUnit.count().unitDivided(by: .minute()),
-                range: DateRangeQuery(start: workout.startDate, end: workout.endDate)
-            )
             summaries.append(WorkoutSummary(
                 id: workout.uuid,
                 start: workout.startDate,
                 end: workout.endDate,
                 activityName: workout.workoutActivityType.displayName,
                 energyKilocalories: workout.totalEnergyBurned?.doubleValue(for: .kilocalorie()),
-                averageHeartRate: workoutHR,
+                averageHeartRate: heartRates[workout.uuid],
                 distanceMeters: workout.totalDistance?.doubleValue(for: .meter())
             ))
         }
         return summaries
+    }
+
+    private func sleepHeartRate(in range: DateRangeQuery) async throws -> Double? {
+        let episodes = try await sleepEpisodes(in: range)
+        let sleepRange = SleepHeartRateRangeResolver.range(for: episodes, fallback: range)
+        return try await averageQuantity(
+            .heartRate,
+            unit: HKUnit.count().unitDivided(by: .minute()),
+            range: sleepRange
+        )
+    }
+
+    private func averageHeartRates(for workouts: [HKWorkout]) async throws -> [UUID: Double] {
+        guard let start = workouts.map(\.startDate).min(),
+              let end = workouts.map(\.endDate).max(),
+              end > start else {
+            return [:]
+        }
+        let samples = try await heartRateSamples(start: start, end: end)
+        let summaries = workouts.map {
+            WorkoutSummary(
+                id: $0.uuid,
+                start: $0.startDate,
+                end: $0.endDate,
+                activityName: $0.workoutActivityType.displayName
+            )
+        }
+        return WorkoutHeartRateAverager.averageHeartRates(samples: samples, workouts: summaries)
     }
 
     func heartRateSamples(start: Date, end: Date) async throws -> [HeartRateSample] {

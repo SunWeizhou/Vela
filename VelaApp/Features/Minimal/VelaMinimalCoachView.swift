@@ -351,6 +351,25 @@ struct AccountSettingsView: View {
 }
 
 // 2. User Wiki Archive View (Pristine markdown local memory editor)
+enum EditorMode {
+    case form
+    case markdown
+}
+
+struct ParsedItem: Identifiable, Equatable {
+    let id: UUID
+    var key: String
+    var value: String
+    var isKeyValue: Bool
+    
+    init(id: UUID = UUID(), key: String, value: String, isKeyValue: Bool) {
+        self.id = id
+        self.key = key
+        self.value = value
+        self.isKeyValue = isKeyValue
+    }
+}
+
 struct UserWikiArchiveView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \UserWikiDocumentRecord.updatedAt, order: .reverse)
@@ -360,6 +379,10 @@ struct UserWikiArchiveView: View {
     @State private var showEditor = false
     @State private var editText = ""
     @State private var editTitle = ""
+    
+    @State private var editorMode: EditorMode = .form
+    @State private var parsedItems: [ParsedItem] = []
+    @State private var notesText: String = ""
     
     var body: some View {
         ScrollView {
@@ -388,6 +411,8 @@ struct UserWikiArchiveView: View {
                             selectedDoc = doc
                             editTitle = doc.title
                             editText = doc.markdownContent
+                            parseMarkdown(doc.markdownContent)
+                            editorMode = .form
                             showEditor = true
                         } label: {
                             VStack(alignment: .leading, spacing: 8) {
@@ -431,26 +456,162 @@ struct UserWikiArchiveView: View {
         .navigationTitle("用户健康档案 (Wiki)")
         .sheet(isPresented: $showEditor) {
             NavigationStack {
-                VStack(spacing: 16) {
+                VStack(spacing: 0) {
+                    Picker("编辑模式", selection: $editorMode) {
+                        Text("表单编辑").tag(EditorMode.form)
+                        Text("源码编辑").tag(EditorMode.markdown)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+                    .padding(.bottom, 8)
+                    
                     TextField("标题", text: $editTitle)
-                        .font(.system(size: 18, weight: .bold))
-                        .padding()
-                        .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.secondaryGroupedBackground))
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
+                        .font(.system(size: 16, weight: .bold))
+                        .padding(12)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(VelaTheme.secondaryGroupedBackground))
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
                         .padding(.horizontal, 16)
-                        .padding(.top, 16)
+                        .padding(.vertical, 8)
                     
-                    TextEditor(text: $editText)
-                        .font(.system(size: 14, design: .monospaced))
-                        .padding()
-                        .background(RoundedRectangle(cornerRadius: 16).fill(VelaTheme.secondaryGroupedBackground))
-                        .overlay(RoundedRectangle(cornerRadius: 16).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
-                        .padding(.horizontal, 16)
+                    if editorMode == .form {
+                        ScrollView {
+                            VStack(spacing: 16) {
+                                if parsedItems.isEmpty {
+                                    VStack(spacing: 12) {
+                                        Text("无结构化项目。")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(VelaTheme.muted)
+                                        Text("你可以使用下方按钮添加属性或普通列表项。")
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(VelaTheme.muted)
+                                            .multilineTextAlignment(.center)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 30)
+                                    .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.secondaryGroupedBackground))
+                                    .padding(.horizontal, 16)
+                                } else {
+                                    VStack(alignment: .leading, spacing: 14) {
+                                        ForEach($parsedItems) { $item in
+                                            HStack(spacing: 12) {
+                                                Button {
+                                                    if let index = parsedItems.firstIndex(where: { $0.id == item.id }) {
+                                                        withAnimation {
+                                                            _ = parsedItems.remove(at: index)
+                                                        }
+                                                    }
+                                                } label: {
+                                                    Image(systemName: "minus.circle.fill")
+                                                        .font(.system(size: 20))
+                                                        .foregroundStyle(.red)
+                                                }
+                                                .buttonStyle(.plain)
+                                                
+                                                VStack(alignment: .leading, spacing: 6) {
+                                                    if item.isKeyValue {
+                                                        HStack(spacing: 8) {
+                                                            Image(systemName: "tag.fill")
+                                                                .font(.system(size: 11))
+                                                                .foregroundStyle(VelaTheme.accent)
+                                                            TextField("属性名", text: $item.key)
+                                                                .font(.system(size: 13, weight: .bold))
+                                                                .foregroundStyle(VelaTheme.accent)
+                                                        }
+                                                        
+                                                        TextField("属性值", text: $item.value)
+                                                            .font(.system(size: 14))
+                                                            .foregroundStyle(VelaTheme.fg)
+                                                            .padding(.leading, 19)
+                                                    } else {
+                                                        HStack(spacing: 8) {
+                                                            Image(systemName: "list.bullet")
+                                                                .font(.system(size: 12))
+                                                                .foregroundStyle(VelaTheme.muted)
+                                                            TextField("列表内容", text: $item.value)
+                                                                .font(.system(size: 14))
+                                                                .foregroundStyle(VelaTheme.fg)
+                                                        }
+                                                    }
+                                                }
+                                                .padding(12)
+                                                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(VelaTheme.cardBg))
+                                                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
+                                            }
+                                        }
+                                    }
+                                    .padding(.horizontal, 16)
+                                }
+                                
+                                // Buttons to dynamically add elements
+                                HStack(spacing: 16) {
+                                    Button {
+                                        withAnimation {
+                                            parsedItems.append(ParsedItem(key: "新属性", value: "", isKeyValue: true))
+                                        }
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "plus.circle.fill")
+                                            Text("新增属性")
+                                        }
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(VelaTheme.accent)
+                                        .padding(.vertical, 8)
+                                        .padding(.horizontal, 16)
+                                        .background(Capsule().fill(VelaTheme.accent.opacity(0.12)))
+                                    }
+                                    .buttonStyle(.plain)
+                                    
+                                    Button {
+                                        withAnimation {
+                                            parsedItems.append(ParsedItem(key: "", value: "新列表项", isKeyValue: false))
+                                        }
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "plus.circle.fill")
+                                            Text("新增列表项")
+                                        }
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(VelaTheme.muted)
+                                        .padding(.vertical, 8)
+                                        .padding(.horizontal, 16)
+                                        .background(Capsule().fill(VelaTheme.muted.opacity(0.12)))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                .padding(.top, 4)
+                                
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("其它备注信息 (Markdown)")
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundStyle(VelaTheme.muted)
+                                    
+                                    TextEditor(text: $notesText)
+                                        .font(.system(size: 14))
+                                        .frame(height: 120)
+                                        .padding(8)
+                                        .background(RoundedRectangle(cornerRadius: 10).fill(VelaTheme.cardBg))
+                                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.top, 8)
+                            }
+                            .padding(.vertical, 8)
+                        }
+                    } else {
+                        TextEditor(text: $editText)
+                            .font(.system(size: 14, design: .monospaced))
+                            .padding(8)
+                            .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.cardBg))
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                    }
                     
-                    Spacer()
+                    Spacer(minLength: 16)
                 }
                 .background(VelaTheme.systemGroupedBackground)
-                .navigationTitle("编辑档案")
+                .navigationTitle("编辑健康档案")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
@@ -469,6 +630,60 @@ struct UserWikiArchiveView: View {
         }
     }
     
+    private func parseMarkdown(_ text: String) {
+        var items: [ParsedItem] = []
+        var extraLines: [String] = []
+        
+        let lines = text.components(separatedBy: .newlines)
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty { continue }
+            if trimmed.hasPrefix("#") {
+                continue
+            }
+            
+            if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") {
+                let content = String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+                if let colonIndex = content.firstIndex(of: ":") {
+                    let key = String(content[..<colonIndex]).trimmingCharacters(in: .whitespaces)
+                    let value = String(content[content.index(after: colonIndex)...]).trimmingCharacters(in: .whitespaces)
+                    items.append(ParsedItem(key: key, value: value, isKeyValue: true))
+                } else if let cnColonIndex = content.firstIndex(of: "：") {
+                    let key = String(content[..<cnColonIndex]).trimmingCharacters(in: .whitespaces)
+                    let value = String(content[content.index(after: cnColonIndex)...]).trimmingCharacters(in: .whitespaces)
+                    items.append(ParsedItem(key: key, value: value, isKeyValue: true))
+                } else {
+                    items.append(ParsedItem(key: "", value: content, isKeyValue: false))
+                }
+            } else {
+                extraLines.append(trimmed)
+            }
+        }
+        
+        self.parsedItems = items
+        self.notesText = extraLines.joined(separator: "\n")
+    }
+    
+    private func reconstructMarkdown() -> String {
+        var lines: [String] = []
+        lines.append("## \(editTitle)")
+        
+        for item in parsedItems {
+            if item.isKeyValue {
+                lines.append("- \(item.key): \(item.value)")
+            } else {
+                lines.append("- \(item.value)")
+            }
+        }
+        
+        if !notesText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append("")
+            lines.append(notesText)
+        }
+        
+        return lines.joined(separator: "\n")
+    }
+    
     private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
@@ -478,13 +693,21 @@ struct UserWikiArchiveView: View {
     
     private func saveDocEdits() {
         guard let doc = selectedDoc else { return }
+        
+        let finalContent: String
+        if editorMode == .form {
+            finalContent = reconstructMarkdown()
+        } else {
+            finalContent = editText
+        }
+        
         doc.title = editTitle
-        doc.markdownContent = editText
+        doc.markdownContent = finalContent
         doc.updatedAt = Date()
         try? modelContext.save()
         
         // Synchronize with flat files
-        try? WikiFileService.updateSection(filename: doc.filename, content: editText, mode: .replace)
+        try? WikiFileService.updateSection(filename: doc.filename, content: finalContent, mode: .replace)
     }
     
     private func initializeDefaultWikiDocs() {

@@ -234,6 +234,45 @@ final class WorkoutAggregationTests: XCTestCase {
         XCTAssertEqual(summary.workoutDuration ?? -1, 60, accuracy: 0.1)
     }
 
+    func testXunjiImportCreatesPostWorkoutArtifact() throws {
+        let store = try makeStore()
+        let start = makeDate(hour: 19)
+        let end = start.addingTimeInterval(45 * 60)
+        let datestr = "2026-04-02"
+        let json = """
+        {
+          "success": true,
+          "res": {
+            "trains": [{
+              "datestr": "\(datestr)",
+              "localid": 778899,
+              "title": "背部训练",
+              "start": \(Int64(start.timeIntervalSince1970 * 1000)),
+              "end": \(Int64(end.timeIntervalSince1970 * 1000)),
+              "rpe": 7,
+              "movements": [{
+                "name": "高位下拉",
+                "sets": [
+                  { "done": true, "weight": "50", "unit": "kg", "reps": "12", "rpe": 7 },
+                  { "done": false, "weight": "55", "unit": "kg", "reps": "10", "rpe": 8 }
+                ]
+              }]
+            }]
+          }
+        }
+        """.data(using: .utf8)!
+
+        let summary = try XunjiTrainingImportService().importResponseData(json, datestr: datestr, modelContext: store.context)
+
+        XCTAssertEqual(summary.importedCount, 1)
+        let artifact = try XCTUnwrap(store.context.fetch(FetchDescriptor<CoachArtifactRecord>()).first?.artifact)
+        XCTAssertEqual(artifact.type, .postWorkoutReview)
+        XCTAssertEqual(artifact.decision, "xunji_import")
+        XCTAssertTrue(artifact.summary.contains("背部训练"))
+        let workout = try XCTUnwrap(store.context.fetch(FetchDescriptor<StrengthWorkoutRecord>()).first)
+        XCTAssertEqual(workout.exercises.first?.sets.last?.isCompleted, false)
+    }
+
     func testWorkoutSaveUpdatesDailySummary() throws {
         let store = try makeStore()
         let start = makeDate(hour: 16)
@@ -266,6 +305,26 @@ final class WorkoutAggregationTests: XCTestCase {
 
         XCTAssertEqual(latest ?? -1, first ?? -2, accuracy: 0.1)
         XCTAssertEqual(latest ?? -1, 147, accuracy: 0.1)
+    }
+
+    func testAggregateDayRemovesPreviousWorkoutLoadFromPollutedActivityLoad() throws {
+        let store = try makeStore()
+        let start = makeDate(hour: 18)
+        let workout = makeStrengthWorkout(start: start, duration: 50)
+        store.context.insert(workout)
+
+        try WorkoutAggregationService.shared.upsertWorkoutEvent(from: workout, modelContext: store.context, sessionRPE: 6)
+        let summary = try XCTUnwrap(fetchDailySummary(store.context, date: start))
+        summary.activityLoad = 110
+        summary.workoutLoad = 90
+        summary.dailyLoad = 110
+
+        try WorkoutAggregationService.shared.aggregateDay(date: start, modelContext: store.context)
+
+        let refreshed = try XCTUnwrap(fetchDailySummary(store.context, date: start))
+        XCTAssertEqual(refreshed.workoutLoad ?? -1, 90, accuracy: 0.1)
+        XCTAssertEqual(refreshed.activityLoad ?? -1, 20, accuracy: 0.1)
+        XCTAssertEqual(refreshed.dailyLoad ?? -1, 110, accuracy: 0.1)
     }
 
     func testManualWorkoutNotErasedByHealthKitSync() throws {

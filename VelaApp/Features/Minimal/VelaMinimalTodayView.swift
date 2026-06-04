@@ -166,17 +166,11 @@ struct VelaTodayView: View {
                     .offset(y: isVisible ? 0 : 10)
                     .animation(VelaTheme.snappy.delay(0.035), value: isVisible)
 
-                // 3. Vela 3.0 Today Command Center
-                todayCommandCenterCard
-                    .opacity(isVisible ? 1 : 0)
-                    .offset(y: isVisible ? 0 : 12)
-                    .animation(VelaTheme.snappy.delay(0.055), value: isVisible)
- 
-                // 4. White Cockpit Card (Strain, Recovery, Sleep side-by-side rings)
+                // 3. White Cockpit Card (Strain, Recovery, Sleep side-by-side rings)
                 cockpitCard
                     .opacity(isVisible ? 1 : 0)
                     .offset(y: isVisible ? 0 : 12)
-                    .animation(VelaTheme.snappy.delay(0.07), value: isVisible)
+                    .animation(VelaTheme.snappy.delay(0.055), value: isVisible)
  
                 // 5. Stress & Energy Section
                 stressAndEnergySection
@@ -271,9 +265,14 @@ struct VelaTodayView: View {
             .presentationBackground(VelaTheme.systemGroupedBackground)
         }
         .sheet(isPresented: $showTodayEvidence) {
-            EvidenceSheet(state: todayCommandState)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
+            TodayDecisionEvidenceSheet(
+                state: todayCommandState,
+                dashboard: dashboard
+            ) { question in
+                VelaAppState.shared.routeToCoach(question: question)
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
         .toolbar(.hidden, for: .navigationBar)
     }
@@ -334,11 +333,12 @@ struct VelaTodayView: View {
 
     private var todayCommandCenterCard: some View {
         let state = todayCommandState
+        let accentColor = readinessColor(state.readinessDecision.decision)
         return VelaHeroCard(
             title: "Today Command Center",
             subtitle: "把恢复、睡眠、负荷和训练历史合成一个今日决策",
             systemImage: "scope",
-            accent: readinessColor(state.readinessDecision.decision)
+            accent: accentColor
         ) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top, spacing: 10) {
@@ -349,7 +349,7 @@ struct VelaTodayView: View {
                             .lineLimit(2)
                             .minimumScaleFactor(0.8)
 
-                        Text(state.summary)
+                        Text(state.coachArtifact?.summary ?? state.summary)
                             .font(VelaTheme.subheadline())
                             .foregroundStyle(VelaTheme.muted)
                             .lineSpacing(3)
@@ -361,31 +361,39 @@ struct VelaTodayView: View {
                         ConfidenceBadge(confidence: state.dataConfidence)
                         Text("\(Int((state.readinessDecision.confidence * 100).rounded()))%")
                             .font(.system(size: 20, weight: .bold, design: .rounded))
-                            .foregroundStyle(readinessColor(state.readinessDecision.decision))
+                            .foregroundStyle(accentColor)
                     }
                 }
 
-                HStack(spacing: 8) {
-                    ForEach(state.actions.prefix(3)) { action in
-                        ActionPill(
-                            title: action.title,
-                            systemImage: icon(for: action),
-                            isPrimary: action.isPrimary
-                        ) {
-                            handleTodayAction(action)
+                if let artifact = state.coachArtifact, !artifact.actions.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(artifact.actions) { action in
+                                ActionPill(
+                                    title: action.label,
+                                    systemImage: icon(for: action),
+                                    isPrimary: action.id == artifact.actions.first?.id
+                                ) {
+                                    handleCoachArtifactAction(action)
+                                }
+                            }
                         }
+                        .padding(.vertical, 1)
                     }
-                }
-
-                VStack(spacing: 8) {
-                    ForEach(state.keySignals.prefix(3)) { signal in
-                        SignalRow(signal: signal)
-                    }
-                }
-
-                if let artifact = state.coachArtifact {
-                    CoachArtifactCard(artifact: artifact, compact: true) { action in
-                        handleCoachArtifactAction(action)
+                } else if !state.actions.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(state.actions.prefix(3)) { action in
+                                ActionPill(
+                                    title: action.title,
+                                    systemImage: icon(for: action),
+                                    isPrimary: action.isPrimary
+                                ) {
+                                    handleTodayAction(action)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 1)
                     }
                 }
             }
@@ -409,6 +417,13 @@ struct VelaTodayView: View {
         case .coach: return "sparkles"
         case .insight: return "list.bullet.clipboard"
         }
+    }
+
+    private func icon(for action: CoachArtifactAction) -> String {
+        if action.type.contains("training") || action.type.contains("workout") { return "figure.run" }
+        if action.type.contains("recovery") { return "heart.fill" }
+        if action.type.contains("check") { return "square.and.pencil" }
+        return "arrow.right"
     }
 
     private func handleTodayAction(_ action: TodayAction) {
@@ -623,7 +638,8 @@ struct VelaTodayView: View {
 
     // MARK: - Cockpit Card (Strain, Recovery, Sleep side-by-side rings)
     private var cockpitCard: some View {
-        let insights = ProactiveInsightService.evaluate(dashboard: dashboard)
+        let state = todayCommandState
+        let accentColor = readinessColor(state.readinessDecision.decision)
 
         return VStack(alignment: .leading, spacing: 16) {
             // Three circular gauges
@@ -682,55 +698,89 @@ struct VelaTodayView: View {
             }
             .padding(.top, 8)
 
-            // Subtitle / Guidance Box
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .center) {
-                    Text("指导")
-                        .font(.system(size: 11, weight: .bold))
-                        .tracking(0.4)
-                        .foregroundStyle(Color(hex: "#8E8A80"))
-                        .textCase(.uppercase)
+            Divider()
 
-                    Spacer()
-
-                    if insights.count > 1 {
-                        Text("\(selectedInsightIndex + 1)/\(insights.count)")
-                            .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
-                            .foregroundStyle(VelaTheme.meta)
+            // Integrated Guidance / Today Command Center
+            VStack(alignment: .leading, spacing: 12) {
+                Button {
+                    showTodayEvidence = true
+                } label: {
+                    HStack(alignment: .center) {
+                        Text("指导 / COMMAND CENTER")
+                            .font(.system(size: 11, weight: .bold))
+                            .tracking(0.5)
+                            .foregroundStyle(Color(hex: "#8E8A80"))
+                        
+                        Spacer()
+                        
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Color(hex: "#BFB9AC"))
                     }
                 }
+                .buttonStyle(.plain)
 
-                TabView(selection: $selectedInsightIndex) {
-                    ForEach(Array(insights.enumerated()), id: \.element.id) { index, insight in
-                        ProactiveGuidanceCard(insight: insight) {
-                            selectedInsight = insight
+                Button {
+                    showTodayEvidence = true
+                } label: {
+                    HStack(alignment: .top, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(state.bodyStateTitle)
+                                .font(.system(size: 18, weight: .bold, design: .rounded))
+                                .foregroundStyle(accentColor)
+                            
+                            Text(state.coachArtifact?.summary ?? state.summary)
+                                .font(VelaTheme.subheadline())
+                                .foregroundStyle(VelaTheme.fg2)
+                                .lineSpacing(3)
+                                .multilineTextAlignment(.leading)
                         }
-                        .tag(index)
+                        
+                        Spacer()
+                        
+                        VStack(alignment: .trailing, spacing: 4) {
+                            ConfidenceBadge(confidence: state.dataConfidence)
+                            Text("\(Int((state.readinessDecision.confidence * 100).rounded()))%")
+                                .font(.system(size: 16, weight: .bold, design: .rounded))
+                                .foregroundStyle(accentColor)
+                        }
                     }
                 }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                .frame(height: 146)
+                .buttonStyle(.plain)
 
-                if insights.count > 1 {
-                    HStack(spacing: 5) {
-                        ForEach(insights.indices, id: \.self) { index in
-                            Capsule()
-                                .fill(index == selectedInsightIndex ? VelaTheme.fg : Color(hex: "#D1D1D6"))
-                                .frame(width: index == selectedInsightIndex ? 14 : 5, height: 5)
-                                .animation(VelaTheme.snappy, value: selectedInsightIndex)
+                if let artifact = state.coachArtifact, !artifact.actions.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(artifact.actions) { action in
+                                ActionPill(
+                                    title: action.label,
+                                    systemImage: icon(for: action),
+                                    isPrimary: action.id == artifact.actions.first?.id
+                                ) {
+                                    handleCoachArtifactAction(action)
+                                }
+                            }
                         }
+                        .padding(.vertical, 1)
                     }
-                    .frame(maxWidth: .infinity)
-                    .accessibilityHidden(true)
+                } else if !state.actions.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(state.actions.prefix(3)) { action in
+                                ActionPill(
+                                    title: action.title,
+                                    systemImage: icon(for: action),
+                                    isPrimary: action.isPrimary
+                                ) {
+                                    handleTodayAction(action)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 1)
+                    }
                 }
             }
-            .padding(.top, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .onChange(of: insights.count) { _, count in
-                if selectedInsightIndex >= count {
-                    selectedInsightIndex = max(0, count - 1)
-                }
-            }
         }
         .padding(18)
         .background(
@@ -1896,6 +1946,128 @@ private extension View {
             }
         } else {
             self
+        }
+    }
+}
+
+private struct TodayDecisionEvidenceSheet: View {
+    let state: TodayCommandState
+    let dashboard: DashboardSummary
+    var onAskCoach: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("今日状态决策") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .center) {
+                            Text(state.bodyStateTitle)
+                                .font(.system(size: 20, weight: .bold, design: .rounded))
+                                .foregroundStyle(readinessColor(state.readinessDecision.decision))
+                            
+                            Spacer()
+                            
+                            HStack(spacing: 4) {
+                                ConfidenceBadge(confidence: state.dataConfidence)
+                                Text("\(Int((state.readinessDecision.confidence * 100).rounded()))%")
+                                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                                    .foregroundStyle(readinessColor(state.readinessDecision.decision))
+                            }
+                        }
+                        
+                        Text(state.coachArtifact?.summary ?? state.summary)
+                            .font(VelaTheme.subheadline())
+                            .foregroundStyle(VelaTheme.fg2)
+                            .lineSpacing(4)
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                let insights = ProactiveInsightService.evaluate(dashboard: dashboard)
+                if !insights.isEmpty {
+                    Section("AI 针对性指导建议") {
+                        ForEach(insights) { insight in
+                            NavigationLink {
+                                ProactiveInsightDetailSheet(insight: insight) { question in
+                                    dismiss()
+                                    onAskCoach(question)
+                                }
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: insight.focus.icon)
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(insight.focus.color)
+                                        .frame(width: 28, height: 28)
+                                        .background(Circle().fill(insight.focus.color.opacity(0.10)))
+                                    
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(insight.displayTitle)
+                                            .font(VelaTheme.subheadline())
+                                            .fontWeight(.semibold)
+                                            .foregroundStyle(VelaTheme.fg)
+                                            .lineLimit(1)
+                                        
+                                        Text(insight.body)
+                                            .font(VelaTheme.caption1())
+                                            .foregroundStyle(VelaTheme.muted)
+                                            .lineLimit(1)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    Text(insight.focus.title)
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .foregroundStyle(insight.focus.color)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Capsule().fill(insight.focus.color.opacity(0.08)))
+                                }
+                                .padding(.vertical, 2)
+                            }
+                        }
+                    }
+                }
+
+                if !state.keySignals.isEmpty {
+                    Section("今日身体数据信号") {
+                        ForEach(state.keySignals) { signal in
+                            SignalRow(signal: signal)
+                        }
+                    }
+                }
+
+                if !state.readinessDecision.reasons.isEmpty {
+                    Section("决策详细逻辑推理") {
+                        ForEach(state.readinessDecision.reasons, id: \.self) { reason in
+                            Text(reason)
+                                .font(VelaTheme.subheadline())
+                                .foregroundStyle(VelaTheme.fg2)
+                                .lineSpacing(3)
+                        }
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("今日指导与证据")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("关闭") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private func readinessColor(_ decision: ReadinessDecisionKind) -> Color {
+        switch decision {
+        case .keep: return VelaTheme.success
+        case .reduce: return Color(hex: "#FF9F0A")
+        case .swap: return Color(hex: "#5C6BC0")
+        case .recover: return VelaTheme.sleep
         }
     }
 }

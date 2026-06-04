@@ -709,11 +709,32 @@ final class CoachChatVM: ObservableObject {
                 sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
             )
         )) ?? []
+        let thirtyFiveDaysAgo = Date().addingTimeInterval(-35 * 24 * 3600)
+        let dailySummaries = (try? modelContext.fetch(
+            FetchDescriptor<DailyHealthSummaryRecord>(
+                predicate: #Predicate<DailyHealthSummaryRecord> { $0.date >= thirtyFiveDaysAgo },
+                sortBy: [SortDescriptor(\.date, order: .reverse)]
+            )
+        )) ?? []
+        let trainingResponses = (try? modelContext.fetch(
+            FetchDescriptor<TrainingResponseRecord>(
+                predicate: #Predicate<TrainingResponseRecord> { $0.date >= thirtyFiveDaysAgo },
+                sortBy: [SortDescriptor(\.date, order: .reverse)]
+            )
+        )) ?? []
         var onboardingDescriptor = FetchDescriptor<OnboardingState>(
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
         onboardingDescriptor.fetchLimit = 1
         let onboardingState = (try? modelContext.fetch(onboardingDescriptor))?.first
+        let bodyModelState = BodyModelBuilder().build(
+            onboarding: onboardingState,
+            dailySummaries: dailySummaries,
+            journalEntries: Array(journalEntries.prefix(80)),
+            strengthWorkouts: strengthWorkouts,
+            trainingResponses: trainingResponses,
+            asOf: dashboard.date
+        )
         let (context, _) = (services?.contextBuilder ?? AIContextBuilder()).build(
             dashboard: dashboard,
             journalEntries: journalEntries.prefix(12).map { JournalContextEntry(tags: $0.tags, text: $0.note) },
@@ -730,7 +751,9 @@ final class CoachChatVM: ObservableObject {
             weeklyTrends: weeklyTrends,
             foodLogs: Array(foodLogs.prefix(8)),
             strengthWorkouts: strengthWorkouts,
-            onboardingState: onboardingState
+            trainingResponses: trainingResponses,
+            onboardingState: onboardingState,
+            bodyModelState: bodyModelState
         )
         let contextJSON = (try? String(data: JSONEncoder().encode(context), encoding: .utf8)) ?? "{}"
 

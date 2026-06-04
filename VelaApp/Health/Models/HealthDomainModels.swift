@@ -204,6 +204,34 @@ struct HeartRateSample: Identifiable, Codable, Hashable {
     var bpm: Double
 }
 
+enum SleepHeartRateRangeResolver {
+    static func range(for episodes: [SleepSummary], fallback: DateRangeQuery) -> DateRangeQuery {
+        let candidates = episodes.compactMap { episode -> DateRangeQuery? in
+            guard let start = episode.bedtime,
+                  let end = episode.wakeTime,
+                  end > start else {
+                return nil
+            }
+            return DateRangeQuery(start: start, end: end)
+        }
+        return candidates.max { $0.end < $1.end } ?? fallback
+    }
+}
+
+enum WorkoutHeartRateAverager {
+    static func averageHeartRates(samples: [HeartRateSample], workouts: [WorkoutSummary]) -> [UUID: Double] {
+        var result: [UUID: Double] = [:]
+        for workout in workouts {
+            let matching = samples.filter { sample in
+                sample.date >= workout.start && sample.date <= workout.end
+            }
+            guard !matching.isEmpty else { continue }
+            result[workout.id] = matching.map(\.bpm).reduce(0, +) / Double(matching.count)
+        }
+        return result
+    }
+}
+
 struct BloodGlucoseReading: Identifiable, Codable, Hashable {
     var id = UUID()
     var date: Date

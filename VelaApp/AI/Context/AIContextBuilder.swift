@@ -13,9 +13,10 @@ struct AIContextBuilder {
         strengthWorkouts: [StrengthWorkoutRecord] = [],
         trainingResponses: [TrainingResponseRecord] = [],
         onboardingState: OnboardingState? = nil,
+        bodyModelState: BodyModelState? = nil,
         generatedAt: Date = Date()
     ) -> (envelope: AgentContextEnvelope, metadata: ContextSnapshotMetadata) {
-        let mergedUserWiki = Self.mergedUserWiki(userWiki, onboardingState: onboardingState)
+        let mergedUserWiki = Self.mergedUserWiki(userWiki, onboardingState: onboardingState, bodyModelState: bodyModelState)
         let envelope = AgentContextEnvelope(
             metadata: AgentContextMetadata(generatedAt: generatedAt, contextWindow: "today"),
             todaySummary: [
@@ -71,7 +72,8 @@ struct AIContextBuilder {
                 "today_summary", "sleep", "recovery", "strain", "workouts",
                 "stress", "energy_bank", "health_age_trend", "nutrition",
                 "journal", "user_wiki", "extended_metrics", "strength_training"
-            ] + (onboardingState == nil ? [] : ["body_model_profile"]),
+            ] + (onboardingState == nil ? [] : ["body_model_profile"])
+                + (bodyModelState == nil ? [] : ["body_model_state"]),
             redactedFields: []
         )
         return (envelope: envelope, metadata: metadata)
@@ -89,9 +91,10 @@ struct AIContextBuilder {
         strengthWorkouts: [StrengthWorkoutRecord] = [],
         trainingResponses: [TrainingResponseRecord] = [],
         onboardingState: OnboardingState? = nil,
+        bodyModelState: BodyModelState? = nil,
         generatedAt: Date = Date()
     ) -> (context: TypedAgentContext, metadata: ContextSnapshotMetadata) {
-        let mergedUserWiki = Self.mergedUserWiki(userWiki, onboardingState: onboardingState)
+        let mergedUserWiki = Self.mergedUserWiki(userWiki, onboardingState: onboardingState, bodyModelState: bodyModelState)
         let hrvMs = dashboard.recoveryMetrics.hrvMilliseconds
         let rhrBpm = dashboard.recoveryMetrics.restingHeartRate
 
@@ -230,7 +233,8 @@ struct AIContextBuilder {
             generatedAt: generatedAt,
             hash: hash,
             includedSections: ["recovery", "sleep", "strain", "stress", "energy_bank", "training", "nutrition", "extended_metrics", "strength_training"]
-                + (onboardingState == nil ? [] : ["body_model_profile"]),
+                + (onboardingState == nil ? [] : ["body_model_profile"])
+                + (bodyModelState == nil ? [] : ["body_model_state"]),
             redactedFields: []
         )
 
@@ -442,33 +446,47 @@ struct AIContextBuilder {
 
     private static func mergedUserWiki(
         _ userWiki: [String: String],
-        onboardingState: OnboardingState?
+        onboardingState: OnboardingState?,
+        bodyModelState: BodyModelState? = nil
     ) -> [String: String] {
-        guard let onboardingState else { return userWiki }
         var result = userWiki
-        let goal = onboardingState.goalProfile
-        let training = onboardingState.trainingPreference
-        let equipment = onboardingState.equipmentProfile
-        let coaching = onboardingState.coachingPreference
-        let snapshot = onboardingState.initialBodySnapshot
+        if let onboardingState {
+            let goal = onboardingState.goalProfile
+            let training = onboardingState.trainingPreference
+            let equipment = onboardingState.equipmentProfile
+            let coaching = onboardingState.coachingPreference
+            let snapshot = onboardingState.initialBodySnapshot
 
-        result["body_model.primary_goal"] = goal.primaryGoal
-        result["body_model.secondary_goals"] = goal.secondaryGoals.joined(separator: ", ")
-        result["body_model.experience_level"] = goal.experienceLevel
-        result["body_model.body_concerns"] = goal.bodyConcerns.joined(separator: ", ")
-        result["body_model.training_style"] = training.trainingStyle
-        result["body_model.weekly_training_days"] = "\(training.weeklyTrainingDays)"
-        result["body_model.session_duration_minutes"] = "\(training.sessionDurationMinutes)"
-        result["body_model.preferred_days"] = training.preferredTrainingDays.joined(separator: ", ")
-        result["body_model.equipment"] = equipment.equipment.joined(separator: ", ")
-        result["body_model.schedule_notes"] = equipment.scheduleNotes
-        result["body_model.coach_style"] = coaching.style
-        result["body_model.explanation_depth"] = coaching.explanationDepth
-        result["body_model.language"] = coaching.language
-        result["body_model.initial_confidence"] = snapshot.dataConfidence.rawValue
-        result["body_model.missing_data"] = snapshot.missingData.joined(separator: ", ")
-        result["body_model.first_brief"] = onboardingState.firstBrief
-        result["body_model.first_action_plan"] = onboardingState.firstActionPlan.joined(separator: " | ")
+            result["body_model.primary_goal"] = goal.primaryGoal
+            result["body_model.secondary_goals"] = goal.secondaryGoals.joined(separator: ", ")
+            result["body_model.experience_level"] = goal.experienceLevel
+            result["body_model.body_concerns"] = goal.bodyConcerns.joined(separator: ", ")
+            result["body_model.training_style"] = training.trainingStyle
+            result["body_model.weekly_training_days"] = "\(training.weeklyTrainingDays)"
+            result["body_model.session_duration_minutes"] = "\(training.sessionDurationMinutes)"
+            result["body_model.preferred_days"] = training.preferredTrainingDays.joined(separator: ", ")
+            result["body_model.equipment"] = equipment.equipment.joined(separator: ", ")
+            result["body_model.schedule_notes"] = equipment.scheduleNotes
+            result["body_model.coach_style"] = coaching.style
+            result["body_model.explanation_depth"] = coaching.explanationDepth
+            result["body_model.language"] = coaching.language
+            result["body_model.initial_confidence"] = snapshot.dataConfidence.rawValue
+            result["body_model.missing_data"] = snapshot.missingData.joined(separator: ", ")
+            result["body_model.first_brief"] = onboardingState.firstBrief
+            result["body_model.first_action_plan"] = onboardingState.firstActionPlan.joined(separator: " | ")
+        }
+        if let bodyModelState {
+            result["body_model.maturity"] = bodyModelState.maturity.overall.rawValue
+            result["body_model.baseline_days"] = "\(bodyModelState.maturity.baselineDays)"
+            result["body_model.behavior_pairs"] = "\(bodyModelState.maturity.behaviorPairs)"
+            result["body_model.training_sessions"] = "\(bodyModelState.maturity.trainingSessions)"
+            result["body_model.claims"] = bodyModelState.claims.map {
+                "\($0.title): \($0.summary) [\($0.confidence.rawValue), n=\($0.evidenceCount)]"
+            }.joined(separator: " | ")
+            result["body_model.uncertain_areas"] = bodyModelState.uncertainAreas.map(\.id).joined(separator: ", ")
+            result["body_model.training_pattern_summary"] = bodyModelState.trainingPatternSummary
+            result["body_model.coach_rules"] = bodyModelState.coachRules.joined(separator: " | ")
+        }
         return result
     }
 

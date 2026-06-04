@@ -14,9 +14,9 @@ struct VelaTrainingView: View {
     @Query(sort: \StrengthWorkoutRecord.startedAt, order: .reverse) private var strengthWorkouts: [StrengthWorkoutRecord]
     @Query(sort: \WorkoutEventRecord.startedAt, order: .reverse) private var localWorkoutEvents: [WorkoutEventRecord]
     @Query(sort: \WorkoutTemplateRecord.title) private var workoutTemplates: [WorkoutTemplateRecord]
-    @AppStorage("xunji.openAPIKey") private var xunjiAPIKey = ""
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
+    private let xunjiKeychainAccount = "xunji_open_api_key"
 
     @State private var previousMonthActiveTiers: [Int: Int] = [:]
     @State private var currentMonthActiveTiers: [Int: Int] = [:]
@@ -33,7 +33,8 @@ struct VelaTrainingView: View {
     @State private var selectedTemplateID: UUID?
     @State private var showXunjiImport = false
     @State private var xunjiImportDate = Date()
-    @State private var xunjiIncludeFullData = true
+    @State private var xunjiAPIKey = ""
+    @State private var xunjiIncludeFullData = false
     @State private var isImportingXunji = false
     @State private var xunjiImportMessage: String?
 
@@ -77,6 +78,7 @@ struct VelaTrainingView: View {
         .background(VelaTheme.systemGroupedBackground)
         .onAppear {
             loadRealFitnessData()
+            loadXunjiAPIKey()
         }
         .task {
             try? ExerciseLibraryService.seedDefaultsIfNeeded(modelContext: modelContext)
@@ -827,7 +829,7 @@ struct VelaTrainingView: View {
     @MainActor
     private func importXunjiTraining() async {
         let datestr = xunjiDateString(xunjiImportDate)
-        let key = xunjiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = storedXunjiAPIKey()
         guard !key.isEmpty else {
             xunjiImportMessage = "请先填写训记 Open API Key。"
             return
@@ -901,6 +903,28 @@ struct VelaTrainingView: View {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: date)
+    }
+
+    @MainActor
+    private func loadXunjiAPIKey() {
+        if let saved = try? KeychainService.shared.read(account: xunjiKeychainAccount), !saved.isEmpty {
+            xunjiAPIKey = saved
+        }
+    }
+
+    @MainActor
+    private func storedXunjiAPIKey() -> String {
+        let typed = xunjiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !typed.isEmpty {
+            try? KeychainService.shared.save(typed, account: xunjiKeychainAccount)
+            return typed
+        }
+        do {
+            return try KeychainService.shared.read(account: xunjiKeychainAccount)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        } catch {
+            return ""
+        }
     }
 
     private func syncRealFitnessData(force: Bool = false) async {

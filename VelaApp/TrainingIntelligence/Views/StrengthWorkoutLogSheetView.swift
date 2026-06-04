@@ -454,7 +454,7 @@ struct StrengthWorkoutLogSheetView: View {
             let finalId = definition?.id ?? libDef?.id
             let finalKey = definition?.canonicalKey ?? libDef?.canonicalKey
             
-            let reps = Int(item.targetReps) ?? (item.targetReps.components(separatedBy: CharacterSet.decimalDigits.inverted).first.flatMap(Int.init) ?? 10)
+            let reps = StrengthWorkoutTemplateParser.reps(from: item.targetReps)
             
             let previousSets = previousCompletedSets(for: item.name)
             let defaultWeight = previousSets.first?.weightKilograms ?? 20.0

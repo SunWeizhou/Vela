@@ -186,16 +186,29 @@ public final class WorkoutAggregationService {
         // Algorithm v1/workoutAggregation: session-RPE fallback load.
         // Source: WorkoutEventRecord + current day's HealthKit workoutsData.
         // Confidence: medium for HR/RPE workouts, low for duration-only workouts.
-        let dailyLoad = (record.activityLoad ?? 0) + load
+        let activityLoad = normalizedActivityLoad(record)
+        let dailyLoad = activityLoad + load
         record.workoutsData = try JSONEncoder().encode(merged)
         record.workoutCount = merged.count
         record.workoutTypes = Set(merged.map(\.activityName)).sorted().joined(separator: ", ")
         record.workoutDuration = duration
         record.activeMinutes = max(record.activeMinutes ?? 0, duration)
         record.activeCalories = max(record.activeCalories ?? 0, energy)
+        record.activityLoad = activityLoad
         record.workoutLoad = load
         record.dailyLoad = dailyLoad
         record.updatedAt = Date()
+    }
+
+    private func normalizedActivityLoad(_ record: DailyHealthSummaryRecord) -> Double {
+        guard let activityLoad = record.activityLoad else { return 0 }
+        guard let previousWorkoutLoad = record.workoutLoad,
+              previousWorkoutLoad > 0,
+              let previousDailyLoad = record.dailyLoad,
+              abs(previousDailyLoad - activityLoad) < 0.01 else {
+            return activityLoad
+        }
+        return max(0, activityLoad - previousWorkoutLoad)
     }
 
     private func consolidateLocalEvents(_ events: [WorkoutEventRecord]) -> [WorkoutEventRecord] {

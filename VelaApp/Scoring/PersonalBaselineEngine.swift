@@ -208,18 +208,68 @@ enum PersonalBaselineEngine {
               baselineDoc.content.count > 50 else {
             return nil
         }
-        // We return the raw content and metadata; detailed parsing is done by callers.
-        // For now we reconstruct minimal info from the markdown.
         let content = baselineDoc.content
         var daysOfData = 0
         if let range = content.range(of: #"\*\*Days of data:\*\* (\d+)"#, options: .regularExpression) {
             let match = String(content[range])
             daysOfData = Int(match.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()) ?? 0
         }
-        return (PersonalBaselines(calculatedAt: baselineDoc.updatedAt, daysOfData: daysOfData), baselineDoc.updatedAt)
+        let rows = baselineRows(from: content)
+        let baselines = PersonalBaselines(
+            hrvBaselineMean: firstNumber(in: rows["HRV"] ?? ""),
+            hrvBaselineSD: standardDeviation(in: rows["HRV"] ?? ""),
+            rhrBaselineMean: firstNumber(in: rows["RHR"] ?? ""),
+            rhrBaselineSD: standardDeviation(in: rows["RHR"] ?? ""),
+            sleepHoursBaseline: firstNumber(in: rows["Sleep Duration"] ?? ""),
+            sleepEfficiencyBaseline: percentFraction(in: rows["Sleep Efficiency"] ?? ""),
+            deepSleepPercentBaseline: percentFraction(in: rows["Deep Sleep"] ?? ""),
+            remSleepPercentBaseline: percentFraction(in: rows["REM Sleep"] ?? ""),
+            strainBaselineMean: firstNumber(in: rows["Strain"] ?? ""),
+            stepsBaseline: firstNumber(in: rows["Steps"] ?? ""),
+            activeCaloriesBaseline: firstNumber(in: rows["Active Calories"] ?? ""),
+            calculatedAt: baselineDoc.updatedAt,
+            daysOfData: daysOfData
+        )
+        return (baselines, baselineDoc.updatedAt)
     }
 
     // MARK: - Statistics Helpers
+
+    private static func baselineRows(from markdown: String) -> [String: String] {
+        var rows: [String: String] = [:]
+        for line in markdown.components(separatedBy: .newlines) {
+            let parts = line
+                .split(separator: "|", omittingEmptySubsequences: false)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            guard parts.count >= 4,
+                  !parts[1].isEmpty,
+                  parts[1] != "Metric",
+                  !parts[1].contains("---") else {
+                continue
+            }
+            rows[parts[1]] = parts[2]
+        }
+        return rows
+    }
+
+    private static func firstNumber(in text: String) -> Double? {
+        guard let range = text.range(of: #"-?\d+(?:,\d{3})*(?:\.\d+)?"#, options: .regularExpression) else {
+            return nil
+        }
+        return Double(text[range].replacingOccurrences(of: ",", with: ""))
+    }
+
+    private static func standardDeviation(in text: String) -> Double? {
+        guard let range = text.range(of: #"±\s*-?\d+(?:\.\d+)?"#, options: .regularExpression) else {
+            return nil
+        }
+        return firstNumber(in: String(text[range]))
+    }
+
+    private static func percentFraction(in text: String) -> Double? {
+        guard let value = firstNumber(in: text) else { return nil }
+        return value / 100.0
+    }
 
     private static func meanOf(_ values: [Double]) -> Double? {
         guard !values.isEmpty else { return nil }

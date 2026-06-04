@@ -493,7 +493,7 @@ enum TodayCommandBuilder {
 
     private static func aggregateConfidence(dashboard: DashboardSummary, signals: [TodayHealthSignal]) -> DataConfidence {
         if !dashboard.recovery.hasData { return .unavailable }
-        if signals.contains(where: { $0.confidence == .unavailable }) { return .medium }
+        if signals.contains(where: { $0.confidence == .unavailable }) { return .low }
         if [dashboard.recovery.confidence, dashboard.sleepScore.confidence, dashboard.strain.confidence].contains(.low) {
             return .low
         }
@@ -509,6 +509,327 @@ enum TodayCommandBuilder {
         case .medium: return .medium
         case .low: return .low
         }
+    }
+}
+
+enum BehaviorTag: String, Codable, Hashable, CaseIterable {
+    case alcohol
+    case caffeine
+    case lateMeal
+    case highFat
+    case highSalt
+    case highSugar
+    case overeating
+    case lowHydration
+    case spicy
+    case lowProtein
+
+    var displayTitle: String {
+        switch self {
+        case .alcohol: return "饮酒"
+        case .caffeine: return "咖啡因"
+        case .lateMeal: return "晚餐过晚"
+        case .highFat: return "高油"
+        case .highSalt: return "高盐"
+        case .highSugar: return "高糖"
+        case .overeating: return "吃撑"
+        case .lowHydration: return "补水不足"
+        case .spicy: return "辛辣"
+        case .lowProtein: return "蛋白不足"
+        }
+    }
+}
+
+enum BehaviorIntensity: String, Codable, Hashable, CaseIterable {
+    case low
+    case medium
+    case high
+}
+
+enum BehaviorTiming: String, Codable, Hashable, CaseIterable {
+    case morning
+    case midday
+    case evening
+    case preSleep
+    case unknown
+}
+
+enum BehaviorSignalConfidence: String, Codable, Hashable, CaseIterable {
+    case userConfirmed
+    case aiInferred
+    case photoAssisted
+}
+
+struct BehaviorSignal: Codable, Hashable, Identifiable {
+    var id: String
+    var tag: BehaviorTag
+    var intensity: BehaviorIntensity
+    var timing: BehaviorTiming
+    var confidence: BehaviorSignalConfidence
+    var sourceNote: String
+    var createdAt: Date
+}
+
+enum BehaviorSignalExtractor {
+    static func extract(
+        from text: String,
+        createdAt: Date = Date(),
+        confidence: BehaviorSignalConfidence = .aiInferred
+    ) -> [BehaviorSignal] {
+        let lowered = text.lowercased()
+        var signals: [BehaviorTag: BehaviorSignal] = [:]
+
+        func timing(default fallback: BehaviorTiming = .unknown) -> BehaviorTiming {
+            if lowered.contains("睡前") || lowered.contains("临睡") || lowered.contains("before bed") { return .preSleep }
+            if lowered.contains("早上") || lowered.contains("早餐") || lowered.contains("morning") { return .morning }
+            if lowered.contains("中午") || lowered.contains("午餐") || lowered.contains("lunch") { return .midday }
+            if lowered.contains("晚上") || lowered.contains("晚餐") || lowered.contains("夜宵") || lowered.contains("dinner") { return .evening }
+            return fallback
+        }
+
+        func intensity(for tag: BehaviorTag) -> BehaviorIntensity {
+            if tag == .overeating, lowered.contains("吃撑") || lowered.contains("撑") {
+                return .high
+            }
+            if lowered.contains("两杯") || lowered.contains("2杯") || lowered.contains("中等") || lowered.contains("medium") {
+                return .medium
+            }
+            if lowered.contains("一点") || lowered.contains("少量") || lowered.contains("一杯") || lowered.contains("1杯") {
+                return .low
+            }
+            if lowered.contains("很多") || lowered.contains("大量") || lowered.contains("high") {
+                return .high
+            }
+            switch tag {
+            case .overeating: return .high
+            case .alcohol: return .medium
+            default: return .medium
+            }
+        }
+
+        func add(_ tag: BehaviorTag, timing explicitTiming: BehaviorTiming? = nil) {
+            signals[tag] = BehaviorSignal(
+                id: "\(Int(createdAt.timeIntervalSince1970))-\(tag.rawValue)",
+                tag: tag,
+                intensity: intensity(for: tag),
+                timing: explicitTiming ?? timing(default: .unknown),
+                confidence: confidence,
+                sourceNote: text,
+                createdAt: createdAt
+            )
+        }
+
+        if lowered.contains("酒") || lowered.contains("啤酒") || lowered.contains("红酒") || lowered.contains("白酒") || lowered.contains("alcohol") || lowered.contains("beer") {
+            add(.alcohol)
+        }
+        if lowered.contains("咖啡") || lowered.contains("拿铁") || lowered.contains("美式") || lowered.contains("caffeine") || lowered.contains("coffee") {
+            add(.caffeine, timing: lowered.contains("睡前") ? .preSleep : nil)
+        }
+        if lowered.contains("夜宵") || lowered.contains("很晚") || lowered.contains("晚吃") || lowered.contains("late meal") {
+            add(.lateMeal)
+        }
+        if lowered.contains("火锅") || lowered.contains("油炸") || lowered.contains("炸鸡") || lowered.contains("烧烤") || lowered.contains("高油") || lowered.contains("high fat") {
+            add(.highFat)
+        }
+        if lowered.contains("火锅") || lowered.contains("烧烤") || lowered.contains("外卖") || lowered.contains("咸") || lowered.contains("高盐") || lowered.contains("high salt") {
+            add(.highSalt)
+        }
+        if lowered.contains("甜") || lowered.contains("奶茶") || lowered.contains("蛋糕") || lowered.contains("高糖") || lowered.contains("sugar") {
+            add(.highSugar)
+        }
+        if lowered.contains("吃撑") || lowered.contains("撑了") || lowered.contains("过饱") || lowered.contains("overeating") {
+            add(.overeating)
+        }
+        if lowered.contains("没喝水") || lowered.contains("喝水少") || lowered.contains("缺水") || lowered.contains("low hydration") {
+            add(.lowHydration)
+        }
+        if lowered.contains("辣") || lowered.contains("辛辣") || lowered.contains("spicy") {
+            add(.spicy)
+        }
+        if lowered.contains("蛋白不足") || lowered.contains("没吃蛋白") || lowered.contains("low protein") {
+            add(.lowProtein)
+        }
+        return signals.values.sorted { $0.tag.rawValue < $1.tag.rawValue }
+    }
+
+    static func extract(from entry: JournalEntryRecord) -> [BehaviorSignal] {
+        var signals = extract(from: entry.note, createdAt: entry.createdAt)
+        for tag in entry.tags {
+            guard tag.hasPrefix("behavior:"),
+                  let behavior = BehaviorTag(rawValue: String(tag.dropFirst("behavior:".count))) else {
+                continue
+            }
+            if !signals.contains(where: { $0.tag == behavior }) {
+                signals.append(BehaviorSignal(
+                    id: "\(Int(entry.createdAt.timeIntervalSince1970))-\(behavior.rawValue)",
+                    tag: behavior,
+                    intensity: intensity(from: entry.tags),
+                    timing: .unknown,
+                    confidence: .userConfirmed,
+                    sourceNote: entry.note,
+                    createdAt: entry.createdAt
+                ))
+            }
+        }
+        return signals.sorted { $0.tag.rawValue < $1.tag.rawValue }
+    }
+
+    private static func intensity(from tags: [String]) -> BehaviorIntensity {
+        if tags.contains("intensity:high") { return .high }
+        if tags.contains("intensity:low") { return .low }
+        return .medium
+    }
+}
+
+enum BodyModelMaturityLevel: String, Codable, Hashable, CaseIterable {
+    case seed
+    case learning
+    case stable
+}
+
+struct BodyModelMaturity: Codable, Hashable {
+    var overall: BodyModelMaturityLevel
+    var baselineDays: Int
+    var behaviorPairs: Int
+    var trainingSessions: Int
+}
+
+struct BodyModelClaim: Codable, Hashable, Identifiable {
+    var id: String
+    var title: String
+    var summary: String
+    var confidence: DataConfidence
+    var evidenceCount: Int
+}
+
+struct BodyModelUncertainArea: Codable, Hashable, Identifiable {
+    var id: String
+    var title: String
+    var detail: String
+}
+
+struct BodyModelState: Codable, Hashable {
+    var generatedAt: Date
+    var maturity: BodyModelMaturity
+    var claims: [BodyModelClaim]
+    var uncertainAreas: [BodyModelUncertainArea]
+    var behaviorSignals: [BehaviorSignal]
+    var trainingPatternSummary: String
+    var coachRules: [String]
+}
+
+struct BodyModelBuilder {
+    func build(
+        onboarding: OnboardingState?,
+        dailySummaries: [DailyHealthSummaryRecord],
+        journalEntries: [JournalEntryRecord],
+        strengthWorkouts: [StrengthWorkoutRecord],
+        trainingResponses: [TrainingResponseRecord],
+        asOf: Date = Date(),
+        calendar: Calendar = .current
+    ) -> BodyModelState {
+        let baselineDays = Set(dailySummaries.map { calendar.startOfDay(for: $0.date) }).count
+        let behaviorSignals = journalEntries.flatMap { BehaviorSignalExtractor.extract(from: $0) }
+        let behaviorPairs = behaviorSignals.count
+        let trainingSessions = strengthWorkouts.count
+        let maturity = BodyModelMaturity(
+            overall: maturityLevel(baselineDays: baselineDays, behaviorPairs: behaviorPairs, trainingSessions: trainingSessions),
+            baselineDays: baselineDays,
+            behaviorPairs: behaviorPairs,
+            trainingSessions: trainingSessions
+        )
+
+        var claims: [BodyModelClaim] = []
+        if let onboarding {
+            claims.append(BodyModelClaim(
+                id: "profile_seed",
+                title: "目标与训练偏好已建立",
+                summary: "目标 \(onboarding.goalProfile.primaryGoal)，训练风格 \(onboarding.trainingPreference.trainingStyle)，每周 \(onboarding.trainingPreference.weeklyTrainingDays) 次。",
+                confidence: onboarding.isCompleted ? .medium : .low,
+                evidenceCount: 1
+            ))
+        }
+        if trainingSessions > 0 {
+            let analysis = TrainingAnalyticsService().buildRecentSummary(workouts: strengthWorkouts, days: 28, endingAt: asOf)
+            claims.append(BodyModelClaim(
+                id: "training_facts",
+                title: "训练事实正在积累",
+                summary: "近 28 天 \(analysis.sessions) 次训练，\(analysis.effectiveSets) 个有效组；这些数据会先用于局部疲劳和训练后反应观察。",
+                confidence: trainingSessions >= 6 ? .medium : .low,
+                evidenceCount: trainingSessions
+            ))
+        }
+        if behaviorPairs >= 6 {
+            let grouped = Dictionary(grouping: behaviorSignals, by: \.tag)
+            if let top = grouped.max(by: { $0.value.count < $1.value.count }) {
+                claims.append(BodyModelClaim(
+                    id: "behavior_pattern_\(top.key.rawValue)",
+                    title: "行为信号样本开始可用",
+                    summary: "\(top.key.displayTitle) 已记录 \(top.value.count) 次。下一步会和次日睡眠、HRV、RHR、恢复进行配对分析。",
+                    confidence: .medium,
+                    evidenceCount: top.value.count
+                ))
+            }
+        }
+
+        var uncertain: [BodyModelUncertainArea] = []
+        if baselineDays < 7 {
+            uncertain.append(BodyModelUncertainArea(
+                id: "baseline_history",
+                title: "个人基线仍在建立",
+                detail: "需要至少 7 天健康摘要，才能把 HRV、RHR、睡眠和负荷判断从通用规则转向个人基线。"
+            ))
+        }
+        if behaviorPairs < 6 {
+            uncertain.append(BodyModelUncertainArea(
+                id: "behavior_pairs",
+                title: "行为-结果配对不足",
+                detail: "饮食、咖啡因、饮酒、补水等行为至少需要约 6 次配对记录后才报告个人化影响。"
+            ))
+        }
+        if trainingSessions < 3 || trainingResponses.count < 3 {
+            uncertain.append(BodyModelUncertainArea(
+                id: "training_response",
+                title: "训练后反应样本不足",
+                detail: "需要更多训练事实和次日恢复反馈，才能判断不同肌群/容量对你的恢复冲击。"
+            ))
+        }
+
+        return BodyModelState(
+            generatedAt: asOf,
+            maturity: maturity,
+            claims: claims,
+            uncertainAreas: uncertain,
+            behaviorSignals: behaviorSignals,
+            trainingPatternSummary: trainingSummary(strengthWorkouts, asOf: asOf),
+            coachRules: coachRules(for: maturity, uncertainAreas: uncertain)
+        )
+    }
+
+    private func maturityLevel(baselineDays: Int, behaviorPairs: Int, trainingSessions: Int) -> BodyModelMaturityLevel {
+        if baselineDays >= 28, behaviorPairs >= 12, trainingSessions >= 8 { return .stable }
+        if baselineDays >= 7 || behaviorPairs >= 6 || trainingSessions >= 3 { return .learning }
+        return .seed
+    }
+
+    private func trainingSummary(_ workouts: [StrengthWorkoutRecord], asOf: Date) -> String {
+        guard !workouts.isEmpty else { return "尚无训练事实。训记或 Vela 训练记录同步后会开始学习训练反应。" }
+        let summary = TrainingAnalyticsService().buildRecentSummary(workouts: workouts, days: 28, endingAt: asOf)
+        return "近 28 天 \(summary.sessions) 次训练，\(summary.effectiveSets) 个有效组，容量 \(Int(summary.volumeKg.rounded())) kg。"
+    }
+
+    private func coachRules(for maturity: BodyModelMaturity, uncertainAreas: [BodyModelUncertainArea]) -> [String] {
+        var rules = [
+            "只把样本充足的模式描述为个人规律；样本不足时使用“正在学习”。",
+            "训练建议必须同时展示证据、置信度和可替代行动。"
+        ]
+        if maturity.overall == .seed {
+            rules.append("Body Model 处于种子期，Coach 默认采用保守训练建议。")
+        }
+        if uncertainAreas.contains(where: { $0.id == "behavior_pairs" }) {
+            rules.append("行为影响暂不下结论，只收集低摩擦手记信号。")
+        }
+        return rules
     }
 }
 
