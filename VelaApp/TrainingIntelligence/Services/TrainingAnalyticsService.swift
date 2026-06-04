@@ -282,6 +282,11 @@ struct XunjiTrainingImportService: Sendable {
         var updated = 0
         var skipped = 0
         var titles: [String] = []
+        var affectedDatesByIdentifier: [String: Date] = [:]
+        func markAffected(_ date: Date) {
+            let day = calendar.startOfDay(for: date)
+            affectedDatesByIdentifier[DailyHealthSummaryRecord.dayIdentifier(for: day, calendar: calendar)] = day
+        }
 
         for train in trains {
             guard let normalized = normalize(train: train, fallbackDatestr: datestr, calendar: calendar) else {
@@ -296,6 +301,7 @@ struct XunjiTrainingImportService: Sendable {
                let linkedID = mirror.linkedStrengthWorkoutID,
                let existing = existingWorkouts.first(where: { $0.id == linkedID }) {
                 workout = existing
+                markAffected(workout.startedAt)
                 workout.title = normalized.title
                 workout.startedAt = normalized.startedAt
                 workout.durationMinutes = normalized.durationMinutes
@@ -314,6 +320,7 @@ struct XunjiTrainingImportService: Sendable {
                 modelContext.insert(workout)
                 imported += 1
             }
+            markAffected(workout.startedAt)
 
             let analysis = TrainingAnalyticsService().summarizeWorkout(
                 workout,
@@ -369,6 +376,14 @@ struct XunjiTrainingImportService: Sendable {
             titles.append(workout.title)
         }
 
+        try modelContext.save()
+        for affectedDate in affectedDatesByIdentifier.values {
+            try WorkoutAggregationService.shared.aggregateDay(
+                date: affectedDate,
+                modelContext: modelContext,
+                calendar: calendar
+            )
+        }
         try modelContext.save()
         return XunjiImportSummary(
             importedCount: imported,

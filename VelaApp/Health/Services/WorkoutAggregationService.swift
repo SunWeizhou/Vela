@@ -4,6 +4,7 @@ import SwiftData
 @MainActor
 public final class WorkoutAggregationService {
     public static let shared = WorkoutAggregationService()
+    private static let duplicateTimeTolerance: TimeInterval = 120
     
     private init() {}
     
@@ -24,29 +25,37 @@ public final class WorkoutAggregationService {
             sortBy: [SortDescriptor(\.startedAt)]
         )
         
-        let localRecords = (try? modelContext.fetch(descriptor)) ?? []
+        let localRecords = consolidateLocalEvents((try? modelContext.fetch(descriptor)) ?? [])
         
         var merged: [WorkoutSummary] = []
         
-        // 1. Keep HealthKit workouts (except those that are already manually handled or duplicated)
-        let localRecordIDs = Set(localRecords.map(\.id))
-        
+        // 1. Keep HealthKit workouts unless a mirrored WorkoutEventRecord already represents them.
         for hk in healthKitWorkouts {
-            if !localRecordIDs.contains(hk.id) {
-                merged.append(hk)
+            if !localRecords.contains(where: { localRecordRepresentsHealthKitWorkout($0, hk) }) {
+                merged.append(WorkoutSummary(
+                    id: hk.id,
+                    start: hk.start,
+                    end: hk.end,
+                    activityName: hk.activityName,
+                    energyKilocalories: hk.energyKilocalories,
+                    averageHeartRate: hk.averageHeartRate,
+                    distanceMeters: hk.distanceMeters,
+                    source: hk.source ?? "healthKit",
+                    rpe: hk.rpe
+                ))
             }
         }
         
-        // 2. Add local records (manual / strength / healthKit mirrored)
+        // 2. Add local records (manual / strength / xunji / HealthKit mirrors).
         for local in localRecords {
-            // Find if there is a HealthKit workout with same id to preserve averageHeartRate etc.
-            let matchedHK = healthKitWorkouts.first { $0.id == local.id }
+            let matchedHK = healthKitWorkouts.first { localRecordRepresentsHealthKitWorkout(local, $0) }
+            let useHealthKitTiming = local.source == "healthKit" && matchedHK != nil
             
             merged.append(WorkoutSummary(
                 id: local.id,
-                start: local.startedAt,
-                end: local.endedAt,
-                activityName: local.activityType,
+                start: useHealthKitTiming ? matchedHK?.start ?? local.startedAt : local.startedAt,
+                end: useHealthKitTiming ? matchedHK?.end ?? local.endedAt : local.endedAt,
+                activityName: useHealthKitTiming ? matchedHK?.activityName ?? local.activityType : local.activityType,
                 energyKilocalories: local.energyKilocalories ?? matchedHK?.energyKilocalories,
                 averageHeartRate: local.averageHeartRate ?? matchedHK?.averageHeartRate,
                 distanceMeters: matchedHK?.distanceMeters,
@@ -55,7 +64,7 @@ public final class WorkoutAggregationService {
             ))
         }
         
-        return merged
+        return deduplicateSummaries(merged).sorted { $0.start < $1.start }
     }
 
     public func upsertHealthKitWorkoutEvents(
@@ -162,8 +171,9 @@ public final class WorkoutAggregationService {
             modelContext.insert(record)
         }
 
+        let healthKitWorkouts = record.toSnapshot().workouts.filter { ($0.source ?? "healthKit") == "healthKit" }
         let merged = aggregateWorkouts(
-            healthKitWorkouts: record.toSnapshot().workouts,
+            healthKitWorkouts: healthKitWorkouts,
             for: dayStart,
             modelContext: modelContext,
             calendar: calendar
@@ -173,6 +183,9 @@ public final class WorkoutAggregationService {
         let load = merged.reduce(0) { partial, workout in
             partial + max(0, workout.end.timeIntervalSince(workout.start) / 60) * (workout.rpe ?? 5) * 0.3
         }
+        // Algorithm v1/workoutAggregation: session-RPE fallback load.
+        // Source: WorkoutEventRecord + current day's HealthKit workoutsData.
+        // Confidence: medium for HR/RPE workouts, low for duration-only workouts.
         let dailyLoad = (record.activityLoad ?? 0) + load
         record.workoutsData = try JSONEncoder().encode(merged)
         record.workoutCount = merged.count
@@ -183,6 +196,94 @@ public final class WorkoutAggregationService {
         record.workoutLoad = load
         record.dailyLoad = dailyLoad
         record.updatedAt = Date()
+    }
+
+    private func consolidateLocalEvents(_ events: [WorkoutEventRecord]) -> [WorkoutEventRecord] {
+        var result: [String: WorkoutEventRecord] = [:]
+        for event in events {
+            let key = stableEventKey(event)
+            if let existing = result[key] {
+                result[key] = existing.updatedAt >= event.updatedAt ? existing : event
+            } else {
+                result[key] = event
+            }
+        }
+        return Array(result.values).sorted { $0.startedAt < $1.startedAt }
+    }
+
+    private func stableEventKey(_ event: WorkoutEventRecord) -> String {
+        if let linkedHealthKitWorkoutId = event.linkedHealthKitWorkoutId {
+            return "healthKit:\(linkedHealthKitWorkoutId.uuidString)"
+        }
+        if let linkedStrengthWorkoutId = event.linkedStrengthWorkoutId {
+            return "strength:\(linkedStrengthWorkoutId.uuidString):\(event.source)"
+        }
+        return [
+            event.source,
+            event.activityType.normalizedWorkoutText,
+            "\(Int(event.startedAt.timeIntervalSince1970 / Self.duplicateTimeTolerance))",
+            "\(Int(event.endedAt.timeIntervalSince1970 / Self.duplicateTimeTolerance))"
+        ].joined(separator: "|")
+    }
+
+    private func localRecordRepresentsHealthKitWorkout(_ local: WorkoutEventRecord, _ healthKit: WorkoutSummary) -> Bool {
+        if local.linkedHealthKitWorkoutId == healthKit.id || local.id == healthKit.id {
+            return true
+        }
+        guard local.source == "healthKit" else { return false }
+        return workoutsOverlapByIdentity(
+            lhsStart: local.startedAt,
+            lhsEnd: local.endedAt,
+            lhsActivity: local.activityType,
+            rhsStart: healthKit.start,
+            rhsEnd: healthKit.end,
+            rhsActivity: healthKit.activityName
+        )
+    }
+
+    private func deduplicateSummaries(_ workouts: [WorkoutSummary]) -> [WorkoutSummary] {
+        var result: [String: WorkoutSummary] = [:]
+        for workout in workouts {
+            let key = summaryStableKey(workout)
+            if let existing = result[key] {
+                result[key] = richerSummary(existing, workout)
+            } else {
+                result[key] = workout
+            }
+        }
+        return Array(result.values)
+    }
+
+    private func summaryStableKey(_ workout: WorkoutSummary) -> String {
+        let source = workout.source ?? "healthKit"
+        if source == "healthKit" {
+            return "healthKit:\(workout.id.uuidString)"
+        }
+        return [
+            source,
+            workout.activityName.normalizedWorkoutText,
+            "\(Int(workout.start.timeIntervalSince1970 / Self.duplicateTimeTolerance))",
+            "\(Int(workout.end.timeIntervalSince1970 / Self.duplicateTimeTolerance))"
+        ].joined(separator: "|")
+    }
+
+    private func richerSummary(_ lhs: WorkoutSummary, _ rhs: WorkoutSummary) -> WorkoutSummary {
+        let lhsScore = [lhs.energyKilocalories, lhs.averageHeartRate, lhs.distanceMeters, lhs.rpe].compactMap { $0 }.count
+        let rhsScore = [rhs.energyKilocalories, rhs.averageHeartRate, rhs.distanceMeters, rhs.rpe].compactMap { $0 }.count
+        return rhsScore > lhsScore ? rhs : lhs
+    }
+
+    private func workoutsOverlapByIdentity(
+        lhsStart: Date,
+        lhsEnd: Date,
+        lhsActivity: String,
+        rhsStart: Date,
+        rhsEnd: Date,
+        rhsActivity: String
+    ) -> Bool {
+        lhsActivity.normalizedWorkoutText == rhsActivity.normalizedWorkoutText
+            && abs(lhsStart.timeIntervalSince(rhsStart)) <= Self.duplicateTimeTolerance
+            && abs(lhsEnd.timeIntervalSince(rhsEnd)) <= Self.duplicateTimeTolerance
     }
 
     public func rebuildRecentDays(
@@ -257,5 +358,13 @@ public final class WorkoutAggregationService {
                 break
             }
         }
+    }
+}
+
+private extension String {
+    var normalizedWorkoutText: String {
+        trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "")
     }
 }

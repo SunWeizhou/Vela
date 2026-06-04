@@ -18,9 +18,14 @@ struct AgentLoop {
     }
 
     /// Runs the agentic loop and returns the final response plus tool execution details.
-    /// - Parameter messages: The chat message history including system prompt.
+    /// - Parameters:
+    ///   - messages: The chat message history including system prompt.
+    ///   - onStreamDelta: Optional callback invoked with each streamed text token delta.
     /// - Returns: AgentLoopResult with the final text response, executed tools, and updated messages.
-    func run(messages: [ChatMessage]) async throws -> AgentLoopResult {
+    func run(
+        messages: [ChatMessage],
+        onStreamDelta: (@MainActor @Sendable (String) -> Void)? = nil
+    ) async throws -> AgentLoopResult {
         var agentMessages = messages
         var fullResponse = ""
         var executedTools: [ExecutedTool] = []
@@ -59,6 +64,9 @@ struct AgentLoop {
                     var streamedText = ""
                     for try await delta in stream {
                         streamedText += delta
+                        if let onStreamDelta {
+                            await onStreamDelta(delta)
+                        }
                     }
                     fullResponse = streamedText
                     return AgentLoopResult(

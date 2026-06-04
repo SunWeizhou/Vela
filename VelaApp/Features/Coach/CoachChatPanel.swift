@@ -488,13 +488,31 @@ final class CoachChatVM: ObservableObject {
             var agentMessages = chatMessages
             var fullResponse = ""
             var wasStreamed = false
+            var wikiFiles: [String] = []
+            var wikiUpdateSummaries: [String] = []
 
-            let agentLoop = AgentLoop(provider: provider, toolRegistry: toolRegistry)
-            let loopResult = try await agentLoop.run(messages: agentMessages)
-            var wikiFiles = loopResult.wikiFiles
-            var wikiUpdateSummaries = loopResult.wikiUpdateSummaries
-            fullResponse = loopResult.response
-            wasStreamed = loopResult.wasStreamed
+            let lang = AppLanguage.stored
+            let policy = ResponseLengthPolicy.forQuery(userText, lang: lang)
+
+            if policy == .casual {
+                // Direct streaming for casual chat to bypass agentic tool calling
+                let stream = provider.streamChat(messages: agentMessages)
+                for try await delta in stream {
+                    fullResponse += delta
+                    streamingContent = fullResponse
+                }
+                wasStreamed = true
+            } else {
+                let agentLoop = AgentLoop(provider: provider, toolRegistry: toolRegistry)
+                let loopResult = try await agentLoop.run(messages: agentMessages) { @MainActor [weak self] delta in
+                    guard let self else { return }
+                    self.streamingContent += delta
+                }
+                wikiFiles = loopResult.wikiFiles
+                wikiUpdateSummaries = loopResult.wikiUpdateSummaries
+                fullResponse = loopResult.response
+                wasStreamed = loopResult.wasStreamed
+            }
 
             if fullResponse.isEmpty {
                 fullResponse = L10n.t(
@@ -574,6 +592,7 @@ final class CoachChatVM: ObservableObject {
             persistThread(modelContext: modelContext)
         }
 
+        streamingContent = ""
         isStreaming = false
     }
 

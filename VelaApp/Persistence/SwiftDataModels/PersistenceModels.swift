@@ -6,7 +6,11 @@ final class DailyHealthSummaryRecord {
     @Attribute(.unique) var dayIdentifier: String
     var date: Date
     var sleepScore: Double?
+    // Algorithm/source/confidence: RecoveryScoreEngine v1 derived from sleep, HRV, RHR and prior strain.
+    // Stored as a daily cache of the latest HealthKit-derived score; confidence is carried by MetricResult upstream.
     var recoveryScore: Double?
+    // Algorithm/source/confidence: StrainScoreEngine v1 derived from active energy, exercise minutes and workout load.
+    // Stored as a daily cache of the latest mixed HealthKit/local workout score.
     var strainScore: Double?
     var stressIndex: Double?
     var morningEnergy: Double?
@@ -36,6 +40,8 @@ final class DailyHealthSummaryRecord {
     var oxygenSaturation: Double?
     var respiratoryRate: Double?
     var wristTemperature: Double?
+    // Algorithm/source/confidence: workoutAggregation.v1 combines activityLoad with session-RPE workout load.
+    // Source is mixed HealthKit WorkoutSummary + WorkoutEventRecord; confidence is medium with RPE/HR, low with duration fallback.
     var dailyLoad: Double?
     var workoutLoad: Double?
     var activityLoad: Double?
@@ -204,13 +210,17 @@ final class DailyHealthSummaryRecord {
 
     func apply(snapshot: DailyHealthSnapshot, calendar: Calendar = .current, updatedAt: Date = Date()) {
         let snapshotWorkoutIDs = Set(snapshot.workouts.map(\.id))
-        let preservedManualWorkouts = decodedWorkouts().filter {
-            $0.source == "manual" && !snapshotWorkoutIDs.contains($0.id)
+        let preservedLocalWorkouts = decodedWorkouts().filter {
+            let source = $0.source ?? "healthKit"
+            return source != "healthKit" && !snapshotWorkoutIDs.contains($0.id)
         }
-        let mergedWorkouts = snapshot.workouts + preservedManualWorkouts
-        let preservedManualEnergy = preservedManualWorkouts.compactMap(\.energyKilocalories).reduce(0, +)
-        let preservedManualDuration = preservedManualWorkouts.reduce(0) {
+        let mergedWorkouts = snapshot.workouts + preservedLocalWorkouts
+        let preservedLocalEnergy = preservedLocalWorkouts.compactMap(\.energyKilocalories).reduce(0, +)
+        let preservedLocalDuration = preservedLocalWorkouts.reduce(0) {
             $0 + $1.end.timeIntervalSince($1.start) / 60.0
+        }
+        let preservedLocalLoad = preservedLocalWorkouts.reduce(0) {
+            $0 + max(0, $1.end.timeIntervalSince($1.start) / 60.0) * ($1.rpe ?? 5) * 0.3
         }
 
         date = calendar.startOfDay(for: snapshot.date)
@@ -230,21 +240,21 @@ final class DailyHealthSummaryRecord {
         remSleepPercent = snapshot.remSleepPercent
         sleepEfficiency = snapshot.sleepEfficiency
         steps = snapshot.steps
-        activeCalories = Self.adding(snapshot.activeCalories, preservedManualEnergy)
-        activeMinutes = Self.adding(snapshot.activeMinutes, preservedManualDuration)
+        activeCalories = Self.adding(snapshot.activeCalories, preservedLocalEnergy)
+        activeMinutes = Self.adding(snapshot.activeMinutes, preservedLocalDuration)
         workoutCount = mergedWorkouts.isEmpty ? snapshot.workoutCount : mergedWorkouts.count
         workoutTypes = mergedWorkouts.isEmpty
             ? snapshot.workoutTypes
             : Set(mergedWorkouts.map(\.activityName)).sorted().joined(separator: ", ")
-        workoutDuration = Self.adding(snapshot.workoutDuration, preservedManualDuration)
+        workoutDuration = Self.adding(snapshot.workoutDuration, preservedLocalDuration)
         bodyWeight = snapshot.bodyWeight
         bodyFatPercent = snapshot.bodyFatPercent
         bmi = snapshot.bmi
         oxygenSaturation = snapshot.oxygenSaturation
         respiratoryRate = snapshot.respiratoryRate
         wristTemperature = snapshot.wristTemperature
-        dailyLoad = snapshot.dailyLoad
-        workoutLoad = snapshot.workoutLoad
+        dailyLoad = Self.adding(snapshot.dailyLoad, preservedLocalLoad)
+        workoutLoad = Self.adding(snapshot.workoutLoad, preservedLocalLoad)
         activityLoad = snapshot.activityLoad
         trainingLoadRatio = snapshot.trainingLoadRatio
         atl = snapshot.atl
