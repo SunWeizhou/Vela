@@ -79,6 +79,15 @@ enum BackgroundTaskManager {
 
                 let modelContainer = try VelaModelContainer.make()
                 let modelContext = ModelContext(modelContainer)
+                let bgRun = AgentRunRecord(
+                    agentName: "background_refresh",
+                    startedAt: Date(),
+                    status: .running,
+                    reason: "BGAppRefreshTask",
+                    outputSummary: "Background refresh started."
+                )
+                modelContext.insert(bgRun)
+                try? modelContext.save()
 
                 // Build DashboardSummary from HealthKit
                 let queryService = HealthKitQueryService()
@@ -87,7 +96,7 @@ enum BackgroundTaskManager {
 
                 let dashboard = try await DailySummaryUseCase(
                     queryService: queryService
-                ).loadDashboard(for: Date(), modelContext: modelContext)
+                ).loadDashboard(for: Date(), modelContext: modelContext, syncDays: 7)
                 try? DailyLogService.refresh(dashboard: dashboard)
 
                 if config.autoEveningWikiSync, hour >= 23 || hour < 4 {
@@ -108,9 +117,26 @@ enum BackgroundTaskManager {
                     logger.info("No agent scheduled for current hour (\(hour)).")
                 }
 
+                bgRun.status = AgentRunStatus.success.rawValue
+                bgRun.endedAt = Date()
+                bgRun.outputSummary = "Background refresh completed. HealthKit sync window: 7 days."
+                try? modelContext.save()
                 task.setTaskCompleted(success: true)
             } catch {
                 logger.error("Background task failed: \(error.localizedDescription)")
+                if let modelContainer = try? VelaModelContainer.make() {
+                    let modelContext = ModelContext(modelContainer)
+                    modelContext.insert(AgentRunRecord(
+                        agentName: "background_refresh",
+                        startedAt: Date(),
+                        endedAt: Date(),
+                        status: .failed,
+                        reason: "BGAppRefreshTask",
+                        outputSummary: "Background refresh failed.",
+                        errorMessage: error.localizedDescription
+                    ))
+                    try? modelContext.save()
+                }
                 task.setTaskCompleted(success: false)
             }
         }

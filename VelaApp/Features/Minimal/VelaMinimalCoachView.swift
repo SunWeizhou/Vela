@@ -153,6 +153,12 @@ struct VelaSettingsView: View {
 
                         Divider().padding(.leading, 56)
 
+                        NavigationLink(destination: HealthDataResyncSettingsView()) {
+                            settingsRow(icon: "arrow.clockwise.icloud.fill", iconBg: Color(hex: "#30A2FF"), title: "健康数据重同步", value: "最近 90 天")
+                        }
+
+                        Divider().padding(.leading, 56)
+
                         NavigationLink(destination: TrustCenterView()) {
                             settingsRow(icon: "checkmark.shield.fill", iconBg: Color(hex: "#34C759"), title: "信任中心", value: "运行日志")
                         }
@@ -1041,6 +1047,58 @@ struct DataSourceSettingsView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
+    }
+}
+
+struct HealthDataResyncSettingsView: View {
+    @Environment(\.modelContext) private var modelContext
+    @State private var isSyncing = false
+    @State private var statusMessage = ""
+
+    var body: some View {
+        Form {
+            Section {
+                Text("重新读取并计算最近 90 天 Apple 健康数据。该操作会刷新已有缓存，适合补授权、换设备或发现旧数据未更新后使用。")
+                    .font(.caption)
+                    .foregroundStyle(VelaTheme.muted)
+
+                Button {
+                    resync()
+                } label: {
+                    if isSyncing {
+                        ProgressView()
+                    } else {
+                        Label("重新同步最近 90 天", systemImage: "arrow.clockwise")
+                    }
+                }
+                .disabled(isSyncing)
+            }
+
+            if !statusMessage.isEmpty {
+                Section {
+                    Text(statusMessage)
+                        .font(.caption)
+                }
+            }
+        }
+        .navigationTitle("健康数据重同步")
+    }
+
+    private func resync() {
+        isSyncing = true
+        statusMessage = "正在重新同步..."
+        Task { @MainActor in
+            do {
+                try await HealthKitSyncEngine(
+                    queryService: HealthKitQueryService(),
+                    modelContext: modelContext
+                ).syncPastDays(90, forceRefreshRecentDays: 90)
+                statusMessage = "最近 90 天健康数据已重新同步。"
+            } catch {
+                statusMessage = "重新同步失败：\(error.localizedDescription)"
+            }
+            isSyncing = false
+        }
     }
 }
 

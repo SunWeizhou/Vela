@@ -15,7 +15,11 @@ final class HealthKitSyncEngine {
 
     /// Backfills and calculates metrics for the past N calendar days.
     /// This runs a two-pass synchronization to prevent empty baseline bootstrapping.
-    func syncPastDays(_ days: Int, endingAt endDate: Date = Date()) async throws {
+    func syncPastDays(
+        _ days: Int,
+        endingAt endDate: Date = Date(),
+        forceRefreshRecentDays: Int? = nil
+    ) async throws {
         let snapshotRepo = HealthSnapshotRepository(modelContext: modelContext, calendar: calendar)
 
         // Pass 1: Build and save the raw daily snapshots from HealthKit for the last (42 + days)
@@ -23,9 +27,10 @@ final class HealthKitSyncEngine {
         let totalDaysToSync = 42 + days
         let cachedSnapshots = (try? snapshotRepo.fetchSnapshots(days: totalDaysToSync, endingAt: endDate)) ?? []
         let cachedDays = Set(cachedSnapshots.map { calendar.startOfDay(for: $0.date) })
+        let refreshWindow = forceRefreshRecentDays ?? min(days, 3)
         let recentRefreshCutoff = calendar.date(
             byAdding: .day,
-            value: -1,
+            value: -max(0, refreshWindow - 1),
             to: calendar.startOfDay(for: endDate)
         ) ?? calendar.startOfDay(for: endDate)
 

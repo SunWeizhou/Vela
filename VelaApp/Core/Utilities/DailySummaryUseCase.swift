@@ -62,14 +62,18 @@ final class DailySummaryUseCase {
         self.calendar = calendar
     }
 
-    func loadDashboard(for date: Date = Date(), modelContext: ModelContext? = nil) async throws -> DashboardSummary {
+    func loadDashboard(
+        for date: Date = Date(),
+        modelContext: ModelContext? = nil,
+        syncDays: Int = 3
+    ) async throws -> DashboardSummary {
         let now = date
         
-        // 1. Sync past 14 days from HealthKit first to SwiftData (Pass 1 loads raw features, Pass 2 scores everything correctly!)
+        // 1. Sync recent HealthKit data first. App foreground refreshes the latest 3 days by default.
         if let modelContext {
             let syncEngine = HealthKitSyncEngine(queryService: queryService, modelContext: modelContext, calendar: calendar)
             do {
-                try await syncEngine.syncPastDays(14, endingAt: now)
+                try await syncEngine.syncPastDays(syncDays, endingAt: now, forceRefreshRecentDays: syncDays)
             } catch {
                 PipelineDiagnosticsLogger.log(
                     modelContext: modelContext,
@@ -128,8 +132,6 @@ final class DailySummaryUseCase {
         let hrvHistory = snapshots42.compactMap(\.hrvAverage)
         let rhrHistory = snapshots42.compactMap(\.restingHeartRate)
         let respHistory = snapshots42.compactMap(\.respiratoryRate)
-        let dailyLoadsHistory = snapshots42.compactMap(\.dailyLoad) // Uses raw dailyLoad for history!
-        
         // Get raw workout list from HealthKit for the current day to preserve sample details
         let todayRange = DateRangeQuery.today(containing: now, calendar: calendar)
         let todayStrainSummary = try? await queryService.strainSummary(in: todayRange)
@@ -198,65 +200,35 @@ final class DailySummaryUseCase {
             extendedMetrics: extendedMetrics
         )
         
-        // 6. Run engines on computed context (strictly local snapshot + local raw baseline history)
-        let yesterday = calendar.date(byAdding: .day, value: -1, to: now) ?? now
-        let yesterdayStrain = snapshots42.first(where: { calendar.isDate($0.date, inSameDayAs: yesterday) })?.strainScore
-        
-        // Bedtime consistency
-        let recentBedtimes = snapshots42.filter { !calendar.isDate($0.date, inSameDayAs: now) }.compactMap(\.bedtime)
-        let sleepScore = SleepScoreEngine().calculate(
-            from: ScoreEngineFactory.sleep(
-                from: context,
-                sleepTarget: SleepTargetSettings.targetMinutes(),
-                todayBedtime: context.sleepSummary?.bedtime ?? snapshot.bedtime,
-                recentBedtimes: recentBedtimes
-            )
+        // 6. Run the unified computation pipeline. HealthKitSyncEngine uses the same entry point,
+        // so background sync, dashboard and AI context read identical score semantics.
+        var pipelineSnapshot = snapshot
+        pipelineSnapshot.workouts = workouts
+        pipelineSnapshot.workoutCount = workouts.count
+        pipelineSnapshot.workoutDuration = workouts.reduce(0) { $0 + $1.end.timeIntervalSince($1.start) / 60.0 }
+        pipelineSnapshot.activeMinutes = snapshot.activeMinutes ?? pipelineSnapshot.workoutDuration
+        pipelineSnapshot.sleepHours = pipelineSnapshot.sleepHours ?? context.sleepSummary.map { Double($0.totalSleepMinutes) / 60.0 }
+        pipelineSnapshot.bedtime = pipelineSnapshot.bedtime ?? context.sleepSummary?.bedtime
+        pipelineSnapshot.wakeTime = pipelineSnapshot.wakeTime ?? context.sleepSummary?.wakeTime
+        pipelineSnapshot.awakeMinutes = pipelineSnapshot.awakeMinutes ?? context.sleepSummary?.stageMinutes[.awake].map { Double($0) }
+        pipelineSnapshot.deepSleepMinutes = pipelineSnapshot.deepSleepMinutes ?? context.sleepSummary?.stageMinutes[.deep].map { Double($0) }
+        pipelineSnapshot.remSleepMinutes = pipelineSnapshot.remSleepMinutes ?? context.sleepSummary?.stageMinutes[.rem].map { Double($0) }
+        pipelineSnapshot.awakeEpisodeCount = pipelineSnapshot.awakeEpisodeCount ?? context.sleepSummary?.segments.filter { $0.stage == .awake && $0.end.timeIntervalSince($0.start) >= 120 }.count
+
+        let historicalSnapshots = snapshots42.filter { !calendar.isDate($0.date, inSameDayAs: now) }
+        let metrics = MetricComputationPipeline().compute(
+            for: pipelineSnapshot,
+            history: historicalSnapshots
         )
+        let sleepScore = metrics.sleepScore
         let resolvedSleepSummary = ScoreEngineFactory.resolvedSleepSummary(
             from: context,
             sleepScore: sleepScore.score
         )
-        
-        let recovery = RecoveryScoreEngine().calculate(
-            from: ScoreEngineFactory.recovery(
-                from: context,
-                sleepScore: sleepScore.value,
-                strainScoreYesterday: yesterdayStrain,
-                hrvHistory: hrvHistory,
-                rhrHistory: rhrHistory
-            )
-        )
-        
-        let strain = StrainScoreEngine().calculate(
-            from: await ScoreEngineFactory.strain(
-                from: context,
-                recoveryScore: recovery.score,
-                last28DaysDailyLoads: dailyLoadsHistory,
-                queryService: queryService
-            )
-        )
-        
-        let stress = StressIndexEngine().calculate(
-            from: ScoreEngineFactory.stress(
-                from: context,
-                sleepScore: sleepScore.value,
-                strainScore: strain.score,
-                hrvHistory: hrvHistory,
-                rhrHistory: rhrHistory
-            )
-        )
-        
-        let energy = EnergyBankEngine().calculate(
-            from: ScoreEngineFactory.energyBank(
-                from: context,
-                recoveryScore: recovery.score,
-                sleepScore: context.sleepSummary == nil ? nil : sleepScore.value,
-                strainScore: strain.score,
-                stressIndex: stress.stressIndex,
-                strainHistory: dailyLoadsHistory,
-                trainingLoadStatus: strain.trainingLoadStatus // Wire training load status!
-            )
-        )
+        let recovery = metrics.recovery
+        let strain = metrics.strain
+        let stress = metrics.stress
+        let energy = metrics.energy
         
         let healthAge = HealthAgeTrendEngine().calculate(
             from: ScoreEngineFactory.healthAge(

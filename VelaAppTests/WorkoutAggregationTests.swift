@@ -87,6 +87,10 @@ final class WorkoutAggregationTests: XCTestCase {
         XCTAssertEqual(summary.workoutDuration ?? -1, 60, accuracy: 0.1)
     }
 
+    func testWorkoutSaveCreatesWorkoutEvent() throws {
+        try testStrengthWorkoutUpsertCreatesWorkoutEvent()
+    }
+
     func testStrengthWorkoutUpsertIsIdempotent() throws {
         let store = try makeStore()
         let start = makeDate()
@@ -103,6 +107,10 @@ final class WorkoutAggregationTests: XCTestCase {
         XCTAssertEqual(summary.workoutCount, 1)
         XCTAssertEqual(summary.workoutDuration ?? -1, 60, accuracy: 0.1)
         XCTAssertEqual(summary.workoutLoad ?? -1, 144, accuracy: 0.1)
+    }
+
+    func testRepeatedWorkoutSaveDoesNotDuplicateEvent() throws {
+        try testStrengthWorkoutUpsertIsIdempotent()
     }
 
     func testAggregateDayDoesNotDuplicateHealthKitWorkout() throws {
@@ -180,6 +188,10 @@ final class WorkoutAggregationTests: XCTestCase {
         XCTAssertEqual(summary.activeCalories ?? -1, 340, accuracy: 0.1)
     }
 
+    func testManualWorkoutPreservedAfterHealthKitSync() throws {
+        try testAggregateDayPreservesManualWorkoutAfterHealthKitResync()
+    }
+
     func testXunjiImportIsIdempotentByExternalID() throws {
         let store = try makeStore()
         let start = makeDate(hour: 19)
@@ -220,6 +232,24 @@ final class WorkoutAggregationTests: XCTestCase {
         let summary = try XCTUnwrap(fetchDailySummary(store.context, date: start))
         XCTAssertEqual(summary.workoutCount, 1)
         XCTAssertEqual(summary.workoutDuration ?? -1, 60, accuracy: 0.1)
+    }
+
+    func testWorkoutSaveUpdatesDailySummary() throws {
+        let store = try makeStore()
+        let start = makeDate(hour: 16)
+        let workout = makeStrengthWorkout(start: start, duration: 50)
+        store.context.insert(workout)
+
+        try WorkoutAggregationService.shared.upsertWorkoutEvent(
+            from: workout,
+            modelContext: store.context,
+            sessionRPE: 6
+        )
+
+        let summary = try XCTUnwrap(fetchDailySummary(store.context, date: start))
+        XCTAssertEqual(summary.workoutCount, 1)
+        XCTAssertEqual(summary.workoutDuration ?? -1, 50, accuracy: 0.1)
+        XCTAssertEqual(summary.workoutLoad ?? -1, 90, accuracy: 0.1)
     }
 
     func testWorkoutLoadStableAfterRepeatedDashboardRefresh() throws {

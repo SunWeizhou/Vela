@@ -50,6 +50,9 @@ struct LocalMuscleFatigue: Codable, Hashable, Sendable {
 
 struct StrengthWorkoutAnalysis: Codable, Hashable, Sendable {
     var totalVolumeKg: Double
+    var plannedSets: Int
+    var completedSets: Int
+    var uncompletedSets: Int
     var totalSets: Int
     var effectiveSets: Int
     var totalReps: Int
@@ -62,6 +65,9 @@ struct StrengthWorkoutAnalysis: Codable, Hashable, Sendable {
 
     init(
         totalVolumeKg: Double,
+        plannedSets: Int? = nil,
+        completedSets: Int? = nil,
+        uncompletedSets: Int? = nil,
         totalSets: Int,
         effectiveSets: Int,
         totalReps: Int,
@@ -73,6 +79,9 @@ struct StrengthWorkoutAnalysis: Codable, Hashable, Sendable {
         summaryText: String
     ) {
         self.totalVolumeKg = totalVolumeKg
+        self.plannedSets = plannedSets ?? totalSets
+        self.completedSets = completedSets ?? totalSets
+        self.uncompletedSets = uncompletedSets ?? max(0, (plannedSets ?? totalSets) - (completedSets ?? totalSets))
         self.totalSets = totalSets
         self.effectiveSets = effectiveSets
         self.totalReps = totalReps

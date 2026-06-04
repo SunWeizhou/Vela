@@ -11,7 +11,8 @@ struct TrainingAnalyticsService: Sendable {
         exerciseLibrary: [ExerciseDefinitionRecord] = ExerciseLibraryService.defaultDefinitions()
     ) -> StrengthWorkoutAnalysis {
         var volume = 0.0
-        var sets = 0
+        var plannedSets = 0
+        var completedSets = 0
         var effectiveSets = 0
         var reps = 0
         var muscleGroupSets: [String: Int] = [:]
@@ -21,7 +22,9 @@ struct TrainingAnalyticsService: Sendable {
         for exercise in workout.exercises {
             let muscle = resolvedMuscleGroup(for: exercise, library: exerciseLibrary)
             for set in exercise.sets {
-                sets += 1
+                plannedSets += 1
+                guard set.isCompleted == true else { continue }
+                completedSets += 1
                 reps += set.repetitions
                 let setVolume = set.volumeKilograms
                 volume += setVolume
@@ -39,10 +42,14 @@ struct TrainingAnalyticsService: Sendable {
         let records = detectPersonalRecords(workout: workout, history: history)
         let density = workout.durationMinutes > 0 ? volume / Double(workout.durationMinutes) : 0
         let muscleText = muscleGroupSets.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }.joined(separator: ", ")
-        let summary = "\(workout.title): \(effectiveSets) effective sets, \(Int(volume.rounded())) kg\(muscleText.isEmpty ? "" : ", \(muscleText)")"
+        let uncompletedSets = max(0, plannedSets - completedSets)
+        let summary = "\(workout.title): \(completedSets)/\(plannedSets) completed sets, \(effectiveSets) effective sets, \(Int(volume.rounded())) kg\(uncompletedSets > 0 ? ", \(uncompletedSets) uncompleted" : "")\(muscleText.isEmpty ? "" : ", \(muscleText)")"
         return StrengthWorkoutAnalysis(
             totalVolumeKg: volume,
-            totalSets: sets,
+            plannedSets: plannedSets,
+            completedSets: completedSets,
+            uncompletedSets: uncompletedSets,
+            totalSets: plannedSets,
             effectiveSets: effectiveSets,
             totalReps: reps,
             muscleGroupSets: muscleGroupSets,
@@ -57,13 +64,13 @@ struct TrainingAnalyticsService: Sendable {
     func detectPersonalRecords(workout: StrengthWorkoutRecord, history: [StrengthWorkoutRecord]) -> [PersonalRecord] {
         var records: [PersonalRecord] = []
         for exercise in workout.exercises {
-            let workSets = exercise.sets.filter { !$0.isWarmup }
+            let workSets = exercise.sets.filter { !$0.isWarmup && $0.isCompleted == true }
             guard let maxWeight = workSets.map(\.weightKilograms).max(), !workSets.isEmpty else { continue }
             let maxE1RM = workSets
                 .filter { $0.weightKilograms > 0 && $0.repetitions >= 1 && $0.repetitions <= 12 }
                 .map { $0.weightKilograms * (1 + Double($0.repetitions) / 30) }
                 .max() ?? 0
-            let priorSets = history.flatMap(\.exercises).filter { namesMatch($0.name, exercise.name) }.flatMap(\.sets).filter { !$0.isWarmup }
+            let priorSets = history.flatMap(\.exercises).filter { namesMatch($0.name, exercise.name) }.flatMap(\.sets).filter { !$0.isWarmup && $0.isCompleted == true }
             guard !priorSets.isEmpty else { continue }
             let priorMaxWeight = priorSets.map(\.weightKilograms).max() ?? 0
             let priorMaxE1RM = priorSets
@@ -146,6 +153,7 @@ struct TrainingAnalyticsService: Sendable {
     }
 
     private func isEffective(_ set: StrengthSetLog, equipment: String) -> Bool {
+        guard set.isCompleted == true else { return false }
         guard !set.isWarmup, set.repetitions >= 3 else { return false }
         let supportsBodyweight = equipment.lowercased().contains("bodyweight") || equipment.contains("自重")
         guard set.weightKilograms > 0 || supportsBodyweight else { return false }

@@ -350,7 +350,7 @@ struct AIContextBuilder {
                 var localMaxWeight = 0.0
                 var localMax1RM = 0.0
 
-                for set in exercise.sets where !set.isWarmup {
+                for set in exercise.sets where !set.isWarmup && set.isCompleted == true {
                     setsCount += 1
                     localMaxWeight = max(localMaxWeight, set.weightKilograms)
                     let epley1RM = set.weightKilograms * (1.0 + Double(set.repetitions) / 30.0)

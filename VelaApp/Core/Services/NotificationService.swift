@@ -31,6 +31,7 @@ final class NotificationService {
         static let bedtimeHour = "agent_bedtime_hour"
         static let bedtimeMinute = "agent_bedtime_minute"
         static let lastAbnormalAlertDate = "notif_last_abnormal_alert_date"
+        static let lastAbnormalAlertSeverities = "notif_last_abnormal_alert_severities"
     }
 
     private init() {
@@ -160,9 +161,10 @@ final class NotificationService {
             logger.info("Morning brief alerts disabled, skipping notification.")
             return
         }
+        let content = Self.morningBriefNotificationContent(language: AppLanguage.stored)
         sendNotification(
-            title: "Your morning brief is ready",
-            body: "Check your recovery, sleep, and strain insights for today.",
+            title: content.title,
+            body: content.body,
             category: .morningBrief
         )
     }
@@ -179,8 +181,9 @@ final class NotificationService {
         cancelBedtimeReminder()
 
         let content = UNMutableNotificationContent()
-        content.title = "Time to wind down"
-        content.body = "Your scheduled bedtime is approaching. Start relaxing to improve your sleep quality."
+        let localized = Self.bedtimeNotificationContent(language: AppLanguage.stored)
+        content.title = localized.title
+        content.body = localized.body
         content.sound = .default
         content.categoryIdentifier = VelaNotificationCategory.bedtimeReminder.identifier
 
@@ -222,46 +225,12 @@ final class NotificationService {
             return
         }
 
-        // Debounce: only send abnormal alerts once per calendar day
-        if let lastDateStr = defaults.string(forKey: PreferenceKey.lastAbnormalAlertDate) {
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withFullDate]
-            if let lastDate = formatter.date(from: lastDateStr),
-               Calendar.current.isDateInToday(lastDate) {
-                logger.info("Abnormal alert already sent today, skipping.")
-                return
-            }
-        }
-
-        var alerts: [String] = []
-
-        // HRV drops >20% below personal baseline
-        if let hrv = snapshot.hrvAverage, let baseline = baselines?.hrvBaselineMean, baseline > 0 {
-            let drop = (baseline - hrv) / baseline
-            if drop > 0.20 {
-                let pct = Int(drop * 100)
-                alerts.append("HRV dropped \(pct)% below your personal baseline (\(String(format: "%.0f", hrv)) vs \(String(format: "%.0f", baseline)) ms)")
-            }
-        }
-
-        // RHR rises >10% above baseline
-        if let rhr = snapshot.restingHeartRate, let baseline = baselines?.rhrBaselineMean, baseline > 0 {
-            let rise = (rhr - baseline) / baseline
-            if rise > 0.10 {
-                let pct = Int(rise * 100)
-                alerts.append("RHR elevated \(pct)% above your baseline (\(String(format: "%.0f", rhr)) vs \(String(format: "%.0f", baseline)) bpm)")
-            }
-        }
-
-        // Recovery score < 40
-        if let recovery = snapshot.recoveryScore, recovery < 40 {
-            alerts.append("Recovery score is low (\(String(format: "%.0f", recovery))) — consider a rest day")
-        }
-
-        // Stress index > 80
-        if let stress = snapshot.stressIndex, stress > 80 {
-            alerts.append("Stress index is high (\(String(format: "%.0f", stress))) — consider relaxation activities")
-        }
+        let candidates = Self.abnormalMetricAlertCandidates(
+            snapshot: snapshot,
+            baselines: baselines,
+            language: AppLanguage.stored
+        )
+        let alerts = candidates.filter { shouldSendAbnormalAlert(metric: $0.metric, severity: $0.severity) }
 
         guard !alerts.isEmpty else {
             logger.info("No abnormal metrics detected.")
@@ -269,15 +238,15 @@ final class NotificationService {
         }
 
         // Build summary notification
-        let title = alerts.count == 1 ? "Health Alert" : "\(alerts.count) Health Alerts"
-        let body = alerts.joined(separator: ". ")
+        let isChinese = AppLanguage.stored.isChinese
+        let title = alerts.count == 1
+            ? (isChinese ? "健康信号提醒" : "Health Signal")
+            : (isChinese ? "\(alerts.count) 个健康信号提醒" : "\(alerts.count) Health Signals")
+        let body = alerts.map(\.message).joined(separator: isChinese ? "。" : ". ")
 
         sendNotification(title: title, body: body, category: .abnormalMetric)
 
-        // Record that we sent an alert today
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withFullDate]
-        defaults.set(formatter.string(from: Date()), forKey: PreferenceKey.lastAbnormalAlertDate)
+        recordSentAbnormalAlerts(alerts)
     }
 
     // MARK: - Consecutive Sleep Check
@@ -315,4 +284,120 @@ final class NotificationService {
             }
         }
     }
+
+    private func shouldSendAbnormalAlert(metric: String, severity: String, date: Date = Date()) -> Bool {
+        let key = abnormalAlertStorageKey(metric: metric, date: date)
+        let lastSeverity = abnormalAlertSeverities()[key]
+        return Self.severityRank(severity) > Self.severityRank(lastSeverity)
+    }
+
+    private func recordSentAbnormalAlerts(_ alerts: [AbnormalMetricAlertCandidate], date: Date = Date()) {
+        var values = abnormalAlertSeverities()
+        for alert in alerts {
+            values[abnormalAlertStorageKey(metric: alert.metric, date: date)] = alert.severity
+        }
+        defaults.set(values, forKey: PreferenceKey.lastAbnormalAlertSeverities)
+    }
+
+    private func abnormalAlertSeverities() -> [String: String] {
+        defaults.dictionary(forKey: PreferenceKey.lastAbnormalAlertSeverities) as? [String: String] ?? [:]
+    }
+
+    private func abnormalAlertStorageKey(metric: String, date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withFullDate]
+        return "\(metric)|\(formatter.string(from: date))"
+    }
+
+    static func morningBriefNotificationContent(language: AppLanguage) -> (title: String, body: String) {
+        language.isChinese
+            ? ("晨间简报已生成", "查看今天的恢复、睡眠和训练负荷建议。")
+            : ("Your morning brief is ready", "Check today's recovery, sleep, and training guidance.")
+    }
+
+    static func bedtimeNotificationContent(language: AppLanguage) -> (title: String, body: String) {
+        language.isChinese
+            ? ("准备进入睡前节奏", "计划睡眠时间快到了，可以开始放松并减少刺激。")
+            : ("Time to wind down", "Your planned bedtime is approaching. Start relaxing and reduce stimulation.")
+    }
+
+    static func abnormalMetricAlertCandidates(
+        snapshot: DailyHealthSnapshot,
+        baselines: PersonalBaselines?,
+        language: AppLanguage
+    ) -> [AbnormalMetricAlertCandidate] {
+        var alerts: [AbnormalMetricAlertCandidate] = []
+        let isChinese = language.isChinese
+
+        if let hrv = snapshot.hrvAverage, let baseline = baselines?.hrvBaselineMean, baseline > 0 {
+            let drop = (baseline - hrv) / baseline
+            if drop > 0.20 {
+                let severity = drop > 0.35 ? "high" : "medium"
+                let pct = Int(drop * 100)
+                alerts.append(.init(
+                    metric: "hrv",
+                    severity: severity,
+                    message: isChinese
+                        ? "HRV 比个人基线低 \(pct)%，今天适合降低训练压力"
+                        : "HRV is \(pct)% below your baseline; consider reducing training pressure today"
+                ))
+            }
+        }
+
+        if let rhr = snapshot.restingHeartRate, let baseline = baselines?.rhrBaselineMean, baseline > 0 {
+            let rise = (rhr - baseline) / baseline
+            if rise > 0.10 {
+                let severity = rise > 0.18 ? "high" : "medium"
+                let pct = Int(rise * 100)
+                alerts.append(.init(
+                    metric: "restingHeartRate",
+                    severity: severity,
+                    message: isChinese
+                        ? "静息心率比个人基线高 \(pct)%，建议观察恢复状态"
+                        : "Resting heart rate is \(pct)% above baseline; keep an eye on recovery"
+                ))
+            }
+        }
+
+        if let recovery = snapshot.recoveryScore, recovery < 40 {
+            alerts.append(.init(
+                metric: "recovery",
+                severity: recovery < 25 ? "high" : "medium",
+                message: isChinese
+                    ? "恢复分较低（\(String(format: "%.0f", recovery))），今天建议安排轻量或恢复性训练"
+                    : "Recovery is low (\(String(format: "%.0f", recovery))); consider light or recovery-focused training today"
+            ))
+        }
+
+        if let stress = snapshot.stressIndex, stress > 80 {
+            alerts.append(.init(
+                metric: "stress",
+                severity: stress > 90 ? "high" : "medium",
+                message: isChinese
+                    ? "压力指数偏高（\(String(format: "%.0f", stress))），可以安排放松或呼吸练习"
+                    : "Stress index is elevated (\(String(format: "%.0f", stress))); consider relaxation or breathing work"
+            ))
+        }
+
+        return alerts
+    }
+
+    static func shouldSendAbnormalAlert(previousSeverity: String?, newSeverity: String) -> Bool {
+        severityRank(newSeverity) > severityRank(previousSeverity)
+    }
+
+    private static func severityRank(_ severity: String?) -> Int {
+        switch severity {
+        case "low": return 1
+        case "medium": return 2
+        case "high": return 3
+        default: return 0
+        }
+    }
+}
+
+struct AbnormalMetricAlertCandidate: Hashable {
+    var metric: String
+    var severity: String
+    var message: String
 }

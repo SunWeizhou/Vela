@@ -8,6 +8,45 @@ private struct RestTimerState {
     var setNumber: Int
 }
 
+@MainActor
+final class StrengthWorkoutSessionViewModel: ObservableObject {
+    private var draftSaveTask: Task<Void, Never>?
+
+    func scheduleDraftSave(_ action: @escaping @MainActor () -> Void) {
+        draftSaveTask?.cancel()
+        draftSaveTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            guard !Task.isCancelled else { return }
+            action()
+        }
+    }
+
+    func saveImmediately(_ action: @escaping @MainActor () -> Void) {
+        draftSaveTask?.cancel()
+        action()
+    }
+
+    deinit {
+        draftSaveTask?.cancel()
+    }
+}
+
+enum StrengthWorkoutSessionPrefill {
+    static func previousCompletedSets(
+        for exerciseName: String,
+        in workoutHistory: [StrengthWorkoutRecord]
+    ) -> [StrengthSetLog] {
+        let normalizedName = exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalizedName.isEmpty,
+              let previous = workoutHistory.lazy
+                .flatMap(\.exercises)
+                .first(where: { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == normalizedName }) else {
+            return []
+        }
+        return previous.sets.filter { !$0.isWarmup && $0.isCompleted == true }
+    }
+}
+
 struct StrengthWorkoutLogSheetView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -30,6 +69,8 @@ struct StrengthWorkoutLogSheetView: View {
     @State private var closeAfterSummary = false
     @State private var now = Date()
     @State private var isLoaded = false
+    @State private var showIgnoreUncompletedConfirmation = false
+    @StateObject private var sessionViewModel = StrengthWorkoutSessionViewModel()
 
     private let startingTemplateID: UUID?
     private let equipmentOptions = ["杠铃", "哑铃", "固定器械", "绳索", "壶铃", "自重", "其他"]
@@ -81,7 +122,7 @@ struct StrengthWorkoutLogSheetView: View {
                     Button("放弃") { showDiscardConfirmation = true }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { save() }
+                    Button("完成") { requestSave() }
                         .disabled(validExercises.isEmpty)
                 }
             }
@@ -97,9 +138,9 @@ struct StrengthWorkoutLogSheetView: View {
             try? ExerciseLibraryService.seedDefaultsIfNeeded(modelContext: modelContext)
             loadDraftIfNeeded()
         }
-        .onChange(of: title) { _, _ in if isLoaded { saveDraft() } }
-        .onChange(of: notes) { _, _ in if isLoaded { saveDraft() } }
-        .onChange(of: exercises) { _, _ in if isLoaded { saveDraft() } }
+        .onChange(of: title) { _, _ in scheduleDraftSave() }
+        .onChange(of: notes) { _, _ in scheduleDraftSave() }
+        .onChange(of: exercises) { _, _ in scheduleDraftSave() }
         .sheet(isPresented: $showExercisePicker) {
             ExercisePickerSheet { definition in
                 addExercise(definition)
@@ -123,6 +164,12 @@ struct StrengthWorkoutLogSheetView: View {
             Button("继续训练", role: .cancel) {}
         } message: {
             Text("放弃后将清除本次训练的草稿。")
+        }
+        .confirmationDialog("忽略未完成组？", isPresented: $showIgnoreUncompletedConfirmation, titleVisibility: .visible) {
+            Button("忽略并保存", role: .destructive) { save(ignoringUncompletedSets: true) }
+            Button("返回继续记录", role: .cancel) {}
+        } message: {
+            Text("未打勾的组不会计入训练总结、肌群疲劳或今日负荷。")
         }
         .alert("无法保存训练", isPresented: Binding(
             get: { saveError != nil },
@@ -302,13 +349,22 @@ struct StrengthWorkoutLogSheetView: View {
         exercises.filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
-    private func save() {
+    private func requestSave() {
+        if hasUncompletedSets {
+            showIgnoreUncompletedConfirmation = true
+        } else {
+            save(ignoringUncompletedSets: false)
+        }
+    }
+
+    private func save(ignoringUncompletedSets: Bool) {
+        let exercisesToSave = ignoringUncompletedSets ? completedOnlyExercises : validExercises
         let record = StrengthWorkoutRecord(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "力量训练" : title,
             startedAt: startedAt,
             durationMinutes: durationMinutes,
             notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
-            exercises: validExercises
+            exercises: exercisesToSave
         )
         modelContext.insert(record)
         do {
@@ -340,13 +396,27 @@ struct StrengthWorkoutLogSheetView: View {
     }
 
     private func addExercise(_ definition: ExerciseDefinitionRecord) {
+        let previousSets = previousCompletedSets(for: definition.name)
+        let seedSets = previousSets.isEmpty
+            ? [StrengthSetLog(repetitions: 10, weightKilograms: 20.0, isWarmup: false, rpe: nil, rir: nil, isCompleted: false, completedAt: nil)]
+            : previousSets.prefix(3).map {
+                StrengthSetLog(
+                    repetitions: $0.repetitions,
+                    weightKilograms: $0.weightKilograms,
+                    isWarmup: false,
+                    rpe: $0.rpe,
+                    rir: $0.rir,
+                    isCompleted: false,
+                    completedAt: nil
+                )
+            }
         exercises.append(StrengthExerciseLog(
             exerciseDefinitionId: definition.id,
             exerciseCanonicalKey: definition.canonicalKey,
             name: definition.name,
             equipment: localizedEquipment(definition.equipment),
             primaryMuscleGroup: definition.primaryMuscleGroup,
-            sets: [StrengthSetLog(repetitions: 10, weightKilograms: 20.0, isWarmup: false, rpe: nil, rir: nil, isCompleted: false, completedAt: nil)]
+            sets: Array(seedSets)
         ))
     }
 
@@ -379,19 +449,22 @@ struct StrengthWorkoutLogSheetView: View {
             
             let reps = Int(item.targetReps) ?? (item.targetReps.components(separatedBy: CharacterSet.decimalDigits.inverted).first.flatMap(Int.init) ?? 10)
             
+            let previousSets = previousCompletedSets(for: item.name)
+            let defaultWeight = previousSets.first?.weightKilograms ?? 20.0
             return StrengthExerciseLog(
                 exerciseDefinitionId: finalId,
                 exerciseCanonicalKey: finalKey,
                 name: item.name,
                 equipment: localizedEquipment(definition?.equipment ?? libDef?.equipment ?? "other"),
                 primaryMuscleGroup: definition?.primaryMuscleGroup ?? libDef?.primaryMuscleGroup,
-                sets: (0..<max(1, item.targetSets)).map { _ in
-                    StrengthSetLog(
-                        repetitions: reps,
-                        weightKilograms: 20.0,
+                sets: (0..<max(1, item.targetSets)).map { index in
+                    let previous = index < previousSets.count ? previousSets[index] : nil
+                    return StrengthSetLog(
+                        repetitions: previous?.repetitions ?? reps,
+                        weightKilograms: previous?.weightKilograms ?? defaultWeight,
                         isWarmup: false,
-                        rpe: item.targetRPE,
-                        rir: nil,
+                        rpe: previous?.rpe ?? item.targetRPE,
+                        rir: previous?.rir,
                         isCompleted: false,
                         completedAt: nil
                     )
@@ -418,18 +491,23 @@ struct StrengthWorkoutLogSheetView: View {
     }
 
     private func previousPerformance(for exerciseName: String) -> String? {
-        guard !exerciseName.isEmpty,
-              let previous = workoutHistory.lazy.flatMap(\.exercises).first(where: { $0.name == exerciseName }) else {
+        let sets = previousCompletedSets(for: exerciseName)
+        guard !sets.isEmpty else {
             return nil
         }
-        return previous.sets.filter { !($0.isWarmup) }.prefix(3).map {
+        return sets.prefix(3).map {
             "\($0.weightKilograms.formatted(.number.precision(.fractionLength(0...1))))kg × \($0.repetitions)"
         }.joined(separator: "，")
+    }
+
+    private func previousCompletedSets(for exerciseName: String) -> [StrengthSetLog] {
+        StrengthWorkoutSessionPrefill.previousCompletedSets(for: exerciseName, in: workoutHistory)
     }
 
     private func complete(set: Binding<StrengthSetLog>, in exercise: Binding<StrengthExerciseLog>) {
         set.wrappedValue.isCompleted = !(set.wrappedValue.isCompleted ?? false)
         set.wrappedValue.completedAt = (set.wrappedValue.isCompleted ?? false) ? Date() : nil
+        sessionViewModel.saveImmediately { saveDraft() }
         guard set.wrappedValue.isCompleted ?? false,
               let index = exercise.wrappedValue.sets.firstIndex(where: { $0.id == set.wrappedValue.id }) else { return }
         restTimer = RestTimerState(endsAt: Date().addingTimeInterval(90), exerciseName: exercise.wrappedValue.name, setNumber: index + 1)
@@ -514,6 +592,23 @@ struct StrengthWorkoutLogSheetView: View {
             modelContext.insert(draft)
         }
         try? modelContext.save()
+    }
+
+    private func scheduleDraftSave() {
+        guard isLoaded else { return }
+        sessionViewModel.scheduleDraftSave { saveDraft() }
+    }
+
+    private var hasUncompletedSets: Bool {
+        validExercises.flatMap(\.sets).contains { $0.isCompleted != true }
+    }
+
+    private var completedOnlyExercises: [StrengthExerciseLog] {
+        validExercises.compactMap { exercise in
+            var copy = exercise
+            copy.sets = exercise.sets.filter { $0.isCompleted == true }
+            return copy.sets.isEmpty ? nil : copy
+        }
     }
 
     private func discardWorkout() {
@@ -607,8 +702,10 @@ struct StrengthWorkoutSummarySheet: View {
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                         metric("时长", "\(workout?.durationMinutes ?? 0) 分钟")
                         metric("总容量", "\(Int(summary.totalVolumeKg.rounded())) kg")
-                        metric("总组数", "\(summary.totalSets)")
+                        metric("计划组", "\(summary.plannedSets)")
+                        metric("完成组", "\(summary.completedSets)")
                         metric("有效组", "\(summary.effectiveSets)")
+                        metric("未完成", "\(summary.uncompletedSets)")
                         metric("总次数", "\(summary.totalReps)")
                         metric("训练密度", "\(Int(summary.densityKgPerMinute.rounded())) kg/min")
                     }
