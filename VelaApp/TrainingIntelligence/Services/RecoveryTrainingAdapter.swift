@@ -6,7 +6,7 @@ struct RecoveryTrainingAdapter: Sendable {
 
     func adapt(input: RecoveryTrainingInput) -> TrainingAdaptationRecommendation {
         var reasons: [String] = []
-        let baseMultiplier: Double
+        var baseMultiplier: Double
         let readiness: String
         var intensity: String
         var shouldTrain = true
@@ -35,18 +35,22 @@ struct RecoveryTrainingAdapter: Sendable {
 
         if input.sleepScore < 75 {
             intensity = intensity == "recovery" ? intensity : "low"
+            baseMultiplier = min(baseMultiplier, 0.75)
             reasons.append(AppLanguage.stored.isChinese ? "睡眠质量低于高强度训练阈值。" : "Sleep is below the threshold for high-intensity training.")
         }
         if let hrv = input.hrvZScore, hrv <= -1 {
             intensity = intensity == "recovery" ? intensity : "low"
+            baseMultiplier = min(baseMultiplier, 0.8)
             reasons.append(AppLanguage.stored.isChinese ? "HRV 明显低于基线水平。" : "HRV is meaningfully below baseline.")
         }
         if let rhr = input.restingHRZScore, rhr >= 1 {
             intensity = intensity == "recovery" ? intensity : "low"
+            baseMultiplier = min(baseMultiplier, 0.8)
             reasons.append(AppLanguage.stored.isChinese ? "静息心率明显高于基线水平。" : "Resting heart rate is elevated above baseline.")
         }
         if let tsb = input.tsb, tsb <= -15 {
             intensity = intensity == "recovery" ? intensity : "low"
+            baseMultiplier = min(baseMultiplier, 0.7)
             reasons.append(AppLanguage.stored.isChinese ? "训练压力平衡（TSB）处于深度负值。" : "Training stress balance is deeply negative.")
         }
 

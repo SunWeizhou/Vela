@@ -486,76 +486,15 @@ final class CoachChatVM: ObservableObject {
             )
 
             var agentMessages = chatMessages
-            let maxIterations = 3
             var fullResponse = ""
-            var wikiFiles: [String] = []
-            var wikiUpdateSummaries: [String] = []
             var wasStreamed = false
 
-            // Agentic loop: LLM decides whether to call tools or answer
-            for iteration in 0..<maxIterations {
-                let response = try await provider.chat(
-                    messages: agentMessages,
-                    tools: toolRegistry.definitions
-                )
-
-                // Tool calls detected → execute and feed back
-                if let toolCalls = response.toolCalls, !toolCalls.isEmpty {
-                    let toolNames = toolCalls.map { $0.name }.joined(separator: ", ")
-                    streamingContent = L10n.t(
-                        "🔧 Calling tools: \(toolNames)...",
-                        "🔧 正在调用工具: \(toolNames)..."
-                    )
-
-                    // Append assistant message with tool_calls and reasoning_content
-                    agentMessages.append(ChatMessage(
-                        role: .assistant,
-                        content: response.content,
-                        toolCalls: toolCalls,
-                        reasoningContent: response.reasoningContent
-                    ))
-
-                    // Execute each tool and append results
-                    for tc in toolCalls {
-                        let result = await toolRegistry.execute(name: tc.name, arguments: tc.arguments)
-                        agentMessages.append(ChatMessage(
-                            role: .tool,
-                            content: result,
-                            toolCallId: tc.id
-                        ))
-                        // Track wiki updates from tool calls
-                        if tc.name == "update_user_wiki", !result.hasPrefix("Error"),
-                           let data = tc.arguments.data(using: .utf8),
-                           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                           let file = json["file"] as? String {
-                            wikiFiles.append(file)
-                            if let content = json["content"] as? String {
-                                wikiUpdateSummaries.append("\(file): \(content)")
-                            }
-                        }
-                    }
-
-                    streamingContent = ""
-                    
-                    // If this was the first or second iteration, we stream the final response!
-                    if iteration < maxIterations - 1 {
-                        let stream = provider.streamChat(messages: agentMessages)
-                        var streamedText = ""
-                        wasStreamed = true
-                        for try await delta in stream {
-                            streamedText += delta
-                            streamingContent = streamedText
-                        }
-                        fullResponse = streamedText
-                        break
-                    }
-                    continue
-                }
-
-                // Final text response (no more tool calls)
-                fullResponse = response.content
-                break
-            }
+            let agentLoop = AgentLoop(provider: provider, toolRegistry: toolRegistry)
+            let loopResult = try await agentLoop.run(messages: agentMessages)
+            var wikiFiles = loopResult.wikiFiles
+            var wikiUpdateSummaries = loopResult.wikiUpdateSummaries
+            fullResponse = loopResult.response
+            wasStreamed = loopResult.wasStreamed
 
             if fullResponse.isEmpty {
                 fullResponse = L10n.t(

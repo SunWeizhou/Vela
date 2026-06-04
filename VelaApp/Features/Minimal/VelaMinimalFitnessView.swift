@@ -13,6 +13,8 @@ struct VelaTrainingView: View {
     @ObservedObject private var appState = VelaAppState.shared
     @Query(sort: \StrengthWorkoutRecord.startedAt, order: .reverse) private var strengthWorkouts: [StrengthWorkoutRecord]
     @Query(sort: \WorkoutEventRecord.startedAt, order: .reverse) private var localWorkoutEvents: [WorkoutEventRecord]
+    @Query(sort: \WorkoutTemplateRecord.title) private var workoutTemplates: [WorkoutTemplateRecord]
+    @AppStorage("xunji.openAPIKey") private var xunjiAPIKey = ""
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
 
@@ -28,6 +30,12 @@ struct VelaTrainingView: View {
     @State private var isExertionBelowTarget: Bool = true
     @State private var recentWorkouts: [WorkoutSummary] = []
     @State private var showStrengthWorkoutLog = false
+    @State private var selectedTemplateID: UUID?
+    @State private var showXunjiImport = false
+    @State private var xunjiImportDate = Date()
+    @State private var xunjiIncludeFullData = true
+    @State private var isImportingXunji = false
+    @State private var xunjiImportMessage: String?
 
     var body: some View {
         ScrollView {
@@ -39,6 +47,8 @@ struct VelaTrainingView: View {
                 trainingIntelligenceCard
 
                 muscleVolumeCard
+
+                templateLibraryCard
 
                 activityHeatmapCard
                 
@@ -64,11 +74,12 @@ struct VelaTrainingView: View {
         }
         .scrollIndicators(.hidden)
         .velaTrackScroll(direction: scrollDirection)
-        .background(Color(hex: "#F5F3F0")) // Warm canvas base
+        .background(VelaTheme.systemGroupedBackground)
         .onAppear {
             loadRealFitnessData()
         }
         .task {
+            try? ExerciseLibraryService.seedDefaultsIfNeeded(modelContext: modelContext)
             await syncRealFitnessData()
         }
         .refreshable {
@@ -83,12 +94,30 @@ struct VelaTrainingView: View {
         .onChange(of: appState.localDataRevision) { _, _ in
             loadRealFitnessData()
         }
-        .sheet(isPresented: $showStrengthWorkoutLog) {
-            StrengthWorkoutLogSheetView()
+        .sheet(isPresented: $showStrengthWorkoutLog, onDismiss: {
+            selectedTemplateID = nil
+        }) {
+            StrengthWorkoutLogSheetView(startingTemplateID: selectedTemplateID)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
-                .presentationBackground(Color(hex: "#F5F3F0"))
+                .presentationBackground(VelaTheme.systemGroupedBackground)
         }
+        .sheet(isPresented: $showXunjiImport) {
+            XunjiImportSheet(
+                apiKey: $xunjiAPIKey,
+                selectedDate: $xunjiImportDate,
+                includeFullData: $xunjiIncludeFullData,
+                isImporting: isImportingXunji,
+                message: xunjiImportMessage,
+                onImport: {
+                    Task { await importXunjiTraining() }
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .presentationBackground(VelaTheme.systemGroupedBackground)
+        }
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     // MARK: - Fitness Title Header
@@ -97,10 +126,10 @@ struct VelaTrainingView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("健身")
                     .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
                 Text("过去 30 天")
                     .font(.system(size: 12))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
             }
             
             Spacer()
@@ -115,23 +144,33 @@ struct VelaTrainingView: View {
                         Text("分析")
                             .font(.system(size: 13, weight: .bold))
                     }
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white))
-                    .shadow(color: Color.black.opacity(0.02), radius: 4, y: 2)
+                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
+                    .shadow(color: Color.black.opacity(0.01), radius: 8, y: 2)
                 }
                 .buttonStyle(.plain)
 
                 Button {
-                    showStrengthWorkoutLog = true
+                    xunjiImportDate = dashboardVM.selectedDate
+                    xunjiImportMessage = nil
+                    showXunjiImport = true
+                } label: {
+                    Image(systemName: "tray.and.arrow.down")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(VelaTheme.muted)
+                        .frame(width: 36, height: 36)
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    startStrengthWorkout()
                 } label: {
                     Image(systemName: "plus")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(Color(hex: "#1A1917"))
-                        .frame(width: 40, height: 40)
-                        .background(Circle().fill(Color.white))
-                        .shadow(color: Color.black.opacity(0.02), radius: 4, y: 2)
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(VelaTheme.muted)
+                        .frame(width: 36, height: 36)
                 }
                 .buttonStyle(.plain)
             }
@@ -169,12 +208,12 @@ struct VelaTrainingView: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.03), radius: 6, y: 3)
+                .fill(VelaTheme.cardBg)
+                .shadow(color: Color.black.opacity(0.012), radius: 10, y: 3)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+                .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
         )
     }
 
@@ -188,7 +227,7 @@ struct VelaTrainingView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(monthTitle)
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(Color(hex: "#8E8A80"))
+                .foregroundStyle(VelaTheme.muted)
             
             // Grid Header Days
             HStack(spacing: 5) {
@@ -240,7 +279,7 @@ struct VelaTrainingView: View {
             
             Text(label)
                 .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(Color(hex: "#8E8A80"))
+                .foregroundStyle(VelaTheme.muted)
         }
     }
 
@@ -251,11 +290,11 @@ struct VelaTrainingView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "chart.bar.fill")
                         .font(.system(size: 14))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .foregroundStyle(VelaTheme.muted)
                     
                     Text("活动摘要")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Color(hex: "#1A1917"))
+                        .foregroundStyle(VelaTheme.fg)
                 }
                 
                 Spacer()
@@ -268,12 +307,12 @@ struct VelaTrainingView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(totalWorkoutDurationText)
                     .font(.system(size: 26, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
                 
                 HStack(spacing: 8) {
                     Text("过去 30 天耗力趋势")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .foregroundStyle(VelaTheme.muted)
                 }
             }
             
@@ -303,12 +342,12 @@ struct VelaTrainingView: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.03), radius: 6, y: 3)
+                .fill(VelaTheme.cardBg)
+                .shadow(color: Color.black.opacity(0.012), radius: 10, y: 3)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+                .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
         )
     }
 
@@ -319,11 +358,11 @@ struct VelaTrainingView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "bolt.heart.fill")
                         .font(.system(size: 14))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .foregroundStyle(VelaTheme.muted)
                     
                     Text("耗力表现")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Color(hex: "#1A1917"))
+                        .foregroundStyle(VelaTheme.fg)
                 }
                 
                 Spacer()
@@ -336,7 +375,7 @@ struct VelaTrainingView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(changePercentageText)
                     .font(.system(size: 26, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
                 
                 Text(dynamicExertionWorkload.isEmpty ? "暂无耗力记录" : (isExertionBelowTarget ? "低于目标值" : "高于目标值"))
                     .font(.system(size: 12, weight: .bold))
@@ -351,12 +390,12 @@ struct VelaTrainingView: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.03), radius: 6, y: 3)
+                .fill(VelaTheme.cardBg)
+                .shadow(color: Color.black.opacity(0.012), radius: 10, y: 3)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+                .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
         )
     }
 
@@ -417,13 +456,13 @@ struct VelaTrainingView: View {
                 Spacer()
                 Text("\(Int((recommendation.volumeMultiplier * 100).rounded()))% 容量")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Color(hex: "#C56B4A"))
+                    .foregroundStyle(VelaTheme.accent)
             }
             Text(recommendation.shouldTrain ? "建议训练 · \(recommendation.recommendedIntensity)" : "建议恢复或休息")
                 .font(.system(size: 20, weight: .bold))
             Text(recommendation.reasons.joined(separator: " "))
                 .font(.system(size: 12))
-                .foregroundStyle(Color(hex: "#8E8A80"))
+                .foregroundStyle(VelaTheme.muted)
             if !recommendation.avoidMuscleGroups.isEmpty {
                 Text("今天避开：\(recommendation.avoidMuscleGroups.joined(separator: "、"))")
                     .font(.system(size: 12, weight: .bold))
@@ -431,7 +470,7 @@ struct VelaTrainingView: View {
             }
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 22).fill(Color.white))
+        .background(RoundedRectangle(cornerRadius: 22).fill(VelaTheme.cardBg))
     }
 
     private var muscleVolumeCard: some View {
@@ -443,12 +482,12 @@ struct VelaTrainingView: View {
                 Spacer()
                 Text("\(summary.sessions) 次力量训练")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
             }
             if summary.muscleGroupSets.isEmpty {
                 Text("完成力量训练后，这里会显示肌群训练量和局部疲劳。")
                     .font(.system(size: 12))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
             } else {
                 ForEach(summary.muscleGroupSets.sorted { $0.key < $1.key }, id: \.key) { muscle, sets in
                     HStack {
@@ -464,13 +503,13 @@ struct VelaTrainingView: View {
                 Divider()
                 Text("近期 PR：\(summary.recentPRs.prefix(3).map(\.summary).joined(separator: " · "))")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Color(hex: "#C56B4A"))
+                    .foregroundStyle(VelaTheme.accent)
             }
             if let latest = summary.lastWorkoutSummary {
                 Divider()
                 Text("最近一次：\(latest)")
                     .font(.system(size: 12))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
             }
             if !exerciseProgressLines.isEmpty {
                 Divider()
@@ -479,12 +518,129 @@ struct VelaTrainingView: View {
                 ForEach(exerciseProgressLines.prefix(3), id: \.self) { line in
                     Text(line)
                         .font(.system(size: 12))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .foregroundStyle(VelaTheme.muted)
                 }
             }
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 22).fill(Color.white))
+        .background(RoundedRectangle(cornerRadius: 22).fill(VelaTheme.cardBg))
+    }
+
+    private var templateLibraryCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("训练模板")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(VelaTheme.fg)
+                    Text("从常用结构开始记录，每组数据仍可自由调整")
+                        .font(.system(size: 11))
+                        .foregroundStyle(VelaTheme.muted)
+                }
+                Spacer()
+                Button {
+                    startStrengthWorkout()
+                } label: {
+                    Label("空白", systemImage: "square.and.pencil")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(VelaTheme.accent)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(Capsule().fill(Color(hex: "#EAF3FF")))
+                }
+                .buttonStyle(.plain)
+            }
+
+            if workoutTemplates.isEmpty {
+                Text("模板库正在准备。打开记录页也可以直接创建自定义模板。")
+                    .font(.system(size: 12))
+                    .foregroundStyle(VelaTheme.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8)
+            } else {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 10) {
+                        ForEach(templateShortcuts) { template in
+                            Button {
+                                startStrengthWorkout(templateID: template.id)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 9) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: templateIcon(for: template))
+                                            .font(.system(size: 14, weight: .bold))
+                                            .foregroundStyle(VelaTheme.accent)
+                                            .frame(width: 28, height: 28)
+                                            .background(Circle().fill(Color(hex: "#EAF3FF")))
+                                        Spacer()
+                                        Text("\(template.estimatedDurationMinutes)′")
+                                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                                            .foregroundStyle(VelaTheme.muted)
+                                    }
+
+                                    Text(template.title)
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundStyle(VelaTheme.fg)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.85)
+
+                                    Text("\(template.exercises.count) 个动作 · \(template.exercises.reduce(0) { $0 + $1.targetSets }) 组")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(VelaTheme.muted)
+                                }
+                                .frame(width: 132, alignment: .leading)
+                                .padding(12)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                        .fill(VelaTheme.systemGroupedBackground)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                        .stroke(Color(hex: "#E5E5EA"), lineWidth: 0.7)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+                .scrollIndicators(.hidden)
+            }
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 22).fill(VelaTheme.cardBg))
+    }
+
+    private var templateShortcuts: [WorkoutTemplateRecord] {
+        workoutTemplates
+            .sorted { lhs, rhs in
+                switch (lhs.lastUsedAt, rhs.lastUsedAt) {
+                case let (left?, right?):
+                    return left > right
+                case (.some, nil):
+                    return true
+                case (nil, .some):
+                    return false
+                case (nil, nil):
+                    return lhs.title < rhs.title
+                }
+            }
+            .prefix(6)
+            .map { $0 }
+    }
+
+    private func templateIcon(for template: WorkoutTemplateRecord) -> String {
+        let title = template.title.lowercased()
+        let exerciseNames = template.exercises.map(\.name).joined(separator: " ")
+        if title.contains("leg") || exerciseNames.contains("深蹲") || exerciseNames.contains("腿") {
+            return "figure.strengthtraining.functional"
+        }
+        if title.contains("pull") || exerciseNames.contains("划船") || exerciseNames.contains("下拉") {
+            return "figure.climbing"
+        }
+        if title.contains("push") || exerciseNames.contains("卧推") || exerciseNames.contains("推") {
+            return "dumbbell.fill"
+        }
+        return "figure.strengthtraining.traditional"
     }
 
     private var exerciseProgressLines: [String] {
@@ -516,33 +672,33 @@ struct VelaTrainingView: View {
             HStack {
                 Text("统一训练记录")
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
                 Spacer()
                 Text("每项训练单独展示")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
             }
 
             if recentWorkouts.isEmpty {
                 Text("暂无可读取的训练记录")
                     .font(.system(size: 13))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white))
+                    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
             } else {
                 ForEach(recentWorkouts.prefix(8)) { workout in
                     NavigationLink(destination: WorkoutDetailView(workout: workout)) {
                         HStack(spacing: 12) {
                             Image(systemName: workoutListIcon(workout.activityName))
-                                .foregroundStyle(Color(hex: "#C56B4A"))
+                                .foregroundStyle(VelaTheme.accent)
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(workout.activityName)
                                     .font(.system(size: 14, weight: .bold))
-                                    .foregroundStyle(Color(hex: "#1A1917"))
+                                    .foregroundStyle(VelaTheme.fg)
                                 Text(workout.start.formatted(date: .abbreviated, time: .shortened))
                                     .font(.system(size: 11))
-                                    .foregroundStyle(Color(hex: "#8E8A80"))
+                                    .foregroundStyle(VelaTheme.muted)
                                 HStack(spacing: 8) {
                                     if let kcal = workout.energyKilocalories {
                                         Text("\(Int(kcal.rounded())) kcal")
@@ -562,13 +718,13 @@ struct VelaTrainingView: View {
                             Spacer()
                             Text("\(Int(workout.end.timeIntervalSince(workout.start) / 60)) 分钟")
                                 .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(Color(hex: "#8E8A80"))
+                                .foregroundStyle(VelaTheme.muted)
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(Color(hex: "#BFB9AC"))
                         }
                         .padding(14)
-                        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white))
+                        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
                     }
                     .buttonStyle(.plain)
                 }
@@ -582,21 +738,21 @@ struct VelaTrainingView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("力量训练记录")
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(Color(hex: "#1A1917"))
+                        .foregroundStyle(VelaTheme.fg)
                     Text("动作、器械、组次与训练容量")
                         .font(.system(size: 11))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .foregroundStyle(VelaTheme.muted)
                 }
                 Spacer()
                 Button {
-                    showStrengthWorkoutLog = true
+                    startStrengthWorkout()
                 } label: {
                     Label("记录力量", systemImage: "plus")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Color(hex: "#C56B4A"))
+                        .foregroundStyle(VelaTheme.accent)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
-                        .background(Capsule().fill(Color.white))
+                        .background(Capsule().fill(VelaTheme.cardBg))
                 }
                 .buttonStyle(.plain)
             }
@@ -604,27 +760,27 @@ struct VelaTrainingView: View {
             if strengthWorkouts.isEmpty {
                 Text("尚未记录力量训练。完成一次动作与组次记录后，Coach 就能读取容量历史。")
                     .font(.system(size: 13))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white))
+                    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
             } else {
                 ForEach(strengthWorkouts.prefix(5)) { workout in
                     NavigationLink(destination: StrengthWorkoutDetailView(workout: workout)) {
                         HStack(spacing: 12) {
                             Image(systemName: "figure.strengthtraining.traditional")
                                 .font(.system(size: 18))
-                                .foregroundStyle(Color(hex: "#C56B4A"))
+                                .foregroundStyle(VelaTheme.accent)
                                 .frame(width: 38, height: 38)
-                                .background(Circle().fill(Color(hex: "#FFF3EA")))
+                                .background(Circle().fill(Color(hex: "#EAF3FF")))
 
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(workout.title)
                                     .font(.system(size: 14, weight: .bold))
-                                    .foregroundStyle(Color(hex: "#1A1917"))
+                                    .foregroundStyle(VelaTheme.fg)
                                 Text("\(workout.exerciseCount) 个动作 · \(workout.totalSetCount) 组 · \(Int(workout.totalVolumeKilograms.rounded())) kg 容量")
                                     .font(.system(size: 11))
-                                    .foregroundStyle(Color(hex: "#8E8A80"))
+                                    .foregroundStyle(VelaTheme.muted)
                                 Text(workout.startedAt.formatted(date: .abbreviated, time: .shortened))
                                     .font(.system(size: 10))
                                     .foregroundStyle(Color(hex: "#BFB9AC"))
@@ -637,12 +793,17 @@ struct VelaTrainingView: View {
                                 .foregroundStyle(Color(hex: "#BFB9AC"))
                         }
                         .padding(14)
-                        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white))
+                        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
                     }
                     .buttonStyle(.plain)
                 }
             }
         }
+    }
+
+    private func startStrengthWorkout(templateID: UUID? = nil) {
+        selectedTemplateID = templateID
+        showStrengthWorkoutLog = true
     }
 
     private func workoutListIcon(_ name: String) -> String {
@@ -663,6 +824,85 @@ struct VelaTrainingView: View {
     }
 
     // MARK: - SwiftData and HealthKit loader
+    @MainActor
+    private func importXunjiTraining() async {
+        let datestr = xunjiDateString(xunjiImportDate)
+        let key = xunjiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else {
+            xunjiImportMessage = "请先填写训记 Open API Key。"
+            return
+        }
+
+        isImportingXunji = true
+        xunjiImportMessage = "正在读取 \(datestr) 的训记训练..."
+        defer { isImportingXunji = false }
+
+        do {
+            let responseData = try await xunjiResponseData(
+                apiKey: key,
+                datestr: datestr,
+                includeFullData: xunjiIncludeFullData
+            )
+            let summary = try XunjiTrainingImportService().importResponseData(
+                responseData,
+                datestr: datestr,
+                modelContext: modelContext
+            )
+            loadRealFitnessData()
+            await dashboardVM.refresh(modelContext: modelContext)
+            loadRealFitnessData()
+            if summary.importedCount == 0, summary.updatedCount == 0 {
+                xunjiImportMessage = "没有可导入的训练。"
+            } else {
+                let titles = summary.importedTitles.prefix(3).joined(separator: "、")
+                xunjiImportMessage = "已合并 \(summary.importedCount) 条新训练，更新 \(summary.updatedCount) 条。\(titles.isEmpty ? "" : " \(titles)")"
+                VelaAppState.shared.markLocalDataChanged()
+            }
+        } catch {
+            xunjiImportMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func xunjiResponseData(
+        apiKey: String,
+        datestr: String,
+        includeFullData: Bool
+    ) async throws -> Data {
+        let caches = try modelContext.fetch(FetchDescriptor<XunjiDailyCacheRecord>())
+        if let cache = caches.first(where: { XunjiCachePolicy.shouldReuse($0, datestr: datestr, includeFullData: includeFullData) }) {
+            return cache.responseData
+        }
+
+        let data = try await XunjiTrainingAPIClient().fetchTraining(
+            apiKey: apiKey,
+            datestr: datestr,
+            includeFullData: includeFullData
+        )
+
+        if let cache = caches.first(where: { $0.datestr == datestr }) {
+            cache.fetchedAt = Date()
+            cache.includeFullData = includeFullData
+            cache.responseData = data
+        } else {
+            modelContext.insert(XunjiDailyCacheRecord(
+                datestr: datestr,
+                includeFullData: includeFullData,
+                responseData: data
+            ))
+        }
+        try modelContext.save()
+        return data
+    }
+
+    private func xunjiDateString(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+
     private func syncRealFitnessData(force: Bool = false) async {
         loadRealFitnessData()
         await dashboardVM.refresh(modelContext: modelContext, force: force)
@@ -858,6 +1098,89 @@ struct SafeZoneWorkloadChartView: View {
                         .frame(width: 8, height: 8)
                         .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
                         .position(x: x, y: y)
+                }
+            }
+        }
+    }
+}
+
+private struct XunjiImportSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var apiKey: String
+    @Binding var selectedDate: Date
+    @Binding var includeFullData: Bool
+    var isImporting: Bool
+    var message: String?
+    var onImport: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("训记训练导入", systemImage: "tray.and.arrow.down.fill")
+                            .font(.system(size: 18, weight: .bold))
+                        Text("读取指定日期的训记训练，并合并到 Vela 的力量训练、统一训练记录和训练负荷中。")
+                            .font(.system(size: 13))
+                            .foregroundStyle(VelaTheme.muted)
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        DatePicker("训练日期", selection: $selectedDate, displayedComponents: .date)
+                            .datePickerStyle(.compact)
+                        SecureField("训记 Open API Key", text: $apiKey)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .textFieldStyle(.roundedBorder)
+                        Toggle("读取完整组数据", isOn: $includeFullData)
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("完整模式会保留未完成组、RPE、备注、超级组和部分记录型动作摘要。90 秒内同一天会复用本地缓存。")
+                            .font(.system(size: 11))
+                            .foregroundStyle(VelaTheme.muted)
+                    }
+                    .padding(16)
+                    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
+
+                    if let message {
+                        Text(message)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(VelaTheme.fg)
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
+                    }
+
+                    Button {
+                        onImport()
+                    } label: {
+                        HStack {
+                            if isImporting {
+                                ProgressView()
+                            } else {
+                                Image(systemName: "arrow.down.circle.fill")
+                            }
+                            Text(isImporting ? "正在导入" : "导入并合并训练")
+                                .font(.system(size: 14, weight: .bold))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .foregroundStyle(Color.white)
+                        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.fg))
+                    }
+                    .disabled(isImporting)
+                    .buttonStyle(.plain)
+                }
+                .padding(16)
+            }
+            .background(VelaTheme.systemGroupedBackground)
+            .navigationTitle("导入训记")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭") { dismiss() }
                 }
             }
         }

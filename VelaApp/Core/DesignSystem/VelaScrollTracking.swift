@@ -33,13 +33,27 @@ extension View {
             } action: { oldY, newY in
                 let delta = newY - oldY
                 if abs(delta) > 2 {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                    withAnimation(VelaTheme.snappy) {
                         direction.wrappedValue = delta > 0 ? .down : .up
                     }
                 }
             }
         } else {
             // iOS 17 fallback: no-op (tab bar stays visible)
+            self
+        }
+    }
+
+    /// Safely track scroll view y offset on iOS 18+ with legacy fallback.
+    @ViewBuilder
+    func velaTrackScrollOffsetY(offset: Binding<CGFloat>) -> some View {
+        if #available(iOS 18, *) {
+            self.onScrollGeometryChange(for: CGFloat.self) { geo in
+                geo.contentOffset.y
+            } action: { _, newY in
+                offset.wrappedValue = newY
+            }
+        } else {
             self
         }
     }

@@ -31,8 +31,13 @@ struct StrengthWorkoutLogSheetView: View {
     @State private var now = Date()
     @State private var isLoaded = false
 
+    private let startingTemplateID: UUID?
     private let equipmentOptions = ["杠铃", "哑铃", "固定器械", "绳索", "壶铃", "自重", "其他"]
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    init(startingTemplateID: UUID? = nil) {
+        self.startingTemplateID = startingTemplateID
+    }
 
     private var durationMinutes: Int {
         max(1, Int(now.timeIntervalSince(startedAt) / 60))
@@ -57,17 +62,18 @@ struct StrengthWorkoutLogSheetView: View {
                     } label: {
                         Label("添加动作", systemImage: "plus.circle.fill")
                             .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(Color(hex: "#C56B4A"))
+                            .foregroundStyle(VelaTheme.accent)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
-                            .background(RoundedRectangle(cornerRadius: 18).fill(Color.white))
+                            .velaNativeCard(radius: 16)
                     }
                     .buttonStyle(.plain)
                 }
                 .padding(16)
                 .padding(.bottom, 24)
             }
-            .background(Color(hex: "#F5F3F0"))
+            .scrollContentBackground(.hidden)
+            .background(VelaTheme.systemGroupedBackground)
             .navigationTitle("记录力量训练")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -149,17 +155,17 @@ struct StrengthWorkoutLogSheetView: View {
                 HStack {
                     Text("自觉竭力程度 (RPE):")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color(hex: "#1A1917"))
+                        .foregroundStyle(VelaTheme.fg)
                     Spacer()
                     Text("\(Int(exertionScore)) / 10")
                         .font(.system(size: 14, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color(hex: "#C56B4A"))
+                        .foregroundStyle(VelaTheme.accent)
                 }
                 Slider(value: $exertionScore, in: 1...10, step: 1)
-                    .tint(Color(hex: "#C56B4A"))
+                    .tint(VelaTheme.accent)
                 Text("1 = 极轻松，10 = 力竭且无任何保留组。用于重算今日负荷。")
                     .font(.system(size: 11))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
             }
             .padding(.top, 4)
 
@@ -168,7 +174,7 @@ struct StrengthWorkoutLogSheetView: View {
                 .lineLimit(2...4)
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 20).fill(Color.white))
+        .velaNativeCard(radius: 16)
     }
 
     private func exerciseCard(exercise: Binding<StrengthExerciseLog>) -> some View {
@@ -181,7 +187,7 @@ struct StrengthWorkoutLogSheetView: View {
                         exercises.removeAll { $0.id == exercise.wrappedValue.id }
                     } label: {
                         Image(systemName: "trash")
-                            .foregroundStyle(Color(hex: "#FF3B30"))
+                            .foregroundStyle(Color.red)
                     }
                     .buttonStyle(.plain)
                 }
@@ -195,7 +201,7 @@ struct StrengthWorkoutLogSheetView: View {
             if let previous = previousPerformance(for: exercise.wrappedValue.name) {
                 Text("上次表现：\(previous)")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
             }
 
             ForEach(exercise.sets) { set in
@@ -207,7 +213,7 @@ struct StrengthWorkoutLogSheetView: View {
             } label: {
                 Label("添加一组", systemImage: "plus")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Color(hex: "#C56B4A"))
+                    .foregroundStyle(VelaTheme.accent)
             }
             .buttonStyle(.plain)
 
@@ -221,13 +227,13 @@ struct StrengthWorkoutLogSheetView: View {
                 } label: {
                     Label("复制上一组", systemImage: "plus.square.on.square")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .foregroundStyle(VelaTheme.muted)
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 20).fill(Color.white))
+        .velaNativeCard(radius: 16)
     }
 
     private func strengthSetRow(
@@ -247,7 +253,7 @@ struct StrengthWorkoutLogSheetView: View {
 
                 Text("kg ×")
                     .font(.system(size: 12))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
 
                 Stepper("\(set.wrappedValue.repetitions)", value: set.repetitions, in: 1...100)
                     .font(.system(size: 12, weight: .semibold))
@@ -256,7 +262,7 @@ struct StrengthWorkoutLogSheetView: View {
                     complete(set: set, in: exercise)
                 } label: {
                     Image(systemName: (set.wrappedValue.isCompleted ?? false) ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle((set.wrappedValue.isCompleted ?? false) ? Color(hex: "#34C759") : Color(hex: "#C56B4A"))
+                        .foregroundStyle((set.wrappedValue.isCompleted ?? false) ? VelaTheme.success : VelaTheme.accent)
                         .font(.system(size: 20))
                 }
                 .buttonStyle(.plain)
@@ -283,7 +289,7 @@ struct StrengthWorkoutLogSheetView: View {
                         exercise.wrappedValue.sets.removeAll { $0.id == set.wrappedValue.id }
                     } label: {
                         Image(systemName: "trash")
-                            .foregroundStyle(Color(hex: "#BFB9AC"))
+                            .foregroundStyle(VelaTheme.meta)
                     }
                     .buttonStyle(.plain)
                 }
@@ -346,6 +352,8 @@ struct StrengthWorkoutLogSheetView: View {
 
     private func applyTemplate(_ template: WorkoutTemplateRecord) {
         title = template.title
+        template.lastUsedAt = Date()
+        template.updatedAt = Date()
         exercises = template.exercises.map { item in
             var definition: ExerciseDefinitionRecord?
             if let defKey = item.exerciseCanonicalKey {
@@ -443,9 +451,9 @@ struct StrengthWorkoutLogSheetView: View {
             Button("跳过") { restTimer = nil }
         }
         .font(.system(size: 13, weight: .bold))
-        .foregroundStyle(Color(hex: "#C56B4A"))
+        .foregroundStyle(VelaTheme.accent)
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 18).fill(Color.white))
+        .velaNativeCard(radius: 16)
     }
 
     private func saveCompletedWorkoutAsTemplate() {
@@ -479,6 +487,10 @@ struct StrengthWorkoutLogSheetView: View {
             self.startedAt = draft.startedAt
             self.notes = draft.notes
             self.exercises = draft.exercises
+        } else if let startingTemplateID,
+                  let template = availableTemplates.first(where: { $0.id == startingTemplateID }) {
+            self.startedAt = Date()
+            applyTemplate(template)
         }
         self.isLoaded = true
     }
@@ -611,7 +623,8 @@ struct StrengthWorkoutSummarySheet: View {
                 }
                 .padding(16)
             }
-            .background(Color(hex: "#F5F3F0"))
+            .scrollContentBackground(.hidden)
+            .background(VelaTheme.systemGroupedBackground)
             .navigationTitle("Workout Summary")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -631,7 +644,7 @@ struct StrengthWorkoutSummarySheet: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 14).fill(.white))
+        .velaNativeCard(radius: 14)
     }
 
     private func summaryCard(_ title: String, _ body: String) -> some View {
@@ -641,7 +654,7 @@ struct StrengthWorkoutSummarySheet: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 16).fill(.white))
+        .velaNativeCard(radius: 16)
     }
 }
 

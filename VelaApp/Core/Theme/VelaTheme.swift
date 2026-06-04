@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - VelaTheme — Apple Design System Tokens
 // Chinese default, English fallback. Dark mode adaptive. SF Pro typography.
@@ -30,8 +31,11 @@ enum VelaTheme {
 
     // MARK: - Surface
 
-    static let backgroundUIColor = adaptiveUIColor("#FFFFFF", "#000000")
+    static let backgroundUIColor = adaptiveUIColor("#F2F2F7", "#000000")
     static let bg            = Color(backgroundUIColor)
+    static let systemGroupedBackground = Color(uiColor: .systemGroupedBackground)
+    static let secondaryGroupedBackground = Color(uiColor: .secondarySystemGroupedBackground)
+    static let tertiaryGroupedBackground = Color(uiColor: .tertiarySystemGroupedBackground)
     static let surface       = adaptive("#F2F2F7", "#1C1C1E")
     static let cardBg        = adaptive("#FFFFFF", "#1C1C1E")
     static let elevatedBg    = adaptive("#F9F9FB", "#2C2C2E")
@@ -46,15 +50,17 @@ enum VelaTheme {
 
     // MARK: - Accent
 
-    static let accent        = adaptive("#C56B4A", "#D48463")
+    static let accent        = adaptive("#007AFF", "#0A84FF")
     static let accentOn      = adaptive("#FFFFFF", "#FFFFFF")
-    static let accentHover   = adaptive("#D48463", "#E8CFC3")
-    static let accentActive  = adaptive("#A35338", "#BD7051")
+    static let accentHover   = adaptive("#0A84FF", "#64D2FF")
+    static let accentActive  = adaptive("#0057D9", "#409CFF")
 
     // MARK: - Borders
 
     static let border        = adaptive("#D1D1D6", "#48484A")
     static let borderSoft    = adaptive("#E5E5EA", "#2C2C2E")
+    static let separator     = Color(uiColor: .separator)
+    static let separatorSoft = Color(uiColor: .separator).opacity(0.38)
 
     // MARK: - Semantic Colors
 
@@ -121,11 +127,18 @@ enum VelaTheme {
         cs == .dark ? Color.black.opacity(0.3) : Color.black.opacity(0.04)
     }
 
+    static func nativeShadow(_ cs: ColorScheme) -> Color {
+        cs == .dark ? Color.clear : Color.black.opacity(0.012)
+    }
+
     // MARK: - Animation
 
     static let fast = 0.15
     static let standard = 0.22
     static let ease = UnitCurve.easeInOut
+    static let snappy = Animation.snappy(duration: 0.28, extraBounce: 0.02)
+    static let smooth = Animation.smooth(duration: 0.32)
+    static let press = Animation.easeOut(duration: 0.16)
 
     // MARK: - Ring Sizes
 
@@ -409,4 +422,38 @@ extension VelaTheme {
     static let tabBarSelectedUIColor = hex("#0071E3")
     static let tabBarNormalUIColor = hex("#86868B")
     static let tabBarShadowUIColor = UIColor.black.withAlphaComponent(0.08)
+}
+
+// MARK: - Haptic Feedback Helper
+
+enum VelaHaptic {
+    @MainActor static func light() {
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.prepare()
+        generator.impactOccurred()
+    }
+
+    @MainActor static func medium() {
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.prepare()
+        generator.impactOccurred()
+    }
+
+    @MainActor static func heavy() {
+        let generator = UIImpactFeedbackGenerator(style: .heavy)
+        generator.prepare()
+        generator.impactOccurred()
+    }
+
+    @MainActor static func selection() {
+        let generator = UISelectionFeedbackGenerator()
+        generator.prepare()
+        generator.selectionChanged()
+    }
+
+    @MainActor static func success() {
+        let generator = UINotificationFeedbackGenerator()
+        generator.prepare()
+        generator.notificationOccurred(.success)
+    }
 }

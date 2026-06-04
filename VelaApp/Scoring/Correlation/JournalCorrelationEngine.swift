@@ -49,7 +49,7 @@ struct JournalCorrelationEngine {
             while j < sorted.count && sorted[j].value == sorted[i].value {
                 j += 1
             }
-            let rankSum = Double((i + 1 + j)) / 2.0 - 0.5
+            let rankSum = Double((i + 1 + j)) / 2.0
             for k in i..<j {
                 ranks[sorted[k].index] = rankSum
             }

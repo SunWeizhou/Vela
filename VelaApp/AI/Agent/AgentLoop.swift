@@ -18,12 +18,14 @@ struct AgentLoop {
     }
 
     /// Runs the agentic loop and returns the final response plus tool execution details.
+    /// - Parameter messages: The chat message history including system prompt.
+    /// - Returns: AgentLoopResult with the final text response, executed tools, and updated messages.
     func run(messages: [ChatMessage]) async throws -> AgentLoopResult {
         var agentMessages = messages
         var fullResponse = ""
         var executedTools: [ExecutedTool] = []
 
-        for _ in 0..<maxIterations {
+        for iteration in 0..<maxIterations {
             let response = try await provider.chat(
                 messages: agentMessages,
                 tools: toolRegistry.definitions
@@ -50,17 +52,39 @@ struct AgentLoop {
                         result: result
                     ))
                 }
+
+                // Stream the final response after tool execution (not on last iteration fallback)
+                if iteration < maxIterations - 1 {
+                    let stream = provider.streamChat(messages: agentMessages)
+                    var streamedText = ""
+                    for try await delta in stream {
+                        streamedText += delta
+                    }
+                    fullResponse = streamedText
+                    return AgentLoopResult(
+                        response: fullResponse,
+                        executedTools: executedTools,
+                        finalMessages: agentMessages,
+                        wasStreamed: true
+                    )
+                }
                 continue
             }
 
+            // Final text response (no more tool calls)
             fullResponse = response.content
             break
+        }
+
+        if fullResponse.isEmpty {
+            fullResponse = "I wasn't able to generate a response. Please try again."
         }
 
         return AgentLoopResult(
             response: fullResponse,
             executedTools: executedTools,
-            finalMessages: agentMessages
+            finalMessages: agentMessages,
+            wasStreamed: false
         )
     }
 }
@@ -69,6 +93,37 @@ struct AgentLoopResult {
     var response: String
     var executedTools: [ExecutedTool]
     var finalMessages: [ChatMessage]
+    /// Whether the final response was delivered via streaming.
+    var wasStreamed: Bool
+
+    /// Extracts wiki file names updated during tool execution.
+    var wikiFiles: [String] {
+        executedTools.compactMap { tool in
+            guard tool.name == "update_user_wiki",
+                  let data = tool.arguments.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let file = json["file"] as? String,
+                  !tool.result.hasPrefix("Error") else {
+                return nil
+            }
+            return file
+        }
+    }
+
+    /// Summaries of wiki updates made during tool execution.
+    var wikiUpdateSummaries: [String] {
+        executedTools.compactMap { tool in
+            guard tool.name == "update_user_wiki",
+                  let data = tool.arguments.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let file = json["file"] as? String,
+                  let content = json["content"] as? String,
+                  !tool.result.hasPrefix("Error") else {
+                return nil
+            }
+            return "\(file): \(content)"
+        }
+    }
 }
 
 struct ExecutedTool: Identifiable {
@@ -76,16 +131,6 @@ struct ExecutedTool: Identifiable {
     var name: String
     var arguments: String
     var result: String
-
-    var wikiFiles: [String] {
-        guard name == "update_user_wiki",
-              let data = arguments.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let file = json["file"] as? String else {
-            return []
-        }
-        return [file]
-    }
 }
 
 // MARK: - Agent Run Trace (for debugging / reproducibility)
@@ -110,15 +155,5 @@ struct AgentRunTrace: Codable {
         var name: String
         var arguments: String
         var result: String
-    }
-
-    init(contextHash: String, schemaVersion: String) {
-        self.id = UUID()
-        self.startedAt = Date()
-        self.inputMessages = []
-        self.executedTools = []
-        self.finalResponse = ""
-        self.contextHash = contextHash
-        self.schemaVersion = schemaVersion
     }
 }

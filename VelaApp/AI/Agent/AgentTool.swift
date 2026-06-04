@@ -555,54 +555,55 @@ struct FoodLogTool: AgentTool {
     }
 
     func execute(arguments: String) async throws -> String {
-        try await MainActor.run {
+        return try await MainActor.run {
             try PersistenceWriteGate.shared.assertWritable(operation: "FoodLogTool", modelContext: modelContext)
+
+            guard let data = arguments.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let mealName = json["meal_name"] as? String else {
+                return "Error: missing 'meal_name' argument."
+            }
+
+            let foods: [String]
+            if let foodsArray = json["foods"] as? [String] {
+                foods = foodsArray
+            } else if let foodsString = json["foods"] as? String {
+                foods = [foodsString]
+            } else {
+                foods = []
+            }
+
+            let totalCalories = json["total_calories"] as? Int ?? 0
+
+            let foodList = foods.joined(separator: ", ")
+            let note = "[\(mealName)] \(foodList) — ~\(totalCalories) kcal"
+
+            let foodLog = FoodLogRecord(
+                mealName: mealName,
+                foods: foods.map { FoodLogItem(name: $0, portion: "unspecified", calories: 0) },
+                totalCalories: totalCalories,
+                proteinGrams: json["protein_grams"] as? Int ?? 0,
+                carbsGrams: json["carbs_grams"] as? Int ?? 0,
+                fatGrams: json["fat_grams"] as? Int ?? 0,
+                fiberGrams: json["fiber_grams"] as? Int ?? 0,
+                healthScore: json["health_score"] as? String ?? "moderate",
+                suggestions: json["suggestions"] as? [String] ?? [],
+                source: .coachTool
+            )
+            modelContext.insert(foodLog)
+
+            let entry = JournalEntryRecord(
+                createdAt: Date(),
+                tags: ["food", "meal"],
+                note: note,
+                value: Double(totalCalories),
+                unit: "kcal"
+            )
+            modelContext.insert(entry)
+            try modelContext.save()
+
+            return "Successfully logged \(mealName): \(foodList) (\(totalCalories) kcal) to your journal."
         }
-        guard let data = arguments.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let mealName = json["meal_name"] as? String else {
-            return "Error: missing 'meal_name' argument."
-        }
-
-        let foods: [String]
-        if let foodsArray = json["foods"] as? [String] {
-            foods = foodsArray
-        } else if let foodsString = json["foods"] as? String {
-            foods = [foodsString]
-        } else {
-            foods = []
-        }
-
-        let totalCalories = json["total_calories"] as? Int ?? 0
-
-        let foodList = foods.joined(separator: ", ")
-        let note = "[\(mealName)] \(foodList) — ~\(totalCalories) kcal"
-
-        let foodLog = FoodLogRecord(
-            mealName: mealName,
-            foods: foods.map { FoodLogItem(name: $0, portion: "unspecified", calories: 0) },
-            totalCalories: totalCalories,
-            proteinGrams: json["protein_grams"] as? Int ?? 0,
-            carbsGrams: json["carbs_grams"] as? Int ?? 0,
-            fatGrams: json["fat_grams"] as? Int ?? 0,
-            fiberGrams: json["fiber_grams"] as? Int ?? 0,
-            healthScore: json["health_score"] as? String ?? "moderate",
-            suggestions: json["suggestions"] as? [String] ?? [],
-            source: .coachTool
-        )
-        modelContext.insert(foodLog)
-
-        let entry = JournalEntryRecord(
-            createdAt: Date(),
-            tags: ["food", "meal"],
-            note: note,
-            value: Double(totalCalories),
-            unit: "kcal"
-        )
-        modelContext.insert(entry)
-        try modelContext.save()
-
-        return "Successfully logged \(mealName): \(foodList) (\(totalCalories) kcal) to your journal."
     }
 }
 
@@ -660,12 +661,12 @@ struct CreateTrainingPlanTool: AgentTool {
     }
 
     func execute(arguments: String) async throws -> String {
-        try await MainActor.run {
+        return try await MainActor.run {
             try PersistenceWriteGate.shared.assertWritable(operation: "CreateTrainingPlanTool", modelContext: modelContext)
-        }
-        guard let data = arguments.data(using: .utf8) else {
-            return "Error: invalid UTF-8 string."
-        }
+
+            guard let data = arguments.data(using: .utf8) else {
+                return "Error: invalid UTF-8 string."
+            }
 
         struct PlanInput: Codable {
             let title: String
@@ -728,6 +729,7 @@ struct CreateTrainingPlanTool: AgentTool {
         try modelContext.save()
 
         return "Successfully created and activated your training plan: \(input.title) (\(input.weeks_count) weeks, \(trainingDays.count) sessions)!"
+        }
     }
 }
 

@@ -24,12 +24,55 @@ actor LLMService {
 
     // MARK: - Chat Completion
 
+    private static let requestTimeoutSeconds: Int64 = 45
+    private static let maxRetries = 2
+
     func chat(
         messages: [ChatMessage],
         systemPrompt: String,
         tools: [ToolDefinition]? = nil,
         temperature: Double = 0.7,
         lang: String = "zh"
+    ) async throws -> ChatResponse {
+        var lastError: Error?
+
+        for attempt in 0...Self.maxRetries {
+            if attempt > 0 {
+                let delay = UInt64(pow(2.0, Double(attempt))) * 1_000_000_000
+                try await Task.sleep(nanoseconds: delay)
+                logger.info("LLM retry attempt \(attempt)/\(Self.maxRetries)")
+            }
+
+            do {
+                return try await performChatRequest(
+                    messages: messages,
+                    systemPrompt: systemPrompt,
+                    tools: tools,
+                    temperature: temperature,
+                    lang: lang
+                )
+            } catch {
+                lastError = error
+                // Only retry on server errors (502/503) or timeouts (504)
+                if let abort = error as? Abort {
+                    let code = abort.status.code
+                    guard code == 502 || code == 503 || code == 504 else { throw abort }
+                } else {
+                    // Non-Abort errors (network timeouts, etc.) are retryable
+                    guard attempt < Self.maxRetries else { throw error }
+                }
+            }
+        }
+
+        throw lastError ?? Abort(.badGateway, reason: "LLM request failed after \(Self.maxRetries + 1) attempts.")
+    }
+
+    private func performChatRequest(
+        messages: [ChatMessage],
+        systemPrompt: String,
+        tools: [ToolDefinition]?,
+        temperature: Double,
+        lang: String
     ) async throws -> ChatResponse {
         guard !apiKey.isEmpty else {
             throw Abort(.serviceUnavailable, reason: "ANTHROPIC_API_KEY is not configured.")
@@ -56,6 +99,7 @@ actor LLMService {
             buffer.writeBytes(jsonData)
             req.body = buffer
         })
+        req.timeout = .init(connect: .seconds(15), read: .seconds(Self.requestTimeoutSeconds))
         guard response.status == .ok else {
             throw Abort(.badGateway, reason: "Anthropic request failed with status \(response.status.code).")
         }

@@ -44,12 +44,12 @@ struct VelaJournalView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(dateSectionTitle(for: dashboardVM.selectedDate))
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(Color(hex: "#1A1917"))
+                        .foregroundStyle(VelaTheme.fg)
                         .padding(.top, 4)
                     
                     Text("习惯与记录")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .foregroundStyle(VelaTheme.muted)
                         .textCase(.uppercase)
                         .padding(.leading, 2)
                     
@@ -123,7 +123,7 @@ struct VelaJournalView: View {
         }
         .scrollIndicators(.hidden)
         .velaTrackScroll(direction: scrollDirection)
-        .background(Color(hex: "#F5F3F0")) // Warm canvas base
+        .background(VelaTheme.systemGroupedBackground)
         .onAppear {
             loadRealJournalData()
         }
@@ -138,14 +138,14 @@ struct VelaJournalView: View {
                 saveQuickEntry(tags: ["caffeine", "咖啡因"], note: "摄入咖啡因 \(Int(amount)) mg", value: amount, unit: "mg")
             }
             .presentationDetents([.medium])
-            .presentationBackground(Color(hex: "#F5F3F0"))
+            .presentationBackground(VelaTheme.systemGroupedBackground)
         }
         .sheet(isPresented: $showWaterLogger) {
             WaterLoggerView { amount in
                 saveQuickEntry(tags: ["hydration", "补水"], note: "饮水 \(Int(amount)) ml", value: amount, unit: "ml")
             }
             .presentationDetents([.medium])
-            .presentationBackground(Color(hex: "#F5F3F0"))
+            .presentationBackground(VelaTheme.systemGroupedBackground)
         }
         .sheet(isPresented: $showMoodLogger) {
             MoodLoggerView { score, note in
@@ -153,14 +153,14 @@ struct VelaJournalView: View {
                 saveQuickEntry(tags: ["mood", "每日心情"], note: "心情: \(moodText). 备注: \(note)", value: score)
             }
             .presentationDetents([.medium])
-            .presentationBackground(Color(hex: "#F5F3F0"))
+            .presentationBackground(VelaTheme.systemGroupedBackground)
         }
         .sheet(isPresented: $showAlcoholLogger) {
             AlcoholLoggerView { amount in
                 saveQuickEntry(tags: ["alcohol", "酒"], note: "饮酒 \(amount) 标准杯", value: amount, unit: "杯")
             }
             .presentationDetents([.medium])
-            .presentationBackground(Color(hex: "#F5F3F0"))
+            .presentationBackground(VelaTheme.systemGroupedBackground)
         }
     }
 
@@ -276,10 +276,10 @@ struct VelaJournalView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("手记")
                     .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
                 Text(headerDateString(for: dashboardVM.selectedDate))
                     .font(.system(size: 12))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
             }
             
             Spacer()
@@ -295,11 +295,10 @@ struct VelaJournalView: View {
                         Text("分析")
                             .font(.system(size: 13, weight: .bold))
                     }
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white))
-                    .shadow(color: Color.black.opacity(0.02), radius: 4, y: 2)
+                    .velaNativeCard(radius: 16)
                 }
                 .buttonStyle(.plain)
                 
@@ -320,10 +319,10 @@ struct VelaJournalView: View {
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(Color(hex: "#1A1917"))
+                        .foregroundStyle(VelaTheme.fg)
                         .frame(width: 36, height: 36)
-                        .background(Circle().fill(Color.white))
-                        .shadow(color: Color.black.opacity(0.02), radius: 4, y: 2)
+                        .background(Circle().fill(VelaTheme.cardBg))
+                        .overlay(Circle().stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
                 }
                 .buttonStyle(.plain)
             }
@@ -366,20 +365,20 @@ struct VelaJournalView: View {
                     VStack(spacing: 8) {
                         Text(weekdays[idx])
                             .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(Color(hex: "#8E8A80"))
+                            .foregroundStyle(VelaTheme.muted)
                         
                         Text("\(dayNumber)")
                             .font(.system(size: 13, weight: .bold, design: .rounded))
-                            .foregroundStyle(isSelected ? Color.white : Color(hex: "#1A1917"))
+                            .foregroundStyle(isSelected ? Color.white : VelaTheme.fg)
                             .frame(width: 26, height: 26)
                             .background(
                                 Group {
                                     if isSelected {
                                         Circle()
-                                            .fill(Color(hex: "#C56B4A")) // Selected circle
+                                            .fill(VelaTheme.accent) // Selected circle
                                     } else if isToday {
                                         Circle()
-                                            .stroke(Color(hex: "#C56B4A"), lineWidth: 1.5) // Today indicator
+                                            .stroke(VelaTheme.accent, lineWidth: 1.5) // Today indicator
                                     }
                                 }
                             )
@@ -392,7 +391,7 @@ struct VelaJournalView: View {
                         } else {
                             Image(systemName: "circle")
                                 .font(.system(size: 18))
-                                .foregroundStyle(Color(hex: "#E8E4DD")) // Gray empty circle
+                                .foregroundStyle(Color(hex: "#E5E5EA")) // Gray empty circle
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -402,15 +401,7 @@ struct VelaJournalView: View {
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 4)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.02), radius: 4, y: 2)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
-        )
+        .velaNativeCard(radius: 18)
     }
 
     // MARK: - Segmented Action Row (✕, –, ✓ toggles)
@@ -420,13 +411,13 @@ struct VelaJournalView: View {
                 // Colored icon
                 Image(systemName: icon)
                     .font(.system(size: 16))
-                    .foregroundStyle(Color(hex: "#C56B4A"))
+                    .foregroundStyle(VelaTheme.accent)
                     .frame(width: 32, height: 32)
-                    .background(Circle().fill(Color(hex: "#FFF3E0")))
+                    .background(Circle().fill(VelaTheme.accent.opacity(0.12)))
                 
                 Text(title)
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
             }
             
             Spacer()
@@ -436,35 +427,27 @@ struct VelaJournalView: View {
                 segmentButton(title: title, label: "✕", index: 0, state: state)
                 
                 Rectangle()
-                    .fill(Color(hex: "#E8E4DD"))
+                    .fill(VelaTheme.separatorSoft)
                     .frame(width: 0.5, height: 20)
                 
                 segmentButton(title: title, label: "–", index: 1, state: state)
                 
                 Rectangle()
-                    .fill(Color(hex: "#E8E4DD"))
+                    .fill(VelaTheme.separatorSoft)
                     .frame(width: 0.5, height: 20)
                 
                 segmentButton(title: title, label: "✓", index: 2, state: state)
             }
-            .background(Color(hex: "#F5F3F0"))
+            .background(VelaTheme.systemGroupedBackground)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+                    .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
             )
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.015), radius: 4, y: 2)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
-        )
+        .velaNativeCard(radius: 16)
     }
 
     private func segmentButton(title: String, label: String, index: Int, state: Binding<Int>) -> some View {
@@ -474,13 +457,12 @@ struct VelaJournalView: View {
         } label: {
             Text(label)
                 .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(state.wrappedValue == index ? Color(hex: "#1A1917") : Color(hex: "#BFB9AC"))
+                .foregroundStyle(state.wrappedValue == index ? VelaTheme.fg : VelaTheme.meta)
                 .frame(width: 32, height: 30)
                 .background(
                     Group {
                         if state.wrappedValue == index {
-                            Color.white
-                                .shadow(color: Color.black.opacity(0.04), radius: 2, y: 1)
+                            VelaTheme.cardBg
                         }
                     }
                 )
@@ -495,13 +477,13 @@ struct VelaJournalView: View {
                 HStack(spacing: 10) {
                     Image(systemName: icon)
                         .font(.system(size: 16))
-                        .foregroundStyle(Color(hex: "#C56B4A"))
+                        .foregroundStyle(VelaTheme.accent)
                         .frame(width: 32, height: 32)
-                        .background(Circle().fill(Color(hex: "#FFF3E0")))
+                        .background(Circle().fill(VelaTheme.accent.opacity(0.12)))
                     
                     Text(title)
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Color(hex: "#1A1917"))
+                        .foregroundStyle(VelaTheme.fg)
                 }
                 
                 Spacer()
@@ -509,27 +491,19 @@ struct VelaJournalView: View {
                 HStack(spacing: 8) {
                     Text(valuePlaceholder)
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Color(hex: "#BFB9AC"))
+                        .foregroundStyle(VelaTheme.meta)
                     
                     Image(systemName: "arrow.right")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Color(hex: "#BFB9AC"))
+                        .foregroundStyle(VelaTheme.meta)
                         .frame(width: 28, height: 28)
-                        .background(Circle().fill(Color(hex: "#F5F3F0")))
-                        .overlay(Circle().stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
+                        .background(Circle().fill(VelaTheme.systemGroupedBackground))
+                        .overlay(Circle().stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
                 }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color.white)
-                    .shadow(color: Color.black.opacity(0.015), radius: 4, y: 2)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
-            )
+            .velaNativeCard(radius: 16)
         }
         .buttonStyle(.plain)
     }
@@ -576,21 +550,21 @@ struct CaffeineLoggerView: View {
     var body: some View {
         VStack(spacing: 24) {
             Capsule()
-                .fill(Color(hex: "#E8E4DD"))
+                .fill(Color(hex: "#E5E5EA"))
                 .frame(width: 36, height: 5)
                 .padding(.top, 8)
             
             HStack {
                 Text("记录咖啡因")
                     .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
                 Spacer()
                 Button {
                     dismiss()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 24))
-                        .foregroundStyle(Color(hex: "#BFB9AC"))
+                        .foregroundStyle(VelaTheme.meta)
                 }
                 .buttonStyle(.plain)
             }
@@ -600,7 +574,7 @@ struct CaffeineLoggerView: View {
                 VStack(spacing: 24) {
                     Text("输入或选择摄入的咖啡因量。这会有助于 AI 预测它对你深度睡眠和能量水平的长期影响。")
                         .font(.system(size: 14))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .foregroundStyle(VelaTheme.muted)
                         .lineSpacing(4)
                         .padding(.horizontal, 20)
                     
@@ -608,26 +582,25 @@ struct CaffeineLoggerView: View {
                         HStack(alignment: .firstTextBaseline) {
                             Text("\(Int(customAmount))")
                                 .font(.system(size: 48, weight: .black, design: .rounded))
-                                .foregroundStyle(Color(hex: "#C56B4A"))
+                                .foregroundStyle(VelaTheme.accent)
                             Text("mg")
                                 .font(.system(size: 18, weight: .bold))
-                                .foregroundStyle(Color(hex: "#BFB9AC"))
+                                .foregroundStyle(VelaTheme.meta)
                         }
                         
                         Slider(value: $customAmount, in: 0...400, step: 5)
-                            .tint(Color(hex: "#C56B4A"))
+                            .tint(VelaTheme.accent)
                             .padding(.horizontal, 20)
                     }
                     .padding(.vertical, 20)
                     .frame(maxWidth: .infinity)
-                    .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.white))
-                    .shadow(color: Color.black.opacity(0.015), radius: 6, y: 3)
+                    .velaNativeCard(radius: 20)
                     .padding(.horizontal, 16)
                     
                     VStack(alignment: .leading, spacing: 12) {
                         Text("快捷选项")
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(Color(hex: "#8E8A80"))
+                            .foregroundStyle(VelaTheme.muted)
                             .padding(.leading, 20)
                         
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -639,25 +612,24 @@ struct CaffeineLoggerView: View {
                                         VStack(spacing: 8) {
                                             Image(systemName: icon)
                                                 .font(.system(size: 20))
-                                                .foregroundStyle(Color(hex: "#C56B4A"))
+                                                .foregroundStyle(VelaTheme.accent)
                                                 .frame(width: 44, height: 44)
-                                                .background(Circle().fill(Color(hex: "#FFF3E0")))
+                                                .background(Circle().fill(VelaTheme.accent.opacity(0.12)))
                                             
                                             Text(name)
                                                 .font(.system(size: 12, weight: .bold))
-                                                .foregroundStyle(Color(hex: "#1A1917"))
+                                                .foregroundStyle(VelaTheme.fg)
                                             
                                             Text("\(Int(val)) mg")
                                                 .font(.system(size: 11, weight: .bold, design: .rounded))
-                                                .foregroundStyle(Color(hex: "#BFB9AC"))
+                                                .foregroundStyle(VelaTheme.meta)
                                         }
                                         .frame(width: 90, height: 110)
-                                        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white))
+                                        .velaNativeCard(radius: 16)
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                                .stroke(customAmount == val ? Color(hex: "#C56B4A") : Color.clear, lineWidth: 1.5)
+                                                .stroke(customAmount == val ? VelaTheme.accent : Color.clear, lineWidth: 1.5)
                                         )
-                                        .shadow(color: Color.black.opacity(0.015), radius: 4, y: 2)
                                     }
                                     .buttonStyle(.plain)
                                 }
@@ -676,8 +648,8 @@ struct CaffeineLoggerView: View {
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
-                            .background(RoundedRectangle(cornerRadius: 25, style: .continuous).fill(Color(hex: "#C56B4A")))
-                            .shadow(color: Color(hex: "#C56B4A").opacity(0.2), radius: 6, y: 3)
+                            .background(RoundedRectangle(cornerRadius: 25, style: .continuous).fill(VelaTheme.accent))
+                            .shadow(color: VelaTheme.accent.opacity(0.2), radius: 6, y: 3)
                     }
                     .buttonStyle(.plain)
                     .padding(.horizontal, 20)
@@ -685,7 +657,7 @@ struct CaffeineLoggerView: View {
                 }
             }
         }
-        .background(Color(hex: "#F5F3F0").ignoresSafeArea())
+        .background(VelaTheme.systemGroupedBackground.ignoresSafeArea())
     }
 }
 
@@ -706,21 +678,21 @@ struct WaterLoggerView: View {
     var body: some View {
         VStack(spacing: 24) {
             Capsule()
-                .fill(Color(hex: "#E8E4DD"))
+                .fill(Color(hex: "#E5E5EA"))
                 .frame(width: 36, height: 5)
                 .padding(.top, 8)
             
             HStack {
                 Text("记录补水")
                     .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
                 Spacer()
                 Button {
                     dismiss()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 24))
-                        .foregroundStyle(Color(hex: "#BFB9AC"))
+                        .foregroundStyle(VelaTheme.meta)
                 }
                 .buttonStyle(.plain)
             }
@@ -730,7 +702,7 @@ struct WaterLoggerView: View {
                 VStack(spacing: 24) {
                     Text("记录今天摄入的水分。水分补充充足可以提高身体在睡眠期间的自我恢复效能。")
                         .font(.system(size: 14))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .foregroundStyle(VelaTheme.muted)
                         .lineSpacing(4)
                         .padding(.horizontal, 20)
                     
@@ -741,7 +713,7 @@ struct WaterLoggerView: View {
                                 .foregroundStyle(Color(hex: "#4285F4"))
                             Text("ml")
                                 .font(.system(size: 18, weight: .bold))
-                                .foregroundStyle(Color(hex: "#BFB9AC"))
+                                .foregroundStyle(VelaTheme.meta)
                         }
                         
                         Slider(value: $customAmount, in: 0...1000, step: 50)
@@ -750,14 +722,13 @@ struct WaterLoggerView: View {
                     }
                     .padding(.vertical, 20)
                     .frame(maxWidth: .infinity)
-                    .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.white))
-                    .shadow(color: Color.black.opacity(0.015), radius: 6, y: 3)
+                    .velaNativeCard(radius: 20)
                     .padding(.horizontal, 16)
                     
                     VStack(alignment: .leading, spacing: 12) {
                         Text("快捷选项")
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(Color(hex: "#8E8A80"))
+                            .foregroundStyle(VelaTheme.muted)
                             .padding(.leading, 20)
                         
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -775,19 +746,18 @@ struct WaterLoggerView: View {
                                             
                                             Text(name)
                                                 .font(.system(size: 12, weight: .bold))
-                                                .foregroundStyle(Color(hex: "#1A1917"))
+                                                .foregroundStyle(VelaTheme.fg)
                                             
                                             Text("\(Int(val)) ml")
                                                 .font(.system(size: 11, weight: .bold, design: .rounded))
-                                                .foregroundStyle(Color(hex: "#BFB9AC"))
+                                                .foregroundStyle(VelaTheme.meta)
                                         }
                                         .frame(width: 90, height: 110)
-                                        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white))
+                                        .velaNativeCard(radius: 16)
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 18, style: .continuous)
                                                 .stroke(customAmount == val ? Color(hex: "#4285F4") : Color.clear, lineWidth: 1.5)
                                         )
-                                        .shadow(color: Color.black.opacity(0.015), radius: 4, y: 2)
                                     }
                                     .buttonStyle(.plain)
                                 }
@@ -815,7 +785,7 @@ struct WaterLoggerView: View {
                 }
             }
         }
-        .background(Color(hex: "#F5F3F0").ignoresSafeArea())
+        .background(VelaTheme.systemGroupedBackground.ignoresSafeArea())
     }
 }
 
@@ -838,21 +808,21 @@ struct MoodLoggerView: View {
     var body: some View {
         VStack(spacing: 24) {
             Capsule()
-                .fill(Color(hex: "#E8E4DD"))
+                .fill(Color(hex: "#E5E5EA"))
                 .frame(width: 36, height: 5)
                 .padding(.top, 8)
             
             HStack {
                 Text("记录心情")
                     .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
                 Spacer()
                 Button {
                     dismiss()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 24))
-                        .foregroundStyle(Color(hex: "#BFB9AC"))
+                        .foregroundStyle(VelaTheme.meta)
                 }
                 .buttonStyle(.plain)
             }
@@ -862,7 +832,7 @@ struct MoodLoggerView: View {
                 VStack(spacing: 24) {
                     Text("记录今天你的整体情绪感受。AI 会基于心率变异性(HRV)等生理指标与心境波动建立深度习惯网络模型。")
                         .font(.system(size: 14))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .foregroundStyle(VelaTheme.muted)
                         .lineSpacing(4)
                         .padding(.horizontal, 20)
                     
@@ -876,17 +846,17 @@ struct MoodLoggerView: View {
                                         .font(.system(size: 32))
                                     Text(label)
                                         .font(.system(size: 11, weight: .bold))
-                                        .foregroundStyle(selectedScore == score ? Color(hex: "#1A1917") : Color(hex: "#BFB9AC"))
+                                        .foregroundStyle(selectedScore == score ? VelaTheme.fg : VelaTheme.meta)
                                 }
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 80)
                                 .background(
                                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .fill(selectedScore == score ? Color.white : Color(hex: "#E8E4DD").opacity(0.2))
+                                        .fill(selectedScore == score ? Color.white : Color(hex: "#E5E5EA").opacity(0.2))
                                 )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .stroke(selectedScore == score ? Color(hex: "#C56B4A") : Color.clear, lineWidth: 1.5)
+                                        .stroke(selectedScore == score ? VelaTheme.accent : Color.clear, lineWidth: 1.5)
                                 )
                                 .shadow(color: Color.black.opacity(selectedScore == score ? 0.03 : 0.0), radius: 4, y: 2)
                             }
@@ -898,18 +868,17 @@ struct MoodLoggerView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("今日备注 (可选)")
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(Color(hex: "#8E8A80"))
+                            .foregroundStyle(VelaTheme.muted)
                             .padding(.leading, 4)
                         
                         TextField("记录一些让你开心或焦虑的小事...", text: $noteText)
                             .font(.system(size: 14))
                             .padding(14)
-                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white))
+                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.cardBg))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+                                    .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
                             )
-                            .shadow(color: Color.black.opacity(0.015), radius: 4, y: 2)
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 8)
@@ -923,8 +892,8 @@ struct MoodLoggerView: View {
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
-                            .background(RoundedRectangle(cornerRadius: 25, style: .continuous).fill(Color(hex: "#C56B4A")))
-                            .shadow(color: Color(hex: "#C56B4A").opacity(0.2), radius: 6, y: 3)
+                            .background(RoundedRectangle(cornerRadius: 25, style: .continuous).fill(VelaTheme.accent))
+                            .shadow(color: VelaTheme.accent.opacity(0.2), radius: 6, y: 3)
                     }
                     .buttonStyle(.plain)
                     .padding(.horizontal, 20)
@@ -932,7 +901,7 @@ struct MoodLoggerView: View {
                 }
             }
         }
-        .background(Color(hex: "#F5F3F0").ignoresSafeArea())
+        .background(VelaTheme.systemGroupedBackground.ignoresSafeArea())
     }
 }
 
@@ -946,21 +915,21 @@ struct AlcoholLoggerView: View {
     var body: some View {
         VStack(spacing: 24) {
             Capsule()
-                .fill(Color(hex: "#E8E4DD"))
+                .fill(Color(hex: "#E5E5EA"))
                 .frame(width: 36, height: 5)
                 .padding(.top, 8)
             
             HStack {
                 Text("记录饮酒")
                     .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
                 Spacer()
                 Button {
                     dismiss()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 24))
-                        .foregroundStyle(Color(hex: "#BFB9AC"))
+                        .foregroundStyle(VelaTheme.meta)
                 }
                 .buttonStyle(.plain)
             }
@@ -970,7 +939,7 @@ struct AlcoholLoggerView: View {
                 VStack(spacing: 24) {
                     Text("酒精摄入会强烈抑制副交感神经系统，导致夜间静息心率(RHR)升高，HRV 暴跌，深度及 REM 睡眠显著减少。")
                         .font(.system(size: 14))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .foregroundStyle(VelaTheme.muted)
                         .lineSpacing(4)
                         .padding(.horizontal, 20)
                     
@@ -981,7 +950,7 @@ struct AlcoholLoggerView: View {
                                 .foregroundStyle(Color(hex: "#8B0000"))
                             Text("标准杯")
                                 .font(.system(size: 18, weight: .bold))
-                                .foregroundStyle(Color(hex: "#BFB9AC"))
+                                .foregroundStyle(VelaTheme.meta)
                         }
                         
                         HStack(spacing: 40) {
@@ -992,7 +961,7 @@ struct AlcoholLoggerView: View {
                             } label: {
                                 Image(systemName: "minus.circle.fill")
                                     .font(.system(size: 36))
-                                    .foregroundStyle(Color(hex: "#8E8A80"))
+                                    .foregroundStyle(VelaTheme.muted)
                             }
                             .buttonStyle(.plain)
                             
@@ -1001,32 +970,31 @@ struct AlcoholLoggerView: View {
                             } label: {
                                 Image(systemName: "plus.circle.fill")
                                     .font(.system(size: 36))
-                                    .foregroundStyle(Color(hex: "#C56B4A"))
+                                    .foregroundStyle(VelaTheme.accent)
                             }
                             .buttonStyle(.plain)
                         }
                     }
                     .padding(.vertical, 24)
                     .frame(maxWidth: .infinity)
-                    .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.white))
-                    .shadow(color: Color.black.opacity(0.015), radius: 6, y: 3)
+                    .velaNativeCard(radius: 20)
                     .padding(.horizontal, 16)
                     
                     VStack(alignment: .leading, spacing: 10) {
                         Text("💡 什么是 1 标准杯？")
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(Color(hex: "#1A1917"))
+                            .foregroundStyle(VelaTheme.fg)
                         
                         Text("一标准杯大约含有 10 克纯酒精：\n· 1 杯普通啤酒 (约 330ml, 4.5%)\n· 1 杯红葡萄酒 (约 150ml, 12%)\n· 1 盎司烈性白酒 (约 45ml, 40%)")
                             .font(.system(size: 12))
-                            .foregroundStyle(Color(hex: "#8E8A80"))
+                            .foregroundStyle(VelaTheme.muted)
                             .lineSpacing(5)
                     }
                     .padding(18)
-                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white))
+                    .velaNativeCard(radius: 16)
                     .overlay(
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+                            .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
                     )
                     .padding(.horizontal, 20)
                     
@@ -1048,6 +1016,6 @@ struct AlcoholLoggerView: View {
                 }
             }
         }
-        .background(Color(hex: "#F5F3F0").ignoresSafeArea())
+        .background(VelaTheme.systemGroupedBackground.ignoresSafeArea())
     }
 }

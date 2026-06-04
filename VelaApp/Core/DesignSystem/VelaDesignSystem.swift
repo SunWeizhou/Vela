@@ -101,7 +101,7 @@ struct VitalCard: View {
 
                 HStack(alignment: .lastTextBaseline, spacing: 4) {
                     Text(value)
-                        .font(.system(size: 36, weight: .semibold, design: .rounded))
+                        .font(.system(size: 36, weight: .semibold, design: .rounded).monospacedDigit())
                         .foregroundStyle(VelaTheme.fg)
                     Text(unit)
                         .font(.system(size: 16))
@@ -185,7 +185,7 @@ struct InfoCard: View {
 
                 HStack(alignment: .lastTextBaseline, spacing: 4) {
                     Text(value)
-                        .font(.system(size: 32, weight: .semibold, design: .rounded))
+                        .font(.system(size: 32, weight: .semibold, design: .rounded).monospacedDigit())
                         .foregroundStyle(VelaTheme.fg)
                     if let unit = unit {
                         Text(unit)
@@ -328,6 +328,7 @@ struct GlassTabBar: View {
         HStack(spacing: 0) {
             ForEach(VelaTab.allCases, id: \.self) { tab in
                 Button {
+                    VelaHaptic.selection()
                     withAnimation(.spring(response: 0.38, dampingFraction: 0.78, blendDuration: 0)) {
                         selectedTab = tab
                     }
@@ -347,7 +348,7 @@ struct GlassTabBar: View {
                         ZStack {
                             if isActive {
                                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(Color(hex: "#E8E4DD").opacity(0.45))
+                                    .fill(Color(hex: "#E5E5EA").opacity(0.45))
                                     .matchedGeometryEffect(id: "activeTabBackground", in: animation)
                             }
                         }
@@ -955,6 +956,11 @@ struct CardPressStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+            .onChange(of: configuration.isPressed) { _, isPressed in
+                if isPressed {
+                    VelaHaptic.light()
+                }
+            }
     }
 }
 
@@ -967,6 +973,11 @@ struct TabItemStyle: ButtonStyle {
         configuration.label
             .opacity(configuration.isPressed ? 0.6 : 1)
             .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+            .onChange(of: configuration.isPressed) { _, isPressed in
+                if isPressed {
+                    VelaHaptic.selection()
+                }
+            }
     }
 }
 
@@ -979,12 +990,67 @@ struct PlusButtonStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.92 : 1)
             .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+            .onChange(of: configuration.isPressed) { _, isPressed in
+                if isPressed {
+                    VelaHaptic.medium()
+                }
+            }
     }
 }
 
 // MARK: - View Modifiers
 
+// MARK: - View Modifiers
+
+struct AmbientGlowModifier: ViewModifier {
+    let color: Color
+    let intensity: CGFloat
+    @State private var breathe = false
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
+                    .fill(color)
+                    .blur(radius: breathe ? 24 : 16)
+                    .opacity(breathe ? intensity * 1.15 : intensity)
+                    .scaleEffect(breathe ? 1.015 : 0.985)
+                    .onAppear {
+                        withAnimation(.easeInOut(duration: 3.6).repeatForever(autoreverses: true)) {
+                            breathe = true
+                        }
+                    }
+            )
+    }
+}
+
+struct VelaNativeCardModifier: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+    let radius: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(VelaTheme.cardBg)
+                    .shadow(color: VelaTheme.nativeShadow(colorScheme), radius: 8, y: 2)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
+            )
+    }
+}
+
 extension View {
+    func ambientGlow(color: Color, intensity: CGFloat = 0.05) -> some View {
+        self.modifier(AmbientGlowModifier(color: color, intensity: intensity))
+    }
+
+    func velaNativeCard(radius: CGFloat = 16) -> some View {
+        self.modifier(VelaNativeCardModifier(radius: radius))
+    }
+
     func cardSurface(padding: CGFloat = VelaTheme.spaceLG, radius: CGFloat = VelaTheme.radiusLG) -> some View {
         self
             .padding(padding)
@@ -994,10 +1060,12 @@ extension View {
                     .fill(VelaTheme.cardBg)
             )
             .overlay(
+                // Inner concentric highlight border for refraction look
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+                    .stroke(Color.white.opacity(0.14), lineWidth: 1.0)
+                    .padding(0.5)
             )
-            .shadow(color: VelaTheme.cardShadowColor, radius: 2, y: 1)
+            .shadow(color: VelaTheme.cardShadowColor, radius: 4, y: 2)
     }
 
     func heroCardSurface(accent: Color = VelaTheme.accent, padding: CGFloat = VelaTheme.spaceLG) -> some View {
@@ -1010,7 +1078,8 @@ extension View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: VelaTheme.radiusHero, style: .continuous)
-                    .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+                    .stroke(Color.white.opacity(0.14), lineWidth: 1.0)
+                    .padding(0.5)
             )
     }
 
@@ -1018,6 +1087,10 @@ extension View {
         self
             .background(.ultraThinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .stroke(Color.white.opacity(0.18), lineWidth: 0.5)
+            )
     }
 
     func sectionSpacing() -> some View {
@@ -1458,6 +1531,8 @@ struct BevelScoreRing: View {
     let label: String
     let valueText: String
 
+    @State private var animatedScore: Double = 0.0
+
     var body: some View {
         VStack(spacing: 8) {
             ZStack {
@@ -1466,10 +1541,10 @@ struct BevelScoreRing: View {
                     .stroke(VelaTheme.borderSoft, lineWidth: 6.5)
                     .frame(width: size, height: size)
                 
-                if score > 0 {
+                if animatedScore > 0 {
                     // Gradient or solid arc using system gradient to avoid rotation coordinate bugs
                     Circle()
-                        .trim(from: 0, to: max(0.01, score))
+                        .trim(from: 0, to: max(0.01, animatedScore))
                         .stroke(
                             useGradient 
                             ? AnyShapeStyle(color.gradient)
@@ -1478,12 +1553,11 @@ struct BevelScoreRing: View {
                         )
                         .rotationEffect(.degrees(-90))
                         .frame(width: size, height: size)
-                        .animation(.smooth(duration: 0.8), value: score)
                 }
                 
                 // Small indicator dot at progress end aligned perfectly on stroke center path
-                if score > 0 {
-                    let angle = -90 + (max(0.01, score) * 360)
+                if animatedScore > 0 {
+                    let angle = -90 + (max(0.01, animatedScore) * 360)
                     let radius = (size - 6.5) / 2
                     Circle()
                         .fill(color)
@@ -1493,7 +1567,7 @@ struct BevelScoreRing: View {
                 
                 // Center Value
                 Text(valueText)
-                    .font(.system(size: size * 0.28, weight: .bold, design: .rounded))
+                    .font(.system(size: size * 0.28, weight: .bold, design: .rounded).monospacedDigit())
                     .foregroundStyle(VelaTheme.fg)
             }
             .frame(width: size, height: size)
@@ -1501,6 +1575,16 @@ struct BevelScoreRing: View {
             Text(label)
                 .font(VelaTheme.caption2())
                 .foregroundStyle(VelaTheme.muted)
+        }
+        .onAppear {
+            withAnimation(.spring(response: 0.85, dampingFraction: 0.82, blendDuration: 0)) {
+                animatedScore = score
+            }
+        }
+        .onChange(of: score) { _, newScore in
+            withAnimation(.spring(response: 0.85, dampingFraction: 0.82, blendDuration: 0)) {
+                animatedScore = newScore
+            }
         }
     }
 }
@@ -1513,6 +1597,8 @@ struct DottedCircleGauge: View {
     var size: CGFloat = 72
     let color: Color
 
+    @State private var animatedScore: Double = 0.0
+
     var body: some View {
         ZStack {
             // Dotted circle track
@@ -1522,15 +1608,14 @@ struct DottedCircleGauge: View {
             
             // Colored active dots matching score
             Circle()
-                .trim(from: 0, to: max(0.02, score / 100.0))
+                .trim(from: 0, to: max(0.02, animatedScore / 100.0))
                 .stroke(color, style: StrokeStyle(lineWidth: 4.5, lineCap: .round, dash: [1.5, 4]))
                 .rotationEffect(.degrees(-90))
                 .frame(width: size, height: size)
-                .animation(.smooth(duration: 0.8), value: score)
             
             VStack(spacing: 1) {
-                Text("\(Int(score))")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                Text("\(Int(animatedScore))")
+                    .font(.system(size: 20, weight: .bold, design: .rounded).monospacedDigit())
                     .foregroundStyle(VelaTheme.fg)
                 Text(labelText)
                     .font(.system(size: 10, weight: .semibold))
@@ -1538,6 +1623,16 @@ struct DottedCircleGauge: View {
             }
         }
         .frame(width: size, height: size)
+        .onAppear {
+            withAnimation(.spring(response: 0.85, dampingFraction: 0.82, blendDuration: 0)) {
+                animatedScore = score
+            }
+        }
+        .onChange(of: score) { _, newScore in
+            withAnimation(.spring(response: 0.85, dampingFraction: 0.82, blendDuration: 0)) {
+                animatedScore = newScore
+            }
+        }
     }
 }
 
@@ -1548,13 +1643,25 @@ struct SegmentedBatteryBar: View {
     var barCount: Int = 26
     let color: Color
 
+    @State private var animatedPercentage: Double = 0.0
+
     var body: some View {
         HStack(spacing: 3) {
             ForEach(0..<barCount, id: \.self) { idx in
-                let activeCount = Int(percentage * Double(barCount))
+                let activeCount = Int(animatedPercentage * Double(barCount))
                 RoundedRectangle(cornerRadius: 1)
                     .fill(idx < activeCount ? color : VelaTheme.borderSoft)
                     .frame(width: 4, height: 14)
+            }
+        }
+        .onAppear {
+            withAnimation(.spring(response: 1.1, dampingFraction: 0.82, blendDuration: 0)) {
+                animatedPercentage = percentage
+            }
+        }
+        .onChange(of: percentage) { _, newPercentage in
+            withAnimation(.spring(response: 1.1, dampingFraction: 0.82, blendDuration: 0)) {
+                animatedPercentage = newPercentage
             }
         }
     }

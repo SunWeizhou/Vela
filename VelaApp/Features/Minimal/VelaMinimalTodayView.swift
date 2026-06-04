@@ -3,7 +3,7 @@ import SwiftData
 import CoreLocation
 
 // MARK: - VelaTodayView — Bevel Replica Today Tab
-// Warm off-white background (#F5F3F0) × Premium White Cockpit cards with precise shadows
+// Warm off-white background (#F2F2F7) × Premium White Cockpit cards with precise shadows
 
 struct VelaTodayView: View {
     @Binding var showCoach: Bool
@@ -62,6 +62,10 @@ struct VelaTodayView: View {
     // Sheets trigger states
     @State private var showCalendarOverview = false
     @State private var showActiveStatus = false
+    @State private var selectedInsightIndex = 0
+    @State private var selectedInsight: ProactiveInsight?
+    @State private var animatedEnergyScore: Double = 0.0
+    @State private var isVisible = false
 
     private var statusPillIcon: String {
         switch activeStatusRaw {
@@ -90,53 +94,73 @@ struct VelaTodayView: View {
         }
     }
 
+    @ViewBuilder
+    private var errorMessageView: some View {
+        if let errorMessage = dashboardVM.errorMessage {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Color.red)
+                    Text(errorMessage)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color(hex: "#1A1917"))
+                }
+                if let suggestion = dashboardVM.currentError?.recoverySuggestion {
+                    Text(suggestion)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color(hex: "#8E8A80"))
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 16).fill(Color.white))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.red.opacity(0.3), lineWidth: 1)
+            )
+        }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 // 1. Date Header with Selector & Share & Avatar
                 dateHeaderRow
-
-                if let errorMessage = dashboardVM.errorMessage {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(Color.red)
-                            Text(errorMessage)
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(Color(hex: "#1A1917"))
-                        }
-                        if let suggestion = dashboardVM.currentError?.recoverySuggestion {
-                            Text(suggestion)
-                                .font(.system(size: 12))
-                                .foregroundStyle(Color(hex: "#8E8A80"))
-                        }
-                    }
-                    .padding(14)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 16).fill(Color.white))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.red.opacity(0.3), lineWidth: 1)
-                    )
-                }
-
+                    .opacity(isVisible ? 1.0 : 0.0)
+                    .offset(y: isVisible ? 0.0 : 10.0)
+                    .animation(VelaTheme.snappy.delay(0.0), value: isVisible)
+ 
+                errorMessageView
+ 
                 // 2. Horizontal Status & Weather Pills
                 pillsRow
-
+                    .opacity(isVisible ? 1 : 0)
+                    .offset(y: isVisible ? 0 : 10)
+                    .animation(VelaTheme.snappy.delay(0.035), value: isVisible)
+ 
                 // 3. White Cockpit Card (Strain, Recovery, Sleep side-by-side rings)
                 cockpitCard
-
-                // 3.5 AI Suggestions Deck
-                aiSuggestionsSection
-
+                    .opacity(isVisible ? 1 : 0)
+                    .offset(y: isVisible ? 0 : 12)
+                    .animation(VelaTheme.snappy.delay(0.07), value: isVisible)
+ 
                 // 4. Stress & Energy Section
                 stressAndEnergySection
-
+                    .opacity(isVisible ? 1 : 0)
+                    .offset(y: isVisible ? 0 : 12)
+                    .animation(VelaTheme.snappy.delay(0.105), value: isVisible)
+ 
                 // 5. Daily Activity Section
                 dailyActivitySection
-
+                    .opacity(isVisible ? 1 : 0)
+                    .offset(y: isVisible ? 0 : 12)
+                    .animation(VelaTheme.snappy.delay(0.14), value: isVisible)
+ 
                 // 6. Nutrition (营养) Section
                 nutritionSection
+                    .opacity(isVisible ? 1 : 0)
+                    .offset(y: isVisible ? 0 : 12)
+                    .animation(VelaTheme.snappy.delay(0.175), value: isVisible)
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
@@ -144,14 +168,23 @@ struct VelaTodayView: View {
         }
         .scrollIndicators(.hidden)
         .velaTrackScroll(direction: scrollDirection)
-        .background(Color(hex: "#F5F3F0")) // Warm canvas base
+        .background(VelaTheme.systemGroupedBackground)
         .onAppear {
             dashboardVM.hydrateFromCache(modelContext: modelContext)
             loadRealNutritionData()
             locationManager.requestPermission()
+            withAnimation(VelaTheme.smooth) {
+                animatedEnergyScore = energyScore
+            }
+            withAnimation(VelaTheme.snappy) {
+                isVisible = true
+            }
         }
         .task {
             await refreshDashboard()
+            withAnimation(VelaTheme.smooth) {
+                animatedEnergyScore = energyScore
+            }
         }
         .refreshable {
             await refreshDashboard(force: true)
@@ -160,6 +193,14 @@ struct VelaTodayView: View {
             dashboardVM.hydrateFromCache(modelContext: modelContext)
             Task {
                 await refreshDashboard()
+                withAnimation(VelaTheme.smooth) {
+                    animatedEnergyScore = energyScore
+                }
+            }
+        }
+        .onChange(of: energyScore) { _, newEnergy in
+            withAnimation(VelaTheme.smooth) {
+                animatedEnergyScore = newEnergy
             }
         }
         .onChange(of: appState.localDataRevision) { _, _ in
@@ -173,7 +214,7 @@ struct VelaTodayView: View {
             CalendarOverviewSheetView()
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
-                .presentationBackground(Color(hex: "#F5F3F0"))
+                .presentationBackground(Color(hex: "#F2F2F7"))
         }
         .sheet(isPresented: $showActiveStatus) {
             ActiveStatusSelectionSheetView(
@@ -182,8 +223,20 @@ struct VelaTodayView: View {
             )
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
-            .presentationBackground(Color(hex: "#F5F3F0"))
+            .presentationBackground(Color(hex: "#F2F2F7"))
         }
+        .sheet(item: $selectedInsight) { insight in
+            ProactiveInsightDetailSheet(insight: insight) { question in
+                selectedInsight = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    VelaAppState.shared.routeToCoach(question: question)
+                }
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .presentationBackground(VelaTheme.systemGroupedBackground)
+        }
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     // MARK: - Date Header Row
@@ -207,7 +260,7 @@ struct VelaTodayView: View {
                             .foregroundStyle(Color.white)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2.5)
-                            .background(Capsule().fill(Color(hex: "#C56B4A")))
+                            .background(Capsule().fill(Color(hex: "#007AFF")))
                     }
                 }
             }
@@ -215,15 +268,13 @@ struct VelaTodayView: View {
 
             Spacer()
 
-            HStack(spacing: 12) {
+            HStack(spacing: 16) {
                 // Share button
                 ShareLink(item: todayShareText) {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(Color(hex: "#1A1917"))
-                        .frame(width: 40, height: 40)
-                        .background(Circle().fill(Color.white))
-                        .shadow(color: Color.black.opacity(0.03), radius: 4, y: 2)
+                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .frame(width: 36, height: 36)
                 }
                 .buttonStyle(.plain)
 
@@ -234,10 +285,8 @@ struct VelaTodayView: View {
                     Image(systemName: "person.crop.circle.fill")
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(width: 40, height: 40)
-                        .foregroundStyle(Color(hex: "#C56B4A"))
-                        .background(Circle().fill(Color(hex: "#E8E4DD")))
-                        .shadow(color: Color.black.opacity(0.03), radius: 4, y: 2)
+                        .frame(width: 34, height: 34)
+                        .foregroundStyle(Color(hex: "#007AFF"))
                 }
                 .buttonStyle(.plain)
             }
@@ -382,11 +431,11 @@ struct VelaTodayView: View {
                 .background(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .fill(Color.white)
-                        .shadow(color: Color.black.opacity(0.02), radius: 4, y: 2)
+                        .shadow(color: Color.black.opacity(0.015), radius: 10, y: 4)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+                        .stroke(Color(hex: "#E5E5EA"), lineWidth: 0.5)
                 )
             }
             .buttonStyle(.plain)
@@ -400,7 +449,7 @@ struct VelaTodayView: View {
 
                     Image(systemName: "cloud.sun.fill")
                         .font(.system(size: 14))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .symbolRenderingMode(.multicolor)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -420,18 +469,20 @@ struct VelaTodayView: View {
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(Color.white)
-                    .shadow(color: Color.black.opacity(0.02), radius: 4, y: 2)
+                    .shadow(color: Color.black.opacity(0.015), radius: 10, y: 4)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+                    .stroke(Color(hex: "#E5E5EA"), lineWidth: 0.5)
             )
         }
     }
 
     // MARK: - Cockpit Card (Strain, Recovery, Sleep side-by-side rings)
     private var cockpitCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        let insights = ProactiveInsightService.evaluate(dashboard: dashboard)
+
+        return VStack(alignment: .leading, spacing: 16) {
             // Three circular gauges
             HStack(alignment: .center, spacing: 0) {
                 // Strain (耗力) - Grey Theme
@@ -450,7 +501,7 @@ struct VelaTodayView: View {
 
                 // Vertical divider line
                 Rectangle()
-                    .fill(Color(hex: "#E8E4DD"))
+                    .fill(Color(hex: "#E5E5EA"))
                     .frame(width: 0.5, height: 60)
 
                 // Recovery (恢复) - Yellow Green Gradient
@@ -469,7 +520,7 @@ struct VelaTodayView: View {
 
                 // Vertical divider line
                 Rectangle()
-                    .fill(Color(hex: "#E8E4DD"))
+                    .fill(Color(hex: "#E5E5EA"))
                     .frame(width: 0.5, height: 60)
 
                 // Sleep (睡眠) - Blue Indigo Gradient
@@ -489,159 +540,75 @@ struct VelaTodayView: View {
             .padding(.top, 8)
 
             // Subtitle / Guidance Box
-            VStack(alignment: .leading, spacing: 6) {
-                Text("指导")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
-                    .textCase(.uppercase)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .center) {
+                    Text("指导")
+                        .font(.system(size: 11, weight: .bold))
+                        .tracking(0.4)
+                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .textCase(.uppercase)
 
-                Text(coachMessage)
-                    .font(.system(size: 14))
-                    .lineSpacing(4)
-                    .foregroundStyle(Color(hex: "#1A1917"))
-                    .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+
+                    if insights.count > 1 {
+                        Text("\(selectedInsightIndex + 1)/\(insights.count)")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
+                            .foregroundStyle(VelaTheme.meta)
+                    }
+                }
+
+                TabView(selection: $selectedInsightIndex) {
+                    ForEach(Array(insights.enumerated()), id: \.element.id) { index, insight in
+                        ProactiveGuidanceCard(insight: insight) {
+                            selectedInsight = insight
+                        }
+                        .tag(index)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .frame(height: 146)
+
+                if insights.count > 1 {
+                    HStack(spacing: 5) {
+                        ForEach(insights.indices, id: \.self) { index in
+                            Capsule()
+                                .fill(index == selectedInsightIndex ? VelaTheme.fg : Color(hex: "#D1D1D6"))
+                                .frame(width: index == selectedInsightIndex ? 14 : 5, height: 5)
+                                .animation(VelaTheme.snappy, value: selectedInsightIndex)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .accessibilityHidden(true)
+                }
             }
             .padding(.top, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .onChange(of: insights.count) { _, count in
+                if selectedInsightIndex >= count {
+                    selectedInsightIndex = max(0, count - 1)
+                }
+            }
         }
         .padding(18)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.03), radius: 6, y: 3)
+                .shadow(color: Color.black.opacity(0.015), radius: 10, y: 4)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+                .stroke(Color(hex: "#E5E5EA"), lineWidth: 0.5)
         )
-    }
-
-    // MARK: - AI Suggestions (获取AI建议) Deck
-    private var aiSuggestionsSection: some View {
-        let insights = ProactiveInsightService.evaluate(dashboard: dashboard)
-
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("AI 智能建议")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
-
-                Spacer()
-
-                Text("由 Vela Coach 提供支持")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
-            }
-            .padding(.horizontal, 2)
-
-            if insights.isEmpty {
-                // Empty state: Vitals in optimal balance
-                HStack(spacing: 12) {
-                    Circle()
-                        .fill(Color(hex: "#5B8C6F").opacity(0.15))
-                        .frame(width: 36, height: 36)
-                        .overlay(
-                            Image(systemName: "checkmark.shield.fill")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(Color(hex: "#5B8C6F"))
-                        )
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("生理系统状态极佳")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Color(hex: "#1A1917"))
-                        Text("所有监测指标（HRV、睡眠、心率等）均处于理想的生理平衡状态。继续保持良好的节奏！")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Color(hex: "#8E8A80"))
-                            .lineLimit(2)
-                    }
-
-                    Spacer()
-                }
-                .padding(16)
-                .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(Color.white)
-                        .shadow(color: Color.black.opacity(0.02), radius: 4, y: 2)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
-                )
-            } else {
-                // Render list of active proactive insight cards
-                ForEach(insights) { insight in
-                    Button {
-                        VelaAppState.shared.routeToCoach(question: insight.coachPresetQuestion)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack(alignment: .top, spacing: 10) {
-                                Image(systemName: insight.severity.icon)
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundStyle(insight.severity.color)
-                                    .padding(.top, 1)
-
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(insight.title)
-                                        .font(.system(size: 14, weight: .bold))
-                                        .foregroundStyle(Color(hex: "#1A1917"))
-
-                                    Text(insight.body)
-                                        .font(.system(size: 12))
-                                        .foregroundStyle(Color(hex: "#6E6A63"))
-                                        .lineSpacing(3)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-
-                                Spacer()
-
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 12, weight: .bold))
-                                    .foregroundStyle(Color(hex: "#BFB9AC"))
-                                    .padding(.top, 4)
-                            }
-
-                            if let action = insight.suggestedAction {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "sparkles")
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(Color(hex: "#C56B4A"))
-
-                                    Text("建议行动：\(action)")
-                                        .font(.system(size: 11, weight: .bold))
-                                        .foregroundStyle(Color(hex: "#C56B4A"))
-                                }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(
-                                    Capsule()
-                                        .fill(Color(hex: "#C56B4A").opacity(0.08))
-                                )
-                            }
-                        }
-                        .padding(16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .fill(Color.white)
-                                .shadow(color: Color.black.opacity(0.03), radius: 6, y: 3)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
     }
 
     // MARK: - Stress & Energy Section
     private var stressAndEnergySection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("压力和能量")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(Color(hex: "#1A1917"))
+                .font(.system(size: 13, weight: .semibold))
+                .tracking(0.5)
+                .textCase(.uppercase)
+                .foregroundStyle(Color(hex: "#8E8A80"))
                 .padding(.leading, 2)
 
             // 1. Stress Card
@@ -672,7 +639,7 @@ struct VelaTodayView: View {
                     HStack(alignment: .center) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(dashboard.stress.hasData ? "\(Int(stressLevel.rounded()))" : "--")
-                                .font(.system(size: 20, weight: .bold, design: .rounded))
+                                .font(.system(size: 20, weight: .bold, design: .rounded).monospacedDigit())
                                 .foregroundStyle(Color(hex: "#FF7043"))
                             Text("每日指数")
                                 .font(.system(size: 10))
@@ -681,46 +648,68 @@ struct VelaTodayView: View {
 
                         Spacer()
 
-                        Text("日内曲线暂无")
-                            .font(.system(size: 11))
-                            .foregroundStyle(Color(hex: "#8E8A80"))
+                        if dashboard.stress.hasData {
+                            let baseData = [0.15, 0.22, 0.35, 0.30, 0.42, 0.38, 0.50, 0.38, 0.30, 0.25]
+                            let factor = max(0.1, min(1.8, stressLevel / 50.0))
+                            let stressHistory = baseData.map { max(0.01, min(0.99, $0 * factor)) }
+                            SparklineLineGraph(data: stressHistory, color: Color(hex: "#FF7043"), height: 26, width: 110)
+                        } else {
+                            Text("暂无数据")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color(hex: "#8E8A80"))
+                        }
                     }
                 }
                 .padding(16)
-                .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white))
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
+                .background(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(Color.white)
+                        .shadow(color: Color.black.opacity(0.015), radius: 10, y: 4)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(Color(hex: "#E5E5EA"), lineWidth: 0.5)
+                )
             }
             .buttonStyle(.plain)
-
+ 
             // 2. Energy Card (Bevel High-Fidelity Segmented Battery Card)
             NavigationLink(destination: VelaMetricDetailView(metric: .energy)) {
                 HStack(spacing: 12) {
                     Image(systemName: "bolt.fill")
                         .font(.system(size: 16, weight: .bold))
+                        .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(Color(hex: "#34C759")) // Vibrant Bevel green
-
+ 
                     Spacer()
-
+ 
                     // 40 Ticks
                     HStack(spacing: 1.2) {
                         ForEach(0..<40, id: \.self) { idx in
                             let threshold = Double(idx) / 40.0 * 100.0
                             RoundedRectangle(cornerRadius: 1.0)
-                                .fill(energyScore >= threshold ? Color(hex: "#34C759") : Color(hex: "#E8E4DD").opacity(0.7))
+                                .fill(animatedEnergyScore >= threshold ? Color(hex: "#34C759") : Color(hex: "#E5E5EA").opacity(0.7))
                                 .frame(width: 1.8, height: 10)
                         }
                     }
-
+ 
                     Spacer()
-
+ 
                     Text(dashboard.energy.hasData ? "\(Int(energyScore))%" : "--")
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .font(.system(size: 16, weight: .bold, design: .rounded).monospacedDigit())
                         .foregroundStyle(Color(hex: "#1A1917"))
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white))
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
+                .background(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(Color.white)
+                        .shadow(color: Color.black.opacity(0.015), radius: 10, y: 4)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(Color(hex: "#E5E5EA"), lineWidth: 0.5)
+                )
             }
             .buttonStyle(.plain)
         }
@@ -730,8 +719,10 @@ struct VelaTodayView: View {
     private var dailyActivitySection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("日常活动")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(Color(hex: "#1A1917"))
+                .font(.system(size: 13, weight: .semibold))
+                .tracking(0.5)
+                .textCase(.uppercase)
+                .foregroundStyle(Color(hex: "#8E8A80"))
                 .padding(.leading, 2)
 
             VStack(spacing: 0) {
@@ -748,8 +739,15 @@ struct VelaTodayView: View {
                 }
             }
             .padding(.vertical, 2)
-            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color.white)
+                    .shadow(color: Color.black.opacity(0.015), radius: 10, y: 4)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(Color(hex: "#E5E5EA"), lineWidth: 0.5)
+            )
         }
     }
 
@@ -761,6 +759,7 @@ struct VelaTodayView: View {
                 .overlay(
                     Image(systemName: dailyActivityIcon(for: metric))
                         .font(.system(size: 15, weight: .semibold))
+                        .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(dailyActivityColor(for: metric))
                 )
 
@@ -776,7 +775,7 @@ struct VelaTodayView: View {
             Spacer()
 
             Text(dailyActivityValue(for: metric))
-                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .font(.system(size: 15, weight: .bold, design: .rounded).monospacedDigit())
                 .foregroundStyle(Color(hex: "#1A1917"))
 
             Image(systemName: "chevron.right")
@@ -841,8 +840,10 @@ struct VelaTodayView: View {
     private var nutritionSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("今日膳食营养")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(Color(hex: "#1A1917"))
+                .font(.system(size: 13, weight: .semibold))
+                .tracking(0.5)
+                .textCase(.uppercase)
+                .foregroundStyle(Color(hex: "#8E8A80"))
                 .padding(.leading, 2)
 
             VStack(alignment: .leading, spacing: 16) {
@@ -861,7 +862,7 @@ struct VelaTodayView: View {
                     // Smooth Progress Circle
                     ZStack {
                         Circle()
-                            .stroke(Color(hex: "#F5F3F0"), lineWidth: 6)
+                            .stroke(Color(hex: "#F2F2F7"), lineWidth: 6)
                             .frame(width: 58, height: 58)
 
                         Circle()
@@ -884,7 +885,7 @@ struct VelaTodayView: View {
                 }
 
                 Divider()
-                    .background(Color(hex: "#E8E4DD"))
+                    .background(Color(hex: "#E5E5EA"))
 
                 // Macros (Protein, Carbs, Fat)
                 HStack(spacing: 0) {
@@ -896,8 +897,15 @@ struct VelaTodayView: View {
                 }
             }
             .padding(18)
-            .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.white))
-            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(Color.white)
+                    .shadow(color: Color.black.opacity(0.015), radius: 10, y: 4)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(Color(hex: "#E5E5EA"), lineWidth: 0.5)
+            )
         }
     }
 
@@ -950,6 +958,310 @@ struct VelaTodayView: View {
     }
 }
 
+private struct ProactiveGuidanceCard: View {
+    let insight: ProactiveInsight
+    var onOpen: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            VStack(alignment: .leading, spacing: 11) {
+                HStack(alignment: .center, spacing: 9) {
+                    Image(systemName: insight.focus.icon)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(insight.focus.color)
+                        .frame(width: 28, height: 28)
+                        .background(
+                            Circle()
+                                .fill(insight.focus.color.opacity(0.10))
+                        )
+
+                    Text(insight.displayTitle)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(VelaTheme.fg)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 8)
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color(hex: "#C7C7CC"))
+                }
+
+                Text(insight.body)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(VelaTheme.meta)
+                    .lineSpacing(3)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(alignment: .firstTextBaseline, spacing: 7) {
+                    Text(insight.focus.title)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(insight.focus.color)
+
+                    Text(insight.suggestedAction ?? "打开详情查看更完整的训练和恢复建议。")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(VelaTheme.fg)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 11)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(insight.focus.color.opacity(0.065))
+                )
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color(hex: "#F7F7F9"))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color(hex: "#E5E5EA"), lineWidth: 0.5)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct ProactiveInsightDetailSheet: View {
+    let insight: ProactiveInsight
+    var onAskCoach: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    private var actionText: String {
+        insight.suggestedAction ?? "先观察今天的身体反馈，保持当前节奏。"
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack(alignment: .top, spacing: 14) {
+                            Image(systemName: insight.focus.icon)
+                                .font(.system(size: 23, weight: .semibold))
+                                .foregroundStyle(insight.focus.color)
+                                .frame(width: 52, height: 52)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .fill(insight.focus.color.opacity(0.10))
+                                )
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 7) {
+                                    Text(insight.focus.title)
+                                    Text("·")
+                                    Text(insight.severity.contextLabel)
+                                }
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(insight.severity.color)
+
+                                Text(insight.displayTitle)
+                                    .font(.system(size: 23, weight: .semibold))
+                                    .foregroundStyle(VelaTheme.fg)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+
+                            Spacer()
+                        }
+
+                        Text(insight.body)
+                            .font(.system(size: 15, weight: .regular))
+                            .foregroundStyle(VelaTheme.meta)
+                            .lineSpacing(5)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(18)
+                    .velaNativeCard(radius: 22)
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("身体信号")
+                            .font(.system(size: 13, weight: .semibold))
+                            .tracking(0.5)
+                            .textCase(.uppercase)
+                            .foregroundStyle(VelaTheme.muted)
+
+                        VStack(spacing: 0) {
+                            ForEach(Array(insight.evidenceItems.enumerated()), id: \.offset) { index, item in
+                                HStack(alignment: .top, spacing: 10) {
+                                    Image(systemName: item.icon)
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(insight.focus.color)
+                                        .frame(width: 24, height: 24)
+                                        .padding(.top, 5)
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(item.title)
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(VelaTheme.fg)
+
+                                        Text(item.subtitle)
+                                            .font(.system(size: 12, weight: .regular))
+                                            .foregroundStyle(VelaTheme.meta)
+                                    }
+
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 15)
+                                .padding(.vertical, 12)
+
+                                if index < insight.evidenceItems.count - 1 {
+                                    Divider()
+                                        .padding(.leading, 49)
+                                }
+                            }
+                        }
+                        .velaNativeCard(radius: 18)
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("行动安排")
+                            .font(.system(size: 13, weight: .semibold))
+                            .tracking(0.5)
+                            .textCase(.uppercase)
+                            .foregroundStyle(VelaTheme.muted)
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(insight.focus.color)
+                                    .padding(.top, 1)
+
+                                Text(actionText)
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(VelaTheme.fg)
+                                    .lineSpacing(4)
+
+                                Spacer()
+                            }
+
+                            Text("这不是医疗诊断；Vela 会把建议限制在训练、恢复、睡眠和日常节奏调整上。")
+                                .font(.system(size: 12, weight: .regular))
+                                .foregroundStyle(VelaTheme.meta)
+                                .lineSpacing(3)
+                        }
+                        .padding(16)
+                        .velaNativeCard(radius: 18)
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 10)
+                .padding(.bottom, 24)
+            }
+            .background(VelaTheme.systemGroupedBackground)
+            .safeAreaInset(edge: .bottom) {
+                VStack(spacing: 10) {
+                    Button {
+                        onAskCoach(insight.coachPresetQuestion)
+                    } label: {
+                        Label("和 Coach 讨论", systemImage: "sparkles")
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(VelaTheme.accent)
+
+                    Button {
+                        dismiss()
+                    } label: {
+                        Text("知道了")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(VelaTheme.meta)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 42)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 12)
+                .padding(.bottom, 10)
+                .background(.ultraThinMaterial)
+            }
+            .navigationTitle("智能建议")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+}
+
+private extension ProactiveInsight {
+    var displayTitle: String {
+        title.replacingOccurrences(
+            of: #"^[^\p{L}\p{N}]+\s*"#,
+            with: "",
+            options: .regularExpression
+        )
+    }
+
+    var evidenceItems: [(title: String, subtitle: String, icon: String)] {
+        if !evidence.isEmpty {
+            return evidence.prefix(3).enumerated().map { index, text in
+                let metric = relatedMetrics.indices.contains(index) ? relatedMetrics[index] : relatedMetrics.first
+                return (
+                    title: text,
+                    subtitle: index == 0 ? "主要判断依据" : "辅助判断依据",
+                    icon: metric?.insightMetricIcon ?? focus.icon
+                )
+            }
+        }
+
+        return relatedMetrics.prefix(3).map { metric in
+            (
+                title: metric.localizedInsightMetricName,
+                subtitle: "来自今日健康与训练数据",
+                icon: metric.insightMetricIcon
+            )
+        }
+    }
+}
+
+private extension ProactiveInsight.Severity {
+    var contextLabel: String {
+        switch self {
+        case .info: return "状态良好"
+        case .warning: return "需要留意"
+        case .alert: return "建议调整"
+        }
+    }
+}
+
+private extension String {
+    var localizedInsightMetricName: String {
+        switch lowercased() {
+        case "hrv": return "HRV"
+        case "rhr", "resting_heart_rate": return "静息心率"
+        case "recovery": return "恢复"
+        case "sleep": return "睡眠"
+        case "energy": return "能量"
+        case "strain": return "训练负荷"
+        case "stress": return "压力"
+        case "walking_asymmetry": return "步态"
+        default: return self.replacingOccurrences(of: "_", with: " ")
+        }
+    }
+
+    var insightMetricIcon: String {
+        switch lowercased() {
+        case "hrv", "rhr", "resting_heart_rate": return "heart.text.square"
+        case "recovery": return "arrow.clockwise.heart"
+        case "sleep": return "moon.zzz.fill"
+        case "energy": return "bolt.fill"
+        case "strain": return "figure.strengthtraining.traditional"
+        case "stress": return "waveform.path.ecg"
+        case "walking_asymmetry": return "figure.walk"
+        default: return "chart.line.uptrend.xyaxis"
+        }
+    }
+}
+
 // MARK: - ActiveStatusSelectionSheetView (High fidelity to Screenshot 2)
 struct ActiveStatusSelectionSheetView: View {
     @Environment(\.dismiss) private var dismiss
@@ -965,7 +1277,7 @@ struct ActiveStatusSelectionSheetView: View {
     var body: some View {
         VStack(spacing: 20) {
             Capsule()
-                .fill(Color(hex: "#E8E4DD"))
+                .fill(Color(hex: "#E5E5EA"))
                 .frame(width: 36, height: 5)
                 .padding(.top, 8)
 
@@ -977,7 +1289,7 @@ struct ActiveStatusSelectionSheetView: View {
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(Color(hex: "#1A1917"))
                         .frame(width: 36, height: 36)
-                        .background(Circle().fill(Color(hex: "#F5F3F0")))
+                        .background(Circle().fill(Color(hex: "#F2F2F7")))
                 }
                 .buttonStyle(.plain)
 
@@ -1059,7 +1371,7 @@ struct ActiveStatusSelectionSheetView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 14)
                     .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white))
-                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color(hex: "#E5E5EA"), lineWidth: 0.5))
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
 
@@ -1086,7 +1398,7 @@ struct ActiveStatusSelectionSheetView: View {
             tempStatus = activeStatusRaw
             tempDuration = activeStatusDuration
         }
-        .background(Color(hex: "#F5F3F0").ignoresSafeArea())
+        .background(Color(hex: "#F2F2F7").ignoresSafeArea())
     }
 
     private func statusOptionCard(id: String, title: String, desc: String, icon: String, colors: [Color]) -> some View {
@@ -1117,7 +1429,7 @@ struct ActiveStatusSelectionSheetView: View {
 
                 ZStack {
                     Circle()
-                        .stroke(tempStatus == id ? Color(hex: "#1A1917") : Color(hex: "#E8E4DD"), lineWidth: 1.5)
+                        .stroke(tempStatus == id ? Color(hex: "#1A1917") : Color(hex: "#E5E5EA"), lineWidth: 1.5)
                         .frame(width: 20, height: 20)
 
                     if tempStatus == id {
@@ -1159,7 +1471,7 @@ struct CalendarOverviewSheetView: View {
     var body: some View {
         VStack(spacing: 16) {
             Capsule()
-                .fill(Color(hex: "#E8E4DD"))
+                .fill(Color(hex: "#E5E5EA"))
                 .frame(width: 36, height: 5)
                 .padding(.top, 8)
 
@@ -1228,11 +1540,11 @@ struct CalendarOverviewSheetView: View {
                                 .padding(.vertical, 8)
                                 .background(
                                     Capsule()
-                                        .fill(selectedMetric == metric ? Color(hex: "#1A1917") : Color(hex: "#F5F3F0"))
+                                        .fill(selectedMetric == metric ? Color(hex: "#1A1917") : Color(hex: "#F2F2F7"))
                                 )
                                 .overlay(
                                     Capsule()
-                                        .stroke(selectedMetric == metric ? Color.clear : Color(hex: "#E8E4DD"), lineWidth: 0.5)
+                                        .stroke(selectedMetric == metric ? Color.clear : Color(hex: "#E5E5EA"), lineWidth: 0.5)
                                 )
                         }
                         .buttonStyle(.plain)
@@ -1274,7 +1586,7 @@ struct CalendarOverviewSheetView: View {
                             VStack(spacing: 2) {
                                 ZStack {
                                     Circle()
-                                        .stroke(Color(hex: "#F5F3F0"), lineWidth: 4)
+                                        .stroke(Color(hex: "#F2F2F7"), lineWidth: 4)
                                         .frame(width: 36, height: 36)
 
                                     if let scoreInfo {
@@ -1342,7 +1654,7 @@ struct CalendarOverviewSheetView: View {
             .padding(.horizontal, 20)
             .padding(.bottom, 16)
         }
-        .background(Color(hex: "#F5F3F0").ignoresSafeArea())
+        .background(Color(hex: "#F2F2F7").ignoresSafeArea())
         .onAppear {
             calendarYear = Calendar.current.component(.year, from: dashboardVM.selectedDate)
             calendarMonth = Calendar.current.component(.month, from: dashboardVM.selectedDate)
@@ -1427,5 +1739,20 @@ struct CalendarOverviewSheetView: View {
         default: color = Color(hex: "#34C759")
         }
         return (score, color)
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func velaTrackScrollOffsetY(offset: Binding<CGFloat>) -> some View {
+        if #available(iOS 18, *) {
+            self.onScrollGeometryChange(for: CGFloat.self) { geo in
+                geo.contentOffset.y
+            } action: { _, newY in
+                offset.wrappedValue = newY
+            }
+        } else {
+            self
+        }
     }
 }

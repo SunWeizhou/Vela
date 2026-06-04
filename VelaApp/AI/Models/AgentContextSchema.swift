@@ -110,6 +110,9 @@ struct StrengthTrainingContext: Codable, Hashable {
     var recentExerciseProgress: [ExerciseProgressSummary]
     var lastSessionSummary: String
     var trainingAdaptation: String
+    var recoveryResponseSummary: String = "No post-training response data yet."
+    var averageNextDayRecoveryDelta: Double? = nil
+    var flaggedResponseCount: Int = 0
 }
 
 struct ExerciseProgressSummary: Codable, Hashable {

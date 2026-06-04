@@ -129,8 +129,16 @@ struct DeepSeekProvider: LLMProvider {
                     urlRequest.httpBody = try JSONEncoder().encode(
                         DeepSeekChatRequest(
                             model: model,
-                            messages: messages.map {
-                                DeepSeekChatRequest.Message(role: $0.role.apiValue, content: $0.content.isEmpty ? nil : $0.content, toolCalls: nil, toolCallId: $0.toolCallId)
+                            messages: messages.map { msg in
+                                DeepSeekChatRequest.Message(
+                                    role: msg.role.apiValue,
+                                    content: msg.content.isEmpty ? nil : msg.content,
+                                    toolCalls: msg.toolCalls?.map { tc in
+                                        DeepSeekChatRequest.ToolCall(id: tc.id, type: "function", function: .init(name: tc.name, arguments: tc.arguments))
+                                    },
+                                    toolCallId: msg.toolCallId,
+                                    reasoningContent: msg.reasoningContent
+                                )
                             },
                             temperature: 0.4,
                             stream: true,
@@ -144,12 +152,17 @@ struct DeepSeekProvider: LLMProvider {
                         throw LLMProviderError.invalidResponse
                     }
                     guard (200..<300).contains(httpResponse.statusCode) else {
-                        throw LLMProviderError.requestFailed("DeepSeek request failed with status \(httpResponse.statusCode).")
+                        var errorBody = ""
+                        for try await line in bytes.lines {
+                            errorBody += line + "\n"
+                        }
+                        throw LLMProviderError.requestFailed("DeepSeek request failed with status \(httpResponse.statusCode): \(errorBody.prefix(200))")
                     }
 
                     var didReceiveDone = false
                     for try await line in bytes.lines {
-                        if line.trimmingCharacters(in: .whitespacesAndNewlines) == "data: [DONE]" {
+                        let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if trimmedLine == "data: [DONE]" || trimmedLine == "data:[DONE]" {
                             didReceiveDone = true
                             break
                         }

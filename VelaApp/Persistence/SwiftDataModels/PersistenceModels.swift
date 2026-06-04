@@ -1181,6 +1181,74 @@ public final class WorkoutEventRecord {
     }
 }
 
+@Model
+final class XunjiDailyCacheRecord {
+    @Attribute(.unique) var datestr: String
+    var fetchedAt: Date
+    var includeFullData: Bool
+    @Attribute(.externalStorage) var responseData: Data
+
+    init(
+        datestr: String,
+        fetchedAt: Date = Date(),
+        includeFullData: Bool,
+        responseData: Data
+    ) {
+        self.datestr = datestr
+        self.fetchedAt = fetchedAt
+        self.includeFullData = includeFullData
+        self.responseData = responseData
+    }
+}
+
+@Model
+final class XunjiWorkoutMirrorRecord {
+    @Attribute(.unique) var externalID: String
+    var datestr: String
+    var linkedStrengthWorkoutID: UUID?
+    var linkedWorkoutEventID: UUID?
+    @Attribute(.externalStorage) var rawTrainData: Data
+    var lastImportedAt: Date
+
+    init(
+        externalID: String,
+        datestr: String,
+        linkedStrengthWorkoutID: UUID? = nil,
+        linkedWorkoutEventID: UUID? = nil,
+        rawTrainData: Data,
+        lastImportedAt: Date = Date()
+    ) {
+        self.externalID = externalID
+        self.datestr = datestr
+        self.linkedStrengthWorkoutID = linkedStrengthWorkoutID
+        self.linkedWorkoutEventID = linkedWorkoutEventID
+        self.rawTrainData = rawTrainData
+        self.lastImportedAt = lastImportedAt
+    }
+}
+
+enum XunjiCachePolicy {
+    static let cooldown: TimeInterval = 90
+
+    static func shouldReuse(
+        _ cache: XunjiDailyCacheRecord,
+        datestr: String,
+        includeFullData: Bool,
+        now: Date = Date()
+    ) -> Bool {
+        guard cache.datestr == datestr else {
+            return false
+        }
+
+        let age = now.timeIntervalSince(cache.fetchedAt)
+        if age >= 0, age < cooldown {
+            return true
+        }
+
+        return cache.includeFullData || !includeFullData
+    }
+}
+
 extension String {
     public func toCanonicalKey() -> String {
         let mapping: [String: String] = [

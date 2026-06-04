@@ -44,7 +44,7 @@ struct VelaVitalsView: View {
         }
         .scrollIndicators(.hidden)
         .velaTrackScroll(direction: scrollDirection)
-        .background(Color(hex: "#F5F3F0")) // Warm canvas base
+        .background(VelaTheme.systemGroupedBackground)
         .onAppear {
             loadRealVitalsData()
         }
@@ -54,6 +54,7 @@ struct VelaVitalsView: View {
         .onChange(of: appState.localDataRevision) {
             loadRealVitalsData()
         }
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     // MARK: - Biological Age cockpit
@@ -132,11 +133,11 @@ struct VelaVitalsView: View {
                 VStack(spacing: 4) {
                     Text(isPhenoAge ? "生物年龄估算" : "健康年龄趋势 Beta")
                         .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(Color(hex: "#1A1917"))
+                        .foregroundStyle(VelaTheme.fg)
 
                     Text(selectedDateText)
                         .font(.system(size: 12))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .foregroundStyle(VelaTheme.muted)
                 }
 
                 Spacer()
@@ -146,11 +147,9 @@ struct VelaVitalsView: View {
                     VelaAppState.shared.triggerBloodLog = true
                 } label: {
                     Image(systemName: "ellipsis")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(Color(hex: "#1A1917"))
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(VelaTheme.muted)
                         .frame(width: 36, height: 36)
-                        .background(Circle().fill(Color.white))
-                        .shadow(color: Color.black.opacity(0.02), radius: 4, y: 2)
                 }
             }
             .padding(.top, 8)
@@ -178,29 +177,29 @@ struct VelaVitalsView: View {
                 VStack(spacing: 0) {
                     Text(biologicalAge)
                         .font(.system(size: 40, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color(hex: "#1A1917"))
+                        .foregroundStyle(VelaTheme.fg)
 
                     Text(deltaText)
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(result == nil ? Color(hex: "#8E8A80") : Color(hex: "#5B8C6F"))
+                        .foregroundStyle(result == nil ? VelaTheme.muted : Color(hex: "#5B8C6F"))
                         .padding(.top, 4)
 
                     if isPhenoAge {
                         Text(minAgeRange)
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(Color(hex: "#8E8A80"))
+                            .foregroundStyle(VelaTheme.muted)
                             .offset(x: -78, y: 50)
 
                         Text(maxAgeRange)
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(Color(hex: "#8E8A80"))
+                            .foregroundStyle(VelaTheme.muted)
                             .offset(x: 78, y: 37)
                     }
                 }
 
                 // End Dot indicator at bottom center
                 Circle()
-                    .fill(Color(hex: "#8E8A80"))
+                    .fill(VelaTheme.muted)
                     .frame(width: 8, height: 8)
                     .offset(y: 65)
             }
@@ -210,26 +209,25 @@ struct VelaVitalsView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(
-            // Top portion has a sky-blue-yellow aura/gradient background
             ZStack {
-                Color.white
+                VelaTheme.cardBg
 
                 LinearGradient(
                     colors: [
-                        Color(hex: "#D0E1FD").opacity(0.4),
-                        Color(hex: "#FFF9C4").opacity(0.3),
-                        Color.white.opacity(0)
+                        VelaTheme.accent.opacity(0.12),
+                        VelaTheme.recoveryColor.opacity(0.08),
+                        Color.clear
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
             }
             .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .shadow(color: Color.black.opacity(0.03), radius: 6, y: 3)
+            .shadow(color: VelaTheme.nativeShadow(cs), radius: 8, y: 2)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+                .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
         )
     }
 
@@ -260,8 +258,10 @@ struct VelaVitalsView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("其他生物标志物")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .font(.system(size: 13, weight: .semibold))
+                    .tracking(0.5)
+                    .textCase(.uppercase)
+                    .foregroundStyle(VelaTheme.muted)
 
                 Spacer()
 
@@ -269,7 +269,7 @@ struct VelaVitalsView: View {
                     VelaAppState.shared.triggerBloodLog = true
                 }
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Color(hex: "#C56B4A")) // Brand Accent
+                .foregroundStyle(VelaTheme.accent) // Brand Accent
             }
             .padding(.horizontal, 2)
 
@@ -281,9 +281,9 @@ struct VelaVitalsView: View {
                         trendText: syncStatusText(for: weightValueText),
                         trendIcon: "arrow.right",
                         valueText: weightValueText,
-                        valueColor: Color(hex: "#1A1917"),
+                        valueColor: VelaTheme.fg,
                         history: weightHistoryData,
-                        graphColor: Color(hex: "#8E8A80")
+                        graphColor: VelaTheme.muted
                     )
                 }
                 .buttonStyle(.plain)
@@ -295,7 +295,7 @@ struct VelaVitalsView: View {
                         trendText: syncStatusText(for: hrvValueText),
                         trendIcon: "arrow.right",
                         valueText: hrvValueText,
-                        valueColor: Color(hex: "#1A1917"),
+                        valueColor: VelaTheme.fg,
                         history: hrvHistoryData,
                         graphColor: Color(hex: "#6E6A63")
                     )
@@ -337,9 +337,9 @@ struct VelaVitalsView: View {
                         trendText: syncStatusText(for: bloodOxygenValueText),
                         trendIcon: "arrow.right",
                         valueText: bloodOxygenValueText,
-                        valueColor: Color(hex: "#C56B4A"),
+                        valueColor: VelaTheme.accent,
                         history: bloodOxygenHistoryData,
-                        graphColor: Color(hex: "#C56B4A")
+                        graphColor: VelaTheme.accent
                     )
                 }
                 .buttonStyle(.plain)
@@ -351,9 +351,9 @@ struct VelaVitalsView: View {
                         trendText: syncStatusText(for: fatValueText),
                         trendIcon: "arrow.right",
                         valueText: fatValueText,
-                        valueColor: Color(hex: "#1A1917"),
+                        valueColor: VelaTheme.fg,
                         history: fatHistoryData,
-                        graphColor: Color(hex: "#8E8A80")
+                        graphColor: VelaTheme.muted
                     )
                 }
                 .buttonStyle(.plain)
@@ -375,7 +375,7 @@ struct VelaVitalsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
 
                 HStack(spacing: 4) {
                     Image(systemName: trendIcon)
@@ -393,7 +393,7 @@ struct VelaVitalsView: View {
             if history.isEmpty {
                 Text("暂无趋势")
                     .font(.system(size: 11))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
                     .frame(width: 90, alignment: .trailing)
                     .padding(.trailing, 4)
             } else {
@@ -403,15 +403,7 @@ struct VelaVitalsView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.02), radius: 4, y: 2)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
-        )
+        .velaNativeCard(radius: 16)
     }
 
     // MARK: - Dynamic Vitals Sync Loader
@@ -522,7 +514,7 @@ struct GaugeScaleArcView: View {
             Circle()
                 .trim(from: 0.15, to: 0.85)
                 .stroke(
-                    Color(hex: "#E8E4DD"),
+                    Color(hex: "#E5E5EA"),
                     style: StrokeStyle(lineWidth: 1.5, lineCap: .round)
                 )
                 .rotationEffect(.degrees(90))

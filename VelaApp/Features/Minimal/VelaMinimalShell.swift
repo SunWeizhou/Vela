@@ -8,7 +8,7 @@ enum VelaNavigationVisibility {
 }
 
 enum VelaNavigationMotion {
-    static let destinationFadeDuration = 0.18
+    static let destinationFadeDuration = 0.16
 }
 
 // MARK: - VelaScrollTracking
@@ -66,7 +66,11 @@ struct VelaShell: View {
     // MARK: - Tab Enum
 
     enum VelaTab: Int, CaseIterable, Hashable {
-        case today, training, vitals, coach
+        case today = 0
+        case journal = 1
+        case training = 2
+        case vitals = 3
+        case coach = 4
     }
 
     // MARK: - Body
@@ -87,12 +91,12 @@ struct VelaShell: View {
             selectedTab = next
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-            withAnimation(.easeOut(duration: 0.2)) {
+            withAnimation(VelaTheme.snappy) {
                 keyboardVisible = true
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            withAnimation(.easeOut(duration: 0.2)) {
+            withAnimation(VelaTheme.snappy) {
                 keyboardVisible = false
             }
         }
@@ -103,7 +107,7 @@ struct VelaShell: View {
             PlusActionSheet()
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
-                .presentationBackground(VelaTheme.bg)
+                .presentationBackground(VelaTheme.systemGroupedBackground)
         }
         .fullScreenCover(isPresented: $showCoach) {
             VelaCoachView(presentation: .quickCover, vm: services.coachChat)
@@ -123,19 +127,19 @@ struct VelaShell: View {
             WorkoutLogSheetView()
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
-                .presentationBackground(VelaTheme.bg)
+                .presentationBackground(VelaTheme.systemGroupedBackground)
         }
         .sheet(isPresented: $appState.triggerFoodSearch, onDismiss: appState.markLocalDataChanged) {
             FoodSearchSheetView()
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
-                .presentationBackground(VelaTheme.bg)
+                .presentationBackground(VelaTheme.systemGroupedBackground)
         }
         .sheet(isPresented: $appState.triggerFoodScanner, onDismiss: appState.markLocalDataChanged) {
             FoodScannerView(type: appState.scannerType)
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
-                .presentationBackground(VelaTheme.bg)
+                .presentationBackground(VelaTheme.systemGroupedBackground)
         }
         .sheet(isPresented: $appState.triggerJournal, onDismiss: appState.markLocalDataChanged) {
             NavigationStack {
@@ -143,7 +147,7 @@ struct VelaShell: View {
             }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
-            .presentationBackground(VelaTheme.bg)
+            .presentationBackground(VelaTheme.systemGroupedBackground)
         }
         .tint(VelaTheme.accent)
     }
@@ -163,6 +167,11 @@ struct VelaShell: View {
             Tab(label(for: .today), systemImage: iconName(for: .today), value: VelaTab.today) {
                 nativeTabSurface(.today) {
                     VelaTodayView(showCoach: $showCoach, showSettings: $showSettings)
+                }
+            }
+            Tab(label(for: .journal), systemImage: iconName(for: .journal), value: VelaTab.journal) {
+                nativeTabSurface(.journal) {
+                    VelaJournalView()
                 }
             }
             Tab(label(for: .training), systemImage: iconName(for: .training), value: VelaTab.training) {
@@ -198,13 +207,16 @@ struct VelaShell: View {
 
     private var legacyFloatingNavigation: some View {
         ZStack(alignment: .bottom) {
-            VelaTheme.bg.ignoresSafeArea()
+            VelaTheme.systemGroupedBackground.ignoresSafeArea()
 
             // Keep legacy primary surfaces mounted so cached SwiftData content
             // is already hydrated when the user switches tabs.
             ZStack {
                 tabSurface(.today) {
                     VelaTodayView(showCoach: $showCoach, showSettings: $showSettings)
+                }
+                tabSurface(.journal) {
+                    VelaJournalView()
                 }
                 tabSurface(.training) {
                     VelaTrainingView()
@@ -250,7 +262,7 @@ struct VelaShell: View {
             Capsule()
                 .stroke(VelaTheme.cardBg.opacity(0.18), lineWidth: 0.5)
         )
-        .shadow(color: Color.black.opacity(0.04), radius: 8, y: 4)
+        .shadow(color: Color.black.opacity(0.018), radius: 10, y: 4)
         .padding(.horizontal, 16)
     }
 
@@ -262,7 +274,7 @@ struct VelaShell: View {
     ) -> some View {
         content()
             .opacity(selectedTab == tab ? 1 : 0)
-            .animation(.easeInOut(duration: VelaNavigationMotion.destinationFadeDuration), value: selectedTab)
+            .animation(VelaTheme.snappy, value: selectedTab)
             .allowsHitTesting(selectedTab == tab)
             .accessibilityHidden(selectedTab != tab)
             .zIndex(selectedTab == tab ? 1 : 0)
@@ -271,17 +283,17 @@ struct VelaShell: View {
     private func customTabButton(_ tab: VelaTab) -> some View {
         let isActive = selectedTab == tab
         return Button {
-            withAnimation(.easeInOut(duration: VelaNavigationMotion.destinationFadeDuration)) {
+            withAnimation(VelaTheme.snappy) {
                 selectedTab = tab
                 appState.selectedTab = tab.rawValue
             }
         } label: {
             VStack(spacing: 3) {
                 Image(systemName: iconName(for: tab))
-                    .font(.system(size: 18, weight: isActive ? .semibold : .regular))
+                    .font(.system(size: 17, weight: isActive ? .semibold : .regular))
                     .frame(height: 22)
                 Text(label(for: tab))
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 8.5, weight: .bold))
             }
             .foregroundStyle(isActive ? VelaTheme.fg : VelaTheme.muted)
             .frame(maxWidth: .infinity)
@@ -290,7 +302,7 @@ struct VelaShell: View {
                 ZStack {
                     if isActive {
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(VelaTheme.borderSoft.opacity(0.48))
+                            .fill(VelaTheme.accent.opacity(0.08))
                             .matchedGeometryEffect(id: "activeTabHighlight", in: tabAnimation)
                     }
                 }
@@ -302,6 +314,7 @@ struct VelaShell: View {
     private func iconName(for tab: VelaTab) -> String {
         switch tab {
         case .today:    "sun.max"
+        case .journal:  "book.pages"
         case .training: "figure.run"
         case .vitals:   "heart.text.square"
         case .coach:    "sparkles"
@@ -311,6 +324,7 @@ struct VelaShell: View {
     private func label(for tab: VelaTab) -> String {
         switch tab {
         case .today:    "首页"
+        case .journal:  "手记"
         case .training: "健身"
         case .vitals:   "体征"
         case .coach:    "Coach"
@@ -323,7 +337,7 @@ struct VelaShell: View {
     ) -> some View {
         content()
             .opacity(selectedTab == tab ? 1 : 0)
-            .animation(.easeInOut(duration: VelaNavigationMotion.destinationFadeDuration), value: selectedTab)
+            .animation(VelaTheme.snappy, value: selectedTab)
     }
 }
 
@@ -333,7 +347,7 @@ enum VelaTabSelection {
         var shouldPresentQuickActions: Bool
     }
 
-    static let contentTabs: [VelaShell.VelaTab] = [.today, .training, .vitals, .coach]
+    static let contentTabs: [VelaShell.VelaTab] = [.today, .journal, .training, .vitals, .coach]
 
     static func resolve(
         candidate: VelaShell.VelaTab,

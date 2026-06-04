@@ -12,7 +12,7 @@ xcodebuild \
   -project Vela.xcodeproj \
   -scheme Vela \
   -configuration Debug \
-  -destination "platform=iOS,name=$DEVICE_NAME" \
+  -destination "generic/platform=iOS" \
   -allowProvisioningUpdates \
   build
 

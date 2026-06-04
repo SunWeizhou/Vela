@@ -45,8 +45,10 @@ struct VelaSettingsView: View {
                 // 1. 通用 (General) Group matching Screenshot 3 + User Wiki + AI Models + Coach Style + Agent Automation
                 VStack(alignment: .leading, spacing: 8) {
                     Text("通用")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .font(.system(size: 13, weight: .semibold))
+                        .tracking(0.5)
+                        .textCase(.uppercase)
+                        .foregroundStyle(VelaTheme.muted)
                         .padding(.leading, 12)
                     
                     VStack(spacing: 0) {
@@ -57,7 +59,7 @@ struct VelaSettingsView: View {
                         Divider().padding(.leading, 56)
                         
                         NavigationLink(destination: UserWikiArchiveView()) {
-                            settingsRow(icon: "doc.text.fill", iconBg: Color(hex: "#8E8A80"), title: "用户健康档案 (Wiki)", value: "本地记忆库")
+                            settingsRow(icon: "doc.text.fill", iconBg: VelaTheme.muted, title: "用户健康档案 (Wiki)", value: "本地记忆库")
                         }
                         
                         Divider().padding(.leading, 56)
@@ -118,16 +120,18 @@ struct VelaSettingsView: View {
                             )
                         }
                     }
-                    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white))
-                    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
+                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
                 }
                 .padding(.horizontal, 16)
                 
                 // 2. 数据 (Data) Group matching Screenshot 3
                 VStack(alignment: .leading, spacing: 8) {
                     Text("数据")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .font(.system(size: 13, weight: .semibold))
+                        .tracking(0.5)
+                        .textCase(.uppercase)
+                        .foregroundStyle(VelaTheme.muted)
                         .padding(.leading, 12)
                     
                     VStack(spacing: 0) {
@@ -156,27 +160,29 @@ struct VelaSettingsView: View {
                         Divider().padding(.leading, 56)
 
                         NavigationLink(destination: ExportDataSettingsView()) {
-                            settingsRow(icon: "square.and.arrow.up.fill", iconBg: Color(hex: "#8E8A80"), title: "数据导出", value: "JSON 格式")
+                            settingsRow(icon: "square.and.arrow.up.fill", iconBg: VelaTheme.muted, title: "数据导出", value: "JSON 格式")
                         }
                         
                         if VelaCapabilityAvailability.cloudKitSyncEnabled {
                             Divider().padding(.leading, 56)
  
                             NavigationLink(destination: iCloudSyncSettingsView()) {
-                                settingsRow(icon: "icloud.fill", iconBg: Color(hex: "#007AFF"), title: "iCloud 同步", value: "已接入")
+                                settingsRow(icon: "icloud.fill", iconBg: VelaTheme.accent, title: "iCloud 同步", value: "已接入")
                             }
                         }
                     }
-                    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white))
-                    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
+                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
                 }
                 .padding(.horizontal, 16)
                 
                 // 3. 资源 (Resources) Group
                 VStack(alignment: .leading, spacing: 8) {
                     Text("资源")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .font(.system(size: 13, weight: .semibold))
+                        .tracking(0.5)
+                        .textCase(.uppercase)
+                        .foregroundStyle(VelaTheme.muted)
                         .padding(.leading, 12)
                     
                     VStack(spacing: 0) {
@@ -184,8 +190,8 @@ struct VelaSettingsView: View {
                             settingsRow(icon: "sparkles", iconBg: Color(hex: "#5856D6"), title: "最新变化", value: "v0.1.0")
                         }
                     }
-                    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white))
-                    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
+                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 30)
@@ -193,7 +199,7 @@ struct VelaSettingsView: View {
             .padding(.top, 16)
         }
         .scrollIndicators(.hidden)
-        .background(Color(hex: "#F5F3F0")) // Warm canvas base
+        .background(VelaTheme.systemGroupedBackground)
         .navigationTitle("设置")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -202,7 +208,7 @@ struct VelaSettingsView: View {
                     dismiss()
                 }
                 .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Color(hex: "#C56B4A"))
+                .foregroundStyle(VelaTheme.accent)
             }
         }
     }
@@ -220,23 +226,24 @@ struct VelaSettingsView: View {
             }
             
             Text(title)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Color(hex: "#1A1917"))
+                .font(.system(size: 16, weight: .regular))
+                .foregroundStyle(VelaTheme.fg)
             
             Spacer()
             
             if let val = value {
                 Text(val)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundStyle(VelaTheme.muted)
+                    .lineLimit(1)
             }
             
             Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(Color(hex: "#BFB9AC"))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color(uiColor: .tertiaryLabel))
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.vertical, 11)
         .contentShape(Rectangle())
     }
     
@@ -247,7 +254,7 @@ struct VelaSettingsView: View {
                 Circle()
                     .fill(
                         LinearGradient(
-                            colors: [Color(hex: "#C56B4A"), Color(hex: "#E89B7E")],
+                            colors: [VelaTheme.accent, Color(hex: "#64D2FF")],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -262,17 +269,17 @@ struct VelaSettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("本机健康资料")
                     .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
                 Text("Local-first 存储")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Color(hex: "#C56B4A"))
+                    .foregroundStyle(VelaTheme.accent)
             }
             
             Spacer()
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white))
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
         .padding(.horizontal, 16)
     }
 }
@@ -353,7 +360,7 @@ struct UserWikiArchiveView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text("你的健康画像与个人背景 (Coach 的本地记忆知识库)")
                     .font(.system(size: 14))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
                 
@@ -362,7 +369,7 @@ struct UserWikiArchiveView: View {
                         ProgressView()
                         Text("正在初始化本地健康档案...")
                             .font(.system(size: 13))
-                            .foregroundStyle(Color(hex: "#8E8A80"))
+                            .foregroundStyle(VelaTheme.muted)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 40)
@@ -381,19 +388,19 @@ struct UserWikiArchiveView: View {
                                 HStack {
                                     Text(doc.title)
                                         .font(.system(size: 16, weight: .bold))
-                                        .foregroundStyle(Color(hex: "#1A1917"))
+                                        .foregroundStyle(VelaTheme.fg)
                                     Spacer()
                                     Text(doc.filename)
                                         .font(.system(size: 11, weight: .bold, design: .rounded))
-                                        .foregroundStyle(Color(hex: "#C56B4A"))
+                                        .foregroundStyle(VelaTheme.accent)
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 4)
-                                        .background(Capsule().fill(Color(hex: "#FFF3E0")))
+                                        .background(Capsule().fill(VelaTheme.accent.opacity(0.12)))
                                 }
                                 
                                 Text(doc.markdownContent.prefix(120) + (doc.markdownContent.count > 120 ? "..." : ""))
                                     .font(.system(size: 13))
-                                    .foregroundStyle(Color(hex: "#8E8A80"))
+                                    .foregroundStyle(VelaTheme.muted)
                                     .lineLimit(3)
                                     .multilineTextAlignment(.leading)
                                 
@@ -401,12 +408,12 @@ struct UserWikiArchiveView: View {
                                     Spacer()
                                     Text("更新于: \(formatDate(doc.updatedAt))")
                                         .font(.system(size: 10))
-                                        .foregroundStyle(Color(hex: "#BFB9AC"))
+                                        .foregroundStyle(Color(hex: "#C7C7CC"))
                                 }
                             }
                             .padding(16)
-                            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white))
-                            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
+                            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
+                            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
                             .padding(.horizontal, 16)
                         }
                         .buttonStyle(.plain)
@@ -414,7 +421,7 @@ struct UserWikiArchiveView: View {
                 }
             }
         }
-        .background(Color(hex: "#F5F3F0"))
+        .background(VelaTheme.systemGroupedBackground)
         .navigationTitle("用户健康档案 (Wiki)")
         .sheet(isPresented: $showEditor) {
             NavigationStack {
@@ -422,21 +429,21 @@ struct UserWikiArchiveView: View {
                     TextField("标题", text: $editTitle)
                         .font(.system(size: 18, weight: .bold))
                         .padding()
-                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.white))
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
+                        .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.secondaryGroupedBackground))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
                         .padding(.horizontal, 16)
                         .padding(.top, 16)
                     
                     TextEditor(text: $editText)
                         .font(.system(size: 14, design: .monospaced))
                         .padding()
-                        .background(RoundedRectangle(cornerRadius: 16).fill(Color.white))
-                        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
+                        .background(RoundedRectangle(cornerRadius: 16).fill(VelaTheme.secondaryGroupedBackground))
+                        .overlay(RoundedRectangle(cornerRadius: 16).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
                         .padding(.horizontal, 16)
                     
                     Spacer()
                 }
-                .background(Color(hex: "#F5F3F0"))
+                .background(VelaTheme.systemGroupedBackground)
                 .navigationTitle("编辑档案")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -449,7 +456,7 @@ struct UserWikiArchiveView: View {
                             showEditor = false
                         }
                         .bold()
-                        .foregroundStyle(Color(hex: "#C56B4A"))
+                        .foregroundStyle(VelaTheme.accent)
                     }
                 }
             }
@@ -511,7 +518,7 @@ struct AIModelSettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("DeepSeek API Key")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .foregroundStyle(VelaTheme.muted)
                     SecureField("输入 DeepSeek API 秘钥...", text: $deepseekKey)
                         .font(.system(size: 14, design: .monospaced))
                 }
@@ -520,7 +527,7 @@ struct AIModelSettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Kimi API Key (视觉模型)")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .foregroundStyle(VelaTheme.muted)
                     SecureField("输入 Kimi API 秘钥...", text: $kimiKey)
                         .font(.system(size: 14, design: .monospaced))
                 }
@@ -553,7 +560,7 @@ struct AIModelSettingsView: View {
                         }
                         Text(isTesting ? "正在连通性测试..." : "测试 API 连接")
                             .bold()
-                            .foregroundStyle(Color(hex: "#C56B4A"))
+                            .foregroundStyle(VelaTheme.accent)
                     }
                 }
                 
@@ -570,7 +577,7 @@ struct AIModelSettingsView: View {
                 .foregroundStyle(Color.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
-                .background(RoundedRectangle(cornerRadius: 22).fill(Color(hex: "#C56B4A")))
+                .background(RoundedRectangle(cornerRadius: 22).fill(VelaTheme.accent))
                 .padding(.vertical, 4)
             }
         }
@@ -661,11 +668,11 @@ struct AppearanceSettingsView: View {
                     } label: {
                         HStack {
                             Text(mode == "dark" ? "深色" : (mode == "light" ? "浅色" : "跟随系统"))
-                                .foregroundStyle(Color(hex: "#1A1917"))
+                                .foregroundStyle(VelaTheme.fg)
                             Spacer()
                             if darkModeRaw == mode {
                                 Image(systemName: "checkmark")
-                                    .foregroundStyle(Color(hex: "#C56B4A"))
+                                    .foregroundStyle(VelaTheme.accent)
                             }
                         }
                     }
@@ -756,7 +763,7 @@ struct CustomizationSettingsView: View {
                 Button("保存更改") {
                     dailyCalorieTarget = tempTarget
                 }
-                .tint(Color(hex: "#C56B4A"))
+                .tint(VelaTheme.accent)
             }
 
             Section(header: Text("睡眠目标")) {
@@ -768,7 +775,7 @@ struct CustomizationSettingsView: View {
 
                 Text("该目标会用于睡眠评分和睡眠详情展示。")
                     .font(.caption)
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
             }
         }
         .onAppear {
@@ -788,7 +795,7 @@ struct ShortcutsSettingsView: View {
                 
                 Text("以下快捷指令已通过 App Intents 接入，可在快捷指令 App 或 Siri 中使用：")
                     .font(.system(size: 14))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
                 
                 VStack(alignment: .leading, spacing: 14) {
                     shortcutGuideRow(command: "查看 Vela 今日状态", desc: "打开首页查看今日恢复、睡眠和训练负荷。")
@@ -800,7 +807,7 @@ struct ShortcutsSettingsView: View {
             }
             .padding(20)
         }
-        .background(Color(hex: "#F5F3F0"))
+        .background(VelaTheme.systemGroupedBackground)
         .navigationTitle("快捷指令")
     }
     
@@ -808,14 +815,14 @@ struct ShortcutsSettingsView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(command)
                 .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Color(hex: "#C56B4A"))
+                .foregroundStyle(VelaTheme.accent)
             Text(desc)
                 .font(.system(size: 12))
-                .foregroundStyle(Color(hex: "#8E8A80"))
+                .foregroundStyle(VelaTheme.muted)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white))
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
     }
 }
 
@@ -829,18 +836,18 @@ struct LanguageSettingsView: View {
                 Button { languageRaw = AppLanguage.simplifiedChinese.rawValue } label: {
                     HStack {
                         Text("简体中文")
-                            .foregroundStyle(Color(hex: "#1A1917"))
+                            .foregroundStyle(VelaTheme.fg)
                         Spacer()
-                        if languageRaw == AppLanguage.simplifiedChinese.rawValue { Image(systemName: "checkmark").foregroundStyle(Color(hex: "#C56B4A")) }
+                        if languageRaw == AppLanguage.simplifiedChinese.rawValue { Image(systemName: "checkmark").foregroundStyle(VelaTheme.accent) }
                     }
                 }
                 
                 Button { languageRaw = AppLanguage.english.rawValue } label: {
                     HStack {
                         Text("English")
-                            .foregroundStyle(Color(hex: "#1A1917"))
+                            .foregroundStyle(VelaTheme.fg)
                         Spacer()
-                        if languageRaw == AppLanguage.english.rawValue { Image(systemName: "checkmark").foregroundStyle(Color(hex: "#C56B4A")) }
+                        if languageRaw == AppLanguage.english.rawValue { Image(systemName: "checkmark").foregroundStyle(VelaTheme.accent) }
                     }
                 }
             }
@@ -864,7 +871,7 @@ struct DataSourceSettingsView: View {
                 // Tier Permissions Request Cards
                 Text("健康数据权限请求")
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
                     .padding(.leading, 16)
                     .padding(.top, 16)
 
@@ -908,7 +915,7 @@ struct DataSourceSettingsView: View {
 
                 Text("已同步健康传感器")
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
                     .padding(.leading, 16)
                 
                 VStack(spacing: 0) {
@@ -918,8 +925,8 @@ struct DataSourceSettingsView: View {
                         count: appleHealthDetail
                     )
                 }
-                .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white))
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
+                .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
+                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
                 .padding(.horizontal, 16)
 
                 Button {
@@ -942,7 +949,7 @@ struct DataSourceSettingsView: View {
                     .foregroundStyle(Color.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 13)
-                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(hex: "#C56B4A")))
+                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.accent))
                 }
                 .buttonStyle(.plain)
                 .disabled(isSyncing)
@@ -950,7 +957,7 @@ struct DataSourceSettingsView: View {
                 .padding(.bottom, 30)
             }
         }
-        .background(Color(hex: "#F5F3F0"))
+        .background(VelaTheme.systemGroupedBackground)
         .navigationTitle("健康数据源")
     }
 
@@ -959,7 +966,7 @@ struct DataSourceSettingsView: View {
             HStack {
                 Text(title)
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
                 Spacer()
                 Button {
                     Task {
@@ -985,12 +992,12 @@ struct DataSourceSettingsView: View {
 
             Text(desc)
                 .font(.system(size: 12))
-                .foregroundStyle(Color(hex: "#8E8A80"))
+                .foregroundStyle(VelaTheme.muted)
                 .lineSpacing(2)
         }
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5))
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
     }
 
     private var appleHealthStatus: String {
@@ -1022,10 +1029,10 @@ struct DataSourceSettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(name)
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
                 Text(count)
                     .font(.system(size: 12))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
             }
             Spacer()
             Text(status)
@@ -1095,7 +1102,7 @@ struct CGMSettingsView: View {
             }
             .padding(20)
         }
-        .background(Color(hex: "#F5F3F0"))
+        .background(VelaTheme.systemGroupedBackground)
         .navigationTitle("连续血糖监测 (CGM)")
         .task {
             await reload()
@@ -1116,10 +1123,10 @@ struct CGMSettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Apple 健康 CGM 数据")
                     .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
                 Text("读取已同步到 Apple 健康的血糖样本")
                     .font(.system(size: 12))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1131,21 +1138,21 @@ struct CGMSettingsView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("最新血糖")
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(Color(hex: "#8E8A80"))
+                .foregroundStyle(VelaTheme.muted)
 
             if let latest = summary.latestReading {
                 HStack(alignment: .lastTextBaseline, spacing: 6) {
                     Text(latest.milligramsPerDeciliter.formatted(.number.precision(.fractionLength(0))))
                         .font(.system(size: 42, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color(hex: "#1A1917"))
+                        .foregroundStyle(VelaTheme.fg)
                     Text("mg/dL")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
+                        .foregroundStyle(VelaTheme.muted)
                 }
 
                 Text("最近更新 \(latest.date.formatted(date: .abbreviated, time: .shortened)) · 近 14 天共 \(summary.readingCount) 条")
                     .font(.system(size: 12))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1157,7 +1164,7 @@ struct CGMSettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("近 14 天趋势")
                 .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Color(hex: "#1A1917"))
+                .foregroundStyle(VelaTheme.fg)
 
             Chart(summary.readings) { reading in
                 LineMark(
@@ -1191,11 +1198,11 @@ struct CGMSettingsView: View {
                 .foregroundStyle(Color(hex: "#30A2FF"))
             Text("等待血糖数据")
                 .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(Color(hex: "#1A1917"))
+                .foregroundStyle(VelaTheme.fg)
             Text(message)
                 .font(.system(size: 13))
                 .multilineTextAlignment(.center)
-                .foregroundStyle(Color(hex: "#8E8A80"))
+                .foregroundStyle(VelaTheme.muted)
         }
         .frame(maxWidth: .infinity)
         .padding(24)
@@ -1207,7 +1214,7 @@ struct CGMSettingsView: View {
             .fill(Color.white)
             .overlay(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(Color(hex: "#E8E4DD"), lineWidth: 0.5)
+                    .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
             )
     }
 
@@ -1251,7 +1258,7 @@ struct iCloudSyncSettingsView: View {
 
                 Text("当前版本只使用本机 SwiftData 存储，尚未配置 CloudKit 同步。接入并验证跨设备合并策略前，不会展示自动备份开关。")
                     .font(.system(size: 11))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
             }
         }
         .navigationTitle("iCloud 同步")
@@ -1268,7 +1275,7 @@ struct WhatsNewSettingsView: View {
                 
                 Text("当前版本已实现以下 local-first 能力：")
                     .font(.system(size: 14))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
                 
                 VStack(alignment: .leading, spacing: 16) {
                     featureUpdateBlock(title: "弹性滑动 Dock 栏", desc: "基于 MatchedGeometry 的悬浮 Dock 滑块指示器。")
@@ -1282,7 +1289,7 @@ struct WhatsNewSettingsView: View {
             }
             .padding(20)
         }
-        .background(Color(hex: "#F5F3F0"))
+        .background(VelaTheme.systemGroupedBackground)
         .navigationTitle("最新变化")
     }
     
@@ -1293,17 +1300,17 @@ struct WhatsNewSettingsView: View {
                     .foregroundStyle(Color(hex: "#34C759"))
                 Text(title)
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
+                    .foregroundStyle(VelaTheme.fg)
             }
             Text(desc)
                 .font(.system(size: 12))
-                .foregroundStyle(Color(hex: "#8E8A80"))
+                .foregroundStyle(VelaTheme.muted)
                 .lineSpacing(4)
                 .padding(.leading, 26)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white))
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
     }
 }
 
@@ -1333,17 +1340,17 @@ struct CoachPersonalitySettingsView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(personality.displayName)
                                     .font(.system(size: 15, weight: .bold))
-                                    .foregroundStyle(Color(hex: "#1A1917"))
+                                    .foregroundStyle(VelaTheme.fg)
                                 Text(personality.description)
                                     .font(.system(size: 12))
-                                    .foregroundStyle(Color(hex: "#8E8A80"))
+                                    .foregroundStyle(VelaTheme.muted)
                                     .multilineTextAlignment(.leading)
                             }
                             Spacer()
                             if selectedPersonality == personality {
                                 Image(systemName: "checkmark")
                                     .font(.system(size: 14, weight: .bold))
-                                    .foregroundStyle(Color(hex: "#C56B4A"))
+                                    .foregroundStyle(VelaTheme.accent)
                             }
                         }
                         .padding(.vertical, 4)
@@ -1351,7 +1358,7 @@ struct CoachPersonalitySettingsView: View {
                 }
             }
         }
-        .background(Color(hex: "#F5F3F0"))
+        .background(VelaTheme.systemGroupedBackground)
         .navigationTitle("AI 教练风格")
         .onAppear {
             selectedPersonality = CoachPersonality(rawValue: coachPersonalityRaw) ?? .guardian
@@ -1377,16 +1384,16 @@ struct AgentAutomationSettingsView: View {
                         HStack(spacing: 12) {
                             Image(systemName: skill.icon)
                                 .font(.body)
-                                .foregroundStyle(Color(hex: "#C56B4A"))
+                                .foregroundStyle(VelaTheme.accent)
                                 .frame(width: 28)
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(isChinese ? skill.name : skill.enName)
                                     .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(Color(hex: "#1A1917"))
+                                    .foregroundStyle(VelaTheme.fg)
                                 Text(skill.schedule)
                                     .font(.caption2)
-                                    .foregroundStyle(Color(hex: "#8E8A80"))
+                                    .foregroundStyle(VelaTheme.muted)
                             }
 
                             Spacer()
@@ -1399,12 +1406,12 @@ struct AgentAutomationSettingsView: View {
                                 }
                             ))
                             .labelsHidden()
-                            .tint(Color(hex: "#C56B4A"))
+                            .tint(VelaTheme.accent)
                         }
 
                         Text(isChinese ? skill.description : skill.enDescription)
                             .font(.caption)
-                            .foregroundStyle(Color(hex: "#8E8A80"))
+                            .foregroundStyle(VelaTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(.vertical, 6)
@@ -1429,7 +1436,7 @@ struct ExportDataSettingsView: View {
             Section(header: Text("数据导出与备份")) {
                 Text("Vela 始终秉持 Local-first 理念，你的所有健康数据都保留在设备本地。为了数据迁移或备份，你可以将健康摘要与日志导出为 JSON 文件。数据在导出过程中不会离开你的设备。")
                     .font(.footnote)
-                    .foregroundStyle(Color(hex: "#8E8A80"))
+                    .foregroundStyle(VelaTheme.muted)
                     .padding(.vertical, 4)
                 
                 Button {
@@ -1446,7 +1453,7 @@ struct ExportDataSettingsView: View {
                         .foregroundStyle(Color.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
-                        .background(RoundedRectangle(cornerRadius: 12).fill(Color(hex: "#C56B4A")))
+                        .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.accent))
                 }
                 .buttonStyle(.plain)
                 

@@ -224,6 +224,7 @@ struct VelaCoachView: View {
                 AIModelSettingsView()
             }
         }
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     // MARK: - History Drawer View
@@ -243,7 +244,7 @@ struct VelaCoachView: View {
                 } label: {
                     Image(systemName: "sidebar.left")
                         .font(.system(size: 16))
-                        .foregroundStyle(Color(hex: "#C56B4A"))
+                        .foregroundStyle(Color(hex: "#007AFF"))
                 }
             }
             .padding(.horizontal, 20)
@@ -266,8 +267,8 @@ struct VelaCoachView: View {
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
-                .background(RoundedRectangle(cornerRadius: 22).fill(Color(hex: "#C56B4A")))
-                .shadow(color: Color(hex: "#C56B4A").opacity(0.15), radius: 6, y: 3)
+                .background(RoundedRectangle(cornerRadius: 22).fill(Color(hex: "#007AFF")))
+                .shadow(color: Color(hex: "#007AFF").opacity(0.15), radius: 6, y: 3)
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 20)
@@ -282,7 +283,7 @@ struct VelaCoachView: View {
                         HStack(spacing: 12) {
                             Image(systemName: "bubble.left.and.bubble.right.fill")
                                 .font(.system(size: 13))
-                                .foregroundStyle(vm.currentSession?.id == session.id ? Color(hex: "#C56B4A") : Color(hex: "#8E8A80"))
+                                .foregroundStyle(vm.currentSession?.id == session.id ? Color(hex: "#007AFF") : Color(hex: "#8E8A80"))
                             
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(session.title.isEmpty ? "新对话" : session.title)
@@ -305,7 +306,7 @@ struct VelaCoachView: View {
                                 } label: {
                                     Image(systemName: "pencil")
                                         .font(.system(size: 12))
-                                        .foregroundStyle(Color(hex: "#C56B4A"))
+                                        .foregroundStyle(Color(hex: "#007AFF"))
                                         .frame(width: 24, height: 24)
                                 }
                                 .buttonStyle(.plain)
@@ -328,7 +329,7 @@ struct VelaCoachView: View {
                                 .fill(vm.currentSession?.id == session.id ? Color.white : Color.clear)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .stroke(vm.currentSession?.id == session.id ? Color(hex: "#C56B4A").opacity(0.3) : Color.clear, lineWidth: 1)
+                                        .stroke(vm.currentSession?.id == session.id ? Color(hex: "#007AFF").opacity(0.3) : Color.clear, lineWidth: 1)
                                 )
                         )
                         .padding(.horizontal, 14)
@@ -349,7 +350,7 @@ struct VelaCoachView: View {
                     Circle()
                         .fill(
                             LinearGradient(
-                                colors: [Color(hex: "#C56B4A"), Color(hex: "#E89B7E")],
+                                colors: [Color(hex: "#007AFF"), Color(hex: "#64D2FF")],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
@@ -367,7 +368,7 @@ struct VelaCoachView: View {
                         .foregroundStyle(Color(hex: "#1A1917"))
                     Text("Local-first 存储")
                         .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Color(hex: "#C56B4A"))
+                        .foregroundStyle(Color(hex: "#007AFF"))
                 }
                 Spacer()
             }
@@ -378,10 +379,10 @@ struct VelaCoachView: View {
         }
         .frame(width: width)
         .frame(maxHeight: .infinity)
-        .background(Color(hex: "#F5F3F0"))
+        .background(Color(hex: "#F2F2F7"))
         .overlay(alignment: .trailing) {
             Rectangle()
-                .fill(Color(hex: "#E8E4DD"))
+                .fill(Color(hex: "#E5E5EA"))
                 .frame(width: 0.5)
         }
     }
@@ -397,7 +398,7 @@ struct VelaCoachView: View {
             } label: {
                 Image(systemName: "sidebar.left")
                     .font(.system(size: 18))
-                    .foregroundStyle(Color(hex: "#C56B4A"))
+                    .foregroundStyle(Color(hex: "#007AFF"))
                     .frame(width: 36, height: 36)
                     .background(
                         Circle().fill(VelaTheme.surface)
@@ -426,7 +427,7 @@ struct VelaCoachView: View {
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(Color(hex: "#C56B4A"))
+                    .foregroundStyle(Color(hex: "#007AFF"))
                     .frame(width: 36, height: 36)
                     .background(
                         Circle().fill(VelaTheme.surface)
@@ -439,7 +440,7 @@ struct VelaCoachView: View {
             } label: {
                 Image(systemName: "gearshape.fill")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#C56B4A"))
+                    .foregroundStyle(Color(hex: "#007AFF"))
                     .frame(width: 36, height: 36)
                     .background(
                         Circle().fill(VelaTheme.surface)
@@ -454,7 +455,7 @@ struct VelaCoachView: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Color(hex: "#C56B4A"))
+                        .foregroundStyle(Color(hex: "#007AFF"))
                         .frame(width: 36, height: 36)
                         .background(
                             Circle().fill(VelaTheme.surface)
@@ -478,7 +479,7 @@ struct VelaCoachView: View {
             HStack(spacing: 10) {
                 Image(systemName: "brain.head.profile")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#C56B4A"))
+                    .foregroundStyle(Color(hex: "#007AFF"))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("待确认长期记忆")
@@ -500,7 +501,7 @@ struct VelaCoachView: View {
             .background(Color(hex: "#FFF8F2"))
             .overlay(alignment: .bottom) {
                 Rectangle()
-                    .fill(Color(hex: "#E8E4DD"))
+                    .fill(Color(hex: "#E5E5EA"))
                     .frame(height: 0.5)
             }
         }
@@ -515,11 +516,11 @@ struct VelaCoachView: View {
                 Circle()
                     .fill(Color.white)
                     .frame(width: 76, height: 76)
-                    .overlay(Circle().stroke(Color(hex: "#E8E4DD"), lineWidth: 0.8))
+                    .overlay(Circle().stroke(Color(hex: "#E5E5EA"), lineWidth: 0.8))
                     .shadow(color: Color.black.opacity(0.04), radius: 8, y: 3)
 
                 AlpacaView(
-                    strokeColor: Color(hex: "#C56B4A"),
+                    strokeColor: Color(hex: "#007AFF"),
                     size: 58,
                     lineWidth: 2.6
                 )
