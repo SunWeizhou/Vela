@@ -82,6 +82,31 @@ final class AgentActionParserTests: XCTestCase {
         XCTAssertEqual(result.finalMessages.filter { $0.role == .tool }.map(\.content), ["first result", "second result"])
     }
 
+    func testAgentLoopRequestsFinalAnswerWhenLastAllowedIterationStillUsesTool() async throws {
+        let provider = FakeAgentChatProvider(responses: [
+            LLMResponse(
+                content: "",
+                toolCalls: [ToolCall(id: "call-1", name: "first_tool", arguments: "{}")]
+            ),
+            LLMResponse(
+                content: "",
+                toolCalls: [ToolCall(id: "call-2", name: "second_tool", arguments: "{}")]
+            ),
+            LLMResponse(content: "final after tools", toolCalls: nil)
+        ])
+        let registry = ToolRegistry(tools: [
+            StaticAgentTool(name: "first_tool", result: "first result"),
+            StaticAgentTool(name: "second_tool", result: "second result")
+        ])
+        let loop = AgentLoop(provider: provider, toolRegistry: registry, maxIterations: 2)
+
+        let result = try await loop.run(messages: [ChatMessage(role: .user, content: "run bounded tools")])
+
+        XCTAssertEqual(result.response, "final after tools")
+        XCTAssertEqual(result.executedTools.map(\.name), ["first_tool", "second_tool"])
+        XCTAssertEqual(provider.chatCallToolAvailability, [true, true, false])
+    }
+
     @MainActor
     func testAgentLoopStreamsOnlyAfterNoToolCallsRemain() async throws {
         let provider = FakeAgentChatProvider(

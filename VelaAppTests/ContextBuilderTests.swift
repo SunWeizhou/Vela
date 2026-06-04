@@ -77,6 +77,39 @@ final class ContextBuilderTests: XCTestCase {
         XCTAssertTrue((strength["last_session_summary"] ?? "").contains("Chest Strength"))
     }
 
+    func testAIContextFlagsCostlyTrainingResponse() throws {
+        let generatedAt = makeDate()
+        let dashboard = DashboardSummary.preview(date: generatedAt)
+        let response = TrainingResponseRecord(
+            workoutId: UUID(),
+            date: generatedAt.addingTimeInterval(-86_400),
+            nextDayDate: generatedAt,
+            primaryMuscleGroups: ["legs"],
+            totalEffectiveSets: 12,
+            totalVolumeKg: 9_600,
+            sessionRPE: 8,
+            nextDayRecoveryDelta: -10,
+            nextDayHRVDelta: -12,
+            nextDayRHRDelta: 4
+        )
+
+        let result = AIContextBuilder().build(
+            dashboard: dashboard,
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:],
+            strengthWorkouts: [],
+            trainingResponses: [response],
+            generatedAt: generatedAt
+        )
+        let contextJSON = try XCTUnwrap(String(data: JSONEncoder().encode(result.envelope), encoding: .utf8))
+
+        XCTAssertTrue(contextJSON.contains("recovery_response_summary"))
+        XCTAssertTrue(contextJSON.contains("notable recovery cost"))
+        XCTAssertTrue(contextJSON.contains("\"flagged_response_count\":\"1\""))
+        XCTAssertTrue(contextJSON.contains("\"average_next_day_recovery_delta\":\"-10.0\""))
+    }
+
     func testAIContextIncludesLocalFatigue() throws {
         let generatedAt = makeDate()
         let workout = makeWorkout(start: generatedAt.addingTimeInterval(-6 * 3600))

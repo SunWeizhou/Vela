@@ -107,6 +107,28 @@ final class PersistenceFoundationTests: XCTestCase {
         XCTAssertEqual(StrengthWorkoutTemplateParser.reps(from: "AMRAP"), 10)
     }
 
+    func testStrengthWorkoutSaveValidatorRejectsWorkoutWithOnlyUncompletedSetsWhenIgnoring() {
+        let exercises = [
+            StrengthExerciseLog(
+                name: "杠铃深蹲",
+                equipment: "barbell",
+                primaryMuscleGroup: "legs",
+                sets: [
+                    StrengthSetLog(repetitions: 8, weightKilograms: 100, isWarmup: false, rpe: nil, rir: nil, isCompleted: false, completedAt: nil)
+                ]
+            )
+        ]
+
+        let result = StrengthWorkoutSaveValidator.exercisesToSave(
+            from: exercises,
+            ignoringUncompletedSets: true
+        )
+
+        XCTAssertThrowsError(try result.get()) { error in
+            XCTAssertEqual(error as? StrengthWorkoutSaveValidator.ValidationError, .emptyCompletedSets)
+        }
+    }
+
     func testTrainingDayDecodingToleratesLegacyMissingFields() throws {
         let json = """
         {

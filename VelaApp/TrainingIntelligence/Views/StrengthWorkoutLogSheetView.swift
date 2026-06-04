@@ -358,7 +358,18 @@ struct StrengthWorkoutLogSheetView: View {
     }
 
     private func save(ignoringUncompletedSets: Bool) {
-        let exercisesToSave = ignoringUncompletedSets ? completedOnlyExercises : validExercises
+        let validation = StrengthWorkoutSaveValidator.exercisesToSave(
+            from: exercises,
+            ignoringUncompletedSets: ignoringUncompletedSets
+        )
+        let exercisesToSave: [StrengthExerciseLog]
+        switch validation {
+        case .success(let validatedExercises):
+            exercisesToSave = validatedExercises
+        case .failure(.emptyCompletedSets):
+            saveError = "至少完成一组后才能保存训练。"
+            return
+        }
         let record = StrengthWorkoutRecord(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "力量训练" : title,
             startedAt: startedAt,
@@ -608,14 +619,6 @@ struct StrengthWorkoutLogSheetView: View {
 
     private var hasUncompletedSets: Bool {
         validExercises.flatMap(\.sets).contains { $0.isCompleted != true }
-    }
-
-    private var completedOnlyExercises: [StrengthExerciseLog] {
-        validExercises.compactMap { exercise in
-            var copy = exercise
-            copy.sets = exercise.sets.filter { $0.isCompleted == true }
-            return copy.sets.isEmpty ? nil : copy
-        }
     }
 
     private func discardWorkout() {

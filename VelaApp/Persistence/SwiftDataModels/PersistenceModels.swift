@@ -574,6 +574,36 @@ enum StrengthWorkoutTemplateParser {
     }
 }
 
+enum StrengthWorkoutSaveValidator {
+    enum ValidationError: Error, Equatable {
+        case emptyCompletedSets
+    }
+
+    static func exercisesToSave(
+        from exercises: [StrengthExerciseLog],
+        ignoringUncompletedSets: Bool
+    ) -> Result<[StrengthExerciseLog], ValidationError> {
+        let namedExercises = exercises.filter {
+            !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        let exercisesToSave: [StrengthExerciseLog]
+        if ignoringUncompletedSets {
+            exercisesToSave = namedExercises.compactMap { exercise in
+                var copy = exercise
+                copy.sets = exercise.sets.filter { $0.isCompleted == true }
+                return copy.sets.isEmpty ? nil : copy
+            }
+        } else {
+            exercisesToSave = namedExercises
+        }
+
+        guard exercisesToSave.contains(where: { !$0.sets.isEmpty }) else {
+            return .failure(.emptyCompletedSets)
+        }
+        return .success(exercisesToSave)
+    }
+}
+
 @Model
 final class WorkoutTemplateRecord {
     @Attribute(.unique) var id: UUID

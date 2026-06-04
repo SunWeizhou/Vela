@@ -11,10 +11,11 @@
 - iPhoneOS build command: `xcodebuild -project Vela.xcodeproj -scheme Vela -sdk iphoneos -configuration Debug build`
 - iPhoneOS build result: succeeded on 2026-06-04.
 - iOS test command: `xcodebuild test -project Vela.xcodeproj -scheme Vela -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5'`
-- iOS test result: succeeded on 2026-06-04; 31 tests passed.
+- iOS test result: succeeded on 2026-06-04; 35 tests passed.
 - Backend test command: `swift test` in `VelaBackend`
 - Backend test result: succeeded on 2026-06-04; 3 tests passed.
-- Root `README.md`: not present. `docs/README.md` exists.
+- Current branch: `codex/vela-3-active-coach-os`
+- Latest commit: `e25f72b` — audit-driven bug fix round (8 fixes: sleep HR, N+1 queries, dailyLoad, baseline roundtrip, confidence degradation, reps parsing, TrainingDay compat, journal correlation)
 
 ## Reusable Modules
 

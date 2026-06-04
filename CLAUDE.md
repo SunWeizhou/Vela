@@ -4,15 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-Vela 是一个 local-first 的 iOS 健康分析 App（SwiftUI + SwiftData + HealthKit），对标 Bevel Health。原始健康数据留在设备本地，只有结构化摘要发送给 LLM（通过 VelaBackend Vapor 服务，默认 Claude API，DeepSeek 也可用）。
+Vela 是一个 local-first 的 iOS 健康分析 App（SwiftUI + SwiftData + HealthKit），对标 Bevel Health。原始健康数据留在设备本地，只有结构化摘要通过 DeepSeek API 直接发送给 LLM（不经过中间服务器）。
 
 - **Target**: `Vela`
 - **Scheme**: `Vela`
 - **Bundle ID**: `com.sunweizhou.Vela`
 - **Deployment**: iPhone B1B2A1DB-2B5C-5C02-A222-B051240A22EA
 - **Project**: `/Users/sunweizhou/Desktop/AI Project/Vela/Vela.xcodeproj`
-- **Backend**: `/Users/sunweizhou/Desktop/AI Project/Vela/VelaBackend` (Vapor 4, SQLite)
-- **Current Branch**: `codex/vela-3-training-intelligence` (also synced to `main`)
+- **Backend**: `/Users/sunweizhou/Desktop/AI Project/Vela/VelaBackend` (Vapor 4, SQLite) — **当前未启用**，iOS 端直连 DeepSeek API
+- **LLM Provider**: DeepSeek (`deepseek-v4-flash` / `deepseek-v4-pro`)，API key 存在 iOS Keychain
+- **Current Branch**: `codex/vela-3-active-coach-os`
 - **GitHub**: `https://github.com/SunWeizhou/Vela`
 
 ## 构建与推送
@@ -62,16 +63,16 @@ xcodebuild -project Vela.xcodeproj -scheme Vela -sdk iphoneos -configuration Deb
 - `GlassTabBar` 底部导航，`+` 在最右侧
 - 头像按钮 → Settings sheet，Coach 通过 Today 页按钮触发 sheet
 
-| 页面 | 文件 | 数据源 |
-|------|------|--------|
-| TodayView | `VelaApp/Features/Minimal/VelaMinimalTodayView.swift` | `@EnvironmentObject dashboardVM: DashboardViewModel` |
-| JournalView | `VelaApp/Features/Minimal/VelaMinimalCoachView.swift` | SwiftData `JournalEntryRecord` |
-| TrainingView | `VelaApp/Features/Minimal/VelaMinimalFitnessView.swift` | `@EnvironmentObject dashboardVM` + TrainingIntelligence 引擎 |
-| VitalsView | `VelaApp/Features/Minimal/VelaMinimalVitalsView.swift` | `@EnvironmentObject dashboardVM` |
-| SettingsView | `VelaApp/Features/Minimal/VelaMinimalJournalView.swift` | `@AppStorage`（notifications/language/theme） |
-| CoachView | `VelaApp/Features/Coach/CoachView.swift` | `@StateObject vm: CoachChatVM`（streaming） |
-| MetricDetailView | `VelaApp/Features/Minimal/VelaMinimalComponents.swift` | 各页面 onTap 导航进入 |
-| PlusActionSheet | `VelaApp/Features/SharedComponents/VelaQuickActionsSheet.swift` | 快速添加动作面板 |
+| Tab | 页面 | 文件 | 数据源 |
+|-----|------|------|--------|
+| Tab 0 | TodayView | `VelaMinimalTodayView.swift` | `@EnvironmentObject dashboardVM` |
+| Tab 1 | TrainingView | `VelaMinimalFitnessView.swift` | `@EnvironmentObject dashboardVM` + TrainingIntelligence |
+| Tab 2 | VitalsView | `VelaMinimalVitalsView.swift` | `@EnvironmentObject dashboardVM` |
+| Tab 3 | CoachView | `CoachView.swift` | `@StateObject vm: CoachChatVM`（streaming） |
+| Tab 4 | MeView | `VelaMinimalJournalView.swift` | `@AppStorage` + `@Query coachArtifacts` |
+| — | SettingsView | `VelaMinimalCoachView.swift` | 手记/Journal 页面 |
+| — | MetricDetailView | `VelaMinimalComponents.swift` | 各页面 onTap 导航进入 |
+| — | PlusActionSheet | `VelaQuickActionsSheet.swift` | 快速添加动作面板 |
 
 ### 关键：文件映射（pbxproj 不可脚本修改）
 
@@ -100,25 +101,40 @@ xcodebuild -project Vela.xcodeproj -scheme Vela -sdk iphoneos -configuration Deb
 - **DashboardViewModel** (`VelaApp/Features/SharedComponents/DashboardViewModel.swift`) — ObservableObject，持有 DashboardSummary
 - **MetricCoachCard** (`VelaApp/Features/SharedComponents/MetricCoachCard.swift`) — Apple Intelligence 风格的指标分析入口卡片
 
-## 数据流（Vela 3.0 当前架构）
+## 数据流（当前架构，Vela 3.0 Active Coach OS）
 
 ```
-HealthKit → HealthKitSyncEngine / HealthKitQueryService
-  → SwiftData DailyHealthSummaryRecord（本地缓存）
-  → ScoreEngineFactory → 各评分引擎计算 MetricResult
-  → DashboardSummary（聚合体）→ DashboardViewModel
+HealthKit → HealthKitSyncEngine (2-pass: raw snapshot → MetricComputationPipeline)
+  → SwiftData DailyHealthSummaryRecord（本地缓存，50+ 字段）
+  → ScoreEngineFactory / MetricComputationPipeline → 9 引擎计算 MetricResult
+  → DashboardSummary（聚合体）→ DashboardViewModel (@EnvironmentObject)
+  → TodayCommandBuilder.build() → TodayCommandState (readiness / actions / signals)
   → AIContextBuilder.build() → AgentContextEnvelope
-  → VelaBackend（Vapor 4）→ Claude API / DeepSeek API → 流式返回
+  → DeepSeek API（iOS 端直连，不经过中间服务器）→ SSE 流式返回
 ```
+
+**⚠️ VelaBackend 当前未连线**：iOS 端直连 DeepSeek API (`api.deepseek.com`)，模型 `deepseek-v4-flash` / `deepseek-v4-pro`。VelaBackend 是并行设计的服务端替代方案（Claude API + 用户系统 + 审计），尚未集成。
+
+### 引擎调用路径说明
+
+主路径 `MetricComputationPipeline.compute(for:history:)` 从快照内联构建 Input 并直接调用各引擎。`ScoreEngineFactory` 仅在回填路径 (`DailySummaryUseCase.backfillSleepHistoryIfNeeded`) 中使用。PreviewDataFactory 用固定种子合成预览数据。**修改引擎算法时需同时更新三处**。
+
+### 历史数据组装
+
+- `hrvHistory` / `rhrHistory`: 从 SwiftData 42 天快照中 compactMap 提取，用于 Recovery 引擎 MAD 基线计算
+- `last28DaysDailyLoads`: 从快照 `dailyLoad` 字段提取，用于 Strain 引擎 ATL/CTL/ACWR（当前用简单平均，非 Banister EWMA）
+- `strainHistory`: 从快照 `strainScore` 提取，用于 EnergyBank 引擎 ATL/CTL/TSB 计算
 
 关键类型：
 - `DashboardSummary`: 所有评分的聚合体（`Core/Utilities/DashboardSummary.swift`）
 - `DashboardViewModel`: ObservableObject，持有 DashboardSummary，通过 `@EnvironmentObject` 注入页面
-- `ScoreEngineFactory`: 统一创建各评分引擎的 Input struct，替代了旧的 `DashboardSummary.healthKit()` 静态方法
+- `ScoreEngineFactory`: 统一创建各评分引擎的 Input struct（回填路径使用）
+- `MetricComputationPipeline`: 主路径编排者，内联构建 Input 并调用引擎（`Health/Services/HealthKitSyncEngine.swift`）
 - `PreviewDataFactory`: 用真实引擎 + 固定种子生成预览 DashboardSummary
-- `AIContextBuilder`: 构建发给 LLM 的结构化上下文包（AgentContextEnvelope）
+- `AIContextBuilder`: 构建发给 LLM 的结构化上下文包（AgentContextEnvelope v1 / TypedAgentContext v2）
 - `DomainContextBuilders`: 各领域的上下文构建器（Sleep/Recovery/Strain/Stress/EnergyBank/StrengthTraining 等）
 - `CoachChatVM`: Coach 对话的 ViewModel，管理 streaming 状态和消息历史
+- `TodayCommandBuilder`: 规则引擎，从 DashboardSummary 产生 TodayCommandState（readiness 判定 + 行动建议）
 
 ## Training Intelligence 模块（Vela 3.0 新增）
 
@@ -145,29 +161,36 @@ HealthKit → HealthKitSyncEngine / HealthKitQueryService
 
 ## 评分引擎
 
-每个引擎实现 `ScoreEngine` protocol（定义在 `Scoring/ScoringCore.swift`）：
+每个引擎实现 `ScoreEngine` protocol（定义在 `Scoring/ScoringCore.swift`），输出统一的 `MetricResult`（value 0-100 / band / confidence / components / reasons）。
 
-| 引擎 | 文件 | 功能 |
-|------|------|------|
-| `SleepScoreEngine` | `Scoring/Sleep/SleepScoreEngine.swift` | REM/Deep/Core 阶段分析 + 效率 |
-| `RecoveryScoreEngine` | `Scoring/Recovery/RecoveryScoreEngine.swift` | HRV Z-score 28-day rolling + RHR 基线 |
-| `StrainScoreEngine` | `Scoring/Strain/StrainScoreEngine.swift` | TRIMP-inspired + workout intensity |
-| `StressIndexEngine` | `Scoring/Stress/StressIndexEngine.swift` | 4 因子: RHR↑, HRV↓, 睡眠负债, 负荷压力 |
-| `EnergyBankEngine` | `Scoring/EnergyBank/EnergyBankEngine.swift` | Firstbeat charge/discharge + ATL(7d)/CTL(42d)/TSB |
-| `HealthAgeTrendEngine` | `Scoring/HealthAge/HealthAgeTrendEngine.swift` | 生物年龄估算 |
-| `BiologicalAgeEngine` | `Scoring/Biology/BiologicalAgeEngine.swift` | PhenoAge 临床化验模式 |
-| `AdaptiveTrainingEngine` | `Scoring/Training/AdaptiveTrainingEngine.swift` | 基于 readiness 的训练日调整 |
-| `TrainingDecisionEngine` | `Scoring/Training/TrainingDecisionEngine.swift` | DashboardSummary → TrainingDecision |
-| `BodyInterpreterEngine` | `Scoring/BodyInterpreter/BodyInterpreterEngine.swift` | 身体状态综合解读 |
-| `JournalCorrelationEngine` | `Scoring/Correlation/JournalCorrelationEngine.swift` | 行为-体征滞后关联分析 |
-| `DailyPlanLimiterEngine` | `Scoring/DailyPlan/DailyPlanLimiterEngine.swift` | 训练限制因子判定 |
-| `ScoreEngineFactory` | `Scoring/ScoreEngineFactory.swift` | 统一创建引擎 Input struct |
+| 引擎 | 文件 | 功能 | 学术基础 |
+|------|------|------|---------|
+| `SleepScoreEngine` | `Scoring/Sleep/SleepScoreEngine.swift` | 3 因子: Duration (0-50) + Consistency (0-30) + Interruption (0-20) | Buysse (1989) PSQI 五维框架，REM/Deep% 匹配 AASM 标准 |
+| `RecoveryScoreEngine` | `Scoring/Recovery/RecoveryScoreEngine.swift` | HRV log-SDNN Z-score (35%) + RHR Z (25%) + Sleep (25%) + PriorStrain (15%) + Red Flag modifiers | Plews (2012/2014) 运动员 HRV 监测，MAD 稳健统计 (1.4826 因子)，副交感反弹保护 |
+| `StrainScoreEngine` | `Scoring/Strain/StrainScoreEngine.swift` | Lucia's TRIMP (HR zone) / Banister TRIMP (性别参数) / Foster's Session RPE → dailyLoad → ATL/CTL/TSB/ACWR | Banister (1975) 脉冲-响应模型，Lucia (2003)，Foster (2001)，Gabbett (2016) ACWR 阈值 |
+| `StressIndexEngine` | `Scoring/Stress/StressIndexEngine.swift` | 6 因子加权: RHR↑ (25%), HRV↓ (25%), RR↑ (15%), Temp (10%), SleepDebt (15%), Load (10%) + 运动窗口排除 | Thayer (2012) HRV-压力 meta-analysis，各单因子有文献 |
+| `EnergyBankEngine` | `Scoring/EnergyBank/EnergyBankEngine.swift` | Firstbeat-inspired charge/discharge + ATL(7d)/CTL(42d)/TSB + 正念/小憩充电 | Firstbeat 专有算法启发式还原 (Garmin) |
+| `HealthAgeTrendEngine` | `Scoring/HealthAge/HealthAgeTrendEngine.swift` | 多因子趋势方向评分 → improving/stable/worsening | 启发式，VO2Max/RHR/Sleep/Steps 等权重 |
+| `BiologicalAgeEngine` | `Scoring/Biology/BiologicalAgeEngine.swift` | Levine PhenoAge 临床化验模型（9 项血液指标 + 年龄）| Levine et al. (2018, *Aging*)，逐字实现论文回归系数，**当前闲置未接入** |
+| `BodyInterpreterEngine` | `Scoring/BodyInterpreter/BodyInterpreterEngine.swift` | 多系统疲劳分析 + 主要限制因子 + 训练窗口 + 风险标记 + 恢复任务 | 专家推理框架 |
+| `JournalCorrelationEngine` | `Scoring/Correlation/JournalCorrelationEngine.swift` | 行为标签 vs 次日体征滞后关联分析 | Spearman + 点二列相关，刚提高最低样本门槛 |
+| `DailyPlanLimiterEngine` | `Scoring/DailyPlan/DailyPlanLimiterEngine.swift` | 规则引擎: sleep/recovery/stress/load/temp/手记 → keep/reduce/swap/rest | 保守安全规则，任何 severity 3 → rest |
+| `PersonalBaselineEngine` | `Scoring/PersonalBaselineEngine.swift` | 30 天均值 ± SD 个人基线，写入 Wiki baselines.md | 标准运动监测，支持 round-trip markdown 解析 |
+| `ScoreEngineFactory` | `Scoring/ScoreEngineFactory.swift` | 统一创建引擎 Input（仅回填路径使用） | — |
 
-## VelaBackend（Vapor 4）
+### 已知改进空间
 
-独立的服务端项目 (`VelaBackend/`)，使用 Fluent + SQLite + JWT。
+- **ATL/CTL 用简单平均而非 EWMA**：Banister 原模型要求指数加权衰减 τ=7/42 天，当前 `EnergyBankEngine` 用 `average()`
+- **HRV 只用了 SDNN**：HealthKit 同时提供 RMSSD（更好的迷走神经代理）和 SDNN，RMSSD 未使用
+- **Readiness 置信度硬编码**：0.32/0.86/0.78... 未基于用户数据统计校准
+- **BiologicalAgeEngine 闲置**：PhenoAge 公式完整实现但无生产调用路径
+- **局部疲劳阈值过敏感**：`setsLast48h >= 10` 触发 swap，一个 push session 即超过
 
-### API 路由
+## VelaBackend（Vapor 4）— 当前未启用
+
+独立的服务端项目 (`VelaBackend/`)，使用 Fluent + SQLite + JWT + Anthropic Claude API。**当前 iOS 端直连 DeepSeek API，VelaBackend 尚未集成到产品流中。**
+
+### API 路由（设计阶段）
 
 | 方法 | 路径 | 是否走 LLM |
 |------|------|-----------|
@@ -186,35 +209,59 @@ HealthKit → HealthKitSyncEngine / HealthKitQueryService
 
 ### 核心服务
 
-- `LLMService`: actor，封装 Claude API 调用（`chat()` / `jsonCompletion()`），含 3 个 Tool Definition
+- `LLMService`: actor，封装 Anthropic Claude API 调用（`claude-sonnet-4-6`），含 3 个 Tool Definition
 - `PromptService`: 5 套中文 Prompt 模板（coach/todayInsight/trainingAdaptation/evidenceChain/memoryPattern）
 - `JWTService`: Access Token 15min / Refresh Token 7d
 
 ### HealthContext 边界
 
-iOS 端只发摘要 `HealthContext`，原始 HealthKit 数据永不离设备。所有 AI prompt 通过 `PromptService.formatHealthContext()` 注入数据。
+iOS 端只发摘要 `HealthContext`，原始 HealthKit 数据永不离设备。当前直连 DeepSeek 时同样遵守此边界。
 
-## AI 模块（VelaApp/AI/）
+## AI / Memory / Proactive 模块（VelaApp/AI/）
+
+### 上下文构建
 
 | 子模块 | 文件 | 职责 |
 |--------|------|------|
-| Context | `AIContextBuilder.swift` | 构建 AgentContextEnvelope（发给 LLM 的结构化上下文） |
-| Context | `DomainContextBuilders.swift` | 各领域上下文构建器 |
-| Context | `WikiFileService.swift` | 用户 Wiki 文件读写 |
-| Models | `AgentContextSchema.swift` | AgentContextEnvelope 定义 |
-| Models | `TypedContextSchema.swift` | 强类型上下文 schema |
-| Provider | `DeepSeekProvider.swift` | DeepSeek API streaming（60ms throttle） |
-| Provider | `LLMProvider.swift` | LLM Provider 协议 |
-| Provider | `WebSearchService.swift` | Web 搜索能力 |
-| Agent | `AgentLoop.swift`, `AgentTool.swift` | Agent 工具调用循环 |
-| Agent | `ToolFactory.swift` | Tool 工厂注册 |
-| Agent | `FoodPhotoAnalyzer.swift` | Kimi Vision 食物照片识别 |
-| Proactive | `PersonalResponseInsightService.swift` | 个人反应洞察 + 周报 |
-| Proactive | `ProactiveInsightService.swift` | 主动洞察服务 |
-| Proactive | `MorningBriefScheduler.swift` | 晨间简报 |
-| Proactive | `EveningWikiSyncAgent.swift` | 夜间 Wiki 同步 |
-| Memory | `MemoryLedger.swift`, `MemoryModels.swift` | 记忆提议与确认账本 |
-| Reports | `ReportGenerator.swift` | AI 报告生成 |
+| Context | `AIContextBuilder.swift` | 双路径构建 AgentContextEnvelope（v1 dictionary）和 TypedAgentContext（v2 typed）。从 DashboardSummary + journal/wiki/foodLog/strengthWorkout 构建结构化上下文 |
+| Context | `DomainContextBuilders.swift` | 各领域上下文构建器（Sleep/Recovery/Strain/Stress/EnergyBank/StrengthTraining/Nutrition/ExtendedMetrics 等） |
+| Models | `AgentContextSchema.swift` | AgentContextEnvelope 定义，含 `ContextBudget`（**已定义但 AIContextBuilder / Scheduler 未执行限制**） |
+| Models | `TypedContextSchema.swift` | 强类型上下文 schema，`MetricValue<T>` 带 source/freshness/confidence/baseline 元数据 |
+
+### 记忆系统（Artifact + Wiki）
+
+| 子模块 | 文件 | 职责 |
+|--------|------|------|
+| Artifact | `AgentActionParser.swift` | CoachArtifact 类型定义（8 种: morningBrief, workoutReadiness, trainingAdjustment, postWorkoutReview, eveningReview, weeklyReview, wikiUpdateProposal, askCoachAnswer），CoachArtifactAction/Reason/Status |
+| Artifact | `PersistenceModels.swift` (CoachArtifactRecord) | SwiftData 持久化，reasons/actions 存为 JSON blob |
+| Memory | `MemoryLedger.swift` | 记忆提议账本: propose → confirm(写入 Wiki) / reject / rollback(标记 superseded) / expire(14天过期) |
+| Memory | `MemoryModels.swift` | MemoryEventRecord（8 种类型: fact/observation/hypothesis/strategy/preference/constraint/goalChange/baselineUpdate），MemoryProposalStatus（proposed→accepted/rejected/superseded/expired），AgentRunRecord，WikiFileRole，ContextBudget |
+| Wiki | `WikiFileService.swift` | 14 个 Markdown Wiki 文件读写，merge 模式去重（精确+子串+Levenshtein >0.85），baselines.md 由 PersonalBaselineEngine 自动生成 |
+
+### LLM Provider & Agent
+
+| 子模块 | 文件 | 职责 |
+|--------|------|------|
+| Provider | `DeepSeekProvider.swift` | DeepSeek API（`api.deepseek.com`），SSE streaming（60ms throttle），temperature 0.4，模型 `deepseek-v4-flash`/`deepseek-v4-pro`。**无 retry/backoff** |
+| Provider | `LLMProvider.swift` | LLM Provider 协议 + ChatMessage/LLMResponse/Value 类型 |
+| Provider | `WebSearchService.swift` | DuckDuckGo HTML scraping — **dead code，实际使用 WebSearchHelper (Bing)** |
+| Agent | `AgentLoop.swift` | Agent 工具调用循环: 发送消息 → 检查 tool_calls → 执行工具 → 追加结果 → 循环（maxIterations=3）→ 流式最终响应。**无重试、无取消传播** |
+| Agent | `AgentTool.swift` | AgentTool 协议 + ToolRegistry + ToolExecutionContext |
+| Agent | `ToolFactory.swift` | 9 个 Tool 注册: WebSearch, UpdateWiki, HealthData, StrengthWorkoutHistory, JournalCorrelation(stub), FoodLog, TrainingPlan, CreateTrainingPlan, RenderCorrelationChart |
+| Agent | `WebSearchHelper.swift` | Bing HTML scraping（活跃实现，但违反 ToS） |
+| Agent | `FoodPhotoAnalyzer.swift` | Kimi Vision API（Moonshot），`kimi-k2.6` 模型，JPEG 0.7 压缩 → base64 → 解析食物/json |
+
+### 主动服务
+
+| 子模块 | 文件 | 职责 |
+|--------|------|------|
+| Proactive | `MorningBriefScheduler.swift` | 06:00-11:00 窗口 → AIContextBuilder → ReportGenerator → AIReportRecord → 推送通知。**无超时、无 HealthKit 同步完成检查** |
+| Proactive | `EveningWikiSyncAgent.swift` | 21:00-04:00 窗口 → 发送数据给 DeepSeek → 解析 legacy `[ACTION:update_wiki]` 标签 → MemoryProposal。**仍用 legacy parser，未迁移到 AgentLoop** |
+| Proactive | `ProactiveInsightService.swift` | 7 条硬编码规则评估 DashboardSummary → [ProactiveInsight]（HRV↓/睡眠↓/训练窗口/能量↓/负荷-恢复不匹配/压力↑） |
+| Proactive | `PersonalResponseInsightService.swift` | 60 天快照扫描 → 个人反应模式 → MemoryEventRecord 提议 |
+| Proactive | `BackgroundTaskManager.swift` | iOS BGTask 注册与调度 |
+| Reports | `ReportGenerator.swift` | AI 报告生成（morning brief/sleep review/etc.），**无 max_tokens 限制** |
+| Prompting | `CoachPromptComposer.swift` | 组合式 Prompt 片段: temporal context / personality / web search / wiki / baselines / plan / health context / journal correlations / cross-diagnosis / thresholds / training prescription。三种变体: casual / focused / full。**无 token budget 强制** |
 
 ## 注意事项
 

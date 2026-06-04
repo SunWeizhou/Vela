@@ -1,21 +1,22 @@
 # TECH_ARCHITECTURE.md
 # Project Vela — Technical Architecture
 
-> Updated: 2026-06-02
+> Updated: 2026-06-04
 > This document reflects the current build. Product context: `docs/VELA_FULL_STRENGTH_PRODUCT_BLUEPRINT.md`.
 
 ## 0. 当前技术状态
 
-截至 2026-06-02:
+截至 2026-06-04:
 
 - `xcodebuild -project Vela.xcodeproj -scheme Vela -destination 'generic/platform=iOS' -configuration Debug CODE_SIGNING_ALLOWED=NO build` succeeds.
 - `xcodebuild test -project Vela.xcodeproj -scheme Vela -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -configuration Debug` succeeds (100% pass rate).
 - 真机 iPhone 16 Pro 可通过 `devicectl` 构建、安装和启动。
 - 项目包含 HealthKit、SwiftData、评分引擎、AI Agent、Wiki、Training Intelligence、Biology、食物分析、通知等模块。
 - App shell 使用 Apple Design System + Bevel Parity 视觉体系：`VelaTheme` 设计令牌、`VelaDesignSystem` 复用组件、毛玻璃胶囊底栏、白卡驾驶舱。
-- **VelaBackend** (Vapor 4) 提供 Coach chat API、Today Plan、Training Adaptations、Memory、Insights Evidence 等路由。
+- **VelaBackend** (Vapor 4) 存在但 **当前未启用** — iOS 端直连 DeepSeek API (`api.deepseek.com`)。
 - **Training Intelligence v3** 模块已落地：模型层、分析服务、恢复联动适配器、计划关联、力量训练视图。
-- 当前主分支：`codex/vela-3-training-intelligence`（已同步到 `main`）。
+- **Vela 3.0 Active Coach OS** 已实施：5-Tab 导航（Today/Training/Insights/Coach/Me）、Today Command Center、Coach Artifact 系统、Body Model 统一卡片、Coach 收件箱。
+- 当前主分支：`codex/vela-3-active-coach-os`。
 
 ## 1. 技术总览
 
@@ -173,32 +174,36 @@
 ```text
 HealthKit Raw Samples
     ↓
-HealthKitSyncEngine / HealthKitQueryService
+HealthKitSyncEngine (2-pass: raw snapshot → MetricComputationPipeline)
     ↓
-DailyHealthSummaryRecord (SwiftData 缓存)
+DailyHealthSummaryRecord (SwiftData 缓存，50+ 字段)
     ↓
-ScoreEngineFactory.buildSleepInput/buildRecoveryInput/...
+MetricComputationPipeline 内联构建引擎 Input 并调用
     ↓
 评分引擎 → MetricResult
     ↓
-DashboardSummary (聚合)
+DailysummaryUseCase.loadDashboard() 聚合
     ↓
-DashboardViewModel (@EnvironmentObject)
+DashboardSummary (聚合体)
+    ↓
+DashboardViewModel (@Published, @EnvironmentObject 注入全视图树)
     ↓
 UI Refresh
 ```
 
+**注意**: `MetricComputationPipeline` 是主路径，绕过 `ScoreEngineFactory` 直接构建输入。`ScoreEngineFactory` 仅在回填路径 (`backfillSleepHistoryIfNeeded`) 中使用。PreviewDataFactory 用固定种子合成预览数据。**修改引擎算法需同步更新三处**。
+
 ### 5.2 AI 上下文构建
 ```text
-DashboardSummary + SwiftData 记录 (journal/foodLog/strengthWorkout)
+DashboardSummary + SwiftData 记录 (journal/foodLog/strengthWorkout/onboarding/wiki)
     ↓
-AIContextBuilder.build()
+AIContextBuilder.build() / buildTyped() (双路径: v1 dictionary + v2 typed)
     ↓
-AgentContextEnvelope (JSON)
+AgentContextEnvelope (JSON) 或 TypedAgentContext
     ↓
-VelaBackend / DeepSeekProvider
+CoachPromptComposer → DeepSeekProvider (直连 api.deepseek.com)
     ↓
-流式响应 → CoachChatPanel 渲染 (MarkdownText)
+SSE 流式响应 → CoachChatPanel 渲染 (MarkdownText)
 ```
 
 ### 5.3 训练闭环
@@ -218,25 +223,27 @@ RecoveryTrainingAdapter → TrainingAdaptationRecommendation
 TrainingView / Coach 上下文
 ```
 
-## 6. VelaBackend（Vapor 4）
+## 6. VelaBackend（Vapor 4）— 当前未启用
 
-服务端项目，提供 LLM 代理和轻量业务逻辑。
+VelaBackend 是服务端项目，使用 Fluent + SQLite + JWT + Anthropic Claude API。当前 **iOS 端直连 DeepSeek API**，不经过 VelaBackend。
 
-### 路由摘要
-| 方法 | 路径 | LLM 调用 |
-|------|------|---------|
-| POST | `/api/auth/register`, `/login`, `/refresh` | 否 |
+### 路由摘要（设计阶段）
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/auth/register`, `/login`, `/refresh` | JWT 认证 |
 | POST | `/api/coach/chat` | Claude API + Tool Use |
 | GET | `/api/today/plan` | Claude JSON |
 | GET | `/api/training/adaptations` | Claude JSON |
 | POST | `/api/insights/evidence` | Claude JSON |
-| GET/PUT | `/api/memory/*` | 读写 DB |
+| GET/PUT | `/api/memory/*` | 本地 DB |
 | GET | `/api/data-coverage` | 纯计算 |
 
 ### HealthContext 边界
-iOS 端只发送结构化摘要 `HealthContext`，原始 HealthKit 数据永不离设备。
+iOS 端只发送结构化摘要，原始 HealthKit 数据永不离设备。当前直连 DeepSeek 时同样遵守此边界。
 
-## 7. 技术风险
+## 7. 技术风险与已知问题
+
+### 当前风险
 
 | 风险 | 缓解 |
 |------|------|
@@ -245,6 +252,22 @@ iOS 端只发送结构化摘要 `HealthContext`，原始 HealthKit 数据永不�
 | LLM 输出不稳定 | 固定输出结构 / Prompt 约束 / JSON schema |
 | SwiftData migration 风险 | 优先 JSON 字段扩展 + 可选字段 |
 | pbxproj 冲突 | 不脚本修改 pbxproj，新文件手动 Xcode 注册 |
+| Token budget 超限 | `ContextBudget` 已定义但 `AIContextBuilder` / scheduler 未执行限制 |
+| 无 HTTP 重试机制 | DeepSeekProvider / Agent Loop / Scheduler 全链路无 retry/backoff |
+| ATL/CTL 用简单平均非 EWMA | EnergyBankEngine 待修正为指数加权 |
+
+### 近期修复 (2026-06-04 audit-driven)
+
+| Bug | 修复内容 |
+|-----|---------|
+| 睡眠心率查询错误 | 从全天区间改为按最近一次睡眠区间取样 |
+| N+1 心率查询 | 逐条查询改为批量取样后按训练分桶 |
+| dailyLoad 重复累加 | 防止 `aggregateDay` 多次调用叠加 activityLoad |
+| Wiki 基线 nil 字段 | baseline markdown 支持完整 round-trip 解析 |
+| 信任度反向 | 关键信号缺失时 Today confidence 降为 `.low` |
+| Reps 解析错误 | 训练模板 "3x8-12" 解析目标次数 8 而非组数 3 |
+| TrainingDay 解码崩溃 | 兼容旧序列化数据缺字段 |
+| 手记伪相关 | 提高最低样本门槛，避免 2 天标签出关联 |
 
 ## 8. 测试
 
