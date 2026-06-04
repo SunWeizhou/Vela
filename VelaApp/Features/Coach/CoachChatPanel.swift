@@ -485,7 +485,7 @@ final class CoachChatVM: ObservableObject {
                 dashboard: dashboard
             )
 
-            var agentMessages = chatMessages
+            let agentMessages = chatMessages
             var fullResponse = ""
             var wasStreamed = false
             var wikiFiles: [String] = []
@@ -709,6 +709,11 @@ final class CoachChatVM: ObservableObject {
                 sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
             )
         )) ?? []
+        var onboardingDescriptor = FetchDescriptor<OnboardingState>(
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        onboardingDescriptor.fetchLimit = 1
+        let onboardingState = (try? modelContext.fetch(onboardingDescriptor))?.first
         let (context, _) = (services?.contextBuilder ?? AIContextBuilder()).build(
             dashboard: dashboard,
             journalEntries: journalEntries.prefix(12).map { JournalContextEntry(tags: $0.tags, text: $0.note) },
@@ -724,7 +729,8 @@ final class CoachChatVM: ObservableObject {
             userWiki: wiki,
             weeklyTrends: weeklyTrends,
             foodLogs: Array(foodLogs.prefix(8)),
-            strengthWorkouts: strengthWorkouts
+            strengthWorkouts: strengthWorkouts,
+            onboardingState: onboardingState
         )
         let contextJSON = (try? String(data: JSONEncoder().encode(context), encoding: .utf8)) ?? "{}"
 

@@ -48,6 +48,17 @@ struct ToolRegistry {
     }
 }
 
+@MainActor
+final class ToolExecutionContext: @unchecked Sendable {
+    let modelContext: ModelContext
+    let dashboard: DashboardSummary
+
+    init(modelContext: ModelContext, dashboard: DashboardSummary) {
+        self.modelContext = modelContext
+        self.dashboard = dashboard
+    }
+}
+
 // MARK: - Concrete Tools
 
 enum SearchSourcePolicy: String, Codable, Sendable {
@@ -134,7 +145,7 @@ struct UpdateWikiTool: AgentTool {
     let name = "update_user_wiki"
     let description = "Propose a durable long-term memory entry for the user's personal Wiki profile. Use only for stable preferences, confirmed facts, constraints, goals, or repeated patterns. Never store a one-day symptom, workout, meal, sleep result, or temporary body state here; those belong in the automatic daily Wiki log. Generates a proposal that the user can review and confirm. Available files: profile.md, goals.md, constraints.md, preferences.md, habits.md, training_history.md, health_context.md, observations.md, strategies.md."
 
-    nonisolated(unsafe) let modelContext: ModelContext
+    let executionContext: ToolExecutionContext
 
     var parameters: [String: Value] {
         [
@@ -180,7 +191,7 @@ struct UpdateWikiTool: AgentTool {
 
         return await MainActor.run { () -> String in
             do {
-                let ledger = MemoryLedger(modelContext: modelContext)
+                let ledger = MemoryLedger(modelContext: executionContext.modelContext)
                 let record = try ledger.createProposal(
                     targetFile: file,
                     memoryType: memoryType,
@@ -205,7 +216,7 @@ struct HealthDataTool: AgentTool {
     let name = "check_health_data"
     let description = "Retrieve a specific health metric value from today's context when the user asks for an exact number. Use this sparingly — most data is visible in the system prompt context JSON."
 
-    nonisolated(unsafe) let dashboard: DashboardSummary
+    let executionContext: ToolExecutionContext
 
     var parameters: [String: Value] {
         [
@@ -236,6 +247,7 @@ struct HealthDataTool: AgentTool {
             var lastUpdated: String
         }
         
+        let dashboard = await MainActor.run { executionContext.dashboard }
         var response = MetricResponse(
             metric: metric,
             value: nil,
@@ -341,7 +353,7 @@ struct StrengthWorkoutHistoryTool: AgentTool {
     let name = "get_strength_workout_history"
     let description = "Retrieve recent locally logged strength workouts with exercises, equipment, sets, repetitions, weights, and calculated training volume. Use this when the user asks about gym progress, lifting history, exercise selection, or volume trends."
 
-    nonisolated(unsafe) let modelContext: ModelContext
+    let executionContext: ToolExecutionContext
 
     var parameters: [String: Value] {
         [
@@ -368,7 +380,7 @@ struct StrengthWorkoutHistoryTool: AgentTool {
             let descriptor = FetchDescriptor<StrengthWorkoutRecord>(
                 sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
             )
-            let records = Array(((try? modelContext.fetch(descriptor)) ?? []).prefix(limit))
+            let records = Array(((try? executionContext.modelContext.fetch(descriptor)) ?? []).prefix(limit))
             let payload = records.map { record in
                 StrengthWorkoutHistoryPayload(
                     title: record.title,
@@ -505,9 +517,7 @@ struct FoodLogTool: AgentTool {
     let name = "log_food"
     let description = "Log a food or meal entry to the user's journal. Use this after analyzing a meal photo or when the user describes what they ate. The entry will be tagged with 'food' and 'meal' for later correlation analysis."
 
-    /// ModelContext is always accessed from @MainActor via CoachChatVM.send(),
-    /// so the non-Sendable storage is safe in practice.
-    nonisolated(unsafe) let modelContext: ModelContext
+    let executionContext: ToolExecutionContext
 
     var parameters: [String: Value] {
         [
@@ -556,6 +566,7 @@ struct FoodLogTool: AgentTool {
 
     func execute(arguments: String) async throws -> String {
         return try await MainActor.run {
+            let modelContext = executionContext.modelContext
             try PersistenceWriteGate.shared.assertWritable(operation: "FoodLogTool", modelContext: modelContext)
 
             guard let data = arguments.data(using: .utf8),
@@ -612,7 +623,7 @@ struct CreateTrainingPlanTool: AgentTool {
     let name = "create_training_plan"
     let description = "Generate and save a multi-week training program for the user. When the user asks for a workout program, training plan, or structured fitness guidance, you must generate a comprehensive multi-week plan (typically 4 weeks, with specific activities for days 1-7 of each week) and call this tool to persist it. Use this tool only once per complete plan creation."
 
-    nonisolated(unsafe) let modelContext: ModelContext
+    let executionContext: ToolExecutionContext
 
     var parameters: [String: Value] {
         [
@@ -662,6 +673,7 @@ struct CreateTrainingPlanTool: AgentTool {
 
     func execute(arguments: String) async throws -> String {
         return try await MainActor.run {
+            let modelContext = executionContext.modelContext
             try PersistenceWriteGate.shared.assertWritable(operation: "CreateTrainingPlanTool", modelContext: modelContext)
 
             guard let data = arguments.data(using: .utf8) else {

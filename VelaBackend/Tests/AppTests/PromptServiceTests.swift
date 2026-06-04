@@ -16,7 +16,17 @@ final class PromptServiceTests: XCTestCase {
     func testCoachToolsExposeMemoryAndTrainingActions() {
         XCTAssertEqual(
             Set(LLMService.coachTools.map(\.name)),
-            Set(["propose_memory", "suggest_training"])
+            Set(["propose_memory", "suggest_training", "web_search"])
         )
+    }
+
+    func testCoachPromptToolReferencesAreRegistered() {
+        let prompt = PromptService.coachSystemPrompt(lang: "zh")
+        let registeredToolNames = Set(LLMService.coachTools.map(\.name))
+
+        for toolName in ["propose_memory", "suggest_training", "web_search"] {
+            XCTAssertTrue(prompt.contains(toolName), "Prompt should mention \(toolName).")
+            XCTAssertTrue(registeredToolNames.contains(toolName), "\(toolName) should be registered in LLMService.coachTools.")
+        }
     }
 }

@@ -92,6 +92,7 @@ actor LLMService {
         let jsonData = try JSONSerialization.data(withJSONObject: body)
 
         let response = try await client.post(URI(string: url), beforeSend: { req in
+            req.timeout = .seconds(Self.requestTimeoutSeconds)
             req.headers.add(name: "x-api-key", value: apiKey)
             req.headers.add(name: "anthropic-version", value: "2023-06-01")
             req.headers.contentType = .json
@@ -99,8 +100,7 @@ actor LLMService {
             buffer.writeBytes(jsonData)
             req.body = buffer
         })
-        req.timeout = .init(connect: .seconds(15), read: .seconds(Self.requestTimeoutSeconds))
-        guard response.status == .ok else {
+        guard response.status == HTTPStatus.ok else {
             throw Abort(.badGateway, reason: "Anthropic request failed with status \(response.status.code).")
         }
 
@@ -183,6 +183,22 @@ actor LLMService {
                     "reason": ["type": "string", "description": "基于数据的理由"]
                 ],
                 "required": ["focus", "duration_minutes", "intensity"]
+            ]
+        ),
+        ToolDefinition(
+            name: "web_search",
+            description: "查询最新公开健康研究、运动科学资料或指南摘要。只用于需要外部最新信息的问题，不用于读取用户私人健康数据。",
+            parameters: [
+                "type": "object",
+                "properties": [
+                    "query": ["type": "string", "description": "搜索问题。健康研究和运动科学问题优先使用英文。"],
+                    "source_policy": [
+                        "type": "string",
+                        "description": "来源优先级：medical_primary|sports_science|general",
+                        "enum": ["medical_primary", "sports_science", "general"]
+                    ]
+                ],
+                "required": ["query"]
             ]
         ),
     ]

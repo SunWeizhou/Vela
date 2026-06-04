@@ -63,7 +63,23 @@ struct VelaCoachView: View {
         sort: \MemoryEventRecord.createdAt, order: .reverse
     ) private var pendingMemoryProposals: [MemoryEventRecord]
 
+    @Query(sort: \CoachArtifactRecord.createdAt, order: .reverse)
+    private var coachArtifacts: [CoachArtifactRecord]
+
+    @Query(sort: \StrengthWorkoutRecord.startedAt, order: .reverse)
+    private var strengthWorkouts: [StrengthWorkoutRecord]
+
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
+    private var recentStrengthSummary: RecentTrainingSummary {
+        TrainingAnalyticsService().buildRecentSummary(workouts: strengthWorkouts, days: 7)
+    }
+    private var todayCommandState: TodayCommandState {
+        TodayCommandBuilder.build(
+            from: dashboard,
+            recentStrengthSummary: recentStrengthSummary,
+            coachArtifact: coachArtifacts.first?.artifact
+        )
+    }
 
     init(
         presentation: CoachPresentationStyle = .quickCover,
@@ -89,6 +105,8 @@ struct VelaCoachView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(spacing: 20) {
+                            coachArtifactDashboard
+
                             if vm.messages.isEmpty {
                                 welcomeView
                             }
@@ -559,6 +577,66 @@ struct VelaCoachView: View {
         }
     }
 
+    private var coachArtifactDashboard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VelaHeroCard(
+                title: "Active Coach OS",
+                subtitle: todayCommandState.summary,
+                systemImage: "sparkles",
+                accent: VelaTheme.accent
+            ) {
+                HStack(spacing: 10) {
+                    MetricScoreCard(
+                        title: "Readiness",
+                        value: todayCommandState.readinessDecision.displayTitle,
+                        subtitle: "\(Int((todayCommandState.readinessDecision.confidence * 100).rounded()))% confidence",
+                        accent: readinessColor(todayCommandState.readinessDecision.decision),
+                        confidence: todayCommandState.dataConfidence
+                    )
+
+                    MetricScoreCard(
+                        title: "Artifacts",
+                        value: "\(coachArtifacts.count)",
+                        subtitle: coachArtifacts.isEmpty ? "local brief only" : "saved coach outputs",
+                        accent: VelaTheme.accent
+                    )
+                }
+
+                if let artifact = todayCommandState.coachArtifact {
+                    CoachArtifactCard(artifact: artifact, compact: true) { action in
+                        handleArtifactAction(action, artifact: artifact)
+                    }
+                }
+            }
+
+            if !coachArtifacts.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Artifact Inbox")
+                        .font(VelaTheme.caption1())
+                        .fontWeight(.bold)
+                        .foregroundStyle(VelaTheme.muted)
+                        .textCase(.uppercase)
+                        .padding(.leading, 2)
+
+                    ForEach(coachArtifacts.prefix(3)) { record in
+                        CoachArtifactCard(artifact: record.artifact, compact: true) { action in
+                            handleArtifactAction(action, artifact: record.artifact)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func readinessColor(_ decision: ReadinessDecisionKind) -> Color {
+        switch decision {
+        case .keep: return VelaTheme.success
+        case .reduce: return Color(hex: "#FF9F0A")
+        case .swap: return Color(hex: "#5C6BC0")
+        case .recover: return VelaTheme.sleep
+        }
+    }
+
     // MARK: - Composer
 
     private var composerView: some View {
@@ -637,6 +715,24 @@ struct VelaCoachView: View {
         if let question = appState.prefilledCoachQuestion {
             sendMessage(question)
             appState.prefilledCoachQuestion = nil
+        }
+    }
+
+    private func handleArtifactAction(_ action: CoachArtifactAction, artifact: CoachArtifact) {
+        if action.type.contains("training") || action.type.contains("workout") {
+            appState.routeToTab(1)
+            if presentation == .quickCover {
+                dismiss()
+            }
+        } else if action.type.contains("check") {
+            appState.triggerJournal = true
+            if presentation == .quickCover {
+                dismiss()
+            }
+        } else if action.type.contains("recovery") {
+            sendMessage("请解释这条建议的恢复影响：\(artifact.summary)")
+        } else {
+            sendMessage(artifact.followUpQuestion ?? action.label)
         }
     }
 

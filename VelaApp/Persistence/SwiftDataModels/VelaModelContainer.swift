@@ -12,6 +12,8 @@ enum VelaModelContainer {
         AIReportRecord.self,
         UserWikiDocumentRecord.self,
         CoachSessionRecord.self,
+        OnboardingState.self,
+        CoachArtifactRecord.self,
         FoodLogRecord.self,
         StrengthWorkoutRecord.self,
         ActiveWorkoutDraftRecord.self,

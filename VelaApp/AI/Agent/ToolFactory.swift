@@ -10,6 +10,7 @@ enum ToolFactory {
     ///   - modelContext: SwiftData context for tools that persist data
     ///   - dashboard: Current health dashboard for tools that need score context
     /// - Returns: ToolRegistry with all available tools
+    @MainActor
     static func makeRegistry(
         modelContext: ModelContext,
         dashboard: DashboardSummary
@@ -19,19 +20,21 @@ enum ToolFactory {
 
     /// Returns all available agent tools.
     /// Add new tools here — they'll be automatically available to the Coach.
+    @MainActor
     static func allTools(
         modelContext: ModelContext,
         dashboard: DashboardSummary
     ) -> [AgentTool] {
-        [
+        let executionContext = ToolExecutionContext(modelContext: modelContext, dashboard: dashboard)
+        return [
             WebSearchTool(),
-            UpdateWikiTool(modelContext: modelContext),
-            HealthDataTool(dashboard: dashboard),
-            StrengthWorkoutHistoryTool(modelContext: modelContext),
+            UpdateWikiTool(executionContext: executionContext),
+            HealthDataTool(executionContext: executionContext),
+            StrengthWorkoutHistoryTool(executionContext: executionContext),
             JournalCorrelationTool(),
-            FoodLogTool(modelContext: modelContext),
+            FoodLogTool(executionContext: executionContext),
             TrainingPlanTool(decision: dashboard.trainingDecision),
-            CreateTrainingPlanTool(modelContext: modelContext),
+            CreateTrainingPlanTool(executionContext: executionContext),
             RenderCorrelationChartTool(),
         ]
     }

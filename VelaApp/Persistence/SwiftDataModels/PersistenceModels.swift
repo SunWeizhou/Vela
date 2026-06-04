@@ -832,6 +832,276 @@ final class CoachSessionRecord {
     }
 }
 
+struct UserGoalProfile: Codable, Hashable {
+    var primaryGoal: String
+    var secondaryGoals: [String]
+    var experienceLevel: String
+    var bodyConcerns: [String]
+
+    init(
+        primaryGoal: String = "maintain",
+        secondaryGoals: [String] = [],
+        experienceLevel: String = "unknown",
+        bodyConcerns: [String] = []
+    ) {
+        self.primaryGoal = primaryGoal
+        self.secondaryGoals = secondaryGoals
+        self.experienceLevel = experienceLevel
+        self.bodyConcerns = bodyConcerns
+    }
+}
+
+struct TrainingPreferenceProfile: Codable, Hashable {
+    var trainingStyle: String
+    var weeklyTrainingDays: Int
+    var sessionDurationMinutes: Int
+    var preferredTrainingDays: [String]
+
+    init(
+        trainingStyle: String = "mixed",
+        weeklyTrainingDays: Int = 3,
+        sessionDurationMinutes: Int = 45,
+        preferredTrainingDays: [String] = []
+    ) {
+        self.trainingStyle = trainingStyle
+        self.weeklyTrainingDays = weeklyTrainingDays
+        self.sessionDurationMinutes = sessionDurationMinutes
+        self.preferredTrainingDays = preferredTrainingDays
+    }
+}
+
+struct EquipmentProfile: Codable, Hashable {
+    var equipment: [String]
+    var scheduleNotes: String
+
+    init(equipment: [String] = [], scheduleNotes: String = "") {
+        self.equipment = equipment
+        self.scheduleNotes = scheduleNotes
+    }
+}
+
+struct CoachingPreference: Codable, Hashable {
+    var style: String
+    var explanationDepth: String
+    var language: String
+
+    init(style: String = "explanatory", explanationDepth: String = "balanced", language: String = "zh-Hans") {
+        self.style = style
+        self.explanationDepth = explanationDepth
+        self.language = language
+    }
+}
+
+struct InitialBodySnapshot: Codable, Hashable {
+    var sleepScore: Double?
+    var recoveryScore: Double?
+    var strainScore: Double?
+    var dataConfidence: DataConfidence
+    var missingData: [String]
+    var generatedAt: Date
+
+    init(
+        sleepScore: Double? = nil,
+        recoveryScore: Double? = nil,
+        strainScore: Double? = nil,
+        dataConfidence: DataConfidence = .unavailable,
+        missingData: [String] = [],
+        generatedAt: Date = Date()
+    ) {
+        self.sleepScore = sleepScore
+        self.recoveryScore = recoveryScore
+        self.strainScore = strainScore
+        self.dataConfidence = dataConfidence
+        self.missingData = missingData
+        self.generatedAt = generatedAt
+    }
+}
+
+@Model
+final class OnboardingState {
+    @Attribute(.unique) var id: UUID
+    var currentStep: String
+    var isCompleted: Bool
+    var completedAt: Date?
+    var goalProfileJSON: String
+    var trainingPreferenceJSON: String
+    var equipmentProfileJSON: String
+    var coachingPreferenceJSON: String
+    var initialBodySnapshotJSON: String
+    var missingDataJSON: String
+    var firstBrief: String
+    var firstActionPlanJSON: String
+    var createdAt: Date
+    var updatedAt: Date
+
+    init(
+        id: UUID = UUID(),
+        currentStep: String = "welcome",
+        isCompleted: Bool = false,
+        completedAt: Date? = nil,
+        goalProfile: UserGoalProfile = UserGoalProfile(),
+        trainingPreference: TrainingPreferenceProfile = TrainingPreferenceProfile(),
+        equipmentProfile: EquipmentProfile = EquipmentProfile(),
+        coachingPreference: CoachingPreference = CoachingPreference(),
+        initialBodySnapshot: InitialBodySnapshot = InitialBodySnapshot(),
+        missingData: [String] = [],
+        firstBrief: String = "",
+        firstActionPlan: [String] = [],
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.currentStep = currentStep
+        self.isCompleted = isCompleted
+        self.completedAt = completedAt ?? (isCompleted ? updatedAt : nil)
+        self.goalProfileJSON = Self.encode(goalProfile)
+        self.trainingPreferenceJSON = Self.encode(trainingPreference)
+        self.equipmentProfileJSON = Self.encode(equipmentProfile)
+        self.coachingPreferenceJSON = Self.encode(coachingPreference)
+        self.initialBodySnapshotJSON = Self.encode(initialBodySnapshot)
+        self.missingDataJSON = Self.encode(missingData)
+        self.firstBrief = firstBrief
+        self.firstActionPlanJSON = Self.encode(firstActionPlan)
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    @Transient
+    var goalProfile: UserGoalProfile {
+        get { Self.decode(goalProfileJSON, fallback: UserGoalProfile()) }
+        set { goalProfileJSON = Self.encode(newValue); updatedAt = Date() }
+    }
+
+    @Transient
+    var trainingPreference: TrainingPreferenceProfile {
+        get { Self.decode(trainingPreferenceJSON, fallback: TrainingPreferenceProfile()) }
+        set { trainingPreferenceJSON = Self.encode(newValue); updatedAt = Date() }
+    }
+
+    @Transient
+    var equipmentProfile: EquipmentProfile {
+        get { Self.decode(equipmentProfileJSON, fallback: EquipmentProfile()) }
+        set { equipmentProfileJSON = Self.encode(newValue); updatedAt = Date() }
+    }
+
+    @Transient
+    var coachingPreference: CoachingPreference {
+        get { Self.decode(coachingPreferenceJSON, fallback: CoachingPreference()) }
+        set { coachingPreferenceJSON = Self.encode(newValue); updatedAt = Date() }
+    }
+
+    @Transient
+    var initialBodySnapshot: InitialBodySnapshot {
+        get { Self.decode(initialBodySnapshotJSON, fallback: InitialBodySnapshot()) }
+        set { initialBodySnapshotJSON = Self.encode(newValue); updatedAt = Date() }
+    }
+
+    @Transient
+    var missingData: [String] {
+        get { Self.decode(missingDataJSON, fallback: []) }
+        set { missingDataJSON = Self.encode(newValue); updatedAt = Date() }
+    }
+
+    @Transient
+    var firstActionPlan: [String] {
+        get { Self.decode(firstActionPlanJSON, fallback: []) }
+        set { firstActionPlanJSON = Self.encode(newValue); updatedAt = Date() }
+    }
+
+    private static func encode<T: Encodable>(_ value: T) -> String {
+        guard let data = try? JSONEncoder().encode(value) else { return "{}" }
+        return String(data: data, encoding: .utf8) ?? "{}"
+    }
+
+    private static func decode<T: Decodable>(_ json: String, fallback: T) -> T {
+        guard let data = json.data(using: .utf8) else { return fallback }
+        return (try? JSONDecoder().decode(T.self, from: data)) ?? fallback
+    }
+}
+
+@Model
+final class CoachArtifactRecord {
+    @Attribute(.unique) var id: UUID
+    var type: String
+    var title: String
+    var summary: String
+    var createdAt: Date
+    var relatedDate: Date?
+    var decision: String?
+    var confidence: Double
+    var reasonsJSON: String
+    var actionsJSON: String
+    var sourceContextHash: String
+    var userFeedback: String?
+    var status: String
+    var followUpQuestion: String?
+
+    init(artifact: CoachArtifact) {
+        self.id = artifact.id
+        self.type = artifact.type.rawValue
+        self.title = artifact.title
+        self.summary = artifact.summary
+        self.createdAt = artifact.createdAt
+        self.relatedDate = artifact.relatedDate
+        self.decision = artifact.decision
+        self.confidence = artifact.confidence
+        self.reasonsJSON = Self.encode(artifact.reasons)
+        self.actionsJSON = Self.encode(artifact.actions)
+        self.sourceContextHash = artifact.sourceContextHash
+        self.userFeedback = artifact.userFeedback
+        self.status = artifact.status.rawValue
+        self.followUpQuestion = artifact.followUpQuestion
+    }
+
+    @Transient
+    var artifact: CoachArtifact {
+        get {
+            CoachArtifact(
+                id: id,
+                type: CoachArtifactType(rawValue: type) ?? .askCoachAnswer,
+                title: title,
+                summary: summary,
+                createdAt: createdAt,
+                relatedDate: relatedDate,
+                decision: decision,
+                confidence: confidence,
+                reasons: Self.decode(reasonsJSON, fallback: []),
+                actions: Self.decode(actionsJSON, fallback: []),
+                sourceContextHash: sourceContextHash,
+                userFeedback: userFeedback,
+                status: CoachArtifactStatus(rawValue: status) ?? .created,
+                followUpQuestion: followUpQuestion
+            )
+        }
+        set {
+            id = newValue.id
+            type = newValue.type.rawValue
+            title = newValue.title
+            summary = newValue.summary
+            createdAt = newValue.createdAt
+            relatedDate = newValue.relatedDate
+            decision = newValue.decision
+            confidence = newValue.confidence
+            reasonsJSON = Self.encode(newValue.reasons)
+            actionsJSON = Self.encode(newValue.actions)
+            sourceContextHash = newValue.sourceContextHash
+            userFeedback = newValue.userFeedback
+            status = newValue.status.rawValue
+            followUpQuestion = newValue.followUpQuestion
+        }
+    }
+
+    private static func encode<T: Encodable>(_ value: T) -> String {
+        guard let data = try? JSONEncoder().encode(value) else { return "[]" }
+        return String(data: data, encoding: .utf8) ?? "[]"
+    }
+
+    private static func decode<T: Decodable>(_ json: String, fallback: T) -> T {
+        guard let data = json.data(using: .utf8) else { return fallback }
+        return (try? JSONDecoder().decode(T.self, from: data)) ?? fallback
+    }
+}
+
 enum PersistenceSchemaVersion {
     static let current = "v0.1"
 }

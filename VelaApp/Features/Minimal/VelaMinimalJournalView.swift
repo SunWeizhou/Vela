@@ -1,6 +1,206 @@
 import SwiftUI
 import SwiftData
 
+struct VelaMeView: View {
+    @Environment(\.velaScrollDirection) private var scrollDirection
+    @EnvironmentObject private var dashboardVM: DashboardViewModel
+
+    @Query(sort: \OnboardingState.updatedAt, order: .reverse)
+    private var onboardingStates: [OnboardingState]
+    @Query(sort: \CoachArtifactRecord.createdAt, order: .reverse)
+    private var coachArtifacts: [CoachArtifactRecord]
+
+    private var onboarding: OnboardingState? { onboardingStates.first }
+    private var dashboard: DashboardSummary { dashboardVM.dashboard }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                profileHeader
+                bodyModelCard
+                coachMemoryCard
+                personalToolsCard
+                dataAndTrustCard
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 120)
+        }
+        .scrollIndicators(.hidden)
+        .velaTrackScroll(direction: scrollDirection)
+        .background(VelaTheme.systemGroupedBackground)
+        .navigationTitle("Me")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var profileHeader: some View {
+        VelaHeroCard(
+            title: "Body Model",
+            subtitle: onboarding?.firstBrief.isEmpty == false ? onboarding?.firstBrief : "你的训练目标、偏好、设备和健康数据会合并成 Coach 的个人上下文。",
+            systemImage: "person.crop.circle.fill",
+            accent: VelaTheme.accent
+        ) {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                MetricScoreCard(
+                    title: "Goal",
+                    value: displayGoal(onboarding?.goalProfile.primaryGoal ?? "maintain"),
+                    subtitle: onboarding?.goalProfile.experienceLevel ?? "unknown",
+                    accent: VelaTheme.accent
+                )
+                MetricScoreCard(
+                    title: "Training",
+                    value: "\(onboarding?.trainingPreference.weeklyTrainingDays ?? 3)x",
+                    subtitle: "\(onboarding?.trainingPreference.sessionDurationMinutes ?? 45) min/session",
+                    accent: VelaTheme.strain
+                )
+            }
+        }
+    }
+
+    private var bodyModelCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Profile")
+                .font(VelaTheme.caption1())
+                .fontWeight(.bold)
+                .foregroundStyle(VelaTheme.muted)
+                .textCase(.uppercase)
+
+            profileLine("训练风格", onboarding?.trainingPreference.trainingStyle ?? "mixed", icon: "figure.run")
+            profileLine("可用设备", equipmentText, icon: "dumbbell.fill")
+            profileLine("教练风格", onboarding?.coachingPreference.style ?? "explanatory", icon: "brain.head.profile")
+            profileLine("数据可信度", onboarding?.initialBodySnapshot.dataConfidence.rawValue.uppercased() ?? dashboard.recovery.confidence.rawValue.uppercased(), icon: "checkmark.seal.fill")
+
+            if let missing = onboarding?.missingData, !missing.isEmpty {
+                Text("待补充: \(missing.joined(separator: ", "))")
+                    .font(VelaTheme.caption1())
+                    .foregroundStyle(VelaTheme.muted)
+                    .lineLimit(3)
+            }
+        }
+        .padding(16)
+        .velaNativeCard(radius: 18)
+    }
+
+    private var coachMemoryCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Coach Memory")
+                    .font(VelaTheme.caption1())
+                    .fontWeight(.bold)
+                    .foregroundStyle(VelaTheme.muted)
+                    .textCase(.uppercase)
+                Spacer()
+                Text("\(coachArtifacts.count)")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(VelaTheme.accent)
+            }
+
+            if let artifact = coachArtifacts.first?.artifact {
+                CoachArtifactCard(artifact: artifact, compact: true)
+            } else {
+                EmptyStateView(
+                    icon: "tray",
+                    title: "暂无 Coach Artifact",
+                    subtitle: "完成训练、查看 Today 或与 Coach 对话后，这里会显示可追溯的建议。"
+                )
+            }
+        }
+    }
+
+    private var personalToolsCard: some View {
+        VStack(spacing: 0) {
+            settingsLink("手记与主观反馈", value: "Journal", icon: "book.pages.fill", color: Color(hex: "#FF9F0A"), destination: VelaJournalView())
+            Divider().padding(.leading, 54)
+            settingsLink("用户健康档案", value: "Wiki", icon: "doc.text.fill", color: VelaTheme.muted, destination: UserWikiArchiveView())
+            Divider().padding(.leading, 54)
+            settingsLink("生物学资料", value: "Biology", icon: "person.text.rectangle.fill", color: Color(hex: "#00A896"), destination: BiologyView())
+            Divider().padding(.leading, 54)
+            settingsLink("完整设置", value: "Settings", icon: "gearshape.fill", color: Color(hex: "#5C6BC0"), destination: VelaSettingsView())
+        }
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.cardBg))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+    }
+
+    private var dataAndTrustCard: some View {
+        VStack(spacing: 0) {
+            settingsLink("数据覆盖", value: "Signals", icon: "waveform.path.ecg.rectangle.fill", color: Color(hex: "#30A2FF"), destination: DataCoverageView())
+            Divider().padding(.leading, 54)
+            settingsLink("信任中心", value: "Logs", icon: "checkmark.shield.fill", color: VelaTheme.success, destination: TrustCenterView())
+            Divider().padding(.leading, 54)
+            settingsLink("AI 模型设置", value: "Model", icon: "cpu.fill", color: Color(hex: "#AF52DE"), destination: AIModelSettingsView())
+        }
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.cardBg))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+    }
+
+    private var equipmentText: String {
+        guard let equipment = onboarding?.equipmentProfile.equipment, !equipment.isEmpty else {
+            return "home + gym"
+        }
+        return equipment.prefix(3).joined(separator: ", ")
+    }
+
+    private func profileLine(_ title: String, _ value: String, icon: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(VelaTheme.accent)
+                .frame(width: 28, height: 28)
+                .background(RoundedRectangle(cornerRadius: 8).fill(VelaTheme.accent.opacity(0.1)))
+            Text(title)
+                .font(VelaTheme.subheadline())
+                .foregroundStyle(VelaTheme.fg)
+            Spacer()
+            Text(value)
+                .font(VelaTheme.subheadline())
+                .fontWeight(.semibold)
+                .foregroundStyle(VelaTheme.muted)
+                .lineLimit(1)
+        }
+    }
+
+    private func settingsLink<Destination: View>(
+        _ title: String,
+        value: String,
+        icon: String,
+        color: Color,
+        destination: Destination
+    ) -> some View {
+        NavigationLink(destination: destination) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 30, height: 30)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(color))
+                Text(title)
+                    .font(VelaTheme.body())
+                    .foregroundStyle(VelaTheme.fg)
+                Spacer()
+                Text(value)
+                    .font(VelaTheme.subheadline())
+                    .foregroundStyle(VelaTheme.muted)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(VelaTheme.meta)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func displayGoal(_ goal: String) -> String {
+        switch goal {
+        case "muscle_gain": return "Muscle"
+        case "fat_loss": return "Fat loss"
+        case "performance": return "Performance"
+        case "health": return "Health"
+        default: return "Maintain"
+        }
+    }
+}
+
 // MARK: - VelaJournalView — Bevel Replica Journal Tab
 // Persisted journal checklist × Golden calendar checks strip × Segments cluster toggles
 

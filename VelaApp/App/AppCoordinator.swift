@@ -24,6 +24,7 @@ struct AppCoordinator: View {
                     .id(language.rawValue)
             } else {
                 VelaOnboardingView()
+                    .environmentObject(dashboardVM)
                     .environment(\.locale, Locale(identifier: language.localeIdentifier))
             }
 

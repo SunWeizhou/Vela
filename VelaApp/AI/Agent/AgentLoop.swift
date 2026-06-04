@@ -3,15 +3,22 @@ import SwiftData
 
 // MARK: - Agent Loop
 
+protocol AgentChatProvider: Sendable {
+    func chat(messages: [ChatMessage], tools: [[String: Value]]?) async throws -> LLMResponse
+    func streamChat(messages: [ChatMessage]) -> AsyncThrowingStream<String, Error>
+}
+
+extension DeepSeekProvider: AgentChatProvider {}
+
 /// Encapsulates the tool-call loop: sends messages to LLM, executes tool calls, collects results.
 /// Extracted from CoachChatVM.send() so that CoachChatPanel.swift remains UI-only.
 struct AgentLoop {
 
-    let provider: DeepSeekProvider
+    let provider: any AgentChatProvider
     let toolRegistry: ToolRegistry
     let maxIterations: Int
 
-    init(provider: DeepSeekProvider, toolRegistry: ToolRegistry, maxIterations: Int = 3) {
+    init(provider: any AgentChatProvider, toolRegistry: ToolRegistry, maxIterations: Int = 3) {
         self.provider = provider
         self.toolRegistry = toolRegistry
         self.maxIterations = maxIterations
@@ -30,7 +37,7 @@ struct AgentLoop {
         var fullResponse = ""
         var executedTools: [ExecutedTool] = []
 
-        for iteration in 0..<maxIterations {
+        for _ in 0..<maxIterations {
             let response = try await provider.chat(
                 messages: agentMessages,
                 tools: toolRegistry.definitions
@@ -58,34 +65,39 @@ struct AgentLoop {
                     ))
                 }
 
-                // Stream the final response after tool execution (not on last iteration fallback)
-                if iteration < maxIterations - 1 {
-                    let stream = provider.streamChat(messages: agentMessages)
-                    var streamedText = ""
-                    for try await delta in stream {
-                        streamedText += delta
-                        if let onStreamDelta {
-                            await onStreamDelta(delta)
-                        }
-                    }
-                    fullResponse = streamedText
-                    return AgentLoopResult(
-                        response: fullResponse,
-                        executedTools: executedTools,
-                        finalMessages: agentMessages,
-                        wasStreamed: true
-                    )
-                }
                 continue
             }
 
             // Final text response (no more tool calls)
-            fullResponse = response.content
+            if let onStreamDelta {
+                fullResponse = try await streamFinalResponse(messages: agentMessages, onStreamDelta: onStreamDelta)
+                return AgentLoopResult(
+                    response: fullResponse,
+                    executedTools: executedTools,
+                    finalMessages: agentMessages,
+                    wasStreamed: true
+                )
+            } else {
+                fullResponse = response.content
+            }
             break
         }
 
         if fullResponse.isEmpty {
-            fullResponse = "I wasn't able to generate a response. Please try again."
+            if let onStreamDelta {
+                fullResponse = try await streamFinalResponse(messages: agentMessages, onStreamDelta: onStreamDelta)
+                return AgentLoopResult(
+                    response: fullResponse,
+                    executedTools: executedTools,
+                    finalMessages: agentMessages,
+                    wasStreamed: true
+                )
+            } else {
+                let finalResponse = try await provider.chat(messages: agentMessages, tools: nil)
+                fullResponse = finalResponse.content.isEmpty
+                    ? "I wasn't able to generate a response. Please try again."
+                    : finalResponse.content
+            }
         }
 
         return AgentLoopResult(
@@ -94,6 +106,19 @@ struct AgentLoop {
             finalMessages: agentMessages,
             wasStreamed: false
         )
+    }
+
+    private func streamFinalResponse(
+        messages: [ChatMessage],
+        onStreamDelta: @MainActor @Sendable (String) -> Void
+    ) async throws -> String {
+        let stream = provider.streamChat(messages: messages)
+        var streamedText = ""
+        for try await delta in stream {
+            streamedText += delta
+            await onStreamDelta(delta)
+        }
+        return streamedText
     }
 }
 

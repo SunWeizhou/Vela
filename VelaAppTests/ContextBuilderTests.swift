@@ -128,6 +128,61 @@ final class ContextBuilderTests: XCTestCase {
         XCTAssertTrue(typedStrength.localFatigue.isEmpty)
     }
 
+    @MainActor
+    func testAIContextIncludesOnboardingBodyModel() {
+        let generatedAt = makeDate()
+        let dashboard = DashboardSummary.preview(date: generatedAt)
+        let onboarding = OnboardingState(
+            isCompleted: true,
+            goalProfile: UserGoalProfile(
+                primaryGoal: "muscle_gain",
+                secondaryGoals: ["strength"],
+                experienceLevel: "intermediate",
+                bodyConcerns: ["shoulder"]
+            ),
+            trainingPreference: TrainingPreferenceProfile(
+                trainingStyle: "strength",
+                weeklyTrainingDays: 4,
+                sessionDurationMinutes: 60,
+                preferredTrainingDays: ["Mon", "Wed", "Fri"]
+            ),
+            equipmentProfile: EquipmentProfile(
+                equipment: ["gym", "barbell"],
+                scheduleNotes: "evening sessions"
+            ),
+            coachingPreference: CoachingPreference(
+                style: "direct",
+                explanationDepth: "balanced",
+                language: "zh-Hans"
+            ),
+            firstBrief: "Build muscle with conservative progression."
+        )
+
+        let result = AIContextBuilder().build(
+            dashboard: dashboard,
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: ["existing": "keep"],
+            onboardingState: onboarding,
+            generatedAt: generatedAt
+        )
+        let typed = AIContextBuilder().buildTyped(
+            dashboard: dashboard,
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:],
+            onboardingState: onboarding,
+            generatedAt: generatedAt
+        )
+
+        XCTAssertEqual(result.envelope.userWiki["existing"], "keep")
+        XCTAssertEqual(result.envelope.userWiki["body_model.primary_goal"], "muscle_gain")
+        XCTAssertEqual(result.envelope.userWiki["body_model.weekly_training_days"], "4")
+        XCTAssertEqual(typed.context.userWiki["body_model.training_style"], "strength")
+        XCTAssertTrue(result.metadata.includedSections.contains("body_model_profile"))
+        XCTAssertTrue(typed.metadata.includedSections.contains("body_model_profile"))
+    }
+
     func testUncompletedSetsAreNotCountedAsEffectiveSets() {
         let generatedAt = makeDate()
         let workout = makeMixedCompletionWorkout(start: generatedAt.addingTimeInterval(-3600))
@@ -260,5 +315,72 @@ final class ContextBuilderTests: XCTestCase {
         XCTAssertEqual(syncMetrics.strain.score, dashboardMetrics.strain.score, accuracy: 0.001)
         XCTAssertEqual(syncMetrics.stress.stressIndex, dashboardMetrics.stress.stressIndex, accuracy: 0.001)
         XCTAssertEqual(syncMetrics.energy.currentEnergy, dashboardMetrics.energy.currentEnergy, accuracy: 0.001)
+    }
+
+    func testTodayCommandStateRecoversWhenRecoveryIsLow() {
+        let generatedAt = makeDate()
+        var dashboard = DashboardSummary.preview(date: generatedAt)
+        dashboard.recovery = MetricResult(
+            name: "Recovery Score",
+            value: 34,
+            band: .low,
+            confidence: .high,
+            components: ["hrv": 32, "rhr": 44, "sleep": 58],
+            componentWeights: ["hrv": 0.35, "rhr": 0.25, "sleep": 0.25],
+            reasons: ["HRV is below baseline.", "Resting heart rate is elevated."],
+            missingInputs: [],
+            dataWindow: DateInterval(start: generatedAt, duration: 86_400),
+            source: .derived,
+            algorithmVersion: "test",
+            lastUpdated: generatedAt
+        )
+        dashboard.sleepScore = MetricResult(
+            name: "Sleep Score",
+            value: 58,
+            band: .low,
+            confidence: .high,
+            components: ["duration": 58],
+            componentWeights: ["duration": 1],
+            reasons: ["Sleep duration is below target."],
+            missingInputs: [],
+            dataWindow: DateInterval(start: generatedAt, duration: 86_400),
+            source: .derived,
+            algorithmVersion: "test",
+            lastUpdated: generatedAt
+        )
+        dashboard.strain = MetricResult(
+            name: "Strain Score",
+            value: 42,
+            band: .normal,
+            confidence: .high,
+            components: ["recommended_lower": 35, "recommended_upper": 65],
+            componentWeights: ["load": 1],
+            reasons: ["Current strain is in range."],
+            missingInputs: [],
+            dataWindow: DateInterval(start: generatedAt, duration: 86_400),
+            source: .derived,
+            algorithmVersion: "test",
+            lastUpdated: generatedAt
+        )
+        dashboard.recoveryMetrics = RecoveryMetricSummary(
+            hrvMilliseconds: 36,
+            restingHeartRate: 64,
+            sleepHeartRate: nil,
+            respiratoryRate: nil
+        )
+        dashboard.recoveryBaseline = RecoveryMetricSummary(
+            hrvMilliseconds: 48,
+            restingHeartRate: 58,
+            sleepHeartRate: nil,
+            respiratoryRate: nil
+        )
+
+        let state = TodayCommandBuilder.build(from: dashboard, generatedAt: generatedAt)
+
+        XCTAssertEqual(state.readinessDecision.decision, .recover)
+        XCTAssertGreaterThanOrEqual(state.readinessDecision.supportingSignals.count, 3)
+        XCTAssertTrue(state.readinessDecision.reasons.contains { $0.localizedCaseInsensitiveContains("HRV") })
+        XCTAssertTrue(state.actions.contains { $0.kind == .recovery })
+        XCTAssertEqual(state.dataConfidence, .high)
     }
 }

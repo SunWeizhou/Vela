@@ -67,10 +67,10 @@ struct VelaShell: View {
 
     enum VelaTab: Int, CaseIterable, Hashable {
         case today = 0
-        case journal = 1
-        case training = 2
-        case vitals = 3
-        case coach = 4
+        case training = 1
+        case insights = 2
+        case coach = 3
+        case me = 4
     }
 
     // MARK: - Body
@@ -169,24 +169,26 @@ struct VelaShell: View {
                     VelaTodayView(showCoach: $showCoach, showSettings: $showSettings)
                 }
             }
-            Tab(label(for: .journal), systemImage: iconName(for: .journal), value: VelaTab.journal) {
-                nativeTabSurface(.journal) {
-                    VelaJournalView()
-                }
-            }
             Tab(label(for: .training), systemImage: iconName(for: .training), value: VelaTab.training) {
                 nativeTabSurface(.training) {
                     VelaTrainingView()
                 }
             }
-            Tab(label(for: .vitals), systemImage: iconName(for: .vitals), value: VelaTab.vitals) {
-                nativeTabSurface(.vitals) {
+            Tab(label(for: .insights), systemImage: iconName(for: .insights), value: VelaTab.insights) {
+                nativeTabSurface(.insights) {
                     VelaVitalsView()
                 }
             }
             Tab(label(for: .coach), systemImage: iconName(for: .coach), value: VelaTab.coach) {
                 nativeTabSurface(.coach) {
                     VelaCoachView(presentation: .embedded, vm: services.coachChat)
+                }
+            }
+            Tab(label(for: .me), systemImage: iconName(for: .me), value: VelaTab.me) {
+                nativeTabSurface(.me) {
+                    NavigationStack {
+                        VelaMeView()
+                    }
                 }
             }
         }
@@ -215,13 +217,10 @@ struct VelaShell: View {
                 tabSurface(.today) {
                     VelaTodayView(showCoach: $showCoach, showSettings: $showSettings)
                 }
-                tabSurface(.journal) {
-                    VelaJournalView()
-                }
                 tabSurface(.training) {
                     VelaTrainingView()
                 }
-                tabSurface(.vitals) {
+                tabSurface(.insights) {
                     VelaVitalsView()
                 }
                 tabSurface(.coach) {
@@ -230,6 +229,11 @@ struct VelaShell: View {
                         usesOverlayNavigation: true,
                         vm: services.coachChat
                     )
+                }
+                tabSurface(.me) {
+                    NavigationStack {
+                        VelaMeView()
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -314,20 +318,20 @@ struct VelaShell: View {
     private func iconName(for tab: VelaTab) -> String {
         switch tab {
         case .today:    "sun.max"
-        case .journal:  "book.pages"
         case .training: "figure.run"
-        case .vitals:   "heart.text.square"
+        case .insights: "chart.xyaxis.line"
         case .coach:    "sparkles"
+        case .me:       "person.crop.circle"
         }
     }
 
     private func label(for tab: VelaTab) -> String {
         switch tab {
-        case .today:    "首页"
-        case .journal:  "手记"
-        case .training: "健身"
-        case .vitals:   "体征"
+        case .today:    "Today"
+        case .training: "Training"
+        case .insights: "Insights"
         case .coach:    "Coach"
+        case .me:       "Me"
         }
     }
 
@@ -347,7 +351,7 @@ enum VelaTabSelection {
         var shouldPresentQuickActions: Bool
     }
 
-    static let contentTabs: [VelaShell.VelaTab] = [.today, .journal, .training, .vitals, .coach]
+    static let contentTabs: [VelaShell.VelaTab] = [.today, .training, .insights, .coach, .me]
 
     static func resolve(
         candidate: VelaShell.VelaTab,

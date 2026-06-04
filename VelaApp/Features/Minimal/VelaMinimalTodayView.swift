@@ -14,8 +14,35 @@ struct VelaTodayView: View {
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     @ObservedObject private var appState = VelaAppState.shared
     @ObservedObject private var locationManager = LocationManager.shared
+    @Query(sort: \CoachArtifactRecord.createdAt, order: .reverse)
+    private var coachArtifacts: [CoachArtifactRecord]
+    @Query(sort: \StrengthWorkoutRecord.startedAt, order: .reverse)
+    private var strengthWorkouts: [StrengthWorkoutRecord]
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
+    private var recentStrengthSummary: RecentTrainingSummary {
+        TrainingAnalyticsService().buildRecentSummary(
+            workouts: strengthWorkouts,
+            days: 7,
+            endingAt: dashboardVM.selectedDate
+        )
+    }
+    private var latestTodayArtifact: CoachArtifact? {
+        coachArtifacts
+            .map(\.artifact)
+            .first { artifact in
+                guard let relatedDate = artifact.relatedDate else { return true }
+                return Calendar.current.isDate(relatedDate, inSameDayAs: dashboardVM.selectedDate)
+            }
+    }
+    private var todayCommandState: TodayCommandState {
+        TodayCommandBuilder.build(
+            from: dashboard,
+            recentStrengthSummary: recentStrengthSummary,
+            coachArtifact: latestTodayArtifact,
+            generatedAt: Date()
+        )
+    }
 
     // Real scores mapped to 0...1 for BevelScoreRing
     private var strainScore: Double { max(0, min(1.0, dashboard.strain.score / 100.0)) }
@@ -64,6 +91,7 @@ struct VelaTodayView: View {
     @State private var showActiveStatus = false
     @State private var selectedInsightIndex = 0
     @State private var selectedInsight: ProactiveInsight?
+    @State private var showTodayEvidence = false
     @State private var animatedEnergyScore: Double = 0.0
     @State private var isVisible = false
 
@@ -137,26 +165,32 @@ struct VelaTodayView: View {
                     .opacity(isVisible ? 1 : 0)
                     .offset(y: isVisible ? 0 : 10)
                     .animation(VelaTheme.snappy.delay(0.035), value: isVisible)
+
+                // 3. Vela 3.0 Today Command Center
+                todayCommandCenterCard
+                    .opacity(isVisible ? 1 : 0)
+                    .offset(y: isVisible ? 0 : 12)
+                    .animation(VelaTheme.snappy.delay(0.055), value: isVisible)
  
-                // 3. White Cockpit Card (Strain, Recovery, Sleep side-by-side rings)
+                // 4. White Cockpit Card (Strain, Recovery, Sleep side-by-side rings)
                 cockpitCard
                     .opacity(isVisible ? 1 : 0)
                     .offset(y: isVisible ? 0 : 12)
                     .animation(VelaTheme.snappy.delay(0.07), value: isVisible)
  
-                // 4. Stress & Energy Section
+                // 5. Stress & Energy Section
                 stressAndEnergySection
                     .opacity(isVisible ? 1 : 0)
                     .offset(y: isVisible ? 0 : 12)
                     .animation(VelaTheme.snappy.delay(0.105), value: isVisible)
  
-                // 5. Daily Activity Section
+                // 6. Daily Activity Section
                 dailyActivitySection
                     .opacity(isVisible ? 1 : 0)
                     .offset(y: isVisible ? 0 : 12)
                     .animation(VelaTheme.snappy.delay(0.14), value: isVisible)
  
-                // 6. Nutrition (营养) Section
+                // 7. Nutrition (营养) Section
                 nutritionSection
                     .opacity(isVisible ? 1 : 0)
                     .offset(y: isVisible ? 0 : 12)
@@ -236,6 +270,11 @@ struct VelaTodayView: View {
             .presentationDragIndicator(.visible)
             .presentationBackground(VelaTheme.systemGroupedBackground)
         }
+        .sheet(isPresented: $showTodayEvidence) {
+            EvidenceSheet(state: todayCommandState)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
         .toolbar(.hidden, for: .navigationBar)
     }
 
@@ -290,6 +329,110 @@ struct VelaTodayView: View {
                 }
                 .buttonStyle(.plain)
             }
+        }
+    }
+
+    private var todayCommandCenterCard: some View {
+        let state = todayCommandState
+        return VelaHeroCard(
+            title: "Today Command Center",
+            subtitle: "把恢复、睡眠、负荷和训练历史合成一个今日决策",
+            systemImage: "scope",
+            accent: readinessColor(state.readinessDecision.decision)
+        ) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(state.bodyStateTitle)
+                            .font(.system(size: 26, weight: .bold, design: .rounded))
+                            .foregroundStyle(VelaTheme.fg)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.8)
+
+                        Text(state.summary)
+                            .font(VelaTheme.subheadline())
+                            .foregroundStyle(VelaTheme.muted)
+                            .lineSpacing(3)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    VStack(alignment: .trailing, spacing: 6) {
+                        ConfidenceBadge(confidence: state.dataConfidence)
+                        Text("\(Int((state.readinessDecision.confidence * 100).rounded()))%")
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundStyle(readinessColor(state.readinessDecision.decision))
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    ForEach(state.actions.prefix(3)) { action in
+                        ActionPill(
+                            title: action.title,
+                            systemImage: icon(for: action),
+                            isPrimary: action.isPrimary
+                        ) {
+                            handleTodayAction(action)
+                        }
+                    }
+                }
+
+                VStack(spacing: 8) {
+                    ForEach(state.keySignals.prefix(3)) { signal in
+                        SignalRow(signal: signal)
+                    }
+                }
+
+                if let artifact = state.coachArtifact {
+                    CoachArtifactCard(artifact: artifact, compact: true) { action in
+                        handleCoachArtifactAction(action)
+                    }
+                }
+            }
+        }
+    }
+
+    private func readinessColor(_ decision: ReadinessDecisionKind) -> Color {
+        switch decision {
+        case .keep: return VelaTheme.success
+        case .reduce: return Color(hex: "#FF9F0A")
+        case .swap: return Color(hex: "#5C6BC0")
+        case .recover: return VelaTheme.sleep
+        }
+    }
+
+    private func icon(for action: TodayAction) -> String {
+        switch action.kind {
+        case .training: return "figure.run"
+        case .recovery: return "heart.fill"
+        case .checkIn: return "square.and.pencil"
+        case .coach: return "sparkles"
+        case .insight: return "list.bullet.clipboard"
+        }
+    }
+
+    private func handleTodayAction(_ action: TodayAction) {
+        switch action.kind {
+        case .training:
+            appState.routeToTab(1)
+        case .recovery, .insight:
+            showTodayEvidence = true
+        case .checkIn:
+            appState.triggerJournal = true
+        case .coach:
+            appState.routeToCoach(question: action.detail)
+        }
+    }
+
+    private func handleCoachArtifactAction(_ action: CoachArtifactAction) {
+        if action.type.contains("training") || action.type.contains("workout") {
+            appState.routeToTab(1)
+        } else if action.type.contains("check") {
+            appState.triggerJournal = true
+        } else if action.type.contains("recovery") {
+            showTodayEvidence = true
+        } else {
+            appState.routeToCoach(question: action.label)
         }
     }
 

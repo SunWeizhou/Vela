@@ -302,4 +302,30 @@ final class WorkoutAggregationTests: XCTestCase {
         XCTAssertEqual(summary.workoutCount, 2)
         XCTAssertTrue(summary.toSnapshot().workouts.contains { $0.source == "manual" && $0.activityName == "Stretching" })
     }
+
+    func testPostWorkoutReviewArtifactPersistsFromWorkoutSummary() throws {
+        let store = try makeStore()
+        let start = makeDate(hour: 18)
+        let previous = makeStrengthWorkout(start: start.addingTimeInterval(-7 * 86_400), title: "Prior Upper")
+        let workout = makeStrengthWorkout(start: start, title: "Upper Strength")
+        let analysis = TrainingAnalyticsService().summarizeWorkout(workout, history: [previous])
+
+        let artifact = CoachArtifact.postWorkoutReview(
+            workout: workout,
+            summary: analysis,
+            readinessDecision: "reduce",
+            sourceContextHash: "ctx-workout"
+        )
+        let record = CoachArtifactRecord(artifact: artifact)
+        store.context.insert(record)
+        try store.context.save()
+
+        let fetched = try XCTUnwrap(store.context.fetch(FetchDescriptor<CoachArtifactRecord>()).first)
+
+        XCTAssertEqual(fetched.type, CoachArtifactType.postWorkoutReview.rawValue)
+        XCTAssertEqual(fetched.artifact.status, .created)
+        XCTAssertEqual(fetched.artifact.sourceContextHash, "ctx-workout")
+        XCTAssertTrue(fetched.artifact.summary.contains("Upper Strength"))
+        XCTAssertTrue(fetched.artifact.actions.contains { $0.type == "open_training_summary" })
+    }
 }

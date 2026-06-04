@@ -374,6 +374,13 @@ struct StrengthWorkoutLogSheetView: View {
                 exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
             )
             record.analyticsJSON = (try? String(data: JSONEncoder().encode(analysis), encoding: .utf8)) ?? "{}"
+            let artifact = CoachArtifact.postWorkoutReview(
+                workout: record,
+                summary: analysis,
+                readinessDecision: dashboardVM.dashboard.trainingDecision.kind.rawValue,
+                sourceContextHash: ContentHash.hash("\(record.id.uuidString)-\(record.analyticsJSON ?? "")")
+            )
+            modelContext.insert(CoachArtifactRecord(artifact: artifact))
             _ = try WorkoutAggregationService.shared.upsertWorkoutEvent(
                 from: record,
                 modelContext: modelContext,

@@ -12,8 +12,10 @@ struct AIContextBuilder {
         foodLogs: [FoodLogRecord] = [],
         strengthWorkouts: [StrengthWorkoutRecord] = [],
         trainingResponses: [TrainingResponseRecord] = [],
+        onboardingState: OnboardingState? = nil,
         generatedAt: Date = Date()
     ) -> (envelope: AgentContextEnvelope, metadata: ContextSnapshotMetadata) {
+        let mergedUserWiki = Self.mergedUserWiki(userWiki, onboardingState: onboardingState)
         let envelope = AgentContextEnvelope(
             metadata: AgentContextMetadata(generatedAt: generatedAt, contextWindow: "today"),
             todaySummary: [
@@ -42,7 +44,7 @@ struct AIContextBuilder {
             historicalAIReports: [
                 "recent": historicalReports.map { "\($0.title): \($0.markdownContent.prefix(160))" }.joined(separator: "\n")
             ],
-            userWiki: userWiki,
+            userWiki: mergedUserWiki,
             agentInstruction: [
                 "role": "Private health data analyst and lifestyle coach",
                 "safety": "Do not diagnose. Be cautious with stress and health age trend."
@@ -69,7 +71,7 @@ struct AIContextBuilder {
                 "today_summary", "sleep", "recovery", "strain", "workouts",
                 "stress", "energy_bank", "health_age_trend", "nutrition",
                 "journal", "user_wiki", "extended_metrics", "strength_training"
-            ],
+            ] + (onboardingState == nil ? [] : ["body_model_profile"]),
             redactedFields: []
         )
         return (envelope: envelope, metadata: metadata)
@@ -86,8 +88,10 @@ struct AIContextBuilder {
         foodLogs: [FoodLogRecord] = [],
         strengthWorkouts: [StrengthWorkoutRecord] = [],
         trainingResponses: [TrainingResponseRecord] = [],
+        onboardingState: OnboardingState? = nil,
         generatedAt: Date = Date()
     ) -> (context: TypedAgentContext, metadata: ContextSnapshotMetadata) {
+        let mergedUserWiki = Self.mergedUserWiki(userWiki, onboardingState: onboardingState)
         let hrvMs = dashboard.recoveryMetrics.hrvMilliseconds
         let rhrBpm = dashboard.recoveryMetrics.restingHeartRate
 
@@ -213,7 +217,7 @@ struct AIContextBuilder {
             weeklyTrends: weeklyTrends.isEmpty ? ["note": "No weekly trend data available yet."] : weeklyTrends,
             journalEntries: journalEntries.map { "\($0.tags.joined(separator: "|")): \($0.text)" },
             historicalReports: historicalReports.map { "\($0.title): \($0.markdownContent.prefix(160))" },
-            userWiki: userWiki
+            userWiki: mergedUserWiki
         )
 
         let contextJSON = (try? String(data: JSONEncoder().encode(context), encoding: .utf8)) ?? "{}"
@@ -225,7 +229,8 @@ struct AIContextBuilder {
             schemaVersion: AIContextBuilder.schemaVersion,
             generatedAt: generatedAt,
             hash: hash,
-            includedSections: ["recovery", "sleep", "strain", "stress", "energy_bank", "training", "nutrition", "extended_metrics", "strength_training"],
+            includedSections: ["recovery", "sleep", "strain", "stress", "energy_bank", "training", "nutrition", "extended_metrics", "strength_training"]
+                + (onboardingState == nil ? [] : ["body_model_profile"]),
             redactedFields: []
         )
 
@@ -433,6 +438,38 @@ struct AIContextBuilder {
             summary = "Past 28d post-training response: \(recent.count) sessions captured, but next-day recovery deltas are not available yet."
         }
         return (summary, averageRecoveryDelta, flagged.count)
+    }
+
+    private static func mergedUserWiki(
+        _ userWiki: [String: String],
+        onboardingState: OnboardingState?
+    ) -> [String: String] {
+        guard let onboardingState else { return userWiki }
+        var result = userWiki
+        let goal = onboardingState.goalProfile
+        let training = onboardingState.trainingPreference
+        let equipment = onboardingState.equipmentProfile
+        let coaching = onboardingState.coachingPreference
+        let snapshot = onboardingState.initialBodySnapshot
+
+        result["body_model.primary_goal"] = goal.primaryGoal
+        result["body_model.secondary_goals"] = goal.secondaryGoals.joined(separator: ", ")
+        result["body_model.experience_level"] = goal.experienceLevel
+        result["body_model.body_concerns"] = goal.bodyConcerns.joined(separator: ", ")
+        result["body_model.training_style"] = training.trainingStyle
+        result["body_model.weekly_training_days"] = "\(training.weeklyTrainingDays)"
+        result["body_model.session_duration_minutes"] = "\(training.sessionDurationMinutes)"
+        result["body_model.preferred_days"] = training.preferredTrainingDays.joined(separator: ", ")
+        result["body_model.equipment"] = equipment.equipment.joined(separator: ", ")
+        result["body_model.schedule_notes"] = equipment.scheduleNotes
+        result["body_model.coach_style"] = coaching.style
+        result["body_model.explanation_depth"] = coaching.explanationDepth
+        result["body_model.language"] = coaching.language
+        result["body_model.initial_confidence"] = snapshot.dataConfidence.rawValue
+        result["body_model.missing_data"] = snapshot.missingData.joined(separator: ", ")
+        result["body_model.first_brief"] = onboardingState.firstBrief
+        result["body_model.first_action_plan"] = onboardingState.firstActionPlan.joined(separator: " | ")
+        return result
     }
 
 }

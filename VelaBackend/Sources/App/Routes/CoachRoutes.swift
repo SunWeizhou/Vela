@@ -120,6 +120,10 @@ struct CoachRoutes: RouteCollection {
                 let intensity = call.input.string("intensity") ?? "low"
                 let reason = call.input.string("reason") ?? "Based on today's readiness."
                 result = "Succeeded. Suggested \(duration) minutes of \(focus) at \(intensity) intensity. \(reason)"
+            case "web_search":
+                let query = call.input.string("query") ?? ""
+                let sourcePolicy = call.input.string("source_policy") ?? "general"
+                result = try await performWebSearch(query: query, sourcePolicy: sourcePolicy, req: req)
             default:
                 result = "Failed. Unsupported tool."
             }
@@ -132,6 +136,65 @@ struct CoachRoutes: RouteCollection {
             try await logAudit(req: req, tool: call.name, params: "\(call.input)", result: result)
         }
         return results
+    }
+
+    private func performWebSearch(query: String, sourcePolicy: String, req: Request) async throws -> String {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuery.isEmpty else {
+            return "Failed. web_search requires a non-empty query."
+        }
+
+        let enrichedQuery = enrichSearchQuery(trimmedQuery, sourcePolicy: sourcePolicy)
+        guard let encodedQuery = enrichedQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            return "Failed. Could not encode web_search query."
+        }
+
+        let uri = URI(string: "https://api.duckduckgo.com/?q=\(encodedQuery)&format=json&no_html=1&skip_disambig=1")
+        let response = try await req.client.get(uri) { clientReq in
+            clientReq.timeout = .seconds(20)
+        }
+        guard response.status == HTTPStatus.ok else {
+            return "Failed. web_search returned HTTP \(response.status.code)."
+        }
+
+        let payload = try response.content.decode(DuckDuckGoSearchResponse.self)
+        let directSummary = payload.AbstractText?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+        var lines: [String] = []
+        if let directSummary, !directSummary.isEmpty {
+            lines.append(directSummary)
+            if let url = payload.AbstractURL, !url.isEmpty {
+                lines.append("Source: \(url)")
+            }
+        }
+
+        let related = payload.flattenedRelatedTopics()
+            .prefix(3)
+            .compactMap { topic -> String? in
+                guard let text = topic.Text?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines), !text.isEmpty else {
+                    return nil
+                }
+                if let url = topic.FirstURL, !url.isEmpty {
+                    return "- \(text) (\(url))"
+                }
+                return "- \(text)"
+            }
+        lines.append(contentsOf: related)
+
+        guard !lines.isEmpty else {
+            return "Succeeded. No high-confidence web summary found for '\(trimmedQuery)'. Ask a narrower question or cite primary sources manually."
+        }
+        return "Succeeded. web_search results for '\(trimmedQuery)' [policy=\(sourcePolicy)]:\n" + lines.joined(separator: "\n")
+    }
+
+    private func enrichSearchQuery(_ query: String, sourcePolicy: String) -> String {
+        switch sourcePolicy {
+        case "medical_primary":
+            return query + " site:nih.gov OR site:who.int OR site:cdc.gov OR site:ncbi.nlm.nih.gov"
+        case "sports_science":
+            return query + " site:acsm.org OR site:ncbi.nlm.nih.gov OR site:jissn.biomedcentral.com OR site:nsca.com"
+        default:
+            return query
+        }
     }
 
     private func extractInsights(from text: String) -> [String] {
@@ -162,6 +225,29 @@ struct CoachRoutes: RouteCollection {
             modelVersion: Environment.get("LLM_MODEL") ?? "claude-sonnet-4-6"
         )
         try await entry.save(on: req.db)
+    }
+}
+
+private struct DuckDuckGoSearchResponse: Content {
+    var AbstractText: String?
+    var AbstractURL: String?
+    var RelatedTopics: [RelatedTopic]?
+
+    func flattenedRelatedTopics() -> [RelatedTopic] {
+        (RelatedTopics ?? []).flatMap { topic -> [RelatedTopic] in
+            var topics: [RelatedTopic] = []
+            if topic.Text != nil {
+                topics.append(topic)
+            }
+            topics.append(contentsOf: topic.Topics ?? [])
+            return topics
+        }
+    }
+
+    struct RelatedTopic: Content {
+        var Text: String?
+        var FirstURL: String?
+        var Topics: [RelatedTopic]?
     }
 }
 
