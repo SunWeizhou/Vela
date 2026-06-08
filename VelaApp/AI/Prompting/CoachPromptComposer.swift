@@ -400,7 +400,7 @@ struct CoachPromptComposer {
             **本 System Prompt 中不包含完整的生理数据 JSON。你不能凭记忆或对话历史猜测用户的当前身体指标。每次用户询问身体状态、训练建议或具体数据时，你必须主动调用以下工具获取最新数据：**
             - **今日状态**：调用 `get_today_health` 获取今日所有评分、HRV、静息心率、睡眠详情、负荷、能量（ATL/CTL/TSB）、训练、体测数据。可以用 `sections` 参数只请求相关部分。
             - **历史趋势**：调用 `get_health_history` 获取过去 N 天的每日快照。用户问"过去几天"、"趋势"、"对比上周"时必须调用。
-            - **训练历史**：调用 `get_unified_workout_history`（各类运动）或 `get_strength_workout_history`（力量专项）。
+            - **训练历史**：调用 `get_unified_workout_history`（各类运动）或 `get_strength_workout_history`（力量专项，含动作/组数/重量/PR/容量详情）。
             - **行为相关性**：调用 `journal_correlation` 查询特定行为标签对指标的影响。
             - **当前数据冲突时的优先级**：工具实时返回的数据 > 本 Prompt 中的快照摘要 > 对话历史中的旧数据。
 
@@ -451,7 +451,7 @@ struct CoachPromptComposer {
         **This system prompt does NOT contain the full physiology data JSON. You must NOT guess or infer the user's current metrics from conversation history. Every time the user asks about body state, training, or specific data, you MUST proactively call these tools:**
         - **Today's status**: Call `get_today_health` for all today's scores, HRV, RHR, sleep details, strain/load, energy (ATL/CTL/TSB), workouts, and body metrics. Use the `sections` parameter to request only relevant parts.
         - **Historical trends**: Call `get_health_history` for daily snapshots over N days. MUST call this when the user asks about "last few days", "trends", or "compare to last week".
-        - **Training history**: Call `get_unified_workout_history` (all activity types) or `get_strength_workout_history` (strength-specific).
+        - **Training history**: Call `get_unified_workout_history` (all activity types) or `get_strength_workout_history` (strength-specific with exercises/sets/weights/PRs/volume).
         - **Behavior correlations**: Call `journal_correlation` to check how specific tags affect health scores.
         - **Priority when data conflicts**: Tool-fetched data > this prompt's compact snapshot > old conversation history.
 

@@ -28,16 +28,29 @@ struct AgentLoop {
     /// - Parameters:
     ///   - messages: The chat message history including system prompt.
     ///   - onStreamDelta: Optional callback invoked with each streamed text token delta.
+    ///   - initialDataVersion: Optional data version hash from the compact snapshot, for change detection.
     /// - Returns: AgentLoopResult with the final text response, executed tools, and updated messages.
     func run(
         messages: [ChatMessage],
-        onStreamDelta: (@MainActor @Sendable (String) -> Void)? = nil
+        onStreamDelta: (@MainActor @Sendable (String) -> Void)? = nil,
+        initialDataVersion: String? = nil
     ) async throws -> AgentLoopResult {
         var agentMessages = messages
         var fullResponse = ""
         var executedTools: [ExecutedTool] = []
+        var activeDataVersion = initialDataVersion
+        var dataVersionWarnings: [String] = []
 
         for _ in 0..<maxIterations {
+            // ── Inject data-version notice if tools returned fresher data than the snapshot ──
+            if let currentVersion = activeDataVersion, let initial = initialDataVersion, currentVersion != initial {
+                let notice = "[DATA VERSION CHANGE: tool-returned data (v:\(currentVersion)) is newer than the initial snapshot (v:\(initial)). Prefer the tool-fetched values over any inline snapshot for the rest of this response.]"
+                if !dataVersionWarnings.contains(notice) {
+                    dataVersionWarnings.append(notice)
+                    agentMessages.append(ChatMessage(role: .system, content: notice))
+                }
+            }
+
             let response = try await provider.chat(
                 messages: agentMessages,
                 tools: toolRegistry.definitions
@@ -63,6 +76,10 @@ struct AgentLoop {
                         arguments: tc.arguments,
                         result: result
                     ))
+                    // Track data version from tools that return it
+                    if let newVersion = Self.extractDataVersion(from: result), newVersion != activeDataVersion {
+                        activeDataVersion = newVersion
+                    }
                 }
 
                 continue
@@ -106,6 +123,14 @@ struct AgentLoop {
             finalMessages: agentMessages,
             wasStreamed: false
         )
+    }
+
+    /// Extracts the data_version field from a JSON tool result.
+    private static func extractDataVersion(from jsonResult: String) -> String? {
+        guard let data = jsonResult.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return obj["data_version"] as? String
+            ?? obj["context_hash"] as? String
     }
 
     private func streamFinalResponse(

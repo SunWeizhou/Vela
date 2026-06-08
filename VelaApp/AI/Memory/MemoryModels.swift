@@ -194,6 +194,71 @@ struct ContextBudget: Codable, Hashable {
     var maxJournalEntries: Int = 12
     var maxHistoricalReports: Int = 4
     var maxTrainingPlanDays: Int = 14
+    /// Maximum characters for the inline snapshot in the system prompt.
+    /// Snapshot content beyond this limit should be available via tools instead.
+    var maxSnapshotCharacters: Int = 800
+    /// Maximum characters for wiki content in the system prompt.
+    var maxWikiPromptCharacters: Int = 3000
+    /// Maximum characters for weekly trends in the system prompt.
+    var maxTrendsCharacters: Int = 500
+
+    /// Applies budget trimming to wiki text, keeping the most important sections first.
+    static func trimWiki(_ wikiText: String, maxChars: Int = 3000) -> String {
+        guard wikiText.count > maxChars else { return wikiText }
+        // Priority: baselines > goals > profile > constraints > preferences > habits > observations > strategies
+        let sections = wikiText.components(separatedBy: "\n### ")
+        guard sections.count > 1 else {
+            return String(wikiText.prefix(maxChars)) + "\n\n[Wiki truncated to fit context budget. Call update_user_wiki for full access.]"
+        }
+        let priorityOrder = ["baselines", "goals", "profile", "constraints", "preferences", "habits", "observations", "strategies"]
+        var prioritized: [String] = []
+        var other: [String] = []
+        for section in sections {
+            let lower = section.lowercased()
+            if priorityOrder.contains(where: { lower.hasPrefix($0) }) {
+                prioritized.append(section)
+            } else {
+                other.append(section)
+            }
+        }
+        prioritized.sort { a, b in
+            let ai = priorityOrder.firstIndex(where: { a.lowercased().hasPrefix($0) }) ?? 99
+            let bi = priorityOrder.firstIndex(where: { b.lowercased().hasPrefix($0) }) ?? 99
+            return ai < bi
+        }
+        let ordered = prioritized + other
+        var result = ""
+        for section in ordered {
+            let candidate = result.isEmpty ? section : "### \(section)"
+            if result.count + candidate.count > maxChars { break }
+            result += (result.isEmpty ? "" : "\n") + candidate
+        }
+        return result + "\n\n[Wiki truncated to fit context budget. Remaining sections available via Wiki profile.]"
+    }
+
+    /// Applies budget trimming to weekly trends, keeping the most impactful categories.
+    static func trimTrends(_ trendsText: String, maxChars: Int = 500) -> String {
+        guard trendsText.count > maxChars else { return trendsText }
+        let lines = trendsText.components(separatedBy: "\n")
+        let priorityKeywords = ["recovery", "sleep", "strain", "hrv", "rhr", "energy", "stress", "恢复", "睡眠", "负荷", "能量", "压力"]
+        var priorityLines: [String] = []
+        var otherLines: [String] = []
+        for line in lines {
+            let lower = line.lowercased()
+            if priorityKeywords.contains(where: { lower.contains($0) }) {
+                priorityLines.append(line)
+            } else {
+                otherLines.append(line)
+            }
+        }
+        var result = ""
+        for line in priorityLines + otherLines {
+            let candidate = result.isEmpty ? line : "\n\(line)"
+            if result.count + candidate.count > maxChars { break }
+            result += candidate
+        }
+        return result + "\n[Trends truncated — call get_health_history for full data.]"
+    }
 }
 
 // MARK: - Wiki File Schema Definition

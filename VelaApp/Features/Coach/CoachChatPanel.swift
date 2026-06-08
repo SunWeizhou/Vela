@@ -504,10 +504,15 @@ final class CoachChatVM: ObservableObject {
                 wasStreamed = true
             } else {
                 let agentLoop = AgentLoop(provider: provider, toolRegistry: toolRegistry)
-                let loopResult = try await agentLoop.run(messages: agentMessages) { @MainActor [weak self] delta in
-                    guard let self else { return }
-                    self.streamingContent += delta
-                }
+                let snapshotVersion = ContentHash.hash("\(dashboard.date.timeIntervalSince1970)-\(dashboard.source.rawValue)")
+                let loopResult = try await agentLoop.run(
+                    messages: agentMessages,
+                    onStreamDelta: { @MainActor [weak self] delta in
+                        guard let self else { return }
+                        self.streamingContent += delta
+                    },
+                    initialDataVersion: snapshotVersion
+                )
                 wikiFiles = loopResult.wikiFiles
                 wikiUpdateSummaries = loopResult.wikiUpdateSummaries
                 fullResponse = loopResult.response
@@ -608,7 +613,8 @@ final class CoachChatVM: ObservableObject {
         services: VelaServices? = nil
     ) async -> [ChatMessage] {
         let wiki = WikiFileService.loadDictionary()
-        let wikiText = wiki.map { "### \($0.key)\n\($0.value)" }.joined(separator: "\n\n")
+        let wikiRawText = wiki.map { "### \($0.key)\n\($0.value)" }.joined(separator: "\n\n")
+        let wikiText = ContextBudget.trimWiki(wikiRawText, maxChars: 3000)
         let wikiFiles = WikiFileService.loadAllDocuments().map { "\($0.filename) (\($0.title))" }.joined(separator: ", ")
 
         // Fetch active training plan context
@@ -725,7 +731,7 @@ final class CoachChatVM: ObservableObject {
         onboardingDescriptor.fetchLimit = 1
         let onboardingState = (try? modelContext.fetch(onboardingDescriptor))?.first
 
-        let contextJSON = buildCompactContextSnapshot(
+        let contextJSON = budgetCapped(buildCompactContextSnapshot(
             dashboard: dashboard,
             wiki: wiki,
             weeklyTrends: weeklyTrends,
@@ -733,7 +739,7 @@ final class CoachChatVM: ObservableObject {
             trainingResponses: trainingResponses,
             onboardingState: onboardingState,
             dailySummaries: dailySummaries
-        )
+        ))
 
         let composer = CoachPromptComposer(
             lang: lang,
@@ -825,25 +831,34 @@ final class CoachChatVM: ObservableObject {
             lines.append("- Source \(dashboard.source.rawValue) · Date \(dashboard.date.formatted(date: .numeric, time: .shortened))")
         }
 
-        // ── Weekly trends summary (compact) ──
+        // ── Weekly trends summary (compact, budget-trimmed) ──
         if !weeklyTrends.isEmpty {
-            let summary = weeklyTrends.compactMap { key, value in
-                value.isEmpty ? nil : "- \(key): \(value.prefix(120))"
-            }.joined(separator: "\n")
-            if !summary.isEmpty {
-                lines.append("\n## Weekly Trends\n\(summary)")
+            var trendsBlock = ""
+            for (key, value) in weeklyTrends where !value.isEmpty {
+                let line = "- \(key): \(value.prefix(120))"
+                if trendsBlock.count + line.count + 2 > 500 { break }
+                trendsBlock += (trendsBlock.isEmpty ? "" : "\n") + line
+            }
+            if !trendsBlock.isEmpty {
+                lines.append("\n## Weekly Trends\n\(trendsBlock)")
+                if trendsBlock.count > 450 {
+                    if lang.isChinese {
+                        lines.append("[趋势已截断，调用 get_health_history 获取完整数据。]")
+                    } else {
+                        lines.append("[Trends truncated — call get_health_history for full data.]")
+                    }
+                }
             }
         }
 
-        // ── Strength recap (very compact) ──
+        // ── Strength recap — only show counts, details moved to tools ──
         if !strengthWorkouts.isEmpty {
             let analytics = TrainingAnalyticsService()
             let recent7d = analytics.buildRecentSummary(workouts: strengthWorkouts, days: 7, endingAt: Date())
-            let prsStr = recent7d.recentPRs.isEmpty ? "" : " · PRs: \(recent7d.recentPRs.map(\.summary).joined(separator: ", "))"
             if lang.isChinese {
-                lines.append("\n## 力量训练近期\n7d: \(recent7d.sessions)次 \(Int(recent7d.volumeKg))kg \(recent7d.effectiveSets)组\(prsStr)")
+                lines.append("\n## 力量训练近期\n7d: \(recent7d.sessions)次 \(Int(recent7d.volumeKg))kg \(recent7d.effectiveSets)组 · 调用 get_strength_workout_history 获取详情")
             } else {
-                lines.append("\n## Recent Strength\n7d: \(recent7d.sessions) sessions \(Int(recent7d.volumeKg))kg \(recent7d.effectiveSets) sets\(prsStr)")
+                lines.append("\n## Recent Strength\n7d: \(recent7d.sessions) sessions \(Int(recent7d.volumeKg))kg \(recent7d.effectiveSets) sets · call get_strength_workout_history for details")
             }
         }
 
@@ -858,6 +873,22 @@ final class CoachChatVM: ObservableObject {
         }
 
         return lines.joined(separator: "\n")
+    }
+
+    /// Trims the snapshot to fit within the context budget, preserving the most critical lines.
+    private func budgetCapped(_ text: String, maxChars: Int = 800) -> String {
+        guard text.count > maxChars else { return text }
+        let lines = text.components(separatedBy: "\n")
+        var result = ""
+        for line in lines {
+            let candidate = result.isEmpty ? line : "\n\(line)"
+            if result.count + candidate.count > maxChars { break }
+            result += candidate
+        }
+        let lang = AppLanguage.stored
+        return result + "\n\n" + (lang.isChinese
+            ? "[快照已截断以节省 token。调用 get_today_health 获取完整今日数据。]"
+            : "[Snapshot truncated to save tokens. Call get_today_health for complete data.]")
     }
 
     private func persistInteraction(userText: String, assistantText: String, focus: CoachContextFocus, modelContext: ModelContext) {

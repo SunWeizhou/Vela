@@ -261,6 +261,7 @@ struct TodayHealthTool: AgentTool {
                 "data_date": ISO8601DateFormatter().string(from: dashboard.date),
                 "source": dashboard.source.rawValue,
                 "freshness": freshness,
+                "data_version": ContentHash.hash("\(todayRecord?.dayIdentifier ?? "")-\(dashboard.date.timeIntervalSince1970)"),
                 "_note": "Raw metrics: SwiftData (latest persisted). Scores/bands/reasons: live computation from DashboardSummary. For historical trends use get_health_history."
             ]
 
