@@ -33,7 +33,7 @@ enum ToolFactory {
             HealthHistoryTool(executionContext: executionContext),
             UnifiedWorkoutHistoryTool(executionContext: executionContext),
             StrengthWorkoutHistoryTool(executionContext: executionContext),
-            JournalCorrelationTool(),
+            JournalCorrelationTool(executionContext: executionContext),
             FoodLogTool(executionContext: executionContext),
             TrainingPlanTool(decision: dashboard.trainingDecision),
             CreateTrainingPlanTool(executionContext: executionContext),

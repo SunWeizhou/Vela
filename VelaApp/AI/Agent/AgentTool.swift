@@ -917,7 +917,8 @@ struct TrainingPlanTool: AgentTool {
         context += "| Metric | Score |\n"
         context += "|--------|-------|\n"
         context += "| Recovery Volume Multiplier | \(decision.volumeMultiplier) |\n"
-        context += "| Sleep | \(decision.body) |\n"
+        context += "| Readiness | \(decision.readinessLevel) |\n"
+        context += "| Recommendation | \(decision.readinessGuidance) |\n"
 
         context += "\n### Training Load Status (Banister ATL/CTL/TSB)\n"
         if decision.trainingLoadConfidence == .unavailable {

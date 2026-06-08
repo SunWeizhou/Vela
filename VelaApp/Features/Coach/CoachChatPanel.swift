@@ -754,9 +754,7 @@ final class CoachChatVM: ObservableObject {
         let systemPrompt = composer.compose(for: policy)
 
         var result: [ChatMessage] = [
-            ChatMessage(role: .system, content: systemPrompt),
-            ChatMessage(role: .system, content: CoachSnapshotDirective.build(dashboard: dashboard)),
-            ChatMessage(role: .system, content: "Focus: \(focus.title)\n\(focus.systemContext)")
+            ChatMessage(role: .system, content: systemPrompt)
         ]
 
         // Web search: for data-oriented queries that need up-to-date information
@@ -1157,12 +1155,13 @@ private struct MiniStreamingBubble: View {
 
 // MARK: - Journal Correlation Tool
 
-/// Allows the coach to query how specific journal tags correlate with health scores.
-/// The correlation data is pre-computed and injected into the system prompt context;
-/// this tool provides on-demand access to detailed per-tag correlation information.
+/// Queries how a specific journal tag correlates with health scores by running
+/// the JournalCorrelationEngine against SwiftData records.
 struct JournalCorrelationTool: AgentTool {
     let name = "journal_correlation"
-    let description = "Query how a specific journal tag (e.g., caffeine, alcohol, meditation, late_meal) correlates with sleep, recovery, strain scores, HRV, and RHR. Returns the average scores on days with vs without this tag. Use this to explain behavioral impacts on health metrics."
+    let description = "Query how a specific journal tag (e.g., caffeine, alcohol, meditation, late_meal) correlates with sleep, recovery, strain scores, HRV, and RHR. Returns real correlation data computed from the user's journal entries and daily health snapshots."
+
+    let executionContext: ToolExecutionContext
 
     var parameters: [String: Value] {
         [
@@ -1183,6 +1182,38 @@ struct JournalCorrelationTool: AgentTool {
               let tag = json["tag"] as? String else {
             return "Error: missing 'tag' argument."
         }
-        return "Correlation data for tag '\(tag)' is available in the Journal Tag Correlation Insights section of your system prompt. Refer to the markdown table for exact sleep score, recovery score, strain score, and impact direction for this and other tracked tags."
+        return await MainActor.run {
+            let modelContext = executionContext.modelContext
+            // Fetch recent journal entries and health snapshots
+            let thirtyDaysAgo = Date().addingTimeInterval(-30 * 24 * 3600)
+            let journalDescriptor = FetchDescriptor<JournalEntryRecord>(
+                predicate: #Predicate<JournalEntryRecord> { $0.createdAt >= thirtyDaysAgo },
+                sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+            )
+            let journalEntries = (try? modelContext.fetch(journalDescriptor)) ?? []
+            let healthDescriptor = FetchDescriptor<DailyHealthSummaryRecord>(
+                predicate: #Predicate<DailyHealthSummaryRecord> { $0.date >= thirtyDaysAgo },
+                sortBy: [SortDescriptor(\.date, order: .reverse)]
+            )
+            let healthRecords = (try? modelContext.fetch(healthDescriptor)) ?? []
+            let healthSnapshots = healthRecords.map { $0.toSnapshot() }
+
+            // Run the correlation engine
+            let engine = JournalCorrelationEngine()
+            let allCorrelations = engine.correlateTags(journalEntries: journalEntries, snapshots: healthSnapshots)
+            let topCorrelations = engine.topCorrelations(correlations: allCorrelations)
+
+            // Extract results for the requested tag
+            let matched = topCorrelations.filter { $0.tag.lowercased() == tag.lowercased() }
+            guard !matched.isEmpty else {
+                let availableTags = topCorrelations.prefix(8).map(\.tag).joined(separator: ", ")
+                return availableTags.isEmpty
+                    ? "No correlation data found. Need more journal entries and health snapshots to compute behavior-impact relationships."
+                    : "No correlation data for '\(tag)'. Available tags with correlations: \(availableTags)."
+            }
+
+            let formatted = engine.formatCorrelationsForAI(matched)
+            return formatted.isEmpty ? "Correlation data computed but formatting produced empty output. Try a different tag." : formatted
+        }
     }
 }
