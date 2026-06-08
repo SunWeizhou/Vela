@@ -29,7 +29,9 @@ enum ToolFactory {
         return [
             WebSearchTool(),
             UpdateWikiTool(executionContext: executionContext),
-            HealthDataTool(executionContext: executionContext),
+            TodayHealthTool(executionContext: executionContext),
+            HealthHistoryTool(executionContext: executionContext),
+            UnifiedWorkoutHistoryTool(executionContext: executionContext),
             StrengthWorkoutHistoryTool(executionContext: executionContext),
             JournalCorrelationTool(),
             FoodLogTool(executionContext: executionContext),

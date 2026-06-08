@@ -208,13 +208,13 @@ struct UpdateWikiTool: AgentTool {
     }
 }
 
-/// Queries today's specific health metrics from the already-loaded context.
-/// This tool only works when health data has been provided in the system prompt.
-/// The coach should reference the context JSON directly most of the time —
-/// use this tool only when the user asks for a specific metric value.
-struct HealthDataTool: AgentTool {
-    let name = "check_health_data"
-    let description = "Retrieve a specific health metric value from today's context when the user asks for an exact number. Use this sparingly — most data is visible in the system prompt context JSON."
+/// Unified today's health tool — single source of truth for all current body metrics.
+/// Reads raw metrics from SwiftData (ground truth) and computed fields (bands, reasons,
+/// confidence, training decisions) from the live DashboardSummary. Always returns a
+/// freshness timestamp so the LLM knows how current the data is.
+struct TodayHealthTool: AgentTool {
+    let name = "get_today_health"
+    let description = "Retrieve today's complete health snapshot — all scores, autonomic metrics (HRV, RHR), sleep details, strain/load, stress, energy bank (ATL/CTL/TSB), workouts, body metrics, and training readiness. Always use this FIRST when the user asks about their current body state, training readiness, recovery, or any specific health metric. Returns data with freshness timestamps. Use 'sections' to request only the parts you need."
 
     let executionContext: ToolExecutionContext
 
@@ -222,130 +222,168 @@ struct HealthDataTool: AgentTool {
         [
             "type": .string("object"),
             "properties": .object([
-                "metric": .object([
-                    "type": .string("string"),
-                    "description": .string("The metric to retrieve. One of: sleep_score, recovery_score, strain_score, stress_index, hrv_avg, rhr_avg, energy_bank, health_age, steps, active_calories, sleep_hours, sleep_efficiency, rem_percent, deep_percent, resting_hr, respiratory_rate, spo2, body_temperature, atl, ctl, tsb, acwr, training_load_ratio, workouts_today."),
+                "sections": .object([
+                    "type": .string("array"),
+                    "description": .string("Optional: specific sections to return. Omit for all. Available: scores, autonomic, sleep, strain, stress, energy, workouts, body, training_readiness"),
+                    "items": .object(["type": .string("string")]),
                 ]),
             ]),
-            "required": .array([.string("metric")]),
         ]
     }
 
     func execute(arguments: String) async throws -> String {
-        guard let data = arguments.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let metric = json["metric"] as? String else {
-            return "Error: missing 'metric' argument."
+        let requestedSections: Set<String>? = {
+            guard let data = arguments.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let sections = json["sections"] as? [String] else { return nil }
+            return Set(sections)
+        }()
+
+        return await MainActor.run {
+            let today = Calendar.current.startOfDay(for: Date())
+            let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today)!
+            let descriptor = FetchDescriptor<DailyHealthSummaryRecord>(
+                predicate: #Predicate<DailyHealthSummaryRecord> { $0.date >= today && $0.date < tomorrow },
+                sortBy: [SortDescriptor(\.date, order: .reverse)]
+            )
+            let todayRecord = (try? executionContext.modelContext.fetch(descriptor))?.first
+            let dashboard = executionContext.dashboard
+
+            let now = Date()
+            let ageSeconds = now.timeIntervalSince(dashboard.date)
+            let freshness: String = ageSeconds < 300 ? "live (<5min)"
+                : ageSeconds < 1800 ? "recent (<30min)"
+                : ageSeconds < 7200 ? "moderate (<2h)"
+                : "stale (>2h — a background sync may have fresher raw data in the database; call get_health_history for the latest persisted values)"
+
+            var result: [String: Any] = [
+                "generated_at": ISO8601DateFormatter().string(from: now),
+                "data_date": ISO8601DateFormatter().string(from: dashboard.date),
+                "source": dashboard.source.rawValue,
+                "freshness": freshness,
+                "_note": "Raw metrics: SwiftData (latest persisted). Scores/bands/reasons: live computation from DashboardSummary. For historical trends use get_health_history."
+            ]
+
+            func include(_ section: String) -> Bool {
+                requestedSections?.contains(section) ?? true
+            }
+
+            // ── Scores ──
+            if include("scores") {
+                result["scores"] = [
+                    "recovery": ["value": Int(dashboard.recovery.score.rounded()), "band": dashboard.recovery.band.rawValue, "confidence": dashboard.recovery.confidence.rawValue],
+                    "sleep": ["value": Int(dashboard.sleepScore.score.rounded()), "band": dashboard.sleepScore.band.rawValue, "confidence": dashboard.sleepScore.confidence.rawValue],
+                    "strain": ["value": Int(dashboard.strain.score.rounded()), "band": dashboard.strain.band.rawValue, "target_status": dashboard.strain.targetStatus.rawValue, "confidence": dashboard.strain.confidence.rawValue],
+                    "stress": ["value": Int(dashboard.stress.stressIndex.rounded()), "band": dashboard.stress.band.rawValue, "confidence": dashboard.stress.confidence.rawValue],
+                    "energy": ["current": Int(dashboard.energy.currentEnergy.rounded()), "morning": Int(dashboard.energy.morningEnergy.rounded()), "bank": Int(dashboard.energy.currentEnergy.rounded()), "status": dashboard.energy.status.rawValue, "confidence": dashboard.energy.confidence.rawValue]
+                ]
+            }
+
+            // ── Autonomic (HRV / RHR) ──
+            if include("autonomic") {
+                let hrvMs = todayRecord?.hrvAverage ?? dashboard.recoveryMetrics.hrvMilliseconds
+                let rhrBpm = todayRecord?.restingHeartRate ?? dashboard.recoveryMetrics.restingHeartRate
+                let rr = todayRecord?.respiratoryRate ?? dashboard.recoveryMetrics.respiratoryRate
+                var auto: [String: Any] = [
+                    "hrv_avg_ms": hrvMs as Any,
+                    "resting_hr_bpm": rhrBpm as Any,
+                    "respiratory_rate_brpm": rr as Any,
+                ]
+                if let z = dashboard.recovery.metrics["hrv_z_score"] { auto["hrv_z_score"] = (z * 100).rounded() / 100 }
+                if let z = dashboard.recovery.metrics["rhr_z_score"] { auto["rhr_z_score"] = (z * 100).rounded() / 100 }
+                if !dashboard.recovery.reasons.isEmpty { auto["recovery_key_factors"] = dashboard.recovery.reasons.prefix(3) }
+                result["autonomic"] = auto
+            }
+
+            // ── Sleep detail ──
+            if include("sleep") {
+                let totalMin = todayRecord?.sleepHours.map { $0 * 60 } ?? Double(dashboard.sleepSummary.totalSleepMinutes)
+                var slp: [String: Any] = [
+                    "total_hours": (totalMin / 60.0 * 10).rounded() / 10,
+                    "efficiency_pct": todayRecord?.sleepEfficiency ?? dashboard.sleepScore.metrics["sleep_efficiency"] as Any,
+                    "deep_pct": todayRecord?.deepSleepPercent ?? dashboard.sleepScore.metrics["deep_pct"] as Any,
+                    "rem_pct": todayRecord?.remSleepPercent ?? dashboard.sleepScore.metrics["rem_pct"] as Any,
+                ]
+                if let bt = todayRecord?.bedtime ?? dashboard.sleepSummary.bedtime {
+                    let f = DateFormatter(); f.dateFormat = "HH:mm"; slp["bedtime"] = f.string(from: bt)
+                }
+                if let wt = todayRecord?.wakeTime ?? dashboard.sleepSummary.wakeTime {
+                    let f = DateFormatter(); f.dateFormat = "HH:mm"; slp["wake_time"] = f.string(from: wt)
+                }
+                if !dashboard.sleepScore.reasons.isEmpty { slp["key_factors"] = dashboard.sleepScore.reasons.prefix(3) }
+                result["sleep"] = slp
+            }
+
+            // ── Strain / Load ──
+            if include("strain") {
+                result["strain_detail"] = [
+                    "daily_load": todayRecord?.dailyLoad ?? dashboard.strain.metrics["daily_load"] as Any,
+                    "workout_load": todayRecord?.workoutLoad ?? dashboard.strain.metrics["workout_load"] as Any,
+                    "training_load_ratio": todayRecord?.trainingLoadRatio ?? dashboard.strain.metrics["training_load_ratio"] as Any,
+                    "steps": todayRecord?.steps ?? dashboard.strain.metrics["steps_raw"] as Any,
+                    "active_calories_kcal": todayRecord?.activeCalories ?? dashboard.strain.metrics["active_energy_raw"] as Any,
+                    "exercise_minutes": todayRecord?.activeMinutes ?? dashboard.strain.metrics["exercise_minutes_raw"] as Any,
+                    "recommended_range": [dashboard.strain.recommendedRange.lowerBound, dashboard.strain.recommendedRange.upperBound],
+                ]
+            }
+
+            // ── Energy Bank (ATL/CTL/TSB) ──
+            if include("energy") {
+                result["energy_detail"] = [
+                    "atl_7day": todayRecord?.atl ?? dashboard.energy.metrics["atl"] as Any,
+                    "ctl_42day": todayRecord?.ctl ?? dashboard.energy.metrics["ctl"] as Any,
+                    "tsb": todayRecord?.tsb ?? dashboard.energy.metrics["tsb"] as Any,
+                    "acwr": todayRecord?.acwr ?? dashboard.energy.metrics["acwr"] as Any,
+                ]
+            }
+
+            // ── Workouts ──
+            if include("workouts") {
+                let wos = dashboard.workouts
+                result["workouts"] = [
+                    "count": wos.count,
+                    "types": Array(Set(wos.map(\.activityName))),
+                    "total_duration_min": wos.map { Int($0.end.timeIntervalSince($0.start) / 60) }.reduce(0, +),
+                    "total_energy_kcal": Int(wos.compactMap(\.energyKilocalories).reduce(0, +)),
+                    "items": wos.map { w in
+                        ["name": w.activityName, "duration_min": Int(w.end.timeIntervalSince(w.start) / 60), "energy_kcal": w.energyKilocalories as Any, "avg_hr_bpm": w.averageHeartRate as Any]
+                    }
+                ]
+            }
+
+            // ── Body Metrics ──
+            if include("body") {
+                let ext = dashboard.extendedMetrics
+                let body = dashboard.bodyMetrics
+                result["body"] = [
+                    "weight_kg": body.weightKilograms as Any,
+                    "body_fat_pct": body.bodyFatPercentage as Any,
+                    "bmi": ext.bmi as Any,
+                    "vo2max": body.vo2Max as Any,
+                    "spo2_pct": todayRecord?.oxygenSaturation ?? ext.oxygenSaturation as Any,
+                    "wrist_temp_c": todayRecord?.wristTemperature ?? ext.bodyTemperature as Any,
+                ]
+            }
+
+            // ── Training Readiness ──
+            if include("training_readiness") {
+                let td = dashboard.trainingDecision
+                result["training_readiness"] = [
+                    "level": td.readinessLevel,
+                    "guidance": td.readinessGuidance,
+                    "recommended_type": td.recommendedTrainingType,
+                    "max_intensity": td.maxIntensity,
+                    "volume_multiplier": td.volumeMultiplier,
+                    "main_limiter": td.limiter.map { "\($0.title): \($0.detail)" } ?? "none",
+                ]
+            }
+
+            guard let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]),
+                  let json = String(data: data, encoding: .utf8) else {
+                return "Error: failed to encode health data."
+            }
+            return json
         }
-        
-        struct MetricResponse: Codable {
-            var metric: String
-            var value: Double?
-            var unit: String
-            var confidence: String
-            var source: String
-            var lastUpdated: String
-        }
-        
-        let dashboard = await MainActor.run { executionContext.dashboard }
-        var response = MetricResponse(
-            metric: metric,
-            value: nil,
-            unit: "",
-            confidence: "high",
-            source: dashboard.source.rawValue,
-            lastUpdated: ISO8601DateFormatter().string(from: dashboard.date)
-        )
-        
-        switch metric.lowercased() {
-        case "sleep_score":
-            response.value = dashboard.sleepScore.value
-            response.unit = "pts"
-            response.confidence = dashboard.sleepScore.confidence.rawValue
-        case "recovery_score":
-            response.value = dashboard.recovery.value
-            response.unit = "pts"
-            response.confidence = dashboard.recovery.confidence.rawValue
-        case "strain_score":
-            response.value = dashboard.strain.value
-            response.unit = "pts"
-            response.confidence = dashboard.strain.confidence.rawValue
-        case "stress_index":
-            response.value = dashboard.stress.value
-            response.unit = "index"
-            response.confidence = dashboard.stress.confidence.rawValue
-        case "hrv_avg":
-            response.value = dashboard.recoveryMetrics.hrvMilliseconds
-            response.unit = "ms"
-            response.confidence = dashboard.recoveryMetrics.hrvMilliseconds != nil ? "high" : "unavailable"
-        case "rhr_avg", "resting_hr":
-            response.value = dashboard.recoveryMetrics.restingHeartRate
-            response.unit = "bpm"
-            response.confidence = dashboard.recoveryMetrics.restingHeartRate != nil ? "high" : "unavailable"
-        case "energy_bank":
-            response.value = dashboard.energy.value
-            response.unit = "pts"
-            response.confidence = dashboard.energy.confidence.rawValue
-        case "atl", "ctl", "tsb", "acwr":
-            response.value = dashboard.energy.metrics[metric.lowercased()]
-            response.unit = metric.lowercased() == "acwr" ? "ratio" : "AU"
-            response.confidence = response.value == nil ? "unavailable" : dashboard.energy.confidence.rawValue
-        case "training_load_ratio":
-            response.value = dashboard.strain.metrics["training_load_ratio"]
-            response.unit = "ratio"
-            response.confidence = response.value == nil ? "unavailable" : dashboard.strain.confidence.rawValue
-        case "steps":
-            response.value = dashboard.strain.metrics["steps_raw"]
-            response.unit = "steps"
-            response.confidence = response.value == nil ? "unavailable" : dashboard.strain.confidence.rawValue
-        case "active_calories":
-            response.value = dashboard.strain.metrics["active_energy_raw"]
-            response.unit = "kcal"
-            response.confidence = response.value == nil ? "unavailable" : dashboard.strain.confidence.rawValue
-        case "sleep_hours":
-            response.value = dashboard.sleepSummary.totalSleepMinutes > 0 ? Double(dashboard.sleepSummary.totalSleepMinutes) / 60.0 : nil
-            response.unit = "hours"
-            response.confidence = response.value == nil ? "unavailable" : dashboard.sleepScore.confidence.rawValue
-        case "sleep_efficiency":
-            response.value = dashboard.sleepScore.metrics["sleep_efficiency"]
-            response.unit = "%"
-            response.confidence = response.value == nil ? "unavailable" : dashboard.sleepScore.confidence.rawValue
-        case "rem_percent":
-            response.value = dashboard.sleepScore.metrics["rem_pct"]
-            response.unit = "%"
-            response.confidence = response.value == nil ? "unavailable" : dashboard.sleepScore.confidence.rawValue
-        case "deep_percent":
-            response.value = dashboard.sleepScore.metrics["deep_pct"]
-            response.unit = "%"
-            response.confidence = response.value == nil ? "unavailable" : dashboard.sleepScore.confidence.rawValue
-        case "health_age":
-            response.value = dashboard.healthAge.trendScore
-            response.unit = "trend_score"
-            response.confidence = dashboard.healthAge.confidence.rawValue
-        case "respiratory_rate":
-            response.value = dashboard.recoveryMetrics.respiratoryRate
-            response.unit = "breaths/min"
-            response.confidence = response.value == nil ? "unavailable" : dashboard.recovery.confidence.rawValue
-        case "spo2":
-            response.value = dashboard.extendedMetrics.oxygenSaturation
-            response.unit = "%"
-            response.confidence = response.value == nil ? "unavailable" : "high"
-        case "body_temperature":
-            response.value = dashboard.extendedMetrics.bodyTemperature
-            response.unit = "C"
-            response.confidence = response.value == nil ? "unavailable" : "high"
-        case "workouts_today":
-            response.value = Double(dashboard.workouts.count)
-            response.unit = "workouts"
-            response.confidence = "high"
-        default:
-            return "Unknown metric '\(metric)'"
-        }
-        
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = .prettyPrinted
-        let resData = try encoder.encode(response)
-        return String(data: resData, encoding: .utf8) ?? "{}"
     }
 }
 
@@ -382,16 +420,7 @@ struct StrengthWorkoutHistoryTool: AgentTool {
             )
             let records = Array(((try? executionContext.modelContext.fetch(descriptor)) ?? []).prefix(limit))
             let payload = records.map { record in
-                StrengthWorkoutHistoryPayload(
-                    title: record.title,
-                    startedAt: record.startedAt,
-                    durationMinutes: record.durationMinutes,
-                    exerciseCount: record.exerciseCount,
-                    totalSets: record.totalSetCount,
-                    totalRepetitions: record.totalRepetitionCount,
-                    totalVolumeKilograms: record.totalVolumeKilograms,
-                    exercises: record.exercises
-                )
+                StrengthWorkoutHistoryPayload(workout: record)
             }
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
@@ -407,10 +436,436 @@ private struct StrengthWorkoutHistoryPayload: Encodable {
     var startedAt: Date
     var durationMinutes: Int
     var exerciseCount: Int
-    var totalSets: Int
-    var totalRepetitions: Int
-    var totalVolumeKilograms: Double
-    var exercises: [StrengthExerciseLog]
+    var completedWorkSets: Int
+    var completedRepetitions: Int
+    var completedVolumeKilograms: Double
+    var warmupSets: Int
+    var uncompletedSets: Int
+    var exercises: [StrengthExerciseHistoryPayload]
+
+    init(workout: StrengthWorkoutRecord) {
+        title = workout.title
+        startedAt = workout.startedAt
+        durationMinutes = workout.durationMinutes
+        exerciseCount = workout.exerciseCount
+        exercises = workout.exercises.map(StrengthExerciseHistoryPayload.init(exercise:))
+        completedWorkSets = exercises.reduce(0) { $0 + $1.completedSets.count }
+        completedRepetitions = exercises.reduce(0) { total, exercise in
+            total + exercise.completedSets.reduce(0) { $0 + $1.repetitions }
+        }
+        completedVolumeKilograms = exercises.reduce(0) { total, exercise in
+            total + exercise.completedSets.reduce(0) { $0 + $1.volumeKilograms }
+        }
+        warmupSets = exercises.reduce(0) { $0 + $1.warmupSets.count }
+        uncompletedSets = exercises.reduce(0) { $0 + $1.uncompletedSets.count }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case title
+        case startedAt = "started_at"
+        case durationMinutes = "duration_minutes"
+        case exerciseCount = "exercise_count"
+        case completedWorkSets = "completed_work_sets"
+        case completedRepetitions = "completed_repetitions"
+        case completedVolumeKilograms = "completed_volume_kilograms"
+        case warmupSets = "warmup_sets"
+        case uncompletedSets = "uncompleted_sets"
+        case exercises
+    }
+}
+
+private struct StrengthExerciseHistoryPayload: Encodable {
+    var name: String
+    var equipment: String
+    var primaryMuscleGroup: String?
+    var completedSets: [StrengthSetHistoryPayload]
+    var warmupSets: [StrengthSetHistoryPayload]
+    var uncompletedSets: [StrengthSetHistoryPayload]
+
+    init(exercise: StrengthExerciseLog) {
+        name = exercise.name
+        equipment = exercise.equipment
+        primaryMuscleGroup = exercise.primaryMuscleGroup
+        completedSets = exercise.sets
+            .filter { !$0.isWarmup && $0.isCompleted != false }
+            .map(StrengthSetHistoryPayload.init(set:))
+        warmupSets = exercise.sets
+            .filter { $0.isWarmup && $0.isCompleted != false }
+            .map(StrengthSetHistoryPayload.init(set:))
+        uncompletedSets = exercise.sets
+            .filter { $0.isCompleted == false }
+            .map(StrengthSetHistoryPayload.init(set:))
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case equipment
+        case primaryMuscleGroup = "primary_muscle_group"
+        case completedSets = "completed_sets"
+        case warmupSets = "warmup_sets"
+        case uncompletedSets = "uncompleted_sets"
+    }
+}
+
+private struct StrengthSetHistoryPayload: Encodable {
+    var repetitions: Int
+    var weightKilograms: Double
+    var volumeKilograms: Double
+    var rpe: Double?
+    var rir: Double?
+    var status: String
+
+    init(set: StrengthSetLog) {
+        repetitions = set.repetitions
+        weightKilograms = set.weightKilograms
+        volumeKilograms = set.isWarmup ? 0 : Double(set.repetitions) * set.weightKilograms
+        rpe = set.rpe
+        rir = set.rir
+        if set.isCompleted == false {
+            status = "uncompleted"
+        } else if set.isWarmup {
+            status = "warmup"
+        } else {
+            status = "completed"
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case repetitions
+        case weightKilograms = "weight_kilograms"
+        case volumeKilograms = "volume_kilograms"
+        case rpe
+        case rir
+        case status
+    }
+}
+
+struct UnifiedWorkoutHistoryTool: AgentTool {
+    let name = "get_unified_workout_history"
+    let description = "Retrieve the user's unified workout timeline across Apple Watch/HealthKit, Xunji-enriched strength sessions, manual entries, running, swimming, walking, and other activities. Use this as the primary workout history tool when the user asks about training history, activity patterns, cardio, swimming, running, or merged Apple/Xunji workout records."
+
+    let executionContext: ToolExecutionContext
+
+    var parameters: [String: Value] {
+        [
+            "type": .string("object"),
+            "properties": .object([
+                "days": .object([
+                    "type": .string("integer"),
+                    "description": .string("Lookback window in days. Defaults to 28 and is capped at 180."),
+                ]),
+                "limit": .object([
+                    "type": .string("integer"),
+                    "description": .string("Maximum sessions to return. Defaults to 20 and is capped at 60."),
+                ]),
+                "activity_type": .object([
+                    "type": .string("string"),
+                    "description": .string("Optional case-insensitive filter such as strength, running, swimming, walking, cycling, or a Chinese activity/title fragment."),
+                ]),
+                "include_strength_details": .object([
+                    "type": .string("boolean"),
+                    "description": .string("When true, includes linked strength exercises/sets for Apple+Xunji or Xunji strength sessions. Defaults to true."),
+                ]),
+            ]),
+        ]
+    }
+
+    func execute(arguments: String) async throws -> String {
+        let parsed = Self.parse(arguments: arguments)
+        return await MainActor.run {
+            let cutoff = Date().addingTimeInterval(-Double(parsed.days) * 24 * 3600)
+            let descriptor = FetchDescriptor<WorkoutEventRecord>(
+                predicate: #Predicate<WorkoutEventRecord> { $0.startedAt >= cutoff },
+                sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+            )
+            var events = (try? executionContext.modelContext.fetch(descriptor)) ?? []
+            if let activityType = parsed.activityType?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !activityType.isEmpty {
+                let needle = activityType.lowercased()
+                events = events.filter {
+                    $0.activityType.lowercased().contains(needle)
+                    || $0.title.lowercased().contains(needle)
+                    || $0.source.lowercased().contains(needle)
+                }
+            }
+
+            let limited = Array(events.prefix(parsed.limit))
+            let strengthIDs = Set(limited.compactMap(\.linkedStrengthWorkoutId))
+            let strengthRecords = fetchStrengthRecords(ids: strengthIDs)
+            let strengthMap = Dictionary(uniqueKeysWithValues: strengthRecords.map { ($0.id, $0) })
+
+            let payload = limited.map { event in
+                UnifiedWorkoutHistoryPayload(
+                    event: event,
+                    strengthWorkout: parsed.includeStrengthDetails
+                        ? event.linkedStrengthWorkoutId.flatMap { strengthMap[$0] }
+                        : nil
+                )
+            }
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            guard let data = try? encoder.encode(payload) else { return "[]" }
+            return String(data: data, encoding: .utf8) ?? "[]"
+        }
+    }
+
+    @MainActor
+    private func fetchStrengthRecords(ids: Set<UUID>) -> [StrengthWorkoutRecord] {
+        guard !ids.isEmpty else { return [] }
+        let descriptor = FetchDescriptor<StrengthWorkoutRecord>()
+        return ((try? executionContext.modelContext.fetch(descriptor)) ?? []).filter { ids.contains($0.id) }
+    }
+
+    private static func parse(arguments: String) -> (days: Int, limit: Int, activityType: String?, includeStrengthDetails: Bool) {
+        guard let data = arguments.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return (28, 20, nil, true)
+        }
+        let days = min(max(json["days"] as? Int ?? 28, 1), 180)
+        let limit = min(max(json["limit"] as? Int ?? 20, 1), 60)
+        let activityType = json["activity_type"] as? String
+        let includeStrengthDetails = json["include_strength_details"] as? Bool ?? true
+        return (days, limit, activityType, includeStrengthDetails)
+    }
+}
+
+private struct UnifiedWorkoutHistoryPayload: Encodable {
+    var id: UUID
+    var source: String
+    var title: String
+    var activityType: String
+    var startedAt: Date
+    var endedAt: Date
+    var durationMinutes: Double
+    var energyKilocalories: Double?
+    var averageHeartRate: Double?
+    var rpe: Double?
+    var linkedStrengthWorkoutId: UUID?
+    var linkedHealthKitWorkoutId: UUID?
+    var strengthDetails: StrengthWorkoutHistoryPayload?
+
+    init(event: WorkoutEventRecord, strengthWorkout: StrengthWorkoutRecord?) {
+        id = event.id
+        source = event.source
+        title = event.title
+        activityType = event.activityType
+        startedAt = event.startedAt
+        endedAt = event.endedAt
+        durationMinutes = event.durationMinutes
+        energyKilocalories = event.energyKilocalories
+        averageHeartRate = event.averageHeartRate
+        rpe = event.rpe
+        linkedStrengthWorkoutId = event.linkedStrengthWorkoutId
+        linkedHealthKitWorkoutId = event.linkedHealthKitWorkoutId
+        if let strengthWorkout {
+            strengthDetails = StrengthWorkoutHistoryPayload(workout: strengthWorkout)
+        } else {
+            strengthDetails = nil
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case source
+        case title
+        case activityType = "activity_type"
+        case startedAt = "started_at"
+        case endedAt = "ended_at"
+        case durationMinutes = "duration_minutes"
+        case energyKilocalories = "energy_kilocalories"
+        case averageHeartRate = "average_heart_rate"
+        case rpe
+        case linkedStrengthWorkoutId = "linked_strength_workout_id"
+        case linkedHealthKitWorkoutId = "linked_healthkit_workout_id"
+        case strengthDetails = "strength_details"
+    }
+}
+
+struct HealthHistoryTool: AgentTool {
+    let name = "get_health_history"
+    let description = "Retrieve daily historical body and health metrics from local HealthKit-derived summaries, including sleep, recovery, strain, HRV, resting heart rate, stress, energy bank, steps, calories, body metrics, oxygen saturation, respiratory rate, wrist temperature, and training-load fields. Use this when the user asks about trends, correlations, baselines, or past body state."
+
+    let executionContext: ToolExecutionContext
+
+    var parameters: [String: Value] {
+        [
+            "type": .string("object"),
+            "properties": .object([
+                "days": .object([
+                    "type": .string("integer"),
+                    "description": .string("Lookback window in days. Defaults to 30 and is capped at 180."),
+                ]),
+                "include_workouts": .object([
+                    "type": .string("boolean"),
+                    "description": .string("Whether to include each day's compact workout summaries. Defaults to false."),
+                ]),
+            ]),
+        ]
+    }
+
+    func execute(arguments: String) async throws -> String {
+        let parsed = Self.parse(arguments: arguments)
+        return await MainActor.run {
+            let cutoff = Calendar.current.startOfDay(for: Date().addingTimeInterval(-Double(parsed.days) * 24 * 3600))
+            let descriptor = FetchDescriptor<DailyHealthSummaryRecord>(
+                predicate: #Predicate<DailyHealthSummaryRecord> { $0.date >= cutoff },
+                sortBy: [SortDescriptor(\.date, order: .reverse)]
+            )
+            let records = (try? executionContext.modelContext.fetch(descriptor)) ?? []
+            let payload = records.map { HealthHistoryDayPayload(record: $0, includeWorkouts: parsed.includeWorkouts) }
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            guard let data = try? encoder.encode(payload) else { return "[]" }
+            return String(data: data, encoding: .utf8) ?? "[]"
+        }
+    }
+
+    private static func parse(arguments: String) -> (days: Int, includeWorkouts: Bool) {
+        guard let data = arguments.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return (30, false)
+        }
+        let days = min(max(json["days"] as? Int ?? 30, 1), 180)
+        let includeWorkouts = json["include_workouts"] as? Bool ?? false
+        return (days, includeWorkouts)
+    }
+}
+
+private struct HealthHistoryDayPayload: Encodable {
+    var date: Date
+    var sleepScore: Double?
+    var recoveryScore: Double?
+    var strainScore: Double?
+    var stressIndex: Double?
+    var morningEnergy: Double?
+    var currentEnergy: Double?
+    var energyBank: Double?
+    var healthAge: Double?
+    var hrvAverage: Double?
+    var restingHeartRate: Double?
+    var sleepHours: Double?
+    var deepSleepPercent: Double?
+    var remSleepPercent: Double?
+    var sleepEfficiency: Double?
+    var steps: Double?
+    var activeCalories: Double?
+    var activeMinutes: Double?
+    var workoutCount: Int?
+    var workoutTypes: String?
+    var workoutDuration: Double?
+    var bodyWeight: Double?
+    var bodyFatPercent: Double?
+    var bmi: Double?
+    var oxygenSaturation: Double?
+    var respiratoryRate: Double?
+    var wristTemperature: Double?
+    var dailyLoad: Double?
+    var workoutLoad: Double?
+    var activityLoad: Double?
+    var trainingLoadRatio: Double?
+    var atl: Double?
+    var ctl: Double?
+    var tsb: Double?
+    var acwr: Double?
+    var bedtime: Date?
+    var wakeTime: Date?
+    var awakeMinutes: Double?
+    var awakeEpisodeCount: Int?
+    var deepSleepMinutes: Double?
+    var remSleepMinutes: Double?
+    var workouts: [WorkoutSummary]?
+
+    init(record: DailyHealthSummaryRecord, includeWorkouts: Bool) {
+        date = record.date
+        sleepScore = record.sleepScore
+        recoveryScore = record.recoveryScore
+        strainScore = record.strainScore
+        stressIndex = record.stressIndex
+        morningEnergy = record.morningEnergy
+        currentEnergy = record.currentEnergy
+        energyBank = record.energyBank
+        healthAge = record.healthAge
+        hrvAverage = record.hrvAverage
+        restingHeartRate = record.restingHeartRate
+        sleepHours = record.sleepHours
+        deepSleepPercent = record.deepSleepPercent
+        remSleepPercent = record.remSleepPercent
+        sleepEfficiency = record.sleepEfficiency
+        steps = record.steps
+        activeCalories = record.activeCalories
+        activeMinutes = record.activeMinutes
+        workoutCount = record.workoutCount
+        workoutTypes = record.workoutTypes
+        workoutDuration = record.workoutDuration
+        bodyWeight = record.bodyWeight
+        bodyFatPercent = record.bodyFatPercent
+        bmi = record.bmi
+        oxygenSaturation = record.oxygenSaturation
+        respiratoryRate = record.respiratoryRate
+        wristTemperature = record.wristTemperature
+        dailyLoad = record.dailyLoad
+        workoutLoad = record.workoutLoad
+        activityLoad = record.activityLoad
+        trainingLoadRatio = record.trainingLoadRatio
+        atl = record.atl
+        ctl = record.ctl
+        tsb = record.tsb
+        acwr = record.acwr
+        bedtime = record.bedtime
+        wakeTime = record.wakeTime
+        awakeMinutes = record.awakeMinutes
+        awakeEpisodeCount = record.awakeEpisodeCount
+        deepSleepMinutes = record.deepSleepMinutes
+        remSleepMinutes = record.remSleepMinutes
+        workouts = includeWorkouts ? record.toSnapshot().workouts : nil
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case date
+        case sleepScore = "sleep_score"
+        case recoveryScore = "recovery_score"
+        case strainScore = "strain_score"
+        case stressIndex = "stress_index"
+        case morningEnergy = "morning_energy"
+        case currentEnergy = "current_energy"
+        case energyBank = "energy_bank"
+        case healthAge = "health_age"
+        case hrvAverage = "hrv_average"
+        case restingHeartRate = "resting_heart_rate"
+        case sleepHours = "sleep_hours"
+        case deepSleepPercent = "deep_sleep_percent"
+        case remSleepPercent = "rem_sleep_percent"
+        case sleepEfficiency = "sleep_efficiency"
+        case steps
+        case activeCalories = "active_calories"
+        case activeMinutes = "active_minutes"
+        case workoutCount = "workout_count"
+        case workoutTypes = "workout_types"
+        case workoutDuration = "workout_duration"
+        case bodyWeight = "body_weight"
+        case bodyFatPercent = "body_fat_percent"
+        case bmi
+        case oxygenSaturation = "oxygen_saturation"
+        case respiratoryRate = "respiratory_rate"
+        case wristTemperature = "wrist_temperature"
+        case dailyLoad = "daily_load"
+        case workoutLoad = "workout_load"
+        case activityLoad = "activity_load"
+        case trainingLoadRatio = "training_load_ratio"
+        case atl
+        case ctl
+        case tsb
+        case acwr
+        case bedtime
+        case wakeTime = "wake_time"
+        case awakeMinutes = "awake_minutes"
+        case awakeEpisodeCount = "awake_episode_count"
+        case deepSleepMinutes = "deep_sleep_minutes"
+        case remSleepMinutes = "rem_sleep_minutes"
+        case workouts
+    }
 }
 
 /// Generates a personalized training plan based on today's recovery, strain,

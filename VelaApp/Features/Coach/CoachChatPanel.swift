@@ -688,6 +688,8 @@ final class CoachChatVM: ObservableObject {
         }
 
         // Full prompt for health data inquiries
+        // Build a compact context snapshot — the LLM must use tools for detailed data.
+        // This avoids stale/mismatched data between the inline JSON and tool responses.
         let weeklyTrends = (try? HealthSnapshotRepository(modelContext: modelContext).buildWeeklyTrendSummary()) ?? [:]
         let snapshots = (try? HealthSnapshotRepository(modelContext: modelContext).fetchSnapshots(days: 30)) ?? []
         let correlations = JournalCorrelationEngine().correlateTags(
@@ -697,11 +699,6 @@ final class CoachChatVM: ObservableObject {
         let correlationText = JournalCorrelationEngine().formatCorrelationsForAI(
             JournalCorrelationEngine().topCorrelations(correlations: correlations)
         )
-        let foodLogs = (try? modelContext.fetch(
-            FetchDescriptor<FoodLogRecord>(
-                sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-            )
-        )) ?? []
         let fourteenDaysAgo = Date().addingTimeInterval(-14 * 24 * 3600)
         let strengthWorkouts = (try? modelContext.fetch(
             FetchDescriptor<StrengthWorkoutRecord>(
@@ -727,35 +724,16 @@ final class CoachChatVM: ObservableObject {
         )
         onboardingDescriptor.fetchLimit = 1
         let onboardingState = (try? modelContext.fetch(onboardingDescriptor))?.first
-        let bodyModelState = BodyModelBuilder().build(
-            onboarding: onboardingState,
-            dailySummaries: dailySummaries,
-            journalEntries: Array(journalEntries.prefix(80)),
-            strengthWorkouts: strengthWorkouts,
-            trainingResponses: trainingResponses,
-            asOf: dashboard.date
-        )
-        let (context, _) = (services?.contextBuilder ?? AIContextBuilder()).build(
+
+        let contextJSON = buildCompactContextSnapshot(
             dashboard: dashboard,
-            journalEntries: journalEntries.prefix(12).map { JournalContextEntry(tags: $0.tags, text: $0.note) },
-            historicalReports: savedReports.filter { $0.type != "coach_thread" }.prefix(6).map { record in
-                GeneratedAIReport(
-                    type: AIReportType(rawValue: record.type) ?? .morningBrief,
-                    title: record.title,
-                    markdownContent: record.markdownContent,
-                    contextSnapshot: record.serializedContextSnapshot,
-                    createdAt: record.createdAt
-                )
-            },
-            userWiki: wiki,
+            wiki: wiki,
             weeklyTrends: weeklyTrends,
-            foodLogs: Array(foodLogs.prefix(8)),
             strengthWorkouts: strengthWorkouts,
             trainingResponses: trainingResponses,
             onboardingState: onboardingState,
-            bodyModelState: bodyModelState
+            dailySummaries: dailySummaries
         )
-        let contextJSON = (try? String(data: JSONEncoder().encode(context), encoding: .utf8)) ?? "{}"
 
         let composer = CoachPromptComposer(
             lang: lang,
@@ -809,6 +787,77 @@ final class CoachChatVM: ObservableObject {
 
         result.append(ChatMessage(role: .user, content: userText))
         return result
+    }
+
+    /// Builds a compact snapshot inline context — scores, bands, key reasons, and data-source pointers.
+    /// The LLM MUST use tools (get_today_health, get_health_history, etc.) for detailed metrics.
+    /// This avoids the stale mismatch between inline JSON and tool-returned data.
+    private func buildCompactContextSnapshot(
+        dashboard: DashboardSummary,
+        wiki: [String: String],
+        weeklyTrends: [String: String],
+        strengthWorkouts: [StrengthWorkoutRecord],
+        trainingResponses: [TrainingResponseRecord],
+        onboardingState: OnboardingState?,
+        dailySummaries: [DailyHealthSummaryRecord]
+    ) -> String {
+        let td = dashboard.trainingDecision
+        let hrv = dashboard.recoveryMetrics.hrvMilliseconds.map { "\(Int($0.rounded()))ms" } ?? "N/A"
+        let rhr = dashboard.recoveryMetrics.restingHeartRate.map { "\(Int($0.rounded()))bpm" } ?? "N/A"
+
+        var lines: [String] = []
+
+        // ── Scores at a glance ──
+        let lang = AppLanguage.stored
+        if lang.isChinese {
+            lines.append("## 今日紧凑快照（完整数据需调用 get_today_health）")
+            lines.append("- 恢复 \(Int(dashboard.recovery.score.rounded())) (\(dashboard.recovery.band.rawValue)) · 睡眠 \(Int(dashboard.sleepScore.score.rounded())) (\(dashboard.sleepScore.band.rawValue)) · 负荷 \(Int(dashboard.strain.score.rounded())) (\(dashboard.strain.band.rawValue))")
+            lines.append("- 能量 \(Int(dashboard.energy.currentEnergy.rounded())) (\(dashboard.energy.status.rawValue)) · 压力 \(Int(dashboard.stress.stressIndex.rounded())) (\(dashboard.stress.band.rawValue))")
+            lines.append("- HRV \(hrv) · 静息心率 \(rhr)")
+            lines.append("- 训练准备度 \(td.readinessLevel) · \(td.readinessGuidance)")
+            lines.append("- 数据来源 \(dashboard.source.rawValue) · 日期 \(dashboard.date.formatted(date: .numeric, time: .shortened))")
+        } else {
+            lines.append("## Today's Compact Snapshot (call get_today_health for full data)")
+            lines.append("- Recovery \(Int(dashboard.recovery.score.rounded())) (\(dashboard.recovery.band.rawValue)) · Sleep \(Int(dashboard.sleepScore.score.rounded())) (\(dashboard.sleepScore.band.rawValue)) · Strain \(Int(dashboard.strain.score.rounded())) (\(dashboard.strain.band.rawValue))")
+            lines.append("- Energy \(Int(dashboard.energy.currentEnergy.rounded())) (\(dashboard.energy.status.rawValue)) · Stress \(Int(dashboard.stress.stressIndex.rounded())) (\(dashboard.stress.band.rawValue))")
+            lines.append("- HRV \(hrv) · RHR \(rhr)")
+            lines.append("- Training Readiness \(td.readinessLevel) · \(td.readinessGuidance)")
+            lines.append("- Source \(dashboard.source.rawValue) · Date \(dashboard.date.formatted(date: .numeric, time: .shortened))")
+        }
+
+        // ── Weekly trends summary (compact) ──
+        if !weeklyTrends.isEmpty {
+            let summary = weeklyTrends.compactMap { key, value in
+                value.isEmpty ? nil : "- \(key): \(value.prefix(120))"
+            }.joined(separator: "\n")
+            if !summary.isEmpty {
+                lines.append("\n## Weekly Trends\n\(summary)")
+            }
+        }
+
+        // ── Strength recap (very compact) ──
+        if !strengthWorkouts.isEmpty {
+            let analytics = TrainingAnalyticsService()
+            let recent7d = analytics.buildRecentSummary(workouts: strengthWorkouts, days: 7, endingAt: Date())
+            let prsStr = recent7d.recentPRs.isEmpty ? "" : " · PRs: \(recent7d.recentPRs.map(\.summary).joined(separator: ", "))"
+            if lang.isChinese {
+                lines.append("\n## 力量训练近期\n7d: \(recent7d.sessions)次 \(Int(recent7d.volumeKg))kg \(recent7d.effectiveSets)组\(prsStr)")
+            } else {
+                lines.append("\n## Recent Strength\n7d: \(recent7d.sessions) sessions \(Int(recent7d.volumeKg))kg \(recent7d.effectiveSets) sets\(prsStr)")
+            }
+        }
+
+        // ── Body model onboarding flags (compact) ──
+        if let onboardingState {
+            let goal = onboardingState.goalProfile
+            if lang.isChinese {
+                lines.append("\n## 用户身体模型\n目标: \(goal.primaryGoal) · 经验: \(goal.experienceLevel) · 每周训练 \(onboardingState.trainingPreference.weeklyTrainingDays)天")
+            } else {
+                lines.append("\n## Body Model\nGoal: \(goal.primaryGoal) · Level: \(goal.experienceLevel) · \(onboardingState.trainingPreference.weeklyTrainingDays) days/week")
+            }
+        }
+
+        return lines.joined(separator: "\n")
     }
 
     private func persistInteraction(userText: String, assistantText: String, focus: CoachContextFocus, modelContext: ModelContext) {
