@@ -108,23 +108,30 @@ final class DailySummaryUseCase {
         // 3. Locate today's snapshot
         let todaySnapshot = snapshots42.first(where: { calendar.isDate($0.date, inSameDayAs: now) })
         
-        // 4. Fallback to Mock Seeding if today's snapshot is missing or has no data
-        guard let snapshot = todaySnapshot, (snapshot.hrvAverage != nil || snapshot.restingHeartRate != nil || snapshot.sleepHours != nil) else {
+        // 4. Require today's snapshot with real HealthKit-synced data.
+        //    Mock/preview seeding only fires when there is NO SwiftData cache at all
+        //    (30-day repo is empty). If a snapshot exists but has zeroes for everything
+        //    it means HealthKit returned no sleep/HRV/RHR today — show empty, not fake data.
+        guard let snapshot = todaySnapshot,
+              (snapshot.hrvAverage != nil || snapshot.restingHeartRate != nil || snapshot.sleepHours != nil) else {
             #if DEBUG
             if let modelContext {
-                seedMockDataIfNeeded(modelContext: modelContext, now: now)
-                
-                // Fetch the record we just seeded or existing
                 let repo = SwiftDataDailyHealthSummaryRepository(modelContext: modelContext)
-                let dayStart = calendar.startOfDay(for: now)
-                let range = DateRangeQuery(start: dayStart, end: calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart)
-                if let record = (try? repo.fetch(in: range))?.first {
-                    return makeDashboardFromRecord(record, source: .preview)
+                let range = DateRangeQuery.recentDays(30, endingAt: now, calendar: calendar)
+                let existing = (try? repo.fetch(in: range)) ?? []
+                if existing.isEmpty {
+                    seedMockDataIfNeeded(modelContext: modelContext, now: now)
+                    let dayStart = calendar.startOfDay(for: now)
+                    let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+                    if let record = (try? repo.fetch(in: DateRangeQuery(start: dayStart, end: dayEnd)))?.first {
+                        return makeDashboardFromRecord(record, source: .preview)
+                    }
                 }
             }
-            return PreviewDataFactory.makeDashboard(date: now)
+            // No real data and no mock seed — return empty dashboard
+            return DashboardSummary.empty(date: now)
             #else
-            throw VelaError.healthKitDataUnavailable(sampleType: AppLanguage.stored.isChinese ? "Apple 健康" : "Apple Health")
+            return DashboardSummary.empty(date: now)
             #endif
         }
         
@@ -599,6 +606,7 @@ final class DailySummaryUseCase {
 
         let baselines = PersonalBaselineEngine.computeBaselines(from: snapshots)
         PersonalBaselineEngine.saveBaselinesToWiki(baselines)
+        WikiSyncManager.sync(modelContext: modelContext)
     }
 
     private func checkAndAlertAbnormalMetrics(snapshot: DailyHealthSnapshot, modelContext: ModelContext) async {
