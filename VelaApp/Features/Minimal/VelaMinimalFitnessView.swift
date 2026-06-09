@@ -14,8 +14,24 @@ struct VelaTrainingView: View {
     @Query(sort: \StrengthWorkoutRecord.startedAt, order: .reverse) private var strengthWorkouts: [StrengthWorkoutRecord]
     @Query(sort: \WorkoutEventRecord.startedAt, order: .reverse) private var localWorkoutEvents: [WorkoutEventRecord]
     @Query(sort: \WorkoutTemplateRecord.title) private var workoutTemplates: [WorkoutTemplateRecord]
+    @Query(sort: \TrainingPlanRecord.updatedAt, order: .reverse) private var trainingPlans: [TrainingPlanRecord]
+    @Query(sort: \DailyOperatingPlanRecord.generatedAt, order: .reverse) private var operatingPlans: [DailyOperatingPlanRecord]
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
+    private var activePlan: TrainingPlanRecord? {
+        trainingPlans.first(where: { $0.isActive })
+    }
+    private var todayPlan: DailyOperatingPlanRecord? {
+        let identifier = DailyHealthSummaryRecord.dayIdentifier(for: dashboardVM.selectedDate)
+        return operatingPlans.first(where: { $0.dayIdentifier == identifier })
+    }
+    private var todaySession: TrainingDay? {
+        guard let activePlan else { return nil }
+        let weekday = Calendar.current.component(.weekday, from: dashboardVM.selectedDate)
+        let mondayBasedDay = ((weekday + 5) % 7) + 1
+        return activePlan.days.first(where: { $0.dayNumber == mondayBasedDay && !$0.isCompleted })
+            ?? activePlan.days.first(where: { !$0.isCompleted })
+    }
     private let xunjiKeychainAccount = "xunji_open_api_key"
 
     @State private var previousMonthActiveTiers: [Int: Int] = [:]
@@ -44,6 +60,8 @@ struct VelaTrainingView: View {
             VStack(alignment: .leading, spacing: 20) {
                 // 1. Fitness Title Header
                 fitnessHeader
+
+                trainingExecutionCard
                 
                 // 2. Double-Month Thinned Activity Heatmap Card
                 trainingIntelligenceCard
@@ -124,6 +142,82 @@ struct VelaTrainingView: View {
             .presentationBackground(VelaTheme.systemGroupedBackground)
         }
         .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var trainingExecutionCard: some View {
+        let session = todaySession
+        let payload = todayPlan.flatMap { plan -> DailyOperatingPlanPayload? in
+            guard let data = plan.payloadJSON.data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode(DailyOperatingPlanPayload.self, from: data)
+        }
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("今日训练执行")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(VelaTheme.muted)
+                    Text(session?.title ?? activePlan?.title ?? "自由训练")
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .foregroundStyle(VelaTheme.fg)
+                }
+                Spacer()
+                Text(todayPlan?.primaryActionType.uppercased() ?? "READY")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(VelaTheme.accent)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(VelaTheme.accent.opacity(0.12)))
+            }
+
+            Text(session?.description ?? payload?.summary ?? "选择模板开始记录；每组完成后自动启动休息计时。")
+                .font(.subheadline)
+                .foregroundStyle(VelaTheme.muted)
+
+            HStack(spacing: 10) {
+                executionMetric("容量", payload.map { "\(Int(($0.volumeMultiplier * 100).rounded()))%" } ?? "--")
+                executionMetric("RPE 上限", payload.map { "\($0.intensityCap)" } ?? "--")
+                executionMetric("时长", session.map { "\($0.durationMinutes) 分" } ?? "--")
+            }
+
+            if let latest = recentStrengthSummary.lastWorkoutSummary {
+                Text("上次表现：\(latest)")
+                    .font(.caption)
+                    .foregroundStyle(VelaTheme.muted)
+                    .lineLimit(2)
+            }
+
+            Button {
+                startStrengthWorkout()
+            } label: {
+                Label("开始并记录训练", systemImage: "play.fill")
+                    .font(.subheadline.weight(.bold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .foregroundStyle(.white)
+                    .background(RoundedRectangle(cornerRadius: 14).fill(VelaTheme.accent))
+            }
+            .buttonStyle(.plain)
+
+            Text("\(todayPlan?.source ?? "DailyOperatingPlan") · \(todayPlan?.safetyNotice ?? "一般训练建议，不构成医疗诊断。")")
+                .font(.caption2)
+                .foregroundStyle(VelaTheme.muted)
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 22).fill(VelaTheme.cardBg))
+    }
+
+    private func executionMetric(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(VelaTheme.muted)
+            Text(value)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(VelaTheme.fg)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.surface))
     }
 
     // MARK: - Fitness Title Header

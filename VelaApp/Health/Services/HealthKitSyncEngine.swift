@@ -50,6 +50,12 @@ final class HealthKitSyncEngine {
             // Save the raw snapshot
             do {
                 try snapshotRepo.saveDailySnapshot(snapshot)
+                try WorkoutAggregationService.shared.aggregateDay(
+                    date: dayStart,
+                    modelContext: modelContext,
+                    calendar: calendar
+                )
+                try modelContext.save()
             } catch {
                 PipelineDiagnosticsLogger.log(
                     modelContext: modelContext,
@@ -125,6 +131,12 @@ final class HealthKitSyncEngine {
 
             do {
                 try snapshotRepo.saveDailySnapshot(snapshot)
+                try WorkoutAggregationService.shared.aggregateDay(
+                    date: dayStart,
+                    modelContext: modelContext,
+                    calendar: calendar
+                )
+                try modelContext.save()
             } catch {
                 PipelineDiagnosticsLogger.log(
                     modelContext: modelContext,

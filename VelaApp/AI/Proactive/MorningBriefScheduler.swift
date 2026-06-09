@@ -121,6 +121,38 @@ final class MorningBriefScheduler: ObservableObject {
                     sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
                 )
             )) ?? []
+            let workoutEvents = (try? modelContext.fetch(
+                FetchDescriptor<WorkoutEventRecord>(
+                    predicate: #Predicate<WorkoutEventRecord> { $0.startedAt >= fourteenDaysAgo },
+                    sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+                )
+            )) ?? []
+            let trainingResponses = (try? modelContext.fetch(
+                FetchDescriptor<TrainingResponseRecord>(
+                    sortBy: [SortDescriptor(\.date, order: .reverse)]
+                )
+            )) ?? []
+            let activePlan = (try? modelContext.fetch(
+                FetchDescriptor<TrainingPlanRecord>(
+                    predicate: #Predicate<TrainingPlanRecord> { $0.isActive }
+                )
+            ))?.first
+            let dailySummary = (try? modelContext.fetch(
+                FetchDescriptor<DailyHealthSummaryRecord>(
+                    sortBy: [SortDescriptor(\.date, order: .reverse)]
+                )
+            ))?.first
+            let bodyState = BodyStateKernel().build(input: BodyStateInput(
+                dashboard: dashboard,
+                dailySummary: dailySummary,
+                workoutEvents: workoutEvents,
+                strengthWorkouts: strengthWorkouts,
+                trainingResponses: trainingResponses,
+                foodLogs: Array(foodLogs.prefix(8)),
+                journalEntries: journals,
+                activePlan: activePlan,
+                activeStatus: UserDefaults.standard.string(forKey: "vela_active_status") ?? "active"
+            ))
             let (context, contextMeta) = (services?.contextBuilder ?? AIContextBuilder()).build(
                 dashboard: dashboard,
                 journalEntries: journalEntries,
@@ -128,7 +160,10 @@ final class MorningBriefScheduler: ObservableObject {
                 userWiki: wiki,
                 weeklyTrends: weeklyTrends,
                 foodLogs: Array(foodLogs.prefix(8)),
-                strengthWorkouts: strengthWorkouts
+                workoutEvents: workoutEvents,
+                strengthWorkouts: strengthWorkouts,
+                trainingResponses: trainingResponses,
+                bodyState: bodyState
             )
             
             // 9. Generate Report using ReportGenerator

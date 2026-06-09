@@ -145,6 +145,12 @@ final class DailySummaryUseCase {
         let rawHKWorkouts = todayStrainSummary?.workouts ?? []
         let workouts: [WorkoutSummary]
         if let modelContext = modelContext {
+            try? WorkoutAggregationService.shared.upsertHealthKitWorkoutEvents(
+                rawHKWorkouts,
+                on: now,
+                modelContext: modelContext,
+                calendar: calendar
+            )
             workouts = WorkoutAggregationService.shared.aggregateWorkouts(
                 healthKitWorkouts: rawHKWorkouts,
                 for: now,
@@ -306,6 +312,12 @@ final class DailySummaryUseCase {
             let snapshotRepo = HealthSnapshotRepository(modelContext: modelContext, calendar: calendar)
             do {
                 try snapshotRepo.saveDailySnapshot(persistedSnapshot)
+                try WorkoutAggregationService.shared.aggregateDay(
+                    date: now,
+                    modelContext: modelContext,
+                    calendar: calendar
+                )
+                try modelContext.save()
             } catch {
                 PipelineDiagnosticsLogger.log(
                     modelContext: modelContext,
@@ -453,7 +465,19 @@ final class DailySummaryUseCase {
             )
 
             let snapshot = makeSnapshot(from: dashboard, context: context, date: episode.date)
-            try? HealthSnapshotRepository(modelContext: modelContext, calendar: calendar).saveDailySnapshot(snapshot)
+            let snapshotRepo = HealthSnapshotRepository(modelContext: modelContext, calendar: calendar)
+            try? WorkoutAggregationService.shared.upsertHealthKitWorkoutEvents(
+                snapshot.workouts,
+                on: episode.date,
+                modelContext: modelContext,
+                calendar: calendar
+            )
+            try? snapshotRepo.saveDailySnapshot(snapshot)
+            try? WorkoutAggregationService.shared.aggregateDay(
+                date: episode.date,
+                modelContext: modelContext,
+                calendar: calendar
+            )
         }
 
         // Also backfill days without sleep data (e.g. no sleep recorded)
@@ -550,7 +574,18 @@ final class DailySummaryUseCase {
             )
 
             let snapshot = makeSnapshot(from: dashboard, context: context, date: day)
+            try? WorkoutAggregationService.shared.upsertHealthKitWorkoutEvents(
+                snapshot.workouts,
+                on: day,
+                modelContext: modelContext,
+                calendar: calendar
+            )
             try? snapshotRepo.saveDailySnapshot(snapshot)
+            try? WorkoutAggregationService.shared.aggregateDay(
+                date: day,
+                modelContext: modelContext,
+                calendar: calendar
+            )
         }
     }
 

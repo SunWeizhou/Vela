@@ -571,4 +571,31 @@ final class ContextBuilderTests: XCTestCase {
 
         XCTAssertTrue(correlations.isEmpty)
     }
+
+    func testJournalCorrelationIgnoresLegacyCoachConversations() {
+        let base = makeDate()
+        let entries = (0..<8).map { offset in
+            JournalEntryRecord(
+                createdAt: base.addingTimeInterval(Double(-offset) * 86_400),
+                tags: ["coach", "training"],
+                note: "Should I train today?"
+            )
+        }
+        var snapshots: [DailyHealthSnapshot] = []
+        for offset in 0..<16 {
+            let snapshot = DailyHealthSnapshot(
+                date: base.addingTimeInterval(Double(-offset) * 86_400),
+                sleepScore: Double(60 + offset),
+                recoveryScore: Double(55 + offset)
+            )
+            snapshots.append(snapshot)
+        }
+
+        let correlations = JournalCorrelationEngine().correlateTags(
+            journalEntries: entries,
+            snapshots: snapshots
+        )
+
+        XCTAssertTrue(correlations.isEmpty)
+    }
 }

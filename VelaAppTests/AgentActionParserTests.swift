@@ -81,6 +81,64 @@ final class AgentActionParserTests: XCTestCase {
         XCTAssertEqual(result.executedTools.map(\.name), ["first_tool", "second_tool"])
         XCTAssertEqual(provider.chatCallToolAvailability, [true, true, true])
         XCTAssertEqual(result.finalMessages.filter { $0.role == .tool }.map(\.content), ["first result", "second result"])
+        XCTAssertEqual(result.trace.executedTools.map(\.name), ["first_tool", "second_tool"])
+        XCTAssertEqual(result.trace.finalResponse, "final answer")
+        XCTAssertFalse(result.trace.contextHash.isEmpty)
+    }
+
+    @MainActor
+    func testHealthTrendToolReturnsRequestedMetricsAndWindow() async throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let now = Date()
+        context.insert(DailyHealthSummaryRecord(
+            dayIdentifier: DailyHealthSummaryRecord.dayIdentifier(for: now),
+            date: now,
+            recoveryScore: 72,
+            stressIndex: 38,
+            currentEnergy: 64,
+            hrvAverage: 51,
+            restingHeartRate: 57,
+            sleepHours: 7.4
+        ))
+        try context.save()
+
+        let output = try await HealthTrendTool(
+            executionContext: ToolExecutionContext(modelContext: context, dashboard: .preview(date: now))
+        ).execute(arguments: #"{"days":14,"metrics":["hrv","rhr","sleep","recovery","stress","energy"]}"#)
+
+        XCTAssertTrue(output.contains(#""days" : 14"#))
+        XCTAssertTrue(output.contains(#""hrv" : 51"#))
+        XCTAssertTrue(output.contains(#""recovery" : 72"#))
+        XCTAssertTrue(output.contains(#""source" : "DailyHealthSummaryRecord""#))
+    }
+
+    @MainActor
+    func testTrainingResponseHistoryToolReturnsRecoveryDeltasAndFlags() async throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let now = Date()
+        context.insert(TrainingResponseRecord(
+            workoutId: UUID(),
+            date: now.addingTimeInterval(-86_400),
+            nextDayDate: now,
+            primaryMuscleGroups: ["legs"],
+            totalEffectiveSets: 12,
+            totalVolumeKg: 8_400,
+            sessionRPE: 8,
+            nextDayRecoveryDelta: -11,
+            nextDayHRVDelta: -13,
+            nextDayRHRDelta: 6
+        ))
+        try context.save()
+
+        let output = try await TrainingResponseHistoryTool(
+            executionContext: ToolExecutionContext(modelContext: context, dashboard: .preview(date: now))
+        ).execute(arguments: #"{"days":28,"muscle_group":"legs"}"#)
+
+        XCTAssertTrue(output.contains(#""next_day_recovery_delta" : -11"#))
+        XCTAssertTrue(output.contains(#""primary_muscle_groups" : ["#))
+        XCTAssertTrue(output.contains(#""flagged" : true"#))
     }
 
     func testAgentLoopRequestsFinalAnswerWhenLastAllowedIterationStillUsesTool() async throws {

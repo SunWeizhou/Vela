@@ -1,8 +1,8 @@
 # AI_AGENT_SPEC.md
 # Vela AI Health Coach Specification
 
-> Updated: 2026-05-22  
-> Target: evolve Coach into Vela Intelligence, a Bevel 3.0-class proactive agent layer with user-readable Wiki memory.
+> Updated: 2026-06-09
+> Target: Vela 4.0 Active Coach OS with multi-step tools, auditable runs, shared BodyState, and rendered artifacts.
 
 ## 1. Agent 定位
 
@@ -88,6 +88,7 @@ Agent 不直接读取原始 HealthKit 数据，而读取 App 构造的结构化�
     "context_window": "today | 7d | 30d | custom"
   },
   "today_summary": {},
+  "body_state": {},
   "sleep": {},
   "recovery": {},
   "strain": {},
@@ -106,6 +107,19 @@ Agent 不直接读取原始 HealthKit 数据，而读取 App 构造的结构化�
   "agent_instruction": {}
 }
 ```
+
+### 3.2 Agent Loop and Audit
+
+- Continue calling tools until the model returns no tool calls.
+- Enforce a bounded maximum iteration count, then request a final response with tools disabled.
+- Persist `AgentRunRecord` with context hash, tool names, arguments, results, final response, status, and timestamps.
+- Coach conversation history is stored in `CoachInteractionRecord`; it must not create Journal entries or enter Journal correlation analysis.
+
+### 3.3 Recommendation Contract
+
+Every generated recommendation must state its source, confidence, and non-diagnostic safety language.
+
+Artifacts use the canonical types `daily_plan`, `training_adjustment`, `weekly_report`, `correlation_chart`, `wiki_diff`, and `nutrition_feedback`.
 
 ---
 

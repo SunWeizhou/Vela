@@ -129,6 +129,77 @@ final class PersistenceFoundationTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testVela4RecordsRoundTripWithoutJournalPollution() throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let interaction = CoachInteractionRecord(
+            userText: "今天适合练腿吗？",
+            assistantText: "建议降低容量。",
+            focus: "training",
+            contextHash: "ctx-1"
+        )
+        let plan = DailyOperatingPlanRecord(
+            dayIdentifier: "2026-06-09",
+            bodyStateHash: "body-1",
+            primaryActionType: "reduce",
+            title: "下调训练容量",
+            payloadJSON: #"{"volume_multiplier":0.75}"#,
+            reasonsJSON: #"["HRV below baseline"]"#,
+            confidence: 0.78,
+            status: "proposed"
+        )
+        let artifact = AgentArtifactRecord(
+            type: "training_adjustment",
+            title: "今日训练调整",
+            payloadJSON: #"{"decision":"reduce"}"#,
+            sourceContextHash: "ctx-1",
+            confidence: 0.78,
+            source: "TrainingDecisionKernel"
+        )
+        context.insert(interaction)
+        context.insert(plan)
+        context.insert(artifact)
+        try context.save()
+
+        XCTAssertEqual(try context.fetch(FetchDescriptor<CoachInteractionRecord>()).count, 1)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<JournalEntryRecord>()).count, 0)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<DailyOperatingPlanRecord>()).first?.confidence, 0.78)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<AgentArtifactRecord>()).first?.source, "TrainingDecisionKernel")
+    }
+
+    @MainActor
+    func testDailyOperatingPlanUpsertIsIdempotentAndCreatesArtifact() throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let now = Date(timeIntervalSince1970: 1_781_004_800)
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: .empty(date: now),
+            activeStatus: "active",
+            generatedAt: now
+        ))
+        let decision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(bodyState: bodyState))
+
+        try DailyOperatingPlanCoordinator.upsert(
+            bodyState: bodyState,
+            decision: decision,
+            modelContext: context
+        )
+        try DailyOperatingPlanCoordinator.upsert(
+            bodyState: bodyState,
+            decision: decision,
+            modelContext: context
+        )
+
+        let plans = try context.fetch(FetchDescriptor<DailyOperatingPlanRecord>())
+        let artifacts = try context.fetch(FetchDescriptor<AgentArtifactRecord>())
+            .filter { $0.type == "daily_plan" }
+        XCTAssertEqual(plans.count, 1)
+        XCTAssertEqual(artifacts.count, 1)
+        XCTAssertEqual(plans.first?.bodyStateHash, bodyState.hash)
+        XCTAssertTrue(plans.first?.safetyNotice?.contains("not a medical diagnosis") == true)
+    }
+
     func testTrainingDayDecodingToleratesLegacyMissingFields() throws {
         let json = """
         {

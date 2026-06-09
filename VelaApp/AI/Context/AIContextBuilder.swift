@@ -15,9 +15,18 @@ struct AIContextBuilder {
         trainingResponses: [TrainingResponseRecord] = [],
         onboardingState: OnboardingState? = nil,
         bodyModelState: BodyModelState? = nil,
+        bodyState: BodyState? = nil,
         generatedAt: Date = Date()
     ) -> (envelope: AgentContextEnvelope, metadata: ContextSnapshotMetadata) {
         let mergedUserWiki = Self.mergedUserWiki(userWiki, onboardingState: onboardingState, bodyModelState: bodyModelState)
+        let resolvedBodyState = bodyState ?? BodyStateKernel().build(input: BodyStateInput(
+            dashboard: dashboard,
+            workoutEvents: workoutEvents,
+            strengthWorkouts: strengthWorkouts,
+            trainingResponses: trainingResponses,
+            foodLogs: foodLogs,
+            generatedAt: generatedAt
+        ))
         let envelope = AgentContextEnvelope(
             metadata: AgentContextMetadata(generatedAt: generatedAt, contextWindow: "today"),
             todaySummary: [
@@ -27,6 +36,15 @@ struct AIContextBuilder {
                 "top_reason": dashboard.recovery.reasons.first ?? dashboard.dailyInsight,
                 "readiness_level": dashboard.trainingDecision.readinessLevel,
                 "readiness_guidance": dashboard.trainingDecision.readinessGuidance
+            ],
+            bodyState: [
+                "readiness": resolvedBodyState.readiness.rawValue,
+                "confidence": resolvedBodyState.confidence.rawValue,
+                "freshness": resolvedBodyState.freshness.rawValue,
+                "source": resolvedBodyState.source,
+                "context_hash": resolvedBodyState.hash,
+                "drivers": resolvedBodyState.drivers.map { "\($0.title): \($0.detail)" }.joined(separator: " | "),
+                "safety": "General wellness guidance only; not a medical diagnosis."
             ],
             sleep: SleepContextBuilder().build(from: dashboard),
             recovery: RecoveryContextBuilder().build(from: dashboard),
@@ -71,7 +89,7 @@ struct AIContextBuilder {
             generatedAt: generatedAt,
             hash: hash,
             includedSections: [
-                "today_summary", "sleep", "recovery", "strain", "workouts",
+                "today_summary", "body_state", "sleep", "recovery", "strain", "workouts",
                 "unified_workouts", "stress", "energy_bank", "health_age_trend", "nutrition",
                 "journal", "user_wiki", "extended_metrics", "strength_training"
             ] + (onboardingState == nil ? [] : ["body_model_profile"])

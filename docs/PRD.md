@@ -1,22 +1,23 @@
 # PRD.md
 # Project Vela — Local-first AI Health Coach for Apple Health
 
-> Updated: 2026-06-02
-> Current product target: Bevel 3.0-class health companion, differentiated by local-first architecture, a user-readable agent-maintained Wiki, and Training Intelligence engine. Research basis: `docs/BEVEL_3_RESEARCH.md`. Full product blueprint: `docs/VELA_FULL_STRENGTH_PRODUCT_BLUEPRINT.md`.
+> Updated: 2026-06-09
+> Current product target: Vela 4.0 Active Coach OS, a closed-loop local-first body intelligence and training execution system.
 
 ## 0. 当前构建状态
 
-截至 2026-06-02，Vela 已是一个在真机运行的本地优先健康助手，Training Intelligence v3 Beta Convergence 已完成：
+截至 2026-06-09，Vela 已升级为本地优先 Active Coach OS：
 
 - iOS SwiftUI + SwiftData + HealthKit 主工程可编译通过，全部测试通过（100% pass rate）；
 - 已有 Home / Journal / Fitness / Vitals / `+` Intelligence 五个主 Tab；
 - 已实现 Sleep、Recovery、Strain、Stress、Energy Bank、Health Age、Biological Age 等 10+ 评分引擎；
 - 已实现 HealthKit 多维数据读取、日摘要缓存、AI 报告、Journal、Coach session、训练计划、生物标志物记录；
-- 已实现 Claude API（VelaBackend）+ DeepSeek Provider + Kimi Vision Food Photo Analyzer；
+- 当前 iOS 运行时直连用户配置的 DeepSeek Provider，并使用 Kimi Vision Food Photo Analyzer；VelaBackend 仅保留为未启用的可选实验组件；
 - 已实现结构化 FoodLog、AIContextBuilder、流式 Coach、Coach Personality、Agent tools、Web Search；
 - 已实现 user Wiki、夜间 Wiki 同步 Agent、晨间简报、主动洞察、通知配置；
-- Home 已加入 Daily Plan 与 Readiness Brief，用”状态、原因、下一步行动”承接 Bevel-style daily loop；
-- **VelaBackend** (Vapor 4 + Fluent + SQLite + JWT) 提供 Coach chat、Today Plan、Training Adaptations 等路由；
+- Home 由 `BodyStateKernel`、`TrainingDecisionKernel` 和持久化 `DailyOperatingPlanRecord` 驱动；
+- Coach、Morning Brief、Training 与 Intelligence Workspace 共享同一个 BodyState 和可审计 Agent artifact；
+- 原始 HealthKit 数据永不离开设备；仅向用户选择的模型服务发送经过裁剪的结构化摘要；
 - **Training Intelligence v3** 模块已落地：TrainingAnalyticsService、RecoveryTrainingAdapter、ExerciseLibraryService、TrainingPlanLinkingService、力量训练视图；
 - 真机 UI 采用暖白 `#F5F3F0` 画布 + 白卡驾驶舱 + 毛玻璃胶囊底栏的 Bevel Parity 视觉标准；
 - 键盘交互已优化为微信式体验：点空白区/下滑收起键盘，键盘弹出时聊天区整体上移。

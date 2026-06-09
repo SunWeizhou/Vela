@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 struct DashboardSummary: Hashable, @unchecked Sendable {
     var date: Date
@@ -158,6 +159,537 @@ struct DashboardSummary: Hashable, @unchecked Sendable {
             dailyInsight: "",
             source: .empty
         )
+    }
+}
+
+enum BodyReadiness: String, Codable, Hashable, Sendable {
+    case ready
+    case caution
+    case recovering
+    case unknown
+}
+
+struct BodyStateDriver: Codable, Hashable, Identifiable, Sendable {
+    enum Kind: String, Codable, Hashable, Sendable {
+        case recovery
+        case sleep
+        case strain
+        case stress
+        case energy
+        case localFatigue
+        case trainingResponse
+        case activeStatus
+        case dataCoverage
+        case nutrition
+        case journal
+        case activePlan
+        case recentActivity
+    }
+
+    var id: String
+    var kind: Kind
+    var title: String
+    var detail: String
+    var impact: Double
+    var source: String
+}
+
+struct BodyState: Codable, Hashable {
+    var date: Date
+    var readiness: BodyReadiness
+    var recovery: MetricResult
+    var sleep: MetricResult
+    var strain: MetricResult
+    var energy: MetricResult
+    var stress: MetricResult
+    var localFatigue: [String: LocalMuscleFatigue]
+    var drivers: [BodyStateDriver]
+    var confidence: DataConfidence
+    var freshness: DataFreshness
+    var source: String
+    var activeStatus: String
+    var hash: String
+}
+
+struct BodyStateInput {
+    var dashboard: DashboardSummary
+    var dailySummary: DailyHealthSummaryRecord?
+    var workoutEvents: [WorkoutEventRecord]
+    var strengthWorkouts: [StrengthWorkoutRecord]
+    var trainingResponses: [TrainingResponseRecord]
+    var foodLogs: [FoodLogRecord]
+    var journalEntries: [JournalEntryRecord]
+    var activePlan: TrainingPlanRecord?
+    var activeStatus: String
+    var generatedAt: Date
+
+    init(
+        dashboard: DashboardSummary,
+        dailySummary: DailyHealthSummaryRecord? = nil,
+        workoutEvents: [WorkoutEventRecord] = [],
+        strengthWorkouts: [StrengthWorkoutRecord] = [],
+        trainingResponses: [TrainingResponseRecord] = [],
+        foodLogs: [FoodLogRecord] = [],
+        journalEntries: [JournalEntryRecord] = [],
+        activePlan: TrainingPlanRecord? = nil,
+        activeStatus: String = "active",
+        generatedAt: Date = Date()
+    ) {
+        self.dashboard = dashboard
+        self.dailySummary = dailySummary
+        self.workoutEvents = workoutEvents
+        self.strengthWorkouts = strengthWorkouts
+        self.trainingResponses = trainingResponses
+        self.foodLogs = foodLogs
+        self.journalEntries = journalEntries
+        self.activePlan = activePlan
+        self.activeStatus = activeStatus
+        self.generatedAt = generatedAt
+    }
+}
+
+struct BodyStateKernel {
+    func build(input: BodyStateInput) -> BodyState {
+        let dashboard = input.dashboard
+        let fatigue = TrainingAnalyticsService().computeLocalFatigue(
+            workouts: input.strengthWorkouts,
+            endingAt: input.generatedAt
+        )
+        var drivers = metricDrivers(dashboard)
+        drivers.append(contentsOf: fatigue.values
+            .filter { $0.fatigueLevel != "low" }
+            .sorted { $0.setsLast48h > $1.setsLast48h }
+            .map {
+                BodyStateDriver(
+                    id: "fatigue-\($0.muscleGroup)",
+                    kind: .localFatigue,
+                    title: "\($0.muscleGroup) local fatigue",
+                    detail: "\($0.setsLast48h) effective sets in 48h and \($0.setsLast7d) in 7d.",
+                    impact: $0.fatigueLevel == "high" ? -0.9 : -0.5,
+                    source: "StrengthWorkoutRecord via TrainingAnalyticsService"
+                )
+            })
+
+        let recentResponses = input.trainingResponses.filter {
+            $0.date >= input.generatedAt.addingTimeInterval(-28 * 86_400)
+                && $0.date <= input.generatedAt
+        }
+        if let costly = recentResponses
+            .filter({ ($0.nextDayRecoveryDelta ?? 0) <= -8
+                || ($0.nextDayHRVDelta ?? 0) <= -10
+                || ($0.nextDayRHRDelta ?? 0) >= 5 })
+            .min(by: { ($0.nextDayRecoveryDelta ?? 0) > ($1.nextDayRecoveryDelta ?? 0) }) {
+            drivers.append(BodyStateDriver(
+                id: "training-response-\(costly.id.uuidString)",
+                kind: .trainingResponse,
+                title: "Recent training response",
+                detail: "A \(costly.primaryMuscleGroups.joined(separator: ", ")) session was followed by a \(Self.signed(costly.nextDayRecoveryDelta)) recovery change.",
+                impact: -0.8,
+                source: "TrainingResponseRecord"
+            ))
+        }
+
+        if ["sick", "injured", "resting"].contains(input.activeStatus) {
+            drivers.append(BodyStateDriver(
+                id: "active-status",
+                kind: .activeStatus,
+                title: "Active status",
+                detail: "User status is \(input.activeStatus).",
+                impact: -1,
+                source: "ActiveStatusSettings"
+            ))
+        }
+
+        let dayStart = Calendar.current.startOfDay(for: input.generatedAt)
+        let todayFood = input.foodLogs.filter { $0.createdAt >= dayStart }
+        if !todayFood.isEmpty {
+            let calories = todayFood.reduce(0) { $0 + $1.totalCalories }
+            let protein = todayFood.reduce(0) { $0 + $1.proteinGrams }
+            drivers.append(BodyStateDriver(
+                id: "nutrition-coverage",
+                kind: .nutrition,
+                title: "Nutrition logged",
+                detail: "\(calories) kcal and \(protein) g protein recorded today.",
+                impact: 0.15,
+                source: "FoodLogRecord"
+            ))
+        }
+        if let latestJournal = input.journalEntries
+            .filter({ $0.createdAt >= input.generatedAt.addingTimeInterval(-36 * 3_600) })
+            .max(by: { $0.createdAt < $1.createdAt }) {
+            drivers.append(BodyStateDriver(
+                id: "journal-\(Int(latestJournal.createdAt.timeIntervalSince1970))",
+                kind: .journal,
+                title: "Recent self-report",
+                detail: latestJournal.note.isEmpty ? latestJournal.tags.joined(separator: ", ") : latestJournal.note,
+                impact: 0,
+                source: "JournalEntryRecord"
+            ))
+        }
+        if let activePlan = input.activePlan {
+            drivers.append(BodyStateDriver(
+                id: "active-plan-\(activePlan.id.uuidString)",
+                kind: .activePlan,
+                title: "Active training plan",
+                detail: activePlan.title,
+                impact: 0.1,
+                source: "TrainingPlanRecord"
+            ))
+        }
+        let recentEvents = input.workoutEvents.filter {
+            $0.startedAt >= input.generatedAt.addingTimeInterval(-48 * 3_600)
+                && $0.startedAt <= input.generatedAt
+        }
+        if !recentEvents.isEmpty {
+            let minutes = recentEvents.reduce(0) { $0 + $1.durationMinutes }
+            drivers.append(BodyStateDriver(
+                id: "recent-activity",
+                kind: .recentActivity,
+                title: "Recent training load",
+                detail: "\(recentEvents.count) sessions and \(Int(minutes.rounded())) minutes in 48h.",
+                impact: minutes >= 120 ? -0.35 : 0,
+                source: "WorkoutEventRecord"
+            ))
+        }
+
+        let freshness = Self.freshness(
+            referenceDate: input.dailySummary?.updatedAt ?? dashboard.date,
+            generatedAt: input.generatedAt,
+            hasData: dashboard.source != .empty
+        )
+        let confidence = Self.confidence(for: dashboard, freshness: freshness)
+        let readiness: BodyReadiness
+        if dashboard.source == .empty {
+            readiness = .unknown
+            drivers.append(BodyStateDriver(
+                id: "data-coverage",
+                kind: .dataCoverage,
+                title: "Limited data coverage",
+                detail: "Vela is using a conservative fallback until health or local records are available.",
+                impact: -0.6,
+                source: "BodyStateKernel"
+            ))
+        } else if ["sick", "injured", "resting"].contains(input.activeStatus)
+                    || dashboard.recovery.score < 40 {
+            readiness = .recovering
+        } else if fatigue.values.contains(where: { $0.fatigueLevel == "high" })
+                    || drivers.contains(where: { $0.kind == .trainingResponse })
+                    || dashboard.recovery.score < 62
+                    || dashboard.sleepScore.score < 68 {
+            readiness = .caution
+        } else {
+            readiness = .ready
+        }
+
+        let fatigueHash = fatigue.values
+            .sorted { $0.muscleGroup < $1.muscleGroup }
+            .map { fatigue in
+                "\(fatigue.muscleGroup):\(fatigue.setsLast48h):\(fatigue.setsLast7d)"
+            }
+            .joined(separator: "|")
+        let responseHash = recentResponses
+            .map { response in
+                "\(response.id.uuidString):\(response.nextDayRecoveryDelta ?? 0)"
+            }
+            .joined(separator: "|")
+        let eventHash = recentEvents.map(\.id.uuidString).sorted().joined(separator: "|")
+        let nutritionHash = todayFood
+            .map { food in "\(food.id.uuidString):\(food.totalCalories):\(food.proteinGrams)" }
+            .sorted()
+            .joined(separator: "|")
+        let journalHash = input.journalEntries
+            .filter { $0.createdAt >= input.generatedAt.addingTimeInterval(-36 * 3_600) }
+            .map { "\(Int($0.createdAt.timeIntervalSince1970)):\($0.note)" }
+            .sorted()
+            .joined(separator: "|")
+        let hashInput = [
+            DailyHealthSummaryRecord.dayIdentifier(for: dashboard.date),
+            readiness.rawValue,
+            "\(dashboard.recovery.score)",
+            "\(dashboard.sleepScore.score)",
+            "\(dashboard.strain.score)",
+            input.activeStatus,
+            input.activePlan?.id.uuidString ?? "no-plan",
+            eventHash,
+            nutritionHash,
+            journalHash,
+            fatigueHash,
+            responseHash
+        ].joined(separator: "#")
+
+        return BodyState(
+            date: dashboard.date,
+            readiness: readiness,
+            recovery: dashboard.recovery,
+            sleep: dashboard.sleepScore,
+            strain: dashboard.strain,
+            energy: dashboard.energy,
+            stress: dashboard.stress,
+            localFatigue: fatigue,
+            drivers: Array(drivers.sorted { $0.impact < $1.impact }.prefix(5)),
+            confidence: confidence,
+            freshness: freshness,
+            source: "DashboardSummary + local SwiftData records via BodyStateKernel",
+            activeStatus: input.activeStatus,
+            hash: ContentHash.hash(hashInput)
+        )
+    }
+
+    private func metricDrivers(_ dashboard: DashboardSummary) -> [BodyStateDriver] {
+        var drivers: [BodyStateDriver] = []
+        if let reason = dashboard.recovery.reasons.first, dashboard.recovery.hasData {
+            drivers.append(.init(
+                id: "recovery",
+                kind: .recovery,
+                title: "Recovery",
+                detail: reason,
+                impact: dashboard.recovery.score >= 70 ? 0.7 : -0.7,
+                source: "RecoveryScoreEngine \(dashboard.recovery.algorithmVersion)"
+            ))
+        }
+        if dashboard.sleepScore.hasData, dashboard.sleepScore.score < 70 {
+            drivers.append(.init(
+                id: "sleep",
+                kind: .sleep,
+                title: "Sleep",
+                detail: dashboard.sleepScore.reasons.first ?? "Sleep is below the normal training range.",
+                impact: -0.6,
+                source: "SleepScoreEngine \(dashboard.sleepScore.algorithmVersion)"
+            ))
+        }
+        if dashboard.stress.hasData, dashboard.stress.score >= 75 {
+            drivers.append(.init(
+                id: "stress",
+                kind: .stress,
+                title: "Stress",
+                detail: dashboard.stress.reasons.first ?? "Physiological stress is elevated.",
+                impact: -0.6,
+                source: "StressIndexEngine \(dashboard.stress.algorithmVersion)"
+            ))
+        }
+        return drivers
+    }
+
+    private static func confidence(for dashboard: DashboardSummary, freshness: DataFreshness) -> DataConfidence {
+        guard dashboard.source != .empty, freshness != .missing else { return .low }
+        let values = [
+            dashboard.recovery.confidence,
+            dashboard.sleepScore.confidence,
+            dashboard.strain.confidence
+        ]
+        if freshness == .stale || values.contains(.low) { return .low }
+        if values.allSatisfy({ $0 == .high }) { return .high }
+        return .medium
+    }
+
+    private static func freshness(referenceDate: Date, generatedAt: Date, hasData: Bool) -> DataFreshness {
+        guard hasData else { return .missing }
+        let age = generatedAt.timeIntervalSince(referenceDate)
+        if age <= 2 * 3_600 { return .live }
+        if Calendar.current.isDate(referenceDate, inSameDayAs: generatedAt) { return .today }
+        if age <= 3 * 86_400 { return .recent }
+        return .stale
+    }
+
+    private static func signed(_ value: Double?) -> String {
+        guard let value else { return "not yet measured" }
+        return String(format: "%+.1f", value)
+    }
+}
+
+enum DailyTrainingDecisionType: String, Codable, Hashable, Sendable {
+    case keep
+    case reduce
+    case swap
+    case rest
+}
+
+struct DailyTrainingDecision: Codable, Hashable, Sendable {
+    var decision: DailyTrainingDecisionType
+    var targetSessionTitle: String?
+    var volumeMultiplier: Double
+    var intensityCap: Int
+    var reasons: [String]
+    var userFacingSummary: String
+    var confidence: Double
+    var source: String
+    var safetyNotice: String
+}
+
+struct TrainingDecisionInput {
+    var bodyState: BodyState
+    var activePlan: TrainingPlanRecord?
+    var recentStrengthSummary: RecentTrainingSummary?
+    var trainingResponses: [TrainingResponseRecord]
+    var userConstraints: [String]
+
+    init(
+        bodyState: BodyState,
+        activePlan: TrainingPlanRecord? = nil,
+        recentStrengthSummary: RecentTrainingSummary? = nil,
+        trainingResponses: [TrainingResponseRecord] = [],
+        userConstraints: [String] = []
+    ) {
+        self.bodyState = bodyState
+        self.activePlan = activePlan
+        self.recentStrengthSummary = recentStrengthSummary
+        self.trainingResponses = trainingResponses
+        self.userConstraints = userConstraints
+    }
+}
+
+struct TrainingDecisionKernel {
+    func decide(input: TrainingDecisionInput) -> DailyTrainingDecision {
+        let state = input.bodyState
+        let highFatigue = state.localFatigue.values
+            .filter { $0.fatigueLevel == "high" }
+            .map(\.muscleGroup)
+            .sorted()
+        let type: DailyTrainingDecisionType
+        let multiplier: Double
+        let cap: Int
+        let summary: String
+
+        if ["sick", "injured", "resting"].contains(state.activeStatus)
+            || state.readiness == .recovering {
+            type = .rest
+            multiplier = 0
+            cap = 2
+            summary = "Prioritize rest or light recovery work today."
+        } else if !highFatigue.isEmpty {
+            type = .swap
+            multiplier = 0.65
+            cap = 7
+            summary = "Swap away from \(highFatigue.joined(separator: ", ")) and keep the session controlled."
+        } else if state.readiness == .caution || state.readiness == .unknown {
+            type = .reduce
+            multiplier = state.readiness == .unknown ? 0.6 : 0.75
+            cap = 7
+            summary = "Reduce planned volume and stop if technique or perceived effort deteriorates."
+        } else {
+            type = .keep
+            multiplier = 1
+            cap = 9
+            summary = "Keep the planned session with normal autoregulation."
+        }
+
+        let reasons = state.drivers.prefix(3).map { "\($0.title): \($0.detail)" }
+        let confidence: Double = switch state.confidence {
+        case .high: 0.9
+        case .medium: 0.75
+        case .low: 0.5
+        case .unavailable: 0.3
+        }
+        return DailyTrainingDecision(
+            decision: type,
+            targetSessionTitle: input.activePlan?.title,
+            volumeMultiplier: multiplier,
+            intensityCap: cap,
+            reasons: reasons.isEmpty ? ["No material limiter was detected."] : reasons,
+            userFacingSummary: summary,
+            confidence: confidence,
+            source: "BodyStateKernel + TrainingDecisionKernel",
+            safetyNotice: "General wellness and training guidance only; not a medical diagnosis. Stop and seek qualified care for concerning symptoms."
+        )
+    }
+}
+
+struct DailyOperatingPlanPayload: Codable, Hashable {
+    var decision: DailyTrainingDecisionType
+    var volumeMultiplier: Double
+    var intensityCap: Int
+    var summary: String
+    var targetSessionTitle: String?
+}
+
+@MainActor
+enum DailyOperatingPlanCoordinator {
+    @discardableResult
+    static func upsert(
+        bodyState: BodyState,
+        decision: DailyTrainingDecision,
+        modelContext: ModelContext,
+        calendar: Calendar = .current
+    ) throws -> DailyOperatingPlanRecord {
+        let dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: bodyState.date, calendar: calendar)
+        let payload = DailyOperatingPlanPayload(
+            decision: decision.decision,
+            volumeMultiplier: decision.volumeMultiplier,
+            intensityCap: decision.intensityCap,
+            summary: decision.userFacingSummary,
+            targetSessionTitle: decision.targetSessionTitle
+        )
+        let payloadJSON = Self.json(payload)
+        let reasonsJSON = Self.json(decision.reasons)
+        let descriptor = FetchDescriptor<DailyOperatingPlanRecord>(
+            predicate: #Predicate<DailyOperatingPlanRecord> { $0.dayIdentifier == dayIdentifier }
+        )
+        let record: DailyOperatingPlanRecord
+        if let existing = try modelContext.fetch(descriptor).first {
+            record = existing
+            record.bodyStateHash = bodyState.hash
+            record.generatedAt = Date()
+            record.primaryActionType = decision.decision.rawValue
+            record.title = title(for: decision.decision)
+            record.payloadJSON = payloadJSON
+            record.reasonsJSON = reasonsJSON
+            record.confidence = decision.confidence
+            record.status = "active"
+            record.source = decision.source
+            record.safetyNotice = decision.safetyNotice
+        } else {
+            record = DailyOperatingPlanRecord(
+                dayIdentifier: dayIdentifier,
+                bodyStateHash: bodyState.hash,
+                primaryActionType: decision.decision.rawValue,
+                title: title(for: decision.decision),
+                payloadJSON: payloadJSON,
+                reasonsJSON: reasonsJSON,
+                confidence: decision.confidence,
+                status: "active",
+                source: decision.source,
+                safetyNotice: decision.safetyNotice
+            )
+            modelContext.insert(record)
+        }
+
+        let artifacts = try modelContext.fetch(FetchDescriptor<AgentArtifactRecord>())
+        if let artifact = artifacts.first(where: {
+            $0.type == AgentArtifactType.dailyPlan.rawValue && $0.sourceContextHash == bodyState.hash
+        }) {
+            artifact.title = record.title
+            artifact.payloadJSON = payloadJSON
+            artifact.confidence = decision.confidence
+            artifact.status = "active"
+            artifact.source = decision.source
+            artifact.safetyNotice = decision.safetyNotice
+        } else {
+            modelContext.insert(AgentArtifactRecord(
+                type: AgentArtifactType.dailyPlan.rawValue,
+                title: record.title,
+                payloadJSON: payloadJSON,
+                sourceContextHash: bodyState.hash,
+                confidence: decision.confidence,
+                source: decision.source,
+                safetyNotice: decision.safetyNotice
+            ))
+        }
+        try modelContext.save()
+        return record
+    }
+
+    private static func json<T: Encodable>(_ value: T) -> String {
+        guard let data = try? JSONEncoder().encode(value) else { return "{}" }
+        return String(data: data, encoding: .utf8) ?? "{}"
+    }
+
+    private static func title(for decision: DailyTrainingDecisionType) -> String {
+        switch decision {
+        case .keep: "Keep today's plan"
+        case .reduce: "Reduce today's training"
+        case .swap: "Swap today's session"
+        case .rest: "Recovery day"
+        }
     }
 }
 

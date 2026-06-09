@@ -432,6 +432,186 @@ struct StrengthWorkoutHistoryTool: AgentTool {
     }
 }
 
+struct HealthTrendTool: AgentTool {
+    let name = "get_health_trends"
+    let description = "Return 7, 14, or 30-day trends for HRV, resting heart rate, sleep, recovery, strain, stress, and energy from local daily summaries."
+    let executionContext: ToolExecutionContext
+
+    var parameters: [String: Value] {
+        [
+            "type": .string("object"),
+            "properties": .object([
+                "days": .object([
+                    "type": .string("integer"),
+                    "enum": .array([.number(7), .number(14), .number(30)])
+                ]),
+                "metrics": .object([
+                    "type": .string("array"),
+                    "items": .object(["type": .string("string")])
+                ])
+            ])
+        ]
+    }
+
+    func execute(arguments: String) async throws -> String {
+        let request = Self.request(from: arguments)
+        return await MainActor.run {
+            let start = Calendar.current.startOfDay(
+                for: Date().addingTimeInterval(-Double(request.days - 1) * 86_400)
+            )
+            let descriptor = FetchDescriptor<DailyHealthSummaryRecord>(
+                predicate: #Predicate<DailyHealthSummaryRecord> { $0.date >= start },
+                sortBy: [SortDescriptor(\.date)]
+            )
+            let records = (try? executionContext.modelContext.fetch(descriptor)) ?? []
+            let points = records.map { record -> [String: Any] in
+                var item: [String: Any] = [
+                    "date": ISO8601DateFormatter().string(from: record.date),
+                    "source": "DailyHealthSummaryRecord"
+                ]
+                for metric in request.metrics {
+                    switch metric {
+                    case "hrv": item[metric] = record.hrvAverage
+                    case "rhr": item[metric] = record.restingHeartRate
+                    case "sleep": item[metric] = record.sleepHours
+                    case "recovery": item[metric] = record.recoveryScore
+                    case "strain": item[metric] = record.strainScore
+                    case "stress": item[metric] = record.stressIndex
+                    case "energy": item[metric] = record.currentEnergy
+                    default: break
+                    }
+                }
+                return item
+            }
+            let payload: [String: Any] = [
+                "days": request.days,
+                "metrics": request.metrics,
+                "source": "DailyHealthSummaryRecord",
+                "confidence": records.isEmpty ? "unavailable" : "measured_and_derived",
+                "safety": "General wellness guidance only; not a medical diagnosis.",
+                "points": points
+            ]
+            guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]) else {
+                return "{}"
+            }
+            return String(data: data, encoding: .utf8) ?? "{}"
+        }
+    }
+
+    private static func request(from arguments: String) -> (days: Int, metrics: [String]) {
+        guard let data = arguments.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return (14, ["hrv", "rhr", "sleep", "recovery", "strain", "stress", "energy"])
+        }
+        let requestedDays = json["days"] as? Int ?? 14
+        let days = [7, 14, 30].contains(requestedDays) ? requestedDays : 14
+        let supported = Set(["hrv", "rhr", "sleep", "recovery", "strain", "stress", "energy"])
+        let metrics = (json["metrics"] as? [String] ?? Array(supported)).filter { supported.contains($0) }
+        return (days, metrics)
+    }
+}
+
+struct TrainingResponseHistoryTool: AgentTool {
+    let name = "get_training_response_history"
+    let description = "Return recent workout-to-next-day recovery, HRV, and resting-heart-rate deltas with muscle groups, set counts, and notable-response flags."
+    let executionContext: ToolExecutionContext
+
+    var parameters: [String: Value] {
+        [
+            "type": .string("object"),
+            "properties": .object([
+                "days": .object(["type": .string("integer")]),
+                "muscle_group": .object(["type": .string("string")])
+            ])
+        ]
+    }
+
+    func execute(arguments: String) async throws -> String {
+        let request = Self.request(from: arguments)
+        return await MainActor.run {
+            let start = Date().addingTimeInterval(-Double(request.days) * 86_400)
+            let descriptor = FetchDescriptor<TrainingResponseRecord>(
+                predicate: #Predicate<TrainingResponseRecord> { $0.date >= start },
+                sortBy: [SortDescriptor(\.date, order: .reverse)]
+            )
+            let records = ((try? executionContext.modelContext.fetch(descriptor)) ?? []).filter {
+                guard let muscle = request.muscleGroup else { return true }
+                return $0.primaryMuscleGroups.contains { $0.localizedCaseInsensitiveContains(muscle) }
+            }
+            let payload = TrainingResponseHistoryResult(
+                source: "TrainingResponseRecord",
+                confidence: records.isEmpty ? "unavailable" : "measured_and_derived",
+                safety: "General wellness guidance only; not a medical diagnosis.",
+                records: records.map(TrainingResponseHistoryPayload.init(record:))
+            )
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            guard let data = try? encoder.encode(payload) else { return "[]" }
+            return String(data: data, encoding: .utf8) ?? "[]"
+        }
+    }
+
+    private static func request(from arguments: String) -> (days: Int, muscleGroup: String?) {
+        guard let data = arguments.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return (28, nil)
+        }
+        return (min(max(json["days"] as? Int ?? 28, 1), 60), json["muscle_group"] as? String)
+    }
+}
+
+private struct TrainingResponseHistoryResult: Encodable {
+    var source: String
+    var confidence: String
+    var safety: String
+    var records: [TrainingResponseHistoryPayload]
+}
+
+private struct TrainingResponseHistoryPayload: Encodable {
+    var workoutId: UUID
+    var date: Date
+    var nextDayDate: Date
+    var primaryMuscleGroups: [String]
+    var totalEffectiveSets: Int
+    var totalVolumeKg: Double
+    var sessionRPE: Double?
+    var nextDayRecoveryDelta: Double?
+    var nextDayHRVDelta: Double?
+    var nextDayRHRDelta: Double?
+    var flagged: Bool
+
+    init(record: TrainingResponseRecord) {
+        workoutId = record.workoutId
+        date = record.date
+        nextDayDate = record.nextDayDate
+        primaryMuscleGroups = record.primaryMuscleGroups
+        totalEffectiveSets = record.totalEffectiveSets
+        totalVolumeKg = record.totalVolumeKg
+        sessionRPE = record.sessionRPE
+        nextDayRecoveryDelta = record.nextDayRecoveryDelta
+        nextDayHRVDelta = record.nextDayHRVDelta
+        nextDayRHRDelta = record.nextDayRHRDelta
+        flagged = (record.nextDayRecoveryDelta ?? 0) <= -8
+            || (record.nextDayHRVDelta ?? 0) <= -10
+            || (record.nextDayRHRDelta ?? 0) >= 5
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case workoutId = "workout_id"
+        case date
+        case nextDayDate = "next_day_date"
+        case primaryMuscleGroups = "primary_muscle_groups"
+        case totalEffectiveSets = "total_effective_sets"
+        case totalVolumeKg = "total_volume_kg"
+        case sessionRPE = "session_rpe"
+        case nextDayRecoveryDelta = "next_day_recovery_delta"
+        case nextDayHRVDelta = "next_day_hrv_delta"
+        case nextDayRHRDelta = "next_day_rhr_delta"
+        case flagged
+    }
+}
+
 private struct StrengthWorkoutHistoryPayload: Encodable {
     var title: String
     var startedAt: Date

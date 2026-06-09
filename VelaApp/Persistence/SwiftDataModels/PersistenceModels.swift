@@ -160,7 +160,6 @@ final class DailyHealthSummaryRecord {
 
     convenience init(snapshot: DailyHealthSnapshot, calendar: Calendar = .current) {
         let day = calendar.startOfDay(for: snapshot.date)
-        let wData = try? JSONEncoder().encode(snapshot.workouts)
         self.init(
             dayIdentifier: Self.dayIdentifier(for: day, calendar: calendar),
             date: day,
@@ -181,17 +180,17 @@ final class DailyHealthSummaryRecord {
             steps: snapshot.steps,
             activeCalories: snapshot.activeCalories,
             activeMinutes: snapshot.activeMinutes,
-            workoutCount: snapshot.workoutCount,
-            workoutTypes: snapshot.workoutTypes,
-            workoutDuration: snapshot.workoutDuration,
+            workoutCount: nil,
+            workoutTypes: nil,
+            workoutDuration: nil,
             bodyWeight: snapshot.bodyWeight,
             bodyFatPercent: snapshot.bodyFatPercent,
             bmi: snapshot.bmi,
             oxygenSaturation: snapshot.oxygenSaturation,
             respiratoryRate: snapshot.respiratoryRate,
             wristTemperature: snapshot.wristTemperature,
-            dailyLoad: snapshot.dailyLoad,
-            workoutLoad: snapshot.workoutLoad,
+            dailyLoad: nil,
+            workoutLoad: nil,
             activityLoad: snapshot.activityLoad,
             trainingLoadRatio: snapshot.trainingLoadRatio,
             atl: snapshot.atl,
@@ -204,25 +203,11 @@ final class DailyHealthSummaryRecord {
             awakeEpisodeCount: snapshot.awakeEpisodeCount,
             deepSleepMinutes: snapshot.deepSleepMinutes,
             remSleepMinutes: snapshot.remSleepMinutes,
-            workoutsData: wData
+            workoutsData: nil
         )
     }
 
     func apply(snapshot: DailyHealthSnapshot, calendar: Calendar = .current, updatedAt: Date = Date()) {
-        let snapshotWorkoutIDs = Set(snapshot.workouts.map(\.id))
-        let preservedLocalWorkouts = decodedWorkouts().filter {
-            let source = $0.source ?? "healthKit"
-            return source != "healthKit" && !snapshotWorkoutIDs.contains($0.id)
-        }
-        let mergedWorkouts = snapshot.workouts + preservedLocalWorkouts
-        let preservedLocalEnergy = preservedLocalWorkouts.compactMap(\.energyKilocalories).reduce(0, +)
-        let preservedLocalDuration = preservedLocalWorkouts.reduce(0) {
-            $0 + $1.end.timeIntervalSince($1.start) / 60.0
-        }
-        let preservedLocalLoad = preservedLocalWorkouts.reduce(0) {
-            $0 + max(0, $1.end.timeIntervalSince($1.start) / 60.0) * ($1.rpe ?? 5) * 0.3
-        }
-
         date = calendar.startOfDay(for: snapshot.date)
         dayIdentifier = Self.dayIdentifier(for: date, calendar: calendar)
         sleepScore = snapshot.sleepScore
@@ -240,21 +225,14 @@ final class DailyHealthSummaryRecord {
         remSleepPercent = snapshot.remSleepPercent
         sleepEfficiency = snapshot.sleepEfficiency
         steps = snapshot.steps
-        activeCalories = Self.adding(snapshot.activeCalories, preservedLocalEnergy)
-        activeMinutes = Self.adding(snapshot.activeMinutes, preservedLocalDuration)
-        workoutCount = mergedWorkouts.isEmpty ? snapshot.workoutCount : mergedWorkouts.count
-        workoutTypes = mergedWorkouts.isEmpty
-            ? snapshot.workoutTypes
-            : Set(mergedWorkouts.map(\.activityName)).sorted().joined(separator: ", ")
-        workoutDuration = Self.adding(snapshot.workoutDuration, preservedLocalDuration)
+        activeCalories = snapshot.activeCalories
+        activeMinutes = snapshot.activeMinutes
         bodyWeight = snapshot.bodyWeight
         bodyFatPercent = snapshot.bodyFatPercent
         bmi = snapshot.bmi
         oxygenSaturation = snapshot.oxygenSaturation
         respiratoryRate = snapshot.respiratoryRate
         wristTemperature = snapshot.wristTemperature
-        dailyLoad = Self.adding(snapshot.dailyLoad, preservedLocalLoad)
-        workoutLoad = Self.adding(snapshot.workoutLoad, preservedLocalLoad)
         activityLoad = snapshot.activityLoad
         trainingLoadRatio = snapshot.trainingLoadRatio
         atl = snapshot.atl
@@ -267,7 +245,6 @@ final class DailyHealthSummaryRecord {
         awakeEpisodeCount = snapshot.awakeEpisodeCount
         deepSleepMinutes = snapshot.deepSleepMinutes
         remSleepMinutes = snapshot.remSleepMinutes
-        workoutsData = try? JSONEncoder().encode(mergedWorkouts)
         configVersion = VelaAppMetadata.configVersion
         self.updatedAt = updatedAt
     }
@@ -339,10 +316,6 @@ final class DailyHealthSummaryRecord {
         return decoded
     }
 
-    private static func adding(_ base: Double?, _ increment: Double) -> Double? {
-        guard base != nil || increment != 0 else { return nil }
-        return (base ?? 0) + increment
-    }
 }
 
 struct StrengthSetLog: Identifiable, Codable, Hashable {
@@ -809,6 +782,123 @@ final class JournalEntryRecord {
     static var allKnownTags: [String] {
         tagCategories.values.flatMap { $0 }
     }
+}
+
+@Model
+final class CoachInteractionRecord {
+    @Attribute(.unique) var id: UUID
+    var createdAt: Date
+    var userText: String
+    var assistantText: String
+    var focus: String
+    var contextHash: String?
+    var sessionId: UUID?
+
+    init(
+        id: UUID = UUID(),
+        createdAt: Date = Date(),
+        userText: String,
+        assistantText: String,
+        focus: String,
+        contextHash: String? = nil,
+        sessionId: UUID? = nil
+    ) {
+        self.id = id
+        self.createdAt = createdAt
+        self.userText = userText
+        self.assistantText = assistantText
+        self.focus = focus
+        self.contextHash = contextHash
+        self.sessionId = sessionId
+    }
+}
+
+@Model
+final class DailyOperatingPlanRecord {
+    @Attribute(.unique) var dayIdentifier: String
+    var bodyStateHash: String
+    var generatedAt: Date
+    var primaryActionType: String
+    var title: String
+    var payloadJSON: String
+    var reasonsJSON: String
+    var confidence: Double
+    var status: String
+    var source: String?
+    var safetyNotice: String?
+
+    init(
+        dayIdentifier: String,
+        bodyStateHash: String,
+        generatedAt: Date = Date(),
+        primaryActionType: String,
+        title: String,
+        payloadJSON: String,
+        reasonsJSON: String,
+        confidence: Double,
+        status: String = "proposed",
+        source: String? = "BodyStateKernel + TrainingDecisionKernel",
+        safetyNotice: String? = "General wellness guidance only; not a medical diagnosis."
+    ) {
+        self.dayIdentifier = dayIdentifier
+        self.bodyStateHash = bodyStateHash
+        self.generatedAt = generatedAt
+        self.primaryActionType = primaryActionType
+        self.title = title
+        self.payloadJSON = payloadJSON
+        self.reasonsJSON = reasonsJSON
+        self.confidence = min(1, max(0, confidence))
+        self.status = status
+        self.source = source
+        self.safetyNotice = safetyNotice
+    }
+}
+
+@Model
+final class AgentArtifactRecord {
+    @Attribute(.unique) var id: UUID
+    var type: String
+    var title: String
+    var createdAt: Date
+    var payloadJSON: String
+    var sourceContextHash: String
+    var status: String
+    var confidence: Double
+    var source: String
+    var safetyNotice: String?
+
+    init(
+        id: UUID = UUID(),
+        type: String,
+        title: String,
+        createdAt: Date = Date(),
+        payloadJSON: String,
+        sourceContextHash: String,
+        status: String = "active",
+        confidence: Double,
+        source: String,
+        safetyNotice: String? = "General wellness guidance only; not a medical diagnosis."
+    ) {
+        self.id = id
+        self.type = type
+        self.title = title
+        self.createdAt = createdAt
+        self.payloadJSON = payloadJSON
+        self.sourceContextHash = sourceContextHash
+        self.status = status
+        self.confidence = min(1, max(0, confidence))
+        self.source = source
+        self.safetyNotice = safetyNotice
+    }
+}
+
+enum AgentArtifactType: String, Codable, CaseIterable {
+    case dailyPlan = "daily_plan"
+    case trainingAdjustment = "training_adjustment"
+    case weeklyReport = "weekly_report"
+    case correlationChart = "correlation_chart"
+    case wikiDiff = "wiki_diff"
+    case nutritionFeedback = "nutrition_feedback"
 }
 
 @Model

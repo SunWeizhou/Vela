@@ -316,6 +316,7 @@ struct CoachPromptComposer {
             - 不要主动展示健康数据或分析，除非用户明确要求
             - 可以主动询问用户今天想关注什么方面
             - 保持温暖、自然、人性化的语调
+            - 如果给出任何健康、训练、恢复或营养建议，必须注明来源、置信度，并附“一般健康建议，不构成医疗诊断”
             """
         }
         return """
@@ -342,6 +343,7 @@ struct CoachPromptComposer {
         - Do NOT dump health data or analysis unless the user explicitly asks
         - You may gently ask what they'd like to focus on today
         - Maintain a warm, natural, human tone
+        - If you provide any health, training, recovery, or nutrition recommendation, include source, confidence, and a non-diagnostic safety statement
         """
     }
 
@@ -425,6 +427,7 @@ struct CoachPromptComposer {
             ## 安全与学术边界
             - 始终不做医疗诊断。Stress、Health Age 等仅为生理状态评估工具。
             - 涉及身体严重不适或极端异常指标时，建议咨询专业医师。
+            - 每一条健康、训练、恢复或营养建议都必须附带：`来源`、`置信度（高/中/低）`、`安全声明：一般健康建议，不构成医疗诊断。`
             """
         }
         return """
@@ -476,6 +479,7 @@ struct CoachPromptComposer {
         ## Safety and Science Boundaries
         - Never diagnose medical conditions. Stress Index and Health Age are physiological proxies, not diagnostic tools.
         - Warmly recommend consulting a physician if prolonged anomaly patterns emerge.
+        - Every health, training, recovery, or nutrition recommendation must include `Source`, `Confidence (high/medium/low)`, and `Safety: General wellness guidance only; not a medical diagnosis.`
         """
     }
 }

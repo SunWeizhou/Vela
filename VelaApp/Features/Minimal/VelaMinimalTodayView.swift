@@ -18,6 +18,20 @@ struct VelaTodayView: View {
     private var coachArtifacts: [CoachArtifactRecord]
     @Query(sort: \StrengthWorkoutRecord.startedAt, order: .reverse)
     private var strengthWorkouts: [StrengthWorkoutRecord]
+    @Query(sort: \WorkoutEventRecord.startedAt, order: .reverse)
+    private var workoutEvents: [WorkoutEventRecord]
+    @Query(sort: \TrainingResponseRecord.date, order: .reverse)
+    private var trainingResponses: [TrainingResponseRecord]
+    @Query(sort: \FoodLogRecord.createdAt, order: .reverse)
+    private var foodLogs: [FoodLogRecord]
+    @Query(sort: \JournalEntryRecord.createdAt, order: .reverse)
+    private var journalEntries: [JournalEntryRecord]
+    @Query(sort: \DailyHealthSummaryRecord.date, order: .reverse)
+    private var dailySummaries: [DailyHealthSummaryRecord]
+    @Query(sort: \TrainingPlanRecord.updatedAt, order: .reverse)
+    private var trainingPlans: [TrainingPlanRecord]
+    @Query(sort: \DailyOperatingPlanRecord.generatedAt, order: .reverse)
+    private var operatingPlans: [DailyOperatingPlanRecord]
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
     private var recentStrengthSummary: RecentTrainingSummary {
@@ -26,6 +40,37 @@ struct VelaTodayView: View {
             days: 7,
             endingAt: dashboardVM.selectedDate
         )
+    }
+    private var activePlan: TrainingPlanRecord? {
+        trainingPlans.first(where: \.isActive)
+    }
+    private var bodyState: BodyState {
+        BodyStateKernel().build(input: BodyStateInput(
+            dashboard: dashboard,
+            dailySummary: dailySummaries.first(where: {
+                Calendar.current.isDate($0.date, inSameDayAs: dashboardVM.selectedDate)
+            }),
+            workoutEvents: workoutEvents,
+            strengthWorkouts: strengthWorkouts,
+            trainingResponses: trainingResponses,
+            foodLogs: foodLogs,
+            journalEntries: journalEntries,
+            activePlan: activePlan,
+            activeStatus: activeStatusRaw,
+            generatedAt: Date()
+        ))
+    }
+    private var trainingDecision: DailyTrainingDecision {
+        TrainingDecisionKernel().decide(input: TrainingDecisionInput(
+            bodyState: bodyState,
+            activePlan: activePlan,
+            recentStrengthSummary: recentStrengthSummary,
+            trainingResponses: trainingResponses
+        ))
+    }
+    private var persistedOperatingPlan: DailyOperatingPlanRecord? {
+        let identifier = DailyHealthSummaryRecord.dayIdentifier(for: dashboardVM.selectedDate)
+        return operatingPlans.first(where: { $0.dayIdentifier == identifier })
     }
     private var latestTodayArtifact: CoachArtifact? {
         coachArtifacts
@@ -159,6 +204,11 @@ struct VelaTodayView: View {
                     .animation(VelaTheme.snappy.delay(0.0), value: isVisible)
  
                 errorMessageView
+
+                todayOSCard
+                    .opacity(isVisible ? 1 : 0)
+                    .offset(y: isVisible ? 0 : 10)
+                    .animation(VelaTheme.snappy.delay(0.025), value: isVisible)
  
                 // 2. Horizontal Status & Weather Pills
                 pillsRow
@@ -210,17 +260,20 @@ struct VelaTodayView: View {
         }
         .task {
             await refreshDashboard()
+            persistDailyOperatingPlan()
             withAnimation(VelaTheme.smooth) {
                 animatedEnergyScore = energyScore
             }
         }
         .refreshable {
             await refreshDashboard(force: true)
+            persistDailyOperatingPlan()
         }
         .onChange(of: dashboardVM.selectedDate) { _, _ in
             dashboardVM.hydrateFromCache(modelContext: modelContext)
             Task {
                 await refreshDashboard()
+                persistDailyOperatingPlan()
                 withAnimation(VelaTheme.smooth) {
                     animatedEnergyScore = energyScore
                 }
@@ -275,6 +328,109 @@ struct VelaTodayView: View {
             .presentationDragIndicator(.visible)
         }
         .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var todayOSCard: some View {
+        let state = bodyState
+        let decision = trainingDecision
+        let planTitle = persistedOperatingPlan?.title ?? decision.userFacingSummary
+        let cause = state.drivers.first?.detail ?? L10n.t(
+            "Local records are available while health baselines are still forming.",
+            "健康基线仍在建立，当前先使用本地记录给出保守建议。"
+        )
+        let watch = state.drivers.first(where: { $0.impact < 0 })?.title
+            ?? L10n.t("Training quality and perceived effort", "训练质量与主观用力")
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L10n.t("TODAY OS", "今日 OS"))
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(VelaTheme.muted)
+                    Text(bodyStateTitle(state.readiness))
+                        .font(.system(size: 26, weight: .bold, design: .rounded))
+                        .foregroundStyle(VelaTheme.fg)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text("\(Int((decision.confidence * 100).rounded()))%")
+                        .font(.headline.weight(.bold))
+                    Text("\(state.confidence.rawValue) · \(state.freshness.rawValue)")
+                        .font(.caption2)
+                        .foregroundStyle(VelaTheme.muted)
+                }
+            }
+
+            todayOSRow(label: L10n.t("Cause", "原因"), value: cause)
+            todayOSRow(label: L10n.t("Plan", "计划"), value: planTitle)
+            todayOSRow(label: L10n.t("Watch", "观察"), value: watch)
+
+            Button {
+                if decision.decision == .rest {
+                    showTodayEvidence = true
+                } else {
+                    appState.routeToTab(1)
+                }
+            } label: {
+                HStack {
+                    Image(systemName: decision.decision == .rest ? "heart.fill" : "figure.strengthtraining.traditional")
+                    Text(primaryActionTitle(decision.decision))
+                    Spacer()
+                    Image(systemName: "arrow.right")
+                }
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(RoundedRectangle(cornerRadius: 14).fill(VelaTheme.accent))
+            }
+            .buttonStyle(.plain)
+
+            Text("\(persistedOperatingPlan?.source ?? decision.source) · \(decision.safetyNotice)")
+                .font(.caption2)
+                .foregroundStyle(VelaTheme.muted)
+        }
+        .padding(18)
+        .background(RoundedRectangle(cornerRadius: 22).fill(VelaTheme.surface))
+        .overlay(RoundedRectangle(cornerRadius: 22).stroke(VelaTheme.accent.opacity(0.16), lineWidth: 1))
+    }
+
+    private func todayOSRow(label: String, value: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(label)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(VelaTheme.muted)
+                .frame(width: 52, alignment: .leading)
+            Text(value)
+                .font(.subheadline)
+                .foregroundStyle(VelaTheme.fg)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func bodyStateTitle(_ readiness: BodyReadiness) -> String {
+        switch readiness {
+        case .ready: L10n.t("Ready to execute", "适合执行训练")
+        case .caution: L10n.t("Train with limits", "训练需有限制")
+        case .recovering: L10n.t("Recovery first", "恢复优先")
+        case .unknown: L10n.t("Conservative mode", "保守模式")
+        }
+    }
+
+    private func primaryActionTitle(_ decision: DailyTrainingDecisionType) -> String {
+        switch decision {
+        case .keep: L10n.t("Start planned session", "开始计划训练")
+        case .reduce: L10n.t("Start reduced session", "开始减量训练")
+        case .swap: L10n.t("Choose alternate session", "选择替代训练")
+        case .rest: L10n.t("Open recovery plan", "查看恢复计划")
+        }
+    }
+
+    private func persistDailyOperatingPlan() {
+        _ = try? DailyOperatingPlanCoordinator.upsert(
+            bodyState: bodyState,
+            decision: trainingDecision,
+            modelContext: modelContext
+        )
     }
 
     // MARK: - Date Header Row

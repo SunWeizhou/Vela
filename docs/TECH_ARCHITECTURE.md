@@ -1,12 +1,12 @@
 # TECH_ARCHITECTURE.md
 # Project Vela — Technical Architecture
 
-> Updated: 2026-06-04
+> Updated: 2026-06-09
 > This document reflects the current build. Product context: `docs/VELA_FULL_STRENGTH_PRODUCT_BLUEPRINT.md`.
 
 ## 0. 当前技术状态
 
-截至 2026-06-04:
+截至 2026-06-09:
 
 - `xcodebuild -project Vela.xcodeproj -scheme Vela -destination 'generic/platform=iOS' -configuration Debug CODE_SIGNING_ALLOWED=NO build` succeeds.
 - `xcodebuild test -project Vela.xcodeproj -scheme Vela -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -configuration Debug` succeeds (100% pass rate).
@@ -15,14 +15,13 @@
 - App shell 使用 Apple Design System + Bevel Parity 视觉体系：`VelaTheme` 设计令牌、`VelaDesignSystem` 复用组件、毛玻璃胶囊底栏、白卡驾驶舱。
 - **VelaBackend** (Vapor 4) 存在但 **当前未启用** — iOS 端直连 DeepSeek API (`api.deepseek.com`)。
 - **Training Intelligence v3** 模块已落地：模型层、分析服务、恢复联动适配器、计划关联、力量训练视图。
-- **Vela 3.0 Active Coach OS** 已实施：5-Tab 导航（Today/Training/Insights/Coach/Me）、Today Command Center、Coach Artifact 系统、Body Model 统一卡片、Coach 收件箱。
-- 当前主分支：`codex/vela-3-active-coach-os`。
+- **Vela 4.0 Active Coach OS** 核心闭环已实施：统一 WorkoutEvent 汇总、BodyStateKernel、TrainingDecisionKernel、DailyOperatingPlan、Agent artifacts、可审计 AgentRun trace。
 
 ## 1. 技术总览
 
 ### 平台
 - iOS App (SwiftUI + SwiftData)
-- 后端: VelaBackend (Vapor 4 + Fluent + SQLite + JWT)
+- 可选后端: VelaBackend（当前运行时未启用）
 
 ### 系统能力
 - HealthKit（睡眠/心率/HRV/运动/体测/血氧/体温等）
@@ -52,8 +51,8 @@
 ```text
 ┌─────────────────────────────────┐
 │          SwiftUI Views           │
-│  Today / Journal / Training /    │
-│  Vitals / Coach / Settings       │
+│  Today OS / Training Execution / │
+│  Intelligence / Vitals / Journal│
 └──────────────┬──────────────────┘
                │
 ┌──────────────▼──────────────────┐
@@ -66,6 +65,7 @@
 ┌──────────────▼──────────────────┐
 │       Application Layer          │
 │  DailySummaryUseCase             │
+│  DailyOperatingPlanCoordinator   │
 │  AIContextBuilder                │
 │  MorningBriefScheduler           │
 │  EveningWikiSyncAgent            │
@@ -78,9 +78,10 @@
 │  Score Engines (Sleep/Recovery/  │
 │    Strain/Stress/Energy/HealthAge)│
 │  ScoreEngineFactory              │
-│  Training Intelligence Engines   │
-│    (AdaptiveTraining, Decision,  │
-│     Analytics, RecoveryAdapter)  │
+│  BodyStateKernel                 │
+│  TrainingDecisionKernel          │
+│  WorkoutAggregationService       │
+│  TrainingAnalyticsService        │
 │  BodyInterpreter                 │
 │  BiologicalAgeEngine             │
 │  JournalCorrelationEngine        │
@@ -96,9 +97,15 @@
 │  DeepSeekProvider                │
 │  WebSearchService                │
 │  FoodPhotoAnalyzer (Kimi)        │
-│  VelaBackend (Vapor 4)           │
+│  Optional inactive VelaBackend   │
 └──────────────────────────────────┘
 ```
+
+### 3.1 Daily Body Intelligence Loop
+
+`HealthKit + local records -> WorkoutEventRecord/DailyHealthSummaryRecord -> BodyStateKernel -> TrainingDecisionKernel -> DailyOperatingPlanRecord -> Training/Journal/Nutrition actions -> TrainingResponseRecord -> Coach context + Memory proposal -> next plan`
+
+`WorkoutAggregationService.aggregateDay` is the only writer of workout count, duration, load, types, and serialized workouts. Home, Coach, Morning Brief, and Training consume the shared kernel output instead of maintaining independent readiness rules.
 
 ## 4. 模块拆分
 
@@ -120,7 +127,7 @@
 - JournalCorrelationEngine
 - DailyPlanLimiterEngine
 
-### 4.3 Training Intelligence Module（Vela 3.0 新增）
+### 4.3 Training Intelligence Module
 位置: `VelaApp/TrainingIntelligence/`
 
 - **Models** (`Models/TrainingIntelligenceModels.swift`): PersonalRecord, LocalMuscleFatigue, StrengthWorkoutAnalysis, RecentTrainingSummary, RecoveryTrainingInput, TrainingAdaptationRecommendation
@@ -152,6 +159,7 @@
 - DailyHealthSummaryRecord（核心日摘要，含 50+ 字段）
 - StrengthWorkoutRecord / ExerciseDefinitionRecord / WorkoutEventRecord
 - TrainingPlanRecord / TrainingDay
+- CoachInteractionRecord / DailyOperatingPlanRecord / AgentArtifactRecord / AgentRunRecord
 - FoodLogRecord / JournalEntryRecord / AIReport
 - VelaModelContainer（SwiftData 容器配置）
 

@@ -3,6 +3,7 @@ import Foundation
 struct AgentContextEnvelope: Codable, Hashable {
     var metadata: AgentContextMetadata
     var todaySummary: [String: String]
+    var bodyState: [String: String]? = nil
     var sleep: [String: String]
     var recovery: [String: String]
     var strain: [String: String]
@@ -24,6 +25,7 @@ struct AgentContextEnvelope: Codable, Hashable {
     enum CodingKeys: String, CodingKey {
         case metadata
         case todaySummary = "today_summary"
+        case bodyState = "body_state"
         case sleep
         case recovery
         case strain

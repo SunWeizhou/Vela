@@ -490,6 +490,9 @@ final class CoachChatVM: ObservableObject {
             var wasStreamed = false
             var wikiFiles: [String] = []
             var wikiUpdateSummaries: [String] = []
+            var agentTrace: AgentRunTrace?
+            let agentStartedAt = Date()
+            let contextHash = ContentHash.hash(chatMessages.map(\.content).joined(separator: "\n"))
 
             let lang = AppLanguage.stored
             let policy = ResponseLengthPolicy.forQuery(userText, lang: lang)
@@ -502,6 +505,22 @@ final class CoachChatVM: ObservableObject {
                     streamingContent = fullResponse
                 }
                 wasStreamed = true
+                agentTrace = AgentRunTrace(
+                    id: UUID(),
+                    startedAt: agentStartedAt,
+                    endedAt: Date(),
+                    inputMessages: agentMessages.map {
+                        AgentRunTrace.ChatMessageSnapshot(
+                            role: $0.role.rawValue,
+                            content: $0.content,
+                            toolCalls: $0.toolCalls?.map(\.name)
+                        )
+                    },
+                    executedTools: [],
+                    finalResponse: fullResponse,
+                    contextHash: contextHash,
+                    schemaVersion: "agentTrace.v1"
+                )
             } else {
                 let agentLoop = AgentLoop(provider: provider, toolRegistry: toolRegistry)
                 let snapshotVersion = ContentHash.hash("\(dashboard.date.timeIntervalSince1970)-\(dashboard.source.rawValue)")
@@ -517,6 +536,9 @@ final class CoachChatVM: ObservableObject {
                 wikiUpdateSummaries = loopResult.wikiUpdateSummaries
                 fullResponse = loopResult.response
                 wasStreamed = loopResult.wasStreamed
+                var loopTrace = loopResult.trace
+                loopTrace.contextHash = contextHash
+                agentTrace = loopTrace
             }
 
             if fullResponse.isEmpty {
@@ -570,7 +592,18 @@ final class CoachChatVM: ObservableObject {
 
             // Persist
             persistThread(modelContext: modelContext)
-            persistInteraction(userText: userText, assistantText: parsed.displayText, focus: focus, modelContext: modelContext)
+            persistInteraction(
+                userText: userText,
+                assistantText: finalText,
+                focus: focus,
+                contextHash: contextHash,
+                modelContext: modelContext
+            )
+            if var agentTrace {
+                agentTrace.finalResponse = finalText
+                agentTrace.endedAt = Date()
+                persistAgentTrace(agentTrace, modelContext: modelContext)
+            }
             try? DailyLogService.recordInteraction(
                 dashboard: dashboard,
                 userText: userText,
@@ -725,6 +758,29 @@ final class CoachChatVM: ObservableObject {
                 sortBy: [SortDescriptor(\.date, order: .reverse)]
             )
         )) ?? []
+        let workoutEvents = (try? modelContext.fetch(
+            FetchDescriptor<WorkoutEventRecord>(
+                predicate: #Predicate<WorkoutEventRecord> { $0.startedAt >= thirtyFiveDaysAgo },
+                sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+            )
+        )) ?? []
+        let foodLogs = (try? modelContext.fetch(
+            FetchDescriptor<FoodLogRecord>(
+                predicate: #Predicate<FoodLogRecord> { $0.createdAt >= thirtyFiveDaysAgo },
+                sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+            )
+        )) ?? []
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: dashboard,
+            dailySummary: dailySummaries.first,
+            workoutEvents: workoutEvents,
+            strengthWorkouts: strengthWorkouts,
+            trainingResponses: trainingResponses,
+            foodLogs: foodLogs,
+            journalEntries: journalEntries,
+            activePlan: activePlan,
+            activeStatus: UserDefaults.standard.string(forKey: "vela_active_status") ?? "active"
+        ))
         var onboardingDescriptor = FetchDescriptor<OnboardingState>(
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
@@ -738,7 +794,8 @@ final class CoachChatVM: ObservableObject {
             strengthWorkouts: strengthWorkouts,
             trainingResponses: trainingResponses,
             onboardingState: onboardingState,
-            dailySummaries: dailySummaries
+            dailySummaries: dailySummaries,
+            bodyState: bodyState
         ))
 
         let composer = CoachPromptComposer(
@@ -803,18 +860,25 @@ final class CoachChatVM: ObservableObject {
         strengthWorkouts: [StrengthWorkoutRecord],
         trainingResponses: [TrainingResponseRecord],
         onboardingState: OnboardingState?,
-        dailySummaries: [DailyHealthSummaryRecord]
+        dailySummaries: [DailyHealthSummaryRecord],
+        bodyState: BodyState
     ) -> String {
         let td = dashboard.trainingDecision
         let hrv = dashboard.recoveryMetrics.hrvMilliseconds.map { "\(Int($0.rounded()))ms" } ?? "N/A"
         let rhr = dashboard.recoveryMetrics.restingHeartRate.map { "\(Int($0.rounded()))bpm" } ?? "N/A"
 
         var lines: [String] = []
+        let bodyDrivers = bodyState.drivers.prefix(3)
+            .map { "\($0.title): \($0.detail)" }
+            .joined(separator: " | ")
 
         // ── Scores at a glance ──
         let lang = AppLanguage.stored
         if lang.isChinese {
             lines.append("## 今日紧凑快照（完整数据需调用 get_today_health）")
+            lines.append("- BodyState \(bodyState.readiness.rawValue) · 置信度 \(bodyState.confidence.rawValue) · 新鲜度 \(bodyState.freshness.rawValue)")
+            lines.append("- 驱动: \(bodyDrivers.isEmpty ? "暂无可靠驱动" : bodyDrivers)")
+            lines.append("- 来源: \(bodyState.source) · 一般健康建议，不构成医疗诊断")
             lines.append("- 恢复 \(Int(dashboard.recovery.score.rounded())) (\(dashboard.recovery.band.rawValue)) · 睡眠 \(Int(dashboard.sleepScore.score.rounded())) (\(dashboard.sleepScore.band.rawValue)) · 负荷 \(Int(dashboard.strain.score.rounded())) (\(dashboard.strain.band.rawValue))")
             lines.append("- 能量 \(Int(dashboard.energy.currentEnergy.rounded())) (\(dashboard.energy.status.rawValue)) · 压力 \(Int(dashboard.stress.stressIndex.rounded())) (\(dashboard.stress.band.rawValue))")
             lines.append("- HRV \(hrv) · 静息心率 \(rhr)")
@@ -822,6 +886,9 @@ final class CoachChatVM: ObservableObject {
             lines.append("- 数据来源 \(dashboard.source.rawValue) · 日期 \(dashboard.date.formatted(date: .numeric, time: .shortened))")
         } else {
             lines.append("## Today's Compact Snapshot (call get_today_health for full data)")
+            lines.append("- BodyState \(bodyState.readiness.rawValue) · confidence \(bodyState.confidence.rawValue) · freshness \(bodyState.freshness.rawValue)")
+            lines.append("- Drivers: \(bodyDrivers.isEmpty ? "No reliable driver yet" : bodyDrivers)")
+            lines.append("- Source: \(bodyState.source) · general wellness guidance, not a medical diagnosis")
             lines.append("- Recovery \(Int(dashboard.recovery.score.rounded())) (\(dashboard.recovery.band.rawValue)) · Sleep \(Int(dashboard.sleepScore.score.rounded())) (\(dashboard.sleepScore.band.rawValue)) · Strain \(Int(dashboard.strain.score.rounded())) (\(dashboard.strain.band.rawValue))")
             lines.append("- Energy \(Int(dashboard.energy.currentEnergy.rounded())) (\(dashboard.energy.status.rawValue)) · Stress \(Int(dashboard.stress.stressIndex.rounded())) (\(dashboard.stress.band.rawValue))")
             lines.append("- HRV \(hrv) · RHR \(rhr)")
@@ -889,11 +956,41 @@ final class CoachChatVM: ObservableObject {
             : "[Snapshot truncated to save tokens. Call get_today_health for complete data.]")
     }
 
-    private func persistInteraction(userText: String, assistantText: String, focus: CoachContextFocus, modelContext: ModelContext) {
-        modelContext.insert(JournalEntryRecord(
-            createdAt: Date(),
-            tags: ["coach", focus.title.lowercased().replacingOccurrences(of: " ", with: "_")],
-            note: userText
+    private func persistInteraction(
+        userText: String,
+        assistantText: String,
+        focus: CoachContextFocus,
+        contextHash: String,
+        modelContext: ModelContext
+    ) {
+        modelContext.insert(CoachInteractionRecord(
+            userText: userText,
+            assistantText: assistantText,
+            focus: focus.title.lowercased().replacingOccurrences(of: " ", with: "_"),
+            contextHash: contextHash,
+            sessionId: currentSession?.id
+        ))
+        try? modelContext.save()
+    }
+
+    private func persistAgentTrace(_ trace: AgentRunTrace, modelContext: ModelContext) {
+        let toolCallsJSON: String
+        if let data = try? JSONEncoder().encode(trace.executedTools),
+           let json = String(data: data, encoding: .utf8) {
+            toolCallsJSON = json
+        } else {
+            toolCallsJSON = "[]"
+        }
+        modelContext.insert(AgentRunRecord(
+            id: trace.id,
+            agentName: "coach",
+            startedAt: trace.startedAt,
+            endedAt: trace.endedAt,
+            status: .success,
+            reason: trace.schemaVersion,
+            inputContextHash: trace.contextHash,
+            outputSummary: trace.finalResponse,
+            toolCallsJSON: toolCallsJSON
         ))
         try? modelContext.save()
     }

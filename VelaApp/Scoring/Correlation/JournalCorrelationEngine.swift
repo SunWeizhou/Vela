@@ -101,6 +101,7 @@ struct JournalCorrelationEngine {
         snapshots: [DailyHealthSnapshot],
         calendar: Calendar = .current
     ) -> [HabitCorrelationInsight] {
+        let journalEntries = journalEntries.filter { !isCoachConversation($0) }
         var snapshotByDay: [String: DailyHealthSnapshot] = [:]
         for snap in snapshots {
             let key = dayKey(for: snap.date, calendar: calendar)
@@ -207,6 +208,7 @@ struct JournalCorrelationEngine {
         snapshots: [DailyHealthSnapshot],
         calendar: Calendar = .current
     ) -> [TagCorrelation] {
+        let journalEntries = journalEntries.filter { !isCoachConversation($0) }
         var snapshotByDay: [String: DailyHealthSnapshot] = [:]
         for snap in snapshots {
             let key = dayKey(for: snap.date, calendar: calendar)
@@ -267,6 +269,13 @@ struct JournalCorrelationEngine {
     private func averageOf(_ values: [Double]) -> Double {
         guard !values.isEmpty else { return 0 }
         return values.reduce(0, +) / Double(values.count)
+    }
+
+    private func isCoachConversation(_ entry: JournalEntryRecord) -> Bool {
+        entry.tags.contains { tag in
+            let normalized = tag.lowercased()
+            return normalized == "coach" || normalized == "coach_conversation"
+        }
     }
 
     /// Returns the top N correlations sorted by absolute impact magnitude.

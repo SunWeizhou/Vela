@@ -47,4 +47,75 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(result.value ?? 0, 0)
         XCTAssertLessThanOrEqual(result.value ?? 0, 100)
     }
+
+    func testBodyStateKernelProvidesFallbackWithoutHealthKit() {
+        let now = Date()
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: .empty(date: now),
+            activeStatus: "active",
+            generatedAt: now
+        ))
+
+        XCTAssertEqual(bodyState.readiness, .unknown)
+        XCTAssertEqual(bodyState.confidence, .low)
+        XCTAssertEqual(bodyState.freshness, .missing)
+        XCTAssertFalse(bodyState.drivers.isEmpty)
+        XCTAssertFalse(bodyState.hash.isEmpty)
+    }
+
+    func testBodyStateKernelIncludesLocalFatigueAndTrainingResponseDrivers() {
+        let now = Date()
+        let workout = StrengthWorkoutRecord(
+            title: "Leg Day",
+            startedAt: now.addingTimeInterval(-6 * 3600),
+            durationMinutes: 60,
+            exercises: [
+                StrengthExerciseLog(
+                    name: "Squat",
+                    equipment: "barbell",
+                    primaryMuscleGroup: "legs",
+                    sets: (0..<8).map { _ in
+                        StrengthSetLog(repetitions: 8, weightKilograms: 100, rpe: 8, isCompleted: true)
+                    }
+                )
+            ]
+        )
+        let response = TrainingResponseRecord(
+            workoutId: UUID(),
+            date: now.addingTimeInterval(-2 * 86_400),
+            nextDayDate: now.addingTimeInterval(-86_400),
+            primaryMuscleGroups: ["legs"],
+            totalEffectiveSets: 12,
+            totalVolumeKg: 9_600,
+            nextDayRecoveryDelta: -10
+        )
+
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: .preview(date: now),
+            strengthWorkouts: [workout],
+            trainingResponses: [response],
+            activeStatus: "active",
+            generatedAt: now
+        ))
+
+        XCTAssertEqual(bodyState.localFatigue["legs"]?.fatigueLevel, "high")
+        XCTAssertTrue(bodyState.drivers.contains { $0.kind == .localFatigue })
+        XCTAssertTrue(bodyState.drivers.contains { $0.kind == .trainingResponse })
+    }
+
+    func testTrainingDecisionKernelRestsForSickStatus() {
+        let now = Date()
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: .preview(date: now),
+            activeStatus: "sick",
+            generatedAt: now
+        ))
+
+        let decision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(bodyState: bodyState))
+
+        XCTAssertEqual(decision.decision, .rest)
+        XCTAssertEqual(decision.volumeMultiplier, 0)
+        XCTAssertLessThanOrEqual(decision.intensityCap, 2)
+        XCTAssertTrue(decision.safetyNotice.contains("not a medical diagnosis"))
+    }
 }

@@ -35,6 +35,7 @@ struct AgentLoop {
         onStreamDelta: (@MainActor @Sendable (String) -> Void)? = nil,
         initialDataVersion: String? = nil
     ) async throws -> AgentLoopResult {
+        let startedAt = Date()
         var agentMessages = messages
         var fullResponse = ""
         var executedTools: [ExecutedTool] = []
@@ -92,7 +93,14 @@ struct AgentLoop {
                     response: fullResponse,
                     executedTools: executedTools,
                     finalMessages: agentMessages,
-                    wasStreamed: true
+                    wasStreamed: true,
+                    trace: makeTrace(
+                        startedAt: startedAt,
+                        inputMessages: messages,
+                        executedTools: executedTools,
+                        finalResponse: fullResponse,
+                        contextHash: initialDataVersion
+                    )
                 )
             } else {
                 fullResponse = response.content
@@ -107,7 +115,14 @@ struct AgentLoop {
                     response: fullResponse,
                     executedTools: executedTools,
                     finalMessages: agentMessages,
-                    wasStreamed: true
+                    wasStreamed: true,
+                    trace: makeTrace(
+                        startedAt: startedAt,
+                        inputMessages: messages,
+                        executedTools: executedTools,
+                        finalResponse: fullResponse,
+                        contextHash: initialDataVersion
+                    )
                 )
             } else {
                 let finalResponse = try await provider.chat(messages: agentMessages, tools: nil)
@@ -121,7 +136,48 @@ struct AgentLoop {
             response: fullResponse,
             executedTools: executedTools,
             finalMessages: agentMessages,
-            wasStreamed: false
+            wasStreamed: false,
+            trace: makeTrace(
+                startedAt: startedAt,
+                inputMessages: messages,
+                executedTools: executedTools,
+                finalResponse: fullResponse,
+                contextHash: initialDataVersion
+            )
+        )
+    }
+
+    private func makeTrace(
+        startedAt: Date,
+        inputMessages: [ChatMessage],
+        executedTools: [ExecutedTool],
+        finalResponse: String,
+        contextHash: String?
+    ) -> AgentRunTrace {
+        let resolvedHash = contextHash ?? ContentHash.hash(
+            inputMessages.map { "\($0.role.rawValue):\($0.content)" }.joined(separator: "\n")
+        )
+        return AgentRunTrace(
+            id: UUID(),
+            startedAt: startedAt,
+            endedAt: Date(),
+            inputMessages: inputMessages.map {
+                AgentRunTrace.ChatMessageSnapshot(
+                    role: $0.role.rawValue,
+                    content: $0.content,
+                    toolCalls: $0.toolCalls?.map(\.name)
+                )
+            },
+            executedTools: executedTools.map {
+                AgentRunTrace.ExecutedToolSnapshot(
+                    name: $0.name,
+                    arguments: $0.arguments,
+                    result: $0.result
+                )
+            },
+            finalResponse: finalResponse,
+            contextHash: resolvedHash,
+            schemaVersion: "agentTrace.v1"
         )
     }
 
@@ -153,6 +209,7 @@ struct AgentLoopResult {
     var finalMessages: [ChatMessage]
     /// Whether the final response was delivered via streaming.
     var wasStreamed: Bool
+    var trace: AgentRunTrace
 
     /// Extracts wiki file names updated during tool execution.
     var wikiFiles: [String] {

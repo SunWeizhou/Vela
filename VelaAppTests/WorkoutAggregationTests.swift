@@ -131,17 +131,13 @@ final class WorkoutAggregationTests: XCTestCase {
         snapshot.workouts = [healthKitWorkout]
         let record = DailyHealthSummaryRecord(snapshot: snapshot)
         store.context.insert(record)
-        store.context.insert(WorkoutEventRecord(
-            id: UUID(),
-            source: "healthKit",
-            startedAt: start.addingTimeInterval(30),
-            endedAt: end.addingTimeInterval(-20),
-            activityType: "Running",
-            energyKilocalories: 320,
-            averageHeartRate: 142,
-            linkedHealthKitWorkoutId: healthKitID
-        ))
+        try WorkoutAggregationService.shared.upsertHealthKitWorkoutEvents(
+            [healthKitWorkout],
+            on: start,
+            modelContext: store.context
+        )
 
+        try WorkoutAggregationService.shared.aggregateDay(date: start, modelContext: store.context)
         try WorkoutAggregationService.shared.aggregateDay(date: start, modelContext: store.context)
 
         let summary = try XCTUnwrap(fetchDailySummary(store.context, date: start))
@@ -165,6 +161,11 @@ final class WorkoutAggregationTests: XCTestCase {
         snapshot.workouts = [healthKitWorkout]
         let record = DailyHealthSummaryRecord(snapshot: snapshot)
         store.context.insert(record)
+        try WorkoutAggregationService.shared.upsertHealthKitWorkoutEvents(
+            [healthKitWorkout],
+            on: start,
+            modelContext: store.context
+        )
         store.context.insert(WorkoutEventRecord(
             source: "manual",
             startedAt: manualStart,
@@ -180,6 +181,11 @@ final class WorkoutAggregationTests: XCTestCase {
         resync.activeCalories = 220
         resync.workoutDuration = 30
         record.apply(snapshot: resync)
+        try WorkoutAggregationService.shared.upsertHealthKitWorkoutEvents(
+            [healthKitWorkout],
+            on: start,
+            modelContext: store.context
+        )
         try WorkoutAggregationService.shared.aggregateDay(date: start, modelContext: store.context)
 
         let summary = try XCTUnwrap(fetchDailySummary(store.context, date: start))
@@ -190,6 +196,43 @@ final class WorkoutAggregationTests: XCTestCase {
 
     func testManualWorkoutPreservedAfterHealthKitSync() throws {
         try testAggregateDayPreservesManualWorkoutAfterHealthKitResync()
+    }
+
+    func testDailySummaryApplyDoesNotWriteWorkoutAggregationFields() {
+        let start = makeDate()
+        let existing = DailyHealthSummaryRecord(
+            dayIdentifier: DailyHealthSummaryRecord.dayIdentifier(for: start),
+            date: start,
+            workoutCount: 3,
+            workoutTypes: "Strength",
+            workoutDuration: 90,
+            dailyLoad: 120,
+            workoutLoad: 90,
+            workoutsData: Data("existing".utf8)
+        )
+        var snapshot = DailyHealthSnapshot(date: start)
+        snapshot.workoutCount = 1
+        snapshot.workoutTypes = "Running"
+        snapshot.workoutDuration = 30
+        snapshot.dailyLoad = 40
+        snapshot.workoutLoad = 30
+        snapshot.workouts = [
+            WorkoutSummary(
+                start: start,
+                end: start.addingTimeInterval(1800),
+                activityName: "Running",
+                source: "healthKit"
+            )
+        ]
+
+        existing.apply(snapshot: snapshot)
+
+        XCTAssertEqual(existing.workoutCount, 3)
+        XCTAssertEqual(existing.workoutTypes, "Strength")
+        XCTAssertEqual(existing.workoutDuration, 90)
+        XCTAssertEqual(existing.dailyLoad, 120)
+        XCTAssertEqual(existing.workoutLoad, 90)
+        XCTAssertEqual(existing.workoutsData, Data("existing".utf8))
     }
 
     func testXunjiImportIsIdempotentByExternalID() throws {
@@ -573,6 +616,11 @@ final class WorkoutAggregationTests: XCTestCase {
         snapshot.workoutDuration = 35
         let record = try XCTUnwrap(fetchDailySummary(store.context, date: day))
         record.apply(snapshot: snapshot)
+        try WorkoutAggregationService.shared.upsertHealthKitWorkoutEvents(
+            [healthKitWorkout],
+            on: day,
+            modelContext: store.context
+        )
         try WorkoutAggregationService.shared.aggregateDay(date: day, modelContext: store.context)
 
         let summary = try XCTUnwrap(fetchDailySummary(store.context, date: day))

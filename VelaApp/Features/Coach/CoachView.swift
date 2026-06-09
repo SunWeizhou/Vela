@@ -68,6 +68,10 @@ struct VelaCoachView: View {
 
     @Query(sort: \StrengthWorkoutRecord.startedAt, order: .reverse)
     private var strengthWorkouts: [StrengthWorkoutRecord]
+    @Query(sort: \DailyOperatingPlanRecord.generatedAt, order: .reverse)
+    private var operatingPlans: [DailyOperatingPlanRecord]
+    @Query(sort: \AgentArtifactRecord.createdAt, order: .reverse)
+    private var agentArtifacts: [AgentArtifactRecord]
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
     private var recentStrengthSummary: RecentTrainingSummary {
@@ -98,15 +102,11 @@ struct VelaCoachView: View {
                 headerView
                     .background(.ultraThinMaterial)
 
-                if !pendingMemoryProposals.isEmpty {
-                    memoryInboxBanner
-                }
-
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(spacing: 20) {
                             if vm.messages.isEmpty {
-                                welcomeViewWithArtifact
+                                intelligenceWorkspace
                             }
 
                             ForEach(vm.messages.filter { !$0.isStreaming }) { msg in
@@ -487,6 +487,134 @@ struct VelaCoachView: View {
     }
 
     // MARK: - Welcome
+
+    private var intelligenceWorkspace: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            workspaceSectionTitle("INTELLIGENCE WORKSPACE", "主动洞察与可执行产物")
+
+            workspaceCard(
+                title: todayCommandState.bodyStateTitle,
+                detail: todayCommandState.summary,
+                icon: "sparkles",
+                confidence: todayCommandState.readinessDecision.confidence
+            ) {
+                sendMessage("解释今天最重要的身体状态驱动，并给一个具体行动。")
+            }
+
+            if let plan = operatingPlans.first {
+                workspaceCard(
+                    title: plan.title,
+                    detail: decodedPlanSummary(plan),
+                    icon: "checklist",
+                    confidence: plan.confidence
+                ) {
+                    appState.routeToTab(0)
+                }
+            }
+
+            if !pendingMemoryProposals.isEmpty {
+                memoryInboxBanner
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+            }
+
+            if !agentArtifacts.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    workspaceSectionTitle("RECENT ARTIFACTS", "近期产物")
+                    ForEach(agentArtifacts.prefix(4)) { artifact in
+                        workspaceCard(
+                            title: artifact.title,
+                            detail: artifact.type.replacingOccurrences(of: "_", with: " "),
+                            icon: artifactIcon(artifact.type),
+                            confidence: artifact.confidence
+                        ) {
+                            sendMessage("基于产物 \(artifact.title) 给我下一步行动。")
+                        }
+                    }
+                }
+            }
+
+            Button {
+                showWikiProfile = true
+            } label: {
+                HStack {
+                    Label("身体 Wiki 与长期记忆", systemImage: "books.vertical.fill")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(VelaTheme.fg)
+                .padding(14)
+                .background(RoundedRectangle(cornerRadius: 16).fill(VelaTheme.surface))
+            }
+            .buttonStyle(.plain)
+
+            welcomeViewWithArtifact
+        }
+    }
+
+    private func workspaceSectionTitle(_ title: String, _ subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(VelaTheme.accent)
+            Text(subtitle)
+                .font(.caption)
+                .foregroundStyle(VelaTheme.muted)
+        }
+    }
+
+    private func workspaceCard(
+        title: String,
+        detail: String,
+        icon: String,
+        confidence: Double,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: icon)
+                    .foregroundStyle(VelaTheme.accent)
+                    .frame(width: 34, height: 34)
+                    .background(Circle().fill(VelaTheme.accent.opacity(0.12)))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(VelaTheme.fg)
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(VelaTheme.muted)
+                        .lineLimit(3)
+                    Text("置信度 \(Int((confidence * 100).rounded()))% · 一般健康建议，不构成医疗诊断")
+                        .font(.caption2)
+                        .foregroundStyle(VelaTheme.muted)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(14)
+            .background(RoundedRectangle(cornerRadius: 16).fill(VelaTheme.surface))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func decodedPlanSummary(_ plan: DailyOperatingPlanRecord) -> String {
+        guard let data = plan.payloadJSON.data(using: .utf8),
+              let payload = try? JSONDecoder().decode(DailyOperatingPlanPayload.self, from: data) else {
+            return plan.primaryActionType
+        }
+        return payload.summary
+    }
+
+    private func artifactIcon(_ type: String) -> String {
+        switch type {
+        case "daily_plan": "calendar.badge.checkmark"
+        case "training_adjustment": "slider.horizontal.3"
+        case "weekly_report": "chart.line.uptrend.xyaxis"
+        case "correlation_chart": "point.3.connected.trianglepath.dotted"
+        case "wiki_diff": "doc.badge.gearshape"
+        case "nutrition_feedback": "fork.knife"
+        default: "doc.text.fill"
+        }
+    }
 
     private var memoryInboxBanner: some View {
         Button {
