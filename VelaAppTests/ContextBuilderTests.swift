@@ -77,6 +77,72 @@ final class ContextBuilderTests: XCTestCase {
         XCTAssertTrue((strength["last_session_summary"] ?? "").contains("Chest Strength"))
     }
 
+    func testAIContextIncludesUnifiedWorkoutSummary() throws {
+        let generatedAt = makeDate()
+        let event = WorkoutEventRecord(
+            source: "healthKit+xunji",
+            startedAt: generatedAt.addingTimeInterval(-24 * 3600),
+            endedAt: generatedAt.addingTimeInterval(-23 * 3600),
+            activityType: "TraditionalStrengthTraining",
+            title: "背部二头",
+            energyKilocalories: 420,
+            averageHeartRate: 132,
+            linkedStrengthWorkoutId: UUID(),
+            linkedHealthKitWorkoutId: UUID()
+        )
+        let dashboard = DashboardSummary.preview(date: generatedAt)
+
+        let result = AIContextBuilder().build(
+            dashboard: dashboard,
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:],
+            workoutEvents: [event],
+            generatedAt: generatedAt
+        )
+
+        let unified = try XCTUnwrap(result.envelope.unifiedWorkouts)
+        XCTAssertEqual(unified["algorithm_version"], "workoutEvents.v1")
+        XCTAssertEqual(unified["sessions_7d"], "1")
+        XCTAssertTrue((unified["activity_types_14d"] ?? "").contains("背部二头"))
+        XCTAssertTrue((unified["source_mix_14d"] ?? "").contains("healthKit+xunji"))
+        XCTAssertTrue((unified["recent_workout_events_json"] ?? "").contains("linked_strength_workout_id"))
+    }
+
+    func testStrengthDetailsExcludeUncompletedSetsFromCompletedWork() throws {
+        let generatedAt = makeDate()
+        let workout = StrengthWorkoutRecord(
+            title: "Chest",
+            startedAt: generatedAt.addingTimeInterval(-3600),
+            durationMinutes: 45,
+            exercises: [
+                StrengthExerciseLog(
+                    name: "Bench Press",
+                    equipment: "barbell",
+                    primaryMuscleGroup: "chest",
+                    sets: [
+                        StrengthSetLog(repetitions: 8, weightKilograms: 80, isCompleted: true),
+                        StrengthSetLog(repetitions: 8, weightKilograms: 90, isCompleted: false)
+                    ]
+                )
+            ]
+        )
+        let result = AIContextBuilder().build(
+            dashboard: .preview(date: generatedAt),
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:],
+            strengthWorkouts: [workout],
+            generatedAt: generatedAt
+        )
+
+        let details = try XCTUnwrap(result.envelope.strengthTraining?["recent_workout_details"])
+        XCTAssertTrue(details.contains("1 completed work sets") || details.contains("1 完成工作组"))
+        XCTAssertTrue(details.contains("1 uncompleted sets excluded") || details.contains("1 未完成组未计入容量"))
+        XCTAssertTrue(details.contains("80.0kg x 8") || details.contains("80kg x 8"))
+        XCTAssertFalse(details.contains("90.0kg x 8"))
+    }
+
     func testAIContextFlagsCostlyTrainingResponse() throws {
         let generatedAt = makeDate()
         let dashboard = DashboardSummary.preview(date: generatedAt)

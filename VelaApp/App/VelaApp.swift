@@ -36,7 +36,12 @@ final class VelaAppState: ObservableObject {
     @Published var triggerFoodSearch = false
     @Published var triggerFoodScanner = false
     @Published var triggerJournal = false
+    @Published var triggerRecoveryDetail = false
+    @Published var triggerPostWorkoutCheckIn = false
+    @Published var triggerPostWorkoutImpact = false
     @Published var scannerType = "camera"
+    @Published var postWorkoutCheckInWorkoutID: UUID?
+    @Published var postWorkoutImpactWorkoutID: UUID?
     @Published var forceNewCoachSession = false
     @Published private(set) var coachRouteDestination: CoachRouteDestination?
     @Published private(set) var coachRouteRevision = 0
@@ -70,7 +75,12 @@ final class VelaAppState: ObservableObject {
         }
     }
 
+    func logDebug(_ message: String) {
+        print(message)
+    }
+
     func routeToTab(_ tab: Int) {
+        logDebug("[VelaAppState] routeToTab called with tab=\(tab)")
         selectedTab = tab
     }
 
@@ -78,6 +88,24 @@ final class VelaAppState: ObservableObject {
         resetQuickActionSheetTriggers()
         scannerType = type
         triggerFoodScanner = true
+    }
+
+    func routeToRecoveryDetail() {
+        resetQuickActionSheetTriggers()
+        selectedTab = 2
+        triggerRecoveryDetail = true
+    }
+
+    func routeToPostWorkoutCheckIn(workoutID: UUID?) {
+        resetQuickActionSheetTriggers()
+        postWorkoutCheckInWorkoutID = workoutID
+        triggerPostWorkoutCheckIn = true
+    }
+
+    func routeToPostWorkoutImpact(workoutID: UUID?) {
+        resetQuickActionSheetTriggers()
+        postWorkoutImpactWorkoutID = workoutID
+        triggerPostWorkoutImpact = true
     }
 
     func deferQuickActionUntilSheetDismisses(_ action: DeferredQuickAction) {
@@ -110,6 +138,9 @@ final class VelaAppState: ObservableObject {
         triggerFoodSearch = false
         triggerFoodScanner = false
         triggerJournal = false
+        triggerRecoveryDetail = false
+        triggerPostWorkoutCheckIn = false
+        triggerPostWorkoutImpact = false
     }
 
     func markLocalDataChanged() {

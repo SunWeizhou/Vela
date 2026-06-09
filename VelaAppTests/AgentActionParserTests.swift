@@ -1,4 +1,5 @@
 import XCTest
+import SwiftData
 @testable import Vela
 
 final class AgentActionParserTests: XCTestCase {
@@ -135,6 +136,126 @@ final class AgentActionParserTests: XCTestCase {
         XCTAssertEqual(result.executedTools.map(\.name), ["first_tool"])
         XCTAssertEqual(provider.streamCallCount, 1)
         XCTAssertEqual(provider.chatCallToolAvailability, [true, true])
+    }
+
+    @MainActor
+    func testUnifiedWorkoutHistoryToolReturnsMergedWorkoutTimeline() async throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let start = Date().addingTimeInterval(-3600)
+        let strength = StrengthWorkoutRecord(
+            title: "背部二头",
+            startedAt: start,
+            durationMinutes: 60,
+            exercises: [
+                StrengthExerciseLog(
+                    name: "杠铃划船",
+                    equipment: "barbell",
+                    primaryMuscleGroup: "back",
+                    sets: [StrengthSetLog(repetitions: 8, weightKilograms: 80, isCompleted: true)]
+                )
+            ]
+        )
+        context.insert(strength)
+        context.insert(WorkoutEventRecord(
+            source: "healthKit+xunji",
+            startedAt: start,
+            endedAt: start.addingTimeInterval(3600),
+            activityType: "TraditionalStrengthTraining",
+            title: "背部二头",
+            energyKilocalories: 420,
+            averageHeartRate: 132,
+            linkedStrengthWorkoutId: strength.id,
+            linkedHealthKitWorkoutId: UUID()
+        ))
+        try context.save()
+
+        let tool = UnifiedWorkoutHistoryTool(
+            executionContext: ToolExecutionContext(modelContext: context, dashboard: .preview())
+        )
+        let output = try await tool.execute(arguments: #"{"days":7,"include_strength_details":true}"#)
+
+        XCTAssertTrue(output.contains("healthKit+xunji"))
+        XCTAssertTrue(output.contains("背部二头"))
+        XCTAssertTrue(output.contains("杠铃划船"))
+        XCTAssertTrue(output.contains("strength_details"))
+    }
+
+    @MainActor
+    func testUnifiedWorkoutHistoryToolSeparatesCompletedAndUncompletedStrengthSets() async throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let start = Date().addingTimeInterval(-3600)
+        let strength = StrengthWorkoutRecord(
+            title: "胸部训练",
+            startedAt: start,
+            durationMinutes: 50,
+            exercises: [
+                StrengthExerciseLog(
+                    name: "杠铃卧推",
+                    equipment: "barbell",
+                    primaryMuscleGroup: "chest",
+                    sets: [
+                        StrengthSetLog(repetitions: 8, weightKilograms: 80, isCompleted: true),
+                        StrengthSetLog(repetitions: 8, weightKilograms: 90, isCompleted: false),
+                        StrengthSetLog(repetitions: 5, weightKilograms: 60, isWarmup: true, isCompleted: true)
+                    ]
+                )
+            ]
+        )
+        context.insert(strength)
+        context.insert(WorkoutEventRecord(
+            source: "healthKit+xunji",
+            startedAt: start,
+            endedAt: start.addingTimeInterval(3000),
+            activityType: "TraditionalStrengthTraining",
+            title: "胸部训练",
+            linkedStrengthWorkoutId: strength.id,
+            linkedHealthKitWorkoutId: UUID()
+        ))
+        try context.save()
+
+        let tool = UnifiedWorkoutHistoryTool(
+            executionContext: ToolExecutionContext(modelContext: context, dashboard: .preview())
+        )
+        let output = try await tool.execute(arguments: #"{"days":7,"include_strength_details":true}"#)
+
+        XCTAssertTrue(output.contains(#""completed_work_sets" : 1"#))
+        XCTAssertTrue(output.contains(#""completed_volume_kilograms" : 640"#))
+        XCTAssertTrue(output.contains(#""uncompleted_sets" : ["#))
+        XCTAssertTrue(output.contains(#""weight_kilograms" : 90"#))
+        XCTAssertTrue(output.contains(#""warmup_sets" : ["#))
+    }
+
+    @MainActor
+    func testHealthHistoryToolReturnsDailyBodyMetrics() async throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        context.insert(DailyHealthSummaryRecord(
+            dayIdentifier: DailyHealthSummaryRecord.dayIdentifier(for: Date()),
+            date: Date(),
+            sleepScore: 82,
+            recoveryScore: 74,
+            strainScore: 41,
+            hrvAverage: 52,
+            restingHeartRate: 58,
+            sleepHours: 7.3,
+            bodyWeight: 76.5,
+            oxygenSaturation: 98,
+            dailyLoad: 88,
+            tsb: -4
+        ))
+        try context.save()
+
+        let tool = HealthHistoryTool(
+            executionContext: ToolExecutionContext(modelContext: context, dashboard: .preview())
+        )
+        let output = try await tool.execute(arguments: #"{"days":7}"#)
+
+        XCTAssertTrue(output.contains(#""recovery_score" : 74"#))
+        XCTAssertTrue(output.contains(#""hrv_average" : 52"#))
+        XCTAssertTrue(output.contains(#""body_weight" : 76.5"#))
+        XCTAssertTrue(output.contains(#""daily_load" : 88"#))
     }
 }
 

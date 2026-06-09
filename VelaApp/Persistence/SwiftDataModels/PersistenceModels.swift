@@ -1508,6 +1508,17 @@ public final class WorkoutEventRecord {
 }
 
 @Model
+final class DeletedWorkoutRecord {
+    @Attribute(.unique) var id: String
+    var deletedAt: Date
+
+    init(id: String, deletedAt: Date = Date()) {
+        self.id = id
+        self.deletedAt = deletedAt
+    }
+}
+
+@Model
 final class XunjiDailyCacheRecord {
     @Attribute(.unique) var datestr: String
     var fetchedAt: Date

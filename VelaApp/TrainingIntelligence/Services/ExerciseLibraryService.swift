@@ -100,9 +100,17 @@ enum ExerciseLibraryService {
             }
         }
 
+        let deletedRecords = try? modelContext.fetch(FetchDescriptor<DeletedWorkoutRecord>())
+        let deletedTemplateTitles = Set(deletedRecords?.compactMap { rec -> String? in
+            if rec.id.hasPrefix("template:") {
+                return String(rec.id.dropFirst("template:".count))
+            }
+            return nil
+        } ?? [])
+
         let existingTemplates = try modelContext.fetch(FetchDescriptor<WorkoutTemplateRecord>())
         let existingTitles = Set(existingTemplates.map(\.title))
-        for template in defaultTemplates() where !existingTitles.contains(template.title) {
+        for template in defaultTemplates() where !existingTitles.contains(template.title) && !deletedTemplateTitles.contains(template.title) {
             modelContext.insert(template)
         }
         try modelContext.save()

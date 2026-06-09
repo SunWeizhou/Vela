@@ -275,9 +275,20 @@ struct XunjiTrainingImportService: Sendable {
         modelContext: ModelContext,
         calendar: Calendar = .current
     ) throws -> XunjiImportSummary {
-        let response = try decoder.decode(XunjiTrainingAPIResponse.self, from: data)
+        let response: XunjiTrainingAPIResponse
+        do {
+            response = try decoder.decode(XunjiTrainingAPIResponse.self, from: data)
+        } catch let decodingError as DecodingError {
+            throw XunjiImportError.decodingError(XunjiImportError.formatDecodingError(decodingError))
+        } catch {
+            throw error
+        }
         guard response.success else {
-            throw XunjiImportError.unsuccessfulResponse
+            if let errMsg = response.errorMessage {
+                throw XunjiImportError.apiError(errMsg)
+            } else {
+                throw XunjiImportError.unsuccessfulResponse
+            }
         }
 
         let trains = response.res.trains.filter { ($0.datestr ?? datestr) == datestr }
@@ -296,8 +307,16 @@ struct XunjiTrainingImportService: Sendable {
             affectedDatesByIdentifier[DailyHealthSummaryRecord.dayIdentifier(for: day, calendar: calendar)] = day
         }
 
+        let deletedRecords = (try? modelContext.fetch(FetchDescriptor<DeletedWorkoutRecord>())) ?? []
+        let blacklistedIDs = Set(deletedRecords.map(\.id))
+
         for train in trains {
             guard let normalized = normalize(train: train, fallbackDatestr: datestr, calendar: calendar) else {
+                skipped += 1
+                continue
+            }
+
+            if blacklistedIDs.contains(normalized.externalID) {
                 skipped += 1
                 continue
             }
@@ -337,25 +356,50 @@ struct XunjiTrainingImportService: Sendable {
             )
             workout.analyticsJSON = (try? String(data: encoder.encode(analysis), encoding: .utf8)) ?? "{}"
             let artifactHash = ContentHash.hash("xunji-\(normalized.externalID)-\(workout.analyticsJSON ?? "")")
-            let existingArtifacts = try modelContext.fetch(FetchDescriptor<CoachArtifactRecord>())
-            if !existingArtifacts.contains(where: { $0.sourceContextHash == artifactHash }) {
-                modelContext.insert(CoachArtifactRecord(artifact: CoachArtifact.postWorkoutReview(
-                    workout: workout,
-                    summary: analysis,
-                    readinessDecision: "xunji_import",
-                    sourceContextHash: artifactHash
-                )))
+            let workoutIdStr = workout.id.uuidString
+            let existingArtifacts = (try? modelContext.fetch(FetchDescriptor<CoachArtifactRecord>())) ?? []
+            
+            for art in existingArtifacts {
+                if art.actionsJSON.contains(workoutIdStr) {
+                    modelContext.delete(art)
+                }
             }
+            
+            modelContext.insert(CoachArtifactRecord(artifact: CoachArtifact.postWorkoutReview(
+                workout: workout,
+                summary: analysis,
+                readinessDecision: "xunji_import",
+                sourceContextHash: artifactHash
+            )))
+
+            let matchedEvent = WorkoutAggregationService.shared.findMergeCandidate(
+                for: workout,
+                in: existingEvents,
+                calendar: calendar
+            )
 
             let event: WorkoutEventRecord
-            if let existingEvent = existingEvents.first(where: { $0.linkedStrengthWorkoutId == workout.id && $0.source == "xunji" }) {
+            if let matched = matchedEvent {
+                event = matched
+                WorkoutAggregationService.shared.mergeStrengthWorkoutDetails(
+                    event: event,
+                    strengthWorkout: workout,
+                    displayTitle: normalized.title,
+                    sessionRPE: normalized.sessionRPE,
+                    calendar: calendar
+                )
+                // Clean up any previously imported duplicate xunji event
+                if let oldXunjiEvent = existingEvents.first(where: { $0.linkedStrengthWorkoutId == workout.id && $0.source == "xunji" }) {
+                    modelContext.delete(oldXunjiEvent)
+                }
+            } else if let existingEvent = existingEvents.first(where: { $0.linkedStrengthWorkoutId == workout.id && $0.source == "xunji" }) {
                 event = existingEvent
             } else {
                 event = WorkoutEventRecord(
                     source: "xunji",
                     startedAt: workout.startedAt,
                     endedAt: workout.endedAt,
-                    activityType: "力量训练",
+                    activityType: workout.title,
                     title: workout.title,
                     energyKilocalories: nil,
                     averageHeartRate: normalized.averageHeartRate,
@@ -365,15 +409,22 @@ struct XunjiTrainingImportService: Sendable {
                 )
                 modelContext.insert(event)
             }
-            event.startedAt = workout.startedAt
-            event.endedAt = workout.endedAt
-            event.dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: workout.startedAt, calendar: calendar)
-            event.activityType = "力量训练"
-            event.title = workout.title
-            event.durationMinutes = Double(workout.durationMinutes)
-            event.averageHeartRate = normalized.averageHeartRate
-            event.rpe = normalized.sessionRPE
-            event.updatedAt = Date()
+
+            if event.source == "xunji" {
+                event.startedAt = workout.startedAt
+                event.endedAt = workout.endedAt
+                event.dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: workout.startedAt, calendar: calendar)
+                event.activityType = workout.title
+                event.title = workout.title
+                event.durationMinutes = Double(workout.durationMinutes)
+                event.averageHeartRate = normalized.averageHeartRate
+                event.rpe = normalized.sessionRPE
+                event.updatedAt = Date()
+            } else {
+                event.updatedAt = Date()
+            }
+
+            workout.linkedWorkoutEventId = event.id
 
             if let mirror {
                 mirror.datestr = normalized.datestr
@@ -416,8 +467,21 @@ struct XunjiTrainingImportService: Sendable {
         datestr: String,
         calendar: Calendar = .current
     ) throws -> [XunjiNormalizedWorkout] {
-        let response = try decoder.decode(XunjiTrainingAPIResponse.self, from: data)
-        guard response.success else { throw XunjiImportError.unsuccessfulResponse }
+        let response: XunjiTrainingAPIResponse
+        do {
+            response = try decoder.decode(XunjiTrainingAPIResponse.self, from: data)
+        } catch let decodingError as DecodingError {
+            throw XunjiImportError.decodingError(XunjiImportError.formatDecodingError(decodingError))
+        } catch {
+            throw error
+        }
+        guard response.success else {
+            if let errMsg = response.errorMessage {
+                throw XunjiImportError.apiError(errMsg)
+            } else {
+                throw XunjiImportError.unsuccessfulResponse
+            }
+        }
         return response.res.trains.compactMap { normalize(train: $0, fallbackDatestr: datestr, calendar: calendar) }
     }
 
@@ -493,8 +557,40 @@ struct XunjiTrainingImportService: Sendable {
     }
 }
 
-enum XunjiImportError: Error {
+enum XunjiImportError: Error, LocalizedError {
     case unsuccessfulResponse
+    case apiError(String)
+    case decodingError(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .unsuccessfulResponse:
+            return "训记接口返回了失败响应。"
+        case .apiError(let message):
+            return message
+        case .decodingError(let details):
+            return "数据格式错误: \(details)"
+        }
+    }
+
+    static func formatDecodingError(_ error: DecodingError) -> String {
+        switch error {
+        case .typeMismatch(let type, let context):
+            let path = context.codingPath.map(\.stringValue).joined(separator: ".")
+            return "类型不匹配: 期望 \(type), 路径 \(path). \(context.debugDescription)"
+        case .valueNotFound(let type, let context):
+            let path = context.codingPath.map(\.stringValue).joined(separator: ".")
+            return "未找到值: 期望 \(type), 路径 \(path). \(context.debugDescription)"
+        case .keyNotFound(let key, let context):
+            let path = (context.codingPath + [key]).map(\.stringValue).joined(separator: ".")
+            return "缺失字段: '\(key.stringValue)', 路径 \(path). \(context.debugDescription)"
+        case .dataCorrupted(let context):
+            let path = context.codingPath.map(\.stringValue).joined(separator: ".")
+            return "数据损坏: 路径 \(path). \(context.debugDescription)"
+        @unknown default:
+            return error.localizedDescription
+        }
+    }
 }
 
 struct XunjiNormalizedWorkout: Codable, Hashable, Sendable {
@@ -512,11 +608,62 @@ struct XunjiNormalizedWorkout: Codable, Hashable, Sendable {
 private struct XunjiTrainingAPIResponse: Decodable {
     var success: Bool
     var res: XunjiTrainingResult
+    var errorMessage: String?
+
+    enum CodingKeys: String, CodingKey {
+        case success
+        case res
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        let successVal = try container.decodeIfPresent(Bool.self, forKey: .success)
+        
+        if let successVal {
+            self.success = successVal
+            if successVal {
+                if let resultObj = try? container.decode(XunjiTrainingResult.self, forKey: .res) {
+                    self.res = resultObj
+                } else {
+                    let trainsArr = try container.decode([XunjiTrain].self, forKey: .res)
+                    self.res = XunjiTrainingResult(trains: trainsArr)
+                }
+                self.errorMessage = nil
+            } else {
+                if let errorStr = try? container.decode(String.self, forKey: .res) {
+                    self.errorMessage = errorStr
+                } else {
+                    self.errorMessage = nil
+                }
+                self.res = XunjiTrainingResult(trains: [])
+            }
+        } else {
+            if let result = try? container.decode(XunjiTrainingResult.self, forKey: .res) {
+                self.success = true
+                self.res = result
+                self.errorMessage = nil
+            } else if let trainsArr = try? container.decode([XunjiTrain].self, forKey: .res) {
+                self.success = true
+                self.res = XunjiTrainingResult(trains: trainsArr)
+                self.errorMessage = nil
+            } else if let errorStr = try? container.decode(String.self, forKey: .res) {
+                self.success = false
+                self.errorMessage = errorStr
+                self.res = XunjiTrainingResult(trains: [])
+            } else {
+                self.success = false
+                self.errorMessage = nil
+                self.res = try container.decode(XunjiTrainingResult.self, forKey: .res)
+            }
+        }
+    }
 }
 
 private struct XunjiTrainingResult: Decodable {
     var trains: [XunjiTrain]
 }
+
 
 private struct XunjiTrain: Codable {
     var datestr: String?
@@ -538,13 +685,13 @@ private struct XunjiTrain: Codable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        datestr = try container.decodeIfPresent(String.self, forKey: .datestr)
+        datestr = try container.decodeFlexibleStringIfPresent(forKey: .datestr)
         localid = try container.decodeFlexibleIntIfPresent(forKey: .localid)
-        title = try container.decodeIfPresent(String.self, forKey: .title)
+        title = try container.decodeFlexibleStringIfPresent(forKey: .title)
         start = try container.decodeFlexibleInt64IfPresent(forKey: .start)
         end = try container.decodeFlexibleInt64IfPresent(forKey: .end)
-        note = try container.decodeIfPresent(String.self, forKey: .note)
-        remark = try container.decodeIfPresent(String.self, forKey: .remark)
+        note = try container.decodeFlexibleStringIfPresent(forKey: .note)
+        remark = try container.decodeFlexibleStringIfPresent(forKey: .remark)
         rpe = try container.decodeFlexibleDoubleIfPresent(forKey: .rpe)
         movements = try container.decodeIfPresent([XunjiMovement].self, forKey: .movements) ?? []
     }
@@ -553,6 +700,16 @@ private struct XunjiTrain: Codable {
 private struct XunjiMovement: Codable {
     var name: String
     var sets: [XunjiSet]
+
+    enum CodingKeys: String, CodingKey {
+        case name, sets
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decodeFlexibleStringIfPresent(forKey: .name) ?? "未命名动作"
+        sets = try container.decodeIfPresent([XunjiSet].self, forKey: .sets) ?? []
+    }
 }
 
 private struct XunjiSet: Codable {
@@ -578,14 +735,14 @@ private struct XunjiSet: Codable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        done = try container.decodeIfPresent(Bool.self, forKey: .done)
-        weight = try container.decodeIfPresent(String.self, forKey: .weight)
+        done = try container.decodeFlexibleBoolIfPresent(forKey: .done)
+        weight = try container.decodeFlexibleStringIfPresent(forKey: .weight)
         weightKg = try container.decodeFlexibleDoubleIfPresent(forKey: .weightKg)
         unit = try container.decodeIfPresent(String.self, forKey: .unit)
-        reps = try container.decodeIfPresent(String.self, forKey: .reps)
-        time = try container.decodeIfPresent(String.self, forKey: .time)
+        reps = try container.decodeFlexibleStringIfPresent(forKey: .reps)
+        time = try container.decodeFlexibleStringIfPresent(forKey: .time)
         durationSeconds = try container.decodeFlexibleDoubleIfPresent(forKey: .durationSeconds)
-        selfWeight = try container.decodeIfPresent(Bool.self, forKey: .selfWeight)
+        selfWeight = try container.decodeFlexibleBoolIfPresent(forKey: .selfWeight)
         rpe = try container.decodeFlexibleDoubleIfPresent(forKey: .rpe)
         rir = try container.decodeFlexibleDoubleIfPresent(forKey: .rir)
         note = try container.decodeIfPresent(String.self, forKey: .note)
@@ -594,14 +751,15 @@ private struct XunjiSet: Codable {
     }
 
     func strengthSet(doneFallback: Bool?) -> StrengthSetLog {
-        StrengthSetLog(
+        let completed = done ?? doneFallback ?? true
+        return StrengthSetLog(
             repetitions: reps.flatMap { Int(Double($0) ?? 0) }.flatMap { $0 > 0 ? $0 : nil } ?? 1,
             weightKilograms: resolvedWeightKilograms,
             isWarmup: false,
             rpe: rpe,
             rir: rir,
-            isCompleted: done ?? doneFallback,
-            completedAt: (done ?? doneFallback) == true ? Date() : nil
+            isCompleted: completed,
+            completedAt: completed ? Date() : nil
         )
     }
 
@@ -616,6 +774,16 @@ private struct XunjiSet: Codable {
 private struct XunjiSetItem: Codable {
     var name: String?
     var set: XunjiSet
+
+    enum CodingKeys: String, CodingKey {
+        case name, set
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decodeFlexibleStringIfPresent(forKey: .name)
+        set = try container.decode(XunjiSet.self, forKey: .set)
+    }
 }
 
 private struct XunjiSetMetrics: Codable {
@@ -643,22 +811,39 @@ private struct XunjiSetMetrics: Codable {
 
 private extension KeyedDecodingContainer {
     func decodeFlexibleIntIfPresent(forKey key: Key) throws -> Int? {
-        if let value = try decodeIfPresent(Int.self, forKey: key) { return value }
-        if let value = try decodeIfPresent(String.self, forKey: key) { return Int(value) }
+        if let value = try? decodeIfPresent(Int.self, forKey: key) { return value }
+        if let value = try? decodeIfPresent(String.self, forKey: key) { return Int(value) }
         return nil
     }
 
     func decodeFlexibleInt64IfPresent(forKey key: Key) throws -> Int64? {
-        if let value = try decodeIfPresent(Int64.self, forKey: key) { return value }
-        if let value = try decodeIfPresent(Int.self, forKey: key) { return Int64(value) }
-        if let value = try decodeIfPresent(String.self, forKey: key) { return Int64(value) }
+        if let value = try? decodeIfPresent(Int64.self, forKey: key) { return value }
+        if let value = try? decodeIfPresent(Int.self, forKey: key) { return Int64(value) }
+        if let value = try? decodeIfPresent(String.self, forKey: key) { return Int64(value) }
         return nil
     }
 
     func decodeFlexibleDoubleIfPresent(forKey key: Key) throws -> Double? {
-        if let value = try decodeIfPresent(Double.self, forKey: key) { return value }
-        if let value = try decodeIfPresent(Int.self, forKey: key) { return Double(value) }
-        if let value = try decodeIfPresent(String.self, forKey: key) { return Double(value) }
+        if let value = try? decodeIfPresent(Double.self, forKey: key) { return value }
+        if let value = try? decodeIfPresent(Int.self, forKey: key) { return Double(value) }
+        if let value = try? decodeIfPresent(String.self, forKey: key) { return Double(value) }
+        return nil
+    }
+
+    func decodeFlexibleStringIfPresent(forKey key: Key) throws -> String? {
+        if let value = try? decodeIfPresent(String.self, forKey: key) { return value }
+        if let value = try? decodeIfPresent(Int.self, forKey: key) { return String(value) }
+        if let value = try? decodeIfPresent(Double.self, forKey: key) { return String(value) }
+        return nil
+    }
+
+    func decodeFlexibleBoolIfPresent(forKey key: Key) throws -> Bool? {
+        if let value = try? decodeIfPresent(Bool.self, forKey: key) { return value }
+        if let value = try? decodeIfPresent(Int.self, forKey: key) { return value != 0 }
+        if let value = try? decodeIfPresent(String.self, forKey: key) {
+            let lowered = value.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            return lowered == "true" || lowered == "1" || lowered == "yes"
+        }
         return nil
     }
 }

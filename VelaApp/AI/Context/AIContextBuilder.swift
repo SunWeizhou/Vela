@@ -10,6 +10,7 @@ struct AIContextBuilder {
         userWiki: [String: String],
         weeklyTrends: [String: String] = [:],
         foodLogs: [FoodLogRecord] = [],
+        workoutEvents: [WorkoutEventRecord] = [],
         strengthWorkouts: [StrengthWorkoutRecord] = [],
         trainingResponses: [TrainingResponseRecord] = [],
         onboardingState: OnboardingState? = nil,
@@ -31,6 +32,7 @@ struct AIContextBuilder {
             recovery: RecoveryContextBuilder().build(from: dashboard),
             strain: StrainContextBuilder().build(from: dashboard),
             workouts: WorkoutsContextBuilder().build(from: dashboard.workouts),
+            unifiedWorkouts: buildUnifiedWorkoutDict(workoutEvents, generatedAt: generatedAt),
             stress: StressContextBuilder().build(from: dashboard),
             energyBank: EnergyBankContextBuilder().build(from: dashboard),
             healthAgeTrend: HealthAgeContextBuilder().build(from: dashboard),
@@ -70,7 +72,7 @@ struct AIContextBuilder {
             hash: hash,
             includedSections: [
                 "today_summary", "sleep", "recovery", "strain", "workouts",
-                "stress", "energy_bank", "health_age_trend", "nutrition",
+                "unified_workouts", "stress", "energy_bank", "health_age_trend", "nutrition",
                 "journal", "user_wiki", "extended_metrics", "strength_training"
             ] + (onboardingState == nil ? [] : ["body_model_profile"])
                 + (bodyModelState == nil ? [] : ["body_model_state"]),
@@ -88,6 +90,7 @@ struct AIContextBuilder {
         userWiki: [String: String],
         weeklyTrends: [String: String] = [:],
         foodLogs: [FoodLogRecord] = [],
+        workoutEvents: [WorkoutEventRecord] = [],
         strengthWorkouts: [StrengthWorkoutRecord] = [],
         trainingResponses: [TrainingResponseRecord] = [],
         onboardingState: OnboardingState? = nil,
@@ -267,6 +270,71 @@ struct AIContextBuilder {
         ]
     }
 
+    private func buildUnifiedWorkoutDict(
+        _ events: [WorkoutEventRecord],
+        generatedAt: Date
+    ) -> [String: String] {
+        let sorted = events.sorted { $0.startedAt > $1.startedAt }
+        let sevenDaysAgo = generatedAt.addingTimeInterval(-7 * 24 * 3600)
+        let fourteenDaysAgo = generatedAt.addingTimeInterval(-14 * 24 * 3600)
+        let twentyEightDaysAgo = generatedAt.addingTimeInterval(-28 * 24 * 3600)
+        let recent7d = sorted.filter { $0.startedAt >= sevenDaysAgo && $0.startedAt <= generatedAt }
+        let recent14d = sorted.filter { $0.startedAt >= fourteenDaysAgo && $0.startedAt <= generatedAt }
+        let recent28d = sorted.filter { $0.startedAt >= twentyEightDaysAgo && $0.startedAt <= generatedAt }
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.sortedKeys]
+        let entries = sorted.prefix(12).map { UnifiedWorkoutContextEntry(event: $0) }
+        let encodedEntries = (try? encoder.encode(entries))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+
+        return [
+            "algorithm_version": "workoutEvents.v1",
+            "source": "WorkoutEventRecord unified Apple Watch / HealthKit / Xunji / manual workout timeline",
+            "confidence": sorted.isEmpty ? "unavailable" : "medium",
+            "note": sorted.isEmpty
+                ? "No unified workout history available yet."
+                : "Use this as the primary workout timeline. Strength details may be linked through linked_strength_workout_id.",
+            "sessions_7d": "\(recent7d.count)",
+            "sessions_14d": "\(recent14d.count)",
+            "sessions_28d": "\(recent28d.count)",
+            "duration_7d_min": String(format: "%.0f", recent7d.reduce(0) { $0 + $1.durationMinutes }),
+            "duration_14d_min": String(format: "%.0f", recent14d.reduce(0) { $0 + $1.durationMinutes }),
+            "energy_14d_kcal": String(format: "%.0f", recent14d.compactMap(\.energyKilocalories).reduce(0, +)),
+            "activity_types_14d": formatWorkoutActivityTypes(recent14d),
+            "source_mix_14d": formatWorkoutSourceMix(recent14d),
+            "recent_workout_events_json": encodedEntries
+        ]
+    }
+
+    private func formatWorkoutActivityTypes(_ events: [WorkoutEventRecord]) -> String {
+        guard !events.isEmpty else { return "None" }
+        let counts = Dictionary(grouping: events, by: { workoutDisplayType($0) })
+            .mapValues(\.count)
+        return counts
+            .sorted { $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value }
+            .map { "\($0.key): \($0.value)" }
+            .joined(separator: ", ")
+    }
+
+    private func formatWorkoutSourceMix(_ events: [WorkoutEventRecord]) -> String {
+        guard !events.isEmpty else { return "None" }
+        let counts = Dictionary(grouping: events, by: \.source)
+            .mapValues(\.count)
+        return counts
+            .sorted { $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value }
+            .map { "\($0.key): \($0.value)" }
+            .joined(separator: ", ")
+    }
+
+    private func workoutDisplayType(_ event: WorkoutEventRecord) -> String {
+        if !event.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return event.title
+        }
+        return event.activityType
+    }
+
     private func buildStrengthTrainingDict(
         _ workouts: [StrengthWorkoutRecord],
         trainingResponses: [TrainingResponseRecord],
@@ -307,7 +375,8 @@ struct AIContextBuilder {
             "average_next_day_recovery_delta": response.averageNextDayRecoveryDelta.map { String(format: "%+.1f", $0) } ?? "N/A",
             "flagged_response_count": "\(response.flaggedCount)",
             "exercise_progress_14d": progressList.isEmpty ? "No exercise data." : progressList,
-            "last_session_summary": recent14d.lastWorkoutSummary ?? "No strength training sessions logged in the past 14 days."
+            "last_session_summary": recent14d.lastWorkoutSummary ?? "No strength training sessions logged in the past 14 days.",
+            "recent_workout_details": formatRecentWorkoutDetails(workouts)
         ]
     }
 
@@ -338,8 +407,51 @@ struct AIContextBuilder {
             trainingAdaptation: adaptation.modifiedWorkoutDescription + " " + adaptation.reasons.joined(separator: " "),
             recoveryResponseSummary: response.summary,
             averageNextDayRecoveryDelta: response.averageNextDayRecoveryDelta,
-            flaggedResponseCount: response.flaggedCount
+            flaggedResponseCount: response.flaggedCount,
+            recentWorkoutDetails: formatRecentWorkoutDetails(workouts)
         )
+    }
+
+    private func formatRecentWorkoutDetails(_ workouts: [StrengthWorkoutRecord]) -> String {
+        let isZH = AppLanguage.stored.isChinese
+        guard !workouts.isEmpty else {
+            return isZH ? "近期无力量训练记录。" : "No recent strength workouts logged."
+        }
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm"
+        
+        var result = ""
+        for workout in workouts {
+            let dateStr = dateFormatter.string(from: workout.startedAt)
+            result += "### \(workout.title) (\(dateStr) · \(workout.durationMinutes) \(isZH ? "分钟" : "min"))\n"
+            if !workout.notes.isEmpty {
+                result += "\(isZH ? "备注" : "Notes"): \(workout.notes)\n"
+            }
+            if workout.exercises.isEmpty {
+                result += isZH ? "本次训练未记录动作。\n" : "No exercises logged in this session.\n"
+            } else {
+                for exercise in workout.exercises {
+                    let completedWorkSets = exercise.sets.filter { !$0.isWarmup && $0.isCompleted != false }
+                    let warmupSets = exercise.sets.filter { $0.isWarmup && $0.isCompleted != false }
+                    let uncompletedSets = exercise.sets.filter { $0.isCompleted == false }
+                    result += "- \(exercise.name) (\(exercise.equipment)): \(completedWorkSets.count) \(isZH ? "完成工作组" : "completed work sets")"
+                    if !uncompletedSets.isEmpty {
+                        result += ", \(uncompletedSets.count) \(isZH ? "未完成组未计入容量" : "uncompleted sets excluded")"
+                    }
+                    result += "\n"
+                    for (index, set) in completedWorkSets.enumerated() {
+                        let rpeStr = set.rpe.map { " RPE \($0)" } ?? ""
+                        result += "  * \(isZH ? "完成组" : "Completed set") \(index + 1): \(set.weightKilograms)kg x \(set.repetitions)\(isZH ? "次" : "reps")\(rpeStr)\n"
+                    }
+                    if !warmupSets.isEmpty {
+                        result += "  * \(isZH ? "热身组" : "Warmup sets"): \(warmupSets.count) \(isZH ? "组，未计入工作容量" : "sets, excluded from work volume")\n"
+                    }
+                }
+            }
+            result += "\n"
+        }
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func exerciseProgressSummaries(

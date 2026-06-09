@@ -41,6 +41,7 @@ struct WikiProfileView: View {
         .navigationTitle(L10n.t("My Profile", "我的档案"))
         .navigationBarTitleDisplayMode(.large)
         .task {
+            WikiSyncManager.sync(modelContext: modelContext)
             let allDocs = WikiFileService.loadAllDocuments()
             documents = allDocs.filter { $0.filename != "baselines.md" }
             baselineDoc = allDocs.first { $0.filename == "baselines.md" && $0.content.count > 100 }
@@ -315,7 +316,7 @@ struct WikiProfileView: View {
 
     private func readOnlyFieldRow(_ field: WikiField) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(field.label)
+            Text(localizedLabel(field.label))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(tintForFile(fieldsToFilename[field.label] ?? ""))
             Text(field.value.isEmpty ? "—" : field.value)
@@ -332,7 +333,7 @@ struct WikiProfileView: View {
 
     private func editableFieldRow(index: Int, field: WikiField) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(field.label)
+            Text(localizedLabel(field.label))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(tintForFile(fieldsToFilename[field.label] ?? ""))
 
@@ -371,8 +372,17 @@ struct WikiProfileView: View {
     }
 
     private func saveEdit(_ doc: WikiDocument) {
-        let newContent = serializeFields(draftFields, filename: doc.filename)
+        let fieldValues = Dictionary(uniqueKeysWithValues: draftFields.map { ($0.label, $0.value) })
+        let newContent = WikiFileService.replacingStructuredFields(
+            in: doc.content,
+            title: doc.title,
+            fieldValues: fieldValues,
+            preferredOrder: fileTemplateFields[doc.filename] ?? [doc.title]
+        )
         try? WikiFileService.updateSection(filename: doc.filename, content: newContent, mode: .replace)
+        
+        WikiSyncManager.sync(modelContext: modelContext)
+        
         editingFileId = nil
         draftFields = []
         let allDocs = WikiFileService.loadAllDocuments()
@@ -391,10 +401,17 @@ struct WikiProfileView: View {
     private let fileTemplateFields: [String: [String]] = [
         "profile.md": ["Age", "Activity level", "Primary sports", "Health goals"],
         "goals.md": ["Sleep", "Activity", "Recovery", "Other"],
+        "constraints.md": ["Injuries", "Equipment", "Time", "Dietary"],
+        "preferences.md": ["Training style", "Communication style", "Dietary preferences"],
         "habits.md": ["Caffeine", "Alcohol", "Evening routine", "Morning routine"],
         "training_history.md": ["Typical weekly volume", "Preferred training types", "Past injuries"],
         "health_context.md": ["Known conditions", "Medications", "Recent changes"],
+        "diet.md": ["Dietary restrictions", "Caffeine window", "Preferred meals"],
+        "sleep.md": ["Sleep environment", "Wind-down routine", "Targets"],
         "notes.md": ["Notes"],
+        "observations.md": ["Observations"],
+        "strategies.md": ["Active strategies"],
+        "archive.md": ["Archive"]
     ]
 
     /// Reverse mapping: field label → filename
@@ -438,18 +455,6 @@ struct WikiProfileView: View {
         return labels.map { WikiField(label: $0, value: values[$0] ?? "") }
     }
 
-    private func serializeFields(_ fields: [WikiField], filename: String) -> String {
-        let labels = fileTemplateFields[filename] ?? ["Notes"]
-        var lines: [String] = []
-        if let first = labels.first {
-            lines.append("# \(first)")
-        }
-        for field in fields {
-            lines.append("- \(field.label): \(field.value)")
-        }
-        return lines.joined(separator: "\n")
-    }
-
     private func placeholderForField(_ label: String) -> String {
         let lang = AppLanguage.stored
         let map: [String: (en: String, zh: String)] = [
@@ -472,11 +477,69 @@ struct WikiProfileView: View {
             "Medications": ("e.g. None", "例如 无"),
             "Recent changes": ("e.g. New diet plan", "例如 新的饮食计划"),
             "Notes": ("e.g. Any observations...", "例如 任何观察..."),
+            "Injuries": ("e.g. Back pain", "例如 腰背疼痛"),
+            "Equipment": ("e.g. Dumbbells, barbell", "例如 哑铃、杠铃"),
+            "Time": ("e.g. 45 mins/day", "例如 每天45分钟"),
+            "Dietary": ("e.g. Vegetarian", "例如 素食"),
+            "Training style": ("e.g. Hypertrophy", "例如 肌肥大训练"),
+            "Communication style": ("e.g. Direct and encouraging", "例如 直接且鼓励性质"),
+            "Dietary preferences": ("e.g. High protein", "例如 高蛋白饮食"),
+            "Dietary restrictions": ("e.g. Low sodium", "例如 低钠饮食"),
+            "Caffeine window": ("e.g. Before 2 PM", "例如 下午2点前"),
+            "Preferred meals": ("e.g. Chicken breast, broccoli", "例如 鸡胸肉、西兰花"),
+            "Sleep environment": ("e.g. Cool and dark", "例如 凉爽、黑暗"),
+            "Wind-down routine": ("e.g. Reading, no screens", "例如 阅读、不看屏幕"),
+            "Targets": ("e.g. 7.5 hours sleep", "例如 7.5小时睡眠"),
+            "Observations": ("e.g. Fatigue after squats", "例如 深蹲后大腿易疲劳"),
+            "Active strategies": ("e.g. Progressive overload", "例如 渐进性超负荷"),
+            "Archive": ("e.g. Old goals...", "例如 历史目标存档...")
         ]
         if let entry = map[label] {
             return lang.isChinese ? entry.zh : entry.en
         }
         return lang.isChinese ? "输入内容..." : "Enter value..."
+    }
+
+    private func localizedLabel(_ label: String) -> String {
+        guard AppLanguage.stored.isChinese else { return label }
+        let map: [String: String] = [
+            "Age": "年龄",
+            "Activity level": "活跃程度",
+            "Primary sports": "主要运动项目",
+            "Health goals": "健康目标",
+            "Sleep": "睡眠目标",
+            "Activity": "运动目标",
+            "Recovery": "恢复目标",
+            "Other": "其他目标",
+            "Caffeine": "咖啡因摄入",
+            "Alcohol": "饮酒习惯",
+            "Evening routine": "晚间常规",
+            "Morning routine": "早间常规",
+            "Typical weekly volume": "每周运动量",
+            "Preferred training types": "偏好运动类型",
+            "Past injuries": "历史伤病情况",
+            "Known conditions": "已知身体状况",
+            "Medications": "服用药物",
+            "Recent changes": "近期身体变化",
+            "Notes": "备注与发现",
+            "Injuries": "运动伤病情况",
+            "Equipment": "可用训练装备",
+            "Time": "运动时间限制",
+            "Dietary": "饮食禁忌",
+            "Training style": "训练风格偏好",
+            "Communication style": "沟通语言风格",
+            "Dietary preferences": "饮食风格偏好",
+            "Dietary restrictions": "饮食限制与禁忌",
+            "Caffeine window": "咖啡因摄入窗口期",
+            "Preferred meals": "偏好膳食类型",
+            "Sleep environment": "睡眠物理环境",
+            "Wind-down routine": "睡前放松常规",
+            "Targets": "睡眠目标与时长",
+            "Observations": "AI 观察发现",
+            "Active strategies": "当前执行策略",
+            "Archive": "历史存档记录"
+        ]
+        return map[label] ?? label
     }
 
     // MARK: - Icon / Tint Mapping

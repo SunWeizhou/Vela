@@ -617,25 +617,32 @@ struct JournalView: View {
         let allDays = Set(scoresByDay.keys)
 
         // Aggregate by tag — days WITH tag
-        var tagStats: [String: (count: Int, totalRecovery: Double, totalSleep: Double, days: Set<String>)] = [:]
+        var tagStats: [String: Set<String>] = [:]
         for entry in recentEntries {
             let dayKey = DailyHealthSummaryRecord.dayIdentifier(for: entry.createdAt, calendar: calendar)
-            guard let scores = scoresByDay[dayKey] else { continue }
+            guard scoresByDay[dayKey] != nil else { continue }
             for tag in entry.tags {
-                var current = tagStats[tag] ?? (0, 0, 0, [])
-                current.count += 1
-                current.totalRecovery += scores.recovery
-                current.totalSleep += scores.sleep
-                current.days.insert(dayKey)
-                tagStats[tag] = current
+                var days = tagStats[tag] ?? []
+                days.insert(dayKey)
+                tagStats[tag] = days
             }
         }
 
-        return tagStats.compactMap { tag, stats -> TagCorrelationStat? in
-            guard stats.count >= 2 else { return nil }
+        return tagStats.compactMap { tag, days -> TagCorrelationStat? in
+            let dayCount = days.count
+            guard dayCount >= 2 else { return nil }
 
-            let daysWithTag = stats.days
+            let daysWithTag = days
             let daysWithoutTag = allDays.subtracting(daysWithTag)
+
+            // Compute averages for days WITH this tag
+            let withRecScores = daysWithTag.compactMap { scoresByDay[$0]?.recovery }.filter { $0 > 0 }
+            let withSleepScores = daysWithTag.compactMap { scoresByDay[$0]?.sleep }.filter { $0 > 0 }
+            
+            guard !withRecScores.isEmpty || !withSleepScores.isEmpty else { return nil }
+            
+            let avgRec = withRecScores.isEmpty ? 0 : withRecScores.reduce(0, +) / Double(withRecScores.count)
+            let avgSlp = withSleepScores.isEmpty ? 0 : withSleepScores.reduce(0, +) / Double(withSleepScores.count)
 
             // Compute averages for days WITHOUT this tag
             var withoutRecovery: Double? = nil
@@ -653,9 +660,9 @@ struct JournalView: View {
 
             return TagCorrelationStat(
                 tag: tag,
-                count: stats.count,
-                avgRecovery: stats.totalRecovery / Double(stats.count),
-                avgSleep: stats.totalSleep / Double(stats.count),
+                count: dayCount,
+                avgRecovery: avgRec,
+                avgSleep: avgSlp,
                 avgStrain: nil,
                 withoutAvgRecovery: withoutRecovery,
                 withoutAvgSleep: withoutSleep

@@ -403,7 +403,7 @@ struct UserWikiArchiveView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 40)
                     .onAppear {
-                        initializeDefaultWikiDocs()
+                        WikiSyncManager.sync(modelContext: modelContext)
                     }
                 } else {
                     ForEach(wikiDocs) { doc in
@@ -454,6 +454,9 @@ struct UserWikiArchiveView: View {
         }
         .background(VelaTheme.systemGroupedBackground)
         .navigationTitle("用户健康档案 (Wiki)")
+        .task {
+            WikiSyncManager.sync(modelContext: modelContext)
+        }
         .sheet(isPresented: $showEditor) {
             NavigationStack {
                 VStack(spacing: 0) {
@@ -633,12 +636,18 @@ struct UserWikiArchiveView: View {
     private func parseMarkdown(_ text: String) {
         var items: [ParsedItem] = []
         var extraLines: [String] = []
+        var hasSkippedPrimaryHeading = false
         
         let lines = text.components(separatedBy: .newlines)
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty { continue }
             if trimmed.hasPrefix("#") {
+                if !hasSkippedPrimaryHeading, trimmed.hasPrefix("# "), String(trimmed.dropFirst(2)) == editTitle {
+                    hasSkippedPrimaryHeading = true
+                    continue
+                }
+                extraLines.append(line)
                 continue
             }
             
@@ -666,7 +675,8 @@ struct UserWikiArchiveView: View {
     
     private func reconstructMarkdown() -> String {
         var lines: [String] = []
-        lines.append("## \(editTitle)")
+        lines.append("# \(editTitle)")
+        lines.append("")
         
         for item in parsedItems {
             if item.isKeyValue {
@@ -701,30 +711,12 @@ struct UserWikiArchiveView: View {
             finalContent = editText
         }
         
-        doc.title = editTitle
-        doc.markdownContent = finalContent
-        doc.updatedAt = Date()
-        try? modelContext.save()
-        
-        // Synchronize with flat files
         try? WikiFileService.updateSection(filename: doc.filename, content: finalContent, mode: .replace)
+        WikiSyncManager.sync(modelContext: modelContext)
     }
     
     private func initializeDefaultWikiDocs() {
-        let docs = [
-            ("profile.md", "基本画像", "## 个人基本生理画像\n- 年龄: 待补充\n- 训练水平: 待补充\n- 作息偏好: 待补充\n- 最大摄氧量基准: 待补充"),
-            ("goals.md", "健康与运动目标", "## 健康与体能目标\n- 待补充"),
-            ("diet.md", "饮食偏好与禁忌", "## 膳食偏好与日常规避\n- 饮食偏好: 待补充\n- 过敏或不耐受: 待补充\n- 咖啡因窗口: 待补充"),
-            ("sleep.md", "睡眠卫生与环境", "## 睡眠卫生规程与卧室环境\n- 卧室环境: 待补充\n- 睡前习惯: 待补充")
-        ]
-        
-        for (filename, title, content) in docs {
-            let doc = UserWikiDocumentRecord(filename: filename, title: title, markdownContent: content)
-            modelContext.insert(doc)
-            // Synchronize with flat files
-            try? WikiFileService.updateSection(filename: filename, content: content, mode: .replace)
-        }
-        try? modelContext.save()
+        WikiSyncManager.sync(modelContext: modelContext)
     }
 }
 

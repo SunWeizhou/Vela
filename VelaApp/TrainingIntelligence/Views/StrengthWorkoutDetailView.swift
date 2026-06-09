@@ -1,12 +1,19 @@
 import SwiftUI
 import SwiftData
+import Charts
 
 struct StrengthWorkoutDetailView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var dashboardVM: DashboardViewModel
+
     @Query(sort: \StrengthWorkoutRecord.startedAt, order: .reverse) private var allWorkouts: [StrengthWorkoutRecord]
     let workout: StrengthWorkoutRecord
 
     @State private var selectedSet: StrengthSetDetail?
+    @State private var showDeleteConfirmation = false
+    @State private var showEditSheet = false
 
     private var analysis: StrengthWorkoutAnalysis {
         TrainingAnalyticsService().summarizeWorkout(
@@ -40,12 +47,72 @@ struct StrengthWorkoutDetailView: View {
         .background(detailBackground.ignoresSafeArea())
         .navigationTitle("力量训练详情")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                HStack(spacing: 12) {
+                    Button {
+                        showEditSheet = true
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(VelaTheme.accent)
+                    }
+                    
+                    Button(role: .destructive) {
+                        showDeleteConfirmation = true
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(Color.red)
+                    }
+                }
+            }
+        }
         .sheet(item: $selectedSet) { detail in
             StrengthSetDetailSheet(detail: detail)
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(VelaTheme.systemGroupedBackground)
+        }
+        .sheet(isPresented: $showEditSheet) {
+            StrengthWorkoutLogSheetView(editingWorkout: workout)
+        }
+        .confirmationDialog("确定要删除这条健身记录吗？", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
+            Button("删除记录", role: .destructive) {
+                deleteWorkout()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("删除后，该训练对应的组次、容量和计算负荷都将被移除。")
+        }
+    }
+
+    private func deleteWorkout() {
+        do {
+            let workoutID = workout.id
+            let eventDescriptor = FetchDescriptor<WorkoutEventRecord>(
+                predicate: #Predicate<WorkoutEventRecord> { $0.linkedStrengthWorkoutId == workoutID }
+            )
+            let events = try? modelContext.fetch(eventDescriptor)
+            if let events {
+                for event in events {
+                    if let hkId = event.linkedHealthKitWorkoutId {
+                        modelContext.insert(DeletedWorkoutRecord(id: hkId.uuidString))
+                    } else if event.source == "healthKit" {
+                        modelContext.insert(DeletedWorkoutRecord(id: event.id.uuidString))
+                    }
+                }
+            }
+            try WorkoutAggregationService.shared.deleteStrengthWorkout(workout, modelContext: modelContext)
+            
+            VelaAppState.shared.markLocalDataChanged()
+            
+            Task {
+                await dashboardVM.refresh(modelContext: modelContext)
+            }
+            dismiss()
+        } catch {
+            print("Failed to delete workout: \(error)")
         }
     }
 
@@ -193,6 +260,26 @@ struct StrengthWorkoutDetailView: View {
                         }
                     }
 
+                    if !exercise.sets.isEmpty {
+                        HStack(spacing: 12) {
+                            Text("组")
+                                .frame(width: 32, alignment: .leading)
+                            Text("重量")
+                                .frame(width: 70, alignment: .center)
+                            Spacer()
+                            Text("次数")
+                                .frame(width: 50, alignment: .center)
+                            Text("RPE")
+                                .frame(width: 44, alignment: .center)
+                            Text("状态")
+                                .frame(width: 32, alignment: .trailing)
+                        }
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(mutedColor)
+                        .padding(.horizontal, 4)
+                        .padding(.bottom, 2)
+                    }
+
                     ForEach(Array(exercise.sets.enumerated()), id: \.element.id) { index, set in
                         Button {
                             selectedSet = StrengthSetDetail(
@@ -234,13 +321,17 @@ struct StrengthWorkoutDetailView: View {
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(value)
                     .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                 Text(unit)
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(mutedColor)
+                    .lineLimit(1)
             }
             Text(title)
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(mutedColor)
+                .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
@@ -248,23 +339,41 @@ struct StrengthWorkoutDetailView: View {
     }
 
     private func setRow(index: Int, set: StrengthSetLog) -> some View {
-        HStack(spacing: 10) {
-            Text("\(index + 1)")
-                .font(.system(size: 12, weight: .bold, design: .rounded))
+        HStack(spacing: 12) {
+            // 组号 / 热身标记
+            Text(set.isWarmup ? "热" : "\(index + 1)")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
                 .foregroundStyle(Color.white)
                 .frame(width: 24, height: 24)
-                .background(Circle().fill(set.isWarmup ? mutedColor : accentColor))
-            Text(set.isWarmup ? "热身组" : "\(set.weightKilograms.formatted(.number.precision(.fractionLength(0...1)))) kg × \(set.repetitions)")
-                .font(.system(size: 13, weight: .semibold))
+                .background(Circle().fill(set.isWarmup ? Color(hex: "#FF9500") : VelaTheme.accent))
+                .frame(width: 32, alignment: .leading)
+
+            // 重量
+            Text("\(set.weightKilograms.formatted(.number.precision(.fractionLength(0...1)))) kg")
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
                 .foregroundStyle(bodyTextColor)
+                .frame(width: 70, alignment: .center)
+
             Spacer()
-            if let rpe = set.rpe {
-                Text("RPE \(Int(rpe))")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(mutedColor)
-            }
+
+            // 次数
+            Text("\(set.repetitions) 次")
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(bodyTextColor)
+                .frame(width: 50, alignment: .center)
+
+            // RPE
+            Text(set.rpe.map { "\(Int($0))" } ?? "—")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(set.rpe != nil ? VelaTheme.accent : mutedColor)
+                .frame(width: 44, height: 26)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.04)))
+
+            // 状态
             Image(systemName: (set.isCompleted ?? true) ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle((set.isCompleted ?? true) ? Color(hex: "#34C759") : mutedColor)
+                .foregroundStyle((set.isCompleted ?? true) ? VelaTheme.success : mutedColor)
+                .font(.system(size: 20))
+                .frame(width: 32, alignment: .trailing)
         }
         .padding(.vertical, 6)
     }
@@ -331,36 +440,70 @@ struct StrengthWorkoutDetailView: View {
 private struct TrainingVolumeSparkline: View {
     let exercises: [StrengthExerciseLog]
 
-    private var values: [Double] {
-        exercises.flatMap(\.sets).map(\.volumeKilograms)
+    private var chartData: [VolumeItem] {
+        var items: [VolumeItem] = []
+        let sets = exercises.flatMap(\.sets).filter { !($0.isWarmup) }
+        for (index, set) in sets.enumerated() {
+            items.append(VolumeItem(index: index, volume: set.volumeKilograms))
+        }
+        return items
     }
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .bottomLeading) {
-                ForEach(0..<4, id: \.self) { index in
-                    Rectangle()
-                        .fill(Color(hex: "#E5E5EA"))
-                        .frame(height: 0.7)
-                        .offset(y: geo.size.height * CGFloat(index) / 3)
-                }
-                Path { path in
-                    guard values.count > 1 else { return }
-                    let maxValue = max(values.max() ?? 1, 1)
-                    for index in values.indices {
-                        let x = CGFloat(index) / CGFloat(max(values.count - 1, 1)) * geo.size.width
-                        let y = geo.size.height - CGFloat(values[index] / maxValue) * (geo.size.height - 8) - 4
-                        if index == values.startIndex {
-                            path.move(to: CGPoint(x: x, y: y))
-                        } else {
-                            path.addLine(to: CGPoint(x: x, y: y))
-                        }
+        VStack(alignment: .leading, spacing: 8) {
+            Text("训练容量趋势")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(VelaTheme.fg)
+            
+            if chartData.count < 2 {
+                Text("暂无足够的容量趋势数据")
+                    .font(.system(size: 11))
+                    .foregroundStyle(VelaTheme.muted)
+                    .frame(height: 50)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            } else {
+                Chart {
+                    ForEach(chartData) { item in
+                        AreaMark(
+                            x: .value("Set", item.index),
+                            y: .value("Volume", item.volume)
+                        )
+                        .foregroundStyle(LinearGradient(
+                            colors: [VelaTheme.accent.opacity(0.24), VelaTheme.accent.opacity(0.02)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ))
+                        .interpolationMethod(.catmullRom)
+                        
+                        LineMark(
+                            x: .value("Set", item.index),
+                            y: .value("Volume", item.volume)
+                        )
+                        .foregroundStyle(VelaTheme.accent)
+                        .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                        .interpolationMethod(.catmullRom)
                     }
                 }
-                .stroke(VelaTheme.accent, style: StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
+                .chartXAxis(.hidden)
+                .chartYAxis {
+                    AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { _ in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
+                            .foregroundStyle(VelaTheme.separatorSoft)
+                        AxisValueLabel()
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(VelaTheme.muted)
+                    }
+                }
+                .frame(height: 50)
             }
         }
     }
+}
+
+private struct VolumeItem: Identifiable {
+    let id = UUID()
+    let index: Int
+    let volume: Double
 }
 
 private struct StrengthSetDetail: Identifiable {

@@ -37,6 +37,7 @@ struct VelaTrainingView: View {
     @State private var xunjiIncludeFullData = false
     @State private var isImportingXunji = false
     @State private var xunjiImportMessage: String?
+    @State private var isAutoImportingXunji = false
 
     var body: some View {
         ScrollView {
@@ -65,8 +66,6 @@ struct VelaTrainingView: View {
                 }
                 .buttonStyle(.plain)
 
-                strengthWorkoutsSection
-
                 recentWorkoutsSection
             }
             .padding(.horizontal, 16)
@@ -83,9 +82,11 @@ struct VelaTrainingView: View {
         .task {
             try? ExerciseLibraryService.seedDefaultsIfNeeded(modelContext: modelContext)
             await syncRealFitnessData()
+            await autoImportRecentXunjiTraining()
         }
         .refreshable {
             await syncRealFitnessData(force: true)
+            await autoImportRecentXunjiTraining()
         }
         .onChange(of: dashboardVM.selectedDate) { _, _ in
             loadRealFitnessData()
@@ -95,6 +96,9 @@ struct VelaTrainingView: View {
         }
         .onChange(of: appState.localDataRevision) { _, _ in
             loadRealFitnessData()
+            Task {
+                await syncRealFitnessData()
+            }
         }
         .sheet(isPresented: $showStrengthWorkoutLog, onDismiss: {
             selectedTemplateID = nil
@@ -601,6 +605,13 @@ struct VelaTrainingView: View {
                                 )
                             }
                             .buttonStyle(.plain)
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    deleteTemplate(template)
+                                } label: {
+                                    Label("删除模板", systemImage: "trash")
+                                }
+                            }
                         }
                     }
                     .padding(.vertical, 2)
@@ -672,11 +683,11 @@ struct VelaTrainingView: View {
     private var recentWorkoutsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("统一训练记录")
+                Text("训练记录")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
                 Spacer()
-                Text("每项训练单独展示")
+                Text("Apple + 训记自动合并")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(VelaTheme.muted)
             }
@@ -689,49 +700,54 @@ struct VelaTrainingView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
             } else {
-                ForEach(recentWorkouts.prefix(8)) { workout in
+                ForEach(recentWorkouts.prefix(12)) { workout in
                     NavigationLink(destination: WorkoutDetailView(workout: workout)) {
-                        HStack(spacing: 12) {
-                            Image(systemName: workoutListIcon(workout.activityName))
-                                .foregroundStyle(VelaTheme.accent)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(workout.activityName)
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundStyle(VelaTheme.fg)
-                                Text(workout.start.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(VelaTheme.muted)
-                                HStack(spacing: 8) {
-                                    if let kcal = workout.energyKilocalories {
-                                        Text("\(Int(kcal.rounded())) kcal")
-                                    }
-                                    if let hr = workout.averageHeartRate {
-                                        Text("\(Int(hr.rounded())) bpm")
-                                    }
-                                    if let distance = workout.distanceMeters, distance > 0 {
-                                        Text(distance >= 1_000
-                                             ? String(format: "%.1f km", distance / 1_000)
-                                             : "\(Int(distance.rounded())) m")
-                                    }
-                                }
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(Color(hex: "#B06A50"))
-                            }
-                            Spacer()
-                            Text("\(Int(workout.end.timeIntervalSince(workout.start) / 60)) 分钟")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(VelaTheme.muted)
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(Color(hex: "#BFB9AC"))
-                        }
-                        .padding(14)
-                        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
+                        workoutRow(workout)
                     }
                     .buttonStyle(.plain)
                 }
             }
         }
+    }
+
+    private func workoutRow(_ workout: WorkoutSummary) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: workoutListIcon(workout.activityName))
+                .foregroundStyle(VelaTheme.accent)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(workout.activityName)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(VelaTheme.fg)
+                Text(workout.start.formatted(date: .abbreviated, time: .shortened))
+                    .font(.system(size: 11))
+                    .foregroundStyle(VelaTheme.muted)
+                HStack(spacing: 8) {
+                    Text(sourceLabel(for: workout.source))
+                    if let kcal = workout.energyKilocalories {
+                        Text("\(Int(kcal.rounded())) kcal")
+                    }
+                    if let hr = workout.averageHeartRate {
+                        Text("\(Int(hr.rounded())) bpm")
+                    }
+                    if let distance = workout.distanceMeters, distance > 0 {
+                        Text(distance >= 1_000
+                             ? String(format: "%.1f km", distance / 1_000)
+                             : "\(Int(distance.rounded())) m")
+                    }
+                }
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(Color(hex: "#B06A50"))
+            }
+            Spacer()
+            Text("\(Int(workout.end.timeIntervalSince(workout.start) / 60)) 分钟")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(VelaTheme.muted)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Color(hex: "#BFB9AC"))
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
     }
 
     private var strengthWorkoutsSection: some View {
@@ -768,7 +784,13 @@ struct VelaTrainingView: View {
                     .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
             } else {
                 ForEach(strengthWorkouts.prefix(5)) { workout in
-                    NavigationLink(destination: StrengthWorkoutDetailView(workout: workout)) {
+                    NavigationLink(destination: WorkoutDetailView(workout: WorkoutSummary(
+                        id: workout.id,
+                        start: workout.startedAt,
+                        end: workout.startedAt.addingTimeInterval(TimeInterval(workout.durationMinutes * 60)),
+                        activityName: workout.title,
+                        source: "strengthLog"
+                    ))) {
                         HStack(spacing: 12) {
                             Image(systemName: "figure.strengthtraining.traditional")
                                 .font(.system(size: 18))
@@ -806,6 +828,12 @@ struct VelaTrainingView: View {
     private func startStrengthWorkout(templateID: UUID? = nil) {
         selectedTemplateID = templateID
         showStrengthWorkoutLog = true
+    }
+
+    private func deleteTemplate(_ template: WorkoutTemplateRecord) {
+        modelContext.insert(DeletedWorkoutRecord(id: "template:\(template.title)"))
+        modelContext.delete(template)
+        try? modelContext.save()
     }
 
     private func workoutListIcon(_ name: String) -> String {
@@ -862,6 +890,45 @@ struct VelaTrainingView: View {
             }
         } catch {
             xunjiImportMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func autoImportRecentXunjiTraining() async {
+        guard !isAutoImportingXunji else { return }
+        let key = storedXunjiAPIKey()
+        guard !key.isEmpty else { return }
+
+        isAutoImportingXunji = true
+        defer { isAutoImportingXunji = false }
+
+        let calendar = Calendar.current
+        var changed = false
+        for offset in 0..<3 {
+            guard let date = calendar.date(byAdding: .day, value: -offset, to: Date()) else { continue }
+            let datestr = xunjiDateString(date)
+            do {
+                let responseData = try await xunjiResponseData(
+                    apiKey: key,
+                    datestr: datestr,
+                    includeFullData: true
+                )
+                let summary = try XunjiTrainingImportService().importResponseData(
+                    responseData,
+                    datestr: datestr,
+                    modelContext: modelContext
+                )
+                changed = changed || summary.importedCount > 0 || summary.updatedCount > 0
+            } catch {
+                continue
+            }
+        }
+
+        if changed {
+            loadRealFitnessData()
+            await dashboardVM.refresh(modelContext: modelContext)
+            loadRealFitnessData()
+            VelaAppState.shared.markLocalDataChanged()
         }
     }
 
@@ -932,6 +999,10 @@ struct VelaTrainingView: View {
         await dashboardVM.refresh(modelContext: modelContext, force: force)
         loadRealFitnessData()
         let healthKit = (try? await HealthKitQueryService().recentWorkouts(limit: 30)) ?? []
+        let deletedRecords = (try? modelContext.fetch(FetchDescriptor<DeletedWorkoutRecord>())) ?? []
+        let blacklistedIDs = Set(deletedRecords.map(\.id))
+        let filteredHealthKit = healthKit.filter { !blacklistedIDs.contains($0.id.uuidString) }
+        
         let local = localWorkoutEvents.map {
             WorkoutSummary(
                 id: $0.id,
@@ -945,8 +1016,32 @@ struct VelaTrainingView: View {
             )
         }
         let localIDs = Set(local.map(\.id))
-        recentWorkouts = (healthKit.filter { !localIDs.contains($0.id) } + local)
+        let representedHealthKitIDs = Set(localWorkoutEvents.compactMap(\.linkedHealthKitWorkoutId))
+        recentWorkouts = (filteredHealthKit.filter { !localIDs.contains($0.id) && !representedHealthKitIDs.contains($0.id) } + local)
             .sorted { $0.start > $1.start }
+    }
+
+    private func sourceLabel(for source: String?) -> String {
+        switch source {
+        case "healthKit+xunji":
+            return "Apple + 训记"
+        case "xunji":
+            return "训记"
+        case "strengthLog":
+            return "力量"
+        case "manual":
+            return "手动"
+        default:
+            return "Apple"
+        }
+    }
+
+    private func strengthWorkout(for workout: WorkoutSummary) -> StrengthWorkoutRecord? {
+        if let event = localWorkoutEvents.first(where: { $0.id == workout.id || $0.linkedHealthKitWorkoutId == workout.id }),
+           let strengthId = event.linkedStrengthWorkoutId {
+            return strengthWorkouts.first(where: { $0.id == strengthId })
+        }
+        return strengthWorkouts.first(where: { $0.id == workout.id })
     }
 
     private func loadRealFitnessData() {

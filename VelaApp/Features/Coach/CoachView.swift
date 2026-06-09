@@ -671,21 +671,52 @@ struct VelaCoachView: View {
     }
 
     private func handleArtifactAction(_ action: CoachArtifactAction, artifact: CoachArtifact) {
-        if action.type.contains("training") || action.type.contains("workout") {
+        print("[CoachView] handleArtifactAction: type=\(action.type), label=\(action.label)")
+        if action.type == "start_check_in" {
+            print("[CoachView] Opening post-workout check-in")
+            appState.routeToPostWorkoutCheckIn(workoutID: workoutID(for: action, artifact: artifact))
+            if presentation == .quickCover {
+                dismiss()
+            }
+        } else if action.type == "open_recovery_detail" {
+            print("[CoachView] Opening post-workout impact")
+            appState.routeToPostWorkoutImpact(workoutID: workoutID(for: action, artifact: artifact))
+            if presentation == .quickCover {
+                dismiss()
+            }
+        } else if action.type.contains("training") || action.type.contains("workout") || action.type.contains("summary") {
+            print("[CoachView] Routing to training (tab 1)")
             appState.routeToTab(1)
             if presentation == .quickCover {
                 dismiss()
             }
-        } else if action.type.contains("check") {
+        } else if action.type.contains("check") || action.type.contains("journal") {
+            print("[CoachView] Triggering journal")
             appState.triggerJournal = true
             if presentation == .quickCover {
                 dismiss()
             }
-        } else if action.type.contains("recovery") {
-            sendMessage("请解释这条建议的恢复影响：\(artifact.summary)")
+        } else if action.type.contains("recovery") || action.type.contains("vitals") || action.type.contains("insight") {
+            print("[CoachView] Routing to recovery (tab 2)")
+            appState.routeToRecoveryDetail()
+            if presentation == .quickCover {
+                dismiss()
+            }
         } else {
+            print("[CoachView] Routing to coach with question: \(artifact.followUpQuestion ?? action.label)")
             sendMessage(artifact.followUpQuestion ?? action.label)
         }
+    }
+
+    private func workoutID(for action: CoachArtifactAction, artifact: CoachArtifact) -> UUID? {
+        if let raw = action.payload["workout_id"], let id = UUID(uuidString: raw) {
+            return id
+        }
+        if let raw = artifact.actions.compactMap({ $0.payload["workout_id"] }).first,
+           let id = UUID(uuidString: raw) {
+            return id
+        }
+        return nil
     }
 
     private func sendMessage(_ text: String) {

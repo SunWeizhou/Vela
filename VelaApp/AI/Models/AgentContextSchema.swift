@@ -7,6 +7,7 @@ struct AgentContextEnvelope: Codable, Hashable {
     var recovery: [String: String]
     var strain: [String: String]
     var workouts: [String: String]
+    var unifiedWorkouts: [String: String]?
     var stress: [String: String]
     var energyBank: [String: String]
     var healthAgeTrend: [String: String]
@@ -27,6 +28,7 @@ struct AgentContextEnvelope: Codable, Hashable {
         case recovery
         case strain
         case workouts
+        case unifiedWorkouts = "unified_workouts"
         case stress
         case energyBank = "energy_bank"
         case healthAgeTrend = "health_age_trend"
@@ -113,6 +115,7 @@ struct StrengthTrainingContext: Codable, Hashable {
     var recoveryResponseSummary: String = "No post-training response data yet."
     var averageNextDayRecoveryDelta: Double? = nil
     var flaggedResponseCount: Int = 0
+    var recentWorkoutDetails: String? = nil
 }
 
 struct ExerciseProgressSummary: Codable, Hashable {
@@ -120,4 +123,49 @@ struct ExerciseProgressSummary: Codable, Hashable {
     var setsCount: Int
     var maxWeightKg: Double
     var estimated1RMPeakKg: Double
+}
+
+struct UnifiedWorkoutContextEntry: Codable, Hashable {
+    var id: UUID
+    var source: String
+    var title: String
+    var activityType: String
+    var startedAt: Date
+    var endedAt: Date
+    var durationMinutes: Double
+    var energyKilocalories: Double?
+    var averageHeartRate: Double?
+    var rpe: Double?
+    var linkedStrengthWorkoutId: UUID?
+    var linkedHealthKitWorkoutId: UUID?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case source
+        case title
+        case activityType = "activity_type"
+        case startedAt = "started_at"
+        case endedAt = "ended_at"
+        case durationMinutes = "duration_minutes"
+        case energyKilocalories = "energy_kilocalories"
+        case averageHeartRate = "average_heart_rate"
+        case rpe
+        case linkedStrengthWorkoutId = "linked_strength_workout_id"
+        case linkedHealthKitWorkoutId = "linked_healthkit_workout_id"
+    }
+
+    init(event: WorkoutEventRecord) {
+        id = event.id
+        source = event.source
+        title = event.title
+        activityType = event.activityType
+        startedAt = event.startedAt
+        endedAt = event.endedAt
+        durationMinutes = event.durationMinutes
+        energyKilocalories = event.energyKilocalories
+        averageHeartRate = event.averageHeartRate
+        rpe = event.rpe
+        linkedStrengthWorkoutId = event.linkedStrengthWorkoutId
+        linkedHealthKitWorkoutId = event.linkedHealthKitWorkoutId
+    }
 }

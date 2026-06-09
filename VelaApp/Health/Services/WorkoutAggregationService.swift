@@ -49,13 +49,14 @@ public final class WorkoutAggregationService {
         // 2. Add local records (manual / strength / xunji / HealthKit mirrors).
         for local in localRecords {
             let matchedHK = healthKitWorkouts.first { localRecordRepresentsHealthKitWorkout(local, $0) }
-            let useHealthKitTiming = local.source == "healthKit" && matchedHK != nil
+            let useHealthKitTiming = local.linkedHealthKitWorkoutId != nil && matchedHK != nil
+            let useLocalDisplay = local.linkedStrengthWorkoutId != nil
             
             merged.append(WorkoutSummary(
                 id: local.id,
                 start: useHealthKitTiming ? matchedHK?.start ?? local.startedAt : local.startedAt,
                 end: useHealthKitTiming ? matchedHK?.end ?? local.endedAt : local.endedAt,
-                activityName: useHealthKitTiming ? matchedHK?.activityName ?? local.activityType : local.activityType,
+                activityName: useLocalDisplay ? local.title : (useHealthKitTiming ? matchedHK?.activityName ?? local.activityType : local.activityType),
                 energyKilocalories: local.energyKilocalories ?? matchedHK?.energyKilocalories,
                 averageHeartRate: local.averageHeartRate ?? matchedHK?.averageHeartRate,
                 distanceMeters: matchedHK?.distanceMeters,
@@ -69,25 +70,69 @@ public final class WorkoutAggregationService {
 
     public func upsertHealthKitWorkoutEvents(
         _ healthKitWorkouts: [WorkoutSummary],
+        on date: Date,
         modelContext: ModelContext,
         calendar: Calendar = .current
     ) throws {
+        // 1. Identify and remove any previously synced HealthKit workouts for this day that are no longer in healthKitWorkouts payload
+        let dayStart = calendar.startOfDay(for: date)
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+        
+        let descriptor = FetchDescriptor<WorkoutEventRecord>(
+            predicate: #Predicate<WorkoutEventRecord> {
+                $0.startedAt >= dayStart && $0.startedAt < dayEnd
+            }
+        )
+        let existingEvents = (try? modelContext.fetch(descriptor)) ?? []
+        let currentHKIDs = Set(healthKitWorkouts.map { $0.id })
+        
+        for event in existingEvents {
+            if let hkId = event.linkedHealthKitWorkoutId, !currentHKIDs.contains(hkId) {
+                if event.linkedStrengthWorkoutId != nil {
+                    event.linkedHealthKitWorkoutId = nil
+                    event.source = "strengthLog"
+                    event.updatedAt = Date()
+                } else {
+                    modelContext.delete(event)
+                }
+            }
+        }
+
+        // 2. Upsert current HealthKit workouts
         for workout in healthKitWorkouts {
             let healthKitID = workout.id
-            let descriptor = FetchDescriptor<WorkoutEventRecord>(
+            let fetchDescriptor = FetchDescriptor<WorkoutEventRecord>(
                 predicate: #Predicate<WorkoutEventRecord> { $0.linkedHealthKitWorkoutId == healthKitID }
             )
             let event: WorkoutEventRecord
-            if let existing = try modelContext.fetch(descriptor).first {
+            if let existing = try modelContext.fetch(fetchDescriptor).first {
                 event = existing
                 event.startedAt = workout.start
                 event.endedAt = workout.end
                 event.dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: workout.start, calendar: calendar)
-                event.activityType = workout.activityName
-                event.title = workout.activityName
+                if existing.linkedStrengthWorkoutId == nil {
+                    event.activityType = workout.activityName
+                    event.title = workout.activityName
+                }
                 event.durationMinutes = max(0, workout.end.timeIntervalSince(workout.start) / 60)
                 event.energyKilocalories = workout.energyKilocalories
                 event.averageHeartRate = workout.averageHeartRate
+                event.linkedHealthKitWorkoutId = healthKitID
+                event.source = resolvedSource(for: event)
+                event.updatedAt = Date()
+            } else if let matched = try findMergeCandidate(for: workout, modelContext: modelContext, calendar: calendar) {
+                event = matched
+                event.startedAt = workout.start
+                event.endedAt = workout.end
+                event.dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: workout.start, calendar: calendar)
+                if event.linkedStrengthWorkoutId != nil {
+                    event.activityType = event.title
+                }
+                event.durationMinutes = max(0, workout.end.timeIntervalSince(workout.start) / 60)
+                event.energyKilocalories = workout.energyKilocalories
+                event.averageHeartRate = workout.averageHeartRate
+                event.linkedHealthKitWorkoutId = healthKitID
+                event.source = resolvedSource(for: event)
                 event.updatedAt = Date()
             } else {
                 event = WorkoutEventRecord(
@@ -105,6 +150,50 @@ public final class WorkoutAggregationService {
             }
         }
         try modelContext.save()
+    }
+
+    func mergeStrengthWorkoutDetails(
+        event: WorkoutEventRecord,
+        strengthWorkout: StrengthWorkoutRecord,
+        displayTitle: String,
+        sessionRPE: Double?,
+        calendar: Calendar = .current
+    ) {
+        event.linkedStrengthWorkoutId = strengthWorkout.id
+        event.activityType = displayTitle
+        event.title = displayTitle
+        event.rpe = event.rpe ?? sessionRPE
+        event.source = resolvedSource(for: event)
+        event.updatedAt = Date()
+        strengthWorkout.linkedWorkoutEventId = event.id
+    }
+
+    func findMergeCandidate(
+        for strengthWorkout: StrengthWorkoutRecord,
+        in events: [WorkoutEventRecord],
+        calendar: Calendar = .current
+    ) -> WorkoutEventRecord? {
+        events
+            .compactMap { event -> (event: WorkoutEventRecord, score: Double)? in
+                guard event.linkedStrengthWorkoutId == nil || event.linkedStrengthWorkoutId == strengthWorkout.id else {
+                    return nil
+                }
+                guard event.linkedHealthKitWorkoutId != nil || event.source == "healthKit" else {
+                    return nil
+                }
+                guard strengthEventRepresentsSameRealWorkout(event, strengthWorkout, calendar: calendar) else {
+                    return nil
+                }
+                return (event, strengthMergeScore(event: event, strengthWorkout: strengthWorkout))
+            }
+            .sorted { lhs, rhs in
+                if lhs.score == rhs.score {
+                    return lhs.event.updatedAt > rhs.event.updatedAt
+                }
+                return lhs.score > rhs.score
+            }
+            .first?
+            .event
     }
 
     @discardableResult
@@ -132,17 +221,36 @@ public final class WorkoutAggregationService {
             event.rpe = resolvedRPE
             event.updatedAt = Date()
         } else {
-            event = WorkoutEventRecord(
-                source: "strengthLog",
-                startedAt: strengthWorkout.startedAt,
-                endedAt: strengthWorkout.endedAt,
-                activityType: strengthWorkout.title,
-                energyKilocalories: Double(strengthWorkout.durationMinutes) * 6,
-                rpe: resolvedRPE,
-                linkedStrengthWorkoutId: strengthWorkout.id,
-                calendar: calendar
+            // Find if there is an overlapping HealthKit event to merge with (30 mins range)
+            let dayStart = calendar.startOfDay(for: strengthWorkout.startedAt)
+            let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+            let overlapDescriptor = FetchDescriptor<WorkoutEventRecord>(
+                predicate: #Predicate<WorkoutEventRecord> {
+                    $0.startedAt >= dayStart && $0.startedAt < dayEnd && $0.linkedStrengthWorkoutId == nil
+                }
             )
-            modelContext.insert(event)
+            let existingEvents = (try? modelContext.fetch(overlapDescriptor)) ?? []
+            if let matched = findMergeCandidate(for: strengthWorkout, in: existingEvents, calendar: calendar) {
+                event = matched
+                event.linkedStrengthWorkoutId = strengthWorkout.id
+                event.title = strengthWorkout.title
+                event.activityType = strengthWorkout.title
+                event.rpe = event.rpe ?? resolvedRPE
+                event.source = resolvedSource(for: event)
+                event.updatedAt = Date()
+            } else {
+                event = WorkoutEventRecord(
+                    source: "strengthLog",
+                    startedAt: strengthWorkout.startedAt,
+                    endedAt: strengthWorkout.endedAt,
+                    activityType: strengthWorkout.title,
+                    energyKilocalories: Double(strengthWorkout.durationMinutes) * 6,
+                    rpe: resolvedRPE,
+                    linkedStrengthWorkoutId: strengthWorkout.id,
+                    calendar: calendar
+                )
+                modelContext.insert(event)
+            }
         }
         strengthWorkout.linkedWorkoutEventId = event.id
         strengthWorkout.sessionRPE = resolvedRPE
@@ -225,11 +333,11 @@ public final class WorkoutAggregationService {
     }
 
     private func stableEventKey(_ event: WorkoutEventRecord) -> String {
+        if let linkedStrengthWorkoutId = event.linkedStrengthWorkoutId {
+            return "strength:\(linkedStrengthWorkoutId.uuidString)"
+        }
         if let linkedHealthKitWorkoutId = event.linkedHealthKitWorkoutId {
             return "healthKit:\(linkedHealthKitWorkoutId.uuidString)"
-        }
-        if let linkedStrengthWorkoutId = event.linkedStrengthWorkoutId {
-            return "strength:\(linkedStrengthWorkoutId.uuidString):\(event.source)"
         }
         return [
             event.source,
@@ -243,15 +351,21 @@ public final class WorkoutAggregationService {
         if local.linkedHealthKitWorkoutId == healthKit.id || local.id == healthKit.id {
             return true
         }
-        guard local.source == "healthKit" else { return false }
-        return workoutsOverlapByIdentity(
+        if workoutsOverlapByIdentity(
             lhsStart: local.startedAt,
             lhsEnd: local.endedAt,
             lhsActivity: local.activityType,
             rhsStart: healthKit.start,
             rhsEnd: healthKit.end,
             rhsActivity: healthKit.activityName
-        )
+        ) {
+            return true
+        }
+        let timeDifference = abs(local.startedAt.timeIntervalSince(healthKit.start))
+        if timeDifference <= 30 * 60 && activitiesAreCompatible(local.activityType, healthKit.activityName) {
+            return true
+        }
+        return false
     }
 
     private func deduplicateSummaries(_ workouts: [WorkoutSummary]) -> [WorkoutSummary] {
@@ -284,6 +398,141 @@ public final class WorkoutAggregationService {
         let lhsScore = [lhs.energyKilocalories, lhs.averageHeartRate, lhs.distanceMeters, lhs.rpe].compactMap { $0 }.count
         let rhsScore = [rhs.energyKilocalories, rhs.averageHeartRate, rhs.distanceMeters, rhs.rpe].compactMap { $0 }.count
         return rhsScore > lhsScore ? rhs : lhs
+    }
+
+    private func findMergeCandidate(
+        for healthKitWorkout: WorkoutSummary,
+        modelContext: ModelContext,
+        calendar: Calendar
+    ) throws -> WorkoutEventRecord? {
+        let dayStart = calendar.startOfDay(for: healthKitWorkout.start)
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+        let descriptor = FetchDescriptor<WorkoutEventRecord>(
+            predicate: #Predicate<WorkoutEventRecord> {
+                $0.startedAt >= dayStart && $0.startedAt < dayEnd
+            },
+            sortBy: [SortDescriptor(\.startedAt)]
+        )
+        return try modelContext.fetch(descriptor).first { event in
+            event.linkedHealthKitWorkoutId == nil
+                && eventRepresentsSameRealWorkout(event, healthKitWorkout)
+        }
+    }
+
+    private func eventRepresentsSameRealWorkout(_ event: WorkoutEventRecord, _ healthKit: WorkoutSummary) -> Bool {
+        guard healthKitWorkoutCanMergeWithStrengthDetails(healthKit.activityName) else { return false }
+        guard activitiesAreCompatible(event.activityType, healthKit.activityName) else { return false }
+        let overlapRatio = overlapRatio(
+            lhsStart: event.startedAt,
+            lhsEnd: event.endedAt,
+            rhsStart: healthKit.start,
+            rhsEnd: healthKit.end
+        )
+        let startClose = abs(event.startedAt.timeIntervalSince(healthKit.start)) <= 20 * 60
+        let endClose = abs(event.endedAt.timeIntervalSince(healthKit.end)) <= 20 * 60
+        return overlapRatio >= 0.5 && (startClose || endClose)
+    }
+
+    private func strengthEventRepresentsSameRealWorkout(
+        _ event: WorkoutEventRecord,
+        _ strengthWorkout: StrengthWorkoutRecord,
+        calendar: Calendar
+    ) -> Bool {
+        guard calendar.isDate(event.startedAt, inSameDayAs: strengthWorkout.startedAt)
+                || intervalsOverlap(
+                    lhsStart: event.startedAt,
+                    lhsEnd: event.endedAt,
+                    rhsStart: strengthWorkout.startedAt,
+                    rhsEnd: strengthWorkout.endedAt
+                ) else {
+            return false
+        }
+        guard healthKitWorkoutCanMergeWithStrengthDetails(event.activityType) else { return false }
+        let overlapRatio = overlapRatio(
+            lhsStart: event.startedAt,
+            lhsEnd: event.endedAt,
+            rhsStart: strengthWorkout.startedAt,
+            rhsEnd: strengthWorkout.endedAt
+        )
+        let startClose = abs(event.startedAt.timeIntervalSince(strengthWorkout.startedAt)) <= 20 * 60
+        let endClose = abs(event.endedAt.timeIntervalSince(strengthWorkout.endedAt)) <= 20 * 60
+        return overlapRatio >= 0.5 && (startClose || endClose)
+    }
+
+    private func strengthMergeScore(event: WorkoutEventRecord, strengthWorkout: StrengthWorkoutRecord) -> Double {
+        let overlap = overlapRatio(
+            lhsStart: event.startedAt,
+            lhsEnd: event.endedAt,
+            rhsStart: strengthWorkout.startedAt,
+            rhsEnd: strengthWorkout.endedAt
+        )
+        let startCloseness = closenessScore(abs(event.startedAt.timeIntervalSince(strengthWorkout.startedAt)), tolerance: 20 * 60)
+        let endCloseness = closenessScore(abs(event.endedAt.timeIntervalSince(strengthWorkout.endedAt)), tolerance: 20 * 60)
+        let durationDelta = abs(event.durationMinutes - Double(strengthWorkout.durationMinutes)) * 60
+        let durationCloseness = closenessScore(durationDelta, tolerance: 30 * 60)
+        let existingLinkBonus = event.linkedHealthKitWorkoutId != nil ? 0.1 : 0
+        return overlap * 0.55 + max(startCloseness, endCloseness) * 0.25 + durationCloseness * 0.15 + existingLinkBonus
+    }
+
+    private func closenessScore(_ difference: TimeInterval, tolerance: TimeInterval) -> Double {
+        guard tolerance > 0 else { return 0 }
+        return max(0, 1 - difference / tolerance)
+    }
+
+    private func intervalsOverlap(
+        lhsStart: Date,
+        lhsEnd: Date,
+        rhsStart: Date,
+        rhsEnd: Date
+    ) -> Bool {
+        min(lhsEnd, rhsEnd) > max(lhsStart, rhsStart)
+    }
+
+    private func overlapRatio(
+        lhsStart: Date,
+        lhsEnd: Date,
+        rhsStart: Date,
+        rhsEnd: Date
+    ) -> Double {
+        let overlap = min(lhsEnd, rhsEnd).timeIntervalSince(max(lhsStart, rhsStart))
+        guard overlap > 0 else { return 0 }
+        let shorterDuration = min(lhsEnd.timeIntervalSince(lhsStart), rhsEnd.timeIntervalSince(rhsStart))
+        guard shorterDuration > 0 else { return 0 }
+        return overlap / shorterDuration
+    }
+
+    private func activitiesAreCompatible(_ lhs: String, _ rhs: String) -> Bool {
+        let left = lhs.normalizedWorkoutText
+        let right = rhs.normalizedWorkoutText
+        if left == right { return true }
+        let strengthTerms = ["strength", "traditionalstrengthtraining", "functionalstrengthtraining", "weight", "力量", "胸", "背", "肩", "腿", "臀", "二头", "三头"]
+        let leftStrength = strengthTerms.contains { left.contains($0) }
+        let rightStrength = strengthTerms.contains { right.contains($0) }
+        return leftStrength && rightStrength
+    }
+
+    private func healthKitWorkoutCanMergeWithStrengthDetails(_ activity: String) -> Bool {
+        let normalized = activity.normalizedWorkoutText
+        let strengthTerms = [
+            "strength",
+            "traditionalstrengthtraining",
+            "functionalstrengthtraining",
+            "weighttraining",
+            "力量",
+            "传统力量训练",
+            "功能性力量训练"
+        ]
+        return strengthTerms.contains { normalized.contains($0) }
+    }
+
+    private func resolvedSource(for event: WorkoutEventRecord) -> String {
+        if event.linkedHealthKitWorkoutId != nil, event.linkedStrengthWorkoutId != nil {
+            return "healthKit+xunji"
+        }
+        if event.linkedHealthKitWorkoutId != nil {
+            return "healthKit"
+        }
+        return event.source
     }
 
     private func workoutsOverlapByIdentity(
@@ -371,6 +620,53 @@ public final class WorkoutAggregationService {
                 break
             }
         }
+    }
+
+    /// Deletes a StrengthWorkoutRecord and cleans up its linked WorkoutEventRecord, XunjiWorkoutMirrorRecord, and daily load.
+    func deleteStrengthWorkout(
+        _ workout: StrengthWorkoutRecord,
+        modelContext: ModelContext,
+        calendar: Calendar = .current
+    ) throws {
+        let workoutID = workout.id
+        let workoutDate = workout.startedAt
+        
+        // 1. Find linked events
+        let eventDescriptor = FetchDescriptor<WorkoutEventRecord>(
+            predicate: #Predicate<WorkoutEventRecord> { $0.linkedStrengthWorkoutId == workoutID }
+        )
+        let events = try modelContext.fetch(eventDescriptor)
+        for event in events {
+            if let hkId = event.linkedHealthKitWorkoutId {
+                modelContext.insert(DeletedWorkoutRecord(id: hkId.uuidString))
+            }
+            if event.source == "xunji" || event.source == "strengthLog" {
+                modelContext.delete(event)
+            } else {
+                // If it is a HealthKit or other synced event, keep the event but unlink it
+                event.linkedStrengthWorkoutId = nil
+                event.updatedAt = Date()
+            }
+        }
+        
+        // 2. Find Xunji mirror records
+        let mirrorDescriptor = FetchDescriptor<XunjiWorkoutMirrorRecord>(
+            predicate: #Predicate<XunjiWorkoutMirrorRecord> { $0.linkedStrengthWorkoutID == workoutID }
+        )
+        let mirrors = try modelContext.fetch(mirrorDescriptor)
+        for mirror in mirrors {
+            modelContext.insert(DeletedWorkoutRecord(id: mirror.externalID))
+            modelContext.delete(mirror)
+        }
+        
+        // 3. Delete the StrengthWorkoutRecord itself
+        modelContext.delete(workout)
+        
+        try modelContext.save()
+        
+        // 4. Recalculate summary and aggregation for the affected day
+        try aggregateDay(date: workoutDate, modelContext: modelContext, calendar: calendar)
+        try modelContext.save()
     }
 }
 

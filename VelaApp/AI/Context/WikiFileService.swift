@@ -1,5 +1,6 @@
 import Foundation
 import os.log
+import SwiftData
 
 private let logger = Logger(subsystem: "com.sunweizhou.Vela", category: "WikiFileService")
 
@@ -60,16 +61,20 @@ enum WikiFileService {
     static func loadAllDocuments() -> [WikiDocument] {
         filenames.compactMap { entry in
             let url = localURL(for: entry.filename)
-            let content = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+            let localContent = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
             let updatedAt = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
 
             let bundledContent = bundledContent(for: entry.filename)
-            let merged = [bundledContent, content].filter { !$0.isEmpty }.joined(separator: "\n\n")
+            let content = canonicalContent(
+                localContent: localContent,
+                bundledContent: bundledContent,
+                filename: entry.filename
+            )
 
             return WikiDocument(
                 filename: entry.filename,
                 title: entry.title,
-                content: merged.isEmpty ? defaultContent(for: entry.filename) : merged,
+                content: content,
                 updatedAt: updatedAt ?? Date()
             )
         }
@@ -79,18 +84,28 @@ enum WikiFileService {
     static func loadDictionary() -> [String: String] {
         filenames.reduce(into: [:]) { result, entry in
             let url = localURL(for: entry.filename)
-            var content = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+            let localContent = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
             let bundled = bundledContent(for: entry.filename)
-            if !bundled.isEmpty, content.isEmpty {
-                content = bundled
-            } else if !bundled.isEmpty {
-                content = bundled + "\n\n" + content
-            }
-            if content.isEmpty {
-                content = defaultContent(for: entry.filename)
-            }
-            result[entry.filename] = content
+            result[entry.filename] = canonicalContent(
+                localContent: localContent,
+                bundledContent: bundled,
+                filename: entry.filename
+            )
         }
+    }
+
+    private static func canonicalContent(localContent: String, bundledContent: String, filename: String) -> String {
+        let trimmedLocal = localContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedLocal.isEmpty {
+            return localContent
+        }
+
+        let trimmedBundled = bundledContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedBundled.isEmpty {
+            return bundledContent
+        }
+
+        return defaultContent(for: filename)
     }
 
     // MARK: - Write (Agent-driven)
@@ -140,11 +155,86 @@ enum WikiFileService {
             }
 
             let timestamp = ISO8601DateFormatter().string(from: Date())
-            let block = existingParagraphs + ["" , "## Updated \(timestamp)"] + newDeduplicated
-            newContent = block.joined(separator: "\n")
+            let block = existingParagraphs + ["## Updated \(timestamp)"] + newDeduplicated
+            newContent = block.joined(separator: "\n\n")
         }
 
         try newContent.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    static func replacingStructuredFields(
+        in markdown: String,
+        title: String,
+        fieldValues: [String: String],
+        preferredOrder: [String]
+    ) -> String {
+        var lines = markdown.components(separatedBy: .newlines)
+        if lines.isEmpty || lines.allSatisfy({ $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
+            lines = ["# \(title)", ""]
+        } else if !lines.contains(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("#") }) {
+            lines.insert(contentsOf: ["# \(title)", ""], at: 0)
+        }
+
+        var replaced = Set<String>()
+        let fieldSet = Set(preferredOrder)
+
+        for index in lines.indices {
+            let line = lines[index]
+            let leadingWhitespace = String(line.prefix { $0 == " " || $0 == "\t" })
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") else { continue }
+
+            let marker = String(trimmed.prefix(2))
+            let body = String(trimmed.dropFirst(2))
+            guard let match = matchedField(in: body, fields: fieldSet) else { continue }
+
+            let value = fieldValues[match] ?? ""
+            lines[index] = "\(leadingWhitespace)\(marker)\(match): \(value)"
+            replaced.insert(match)
+        }
+
+        let missing = preferredOrder.filter { !replaced.contains($0) }
+        guard !missing.isEmpty else {
+            return normalizedMarkdown(lines)
+        }
+
+        let insertionIndex = structuredFieldInsertionIndex(in: lines)
+        let inserted = missing.map { "- \($0): \(fieldValues[$0] ?? "")" }
+        lines.insert(contentsOf: inserted, at: insertionIndex)
+        if insertionIndex < lines.count, !lines[insertionIndex + inserted.count - 1].isEmpty {
+            lines.insert("", at: insertionIndex + inserted.count)
+        }
+
+        return normalizedMarkdown(lines)
+    }
+
+    private static func matchedField(in bulletBody: String, fields: Set<String>) -> String? {
+        for field in fields.sorted(by: { $0.count > $1.count }) {
+            if bulletBody == field || bulletBody.hasPrefix("\(field):") || bulletBody.hasPrefix("\(field)：") {
+                return field
+            }
+        }
+        return nil
+    }
+
+    private static func structuredFieldInsertionIndex(in lines: [String]) -> Int {
+        guard let headingIndex = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("#") }) else {
+            return 0
+        }
+
+        var index = headingIndex + 1
+        while index < lines.count, lines[index].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            index += 1
+        }
+        return index
+    }
+
+    private static func normalizedMarkdown(_ lines: [String]) -> String {
+        var result = lines
+        while result.last?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true {
+            result.removeLast()
+        }
+        return result.joined(separator: "\n") + "\n"
     }
 
     /// Generate a weekly wiki review prompt for the agent
@@ -319,4 +409,49 @@ enum WikiUpdateMode: String, Hashable {
     case append
     case replace
     case merge
+}
+
+@MainActor
+public enum WikiSyncManager {
+    public static func sync(modelContext: ModelContext) {
+        let allDocs = WikiFileService.loadAllDocuments()
+        
+        let descriptor = FetchDescriptor<UserWikiDocumentRecord>()
+        let existingRecords = (try? modelContext.fetch(descriptor)) ?? []
+        
+        let existingMap = Dictionary(uniqueKeysWithValues: existingRecords.map { ($0.filename, $0) })
+        
+        for doc in allDocs {
+            let url = WikiFileService.localURL(for: doc.filename)
+            if !FileManager.default.fileExists(atPath: url.path) {
+                try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? doc.content.write(to: url, atomically: true, encoding: .utf8)
+            }
+            
+            if let existing = existingMap[doc.filename] {
+                if existing.markdownContent != doc.content {
+                    existing.markdownContent = doc.content
+                    existing.title = doc.title
+                    existing.updatedAt = doc.updatedAt
+                }
+            } else {
+                let record = UserWikiDocumentRecord(
+                    filename: doc.filename,
+                    title: doc.title,
+                    markdownContent: doc.content,
+                    updatedAt: doc.updatedAt
+                )
+                modelContext.insert(record)
+            }
+        }
+        
+        let allowedFilenames = Set(allDocs.map(\.filename))
+        for record in existingRecords {
+            if !allowedFilenames.contains(record.filename) {
+                modelContext.delete(record)
+            }
+        }
+        
+        try? modelContext.save()
+    }
 }

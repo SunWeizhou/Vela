@@ -19,6 +19,8 @@ struct VelaMeView: View {
     private var strengthWorkouts: [StrengthWorkoutRecord]
     @Query(sort: \TrainingResponseRecord.date, order: .reverse)
     private var trainingResponses: [TrainingResponseRecord]
+    
+    @State private var selectedWorkoutForDetail: WorkoutSummary?
 
     private var onboarding: OnboardingState? { onboardingStates.first }
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
@@ -50,6 +52,11 @@ struct VelaMeView: View {
         .background(VelaTheme.systemGroupedBackground)
         .navigationTitle("Me")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $selectedWorkoutForDetail) { summary in
+            NavigationStack {
+                WorkoutDetailView(workout: summary)
+            }
+        }
     }
 
     private var bodyModelUnifiedCard: some View {
@@ -367,14 +374,37 @@ struct VelaMeView: View {
         }
     }
 
-    private func handleArtifactAction(_ action: CoachArtifactAction) {
-        if action.type.contains("training") || action.type.contains("workout") {
+    private func handleArtifactAction(_ action: CoachArtifactAction, artifact: CoachArtifact? = nil) {
+        VelaAppState.shared.logDebug("[VelaMeView] handleArtifactAction: type=\(action.type), label=\(action.label)")
+        if action.type == "start_check_in" {
+            VelaAppState.shared.routeToPostWorkoutCheckIn(workoutID: workoutID(for: action, artifact: artifact))
+        } else if action.type == "open_recovery_detail" {
+            VelaAppState.shared.logDebug("[VelaMeView] Opening post-workout impact")
+            VelaAppState.shared.routeToPostWorkoutImpact(workoutID: workoutID(for: action, artifact: artifact))
+        } else if action.type.contains("recovery") || action.type.contains("vitals") || action.type.contains("insight") {
+            VelaAppState.shared.logDebug("[VelaMeView] Routing to recovery (tab 2)")
+            VelaAppState.shared.routeToRecoveryDetail()
+        } else if action.type.contains("training") || action.type.contains("workout") || action.type.contains("summary") {
+            VelaAppState.shared.logDebug("[VelaMeView] Routing to training (tab 1)")
             VelaAppState.shared.routeToTab(1)
-        } else if action.type.contains("check") {
+        } else if action.type.contains("check") || action.type.contains("journal") {
+            VelaAppState.shared.logDebug("[VelaMeView] Triggering journal")
             VelaAppState.shared.triggerJournal = true
         } else {
+            VelaAppState.shared.logDebug("[VelaMeView] Routing to coach with label: \(action.label)")
             VelaAppState.shared.routeToCoach(question: action.label)
         }
+    }
+
+    private func workoutID(for action: CoachArtifactAction, artifact: CoachArtifact?) -> UUID? {
+        if let raw = action.payload["workout_id"], let id = UUID(uuidString: raw) {
+            return id
+        }
+        if let raw = artifact?.actions.compactMap({ $0.payload["workout_id"] }).first,
+           let id = UUID(uuidString: raw) {
+            return id
+        }
+        return nil
     }
 
     private func artifactIcon(for type: CoachArtifactType) -> String {
@@ -686,6 +716,69 @@ struct VelaJournalView: View {
                         )
                     }
                 }
+                
+                if !selectedDayEntries.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("今日手记历史")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(VelaTheme.muted)
+                            .textCase(.uppercase)
+                            .padding(.leading, 2)
+                        
+                        VStack(spacing: 8) {
+                            ForEach(selectedDayEntries) { entry in
+                                HStack(spacing: 12) {
+                                    Image(systemName: iconForEntry(entry))
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 28, height: 28)
+                                        .background(RoundedRectangle(cornerRadius: 8).fill(colorForEntry(entry)))
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        HStack(spacing: 6) {
+                                            Text(displayTitleForEntry(entry))
+                                                .font(.system(size: 13, weight: .bold))
+                                                .foregroundStyle(VelaTheme.fg)
+                                            
+                                            Text(entry.createdAt.formatted(.dateTime.hour().minute()))
+                                                .font(.system(size: 11))
+                                                .foregroundStyle(VelaTheme.muted)
+                                        }
+                                        
+                                        if !entry.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                            Text(entry.note)
+                                                .font(.system(size: 12))
+                                                .foregroundStyle(VelaTheme.muted)
+                                                .lineLimit(2)
+                                        }
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    Button {
+                                        deleteEntry(entry)
+                                    } label: {
+                                        Image(systemName: "trash")
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundStyle(VelaTheme.muted)
+                                            .frame(width: 28, height: 28)
+                                            .background(Circle().fill(VelaTheme.systemGroupedBackground))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .background(VelaTheme.cardBg)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+                                )
+                            }
+                        }
+                    }
+                    .padding(.top, 8)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
@@ -740,6 +833,72 @@ struct VelaJournalView: View {
             .presentationDragIndicator(.visible)
             .presentationBackground(VelaTheme.systemGroupedBackground)
         }
+    }
+
+    private var selectedDayEntries: [JournalEntryRecord] {
+        let calendar = Calendar.current
+        let targetDay = calendar.startOfDay(for: dashboardVM.selectedDate)
+        return entries.filter { calendar.isDate($0.createdAt, inSameDayAs: targetDay) }
+            .sorted(by: { $0.createdAt > $1.createdAt })
+    }
+
+    private func iconForEntry(_ entry: JournalEntryRecord) -> String {
+        if entry.tags.contains("低碳水化合物") { return "fork.knife" }
+        if entry.tags.contains("添加糖") { return "birthday.cake.fill" }
+        if entry.tags.contains("生酮饮食") { return "leaf.fill" }
+        if entry.tags.contains("在床上使用设备") { return "iphone" }
+        if entry.tags.contains("caffeine") || entry.tags.contains("咖啡因") { return "cup.and.saucer.fill" }
+        if entry.tags.contains("hydration") || entry.tags.contains("补水") { return "drop.fill" }
+        if entry.tags.contains("mood") || entry.tags.contains("每日心情") { return "face.smiling.fill" }
+        if entry.tags.contains("alcohol") || entry.tags.contains("酒") { return "wineglass.fill" }
+        return "text.bubble.fill"
+    }
+
+    private func colorForEntry(_ entry: JournalEntryRecord) -> Color {
+        if entry.tags.contains("低碳水化合物") { return Color.orange }
+        if entry.tags.contains("添加糖") { return Color.purple }
+        if entry.tags.contains("生酮饮食") { return Color.green }
+        if entry.tags.contains("在床上使用设备") { return Color.blue }
+        if entry.tags.contains("caffeine") || entry.tags.contains("咖啡因") { return Color(hex: "#8B5A2B") }
+        if entry.tags.contains("hydration") || entry.tags.contains("补水") { return Color(hex: "#4285F4") }
+        if entry.tags.contains("mood") || entry.tags.contains("每日心情") { return Color(hex: "#FFB74D") }
+        if entry.tags.contains("alcohol") || entry.tags.contains("酒") { return Color(hex: "#8B0000") }
+        return Color(hex: "#5B8C6F")
+    }
+
+    private func displayTitleForEntry(_ entry: JournalEntryRecord) -> String {
+        if entry.tags.contains("低碳水化合物") { return "低碳水化合物" }
+        if entry.tags.contains("添加糖") { return "添加糖" }
+        if entry.tags.contains("生酮饮食") { return "生酮饮食" }
+        if entry.tags.contains("在床上使用设备") { return "在床上使用设备" }
+        if entry.tags.contains("caffeine") || entry.tags.contains("咖啡因") {
+            if let val = entry.value {
+                return "咖啡因: \(Int(val)) mg"
+            }
+            return "咖啡因"
+        }
+        if entry.tags.contains("hydration") || entry.tags.contains("补水") {
+            if let val = entry.value {
+                return "饮水: \(Int(val)) ml"
+            }
+            return "补水"
+        }
+        if entry.tags.contains("mood") || entry.tags.contains("每日心情") {
+            return "每日心情"
+        }
+        if entry.tags.contains("alcohol") || entry.tags.contains("酒") {
+            if let val = entry.value {
+                return "饮酒: \(val) 杯"
+            }
+            return "饮酒"
+        }
+        return entry.tags.first(where: { $0 != "behavior_signal" && !$0.hasPrefix("behavior:") && !$0.hasPrefix("intensity:") && !$0.hasPrefix("timing:") }) ?? "手记"
+    }
+
+    private func deleteEntry(_ entry: JournalEntryRecord) {
+        modelContext.delete(entry)
+        try? modelContext.save()
+        loadRealJournalData()
     }
 
     // MARK: - Date Formatting Helpers
@@ -1136,6 +1295,30 @@ struct VelaJournalView: View {
         components.second = timeComponents.second
         
         let targetDate = calendar.date(from: components) ?? selected
+        let targetStart = calendar.startOfDay(for: targetDate)
+        let targetEnd = calendar.date(byAdding: .day, value: 1, to: targetStart) ?? targetDate
+        
+        let habitTags = Set(["低碳水化合物", "添加糖", "生酮饮食", "在床上使用设备", "mood", "每日心情"])
+        let isHabitOrMood = tags.contains(where: { habitTags.contains($0) })
+        
+        if isHabitOrMood {
+            let descriptor = FetchDescriptor<JournalEntryRecord>(
+                predicate: #Predicate<JournalEntryRecord> { $0.createdAt >= targetStart && $0.createdAt < targetEnd }
+            )
+            if let existingRecords = try? modelContext.fetch(descriptor) {
+                if let matched = existingRecords.first(where: { rec in
+                    rec.tags.contains(where: { tags.contains($0) })
+                }) {
+                    matched.value = value
+                    matched.note = note
+                    matched.unit = unit
+                    matched.createdAt = targetDate
+                    try? modelContext.save()
+                    loadRealJournalData()
+                    return
+                }
+            }
+        }
         
         let entry = JournalEntryRecord(createdAt: targetDate, tags: tags, note: note, value: value, unit: unit)
         modelContext.insert(entry)
@@ -1777,6 +1960,8 @@ struct CoachArtifactInboxView: View {
     @Query(sort: \CoachArtifactRecord.createdAt, order: .reverse)
     private var coachArtifacts: [CoachArtifactRecord]
     
+    @State private var selectedWorkoutForDetail: WorkoutSummary?
+    
     var body: some View {
         List {
             if coachArtifacts.isEmpty {
@@ -1801,7 +1986,7 @@ struct CoachArtifactInboxView: View {
                 ForEach(coachArtifacts) { record in
                     Section {
                         CoachArtifactCard(artifact: record.artifact, compact: false) { action in
-                            handleArtifactAction(action)
+                            handleArtifactAction(action, artifact: record.artifact)
                         }
                     }
                     .listRowInsets(EdgeInsets())
@@ -1814,27 +1999,123 @@ struct CoachArtifactInboxView: View {
         .scrollContentBackground(.hidden)
         .navigationTitle("Coach Artifact 收件箱")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $selectedWorkoutForDetail) { summary in
+            NavigationStack {
+                WorkoutDetailView(workout: summary)
+            }
+        }
+        .onAppear {
+            deduplicateArtifacts()
+        }
+    }
+
+    private func deduplicateArtifacts() {
+        guard let records = try? modelContext.fetch(FetchDescriptor<CoachArtifactRecord>()) else { return }
+        
+        var workoutArtifacts: [String: [CoachArtifactRecord]] = [:]
+        var dateTypeArtifacts: [String: [CoachArtifactRecord]] = [:]
+        let calendar = Calendar.current
+        
+        for record in records {
+            if record.type == CoachArtifactType.postWorkoutReview.rawValue {
+                if let workoutID = extractWorkoutID(from: record.actionsJSON) {
+                    workoutArtifacts[workoutID, default: []].append(record)
+                }
+            } else {
+                let dateStr = calendar.startOfDay(for: record.createdAt).description
+                let key = "\(record.type)-\(dateStr)"
+                dateTypeArtifacts[key, default: []].append(record)
+            }
+        }
+        
+        for (_, list) in workoutArtifacts where list.count > 1 {
+            let sorted = list.sorted { $0.createdAt > $1.createdAt }
+            for dup in sorted.dropFirst() {
+                modelContext.delete(dup)
+            }
+        }
+        
+        for (_, list) in dateTypeArtifacts where list.count > 1 {
+            let sorted = list.sorted { $0.createdAt > $1.createdAt }
+            for dup in sorted.dropFirst() {
+                modelContext.delete(dup)
+            }
+        }
+        
+        try? modelContext.save()
     }
     
-    private func handleArtifactAction(_ action: CoachArtifactAction) {
-        if action.type.contains("training") || action.type.contains("workout") {
+    private func extractWorkoutID(from json: String) -> String? {
+        guard let range = json.range(of: "\"workout_id\":\"") else { return nil }
+        let startIndex = range.upperBound
+        guard let endIndex = json[startIndex...].firstIndex(of: "\"") else { return nil }
+        return String(json[startIndex..<endIndex])
+    }
+    
+    private func handleArtifactAction(_ action: CoachArtifactAction, artifact: CoachArtifact) {
+        VelaAppState.shared.logDebug("[CoachArtifactInboxView] handleArtifactAction: type=\(action.type), label=\(action.label), payload=\(action.payload)")
+        if action.type == "start_check_in" {
+            VelaAppState.shared.logDebug("[CoachArtifactInboxView] Opening post-workout check-in")
+            VelaAppState.shared.routeToPostWorkoutCheckIn(workoutID: workoutID(for: action, artifact: artifact))
+        } else if action.type == "open_recovery_detail" {
+            VelaAppState.shared.logDebug("[CoachArtifactInboxView] Opening post-workout impact")
+            VelaAppState.shared.routeToPostWorkoutImpact(workoutID: workoutID(for: action, artifact: artifact))
+        } else if let workoutIDString = action.payload["workout_id"],
+           let id = UUID(uuidString: workoutIDString) {
+            VelaAppState.shared.logDebug("[CoachArtifactInboxView] Found workout_id: \(workoutIDString)")
+            let descriptor = FetchDescriptor<StrengthWorkoutRecord>(
+                predicate: #Predicate<StrengthWorkoutRecord> { $0.id == id }
+            )
+            if let record = try? modelContext.fetch(descriptor).first {
+                let summary = WorkoutSummary(
+                    id: record.id,
+                    start: record.startedAt,
+                    end: record.startedAt.addingTimeInterval(TimeInterval(record.durationMinutes * 60)),
+                    activityName: record.title,
+                    source: "strengthLog"
+                )
+                VelaAppState.shared.logDebug("[CoachArtifactInboxView] Setting selectedWorkoutForDetail: \(record.title)")
+                selectedWorkoutForDetail = summary
+            } else {
+                VelaAppState.shared.logDebug("[CoachArtifactInboxView] Workout record not found for id: \(id)")
+            }
+        } else if action.type.contains("recovery") || action.type.contains("vitals") || action.type.contains("insight") {
+            VelaAppState.shared.logDebug("[CoachArtifactInboxView] Routing to recovery (tab 2)")
+            VelaAppState.shared.routeToRecoveryDetail()
+        } else if action.type.contains("training") || action.type.contains("workout") || action.type.contains("summary") {
+            VelaAppState.shared.logDebug("[CoachArtifactInboxView] Routing to training (tab 1)")
             VelaAppState.shared.routeToTab(1)
-        } else if action.type.contains("check") {
+        } else if action.type.contains("check") || action.type.contains("journal") {
+            VelaAppState.shared.logDebug("[CoachArtifactInboxView] Triggering journal")
             VelaAppState.shared.triggerJournal = true
         } else {
+            VelaAppState.shared.logDebug("[CoachArtifactInboxView] Routing to coach: \(action.label)")
             VelaAppState.shared.routeToCoach(question: action.label)
         }
+    }
+
+    private func workoutID(for action: CoachArtifactAction, artifact: CoachArtifact) -> UUID? {
+        if let raw = action.payload["workout_id"], let id = UUID(uuidString: raw) {
+            return id
+        }
+        if let raw = artifact.actions.compactMap({ $0.payload["workout_id"] }).first,
+           let id = UUID(uuidString: raw) {
+            return id
+        }
+        return nil
     }
 }
 
 struct CoachArtifactDetailWrapper: View {
+    @Environment(\.modelContext) private var modelContext
     let artifact: CoachArtifact
+    @State private var selectedWorkoutForDetail: WorkoutSummary?
     
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
                 CoachArtifactCard(artifact: artifact, compact: false) { action in
-                    handleArtifactAction(action)
+                    handleArtifactAction(action, artifact: artifact)
                 }
                 .padding(16)
             }
@@ -1842,16 +2123,64 @@ struct CoachArtifactDetailWrapper: View {
         .background(VelaTheme.systemGroupedBackground)
         .navigationTitle(artifact.title)
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $selectedWorkoutForDetail) { summary in
+            NavigationStack {
+                WorkoutDetailView(workout: summary)
+            }
+        }
     }
     
-    private func handleArtifactAction(_ action: CoachArtifactAction) {
-        if action.type.contains("training") || action.type.contains("workout") {
+    private func handleArtifactAction(_ action: CoachArtifactAction, artifact: CoachArtifact) {
+        VelaAppState.shared.logDebug("[CoachArtifactDetailWrapper] handleArtifactAction: type=\(action.type), label=\(action.label), payload=\(action.payload)")
+        if action.type == "start_check_in" {
+            VelaAppState.shared.logDebug("[CoachArtifactDetailWrapper] Opening post-workout check-in")
+            VelaAppState.shared.routeToPostWorkoutCheckIn(workoutID: workoutID(for: action, artifact: artifact))
+        } else if action.type == "open_recovery_detail" {
+            VelaAppState.shared.logDebug("[CoachArtifactDetailWrapper] Opening post-workout impact")
+            VelaAppState.shared.routeToPostWorkoutImpact(workoutID: workoutID(for: action, artifact: artifact))
+        } else if let workoutIDString = action.payload["workout_id"],
+           let id = UUID(uuidString: workoutIDString) {
+            VelaAppState.shared.logDebug("[CoachArtifactDetailWrapper] Found workout_id: \(workoutIDString)")
+            let descriptor = FetchDescriptor<StrengthWorkoutRecord>(
+                predicate: #Predicate<StrengthWorkoutRecord> { $0.id == id }
+            )
+            if let record = try? modelContext.fetch(descriptor).first {
+                let summary = WorkoutSummary(
+                    id: record.id,
+                    start: record.startedAt,
+                    end: record.startedAt.addingTimeInterval(TimeInterval(record.durationMinutes * 60)),
+                    activityName: record.title,
+                    source: "strengthLog"
+                )
+                VelaAppState.shared.logDebug("[CoachArtifactDetailWrapper] Setting selectedWorkoutForDetail: \(record.title)")
+                selectedWorkoutForDetail = summary
+            } else {
+                VelaAppState.shared.logDebug("[CoachArtifactDetailWrapper] Workout record not found for id: \(id)")
+            }
+        } else if action.type.contains("recovery") || action.type.contains("vitals") || action.type.contains("insight") {
+            VelaAppState.shared.logDebug("[CoachArtifactDetailWrapper] Routing to recovery (tab 2)")
+            VelaAppState.shared.routeToRecoveryDetail()
+        } else if action.type.contains("training") || action.type.contains("workout") || action.type.contains("summary") {
+            VelaAppState.shared.logDebug("[CoachArtifactDetailWrapper] Routing to training (tab 1)")
             VelaAppState.shared.routeToTab(1)
-        } else if action.type.contains("check") {
+        } else if action.type.contains("check") || action.type.contains("journal") {
+            VelaAppState.shared.logDebug("[CoachArtifactDetailWrapper] Triggering journal")
             VelaAppState.shared.triggerJournal = true
         } else {
+            VelaAppState.shared.logDebug("[CoachArtifactDetailWrapper] Routing to coach: \(action.label)")
             VelaAppState.shared.routeToCoach(question: action.label)
         }
+    }
+
+    private func workoutID(for action: CoachArtifactAction, artifact: CoachArtifact) -> UUID? {
+        if let raw = action.payload["workout_id"], let id = UUID(uuidString: raw) {
+            return id
+        }
+        if let raw = artifact.actions.compactMap({ $0.payload["workout_id"] }).first,
+           let id = UUID(uuidString: raw) {
+            return id
+        }
+        return nil
     }
 }
 

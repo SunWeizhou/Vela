@@ -374,7 +374,7 @@ struct VelaTodayView: View {
                                     systemImage: icon(for: action),
                                     isPrimary: action.id == artifact.actions.first?.id
                                 ) {
-                                    handleCoachArtifactAction(action)
+                                    handleCoachArtifactAction(action, artifact: artifact)
                                 }
                             }
                         }
@@ -439,13 +439,45 @@ struct VelaTodayView: View {
         }
     }
 
-    private func handleCoachArtifactAction(_ action: CoachArtifactAction) {
+    private func handleCoachArtifactAction(_ action: CoachArtifactAction, artifact: CoachArtifact) {
+        switch action.type {
+        case "open_training_summary":
+            appState.routeToTab(1)
+        case "start_check_in":
+            appState.routeToPostWorkoutCheckIn(workoutID: workoutID(for: action, artifact: artifact))
+        case "open_recovery_detail":
+            appState.routeToPostWorkoutImpact(workoutID: workoutID(for: action, artifact: artifact))
+        default:
+            if action.type.contains("training") || action.type.contains("workout") {
+                appState.routeToTab(1)
+            } else if action.type.contains("check") || action.type.contains("journal") {
+                appState.triggerJournal = true
+            } else if action.type.contains("recovery") {
+                appState.routeToRecoveryDetail()
+            } else {
+                appState.routeToCoach(question: action.label)
+            }
+        }
+    }
+
+    private func workoutID(for action: CoachArtifactAction, artifact: CoachArtifact) -> UUID? {
+        if let raw = action.payload["workout_id"], let id = UUID(uuidString: raw) {
+            return id
+        }
+        if let raw = artifact.actions.compactMap({ $0.payload["workout_id"] }).first,
+           let id = UUID(uuidString: raw) {
+            return id
+        }
+        return nil
+    }
+
+    private func routeLegacyCoachArtifactAction(_ action: CoachArtifactAction) {
         if action.type.contains("training") || action.type.contains("workout") {
             appState.routeToTab(1)
-        } else if action.type.contains("check") {
+        } else if action.type.contains("check") || action.type.contains("journal") {
             appState.triggerJournal = true
         } else if action.type.contains("recovery") {
-            showTodayEvidence = true
+            appState.routeToRecoveryDetail()
         } else {
             appState.routeToCoach(question: action.label)
         }
@@ -757,7 +789,7 @@ struct VelaTodayView: View {
                                     systemImage: icon(for: action),
                                     isPrimary: action.id == artifact.actions.first?.id
                                 ) {
-                                    handleCoachArtifactAction(action)
+                                    handleCoachArtifactAction(action, artifact: artifact)
                                 }
                             }
                         }

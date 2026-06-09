@@ -273,6 +273,224 @@ final class WorkoutAggregationTests: XCTestCase {
         XCTAssertEqual(workout.exercises.first?.sets.last?.isCompleted, false)
     }
 
+    func testXunjiImportMergesIntoExistingAppleStrengthWorkoutAndKeepsAppleMetrics() throws {
+        let store = try makeStore()
+        let start = makeDate(hour: 19)
+        let end = start.addingTimeInterval(62 * 60)
+        let healthKitID = UUID()
+        store.context.insert(WorkoutEventRecord(
+            id: healthKitID,
+            source: "healthKit",
+            startedAt: start,
+            endedAt: end,
+            activityType: "Traditional Strength Training",
+            energyKilocalories: 420,
+            averageHeartRate: 138,
+            linkedHealthKitWorkoutId: healthKitID
+        ))
+        try store.context.save()
+        let datestr = "2026-04-02"
+        let json = """
+        {
+          "success": true,
+          "res": {
+            "trains": [{
+              "datestr": "\(datestr)",
+              "localid": 456789,
+              "title": "胸肩三头",
+              "start": \(Int64(start.addingTimeInterval(90).timeIntervalSince1970 * 1000)),
+              "end": \(Int64(end.addingTimeInterval(-60).timeIntervalSince1970 * 1000)),
+              "rpe": 8,
+              "movements": [{
+                "name": "杠铃卧推",
+                "sets": [
+                  { "done": true, "weight": "80", "unit": "kg", "reps": "8" }
+                ]
+              }]
+            }]
+          }
+        }
+        """.data(using: .utf8)!
+
+        _ = try XunjiTrainingImportService().importResponseData(json, datestr: datestr, modelContext: store.context)
+
+        let events = try fetchEvents(store.context)
+        XCTAssertEqual(events.count, 1)
+        let event = try XCTUnwrap(events.first)
+        XCTAssertEqual(event.id, healthKitID)
+        XCTAssertEqual(event.linkedHealthKitWorkoutId, healthKitID)
+        XCTAssertNotNil(event.linkedStrengthWorkoutId)
+        XCTAssertEqual(event.activityType, "胸肩三头")
+        XCTAssertEqual(event.title, "胸肩三头")
+        XCTAssertEqual(event.energyKilocalories ?? -1, 420, accuracy: 0.1)
+        XCTAssertEqual(event.averageHeartRate ?? -1, 138, accuracy: 0.1)
+
+        let summary = try XCTUnwrap(fetchDailySummary(store.context, date: start))
+        XCTAssertEqual(summary.workoutCount, 1)
+        let workout = try XCTUnwrap(summary.toSnapshot().workouts.first)
+        XCTAssertEqual(workout.activityName, "胸肩三头")
+        XCTAssertEqual(workout.energyKilocalories ?? -1, 420, accuracy: 0.1)
+        XCTAssertEqual(workout.averageHeartRate ?? -1, 138, accuracy: 0.1)
+    }
+
+    func testHealthKitSyncMergesIntoExistingXunjiStrengthWorkout() throws {
+        let store = try makeStore()
+        let start = makeDate(hour: 19)
+        let end = start.addingTimeInterval(60 * 60)
+        let datestr = "2026-04-02"
+        let json = """
+        {
+          "success": true,
+          "res": {
+            "trains": [{
+              "datestr": "\(datestr)",
+              "localid": 567890,
+              "title": "背部二头",
+              "start": \(Int64(start.timeIntervalSince1970 * 1000)),
+              "end": \(Int64(end.timeIntervalSince1970 * 1000)),
+              "rpe": 7,
+              "movements": [{
+                "name": "高位下拉",
+                "sets": [
+                  { "done": true, "weight": "60", "unit": "kg", "reps": "10" }
+                ]
+              }]
+            }]
+          }
+        }
+        """.data(using: .utf8)!
+        _ = try XunjiTrainingImportService().importResponseData(json, datestr: datestr, modelContext: store.context)
+        let healthKitID = UUID()
+        let healthKitWorkout = WorkoutSummary(
+            id: healthKitID,
+            start: start.addingTimeInterval(30),
+            end: end.addingTimeInterval(-30),
+            activityName: "Traditional Strength Training",
+            energyKilocalories: 380,
+            averageHeartRate: 132,
+            source: "healthKit"
+        )
+
+        try WorkoutAggregationService.shared.upsertHealthKitWorkoutEvents(
+            [healthKitWorkout],
+            on: start,
+            modelContext: store.context
+        )
+        try WorkoutAggregationService.shared.aggregateDay(date: start, modelContext: store.context)
+
+        let events = try fetchEvents(store.context)
+        XCTAssertEqual(events.count, 1)
+        let event = try XCTUnwrap(events.first)
+        XCTAssertEqual(event.linkedHealthKitWorkoutId, healthKitID)
+        XCTAssertNotNil(event.linkedStrengthWorkoutId)
+        XCTAssertEqual(event.activityType, "背部二头")
+        XCTAssertEqual(event.energyKilocalories ?? -1, 380, accuracy: 0.1)
+        XCTAssertEqual(event.averageHeartRate ?? -1, 132, accuracy: 0.1)
+        let summary = try XCTUnwrap(fetchDailySummary(store.context, date: start))
+        XCTAssertEqual(summary.workoutCount, 1)
+        XCTAssertEqual(summary.toSnapshot().workouts.first?.activityName, "背部二头")
+    }
+
+    func testXunjiImportDoesNotMergeIntoAppleRunningWorkout() throws {
+        let store = try makeStore()
+        let start = makeDate(hour: 19)
+        let end = start.addingTimeInterval(60 * 60)
+        let healthKitID = UUID()
+        store.context.insert(WorkoutEventRecord(
+            id: healthKitID,
+            source: "healthKit",
+            startedAt: start,
+            endedAt: end,
+            activityType: "Running",
+            title: "Running",
+            energyKilocalories: 520,
+            averageHeartRate: 152,
+            linkedHealthKitWorkoutId: healthKitID
+        ))
+        try store.context.save()
+
+        let datestr = "2026-04-02"
+        let json = """
+        {
+          "success": true,
+          "res": {
+            "trains": [{
+              "datestr": "\(datestr)",
+              "localid": 678901,
+              "title": "胸部训练",
+              "start": \(Int64(start.addingTimeInterval(60).timeIntervalSince1970 * 1000)),
+              "end": \(Int64(end.addingTimeInterval(-60).timeIntervalSince1970 * 1000)),
+              "rpe": 8,
+              "movements": [{
+                "name": "杠铃卧推",
+                "sets": [
+                  { "done": true, "weight": "80", "unit": "kg", "reps": "8" }
+                ]
+              }]
+            }]
+          }
+        }
+        """.data(using: .utf8)!
+
+        _ = try XunjiTrainingImportService().importResponseData(json, datestr: datestr, modelContext: store.context)
+
+        let events = try fetchEvents(store.context)
+        XCTAssertEqual(events.count, 2)
+        XCTAssertTrue(events.contains { $0.linkedHealthKitWorkoutId == healthKitID && $0.linkedStrengthWorkoutId == nil })
+        XCTAssertTrue(events.contains { $0.source == "xunji" && $0.linkedStrengthWorkoutId != nil && $0.linkedHealthKitWorkoutId == nil })
+    }
+
+    func testXunjiImportDoesNotMergeWhenStartIsCloseButOverlapIsWeak() throws {
+        let store = try makeStore()
+        let appleStart = makeDate(hour: 19)
+        let appleEnd = appleStart.addingTimeInterval(20 * 60)
+        let xunjiStart = appleStart.addingTimeInterval(15 * 60)
+        let xunjiEnd = xunjiStart.addingTimeInterval(60 * 60)
+        let healthKitID = UUID()
+        store.context.insert(WorkoutEventRecord(
+            id: healthKitID,
+            source: "healthKit",
+            startedAt: appleStart,
+            endedAt: appleEnd,
+            activityType: "Traditional Strength Training",
+            title: "Traditional Strength Training",
+            energyKilocalories: 120,
+            averageHeartRate: 110,
+            linkedHealthKitWorkoutId: healthKitID
+        ))
+        try store.context.save()
+
+        let datestr = "2026-04-02"
+        let json = """
+        {
+          "success": true,
+          "res": {
+            "trains": [{
+              "datestr": "\(datestr)",
+              "localid": 789012,
+              "title": "腿部训练",
+              "start": \(Int64(xunjiStart.timeIntervalSince1970 * 1000)),
+              "end": \(Int64(xunjiEnd.timeIntervalSince1970 * 1000)),
+              "rpe": 8,
+              "movements": [{
+                "name": "杠铃深蹲",
+                "sets": [
+                  { "done": true, "weight": "100", "unit": "kg", "reps": "5" }
+                ]
+              }]
+            }]
+          }
+        }
+        """.data(using: .utf8)!
+
+        _ = try XunjiTrainingImportService().importResponseData(json, datestr: datestr, modelContext: store.context)
+
+        let events = try fetchEvents(store.context)
+        XCTAssertEqual(events.count, 2)
+        XCTAssertTrue(events.contains { $0.linkedHealthKitWorkoutId == healthKitID && $0.linkedStrengthWorkoutId == nil })
+        XCTAssertTrue(events.contains { $0.source == "xunji" && $0.title == "腿部训练" })
+    }
+
     func testWorkoutSaveUpdatesDailySummary() throws {
         let store = try makeStore()
         let start = makeDate(hour: 16)
@@ -386,5 +604,7 @@ final class WorkoutAggregationTests: XCTestCase {
         XCTAssertEqual(fetched.artifact.sourceContextHash, "ctx-workout")
         XCTAssertTrue(fetched.artifact.summary.contains("Upper Strength"))
         XCTAssertTrue(fetched.artifact.actions.contains { $0.type == "open_training_summary" })
+        XCTAssertTrue(fetched.artifact.actions.contains { $0.type == "start_check_in" && $0.payload["workout_id"] == workout.id.uuidString })
+        XCTAssertTrue(fetched.artifact.actions.contains { $0.type == "open_recovery_detail" && $0.payload["workout_id"] == workout.id.uuidString })
     }
 }

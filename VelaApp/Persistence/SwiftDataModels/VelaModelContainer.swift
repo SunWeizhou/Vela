@@ -27,7 +27,8 @@ enum VelaModelContainer {
         TrainingPlanAdaptationRecord.self,
         WorkoutEventRecord.self,
         XunjiDailyCacheRecord.self,
-        XunjiWorkoutMirrorRecord.self
+        XunjiWorkoutMirrorRecord.self,
+        DeletedWorkoutRecord.self
     ])
 
     private static let storeURL: URL = {

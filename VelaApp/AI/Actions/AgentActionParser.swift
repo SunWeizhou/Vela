@@ -170,8 +170,8 @@ struct CoachArtifact: Codable, Hashable, Identifiable {
             ],
             actions: [
                 CoachArtifactAction(type: "open_training_summary", label: "查看训练总结", payload: ["workout_id": workout.id.uuidString]),
-                CoachArtifactAction(type: "start_check_in", label: "记录训练后感受"),
-                CoachArtifactAction(type: "open_recovery_detail", label: "查看恢复影响")
+                CoachArtifactAction(type: "start_check_in", label: "记录训练后感受", payload: ["workout_id": workout.id.uuidString]),
+                CoachArtifactAction(type: "open_recovery_detail", label: "查看恢复影响", payload: ["workout_id": workout.id.uuidString])
             ],
             sourceContextHash: sourceContextHash,
             followUpQuestion: prText

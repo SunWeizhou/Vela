@@ -2,87 +2,74 @@ import SwiftUI
 import Charts
 import MapKit
 import HealthKit
+import SwiftData
 
 struct WorkoutDetailView: View {
-    let workout: WorkoutSummary
-    
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var dashboardVM: DashboardViewModel
+
+    let workout: WorkoutSummary
+    
     @State private var heartRates: [HeartRateSample] = []
     @State private var routeCoordinates: [CLLocationCoordinate2D] = []
     @State private var isLoading = true
     @State private var showHeartRateInsight = false
+    @State private var showDeleteConfirmation = false
+    @State private var selectedSet: StrengthSetDetail?
+
+    @Query(sort: \WorkoutEventRecord.startedAt, order: .reverse) private var workoutEvents: [WorkoutEventRecord]
+    @Query(sort: \StrengthWorkoutRecord.startedAt, order: .reverse) private var strengthWorkouts: [StrengthWorkoutRecord]
     
     private let queryService = HealthKitQueryService()
     
     var body: some View {
-        ZStack {
-            workoutDetailBackground
-
-            VStack(spacing: 0) {
-                HStack {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(VelaTheme.accent)
-                            .frame(width: 36, height: 36)
-                    }
-                    .buttonStyle(.plain)
-
-                    Spacer()
-
-                    Text("健身详情")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(VelaTheme.fg)
-
-                    Spacer()
-
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                hero
+                intelligenceStrip
+                heartRateChartSection
+                
+                if let strength = linkedStrengthWorkout {
+                    muscleDistribution(strength)
+                    exerciseList(strength)
+                    notesCard(strength)
+                }
+                
+                if !routeCoordinates.isEmpty {
+                    gpsRouteSection
+                }
+                workoutCoachCard
+            }
+            .padding(16)
+            .padding(.bottom, 88)
+        }
+        .scrollIndicators(.hidden)
+        .background(detailBackground.ignoresSafeArea())
+        .navigationTitle("健身详情")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                HStack(spacing: 12) {
                     Button {
                         showHeartRateInsight = true
                     } label: {
                         Image(systemName: "heart.text.square")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(heartRates.isEmpty ? VelaTheme.muted : VelaTheme.accent)
-                            .frame(width: 36, height: 36)
                     }
-                    .buttonStyle(.plain)
                     .disabled(heartRates.isEmpty)
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-                .padding(.bottom, 8)
-                .background(.regularMaterial)
-                .overlay(alignment: .bottom) {
-                    Rectangle()
-                        .fill(VelaTheme.separatorSoft)
-                        .frame(height: 0.5)
-                }
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        workoutHeaderCard
-                        statsMetricsRow
-                        heartRateChartSection
-
-                        if !routeCoordinates.isEmpty {
-                            gpsRouteSection
-                        }
-
-                        workoutCoachCard
+                    
+                    Button(role: .destructive) {
+                        showDeleteConfirmation = true
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(Color.red)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-                    .padding(.bottom, 32)
                 }
-                .scrollIndicators(.hidden)
             }
-        }
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar) // Hide standard nav bar for premium custom header
-        .task {
-            await loadWorkoutDetails()
         }
         .sheet(isPresented: $showHeartRateInsight) {
             WorkoutHeartRateInsightSheet(
@@ -96,142 +83,130 @@ struct WorkoutDetailView: View {
             .presentationDragIndicator(.visible)
             .presentationBackground(VelaTheme.systemGroupedBackground)
         }
+        .sheet(item: $selectedSet) { detail in
+            StrengthSetDetailSheet(detail: detail)
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(VelaTheme.systemGroupedBackground)
+        }
+        .confirmationDialog("确定要删除这条健身记录吗？", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
+            Button("删除记录", role: .destructive) {
+                deleteWorkout()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("删除后，该训练对应的耗力、卡路里和负荷计算都将被移除。")
+        }
+        .task {
+            await loadWorkoutDetails()
+        }
     }
     
     // MARK: - Subviews
 
-    private var workoutDetailBackground: some View {
-        ZStack(alignment: .top) {
+    private var bodyTextColor: Color { VelaTheme.fg }
+    private var mutedColor: Color { VelaTheme.muted }
+    private var accentColor: Color { VelaTheme.accent }
+
+    private var heroBackground: some View {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .fill(VelaTheme.cardBg.opacity(colorScheme == .dark ? 0.62 : 0.92))
+            .shadow(color: VelaTheme.nativeShadow(colorScheme), radius: 10, y: 3)
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
+            )
+    }
+
+    private var detailBackground: some View {
+        ZStack {
+            VelaTheme.systemGroupedBackground
             LinearGradient(
-                colors: [
-                    workoutAccentColor.opacity(0.18),
-                    VelaTheme.systemGroupedBackground,
-                    VelaTheme.systemGroupedBackground
-                ],
+                colors: [Color(hex: "#EAF3FF"), VelaTheme.systemGroupedBackground, Color(hex: "#EEF7F5")],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            .ignoresSafeArea()
+        }
+    }
 
-            VStack(spacing: 0) {
-                LinearGradient(
-                    colors: [
-                        workoutAccentColor.opacity(0.16),
-                        workoutSecondaryColor.opacity(0.10),
-                        Color.clear
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 240)
-                Spacer()
-            }
-            .ignoresSafeArea()
-        }
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .fill(VelaTheme.cardBg)
+            .shadow(color: VelaTheme.nativeShadow(colorScheme), radius: 8, y: 2)
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
+            )
     }
-    
-    private var workoutHeaderCard: some View {
-        HStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .fill(workoutAccentColor.opacity(0.14))
-                    .frame(width: 52, height: 52)
-                
-                Image(systemName: iconForWorkout(workout.activityName))
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(workoutAccentColor)
-            }
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text(workout.activityName)
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(VelaTheme.fg)
-                
-                Text(formattedWorkoutTime)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(VelaTheme.muted)
-            }
-            
-            Spacer()
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [VelaTheme.cardBg, workoutAccentColor.opacity(0.05)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: Color.black.opacity(0.012), radius: 10, y: 3)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
-        )
-    }
-    
-    private var statsMetricsRow: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 2), spacing: 10) {
-            workoutStatTile(
-                title: L10n.t("Duration", "持续时间"),
-                value: formattedDuration(workout.start, workout.end),
-                icon: "clock.fill",
-                color: Color(hex: "#E0A926") // Deep warm yellow
-            )
-            
-            workoutStatTile(
-                title: L10n.t("Active Burn", "活动消耗"),
-                value: workout.energyKilocalories.map { "\(Int($0)) kcal" } ?? "--",
-                icon: "flame.fill",
-                color: Color(hex: "#FF7043") // Orange fire
-            )
-            
-            workoutStatTile(
-                title: L10n.t("Avg Heart Rate", "平均心率"),
-                value: workout.averageHeartRate.map { "\(Int($0)) bpm" } ?? "--",
-                icon: "heart.fill",
-                color: Color(hex: "#5C6BC0") // Indigo purple
-            )
 
-            workoutStatTile(
-                title: L10n.t("Distance", "距离"),
-                value: formattedDistance,
-                icon: "location.fill",
-                color: Color(hex: "#4CAF50")
-            )
-        }
-    }
-    
-    private func workoutStatTile(title: String, value: String, icon: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 11))
-                    .foregroundStyle(color)
-                Text(title)
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(VelaTheme.muted)
+    private func heroMetric(_ title: String, _ value: String, _ unit: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(value)
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                Text(unit)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(mutedColor)
+                    .lineLimit(1)
             }
-            
-            Text(value)
-                .font(.system(size: 18, weight: .bold, design: .rounded))
-                .foregroundStyle(VelaTheme.fg)
+            Text(title)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(mutedColor)
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(VelaTheme.cardBg)
-                .shadow(color: Color.black.opacity(0.01), radius: 8, y: 2)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
-        )
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.72)))
+    }
+
+    private var hero: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(workout.activityName)
+                        .font(.system(size: 30, weight: .bold, design: .rounded))
+                        .foregroundStyle(bodyTextColor)
+                    Text(workout.start.formatted(date: .abbreviated, time: .shortened))
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(mutedColor)
+                }
+                Spacer()
+                Image(systemName: iconForWorkout(workout.activityName))
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(workoutAccentColor)
+                    .frame(width: 46, height: 46)
+                    .background(Circle().fill(workoutAccentColor.opacity(0.14)))
+            }
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
+                heroMetric("时长", "\(Int((workout.end.timeIntervalSince(workout.start) / 60).rounded()))", "分钟")
+                heroMetric("活动消耗", workout.energyKilocalories.map { "\(Int($0))" } ?? "--", "kcal")
+                if let dist = workout.distanceMeters, dist > 0 {
+                    heroMetric("距离", dist >= 1000 ? String(format: "%.1f", dist/1000) : "\(Int(dist.rounded()))", dist >= 1000 ? "km" : "m")
+                } else {
+                    heroMetric("平均心率", workout.averageHeartRate.map { "\(Int($0))" } ?? "--", "bpm")
+                }
+            }
+        }
+        .padding(18)
+        .background(heroBackground)
+    }
+
+    private var intelligenceStrip: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("训练智能摘要", systemImage: "sparkles")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(bodyTextColor)
+
+            Text("本次为 \(workout.activityName) 运动，持续时间约 \(Int((workout.end.timeIntervalSince(workout.start) / 60).rounded())) 分钟。")
+                .font(.system(size: 13))
+                .foregroundStyle(mutedColor)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground)
     }
     
     private var heartRateChartSection: some View {
@@ -266,54 +241,41 @@ struct WorkoutDetailView: View {
                 Chart {
                     if let averageHeartRate {
                         RuleMark(y: .value("Average", averageHeartRate))
-                            .foregroundStyle(VelaTheme.muted.opacity(0.45))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                            .foregroundStyle(Color(hex: "#FF5252").opacity(0.6))
+                            .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [3, 3]))
                             .annotation(position: .trailing, alignment: .center) {
                                 Text("AVG")
                                     .font(.system(size: 9, weight: .bold))
-                                    .foregroundStyle(VelaTheme.muted)
+                                    .foregroundStyle(Color(hex: "#FF5252"))
                             }
                     }
 
-                    ForEach(heartRates) { item in
-                        AreaMark(
-                            x: .value("Time", item.date),
-                            y: .value("BPM", item.bpm)
+                    ForEach(binnedHeartRates) { bin in
+                        BarMark(
+                            x: .value("Time", bin.date),
+                            yStart: .value("Min BPM", bin.minBPM),
+                            yEnd: .value("Max BPM", bin.maxBPM),
+                            width: .fixed(3.0)
                         )
-                        .foregroundStyle(LinearGradient(
-                            colors: [Color(hex: "#FF3B30").opacity(0.26), Color(hex: "#FF9500").opacity(0.03)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ))
-                        .interpolationMethod(.catmullRom)
-                        
-                        LineMark(
-                            x: .value("Time", item.date),
-                            y: .value("BPM", item.bpm)
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [Color(hex: "#00C7BE").opacity(0.85), Color(hex: "#30B0C7")],
+                                startPoint: .bottom,
+                                endPoint: .top
+                            )
                         )
-                        .foregroundStyle(Color(hex: "#FF3B30"))
-                        .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
-                        .interpolationMethod(.catmullRom)
-                    }
-
-                    if let maxHeartRateSample {
-                        PointMark(
-                            x: .value("Peak Time", maxHeartRateSample.date),
-                            y: .value("Peak BPM", maxHeartRateSample.bpm)
-                        )
-                        .symbolSize(70)
-                        .foregroundStyle(Color.white)
-                        .annotation(position: .top, alignment: .center) {
-                            Text("\(Int(maxHeartRateSample.bpm.rounded()))")
-                                .font(.system(size: 10, weight: .bold, design: .rounded))
-                                .foregroundStyle(Color(hex: "#FF3B30"))
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3)
-                                .background(Capsule().fill(VelaTheme.cardBg))
-                        }
+                        .cornerRadius(1.5)
                     }
                 }
-                .chartXAxis(.hidden)
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 5)) { value in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                            .foregroundStyle(VelaTheme.separatorSoft)
+                        AxisValueLabel(format: .dateTime.hour().minute())
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(VelaTheme.muted)
+                    }
+                }
                 .chartYAxis {
                     AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { _ in
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6, dash: [2, 4]))
@@ -348,15 +310,7 @@ struct WorkoutDetailView: View {
             }
         }
         .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(VelaTheme.cardBg)
-                .shadow(color: Color.black.opacity(0.012), radius: 10, y: 3)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
-        )
+        .background(cardBackground)
     }
 
     private func heartRateFact(title: String, value: String) -> some View {
@@ -428,15 +382,7 @@ struct WorkoutDetailView: View {
             }
         }
         .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(VelaTheme.cardBg)
-                .shadow(color: Color.black.opacity(0.012), radius: 10, y: 3)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
-        )
+        .background(cardBackground)
     }
     
     private var workoutCoachCard: some View {
@@ -471,6 +417,20 @@ struct WorkoutDetailView: View {
             return String(format: "%.2f km", meters / 1_000)
         }
         return "\(Int(meters.rounded())) m"
+    }
+
+    private var binnedHeartRates: [HeartRateRangeBin] {
+        guard !heartRates.isEmpty else { return [] }
+        let calendar = Calendar.current
+        let grouped = Dictionary(grouping: heartRates) { sample in
+            let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: sample.date)
+            return calendar.date(from: components) ?? sample.date
+        }
+        return grouped.compactMap { (minuteDate, samples) -> HeartRateRangeBin? in
+            let bpms = samples.map(\.bpm)
+            guard let minVal = bpms.min(), let maxVal = bpms.max() else { return nil }
+            return HeartRateRangeBin(date: minuteDate, minBPM: minVal, maxBPM: maxVal)
+        }.sorted { $0.date < $1.date }
     }
 
     private var heartRateDomain: ClosedRange<Double> {
@@ -632,7 +592,278 @@ struct WorkoutDetailView: View {
         
         isLoading = false
     }
-    
+
+    private func deleteWorkout() {
+        do {
+            let workoutID = workout.id
+            let eventDescriptor = FetchDescriptor<WorkoutEventRecord>(
+                predicate: #Predicate<WorkoutEventRecord> { $0.id == workoutID || $0.linkedHealthKitWorkoutId == workoutID }
+            )
+            let events = try modelContext.fetch(eventDescriptor)
+            for event in events {
+                if let hkId = event.linkedHealthKitWorkoutId {
+                    modelContext.insert(DeletedWorkoutRecord(id: hkId.uuidString))
+                } else if event.source == "healthKit" {
+                    modelContext.insert(DeletedWorkoutRecord(id: event.id.uuidString))
+                }
+                if let strengthId = event.linkedStrengthWorkoutId {
+                    let strDescriptor = FetchDescriptor<StrengthWorkoutRecord>(
+                        predicate: #Predicate<StrengthWorkoutRecord> { $0.id == strengthId }
+                    )
+                    if let strWorkout = try? modelContext.fetch(strDescriptor).first {
+                        try? WorkoutAggregationService.shared.deleteStrengthWorkout(strWorkout, modelContext: modelContext)
+                    }
+                }
+                modelContext.delete(event)
+            }
+            if workout.source == "healthKit" || workout.source == nil {
+                modelContext.insert(DeletedWorkoutRecord(id: workout.id.uuidString))
+            }
+            try modelContext.save()
+            try? WorkoutAggregationService.shared.aggregateDay(date: workout.start, modelContext: modelContext)
+            
+            VelaAppState.shared.markLocalDataChanged()
+            
+            Task {
+                await dashboardVM.refresh(modelContext: modelContext)
+            }
+            dismiss()
+        } catch {
+            print("Failed to delete workout: \(error)")
+        }
+    }
+
+    private var linkedStrengthWorkout: StrengthWorkoutRecord? {
+        // 1. Try explicit link via WorkoutEventRecord
+        if let event = workoutEvents.first(where: { $0.id == workout.id || $0.linkedHealthKitWorkoutId == workout.id }),
+           let strengthId = event.linkedStrengthWorkoutId {
+            if let match = strengthWorkouts.first(where: { $0.id == strengthId }) {
+                return match
+            }
+        }
+        // 2. Try direct matching of workout.id
+        if let match = strengthWorkouts.first(where: { $0.id == workout.id }) {
+            return match
+        }
+        // 3. Fallback: Find by time overlap (30 mins range)
+        let matchRange: TimeInterval = 30 * 60
+        if let match = strengthWorkouts.first(where: { abs($0.startedAt.timeIntervalSince(workout.start)) <= matchRange }) {
+            return match
+        }
+        return nil
+    }
+
+    private func muscleDistribution(_ strength: StrengthWorkoutRecord) -> some View {
+        let analysis = TrainingAnalyticsService().summarizeWorkout(
+            strength,
+            history: strengthWorkouts.filter { $0.startedAt < strength.startedAt },
+            exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
+        )
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("肌群分布")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(bodyTextColor)
+                Spacer()
+                Text("有效组")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(mutedColor)
+            }
+
+            if analysis.muscleGroupSets.isEmpty {
+                Text("这次训练暂未形成有效组。")
+                    .font(.system(size: 13))
+                    .foregroundStyle(mutedColor)
+            } else {
+                ForEach(analysis.muscleGroupSets.sorted { $0.value > $1.value }, id: \.key) { muscle, sets in
+                    let maxSets = max(analysis.muscleGroupSets.values.max() ?? 1, 1)
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(localizedMuscle(muscle))
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(bodyTextColor)
+                            Spacer()
+                            Text("\(sets) 组")
+                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .foregroundStyle(mutedColor)
+                        }
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(Color(hex: "#EFEAE2"))
+                                Capsule()
+                                    .fill(muscleColor(muscle))
+                                    .frame(width: geo.size.width * CGFloat(Double(sets) / Double(maxSets)))
+                            }
+                        }
+                        .frame(height: 8)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(cardBackground)
+    }
+
+    private func exerciseList(_ strength: StrengthWorkoutRecord) -> some View {
+        let analysis = TrainingAnalyticsService().summarizeWorkout(
+            strength,
+            history: strengthWorkouts.filter { $0.startedAt < strength.startedAt },
+            exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
+        )
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("动作与组次")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(bodyTextColor)
+
+            ForEach(strength.exercises) { exercise in
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(exercise.name)
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(bodyTextColor)
+                            Text("\(exercise.equipment) · \(Int(exercise.volumeKilograms.rounded())) kg")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(mutedColor)
+                        }
+                        Spacer()
+                        if let e1RM = analysis.estimatedOneRepMaxByExercise[exercise.name] {
+                            VStack(alignment: .trailing, spacing: 3) {
+                                Text("\(Int(e1RM.rounded())) kg")
+                                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                                    .foregroundStyle(accentColor)
+                                Text("e1RM")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(mutedColor)
+                            }
+                        }
+                    }
+
+                    if !exercise.sets.isEmpty {
+                        HStack(spacing: 12) {
+                            Text("组")
+                                .frame(width: 32, alignment: .leading)
+                            Text("重量")
+                                .frame(width: 70, alignment: .center)
+                            Spacer()
+                            Text("次数")
+                                .frame(width: 50, alignment: .center)
+                            Text("RPE")
+                                .frame(width: 44, alignment: .center)
+                            Text("状态")
+                                .frame(width: 32, alignment: .trailing)
+                        }
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(mutedColor)
+                        .padding(.horizontal, 4)
+                        .padding(.bottom, 2)
+                    }
+
+                    ForEach(Array(exercise.sets.enumerated()), id: \.element.id) { index, set in
+                        Button {
+                            selectedSet = StrengthSetDetail(
+                                exerciseName: exercise.name,
+                                setIndex: index + 1,
+                                set: set
+                            )
+                        } label: {
+                            setRow(index: index, set: set)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(16)
+                .background(cardBackground)
+            }
+        }
+    }
+
+    private func setRow(index: Int, set: StrengthSetLog) -> some View {
+        HStack(spacing: 12) {
+            Text(set.isWarmup ? "热" : "\(index + 1)")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(Color.white)
+                .frame(width: 24, height: 24)
+                .background(Circle().fill(set.isWarmup ? Color(hex: "#FF9500") : VelaTheme.accent))
+                .frame(width: 32, alignment: .leading)
+
+            Text("\(set.weightKilograms.formatted(.number.precision(.fractionLength(0...1)))) kg")
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(bodyTextColor)
+                .frame(width: 70, alignment: .center)
+
+            Spacer()
+
+            Text("\(set.repetitions) 次")
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(bodyTextColor)
+                .frame(width: 50, alignment: .center)
+
+            Text(set.rpe.map { "\(Int($0))" } ?? "—")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(set.rpe != nil ? VelaTheme.accent : mutedColor)
+                .frame(width: 44, height: 26)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.04)))
+
+            Image(systemName: (set.isCompleted ?? true) ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle((set.isCompleted ?? true) ? VelaTheme.success : mutedColor)
+                .font(.system(size: 20))
+                .frame(width: 32, alignment: .trailing)
+        }
+        .padding(.vertical, 6)
+    }
+
+    @ViewBuilder
+    private func notesCard(_ strength: StrengthWorkoutRecord) -> some View {
+        if !strength.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("训练备注")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(bodyTextColor)
+                Text(strength.notes)
+                    .font(.system(size: 13))
+                    .foregroundStyle(mutedColor)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(cardBackground)
+        }
+    }
+
+    private func localizedMuscle(_ muscle: String) -> String {
+        [
+            "chest": "胸部",
+            "back": "背部",
+            "quads": "股四头肌",
+            "hamstrings": "腘绳肌",
+            "glutes": "臀部",
+            "shoulders": "肩部",
+            "biceps": "肱二头肌",
+            "triceps": "肱三头肌",
+            "core": "核心",
+            "other": "其他"
+        ][muscle] ?? muscle
+    }
+
+    private func muscleColor(_ muscle: String) -> Color {
+        switch muscle {
+        case "chest": return Color(hex: "#FF8A65")
+        case "back": return Color(hex: "#4DB6AC")
+        case "quads", "hamstrings", "glutes": return Color(hex: "#66BB6A")
+        case "shoulders": return Color(hex: "#5C6BC0")
+        case "biceps", "triceps": return Color(hex: "#AB47BC")
+        case "core": return Color(hex: "#FFCA28")
+        default: return Color(hex: "#90A4AE")
+        }
+    }
+
+}
+
+struct HeartRateRangeBin: Identifiable {
+    let id = UUID()
+    let date: Date
+    let minBPM: Double
+    let maxBPM: Double
 }
 
 private struct HeartRateZoneSegment: Identifiable {
@@ -736,5 +967,56 @@ private struct WorkoutHeartRateInsightSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.cardBg))
+    }
+}
+
+private struct StrengthSetDetail: Identifiable {
+    let id = UUID()
+    var exerciseName: String
+    var setIndex: Int
+    var set: StrengthSetLog
+}
+
+private struct StrengthSetDetailSheet: View {
+    let detail: StrengthSetDetail
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(detail.exerciseName)
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                Text("第 \(detail.setIndex) 组")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(VelaTheme.muted)
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    metric("重量", "\(detail.set.weightKilograms.formatted(.number.precision(.fractionLength(0...1)))) kg")
+                    metric("次数", "\(detail.set.repetitions)")
+                    metric("容量", "\(Int(detail.set.volumeKilograms.rounded())) kg")
+                    metric("RPE", detail.set.rpe.map { "\(Int($0))" } ?? "--")
+                    metric("RIR", detail.set.rir.map { "\(Int($0))" } ?? "--")
+                    metric("状态", (detail.set.isCompleted ?? true) ? "已完成" : "未完成")
+                }
+                Spacer()
+            }
+            .padding(18)
+            .background(VelaTheme.systemGroupedBackground)
+            .navigationTitle("组详情")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private func metric(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(value)
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .foregroundStyle(VelaTheme.fg)
+            Text(title)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(VelaTheme.muted)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.cardBg))
     }
 }

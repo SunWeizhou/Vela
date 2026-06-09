@@ -241,13 +241,18 @@ final class DailySnapshotBuilder {
             // Consolidate workouts using WorkoutAggregationService
             let aggregated: [WorkoutSummary]
             if let modelContext = modelContext {
+                let deletedRecords = (try? modelContext.fetch(FetchDescriptor<DeletedWorkoutRecord>())) ?? []
+                let blacklistedIDs = Set(deletedRecords.map(\.id))
+                let filteredWorkouts = strain.workouts.filter { !blacklistedIDs.contains($0.id.uuidString) }
+
                 try? WorkoutAggregationService.shared.upsertHealthKitWorkoutEvents(
-                    strain.workouts,
+                    filteredWorkouts,
+                    on: dayStart,
                     modelContext: modelContext,
                     calendar: calendar
                 )
                 aggregated = WorkoutAggregationService.shared.aggregateWorkouts(
-                    healthKitWorkouts: strain.workouts,
+                    healthKitWorkouts: filteredWorkouts,
                     for: dayStart,
                     modelContext: modelContext,
                     calendar: calendar

@@ -568,28 +568,30 @@ struct ActionPill: View {
     var action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 12, weight: .bold))
-                Text(title)
-                    .font(VelaTheme.caption1())
-                    .fontWeight(.semibold)
-                    .lineLimit(1)
-            }
-            .foregroundStyle(isPrimary ? .white : VelaTheme.fg)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(isPrimary ? VelaTheme.accent : VelaTheme.surface)
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(isPrimary ? Color.clear : VelaTheme.borderSoft, lineWidth: 0.5)
-            )
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .bold))
+            Text(title)
+                .font(VelaTheme.caption1())
+                .fontWeight(.semibold)
+                .lineLimit(1)
         }
-        .buttonStyle(.plain)
+        .foregroundStyle(isPrimary ? .white : VelaTheme.fg)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            Capsule(style: .continuous)
+                .fill(isPrimary ? VelaTheme.accent : VelaTheme.surface)
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(isPrimary ? Color.clear : VelaTheme.borderSoft, lineWidth: 0.5)
+        )
+        .contentShape(Capsule())
+        .onTapGesture {
+            VelaAppState.shared.logDebug("[ActionPill] Direct tap triggered: \(title)")
+            action()
+        }
     }
 }
 

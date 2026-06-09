@@ -53,6 +53,7 @@ struct StrengthWorkoutLogSheetView: View {
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     @Query(sort: \StrengthWorkoutRecord.startedAt, order: .reverse) private var workoutHistory: [StrengthWorkoutRecord]
     @Query(sort: \WorkoutTemplateRecord.title) private var persistedTemplates: [WorkoutTemplateRecord]
+    @Query private var deletedWorkouts: [DeletedWorkoutRecord]
     
     @State private var title = "力量训练"
     @State private var startedAt = Date()
@@ -73,11 +74,13 @@ struct StrengthWorkoutLogSheetView: View {
     @StateObject private var sessionViewModel = StrengthWorkoutSessionViewModel()
 
     private let startingTemplateID: UUID?
+    private let editingWorkout: StrengthWorkoutRecord?
     private let equipmentOptions = ["杠铃", "哑铃", "固定器械", "绳索", "壶铃", "自重", "其他"]
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
-    init(startingTemplateID: UUID? = nil) {
+    init(startingTemplateID: UUID? = nil, editingWorkout: StrengthWorkoutRecord? = nil) {
         self.startingTemplateID = startingTemplateID
+        self.editingWorkout = editingWorkout
     }
 
     private var durationMinutes: Int {
@@ -115,7 +118,7 @@ struct StrengthWorkoutLogSheetView: View {
             }
             .scrollContentBackground(.hidden)
             .background(VelaTheme.systemGroupedBackground)
-            .navigationTitle("记录力量训练")
+            .navigationTitle(editingWorkout != nil ? "编辑力量训练" : "记录力量训练")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -192,7 +195,10 @@ struct StrengthWorkoutLogSheetView: View {
                 Menu("从模板开始") {
                     Button("空白训练") { exercises = [] }
                     ForEach(availableTemplates) { template in
-                        Button(template.title) { applyTemplate(template) }
+                        Menu(template.title) {
+                            Button("应用模板") { applyTemplate(template) }
+                            Button("删除模板", role: .destructive) { deleteTemplate(template) }
+                        }
                     }
                 }
                 .font(.system(size: 13, weight: .bold))
@@ -245,103 +251,187 @@ struct StrengthWorkoutLogSheetView: View {
             }
             .pickerStyle(.menu)
 
-            if let previous = previousPerformance(for: exercise.wrappedValue.name) {
-                Text("上次表现：\(previous)")
+            let previousSets = previousCompletedSets(for: exercise.wrappedValue.name)
+            if !previousSets.isEmpty {
+                Text("上次表现：\(previousPerformance(for: exercise.wrappedValue.name) ?? "")")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(VelaTheme.muted)
             }
 
-            ForEach(exercise.sets) { set in
-                strengthSetRow(set: set, exercise: exercise)
+            // Set Table Header (Xunji style)
+            if !exercise.wrappedValue.sets.isEmpty {
+                HStack(spacing: 12) {
+                    Text("组")
+                        .frame(width: 32, alignment: .leading)
+                    Text("前次")
+                        .frame(width: 70, alignment: .leading)
+                    Text("重量(kg)")
+                        .frame(width: 70, alignment: .center)
+                    Spacer()
+                    Text("次数")
+                        .frame(width: 50, alignment: .center)
+                    Text("RPE")
+                        .frame(width: 44, alignment: .center)
+                    Text("状态")
+                        .frame(width: 32, alignment: .trailing)
+                }
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(VelaTheme.muted)
+                .padding(.horizontal, 4)
+                .padding(.bottom, 2)
             }
 
-            Button {
-                exercise.wrappedValue.sets.append(StrengthSetLog(repetitions: 10, weightKilograms: 20.0, isWarmup: false, rpe: nil, rir: nil, isCompleted: false, completedAt: nil))
-            } label: {
-                Label("添加一组", systemImage: "plus")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(VelaTheme.accent)
+            ForEach(Array(exercise.wrappedValue.sets.enumerated()), id: \.element.id) { index, item in
+                strengthSetRow(
+                    index: index,
+                    set: Binding(
+                        get: { exercise.wrappedValue.sets[index] },
+                        set: { exercise.wrappedValue.sets[index] = $0 }
+                    ),
+                    exercise: exercise,
+                    previousSets: previousSets
+                )
             }
-            .buttonStyle(.plain)
 
-            if let last = exercise.wrappedValue.sets.last {
+            HStack(spacing: 16) {
                 Button {
-                    var copy = last
-                    copy.id = UUID()
-                    copy.isCompleted = false
-                    copy.completedAt = nil
-                    exercise.wrappedValue.sets.append(copy)
+                    let lastWeight = exercise.wrappedValue.sets.last?.weightKilograms ?? 20.0
+                    let lastReps = exercise.wrappedValue.sets.last?.repetitions ?? 10
+                    exercise.wrappedValue.sets.append(StrengthSetLog(repetitions: lastReps, weightKilograms: lastWeight, isWarmup: false, rpe: nil, rir: nil, isCompleted: false, completedAt: nil))
                 } label: {
-                    Label("复制上一组", systemImage: "plus.square.on.square")
+                    Label("添加一组", systemImage: "plus")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.accent)
                 }
                 .buttonStyle(.plain)
+
+                if let last = exercise.wrappedValue.sets.last {
+                    Button {
+                        var copy = last
+                        copy.id = UUID()
+                        copy.isCompleted = false
+                        copy.completedAt = nil
+                        exercise.wrappedValue.sets.append(copy)
+                    } label: {
+                        Label("复制上一组", systemImage: "plus.square.on.square")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(VelaTheme.muted)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
+            .padding(.top, 4)
         }
         .padding(16)
         .velaNativeCard(radius: 16)
     }
 
     private func strengthSetRow(
+        index: Int,
         set: Binding<StrengthSetLog>,
-        exercise: Binding<StrengthExerciseLog>
+        exercise: Binding<StrengthExerciseLog>,
+        previousSets: [StrengthSetLog]
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Toggle("热身", isOn: set.isWarmup)
-                    .font(.system(size: 11, weight: .medium))
-                    .toggleStyle(.button)
+        let prevText: String
+        if index < previousSets.count {
+            let prev = previousSets[index]
+            prevText = "\(prev.weightKilograms.formatted(.number.precision(.fractionLength(0...1))))×\(prev.repetitions)"
+        } else {
+            prevText = "—"
+        }
 
-                TextField("kg", value: set.weightKilograms, format: .number.precision(.fractionLength(0...1)))
-                    .keyboardType(.decimalPad)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 62)
+        return HStack(spacing: 12) {
+            // 组号 / 热身标记
+            Button {
+                set.wrappedValue.isWarmup.toggle()
+                scheduleDraftSave()
+            } label: {
+                Text(set.wrappedValue.isWarmup ? "热" : "\(index + 1)")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color.white)
+                    .frame(width: 24, height: 24)
+                    .background(Circle().fill(set.wrappedValue.isWarmup ? Color(hex: "#FF9500") : VelaTheme.accent))
+            }
+            .buttonStyle(.plain)
+            .frame(width: 32, alignment: .leading)
 
-                Text("kg ×")
-                    .font(.system(size: 12))
-                    .foregroundStyle(VelaTheme.muted)
+            // 前次表现
+            Text(prevText)
+                .font(.system(size: 11, design: .rounded))
+                .foregroundStyle(VelaTheme.muted)
+                .frame(width: 70, alignment: .leading)
+                .lineLimit(1)
 
-                Stepper("\(set.wrappedValue.repetitions)", value: set.repetitions, in: 1...100)
-                    .font(.system(size: 12, weight: .semibold))
+            // 重量输入
+            TextField("0", value: set.weightKilograms, format: .number.precision(.fractionLength(0...1)))
+                .keyboardType(.decimalPad)
+                .textFieldStyle(.plain)
+                .multilineTextAlignment(.center)
+                .padding(.vertical, 4)
+                .padding(.horizontal, 8)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.04)))
+                .frame(width: 70)
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .onChange(of: set.wrappedValue.weightKilograms) { _, _ in scheduleDraftSave() }
 
-                Button {
-                    complete(set: set, in: exercise)
-                } label: {
-                    Image(systemName: (set.wrappedValue.isCompleted ?? false) ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle((set.wrappedValue.isCompleted ?? false) ? VelaTheme.success : VelaTheme.accent)
-                        .font(.system(size: 20))
+            Spacer()
+
+            // 次数输入
+            TextField("0", value: set.repetitions, format: .number)
+                .keyboardType(.numberPad)
+                .textFieldStyle(.plain)
+                .multilineTextAlignment(.center)
+                .padding(.vertical, 4)
+                .padding(.horizontal, 8)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.04)))
+                .frame(width: 50)
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .onChange(of: set.wrappedValue.repetitions) { _, _ in scheduleDraftSave() }
+
+            // RPE 菜单选择
+            Menu {
+                Button("无") { 
+                    set.wrappedValue.rpe = nil
+                    scheduleDraftSave()
                 }
-                .buttonStyle(.plain)
+                ForEach((5...10).reversed(), id: \.self) { val in
+                    Button("RPE \(val)") { 
+                        set.wrappedValue.rpe = Double(val)
+                        scheduleDraftSave()
+                    }
+                }
+            } label: {
+                Text(set.wrappedValue.rpe.map { "\(Int($0))" } ?? "RPE")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(set.wrappedValue.rpe != nil ? VelaTheme.accent : VelaTheme.muted)
+                    .frame(width: 44, height: 26)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.04)))
             }
 
-            HStack(spacing: 8) {
-                quickAdjust("-2.5") { set.wrappedValue.weightKilograms = max(0, set.wrappedValue.weightKilograms - 2.5) }
-                quickAdjust("+2.5") { set.wrappedValue.weightKilograms += 2.5 }
-                quickAdjust("-1次") { set.wrappedValue.repetitions = max(1, set.wrappedValue.repetitions - 1) }
-                quickAdjust("+1次") { set.wrappedValue.repetitions += 1 }
-                Spacer()
-                Menu("RPE \(set.wrappedValue.rpe.map { String(Int($0)) } ?? "-")") {
-                    ForEach(6...10, id: \.self) { value in
-                        Button("\(value)") { set.wrappedValue.rpe = Double(value) }
-                    }
-                }
-                Menu("RIR \(set.wrappedValue.rir.map { String(Int($0)) } ?? "-")") {
-                    ForEach(0...5, id: \.self) { value in
-                        Button("\(value)") { set.wrappedValue.rir = Double(value) }
-                    }
-                }
-                if exercise.wrappedValue.sets.count > 1 {
-                    Button {
-                        exercise.wrappedValue.sets.removeAll { $0.id == set.wrappedValue.id }
-                    } label: {
-                        Image(systemName: "trash")
-                            .foregroundStyle(VelaTheme.meta)
-                    }
-                    .buttonStyle(.plain)
+            // 完成状态
+            Button {
+                complete(set: set, in: exercise)
+            } label: {
+                Image(systemName: (set.wrappedValue.isCompleted ?? false) ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle((set.wrappedValue.isCompleted ?? false) ? VelaTheme.success : VelaTheme.accent)
+                    .font(.system(size: 22))
+            }
+            .buttonStyle(.plain)
+            .frame(width: 32, alignment: .trailing)
+        }
+        .padding(.vertical, 4)
+        .contextMenu {
+            Button(set.wrappedValue.isWarmup ? "设为正式组" : "设为热身组") {
+                set.wrappedValue.isWarmup.toggle()
+                scheduleDraftSave()
+            }
+            
+            if exercise.wrappedValue.sets.count > 1 {
+                Button("删除此组", role: .destructive) {
+                    exercise.wrappedValue.sets.removeAll { $0.id == set.wrappedValue.id }
+                    scheduleDraftSave()
                 }
             }
-            .font(.system(size: 11, weight: .bold))
         }
     }
 
@@ -370,46 +460,93 @@ struct StrengthWorkoutLogSheetView: View {
             saveError = "至少完成一组后才能保存训练。"
             return
         }
-        let record = StrengthWorkoutRecord(
-            title: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "力量训练" : title,
-            startedAt: startedAt,
-            durationMinutes: durationMinutes,
-            notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
-            exercises: exercisesToSave
-        )
-        modelContext.insert(record)
-        do {
-            let analysis = TrainingAnalyticsService().summarizeWorkout(
-                record,
-                history: workoutHistory,
-                exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
-            )
-            record.analyticsJSON = (try? String(data: JSONEncoder().encode(analysis), encoding: .utf8)) ?? "{}"
-            let artifact = CoachArtifact.postWorkoutReview(
-                workout: record,
-                summary: analysis,
-                readinessDecision: dashboardVM.dashboard.trainingDecision.kind.rawValue,
-                sourceContextHash: ContentHash.hash("\(record.id.uuidString)-\(record.analyticsJSON ?? "")")
-            )
-            modelContext.insert(CoachArtifactRecord(artifact: artifact))
-            _ = try WorkoutAggregationService.shared.upsertWorkoutEvent(
-                from: record,
-                modelContext: modelContext,
-                sessionRPE: exertionScore
-            )
+        
+        if let editingWorkout {
+            editingWorkout.title = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "力量训练" : title
+            editingWorkout.startedAt = startedAt
+            editingWorkout.durationMinutes = durationMinutes
+            editingWorkout.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+            editingWorkout.exercises = exercisesToSave
+            editingWorkout.completedAt = startedAt.addingTimeInterval(TimeInterval(durationMinutes * 60))
             
-            // Delete drafts
-            clearDraft()
-            
-            VelaAppState.shared.markLocalDataChanged()
-            completedWorkout = record
-            completedSummary = analysis
-            Task {
-                await dashboardVM.refresh(modelContext: modelContext)
+            do {
+                let analysis = TrainingAnalyticsService().summarizeWorkout(
+                    editingWorkout,
+                    history: workoutHistory.filter { $0.id != editingWorkout.id },
+                    exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
+                )
+                editingWorkout.analyticsJSON = (try? String(data: JSONEncoder().encode(analysis), encoding: .utf8)) ?? "{}"
+                
+                _ = try WorkoutAggregationService.shared.upsertWorkoutEvent(
+                    from: editingWorkout,
+                    modelContext: modelContext,
+                    sessionRPE: exertionScore
+                )
+                
+                try modelContext.save()
+                try WorkoutAggregationService.shared.aggregateDay(date: startedAt, modelContext: modelContext)
+                
+                VelaAppState.shared.markLocalDataChanged()
+                completedWorkout = editingWorkout
+                completedSummary = analysis
+                Task {
+                    await dashboardVM.refresh(modelContext: modelContext)
+                }
+            } catch {
+                saveError = "训练更新失败，请稍后再试。\(error.localizedDescription)"
             }
-        } catch {
-            modelContext.delete(record)
-            saveError = "训练暂时无法保存，请稍后再试。\(error.localizedDescription)"
+        } else {
+            let record = StrengthWorkoutRecord(
+                title: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "力量训练" : title,
+                startedAt: startedAt,
+                durationMinutes: durationMinutes,
+                notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
+                exercises: exercisesToSave
+            )
+            modelContext.insert(record)
+            do {
+                let analysis = TrainingAnalyticsService().summarizeWorkout(
+                    record,
+                    history: workoutHistory,
+                    exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
+                )
+                record.analyticsJSON = (try? String(data: JSONEncoder().encode(analysis), encoding: .utf8)) ?? "{}"
+                let workoutIdStr = record.id.uuidString
+                let existingArtifacts = try? modelContext.fetch(FetchDescriptor<CoachArtifactRecord>())
+                if let existing = existingArtifacts {
+                    for art in existing {
+                        if art.actionsJSON.contains(workoutIdStr) {
+                            modelContext.delete(art)
+                        }
+                    }
+                }
+                
+                let artifact = CoachArtifact.postWorkoutReview(
+                    workout: record,
+                    summary: analysis,
+                    readinessDecision: dashboardVM.dashboard.trainingDecision.kind.rawValue,
+                    sourceContextHash: ContentHash.hash("\(record.id.uuidString)-\(record.analyticsJSON ?? "")")
+                )
+                modelContext.insert(CoachArtifactRecord(artifact: artifact))
+                _ = try WorkoutAggregationService.shared.upsertWorkoutEvent(
+                    from: record,
+                    modelContext: modelContext,
+                    sessionRPE: exertionScore
+                )
+                
+                // Delete drafts
+                clearDraft()
+                
+                VelaAppState.shared.markLocalDataChanged()
+                completedWorkout = record
+                completedSummary = analysis
+                Task {
+                    await dashboardVM.refresh(modelContext: modelContext)
+                }
+            } catch {
+                modelContext.delete(record)
+                saveError = "训练暂时无法保存，请稍后再试。\(error.localizedDescription)"
+            }
         }
     }
 
@@ -492,8 +629,24 @@ struct StrengthWorkoutLogSheetView: View {
     }
 
     private var availableTemplates: [WorkoutTemplateRecord] {
+        let deletedTemplateTitles = Set(deletedWorkouts.compactMap { rec -> String? in
+            if rec.id.hasPrefix("template:") {
+                return String(rec.id.dropFirst("template:".count))
+            }
+            return nil
+        })
         let persistedTitles = Set(persistedTemplates.map(\.title))
-        return persistedTemplates + ExerciseLibraryService.defaultTemplates().filter { !persistedTitles.contains($0.title) }
+        let filteredPersisted = persistedTemplates.filter { !deletedTemplateTitles.contains($0.title) }
+        let filteredDefaults = ExerciseLibraryService.defaultTemplates().filter {
+            !persistedTitles.contains($0.title) && !deletedTemplateTitles.contains($0.title)
+        }
+        return filteredPersisted + filteredDefaults
+    }
+
+    private func deleteTemplate(_ template: WorkoutTemplateRecord) {
+        modelContext.insert(DeletedWorkoutRecord(id: "template:\(template.title)"))
+        modelContext.delete(template)
+        try? modelContext.save()
     }
 
     private func localizedEquipment(_ value: String) -> String {
@@ -577,22 +730,37 @@ struct StrengthWorkoutLogSheetView: View {
     // MARK: - Draft Autosave Mechanism
 
     private func loadDraftIfNeeded() {
-        let descriptor = FetchDescriptor<ActiveWorkoutDraftRecord>()
-        if let draft = (try? modelContext.fetch(descriptor))?.first {
-            self.title = draft.title
-            self.startedAt = draft.startedAt
-            self.notes = draft.notes
-            self.exercises = draft.exercises
-        } else if let startingTemplateID,
-                  let template = availableTemplates.first(where: { $0.id == startingTemplateID }) {
-            self.startedAt = Date()
-            applyTemplate(template)
+        if let editingWorkout {
+            self.title = editingWorkout.title
+            self.startedAt = editingWorkout.startedAt
+            self.notes = editingWorkout.notes
+            self.exercises = editingWorkout.exercises
+            if let eventID = editingWorkout.linkedWorkoutEventId {
+                let descriptor = FetchDescriptor<WorkoutEventRecord>(
+                    predicate: #Predicate<WorkoutEventRecord> { $0.id == eventID }
+                )
+                if let event = (try? modelContext.fetch(descriptor))?.first {
+                    self.exertionScore = event.rpe ?? 7.0
+                }
+            }
+        } else {
+            let descriptor = FetchDescriptor<ActiveWorkoutDraftRecord>()
+            if let draft = (try? modelContext.fetch(descriptor))?.first {
+                self.title = draft.title
+                self.startedAt = draft.startedAt
+                self.notes = draft.notes
+                self.exercises = draft.exercises
+            } else if let startingTemplateID,
+                      let template = availableTemplates.first(where: { $0.id == startingTemplateID }) {
+                self.startedAt = Date()
+                applyTemplate(template)
+            }
         }
         self.isLoaded = true
     }
 
     private func saveDraft() {
-        guard isLoaded else { return }
+        guard isLoaded && editingWorkout == nil else { return }
         let descriptor = FetchDescriptor<ActiveWorkoutDraftRecord>()
         if let existing = (try? modelContext.fetch(descriptor))?.first {
             existing.title = title
@@ -613,7 +781,7 @@ struct StrengthWorkoutLogSheetView: View {
     }
 
     private func scheduleDraftSave() {
-        guard isLoaded else { return }
+        guard isLoaded && editingWorkout == nil else { return }
         sessionViewModel.scheduleDraftSave { saveDraft() }
     }
 

@@ -72,6 +72,8 @@ final class MemoryLedger {
             mode: .merge
         )
 
+        WikiSyncManager.sync(modelContext: modelContext)
+
         let newContent = (try? String(contentsOf: WikiFileService.localURL(for: record.targetFile), encoding: .utf8)) ?? ""
         record.newContentHash = ContentHash.hash(newContent)
         record.status = MemoryProposalStatus.accepted.rawValue
