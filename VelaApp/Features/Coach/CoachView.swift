@@ -46,6 +46,8 @@ struct VelaCoachView: View {
     @State private var renameText = ""
     @State private var showWikiProfile = false
     @State private var showModelSettings = false
+    @State private var showSettings = false
+    @State private var showChat = false
     @State private var handledRouteRevision = -1
 
     @Query(
@@ -96,7 +98,11 @@ struct VelaCoachView: View {
     }
 
     var body: some View {
-        ZStack {
+        Group {
+            if presentation == .embedded && !showChat {
+                coachHubSurface
+            } else {
+                ZStack {
             // Main Chat Panel
             VStack(spacing: 0) {
                 headerView
@@ -106,7 +112,11 @@ struct VelaCoachView: View {
                     ScrollView {
                         VStack(spacing: 20) {
                             if vm.messages.isEmpty {
-                                intelligenceWorkspace
+                                if presentation == .embedded {
+                                    makeChatEmptyState
+                                } else {
+                                    intelligenceWorkspace
+                                }
                             }
 
                             ForEach(vm.messages.filter { !$0.isStreaming }) { msg in
@@ -167,13 +177,18 @@ struct VelaCoachView: View {
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                composerView
-                    .padding(.bottom, CoachChatLayout.bottomClearance(
-                        presentation: presentation,
-                        keyboardVisible: isKeyboardVisible,
-                        usesOverlayNavigation: usesOverlayNavigation
-                    ))
-                    .background(VelaTheme.bg)
+                VStack(spacing: 0) {
+                    if presentation == .embedded {
+                        makeQuickPromptStrip
+                    }
+                    composerView
+                }
+                .padding(.bottom, CoachChatLayout.bottomClearance(
+                    presentation: presentation,
+                    keyboardVisible: isKeyboardVisible,
+                    usesOverlayNavigation: usesOverlayNavigation
+                ))
+                .background(.ultraThinMaterial)
             }
             .background(VelaTheme.bg)
             .blur(radius: showHistoryDrawer ? 3 : 0)
@@ -199,6 +214,8 @@ struct VelaCoachView: View {
                 }
             }
             .ignoresSafeArea()
+                }
+            }
         }
         .onAppear {
             vm.loadSessions(modelContext: modelContext)
@@ -240,7 +257,288 @@ struct VelaCoachView: View {
                 AIModelSettingsView()
             }
         }
+        .sheet(isPresented: $showSettings) {
+            NavigationStack {
+                VelaSettingsView()
+            }
+        }
         .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var coachHubSurface: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                VelaMakeHeader(title: "Coach", subtitle: "Vela Intelligence") {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 21, weight: .medium))
+                            .foregroundStyle(VelaTheme.accent)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                VStack(alignment: .leading, spacing: 14) {
+                    Button {
+                        showChat = true
+                    } label: {
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 44, height: 44)
+                                .background(Color.white.opacity(0.2))
+                                .clipShape(Circle())
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("开始对话")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(Color.white.opacity(0.85))
+                                Text("问 Vela 任何事情")
+                                    .font(.system(size: 20, weight: .bold))
+                                    .foregroundStyle(.white)
+                                Text("已读取今日体征 · 流式回复 · 支持工具调用")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(Color.white.opacity(0.85))
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(Color.white.opacity(0.8))
+                        }
+                        .padding(20)
+                        .background(
+                            LinearGradient(
+                                colors: [Color(uiColor: .systemIndigo), VelaTheme.accent],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+
+                    VelaMakeSectionHeader(title: "快捷提问")
+                    makeQuickPrompts
+
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())], spacing: 12) {
+                        makeCoachNavigationTile(
+                            title: "生成训练计划",
+                            subtitle: "基于恢复与目标",
+                            icon: "calendar.badge.plus",
+                            color: VelaTheme.accent,
+                            destination: VelaTrainingPlanView()
+                        )
+                        makeCoachActionTile(
+                            title: "食物拍照",
+                            subtitle: "自动识别热量",
+                            icon: "fork.knife",
+                            color: .green
+                        ) {
+                            appState.triggerFoodScanner = true
+                        }
+                        makeCoachNavigationTile(
+                            title: "个人 Wiki",
+                            subtitle: "记忆与目标",
+                            icon: "books.vertical.fill",
+                            color: .purple,
+                            destination: UserWikiArchiveView()
+                        )
+                        makeCoachNavigationTile(
+                            title: "历史报告",
+                            subtitle: "每日 / 每周",
+                            icon: "doc.text.fill",
+                            color: .orange,
+                            destination: VelaReportsView()
+                        )
+                    }
+
+                    makeCoachPersonalitySection
+                    makeRecentArtifactsSection
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 110)
+            }
+        }
+        .scrollIndicators(.hidden)
+        .background(VelaTheme.systemGroupedBackground)
+    }
+
+    private var makeQuickPrompts: some View {
+        FlexStack(spacing: 8) {
+            ForEach(vm.quickQuestions.prefix(4), id: \.self) { prompt in
+                Button(prompt) {
+                    showChat = true
+                    sendMessage(prompt)
+                }
+                .font(.system(size: 13))
+                .foregroundStyle(VelaTheme.fg)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(VelaTheme.cardBg)
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func makeCoachActionTile(
+        title: String,
+        subtitle: String,
+        icon: String,
+        color: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            coachActionTileLabel(
+                title: title,
+                subtitle: subtitle,
+                icon: icon,
+                color: color
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func makeCoachNavigationTile<Destination: View>(
+        title: String,
+        subtitle: String,
+        icon: String,
+        color: Color,
+        destination: Destination
+    ) -> some View {
+        NavigationLink(destination: destination) {
+            coachActionTileLabel(
+                title: title,
+                subtitle: subtitle,
+                icon: icon,
+                color: color
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func coachActionTileLabel(
+        title: String,
+        subtitle: String,
+        icon: String,
+        color: Color
+    ) -> some View {
+        VelaMakeCard {
+            VStack(alignment: .leading, spacing: 3) {
+                VelaMakeIconTile(systemName: icon, color: color)
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(VelaTheme.fg)
+                    .padding(.top, 7)
+                Text(subtitle)
+                    .font(.system(size: 12))
+                    .foregroundStyle(VelaTheme.fg2)
+            }
+            .frame(minHeight: 94, alignment: .topLeading)
+        }
+    }
+
+    private var makeCoachPersonalitySection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            VelaMakeSectionHeader(title: "教练人格")
+            VStack(spacing: 0) {
+                makeCoachRow(
+                    icon: "chart.bar.fill",
+                    color: .green,
+                    title: "数据分析师",
+                    subtitle: "直接、量化、关注趋势",
+                    trailing: "当前"
+                ) {
+                    showSettings = true
+                }
+                Divider().padding(.leading, 60)
+                makeCoachRow(
+                    icon: "shield.fill",
+                    color: .indigo,
+                    title: "守护者",
+                    subtitle: "保守、安全、关注恢复",
+                    trailing: nil
+                ) {
+                    showSettings = true
+                }
+            }
+            .background(VelaTheme.cardBg)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+    }
+
+    private var makeRecentArtifactsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            VelaMakeSectionHeader(title: "最近生成")
+            NavigationLink(destination: CoachArtifactInboxView()) {
+                VStack(spacing: 0) {
+                    if agentArtifacts.isEmpty {
+                        makeCoachRow(
+                            icon: "doc.text.fill",
+                            color: .indigo,
+                            title: "暂无生成内容",
+                            subtitle: "与 Coach 对话后会出现在这里",
+                            trailing: nil,
+                            action: {}
+                        )
+                    } else {
+                        ForEach(Array(agentArtifacts.prefix(3).enumerated()), id: \.element.id) { index, artifact in
+                            makeCoachRow(
+                                icon: artifactIcon(artifact.type),
+                                color: .indigo,
+                                title: artifact.title,
+                                subtitle: artifact.type.replacingOccurrences(of: "_", with: " "),
+                                trailing: nil,
+                                action: {}
+                            )
+                            if index < min(agentArtifacts.count, 3) - 1 {
+                                Divider().padding(.leading, 60)
+                            }
+                        }
+                    }
+                }
+                .background(VelaTheme.cardBg)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func makeCoachRow(
+        icon: String,
+        color: Color,
+        title: String,
+        subtitle: String,
+        trailing: String?,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                VelaMakeIconTile(systemName: icon, color: color, size: 32)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(VelaTheme.fg)
+                    Text(subtitle)
+                        .font(.system(size: 12))
+                        .foregroundStyle(VelaTheme.fg2)
+                }
+                Spacer()
+                if let trailing {
+                    Text(trailing)
+                        .font(.system(size: 13))
+                        .foregroundStyle(VelaTheme.accent)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(VelaTheme.meta)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 11)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - History Drawer View
@@ -260,7 +558,7 @@ struct VelaCoachView: View {
                 } label: {
                     Image(systemName: "sidebar.left")
                         .font(.system(size: 16))
-                        .foregroundStyle(Color(hex: "#007AFF"))
+                        .foregroundStyle(VelaTheme.accent)
                 }
             }
             .padding(.horizontal, 20)
@@ -283,8 +581,8 @@ struct VelaCoachView: View {
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
-                .background(RoundedRectangle(cornerRadius: 22).fill(Color(hex: "#007AFF")))
-                .shadow(color: Color(hex: "#007AFF").opacity(0.15), radius: 6, y: 3)
+                .background(RoundedRectangle(cornerRadius: 22).fill(VelaTheme.accent))
+                .shadow(color: VelaTheme.accent.opacity(0.15), radius: 6, y: 3)
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 20)
@@ -299,7 +597,7 @@ struct VelaCoachView: View {
                         HStack(spacing: 12) {
                             Image(systemName: "bubble.left.and.bubble.right.fill")
                                 .font(.system(size: 13))
-                                .foregroundStyle(vm.currentSession?.id == session.id ? Color(hex: "#007AFF") : Color(hex: "#8E8A80"))
+                                .foregroundStyle(vm.currentSession?.id == session.id ? VelaTheme.accent : Color(hex: "#8E8A80"))
                             
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(session.title.isEmpty ? "新对话" : session.title)
@@ -322,7 +620,7 @@ struct VelaCoachView: View {
                                 } label: {
                                     Image(systemName: "pencil")
                                         .font(.system(size: 12))
-                                        .foregroundStyle(Color(hex: "#007AFF"))
+                                        .foregroundStyle(VelaTheme.accent)
                                         .frame(width: 24, height: 24)
                                 }
                                 .buttonStyle(.plain)
@@ -345,7 +643,7 @@ struct VelaCoachView: View {
                                 .fill(vm.currentSession?.id == session.id ? Color.white : Color.clear)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .stroke(vm.currentSession?.id == session.id ? Color(hex: "#007AFF").opacity(0.3) : Color.clear, lineWidth: 1)
+                                        .stroke(vm.currentSession?.id == session.id ? VelaTheme.accent.opacity(0.3) : Color.clear, lineWidth: 1)
                                 )
                         )
                         .padding(.horizontal, 14)
@@ -366,7 +664,7 @@ struct VelaCoachView: View {
                     Circle()
                         .fill(
                             LinearGradient(
-                                colors: [Color(hex: "#007AFF"), Color(hex: "#64D2FF")],
+                                colors: [VelaTheme.accent, VelaTheme.accent.opacity(0.6)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
@@ -384,7 +682,7 @@ struct VelaCoachView: View {
                         .foregroundStyle(Color(hex: "#1A1917"))
                     Text("Local-first 存储")
                         .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Color(hex: "#007AFF"))
+                        .foregroundStyle(VelaTheme.accent)
                 }
                 Spacer()
             }
@@ -407,63 +705,94 @@ struct VelaCoachView: View {
 
     private var headerView: some View {
         HStack {
-            Button {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                    showHistoryDrawer = true
+            if presentation == .embedded {
+                Button {
+                    isFocused = false
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.84)) {
+                        showChat = false
+                    }
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 17, weight: .semibold))
+                        Text("返回")
+                            .font(.system(size: 17))
+                    }
+                    .foregroundStyle(VelaTheme.accent)
                 }
-            } label: {
-                Image(systemName: "sidebar.left")
-                    .font(.system(size: 18))
-                    .foregroundStyle(Color(hex: "#007AFF"))
-                    .frame(width: 36, height: 36)
-                    .background(
-                        Circle().fill(VelaTheme.surface)
-                    )
+                .buttonStyle(.plain)
+            } else {
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        showHistoryDrawer = true
+                    }
+                } label: {
+                    Image(systemName: "sidebar.left")
+                        .font(.system(size: 18))
+                        .foregroundStyle(VelaTheme.accent)
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(VelaTheme.surface))
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(vm.currentSession?.title.isEmpty != false ? "Coach" : vm.currentSession!.title)
+                Text(presentation == .embedded
+                    ? "Vela Coach"
+                    : (vm.currentSession?.title.isEmpty != false ? "Coach" : vm.currentSession!.title))
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(VelaTheme.fg)
                     .lineLimit(1)
 
-                HStack(spacing: 4) {
-                    Circle().fill(vm.isReady ? VelaTheme.success : VelaTheme.muted).frame(width: 6, height: 6)
-                    Text("\(vm.isReady ? "在线" : "未连接") · \(DeepSeekTextModel.stored.rawValue)")
-                        .font(VelaTheme.caption2())
-                        .foregroundStyle(vm.isReady ? VelaTheme.success : VelaTheme.muted)
+                if presentation != .embedded {
+                    HStack(spacing: 4) {
+                        Circle().fill(vm.isReady ? VelaTheme.success : VelaTheme.muted).frame(width: 6, height: 6)
+                        Text("\(vm.isReady ? "在线" : "未连接") · \(DeepSeekTextModel.stored.rawValue)")
+                            .font(VelaTheme.caption2())
+                            .foregroundStyle(vm.isReady ? VelaTheme.success : VelaTheme.muted)
+                    }
                 }
             }
 
             Spacer()
 
-            Button {
-                vm.createNewSession(modelContext: modelContext)
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(Color(hex: "#007AFF"))
-                    .frame(width: 36, height: 36)
-                    .background(
-                        Circle().fill(VelaTheme.surface)
-                    )
-            }
-            .buttonStyle(.plain)
+            if presentation == .embedded {
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        showHistoryDrawer = true
+                    }
+                } label: {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(VelaTheme.accent)
+                        .frame(width: 36, height: 36)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("历史对话")
+            } else {
+                Button {
+                    vm.createNewSession(modelContext: modelContext)
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(VelaTheme.accent)
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(VelaTheme.surface))
+                }
+                .buttonStyle(.plain)
 
-            Button {
-                showModelSettings = true
-            } label: {
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#007AFF"))
-                    .frame(width: 36, height: 36)
-                    .background(
-                        Circle().fill(VelaTheme.surface)
-                    )
+                Button {
+                    showModelSettings = true
+                } label: {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(VelaTheme.accent)
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(VelaTheme.surface))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Coach 模型设置")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Coach 模型设置")
 
             if presentation == .quickCover {
                 Button {
@@ -471,11 +800,9 @@ struct VelaCoachView: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Color(hex: "#007AFF"))
+                        .foregroundStyle(VelaTheme.accent)
                         .frame(width: 36, height: 36)
-                        .background(
-                            Circle().fill(VelaTheme.surface)
-                        )
+                        .background(Circle().fill(VelaTheme.surface))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("关闭 Coach")
@@ -487,6 +814,79 @@ struct VelaCoachView: View {
     }
 
     // MARK: - Welcome
+
+    private var makeChatEmptyState: some View {
+        VStack(spacing: 14) {
+            Text("今天 · Coach \(vm.isReady ? "在线" : "等待连接")")
+                .font(.system(size: 12))
+                .foregroundStyle(VelaTheme.fg2)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(VelaTheme.elevatedBg))
+
+            HStack(alignment: .bottom, spacing: 8) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color(uiColor: .systemIndigo), VelaTheme.accent],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 28, height: 28)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("我会基于当前可用的健康数据回答。你可以问我训练、恢复、睡眠或营养问题。")
+                        .font(.system(size: 16))
+                        .foregroundStyle(VelaTheme.fg)
+                        .lineSpacing(3)
+
+                    Label("HealthKit · 训练记录 · 个人基线", systemImage: "waveform.path.ecg")
+                        .font(.system(size: 11))
+                        .foregroundStyle(VelaTheme.meta)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(VelaTheme.elevatedBg)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .stroke(VelaTheme.border, lineWidth: 0.5)
+                        )
+                )
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var makeQuickPromptStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(vm.quickQuestions, id: \.self) { prompt in
+                    Button(prompt) {
+                        sendMessage(prompt)
+                    }
+                    .font(.system(size: 13))
+                    .foregroundStyle(VelaTheme.fg)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(Capsule().fill(VelaTheme.elevatedBg))
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+        }
+        .overlay(alignment: .top) {
+            Rectangle().fill(VelaTheme.borderSoft).frame(height: 0.5)
+        }
+    }
 
     private var intelligenceWorkspace: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -508,7 +908,7 @@ struct VelaCoachView: View {
                     icon: "checklist",
                     confidence: plan.confidence
                 ) {
-                    appState.routeToTab(0)
+                    appState.routeToTab(VelaAppState.todayTabIndex)
                 }
             }
 
@@ -623,7 +1023,7 @@ struct VelaCoachView: View {
             HStack(spacing: 10) {
                 Image(systemName: "brain.head.profile")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#007AFF"))
+                    .foregroundStyle(VelaTheme.accent)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("待确认长期记忆")
@@ -666,7 +1066,7 @@ struct VelaCoachView: View {
                         .shadow(color: Color.black.opacity(0.04), radius: 8, y: 3)
 
                     AlpacaView(
-                        strokeColor: Color(hex: "#007AFF"),
+                        strokeColor: VelaTheme.accent,
                         size: 58,
                         lineWidth: 2.6
                     )
@@ -721,50 +1121,79 @@ struct VelaCoachView: View {
 
     private var composerView: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            TextField("输入消息…", text: $inputText, axis: .vertical)
-                .font(VelaTheme.callout())
-                .lineLimit(1...5)
-                .focused($isFocused)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(VelaTheme.surface)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                                .stroke(isFocused ? VelaTheme.accent : VelaTheme.border, lineWidth: 0.5)
-                        )
-                )
-                .onSubmit {
-                    guard !inputText.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-                    sendMessage(inputText)
+            Button {
+                isFocused = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(VelaTheme.fg)
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(VelaTheme.elevatedBg))
+            }
+            .buttonStyle(.plain)
+
+            HStack(alignment: .bottom, spacing: 6) {
+                TextField("问 Vela…", text: $inputText, axis: .vertical)
+                    .font(.system(size: 16))
+                    .lineLimit(1...5)
+                    .focused($isFocused)
+                    .onSubmit {
+                        guard !inputText.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                        sendMessage(inputText)
+                    }
+
+                Button {
+                    appState.routeToFoodScanner(type: "camera")
+                } label: {
+                    Image(systemName: "camera")
+                        .font(.system(size: 17))
+                        .foregroundStyle(VelaTheme.fg2)
                 }
+                .buttonStyle(.plain)
+
+                Button {
+                    appState.routeToFoodScanner(type: "library")
+                } label: {
+                    Image(systemName: "photo")
+                        .font(.system(size: 17))
+                        .foregroundStyle(VelaTheme.fg2)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(VelaTheme.elevatedBg)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(isFocused ? VelaTheme.accent : VelaTheme.border, lineWidth: 0.5)
+                    )
+            )
 
             Button {
-                guard !inputText.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-                sendMessage(inputText)
+                if inputText.trimmingCharacters(in: .whitespaces).isEmpty {
+                    isFocused = true
+                } else {
+                    sendMessage(inputText)
+                }
             } label: {
-                Image(systemName: "arrow.up")
+                Image(systemName: inputText.trimmingCharacters(in: .whitespaces).isEmpty
+                    ? "waveform" : "arrow.up")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 34, height: 34)
+                    .foregroundStyle(inputText.trimmingCharacters(in: .whitespaces).isEmpty
+                        ? VelaTheme.fg : Color.white)
+                    .frame(width: 36, height: 36)
                     .background(
                         Circle()
                             .fill(inputText.trimmingCharacters(in: .whitespaces).isEmpty
-                                ? VelaTheme.border : VelaTheme.accent)
+                                ? VelaTheme.elevatedBg : VelaTheme.accent)
                     )
             }
-            .disabled(inputText.trimmingCharacters(in: .whitespaces).isEmpty)
             .buttonStyle(.plusButton)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(VelaTheme.bg)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(VelaTheme.borderSoft)
-                .frame(height: 0.5)
-        }
     }
 
     // MARK: - Actions
@@ -790,9 +1219,11 @@ struct VelaCoachView: View {
         if appState.forceNewCoachSession {
             vm.createNewSession(modelContext: modelContext)
             appState.forceNewCoachSession = false
+            showChat = true
         }
 
         if let question = appState.prefilledCoachQuestion {
+            showChat = true
             sendMessage(question)
             appState.prefilledCoachQuestion = nil
         }
@@ -813,8 +1244,8 @@ struct VelaCoachView: View {
                 dismiss()
             }
         } else if action.type.contains("training") || action.type.contains("workout") || action.type.contains("summary") {
-            print("[CoachView] Routing to training (tab 1)")
-            appState.routeToTab(1)
+            print("[CoachView] Routing to training")
+            appState.routeToTab(VelaAppState.trainingTabIndex)
             if presentation == .quickCover {
                 dismiss()
             }
@@ -863,6 +1294,190 @@ struct VelaCoachView: View {
         )
     }
 
+}
+
+struct VelaReportsView: View {
+    @Query(sort: \AIReportRecord.createdAt, order: .reverse)
+    private var reports: [AIReportRecord]
+    @Query(sort: \AgentArtifactRecord.createdAt, order: .reverse)
+    private var artifacts: [AgentArtifactRecord]
+
+    @AppStorage("agent_morning_brief_alerts") private var morningBriefOn = true
+    @AppStorage("agent_bedtime_reminders") private var sleepReviewOn = true
+    @AppStorage("agent_weekly_review_enabled") private var weeklyReviewOn = true
+    @AppStorage("agent_post_workout_checkin_enabled") private var postWorkoutOn = true
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                morningBriefHero
+
+                VelaMakeSectionHeader(title: "今日")
+                reportRows
+
+                VelaMakeSectionHeader(title: "生成物")
+                artifactRows
+
+                VelaMakeSectionHeader(title: "自动报告")
+                automationRows
+
+                Text("可在「设置 · 通知」中调整时间与开关。")
+                    .font(.system(size: 12))
+                    .foregroundStyle(VelaTheme.fg2)
+                    .padding(.horizontal, 4)
+            }
+            .padding(16)
+            .padding(.bottom, 30)
+        }
+        .background(VelaTheme.systemGroupedBackground)
+        .navigationTitle("历史报告")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var morningBriefHero: some View {
+        let latest = reports.first
+        return VStack(alignment: .leading, spacing: 8) {
+            Label("今日 Morning Brief · 6:00", systemImage: "sun.max.fill")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.white.opacity(0.9))
+            Text(latest?.title ?? "今日身体状态简报")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(.white)
+            Text(reportPreview(latest?.markdownContent) ?? "同步健康数据后，Vela 会自动生成恢复、睡眠和训练建议。")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.white.opacity(0.9))
+                .lineLimit(4)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            LinearGradient(
+                colors: [.orange, Color(uiColor: .systemPink)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var reportRows: some View {
+        if reports.isEmpty {
+            VelaMakeCard {
+                Text("暂无历史报告")
+                    .font(.system(size: 15))
+                    .foregroundStyle(VelaTheme.fg2)
+            }
+        } else {
+            VStack(spacing: 0) {
+                ForEach(Array(reports.prefix(5).enumerated()), id: \.element.createdAt) { index, report in
+                    reportRow(
+                        icon: report.type.contains("sleep") ? "moon.fill" : "sun.max.fill",
+                        color: report.type.contains("sleep") ? .indigo : .orange,
+                        title: report.title,
+                        subtitle: report.createdAt.formatted(.dateTime.month().day().hour().minute())
+                    )
+                    if index < min(reports.count, 5) - 1 {
+                        Divider().padding(.leading, 60)
+                    }
+                }
+            }
+            .background(VelaTheme.cardBg)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+    }
+
+    @ViewBuilder
+    private var artifactRows: some View {
+        if artifacts.isEmpty {
+            VelaMakeCard {
+                Text("暂无生成物")
+                    .font(.system(size: 15))
+                    .foregroundStyle(VelaTheme.fg2)
+            }
+        } else {
+            VStack(spacing: 0) {
+                ForEach(Array(artifacts.prefix(5).enumerated()), id: \.element.id) { index, artifact in
+                    reportRow(
+                        icon: "doc.text.fill",
+                        color: .indigo,
+                        title: artifact.title,
+                        subtitle: "\(artifact.type.replacingOccurrences(of: "_", with: " ")) · \(artifact.createdAt.formatted(.relative(presentation: .named)))"
+                    )
+                    if index < min(artifacts.count, 5) - 1 {
+                        Divider().padding(.leading, 60)
+                    }
+                }
+            }
+            .background(VelaTheme.cardBg)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+    }
+
+    private var automationRows: some View {
+        VStack(spacing: 0) {
+            automationRow("Morning Brief", "每日 6:00", .blue, $morningBriefOn)
+            Divider().padding(.leading, 60)
+            automationRow("睡眠回顾", "起床后", .purple, $sleepReviewOn)
+            Divider().padding(.leading, 60)
+            automationRow("周报", "周日 21:00", .green, $weeklyReviewOn)
+            Divider().padding(.leading, 60)
+            automationRow("训练后复盘", "训练结束 15 分钟后", .orange, $postWorkoutOn)
+        }
+        .background(VelaTheme.cardBg)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func reportRow(icon: String, color: Color, title: String, subtitle: String) -> some View {
+        HStack(spacing: 12) {
+            VelaMakeIconTile(systemName: icon, color: color, size: 32)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(VelaTheme.fg)
+                Text(subtitle)
+                    .font(.system(size: 12))
+                    .foregroundStyle(VelaTheme.fg2)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(VelaTheme.meta)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 11)
+    }
+
+    private func automationRow(
+        _ title: String,
+        _ subtitle: String,
+        _ color: Color,
+        _ isOn: Binding<Bool>
+    ) -> some View {
+        HStack(spacing: 12) {
+            VelaMakeIconTile(systemName: "sparkles", color: color, size: 32)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 15, weight: .medium))
+                Text(subtitle)
+                    .font(.system(size: 12))
+                    .foregroundStyle(VelaTheme.fg2)
+            }
+            Spacer()
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+    }
+
+    private func reportPreview(_ markdown: String?) -> String? {
+        guard let markdown else { return nil }
+        return markdown
+            .replacingOccurrences(of: "#", with: "")
+            .replacingOccurrences(of: "*", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }
 
 // MARK: - FlexStack (wrapping HStack for suggestion chips)

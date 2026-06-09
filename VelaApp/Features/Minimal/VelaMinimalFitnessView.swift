@@ -57,42 +57,34 @@ struct VelaTrainingView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                // 1. Fitness Title Header
-                fitnessHeader
-
-                trainingExecutionCard
-                
-                // 2. Double-Month Thinned Activity Heatmap Card
-                trainingIntelligenceCard
-
-                muscleVolumeCard
-
-                templateLibraryCard
-
-                activityHeatmapCard
-                
-                // 3. Activity Summary Card (活动摘要 with orange filled area curve)
-                NavigationLink(destination: FitnessActivitySummaryDetailView()) {
-                    activitySummaryCard
+            VStack(spacing: 0) {
+                VelaMakeHeader(title: "训练", subtitle: "过去 30 天") {
+                    Button {
+                        startStrengthWorkout()
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 21, weight: .medium))
+                            .foregroundStyle(VelaTheme.accent)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                
-                // 4. Exertion Fatigue Load Card (耗力表现 with safe-zone range band)
-                NavigationLink(destination: VelaMetricDetailView(metric: .strain)) {
-                    exertionLoadCard
-                }
-                .buttonStyle(.plain)
 
-                recentWorkoutsSection
+                VStack(alignment: .leading, spacing: 12) {
+                    makeReadinessCard
+                    makeActivityHeatmapCard
+                    makeStrainTrendCard
+                    VelaMakeSectionHeader(title: "本周训练计划 · 由 Vela 生成")
+                    makeWeeklyPlanCard
+                    makeStrengthTemplateCard
+                    makeTrainingCalendarCard
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 110)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 100)
         }
         .scrollIndicators(.hidden)
         .velaTrackScroll(direction: scrollDirection)
-        .background(VelaTheme.systemGroupedBackground)
+        .background(VelaTheme.bg)
         .onAppear {
             loadRealFitnessData()
             loadXunjiAPIKey()
@@ -142,6 +134,286 @@ struct VelaTrainingView: View {
             .presentationBackground(VelaTheme.systemGroupedBackground)
         }
         .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var makeReadinessCard: some View {
+        Button {
+            VelaAppState.shared.routeToCoach(question: trainingAnalysisQuestion)
+        } label: {
+            VelaMakeCard {
+                HStack(spacing: 12) {
+                    VelaMakeIconTile(
+                        systemName: "gauge.with.dots.needle.67percent",
+                        color: VelaTheme.strainColor,
+                        size: 40
+                    )
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("训练 readiness")
+                            .font(.system(size: 13))
+                            .foregroundStyle(VelaTheme.fg2)
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            Text(hasTrainingReadinessData ? "\(Int(trainingReadiness.rounded()))" : "--")
+                                .font(.system(size: 22, weight: .bold))
+                                .foregroundStyle(VelaTheme.fg)
+                                .monospacedDigit()
+                            Text("/ 100 · \(trainingIntensityLabel)")
+                                .font(.system(size: 13))
+                                .foregroundStyle(VelaTheme.fg2)
+                        }
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(VelaTheme.meta)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var trainingReadiness: Double {
+        guard hasTrainingReadinessData else { return 0 }
+        return (dashboard.recovery.score * 0.55)
+            + (dashboard.sleepScore.score * 0.25)
+            + (dashboard.energy.currentEnergy * 0.20)
+    }
+
+    private var trainingIntensityLabel: String {
+        guard hasTrainingReadinessData else { return "等待健康数据" }
+        switch trainingReadiness {
+        case 75...: return "中到高强度"
+        case 50..<75: return "中等强度"
+        default: return "恢复训练"
+        }
+    }
+
+    private var hasTrainingReadinessData: Bool {
+        dashboard.recoveryMetrics.hrvMilliseconds != nil
+            || dashboard.recoveryMetrics.restingHeartRate != nil
+            || dashboard.sleepSummary.totalSleepMinutes > 0
+            || !dashboard.workouts.isEmpty
+    }
+
+    private var makeActivityHeatmapCard: some View {
+        VelaMakeCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("活动 heatmap")
+                            .font(.system(size: 13))
+                            .foregroundStyle(VelaTheme.fg2)
+                        Text("30 天负荷分布")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(VelaTheme.fg)
+                    }
+                    Spacer()
+                    Text("\(currentMonthActiveTiers.filter { $0.value > 0 }.count) 个活跃日")
+                        .font(.system(size: 11))
+                        .foregroundStyle(VelaTheme.fg2)
+                }
+                makeThirtyDayGrid
+                HStack(spacing: 4) {
+                    Text("低")
+                    ForEach(1...5, id: \.self) { level in
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(VelaTheme.accent.opacity(Double(level) * 0.18))
+                            .frame(width: 12, height: 12)
+                    }
+                    Text("高")
+                }
+                .font(.system(size: 11))
+                .foregroundStyle(VelaTheme.fg2)
+            }
+        }
+    }
+
+    private var makeThirtyDayGrid: some View {
+        let calendar = Calendar.current
+        let dates = (0..<30).compactMap {
+            calendar.date(byAdding: .day, value: -$0, to: dashboardVM.selectedDate)
+        }.reversed()
+
+        return LazyVGrid(
+            columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 10),
+            spacing: 6
+        ) {
+            ForEach(Array(dates), id: \.self) { date in
+                let day = calendar.component(.day, from: date)
+                let tier = calendar.isDate(date, equalTo: currentMonthStart, toGranularity: .month)
+                    ? (currentMonthActiveTiers[day] ?? 0)
+                    : (previousMonthActiveTiers[day] ?? 0)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(heatmapColor(for: tier))
+                    .aspectRatio(1, contentMode: .fit)
+                    .accessibilityLabel(date.formatted(date: .abbreviated, time: .omitted))
+                    .accessibilityValue(tier == 0 ? "无训练" : "负荷等级 \(tier)")
+            }
+        }
+    }
+
+    private func heatmapColor(for tier: Int) -> Color {
+        switch tier {
+        case 1: VelaTheme.accent.opacity(0.30)
+        case 2: VelaTheme.accent.opacity(0.55)
+        case 3...: VelaTheme.accent
+        default: VelaTheme.elevatedBg
+        }
+    }
+
+    private var makeStrainTrendCard: some View {
+        NavigationLink(destination: VelaMetricDetailView(metric: .strain)) {
+            VelaMakeCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Strain · 30 天")
+                                .font(.system(size: 13))
+                                .foregroundStyle(VelaTheme.fg2)
+                            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                Text(hasWorkloadData ? String(format: "%.1f", dashboard.strain.score) : "--")
+                                    .font(.system(size: 22, weight: .bold))
+                                    .foregroundStyle(VelaTheme.fg)
+                                Text("当前负荷")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(VelaTheme.fg2)
+                            }
+                        }
+                        Spacer()
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 19))
+                            .foregroundStyle(VelaTheme.strainColor)
+                    }
+                    SafeZoneWorkloadChartView(workload: dynamicExertionWorkload)
+                        .frame(height: 90)
+                    Divider()
+                    HStack {
+                        Text("急/慢负荷比 (ACWR)")
+                            .font(.system(size: 13))
+                            .foregroundStyle(VelaTheme.fg2)
+                        Spacer()
+                        Text(acwrStatusText)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(hasWorkloadData ? VelaTheme.success : VelaTheme.fg2)
+                    }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var acwrStatusText: String {
+        guard hasWorkloadData else { return "-- · 等待数据" }
+        let recent = dynamicExertionWorkload.suffix(7).reduce(0, +) / Double(min(7, dynamicExertionWorkload.count))
+        let all = dynamicExertionWorkload.reduce(0, +) / Double(dynamicExertionWorkload.count)
+        let ratio = all > 0 ? recent / all : 0
+        return String(format: "%.2f · %@", ratio, (0.8...1.3).contains(ratio) ? "适宜" : "注意")
+    }
+
+    private var hasWorkloadData: Bool {
+        dynamicExertionWorkload.contains { $0 > 0 }
+    }
+
+    private var makeWeeklyPlanCard: some View {
+        let days = Array((activePlan?.days ?? []).prefix(7))
+        return VStack(spacing: 0) {
+            if days.isEmpty {
+                HStack(spacing: 12) {
+                    Rectangle()
+                        .fill(VelaTheme.meta)
+                        .frame(width: 4, height: 36)
+                        .clipShape(Capsule())
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("今天")
+                            .font(.system(size: 13))
+                            .foregroundStyle(VelaTheme.fg2)
+                        Text(todayPlan?.title ?? "尚未生成训练计划")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(VelaTheme.fg)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+            } else {
+                ForEach(Array(days.enumerated()), id: \.element.id) { index, day in
+                    HStack(spacing: 12) {
+                        Rectangle()
+                            .fill(day.isCompleted ? VelaTheme.success : VelaTheme.accent)
+                            .frame(width: 4, height: 36)
+                            .clipShape(Capsule())
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("第 \(day.dayNumber) 天")
+                                .font(.system(size: 13))
+                                .foregroundStyle(VelaTheme.fg2)
+                            Text(day.title)
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundStyle(VelaTheme.fg)
+                        }
+                        Spacer()
+                        Text("\(day.durationMinutes) 分")
+                            .font(.system(size: 13))
+                            .foregroundStyle(VelaTheme.fg2)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 11)
+                    if index < days.count - 1 {
+                        Divider().padding(.leading, 32)
+                    }
+                }
+            }
+        }
+        .background(VelaTheme.cardBg)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var makeStrengthTemplateCard: some View {
+        Button {
+            startStrengthWorkout()
+        } label: {
+            VelaMakeCard {
+                HStack(spacing: 12) {
+                    VelaMakeIconTile(systemName: "dumbbell.fill", color: VelaTheme.accent, size: 40)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("力量训练模板")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(VelaTheme.fg)
+                        Text(workoutTemplates.isEmpty ? "创建你的第一个模板" : "\(workoutTemplates.count) 个模板 · 点击开始")
+                            .font(.system(size: 13))
+                            .foregroundStyle(VelaTheme.fg2)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(VelaTheme.meta)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var makeTrainingCalendarCard: some View {
+        Button {
+            VelaAppState.shared.routeToCoach(question: "请根据未来四周目标安排训练日历。")
+        } label: {
+            VelaMakeCard {
+                HStack(spacing: 12) {
+                    VelaMakeIconTile(systemName: "calendar", color: Color(uiColor: .systemPink), size: 40)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("训练日历")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(VelaTheme.fg)
+                        Text("未来 4 周 · 自适应计划")
+                            .font(.system(size: 13))
+                            .foregroundStyle(VelaTheme.fg2)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(VelaTheme.meta)
+                }
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     private var trainingExecutionCard: some View {
@@ -220,6 +492,68 @@ struct VelaTrainingView: View {
         .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.surface))
     }
 
+    private var dailyStrainCard: some View {
+        let strainValue = dashboard.strain.score
+        let scoreFraction = max(0, min(1.0, strainValue / 100.0))
+        let lower = dashboard.strain.recommendedRange.lowerBound > 0 ? dashboard.strain.recommendedRange.lowerBound : 45
+        let upper = dashboard.strain.recommendedRange.upperBound > 0 ? dashboard.strain.recommendedRange.upperBound : 75
+        let statusSubtext = dashboard.strain.targetStatus == .withinTarget
+            ? "Ready for a solid workout."
+            : (dashboard.strain.targetStatus == .aboveTarget ? "Consider reducing intensity." : "Increase effort today.")
+
+        return VStack(alignment: .leading, spacing: 0) {
+            // Card header
+            HStack {
+                Text("Daily Strain")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(VelaTheme.fg)
+                Spacer()
+                Text("\(lower)-\(upper) TARGET")
+                    .font(.system(size: 10, weight: .bold))
+                    .tracking(0.8)
+                    .foregroundStyle(VelaTheme.accent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(VelaTheme.accent.opacity(0.1))
+                    .clipShape(Capsule())
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 20)
+
+            // Ring centered
+            VStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .stroke(Color.black.opacity(0.04), lineWidth: 12)
+                        .frame(width: 160, height: 160)
+                    Circle()
+                        .trim(from: 0, to: scoreFraction)
+                        .stroke(VelaTheme.accent, style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: 160, height: 160)
+                    VStack(spacing: 0) {
+                        Text(String(format: "%.0f", strainValue))
+                            .font(.system(size: 52, weight: .bold, design: .rounded))
+                            .foregroundStyle(VelaTheme.fg)
+                        Text("/100")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(VelaTheme.fg2)
+                    }
+                }
+                .frame(width: 160, height: 160)
+
+                Text(statusSubtext)
+                    .font(.system(size: 14))
+                    .foregroundStyle(VelaTheme.fg2)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 20)
+        }
+        .glassEffect(radius: 24)
+    }
+
     // MARK: - Fitness Title Header
     private var fitnessHeader: some View {
         HStack {
@@ -280,6 +614,22 @@ struct VelaTrainingView: View {
     // MARK: - Double-Month Activity Heatmap Card
     private var activityHeatmapCard: some View {
         VStack(alignment: .leading, spacing: 14) {
+            // Header row with streak badge
+            HStack {
+                Text("30-Day Activity")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(VelaTheme.fg)
+                Spacer()
+                let streakCount = currentMonthActiveTiers.filter { $0.value > 0 }.count
+                Text("\(streakCount) Active Days")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(VelaTheme.accent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(VelaTheme.accent.opacity(0.1))
+                    .clipShape(Capsule())
+            }
+
             HStack(alignment: .top, spacing: 16) {
                 monthHeatmap(
                     monthTitle: monthTitle(for: previousMonthStart),
@@ -287,7 +637,7 @@ struct VelaTrainingView: View {
                     startOffset: startOffset(for: previousMonthStart),
                     activeTiers: previousMonthActiveTiers
                 )
-                
+
                 monthHeatmap(
                     monthTitle: monthTitle(for: currentMonthStart),
                     totalDays: dayCount(in: currentMonthStart),
@@ -295,26 +645,26 @@ struct VelaTrainingView: View {
                     activeTiers: currentMonthActiveTiers
                 )
             }
-            
+
             // Legend
-            HStack(spacing: 12) {
-                legendItem(color: Color(hex: "#A5D6A7"), label: "1 项活动")
-                legendItem(color: Color(hex: "#66BB6A"), label: "2 项活动")
-                legendItem(color: Color(hex: "#29B6F6"), label: "3+ 活动")
+            HStack(spacing: 8) {
+                Text("Low")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(VelaTheme.fg2)
+                HStack(spacing: 4) {
+                    legendItem(color: VelaTheme.accent.opacity(0.08), label: "")
+                    legendItem(color: VelaTheme.accent.opacity(0.35), label: "")
+                    legendItem(color: VelaTheme.accent.opacity(0.70), label: "")
+                    legendItem(color: VelaTheme.accent, label: "")
+                }
+                Text("High")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(VelaTheme.fg2)
             }
             .padding(.top, 4)
-            .padding(.leading, 2)
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(VelaTheme.cardBg)
-                .shadow(color: Color.black.opacity(0.012), radius: 10, y: 3)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
-        )
+        .padding(20)
+        .glassEffect(radius: 24)
     }
 
     // Individual Month Heatmap builder
@@ -355,10 +705,10 @@ struct VelaTrainingView: View {
                     let tier = activeTiers[day] ?? 0
                     let cellColor: Color = {
                         switch tier {
-                        case 1:  return Color(hex: "#C8E6C9") // light green
-                        case 2:  return Color(hex: "#81C784") // medium green
-                        case 3:  return Color(hex: "#29B6F6") // teal-blue
-                        default: return Color(hex: "#ECEFF1") // light grey/off-white
+                        case 1:  return VelaTheme.strainColor.opacity(0.35)
+                        case 2:  return VelaTheme.strainColor.opacity(0.70)
+                        case 3...: return VelaTheme.strainColor
+                        default: return VelaTheme.elevatedBg.opacity(0.5)
                         }
                     }()
                     
@@ -440,15 +790,7 @@ struct VelaTrainingView: View {
             }
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(VelaTheme.cardBg)
-                .shadow(color: Color.black.opacity(0.012), radius: 10, y: 3)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
-        )
+        .glassEffect(radius: 24)
     }
 
     // MARK: - Exertion Fatigue Load Card (耗力表现 with safe-zone range band)
@@ -488,15 +830,7 @@ struct VelaTrainingView: View {
                 .padding(.vertical, 8)
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(VelaTheme.cardBg)
-                .shadow(color: Color.black.opacity(0.012), radius: 10, y: 3)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
-        )
+        .glassEffect(radius: 24)
     }
 
     private var currentMonthStart: Date {
@@ -570,7 +904,7 @@ struct VelaTrainingView: View {
             }
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 22).fill(VelaTheme.cardBg))
+        .glassEffect(radius: 22)
     }
 
     private var muscleVolumeCard: some View {
@@ -623,7 +957,7 @@ struct VelaTrainingView: View {
             }
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 22).fill(VelaTheme.cardBg))
+        .glassEffect(radius: 22)
     }
 
     private var templateLibraryCard: some View {
@@ -1397,6 +1731,146 @@ private struct XunjiImportSheet: View {
                 }
             }
         }
+    }
+}
+
+struct VelaTrainingPlanView: View {
+    @Query(sort: \TrainingPlanRecord.updatedAt, order: .reverse)
+    private var plans: [TrainingPlanRecord]
+    @EnvironmentObject private var dashboardVM: DashboardViewModel
+
+    private var activePlan: TrainingPlanRecord? {
+        plans.first(where: \.isActive) ?? plans.first
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                planHero
+                planRows
+
+                VelaMakeCard {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("调整建议")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Color(uiColor: .systemIndigo))
+                        Text(adaptationText)
+                            .font(.system(size: 14))
+                            .foregroundStyle(VelaTheme.fg)
+                    }
+                }
+
+                HStack(spacing: 12) {
+                    Button {
+                        VelaAppState.shared.routeToCoach(question: "请根据我最新的恢复、睡眠和训练负荷重新生成未来一周训练计划。")
+                    } label: {
+                        Text("重新生成")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(VelaTheme.accent)
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        VelaAppState.shared.routeToTab(VelaAppState.trainingTabIndex)
+                    } label: {
+                        Text("打开训练页")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(VelaTheme.accent)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(VelaTheme.cardBg)
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(16)
+        }
+        .background(VelaTheme.systemGroupedBackground)
+        .navigationTitle("训练计划")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var planHero: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("本周计划 · 由 Vela 生成", systemImage: "sparkles")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.white.opacity(0.9))
+            Text(activePlan?.title ?? "尚未生成训练计划")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(.white)
+            Text(activePlan.map { "\($0.days.filter(\.isCompleted).count) / \($0.days.count) 天已完成" } ?? "Vela 会结合恢复、目标和最近训练生成计划。")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.white.opacity(0.9))
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            LinearGradient(
+                colors: [VelaTheme.accent, Color(uiColor: .systemIndigo)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var planRows: some View {
+        if let activePlan, !activePlan.days.isEmpty {
+            VStack(spacing: 0) {
+                ForEach(Array(activePlan.days.enumerated()), id: \.element.id) { index, day in
+                    HStack(spacing: 12) {
+                        VStack(spacing: 1) {
+                            Text("第 \(day.dayNumber) 天")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color.white.opacity(0.86))
+                            Text(day.isCompleted ? "完成" : "\(day.durationMinutes)′")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                        .frame(width: 52, height: 52)
+                        .background(day.isCompleted ? VelaTheme.success : VelaTheme.accent)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(day.title)
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(VelaTheme.fg)
+                            Text(day.description.isEmpty ? "目标负荷会根据当日恢复调整" : day.description)
+                                .font(.system(size: 13))
+                                .foregroundStyle(VelaTheme.fg2)
+                                .lineLimit(2)
+                        }
+                        Spacer()
+                    }
+                    .padding(14)
+                    if index < activePlan.days.count - 1 {
+                        Divider().padding(.leading, 78)
+                    }
+                }
+            }
+            .background(VelaTheme.cardBg)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        } else {
+            VelaMakeCard {
+                Text("目前没有活动计划。点击「重新生成」让 Coach 创建。")
+                    .font(.system(size: 15))
+                    .foregroundStyle(VelaTheme.fg2)
+            }
+        }
+    }
+
+    private var adaptationText: String {
+        let recovery = dashboardVM.dashboard.recovery.score
+        if recovery >= 70 {
+            return "当前恢复状态支持按计划执行；训练后记录 RPE，Vela 会据此调整下一节。"
+        }
+        return "当前恢复偏低，建议降低容量或改为 Zone 1–2 恢复训练。"
     }
 }
 

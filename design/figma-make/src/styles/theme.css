@@ -1,0 +1,168 @@
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --font-size: 16px;
+
+  /* Apple iOS system colors — Light */
+  --ios-bg: #f2f2f7;                       /* grouped background */
+  --ios-bg-elevated: #ffffff;              /* card */
+  --ios-bg-secondary: #ffffff;             /* secondary */
+  --ios-separator: rgba(60, 60, 67, 0.18);
+  --ios-separator-opaque: #c6c6c8;
+
+  --ios-label:           rgba(0, 0, 0, 0.92);
+  --ios-label-secondary: rgba(60, 60, 67, 0.6);
+  --ios-label-tertiary:  rgba(60, 60, 67, 0.3);
+  --ios-label-quaternary:rgba(60, 60, 67, 0.18);
+
+  --ios-fill:           rgba(120, 120, 128, 0.2);
+  --ios-fill-secondary: rgba(120, 120, 128, 0.16);
+  --ios-fill-tertiary:  rgba(118, 118, 128, 0.12);
+
+  --ios-blue:    #007aff;
+  --ios-green:   #34c759;
+  --ios-indigo:  #5856d6;
+  --ios-orange:  #ff9500;
+  --ios-pink:    #ff2d55;
+  --ios-purple:  #af52de;
+  --ios-red:     #ff3b30;
+  --ios-teal:    #30b0c7;
+  --ios-yellow:  #ffcc00;
+  --ios-mint:    #00c7be;
+  --ios-cyan:    #32ade6;
+  --ios-brown:   #a2845e;
+
+  /* Tint / accent */
+  --tint: var(--ios-blue);
+
+  /* Navigation / tab glass material */
+  --chrome-bg: rgba(249, 249, 249, 0.78);
+  --chrome-border: rgba(0, 0, 0, 0.08);
+
+  /* shadcn aliases to keep existing components working */
+  --background: var(--ios-bg);
+  --foreground: var(--ios-label);
+  --card: var(--ios-bg-elevated);
+  --card-foreground: var(--ios-label);
+  --popover: var(--ios-bg-elevated);
+  --popover-foreground: var(--ios-label);
+  --primary: var(--ios-blue);
+  --primary-foreground: #ffffff;
+  --secondary: var(--ios-fill-tertiary);
+  --secondary-foreground: var(--ios-label);
+  --muted: var(--ios-fill-tertiary);
+  --muted-foreground: var(--ios-label-secondary);
+  --accent: var(--ios-fill);
+  --accent-foreground: var(--ios-label);
+  --destructive: var(--ios-red);
+  --destructive-foreground: #ffffff;
+  --border: var(--ios-separator);
+  --input: transparent;
+  --input-background: var(--ios-fill-tertiary);
+  --switch-background: #e9e9eb;
+  --ring: var(--ios-blue);
+  --font-weight-medium: 600;
+  --font-weight-normal: 400;
+  --radius: 0.875rem;
+
+  --chart-1: var(--ios-blue);
+  --chart-2: var(--ios-green);
+  --chart-3: var(--ios-orange);
+  --chart-4: var(--ios-purple);
+  --chart-5: var(--ios-pink);
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: var(--ios-label);
+  --sidebar-primary: var(--ios-blue);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--ios-fill-tertiary);
+  --sidebar-accent-foreground: var(--ios-label);
+  --sidebar-border: var(--ios-separator);
+  --sidebar-ring: var(--ios-blue);
+}
+
+.dark {
+  --ios-bg: #000000;
+  --ios-bg-elevated: #1c1c1e;
+  --ios-bg-secondary: #2c2c2e;
+  --ios-separator: rgba(84, 84, 88, 0.6);
+  --ios-separator-opaque: #38383a;
+
+  --ios-label:           rgba(255, 255, 255, 0.96);
+  --ios-label-secondary: rgba(235, 235, 245, 0.6);
+  --ios-label-tertiary:  rgba(235, 235, 245, 0.3);
+  --ios-label-quaternary:rgba(235, 235, 245, 0.18);
+
+  --ios-fill:           rgba(120, 120, 128, 0.36);
+  --ios-fill-secondary: rgba(120, 120, 128, 0.32);
+  --ios-fill-tertiary:  rgba(118, 118, 128, 0.24);
+
+  --chrome-bg: rgba(22, 22, 24, 0.78);
+  --chrome-border: rgba(255, 255, 255, 0.08);
+
+  --switch-background: #39393b;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html, body, #root {
+    background: var(--ios-bg);
+    color: var(--ios-label);
+  }
+
+  html {
+    font-size: var(--font-size);
+  }
+
+  h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
+  h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.015em; line-height: 1.2; }
+  h3 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; }
+  h4 { font-size: 15px; font-weight: 600; line-height: 1.3; }
+
+  button { font-weight: 500; }
+  input { font-weight: 400; }
+}

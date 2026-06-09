@@ -36,48 +36,58 @@ enum VelaTheme {
     static let systemGroupedBackground = Color(uiColor: .systemGroupedBackground)
     static let secondaryGroupedBackground = Color(uiColor: .secondarySystemGroupedBackground)
     static let tertiaryGroupedBackground = Color(uiColor: .tertiarySystemGroupedBackground)
-    static let surface       = adaptive("#F2F2F7", "#1C1C1E")
-    static let cardBg        = adaptive("#FFFFFF", "#1C1C1E")
-    static let elevatedBg    = adaptive("#F9F9FB", "#2C2C2E")
-    static let groupedBg     = adaptive("#F2F2F7", "#000000")
+    static let surface       = adaptive("#F2F2F7", "#000000")
+    static let cardBg        = Color(uiColor: .secondarySystemGroupedBackground)
+    static let elevatedBg    = Color(uiColor: .tertiarySystemGroupedBackground)
+    static let groupedBg     = Color(uiColor: .systemGroupedBackground)
+
+    // MARK: - iOS 26 Glassmorphic Tokens
+    static let glassCardBgAdaptive   = adaptive("#FFFFFF", "#121214")
+    static let glassCardStrokeColor  = adaptive("#FFFFFF", "#FFFFFF")
+    static let glassAccentGlow       = adaptive("#0058bc", "#adc6ff").opacity(0.18)
+    static let glassRecoveryGlow     = adaptive("#006e28", "#53e16f").opacity(0.16)
+    static let glassSleepGlow        = adaptive("#332eb2", "#c2c1ff").opacity(0.16)
+    static let glassStressGlow       = adaptive("#ba1a1a", "#ffdad6").opacity(0.16)
+    static let glassEnergyGlow       = adaptive("#C4952E", "#DCB048").opacity(0.16)
+
 
     // MARK: - Foreground
 
-    static let fg            = adaptive("#1C1C1E", "#F2F2F7")
-    static let fg2           = adaptive("#636366", "#AEAEB2")
-    static let muted         = adaptive("#8E8E93", "#8E8E93")
-    static let meta          = adaptive("#AEAEB2", "#636366")
+    static let fg            = Color(uiColor: .label)
+    static let fg2           = Color(uiColor: .secondaryLabel)
+    static let muted         = Color(uiColor: .secondaryLabel)
+    static let meta          = Color(uiColor: .tertiaryLabel)
 
     // MARK: - Accent
 
-    static let accent        = adaptive("#007AFF", "#0A84FF")
+    static let accent        = Color(uiColor: .systemBlue)
     static let accentOn      = adaptive("#FFFFFF", "#FFFFFF")
-    static let accentHover   = adaptive("#0A84FF", "#64D2FF")
-    static let accentActive  = adaptive("#0057D9", "#409CFF")
+    static let accentHover   = adaptive("#0062CC", "#409CFF")
+    static let accentActive  = adaptive("#004999", "#0A84FF")
 
     // MARK: - Borders
 
-    static let border        = adaptive("#D1D1D6", "#48484A")
-    static let borderSoft    = adaptive("#E5E5EA", "#2C2C2E")
+    static let border        = Color(uiColor: .separator)
+    static let borderSoft    = Color(uiColor: .separator).opacity(0.45)
     static let separator     = Color(uiColor: .separator)
     static let separatorSoft = Color(uiColor: .separator).opacity(0.38)
 
     // MARK: - Semantic Colors
 
-    static let success       = Color(hex: "#5B8C6F")
-    static let warn          = Color(hex: "#B8843E")
-    static let danger        = Color(hex: "#A85260")
+    static let success       = Color(uiColor: .systemGreen)
+    static let warn          = Color(uiColor: .systemOrange)
+    static let danger        = Color(uiColor: .systemRed)
 
-    /// 负荷 Strain — amber
-    static let strainColor   = adaptive("#B8843E", "#D0A050")
-    /// 恢复 Recovery — sage
-    static let recoveryColor = adaptive("#5B8C6F", "#73A385")
+    /// 负荷 Strain — amber/blue accent
+    static let strainColor   = Color(uiColor: .systemOrange)
+    /// 恢复 Recovery — sage/green
+    static let recoveryColor = Color(uiColor: .systemGreen)
     /// 睡眠 Sleep — indigo
-    static let sleepColor    = adaptive("#6B6FA0", "#8588B8")
-    /// 压力 Stress — rose
-    static let stressColor   = adaptive("#A85260", "#C4707A")
+    static let sleepColor    = Color(uiColor: .systemIndigo)
+    /// 压力 Stress — rose/red
+    static let stressColor   = Color(uiColor: .systemPurple)
     /// 能量 Energy — gold
-    static let energyColor   = adaptive("#C4952E", "#DCB048")
+    static let energyColor   = Color(uiColor: .systemGreen)
 
     // MARK: - Typography
 
@@ -117,7 +127,7 @@ enum VelaTheme {
 
     static let radiusSm: CGFloat   = 8
     static let radiusMd: CGFloat   = 12
-    static let radiusLg: CGFloat   = 18
+    static let radiusLg: CGFloat   = 14
     static let radiusXl: CGFloat   = 24
     static let radiusPill: CGFloat = 980
 

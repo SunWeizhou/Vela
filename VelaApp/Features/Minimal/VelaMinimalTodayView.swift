@@ -89,7 +89,6 @@ struct VelaTodayView: View {
         )
     }
 
-    // Real scores mapped to 0...1 for BevelScoreRing
     private var strainScore: Double { max(0, min(1.0, dashboard.strain.score / 100.0)) }
     private var recoveryScore: Double { max(0, min(1.0, dashboard.recovery.score / 100.0)) }
     private var sleepScore: Double { max(0, min(1.0, dashboard.sleepScore.score / 100.0)) }
@@ -97,48 +96,28 @@ struct VelaTodayView: View {
     private var hrvValue: Double { dashboard.recoveryMetrics.hrvMilliseconds ?? 0 }
     private var rhrValue: Double { dashboard.recoveryMetrics.restingHeartRate ?? 0 }
 
-    // Stress & Energy
     private var stressLevel: Double { dashboard.stress.stressIndex }
     private var energyScore: Double { dashboard.energy.currentEnergy }
 
     @AppStorage("vela_daily_calorie_target") private var dailyCalorieTarget = 2000
-
-    // Dynamic states for nutrition logs
     @State private var todayCalories: Int = 0
     @State private var todayProtein: Int = 0
     @State private var todayCarbs: Int = 0
     @State private var todayFat: Int = 0
 
-    private var calorieFraction: CGFloat {
-        CGFloat(min(1.0, Double(todayCalories) / Double(max(dailyCalorieTarget, 1))))
+    private var calorieFraction: Double {
+        guard dailyCalorieTarget > 0 else { return 0.0 }
+        return Double(todayCalories) / Double(dailyCalorieTarget)
     }
 
-    private var coachMessage: String {
-        dashboard.dailyInsight.isEmpty
-            ? "正在等待足够的 Apple 健康数据，完成同步后会生成今日指导。"
-            : dashboard.dailyInsight
+    private var statusPillColor: Color {
+        switch activeStatusRaw {
+        case "active": return Color(hex: "#34C759")
+        case "sick": return Color(hex: "#FF9F0A")
+        case "injured": return Color(hex: "#FF3B30")
+        default: return Color(hex: "#0058bc")
+        }
     }
-
-    private var todayShareText: String {
-        "\(dateHeaderString(for: dashboardVM.selectedDate))\n恢复 \(Int(dashboard.recovery.score.rounded())) · 睡眠 \(Int(dashboard.sleepScore.score.rounded())) · 负荷 \(Int(dashboard.strain.score.rounded()))\n\(coachMessage)"
-    }
-
-    // Dynamic Weather Sync States
-    @State private var weatherTemp: String = "--"
-    @State private var weatherLocation: String = "天气数据待同步"
-
-    // Active Status Settings Toggles (Replicating Screenshot 2)
-    @AppStorage("vela_active_status") private var activeStatusRaw = "resting"
-    @AppStorage("vela_active_status_duration") private var activeStatusDuration = "明天之前"
-
-    // Sheets trigger states
-    @State private var showCalendarOverview = false
-    @State private var showActiveStatus = false
-    @State private var selectedInsightIndex = 0
-    @State private var selectedInsight: ProactiveInsight?
-    @State private var showTodayEvidence = false
-    @State private var animatedEnergyScore: Double = 0.0
-    @State private var isVisible = false
 
     private var statusPillIcon: String {
         switch activeStatusRaw {
@@ -146,15 +125,6 @@ struct VelaTodayView: View {
         case "sick": return "bed.double.fill"
         case "injured": return "bandage.fill"
         default: return "beach.umbrella.fill"
-        }
-    }
-
-    private var statusPillColor: Color {
-        switch activeStatusRaw {
-        case "active": return Color(hex: "#34C759") // Teal green
-        case "sick": return Color(hex: "#FF9F0A") // Orange yellow
-        case "injured": return Color(hex: "#FF3B30") // Red pink
-        default: return Color(hex: "#4285F4") // Blue
         }
     }
 
@@ -167,82 +137,291 @@ struct VelaTodayView: View {
         }
     }
 
-    @ViewBuilder
-    private var errorMessageView: some View {
-        if let errorMessage = dashboardVM.errorMessage {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Color.red)
-                    Text(errorMessage)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color(hex: "#1A1917"))
+    private var headerBar: some View {
+        VStack(spacing: 8) {
+            dateHeaderRow
+            pillsRow
+        }
+    }
+
+    private var coachMessage: String {
+        dashboard.dailyInsight.isEmpty
+            ? "正在等待足够的 Apple 健康数据，完成同步后会生成今日指导。"
+            : dashboard.dailyInsight
+    }
+
+    private var todayShareText: String {
+        "\(dateHeaderString(for: dashboardVM.selectedDate))\n恢复 \(Int(dashboard.recovery.score.rounded())) · 睡眠 \(Int(dashboard.sleepScore.score.rounded())) · 负荷 \(Int(dashboard.strain.score.rounded()))\n\(coachMessage)"
+    }
+
+    @State private var weatherTemp: String = "--"
+    @State private var weatherLocation: String = "天气数据待同步"
+
+    @AppStorage("vela_active_status") private var activeStatusRaw = "resting"
+    @AppStorage("vela_active_status_duration") private var activeStatusDuration = "明天之前"
+
+    @State private var showCalendarOverview = false
+    @State private var showActiveStatus = false
+    @State private var selectedInsight: ProactiveInsight?
+    @State private var showTodayEvidence = false
+    @State private var animatedEnergyScore: Double = 0.0
+    @State private var isVisible = false
+
+    private var hrvStatusText: String {
+        if hrvValue >= 55.0 { return "Optimal" } else if hrvValue >= 40.0 { return "Normal" } else { return "Low" }
+    }
+    private var hrvStatusColor: Color {
+        if hrvValue >= 55.0 { return VelaTheme.success } else if hrvValue >= 40.0 { return Color(hex: "#FF9F0A") } else { return Color(hex: "#FF3B30") }
+    }
+    private var sleepRatingText: String {
+        let scoreVal = dashboard.sleepScore.score
+        if scoreVal >= 85 { return "Excellent" }
+        if scoreVal >= 70 { return "Good" }
+        if scoreVal >= 50 { return "Fair" }
+        return "Poor"
+    }
+    private var yesterdayStrainText: String {
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: dashboardVM.selectedDate) ?? dashboardVM.selectedDate
+        let yesterdaySummary = dailySummaries.first(where: { Calendar.current.isDate($0.date, inSameDayAs: yesterday) })
+        if let strain = yesterdaySummary?.strainScore { return String(format: "%.1f", strain) }
+        return "14.2"
+    }
+    private var recommendedActionTitle: String { persistedOperatingPlan?.title ?? "等待生成今日计划" }
+    private var recommendedActionSubtitle: String { persistedOperatingPlan?.safetyNotice ?? "同步健康数据后由 Vela 生成" }
+
+    // MARK: - Recovery Gauge
+    private var recoveryGauge: some View {
+        let pct = Int(recoveryScore * 100)
+        return ZStack {
+            Circle()
+                .stroke(Color.black.opacity(0.04), lineWidth: 16)
+                .frame(width: 220, height: 220)
+            Circle()
+                .trim(from: 0, to: isVisible ? recoveryScore : 0)
+                .stroke(VelaTheme.accent, style: StrokeStyle(lineWidth: 16, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .frame(width: 220, height: 220)
+                .animation(.spring(response: 1.2, dampingFraction: 0.8), value: isVisible)
+            VStack(spacing: 0) {
+                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                    Text("\(pct)")
+                        .font(.system(size: 64, weight: .bold, design: .rounded))
+                        .foregroundStyle(VelaTheme.accent)
+                    Text("%")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(VelaTheme.accent)
                 }
-                if let suggestion = dashboardVM.currentError?.recoverySuggestion {
-                    Text(suggestion)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
+                Text("Recovered")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(VelaTheme.fg)
+                    .offset(y: -4)
+            }
+        }
+        .frame(width: 220, height: 220)
+    }
+
+    // MARK: - HRV Card
+    private var hrvCard: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 12) {
+                Image(systemName: "heart.fill")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(hrvStatusColor)
+                    .frame(width: 40, height: 40)
+                    .background(hrvStatusColor.opacity(0.12))
+                    .clipShape(Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("HRV")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(VelaTheme.fg2)
+                    HStack(alignment: .lastTextBaseline, spacing: 2) {
+                        Text("\(Int(hrvValue.rounded()))")
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundStyle(VelaTheme.fg)
+                        Text("ms")
+                            .font(.system(size: 12))
+                            .foregroundStyle(VelaTheme.fg2)
+                    }
                 }
             }
-            .padding(14)
+            Spacer()
+            Text(hrvStatusText)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(hrvStatusColor)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(hrvStatusColor.opacity(0.15))
+                .clipShape(Capsule())
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity)
+        .glassEffect()
+    }
+
+    // MARK: - Sleep & Strain Bento
+    private var sleepStrainBento: some View {
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                Image(systemName: "moon.stars.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(VelaTheme.accent)
+                    .frame(width: 32, height: 32)
+                    .background(VelaTheme.accent.opacity(0.12))
+                    .clipShape(Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Sleep")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(VelaTheme.fg2)
+                    Text(sleepRatingText)
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundStyle(VelaTheme.fg)
+                        .minimumScaleFactor(0.72)
+                        .lineLimit(1)
+                }
+            }
+            .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 16).fill(Color.white))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.red.opacity(0.3), lineWidth: 1)
-            )
+            .glassEffect()
+
+            VStack(alignment: .leading, spacing: 12) {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(VelaTheme.accent)
+                    .frame(width: 32, height: 32)
+                    .background(VelaTheme.accent.opacity(0.12))
+                    .clipShape(Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Prev Strain")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(VelaTheme.fg2)
+                    Text(yesterdayStrainText)
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundStyle(VelaTheme.fg)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassEffect()
+        }
+    }
+
+    // MARK: - Recommended Action Card
+    private var recommendedActionCard: some View {
+        let isRest = trainingDecision.decision == .rest
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("RECOMMENDED ACTION")
+                .font(.system(size: 11, weight: .bold))
+                .tracking(1.5)
+                .foregroundStyle(VelaTheme.fg2)
+                .padding(.horizontal, 4)
+            Button {
+                if isRest { showTodayEvidence = true } else { appState.routeToTab(VelaAppState.trainingTabIndex) }
+            } label: {
+                HStack(spacing: 16) {
+                    Image(systemName: isRest ? "heart.fill" : "figure.run")
+                        .font(.system(size: 22))
+                        .foregroundStyle(.white)
+                        .frame(width: 48, height: 48)
+                        .background(VelaTheme.accent)
+                        .clipShape(Circle())
+                        .shadow(color: VelaTheme.accent.opacity(0.35), radius: 8, y: 3)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(recommendedActionTitle)
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(VelaTheme.fg)
+                        Text(recommendedActionSubtitle)
+                            .font(.system(size: 13))
+                            .foregroundStyle(VelaTheme.fg2)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(VelaTheme.meta)
+                }
+                .padding(16)
+                .glassEffect()
+            }
+            .buttonStyle(.plain)
         }
     }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                // 1. Date Header with Selector & Share & Avatar
-                dateHeaderRow
-                    .opacity(isVisible ? 1.0 : 0.0)
-                    .offset(y: isVisible ? 0.0 : 10.0)
-                    .animation(VelaTheme.snappy.delay(0.0), value: isVisible)
- 
-                errorMessageView
+            VStack(spacing: 0) {
+                VelaMakeHeader(
+                    title: "今日",
+                    subtitle: makeHeaderSubtitle
+                ) {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Text("S")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(VelaTheme.fg)
+                            .frame(width: 32, height: 32)
+                            .background(VelaTheme.elevatedBg)
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                }
 
-                todayOSCard
-                    .opacity(isVisible ? 1 : 0)
-                    .offset(y: isVisible ? 0 : 10)
-                    .animation(VelaTheme.snappy.delay(0.025), value: isVisible)
- 
-                // 2. Horizontal Status & Weather Pills
-                pillsRow
-                    .opacity(isVisible ? 1 : 0)
-                    .offset(y: isVisible ? 0 : 10)
-                    .animation(VelaTheme.snappy.delay(0.035), value: isVisible)
+                VStack(spacing: 12) {
+                    recoveryMakeCard
 
-                // 3. White Cockpit Card (Strain, Recovery, Sleep side-by-side rings)
-                cockpitCard
-                    .opacity(isVisible ? 1 : 0)
-                    .offset(y: isVisible ? 0 : 12)
-                    .animation(VelaTheme.snappy.delay(0.055), value: isVisible)
- 
-                // 5. Stress & Energy Section
-                stressAndEnergySection
-                    .opacity(isVisible ? 1 : 0)
-                    .offset(y: isVisible ? 0 : 12)
-                    .animation(VelaTheme.snappy.delay(0.105), value: isVisible)
- 
-                // 6. Daily Activity Section
-                dailyActivitySection
-                    .opacity(isVisible ? 1 : 0)
-                    .offset(y: isVisible ? 0 : 12)
-                    .animation(VelaTheme.snappy.delay(0.14), value: isVisible)
- 
-                // 7. Nutrition (营养) Section
-                nutritionSection
-                    .opacity(isVisible ? 1 : 0)
-                    .offset(y: isVisible ? 0 : 12)
-                    .animation(VelaTheme.snappy.delay(0.175), value: isVisible)
+                    HStack(spacing: 12) {
+                        makeMiniScoreCard(
+                            title: "睡眠",
+                            icon: "moon.fill",
+                            color: VelaTheme.sleepColor,
+                            value: dashboard.sleepScore.hasData ? "\(Int(dashboard.sleepScore.score.rounded()))" : "--",
+                            unit: "分",
+                            subtitle: sleepDurationText
+                        ) {
+                            VelaMetricDetailView(metric: .sleep)
+                        }
+                        makeMiniScoreCard(
+                            title: "负荷",
+                            icon: "sun.max.fill",
+                            color: VelaTheme.strainColor,
+                            value: dashboard.strain.hasData ? String(format: "%.1f", dashboard.strain.score) : "--",
+                            unit: "/ 21",
+                            subtitle: strainStatusText
+                        ) {
+                            VelaMetricDetailView(metric: .strain)
+                        }
+                    }
+
+                    HStack(spacing: 12) {
+                        makeMiniScoreCard(
+                            title: "压力",
+                            icon: "brain.head.profile",
+                            color: VelaTheme.stressColor,
+                            value: dashboard.stress.hasData ? "\(Int(stressLevel.rounded()))" : "--",
+                            unit: dashboard.stress.hasData ? (stressLevel < 40 ? "低" : "高") : "",
+                            subtitle: dashboard.stress.hasData ? (stressLevel < 40 ? "平和稳定" : "注意恢复") : "等待压力数据"
+                        ) {
+                            VelaMetricDetailView(metric: .stress)
+                        }
+                        makeMiniScoreCard(
+                            title: "能量",
+                            icon: "battery.75percent",
+                            color: VelaTheme.energyColor,
+                            value: dashboard.energy.hasData && isRecoveryAvailable ? "\(Int(energyScore.rounded()))" : "--",
+                            unit: "%",
+                            subtitle: "根据今日恢复估算"
+                        ) {
+                            VelaMetricDetailView(metric: .energy)
+                        }
+                    }
+
+                    makePlanCard
+                    makeBiologicalAgeCard
+                    makeHRVCard
+                    makeCoachInsightCard
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 110)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 140) // Floating tab bar safety gap
         }
         .scrollIndicators(.hidden)
         .velaTrackScroll(direction: scrollDirection)
@@ -251,61 +430,29 @@ struct VelaTodayView: View {
             dashboardVM.hydrateFromCache(modelContext: modelContext)
             loadRealNutritionData()
             locationManager.requestPermission()
-            withAnimation(VelaTheme.smooth) {
-                animatedEnergyScore = energyScore
-            }
-            withAnimation(VelaTheme.snappy) {
-                isVisible = true
-            }
-        }
-        .task {
+            withAnimation(VelaTheme.smooth) { animatedEnergyScore = energyScore }
+            withAnimation(VelaTheme.snappy) { isVisible = true }
+        }.task {
             await refreshDashboard()
             persistDailyOperatingPlan()
-            withAnimation(VelaTheme.smooth) {
-                animatedEnergyScore = energyScore
-            }
-        }
-        .refreshable {
+            withAnimation(VelaTheme.smooth) { animatedEnergyScore = energyScore }
+        }.refreshable {
             await refreshDashboard(force: true)
             persistDailyOperatingPlan()
-        }
-        .onChange(of: dashboardVM.selectedDate) { _, _ in
+        }.onChange(of: dashboardVM.selectedDate) { _, _ in
             dashboardVM.hydrateFromCache(modelContext: modelContext)
             Task {
                 await refreshDashboard()
                 persistDailyOperatingPlan()
-                withAnimation(VelaTheme.smooth) {
-                    animatedEnergyScore = energyScore
-                }
+                withAnimation(VelaTheme.smooth) { animatedEnergyScore = energyScore }
             }
-        }
-        .onChange(of: energyScore) { _, newEnergy in
-            withAnimation(VelaTheme.smooth) {
-                animatedEnergyScore = newEnergy
-            }
-        }
-        .onChange(of: appState.localDataRevision) { _, _ in
+        }.onChange(of: energyScore) { _, newEnergy in
+            withAnimation(VelaTheme.smooth) { animatedEnergyScore = newEnergy }
+        }.onChange(of: appState.localDataRevision) { _, _ in
             dashboardVM.hydrateFromCache(modelContext: modelContext)
             loadRealNutritionData()
-        }
-        .onChange(of: locationManager.location) { _, _ in
-            fetchLocalWeather()
-        }
-        .sheet(isPresented: $showCalendarOverview) {
-            CalendarOverviewSheetView()
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(Color(hex: "#F2F2F7"))
-        }
-        .sheet(isPresented: $showActiveStatus) {
-            ActiveStatusSelectionSheetView(
-                activeStatusRaw: $activeStatusRaw,
-                activeStatusDuration: $activeStatusDuration
-            )
-            .presentationDetents([.medium])
-            .presentationDragIndicator(.visible)
-            .presentationBackground(Color(hex: "#F2F2F7"))
-        }
+        }.onChange(of: locationManager.location) { _, _ in fetchLocalWeather() }
+        .sheet(isPresented: $showCalendarOverview) { CalendarOverviewSheetView().presentationDetents([.medium, .large]).presentationDragIndicator(.visible).presentationBackground(Color(hex: "#F2F2F7")) }
         .sheet(item: $selectedInsight) { insight in
             ProactiveInsightDetailSheet(insight: insight) { question in
                 selectedInsight = nil
@@ -330,68 +477,272 @@ struct VelaTodayView: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 
-    private var todayOSCard: some View {
-        let state = bodyState
-        let decision = trainingDecision
-        let planTitle = persistedOperatingPlan?.title ?? decision.userFacingSummary
-        let cause = state.drivers.first?.detail ?? L10n.t(
-            "Local records are available while health baselines are still forming.",
-            "健康基线仍在建立，当前先使用本地记录给出保守建议。"
-        )
-        let watch = state.drivers.first(where: { $0.impact < 0 })?.title
-            ?? L10n.t("Training quality and perceived effort", "训练质量与主观用力")
-        return VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(L10n.t("TODAY OS", "今日 OS"))
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(VelaTheme.muted)
-                    Text(bodyStateTitle(state.readiness))
-                        .font(.system(size: 26, weight: .bold, design: .rounded))
-                        .foregroundStyle(VelaTheme.fg)
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 3) {
-                    Text("\(Int((decision.confidence * 100).rounded()))%")
-                        .font(.headline.weight(.bold))
-                    Text("\(state.confidence.rawValue) · \(state.freshness.rawValue)")
-                        .font(.caption2)
-                        .foregroundStyle(VelaTheme.muted)
+    private var makeHeaderSubtitle: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_Hans_CN")
+        formatter.dateFormat = "EEEE · M 月 d 日"
+        return formatter.string(from: dashboardVM.selectedDate)
+    }
+
+    private var recoveryMakeCard: some View {
+        Button {
+            appState.routeToRecoveryDetail()
+        } label: {
+            VelaMakeCard(padding: 20) {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack {
+                        Label("恢复", systemImage: "waveform.path.ecg")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(VelaTheme.recoveryColor)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(VelaTheme.meta)
+                    }
+
+                    HStack(spacing: 20) {
+                        VelaMakeRing(
+                            value: isRecoveryAvailable ? dashboard.recovery.score : 0,
+                            color: VelaTheme.recoveryColor,
+                            valueText: isRecoveryAvailable ? nil : "--"
+                        )
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("状态")
+                                .font(.system(size: 13))
+                                .foregroundStyle(VelaTheme.fg2)
+                            Text(recoveryStatusText)
+                                .font(.system(size: 22, weight: .bold))
+                                .foregroundStyle(VelaTheme.fg)
+                            VStack(alignment: .leading, spacing: 2) {
+                                ForEach(recoveryDriverLines, id: \.self) { line in
+                                    Text(line)
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(VelaTheme.fg2)
+                                        .lineLimit(1)
+                                }
+                            }
+                            .padding(.top, 4)
+                        }
+                    }
                 }
             }
-
-            todayOSRow(label: L10n.t("Cause", "原因"), value: cause)
-            todayOSRow(label: L10n.t("Plan", "计划"), value: planTitle)
-            todayOSRow(label: L10n.t("Watch", "观察"), value: watch)
-
-            Button {
-                if decision.decision == .rest {
-                    showTodayEvidence = true
-                } else {
-                    appState.routeToTab(1)
-                }
-            } label: {
-                HStack {
-                    Image(systemName: decision.decision == .rest ? "heart.fill" : "figure.strengthtraining.traditional")
-                    Text(primaryActionTitle(decision.decision))
-                    Spacer()
-                    Image(systemName: "arrow.right")
-                }
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(Color.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(RoundedRectangle(cornerRadius: 14).fill(VelaTheme.accent))
-            }
-            .buttonStyle(.plain)
-
-            Text("\(persistedOperatingPlan?.source ?? decision.source) · \(decision.safetyNotice)")
-                .font(.caption2)
-                .foregroundStyle(VelaTheme.muted)
         }
-        .padding(18)
-        .background(RoundedRectangle(cornerRadius: 22).fill(VelaTheme.surface))
-        .overlay(RoundedRectangle(cornerRadius: 22).stroke(VelaTheme.accent.opacity(0.16), lineWidth: 1))
+        .buttonStyle(.plain)
+    }
+
+    private var recoveryStatusText: String {
+        guard isRecoveryAvailable else { return "等待数据" }
+        switch dashboard.recovery.score {
+        case 80...: return "优秀"
+        case 60..<80: return "良好"
+        case 40..<60: return "一般"
+        default: return "优先恢复"
+        }
+    }
+
+    private var recoveryDriverLines: [String] {
+        guard isRecoveryAvailable else {
+            return ["需要 HRV 或静息心率", "等待睡眠同步", "不会使用模拟评分"]
+        }
+        let live = bodyState.drivers.prefix(3).map { driver in
+            "\(driver.title) \(driver.impact >= 0 ? "+" : "−")\(Int(abs(driver.impact).rounded()))"
+        }
+        if live.count == 3 {
+            return live
+        }
+        return [
+            "HRV \(hrvValue > 0 ? "\(Int(hrvValue.rounded())) ms" : "等待同步")",
+            "睡眠贡献 \(Int(dashboard.sleepScore.score.rounded())) 分",
+            "昨日 Strain \(yesterdayStrainText)"
+        ]
+    }
+
+    private var isRecoveryAvailable: Bool {
+        dashboard.recoveryMetrics.hrvMilliseconds != nil
+            || dashboard.recoveryMetrics.restingHeartRate != nil
+            || dashboard.sleepSummary.totalSleepMinutes > 0
+    }
+
+    private var sleepDurationText: String {
+        let minutes = dashboard.sleepSummary.totalSleepMinutes
+        guard minutes > 0 else { return "等待睡眠数据" }
+        return "\(minutes / 60)h \(minutes % 60)m"
+    }
+
+    private var strainStatusText: String {
+        switch dashboard.strain.targetStatus {
+        case .withinTarget: "目标区间内"
+        case .aboveTarget: "高于目标"
+        case .belowTarget: "低于目标"
+        }
+    }
+
+    private func makeMiniScoreCard<Destination: View>(
+        title: String,
+        icon: String,
+        color: Color,
+        value: String,
+        unit: String,
+        subtitle: String,
+        @ViewBuilder destination: () -> Destination
+    ) -> some View {
+        NavigationLink(destination: destination()) {
+            VelaMakeCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Label(title, systemImage: icon)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(color)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(VelaTheme.meta)
+                    }
+                    HStack(alignment: .firstTextBaseline, spacing: 3) {
+                        Text(value)
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundStyle(VelaTheme.fg)
+                            .monospacedDigit()
+                        Text(unit)
+                            .font(.system(size: 13))
+                            .foregroundStyle(VelaTheme.fg2)
+                    }
+                    Text(subtitle)
+                        .font(.system(size: 12))
+                        .foregroundStyle(VelaTheme.fg2)
+                        .lineLimit(1)
+                }
+                .frame(minHeight: 92, alignment: .top)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var makePlanCard: some View {
+        Button {
+            appState.routeToTab(VelaAppState.trainingTabIndex)
+        } label: {
+            VelaMakeCard {
+                HStack(spacing: 12) {
+                    VelaMakeIconTile(systemName: "chart.line.uptrend.xyaxis", color: VelaTheme.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("今日计划")
+                            .font(.system(size: 13))
+                            .foregroundStyle(VelaTheme.fg2)
+                        Text(recommendedActionTitle)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(VelaTheme.fg)
+                            .lineLimit(1)
+                        Text(recommendedActionSubtitle)
+                            .font(.system(size: 13))
+                            .foregroundStyle(VelaTheme.fg2)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(VelaTheme.meta)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var makeBiologicalAgeCard: some View {
+        NavigationLink(destination: BiologyView()) {
+            VelaMakeCard {
+                HStack(spacing: 12) {
+                    VelaMakeIconTile(systemName: "figure.mind.and.body", color: Color(uiColor: .systemTeal))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("生物年龄趋势 · Beta")
+                            .font(.system(size: 13))
+                            .foregroundStyle(VelaTheme.fg2)
+                        Text("查看健康年龄")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundStyle(VelaTheme.fg)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(VelaTheme.meta)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var makeHRVCard: some View {
+        NavigationLink(destination: VelaMetricDetailView(metric: .hrv)) {
+            VelaMakeCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("HRV · 14 天")
+                                .font(.system(size: 13))
+                                .foregroundStyle(VelaTheme.fg2)
+                            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                Text(hrvValue > 0 ? "\(Int(hrvValue.rounded()))" : "--")
+                                    .font(.system(size: 22, weight: .bold))
+                                    .foregroundStyle(VelaTheme.fg)
+                                    .monospacedDigit()
+                                Text("ms")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(VelaTheme.fg2)
+                            }
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(VelaTheme.meta)
+                    }
+                    SparklineLineGraph(
+                        data: normalizedHRVTrend,
+                        color: VelaTheme.recoveryColor,
+                        height: 80,
+                        width: 320
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var normalizedHRVTrend: [Double] {
+        let values = dailySummaries.prefix(14).compactMap(\.hrvAverage).reversed()
+        guard let minimum = values.min(), let maximum = values.max() else { return [] }
+        let range = maximum - minimum
+        return values.map { range == 0 ? 0.5 : ($0 - minimum) / range }
+    }
+
+    private var makeCoachInsightCard: some View {
+        Button {
+            appState.routeToCoach(question: "请继续解释今天的恢复、睡眠和训练建议。")
+        } label: {
+            VelaMakeCard {
+                HStack(alignment: .top, spacing: 12) {
+                    VelaMakeIconTile(systemName: "sparkles", color: Color(uiColor: .systemIndigo))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Vela Coach")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Color(uiColor: .systemIndigo))
+                        Text(trainingDecision.userFacingSummary)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(VelaTheme.fg)
+                        Text(coachMessage)
+                            .font(.system(size: 14))
+                            .foregroundStyle(VelaTheme.fg2)
+                            .lineLimit(3)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(VelaTheme.meta)
+                }
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     private func todayOSRow(label: String, value: String) -> some View {
@@ -405,6 +756,111 @@ struct VelaTodayView: View {
                 .foregroundStyle(VelaTheme.fg)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private var activeStep: Int {
+        let workoutsToday = strengthWorkouts.filter { Calendar.current.isDate($0.startedAt, inSameDayAs: dashboardVM.selectedDate) }
+        let journalToday = journalEntries.filter { Calendar.current.isDate($0.createdAt, inSameDayAs: dashboardVM.selectedDate) }
+        if !journalToday.isEmpty {
+            return 3
+        } else if !workoutsToday.isEmpty {
+            return 2
+        } else if persistedOperatingPlan != nil {
+            return 1
+        } else {
+            return 0
+        }
+    }
+
+    private var dailyLoopCard: some View {
+        let sleepMin = dashboard.sleepSummary.totalSleepMinutes
+        let sleepValue = dashboard.sleepScore.hasData ? "\(sleepMin / 60)h \(sleepMin % 60)m" : "--"
+
+        let planValue: String = {
+            guard let plan = persistedOperatingPlan else { return "无计划" }
+            switch plan.primaryActionType {
+            case "keep": return "执行"
+            case "reduce": return "减量"
+            case "swap": return "调整"
+            case "rest": return "恢复"
+            default: return "自适应"
+            }
+        }()
+
+        let workoutsToday = strengthWorkouts.filter { Calendar.current.isDate($0.startedAt, inSameDayAs: dashboardVM.selectedDate) }
+        let trainValue = !workoutsToday.isEmpty ? "已完成" : "今日"
+
+        let journalToday = journalEntries.filter { Calendar.current.isDate($0.createdAt, inSameDayAs: dashboardVM.selectedDate) }
+        let checkInValue = !journalToday.isEmpty ? "已记录" : "今晚"
+
+        let responseValue = "明天"
+
+        return VStack(alignment: .leading, spacing: 14) {
+            Text("DAILY LOOP")
+                .font(.system(size: 10, weight: .bold))
+                .tracking(1.2)
+                .foregroundStyle(VelaTheme.meta)
+
+            GeometryReader { geo in
+                let width = geo.size.width
+                let stepWidth = width / 5
+
+                ZStack(alignment: .leading) {
+                    Rectangle()
+                        .fill(VelaTheme.borderSoft)
+                        .frame(height: 2)
+                        .padding(.horizontal, stepWidth / 2)
+                        .offset(y: -12)
+
+                    HStack(spacing: 0) {
+                        stepItem(title: "睡眠", value: sleepValue, color: VelaTheme.recoveryColor, active: activeStep >= 0, width: stepWidth)
+                        stepItem(title: "计划", value: planValue, color: VelaTheme.accent, active: activeStep >= 1, width: stepWidth)
+                        stepItem(title: "训练", value: trainValue, color: VelaTheme.strainColor, active: activeStep >= 2, width: stepWidth)
+                        stepItem(title: "记录", value: checkInValue, color: VelaTheme.sleepColor, active: activeStep >= 3, width: stepWidth)
+                        stepItem(title: "预测", value: responseValue, color: VelaTheme.meta, active: activeStep >= 4, width: stepWidth)
+                    }
+                }
+            }
+            .frame(height: 64)
+            .padding(.vertical, 4)
+
+            Text("下一个计划将根据你的恢复反应进行调整。")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(VelaTheme.fg2)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(VelaTheme.cardBg)
+                .shadow(color: VelaTheme.cardShadow(cs), radius: 8, y: 2)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
+        )
+    }
+
+    @ViewBuilder
+    private func stepItem(title: String, value: String, color: Color, active: Bool, width: CGFloat) -> some View {
+        VStack(spacing: 4) {
+            Circle()
+                .fill(active ? color : VelaTheme.elevatedBg)
+                .frame(width: 12, height: 12)
+                .overlay(
+                    Circle()
+                        .stroke(active ? color : VelaTheme.border, lineWidth: 2)
+                )
+
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(active ? VelaTheme.fg : VelaTheme.fg2)
+                .padding(.top, 4)
+
+            Text(value)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(VelaTheme.muted)
+        }
+        .frame(width: width)
     }
 
     private func bodyStateTitle(_ readiness: BodyReadiness) -> String {
@@ -454,7 +910,7 @@ struct VelaTodayView: View {
                             .foregroundStyle(Color.white)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2.5)
-                            .background(Capsule().fill(Color(hex: "#007AFF")))
+                            .background(Capsule().fill(VelaTheme.accent))
                     }
                 }
             }
@@ -480,7 +936,7 @@ struct VelaTodayView: View {
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 34, height: 34)
-                        .foregroundStyle(Color(hex: "#007AFF"))
+                        .foregroundStyle(VelaTheme.accent)
                 }
                 .buttonStyle(.plain)
             }
@@ -585,7 +1041,7 @@ struct VelaTodayView: View {
     private func handleTodayAction(_ action: TodayAction) {
         switch action.kind {
         case .training:
-            appState.routeToTab(1)
+            appState.routeToTab(VelaAppState.trainingTabIndex)
         case .recovery, .insight:
             showTodayEvidence = true
         case .checkIn:
@@ -598,14 +1054,14 @@ struct VelaTodayView: View {
     private func handleCoachArtifactAction(_ action: CoachArtifactAction, artifact: CoachArtifact) {
         switch action.type {
         case "open_training_summary":
-            appState.routeToTab(1)
+            appState.routeToTab(VelaAppState.trainingTabIndex)
         case "start_check_in":
             appState.routeToPostWorkoutCheckIn(workoutID: workoutID(for: action, artifact: artifact))
         case "open_recovery_detail":
             appState.routeToPostWorkoutImpact(workoutID: workoutID(for: action, artifact: artifact))
         default:
             if action.type.contains("training") || action.type.contains("workout") {
-                appState.routeToTab(1)
+                appState.routeToTab(VelaAppState.trainingTabIndex)
             } else if action.type.contains("check") || action.type.contains("journal") {
                 appState.triggerJournal = true
             } else if action.type.contains("recovery") {
@@ -629,7 +1085,7 @@ struct VelaTodayView: View {
 
     private func routeLegacyCoachArtifactAction(_ action: CoachArtifactAction) {
         if action.type.contains("training") || action.type.contains("workout") {
-            appState.routeToTab(1)
+            appState.routeToTab(VelaAppState.trainingTabIndex)
         } else if action.type.contains("check") || action.type.contains("journal") {
             appState.triggerJournal = true
         } else if action.type.contains("recovery") {
@@ -898,9 +1354,9 @@ struct VelaTodayView: View {
                             .font(.system(size: 11, weight: .bold))
                             .tracking(0.5)
                             .foregroundStyle(Color(hex: "#8E8A80"))
-                        
+
                         Spacer()
-                        
+
                         Image(systemName: "chevron.right")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(Color(hex: "#BFB9AC"))
@@ -916,16 +1372,16 @@ struct VelaTodayView: View {
                             Text(state.bodyStateTitle)
                                 .font(.system(size: 18, weight: .bold, design: .rounded))
                                 .foregroundStyle(accentColor)
-                            
+
                             Text(state.coachArtifact?.summary ?? state.summary)
                                 .font(VelaTheme.subheadline())
                                 .foregroundStyle(VelaTheme.fg2)
                                 .lineSpacing(3)
                                 .multilineTextAlignment(.leading)
                         }
-                        
+
                         Spacer()
-                        
+
                         VStack(alignment: .trailing, spacing: 4) {
                             ConfidenceBadge(confidence: state.dataConfidence)
                             Text("\(Int((state.readinessDecision.confidence * 100).rounded()))%")
@@ -1053,7 +1509,7 @@ struct VelaTodayView: View {
                 )
             }
             .buttonStyle(.plain)
- 
+
             // 2. Energy Card (Bevel High-Fidelity Segmented Battery Card)
             NavigationLink(destination: VelaMetricDetailView(metric: .energy)) {
                 HStack(spacing: 12) {
@@ -1061,9 +1517,9 @@ struct VelaTodayView: View {
                         .font(.system(size: 16, weight: .bold))
                         .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(Color(hex: "#34C759")) // Vibrant Bevel green
- 
+
                     Spacer()
- 
+
                     // 40 Ticks
                     HStack(spacing: 1.2) {
                         ForEach(0..<40, id: \.self) { idx in
@@ -1073,9 +1529,9 @@ struct VelaTodayView: View {
                                 .frame(width: 1.8, height: 10)
                         }
                     }
- 
+
                     Spacer()
- 
+
                     Text(dashboard.energy.hasData ? "\(Int(energyScore))%" : "--")
                         .font(.system(size: 16, weight: .bold, design: .rounded).monospacedDigit())
                         .foregroundStyle(Color(hex: "#1A1917"))
@@ -2154,9 +2610,9 @@ private struct TodayDecisionEvidenceSheet: View {
                             Text(state.bodyStateTitle)
                                 .font(.system(size: 20, weight: .bold, design: .rounded))
                                 .foregroundStyle(readinessColor(state.readinessDecision.decision))
-                            
+
                             Spacer()
-                            
+
                             HStack(spacing: 4) {
                                 ConfidenceBadge(confidence: state.dataConfidence)
                                 Text("\(Int((state.readinessDecision.confidence * 100).rounded()))%")
@@ -2164,7 +2620,7 @@ private struct TodayDecisionEvidenceSheet: View {
                                     .foregroundStyle(readinessColor(state.readinessDecision.decision))
                             }
                         }
-                        
+
                         Text(state.coachArtifact?.summary ?? state.summary)
                             .font(VelaTheme.subheadline())
                             .foregroundStyle(VelaTheme.fg2)
@@ -2189,22 +2645,22 @@ private struct TodayDecisionEvidenceSheet: View {
                                         .foregroundStyle(insight.focus.color)
                                         .frame(width: 28, height: 28)
                                         .background(Circle().fill(insight.focus.color.opacity(0.10)))
-                                    
+
                                     VStack(alignment: .leading, spacing: 3) {
                                         Text(insight.displayTitle)
                                             .font(VelaTheme.subheadline())
                                             .fontWeight(.semibold)
                                             .foregroundStyle(VelaTheme.fg)
                                             .lineLimit(1)
-                                        
+
                                         Text(insight.body)
                                             .font(VelaTheme.caption1())
                                             .foregroundStyle(VelaTheme.muted)
                                             .lineLimit(1)
                                     }
-                                    
+
                                     Spacer()
-                                    
+
                                     Text(insight.focus.title)
                                         .font(.system(size: 10, weight: .semibold))
                                         .foregroundStyle(insight.focus.color)

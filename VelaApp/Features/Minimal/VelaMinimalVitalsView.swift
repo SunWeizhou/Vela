@@ -31,16 +31,41 @@ struct VelaVitalsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                // 1. Biological Age Card (生物年龄 cockpit)
-                biologicalAgeHero
+            VStack(spacing: 0) {
+                VelaMakeHeader(title: "体征", subtitle: "健康数据")
 
-                // 2. Other Biomarkers Section
-                otherBiomarkersSection
+                VStack(alignment: .leading, spacing: 8) {
+                    VelaMakeSectionHeader(title: "心脏与活动")
+                    makeVitalsGroup([
+                        makeVitalItem("HRV", "heart.text.square.fill", .red, hrvValueText, syncStatusText(for: hrvValueText), .hrv),
+                        makeVitalItem("静息心率", "heart.fill", .red, rhrValueText, syncStatusText(for: rhrValueText), .rhr),
+                        makeVitalItem("活动能量", "flame.fill", .orange, activeEnergyText, "今日", .activeCalories),
+                        makeVitalItem("步数", "figure.walk", .green, stepsText, "今日", .steps)
+                    ])
+
+                    VelaMakeSectionHeader(title: "身体")
+                        .padding(.top, 12)
+                    makeVitalsGroup([
+                        makeVitalItem("睡眠", "moon.fill", .indigo, sleepText, "昨夜", .sleep),
+                        makeVitalItem("血氧", "lungs.fill", .blue, bloodOxygenValueText, syncStatusText(for: bloodOxygenValueText), .bloodOxygen),
+                        makeVitalItem("呼吸率", "wind", .teal, respiratoryRateValueText, syncStatusText(for: respiratoryRateValueText), .respiratoryRate),
+                        makeVitalItem("体重", "scalemass.fill", .purple, weightValueText, syncStatusText(for: weightValueText), .weight),
+                        makeVitalItem("体脂", "percent", .orange, fatValueText, syncStatusText(for: fatValueText), .bodyFat)
+                    ])
+
+                    VelaMakeSectionHeader(title: "生物标志物")
+                        .padding(.top, 12)
+                    makeBiomarkerGroup
+
+                    Text("点击「添加」录入新的化验结果，Vela 会自动重算生物年龄。")
+                        .font(.system(size: 12))
+                        .foregroundStyle(VelaTheme.fg2)
+                        .padding(.horizontal, 4)
+                        .padding(.top, 1)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 110)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 100)
         }
         .scrollIndicators(.hidden)
         .velaTrackScroll(direction: scrollDirection)
@@ -55,6 +80,158 @@ struct VelaVitalsView: View {
             loadRealVitalsData()
         }
         .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private struct MakeVitalItem: Identifiable {
+        let id: String
+        let title: String
+        let icon: String
+        let color: Color
+        let value: String
+        let subtitle: String
+        let metric: VelaMetricDetailView.MetricType
+    }
+
+    private func makeVitalItem(
+        _ title: String,
+        _ icon: String,
+        _ color: Color,
+        _ value: String,
+        _ subtitle: String,
+        _ metric: VelaMetricDetailView.MetricType
+    ) -> MakeVitalItem {
+        MakeVitalItem(
+            id: metric.rawValue,
+            title: title,
+            icon: icon,
+            color: color,
+            value: value,
+            subtitle: subtitle,
+            metric: metric
+        )
+    }
+
+    private func makeVitalsGroup(_ items: [MakeVitalItem]) -> some View {
+        VStack(spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                NavigationLink(destination: VelaMetricDetailView(metric: item.metric)) {
+                    makeVitalsRow(
+                        icon: item.icon,
+                        color: item.color,
+                        title: item.title,
+                        subtitle: item.subtitle,
+                        value: item.value
+                    )
+                }
+                .buttonStyle(.plain)
+                if index < items.count - 1 {
+                    Divider().padding(.leading, 60)
+                }
+            }
+        }
+        .background(VelaTheme.cardBg)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var makeBiomarkerGroup: some View {
+        VStack(spacing: 0) {
+            if biomarkers.isEmpty {
+                NavigationLink(destination: BiologyView()) {
+                    makeVitalsRow(
+                        icon: "flask.fill",
+                        color: .teal,
+                        title: "暂无化验数据",
+                        subtitle: "进入生物年龄与标志物",
+                        value: "--"
+                    )
+                }
+                .buttonStyle(.plain)
+                Divider().padding(.leading, 60)
+            } else {
+                ForEach(Array(biomarkers.prefix(5).enumerated()), id: \.element.id) { index, biomarker in
+                    NavigationLink(destination: BiologyView()) {
+                        makeVitalsRow(
+                            icon: "flask.fill",
+                            color: .teal,
+                            title: biomarker.name,
+                            subtitle: biomarker.date.formatted(.dateTime.year().month().day()),
+                            value: "\(String(format: "%.1f", biomarker.value)) \(biomarker.unit)"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    if index < min(biomarkers.count, 5) - 1 {
+                        Divider().padding(.leading, 60)
+                    }
+                }
+                Divider().padding(.leading, 60)
+            }
+
+            Button {
+                appState.triggerBloodLog = true
+            } label: {
+                makeVitalsRow(
+                    icon: "plus",
+                    color: VelaTheme.accent,
+                    title: "添加生物标志物",
+                    subtitle: nil,
+                    value: nil
+                )
+            }
+            .buttonStyle(.plain)
+        }
+        .background(VelaTheme.cardBg)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func makeVitalsRow(
+        icon: String,
+        color: Color,
+        title: String,
+        subtitle: String?,
+        value: String?
+    ) -> some View {
+        HStack(spacing: 12) {
+            VelaMakeIconTile(systemName: icon, color: color, size: 32)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(VelaTheme.fg)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 12))
+                        .foregroundStyle(VelaTheme.fg2)
+                }
+            }
+            Spacer()
+            if let value {
+                Text(value)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(VelaTheme.fg)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(VelaTheme.meta)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 11)
+    }
+
+    private var activeEnergyText: String {
+        guard let energy = dashboard.strain.metrics["active_energy_kcal"] else { return "--" }
+        return "\(Int(energy.rounded())) kcal"
+    }
+
+    private var stepsText: String {
+        guard let steps = dashboard.strain.metrics["steps_raw"] else { return "--" }
+        return "\(Int(steps.rounded()))"
+    }
+
+    private var sleepText: String {
+        let minutes = dashboard.sleepSummary.totalSleepMinutes
+        guard minutes > 0 else { return "--" }
+        return "\(minutes / 60)h \(minutes % 60)m"
     }
 
     // MARK: - Biological Age cockpit
@@ -208,27 +385,7 @@ struct VelaVitalsView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(
-            ZStack {
-                VelaTheme.cardBg
-
-                LinearGradient(
-                    colors: [
-                        VelaTheme.accent.opacity(0.12),
-                        VelaTheme.recoveryColor.opacity(0.08),
-                        Color.clear
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .shadow(color: VelaTheme.nativeShadow(cs), radius: 8, y: 2)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
-        )
+        .glassEffect(radius: 24)
     }
 
     // MARK: - Scattered glowing particles in center of age gauge
@@ -403,7 +560,7 @@ struct VelaVitalsView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
-        .velaNativeCard(radius: 16)
+        .glassEffect(radius: 16)
     }
 
     // MARK: - Dynamic Vitals Sync Loader

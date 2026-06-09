@@ -1550,21 +1550,75 @@ struct AmbientGlowModifier: ViewModifier {
     }
 }
 
+struct VelaThemeBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var animate = false
+
+    var body: some View {
+        ZStack {
+            // Base background gradient matching iOS 26 Liquid Glass
+            LinearGradient(
+                colors: [
+                    VelaTheme.bg,
+                    VelaTheme.surface
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            // Dynamic background blobs
+            GeometryReader { geo in
+                ZStack {
+                    // Blob 1: Accent (Strain/Energy)
+                    Circle()
+                        .fill(VelaTheme.accent.opacity(colorScheme == .dark ? 0.16 : 0.20))
+                        .frame(width: geo.size.width * 0.85, height: geo.size.width * 0.85)
+                        .blur(radius: 70)
+                        .offset(
+                            x: animate ? geo.size.width * 0.25 : -geo.size.width * 0.15,
+                            y: animate ? -geo.size.height * 0.12 : geo.size.height * 0.08
+                        )
+
+                    // Blob 2: Recovery (Green)
+                    Circle()
+                        .fill(VelaTheme.recoveryColor.opacity(colorScheme == .dark ? 0.14 : 0.18))
+                        .frame(width: geo.size.width * 0.75, height: geo.size.width * 0.75)
+                        .blur(radius: 65)
+                        .offset(
+                            x: animate ? -geo.size.width * 0.25 : geo.size.width * 0.25,
+                            y: animate ? geo.size.height * 0.18 : -geo.size.height * 0.15
+                        )
+
+                    // Blob 3: Sleep (Indigo/Blue)
+                    Circle()
+                        .fill(VelaTheme.sleepColor.opacity(colorScheme == .dark ? 0.14 : 0.18))
+                        .frame(width: geo.size.width * 0.9, height: geo.size.width * 0.9)
+                        .blur(radius: 80)
+                        .offset(
+                            x: animate ? geo.size.width * 0.15 : -geo.size.width * 0.25,
+                            y: animate ? geo.size.height * 0.25 : geo.size.height * 0.05
+                        )
+                }
+            }
+            .ignoresSafeArea()
+            .onAppear {
+                withAnimation(.easeInOut(duration: 8.0).repeatForever(autoreverses: true)) {
+                    animate = true
+                }
+            }
+        }
+    }
+}
+
 struct VelaNativeCardModifier: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
     let radius: CGFloat
 
     func body(content: Content) -> some View {
         content
-            .background(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(VelaTheme.cardBg)
-                    .shadow(color: VelaTheme.nativeShadow(colorScheme), radius: 8, y: 2)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
-            )
+            .glassEffect(radius: radius)
+            .shadow(color: VelaTheme.cardShadow(colorScheme), radius: 8, y: 3)
     }
 }
 
@@ -1581,17 +1635,7 @@ extension View {
         self
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(VelaTheme.cardBg)
-            )
-            .overlay(
-                // Inner concentric highlight border for refraction look
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(Color.white.opacity(0.14), lineWidth: 1.0)
-                    .padding(0.5)
-            )
-            .shadow(color: VelaTheme.cardShadowColor, radius: 4, y: 2)
+            .glassEffect(radius: radius)
     }
 
     func heroCardSurface(accent: Color = VelaTheme.accent, padding: CGFloat = VelaTheme.spaceLG) -> some View {
@@ -1600,12 +1644,12 @@ extension View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: VelaTheme.radiusHero, style: .continuous)
-                    .fill(VelaTheme.elevatedBg)
+                    .fill(accent.opacity(0.06))
             )
+            .glassEffect(radius: VelaTheme.radiusHero)
             .overlay(
                 RoundedRectangle(cornerRadius: VelaTheme.radiusHero, style: .continuous)
-                    .stroke(Color.white.opacity(0.14), lineWidth: 1.0)
-                    .padding(0.5)
+                    .stroke(accent.opacity(0.25), lineWidth: 0.8)
             )
     }
 
@@ -1615,7 +1659,19 @@ extension View {
             .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(Color.white.opacity(0.18), lineWidth: 0.5)
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.24),
+                                Color.white.opacity(0.04),
+                                Color.black.opacity(0.04),
+                                Color.white.opacity(0.12)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.8
+                    )
             )
     }
 
@@ -1630,15 +1686,18 @@ struct VelaMinimalScreen<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                content()
+        ZStack {
+            VelaThemeBackground()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    content()
+                }
+                .padding(.horizontal, VelaTheme.pagePadding)
+                .padding(.bottom, VelaTheme.tabBarHeight + 20)
             }
-            .padding(.horizontal, VelaTheme.pagePadding)
-            .padding(.bottom, VelaTheme.tabBarHeight + 20)
+            .scrollIndicators(.hidden)
         }
-        .scrollIndicators(.hidden)
-        .background(VelaTheme.bg)
     }
 }
 
@@ -1986,6 +2045,110 @@ struct ImagePicker: UIViewControllerRepresentable {
 
 enum VelaMinimalTab: CaseIterable {
     case today, training, insights, settings
+}
+
+struct VelaMakeHeader<Trailing: View>: View {
+    let title: String
+    let subtitle: String
+    @ViewBuilder let trailing: () -> Trailing
+
+    init(
+        title: String,
+        subtitle: String,
+        @ViewBuilder trailing: @escaping () -> Trailing
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.trailing = trailing
+    }
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(subtitle)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(VelaTheme.fg2)
+                Text(title)
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundStyle(VelaTheme.fg)
+            }
+            Spacer(minLength: 8)
+            trailing()
+                .frame(minWidth: 32, minHeight: 32)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 14)
+    }
+}
+
+extension VelaMakeHeader where Trailing == EmptyView {
+    init(title: String, subtitle: String) {
+        self.init(title: title, subtitle: subtitle) { EmptyView() }
+    }
+}
+
+struct VelaMakeCard<Content: View>: View {
+    var padding: CGFloat = 16
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        content()
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(VelaTheme.cardBg)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
+struct VelaMakeSectionHeader: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 13, weight: .regular))
+            .foregroundStyle(VelaTheme.fg2)
+            .padding(.horizontal, 4)
+    }
+}
+
+struct VelaMakeIconTile: View {
+    let systemName: String
+    let color: Color
+    var size: CGFloat = 36
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.system(size: size * 0.46, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(color)
+            .clipShape(RoundedRectangle(cornerRadius: size * 0.25, style: .continuous))
+    }
+}
+
+struct VelaMakeRing: View {
+    let value: Double
+    let color: Color
+    var size: CGFloat = 108
+    var lineWidth: CGFloat = 8
+    var valueText: String? = nil
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(color.opacity(0.16), lineWidth: lineWidth)
+            Circle()
+                .trim(from: 0, to: min(max(value / 100, 0), 1))
+                .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            Text(valueText ?? "\(Int(value.rounded()))")
+                .font(.system(size: size * 0.28, weight: .bold))
+                .foregroundStyle(VelaTheme.fg)
+                .monospacedDigit()
+        }
+        .frame(width: size, height: size)
+    }
 }
 
 struct VelaMinimalNavBar: View {

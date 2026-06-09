@@ -181,9 +181,7 @@ struct VelaMeView: View {
                 }
             }
             .padding(16)
-            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
-            .shadow(color: Color.black.opacity(0.015), radius: 10, y: 4)
+            .glassEffect(radius: 20)
         }
     }
 
@@ -369,8 +367,7 @@ struct VelaMeView: View {
                     .padding(.vertical, 12)
                 }
             }
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+            .glassEffect(radius: 18)
         }
     }
 
@@ -385,8 +382,8 @@ struct VelaMeView: View {
             VelaAppState.shared.logDebug("[VelaMeView] Routing to recovery (tab 2)")
             VelaAppState.shared.routeToRecoveryDetail()
         } else if action.type.contains("training") || action.type.contains("workout") || action.type.contains("summary") {
-            VelaAppState.shared.logDebug("[VelaMeView] Routing to training (tab 1)")
-            VelaAppState.shared.routeToTab(1)
+            VelaAppState.shared.logDebug("[VelaMeView] Routing to training")
+            VelaAppState.shared.routeToTab(VelaAppState.trainingTabIndex)
         } else if action.type.contains("check") || action.type.contains("journal") {
             VelaAppState.shared.logDebug("[VelaMeView] Triggering journal")
             VelaAppState.shared.triggerJournal = true
@@ -438,8 +435,7 @@ struct VelaMeView: View {
             Divider().padding(.leading, 54)
             settingsLink("完整设置", value: "Settings", icon: "gearshape.fill", color: Color(hex: "#5C6BC0"), destination: VelaSettingsView())
         }
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.cardBg))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+        .glassEffect(radius: 16)
     }
 
     private var dataAndTrustCard: some View {
@@ -450,8 +446,7 @@ struct VelaMeView: View {
             Divider().padding(.leading, 54)
             settingsLink("AI 模型设置", value: "Model", icon: "cpu.fill", color: Color(hex: "#AF52DE"), destination: AIModelSettingsView())
         }
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.cardBg))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+        .glassEffect(radius: 16)
     }
 
     private var equipmentText: String {
@@ -628,161 +623,50 @@ struct VelaJournalView: View {
     @State private var showWaterLogger = false
     @State private var showAlcoholLogger = false
     @State private var showBehaviorQuickNote = false
+    @State private var freeNote = ""
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                // 1. Journal Header Title Row
-                journalHeader
-                
-                // 2. Weekly Calendar Checks strip
-                weeklyChecksStrip
-
-                behaviorQuickNoteCard
-                
-                // 3. Category daytime title
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(dateSectionTitle(for: dashboardVM.selectedDate))
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(VelaTheme.fg)
-                        .padding(.top, 4)
-                    
-                    Text("习惯与记录")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(VelaTheme.muted)
-                        .textCase(.uppercase)
-                        .padding(.leading, 2)
-                    
-                    // Checklist Rows
-                    VStack(spacing: 10) {
-                        // Row 1: 低碳水化合物 (Bread icon + segment)
-                        segmentedJournalRow(
-                            icon: "fork.knife",
-                            title: "低碳水化合物",
-                            state: $lowCarbState
-                        )
-                        
-                        // Row 2: 咖啡因 (Coffee cup icon + log chevron)
-                        inputJournalRow(
-                            icon: "cup.and.saucer.fill",
-                            title: "咖啡因",
-                            valuePlaceholder: caffeineValueText,
-                            onTap: { showCaffeineLogger = true }
-                        )
-                        
-                        // Row 3: 每日心情 (Smiling face icon + log chevron)
-                        inputJournalRow(
-                            icon: "face.smiling.fill",
-                            title: "每日心情",
-                            valuePlaceholder: moodValueText,
-                            onTap: { showMoodLogger = true }
-                        )
-                        
-                        // Row 4: 添加糖 (Candy icon + segment)
-                        segmentedJournalRow(
-                            icon: "birthday.cake.fill",
-                            title: "添加糖",
-                            state: $addedSugarState
-                        )
-                        
-                        // Row 5: 生酮饮食 (Avocado/Leaf icon + segment)
-                        segmentedJournalRow(
-                            icon: "leaf.fill",
-                            title: "生酮饮食",
-                            state: $ketoDietState
-                        )
-                        
-                        // Row 6: 补水 (Water drop icon + log chevron)
-                        inputJournalRow(
-                            icon: "drop.fill",
-                            title: "补水",
-                            valuePlaceholder: hydrationValueText,
-                            onTap: { showWaterLogger = true }
-                        )
-                        
-                        // Row 7: 酒 (Wine glass icon + log chevron)
-                        inputJournalRow(
-                            icon: "wineglass.fill",
-                            title: "酒",
-                            valuePlaceholder: alcoholValueText,
-                            onTap: { showAlcoholLogger = true }
-                        )
-                        
-                        // Row 8: 在床上使用设备 (Phone icon + segment)
-                        segmentedJournalRow(
-                            icon: "iphone",
-                            title: "在床上使用设备",
-                            state: $bedDeviceState
-                        )
+            VStack(spacing: 0) {
+                VelaMakeHeader(
+                    title: "日志",
+                    subtitle: journalHeaderSubtitle
+                ) {
+                    Button {
+                        showBehaviorQuickNote = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 21, weight: .medium))
+                            .foregroundStyle(VelaTheme.accent)
                     }
+                    .buttonStyle(.plain)
                 }
-                
-                if !selectedDayEntries.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("今日手记历史")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(VelaTheme.muted)
-                            .textCase(.uppercase)
-                            .padding(.leading, 2)
-                        
-                        VStack(spacing: 8) {
-                            ForEach(selectedDayEntries) { entry in
-                                HStack(spacing: 12) {
-                                    Image(systemName: iconForEntry(entry))
-                                        .font(.system(size: 13, weight: .bold))
-                                        .foregroundStyle(.white)
-                                        .frame(width: 28, height: 28)
-                                        .background(RoundedRectangle(cornerRadius: 8).fill(colorForEntry(entry)))
-                                    
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        HStack(spacing: 6) {
-                                            Text(displayTitleForEntry(entry))
-                                                .font(.system(size: 13, weight: .bold))
-                                                .foregroundStyle(VelaTheme.fg)
-                                            
-                                            Text(entry.createdAt.formatted(.dateTime.hour().minute()))
-                                                .font(.system(size: 11))
-                                                .foregroundStyle(VelaTheme.muted)
-                                        }
-                                        
-                                        if !entry.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                            Text(entry.note)
-                                                .font(.system(size: 12))
-                                                .foregroundStyle(VelaTheme.muted)
-                                                .lineLimit(2)
-                                        }
-                                    }
-                                    
-                                    Spacer()
-                                    
-                                    Button {
-                                        deleteEntry(entry)
-                                    } label: {
-                                        Image(systemName: "trash")
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .foregroundStyle(VelaTheme.muted)
-                                            .frame(width: 28, height: 28)
-                                            .background(Circle().fill(VelaTheme.systemGroupedBackground))
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 10)
-                                .background(VelaTheme.cardBg)
-                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
-                                )
-                            }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    makeDateStrip
+                    VelaMakeSectionHeader(title: "快速记录")
+                    makeQuickLogGrid
+                    makeCaptureRow
+                    makeFreeNoteCard
+
+                    VelaMakeSectionHeader(title: "今日时间线")
+                        .padding(.top, 4)
+                    makeTimeline
+
+                    VelaMakeCard {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("相关性发现")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Color(uiColor: .systemIndigo))
+                            Text("Vela 会把你的日志与恢复、睡眠和训练数据关联；记录越稳定，结论越可靠。")
+                                .font(.system(size: 15))
+                                .foregroundStyle(VelaTheme.fg)
                         }
                     }
-                    .padding(.top, 8)
                 }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 110)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 100)
         }
         .scrollIndicators(.hidden)
         .velaTrackScroll(direction: scrollDirection)
@@ -832,6 +716,251 @@ struct VelaJournalView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
             .presentationBackground(VelaTheme.systemGroupedBackground)
+        }
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var journalHeaderSubtitle: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_Hans_CN")
+        formatter.dateFormat = "今日 · M 月 d 日"
+        return formatter.string(from: dashboardVM.selectedDate)
+    }
+
+    private var makeDateStrip: some View {
+        let calendar = Calendar.current
+        let selected = dashboardVM.selectedDate
+        let weekday = calendar.component(.weekday, from: selected)
+        let start = calendar.date(byAdding: .day, value: -(weekday - 1), to: calendar.startOfDay(for: selected)) ?? selected
+        let dates = (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: start) }
+
+        return VelaMakeCard(padding: 8) {
+            HStack(spacing: 0) {
+                ForEach(dates, id: \.self) { date in
+                    let active = calendar.isDate(date, inSameDayAs: selected)
+                    Button {
+                        dashboardVM.selectedDate = date
+                    } label: {
+                        VStack(spacing: 1) {
+                            Text(chineseWeekday(for: date))
+                                .font(.system(size: 11))
+                                .opacity(0.72)
+                            Text("\(calendar.component(.day, from: date))")
+                                .font(.system(size: 17, weight: .semibold))
+                        }
+                        .foregroundStyle(active ? Color.white : VelaTheme.fg)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 7)
+                        .background(active ? VelaTheme.accent : Color.clear)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func chineseWeekday(for date: Date) -> String {
+        let symbols = ["日", "一", "二", "三", "四", "五", "六"]
+        return symbols[Calendar.current.component(.weekday, from: date) - 1]
+    }
+
+    private var makeQuickLogGrid: some View {
+        VelaMakeCard(padding: 12) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
+                makeHabitButton(title: "低碳", icon: "fork.knife", state: $lowCarbState)
+                makeLoggerButton(title: "咖啡", icon: "cup.and.saucer.fill", isActive: caffeineValueText != "- mg") {
+                    showCaffeineLogger = true
+                }
+                makeLoggerButton(title: "心情", icon: "face.smiling.fill", isActive: moodValueText != "-") {
+                    showMoodLogger = true
+                }
+                makeHabitButton(title: "添加糖", icon: "birthday.cake.fill", state: $addedSugarState)
+                makeHabitButton(title: "生酮", icon: "leaf.fill", state: $ketoDietState)
+                makeLoggerButton(title: "补水", icon: "drop.fill", isActive: hydrationValueText != "- ml") {
+                    showWaterLogger = true
+                }
+                makeLoggerButton(title: "饮酒", icon: "wineglass.fill", isActive: alcoholValueText != "- 杯") {
+                    showAlcoholLogger = true
+                }
+                makeHabitButton(title: "床上设备", icon: "iphone", state: $bedDeviceState)
+            }
+        }
+    }
+
+    private func makeHabitButton(title: String, icon: String, state: Binding<Int>) -> some View {
+        let active = state.wrappedValue == 2
+        return Button {
+            state.wrappedValue = active ? 0 : 2
+            saveQuickEntry(
+                tags: [habitStorageTitle(for: title)],
+                note: "习惯打卡: \(title) - \(active ? "✕" : "✓")",
+                value: active ? 0 : 2
+            )
+        } label: {
+            makeQuickLogLabel(title: title, icon: icon, active: active)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func makeLoggerButton(
+        title: String,
+        icon: String,
+        isActive: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            makeQuickLogLabel(title: title, icon: icon, active: isActive)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func makeQuickLogLabel(title: String, icon: String, active: Bool) -> some View {
+        VStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.system(size: 19, weight: .medium))
+            Text(title)
+                .font(.system(size: 11))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .foregroundStyle(active ? Color.white : VelaTheme.fg)
+        .frame(maxWidth: .infinity, minHeight: 58)
+        .background(active ? VelaTheme.accent : VelaTheme.elevatedBg)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func habitStorageTitle(for title: String) -> String {
+        switch title {
+        case "低碳": "低碳水化合物"
+        case "生酮": "生酮饮食"
+        case "床上设备": "在床上使用设备"
+        default: title
+        }
+    }
+
+    private var makeCaptureRow: some View {
+        HStack(spacing: 8) {
+            makeCaptureButton(title: "拍餐", icon: "camera.fill", color: .green) {
+                VelaAppState.shared.triggerFoodScanner = true
+            }
+            makeCaptureButton(title: "语音", icon: "mic.fill", color: .orange) {
+                showBehaviorQuickNote = true
+            }
+            makeCaptureButton(title: "笔记", icon: "pencil", color: .indigo) {
+                showBehaviorQuickNote = true
+            }
+        }
+    }
+
+    private func makeCaptureButton(
+        title: String,
+        icon: String,
+        color: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(color)
+                    .clipShape(Circle())
+                Text(title)
+                    .font(.system(size: 12))
+                    .foregroundStyle(VelaTheme.fg)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(VelaTheme.cardBg)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var makeFreeNoteCard: some View {
+        VelaMakeCard {
+            VStack(spacing: 8) {
+                HStack {
+                    Label("自由记录", systemImage: "book.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(VelaTheme.fg2)
+                    Spacer()
+                    Button("AI 总结") {
+                        VelaAppState.shared.routeToCoach(question: journalAnalysisQuestion)
+                    }
+                    .font(.system(size: 13))
+                }
+                TextField("今天感觉怎么样？", text: $freeNote, axis: .vertical)
+                    .font(.system(size: 15))
+                    .lineLimit(2...4)
+                    .onSubmit {
+                        saveFreeNote()
+                    }
+                if !freeNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    HStack {
+                        Spacer()
+                        Button("保存") {
+                            saveFreeNote()
+                        }
+                        .font(.system(size: 13, weight: .semibold))
+                    }
+                }
+            }
+        }
+    }
+
+    private func saveFreeNote() {
+        let note = freeNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !note.isEmpty else { return }
+        saveQuickEntry(tags: ["自由记录"], note: note)
+        freeNote = ""
+    }
+
+    @ViewBuilder
+    private var makeTimeline: some View {
+        if selectedDayEntries.isEmpty {
+            VelaMakeCard {
+                Text("今天还没有记录")
+                    .font(.system(size: 15))
+                    .foregroundStyle(VelaTheme.fg2)
+            }
+        } else {
+            VStack(spacing: 0) {
+                ForEach(Array(selectedDayEntries.enumerated()), id: \.element.id) { index, entry in
+                    HStack(spacing: 12) {
+                        Image(systemName: iconForEntry(entry))
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 36, height: 36)
+                            .background(colorForEntry(entry))
+                            .clipShape(Circle())
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack {
+                                Text(displayTitleForEntry(entry))
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(VelaTheme.fg)
+                                Spacer()
+                                Text(entry.createdAt.formatted(.dateTime.hour().minute()))
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(VelaTheme.meta)
+                            }
+                            Text(entry.note)
+                                .font(.system(size: 13))
+                                .foregroundStyle(VelaTheme.fg2)
+                                .lineLimit(1)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    if index < selectedDayEntries.count - 1 {
+                        Divider().padding(.leading, 64)
+                    }
+                }
+            }
+            .background(VelaTheme.cardBg)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
     }
 
@@ -1100,9 +1229,8 @@ struct VelaJournalView: View {
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(VelaTheme.accent)
             }
-            .padding(14)
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+            .padding(16)
+            .glassEffect(radius: 18)
         }
         .buttonStyle(.plain)
     }
@@ -2083,8 +2211,8 @@ struct CoachArtifactInboxView: View {
             VelaAppState.shared.logDebug("[CoachArtifactInboxView] Routing to recovery (tab 2)")
             VelaAppState.shared.routeToRecoveryDetail()
         } else if action.type.contains("training") || action.type.contains("workout") || action.type.contains("summary") {
-            VelaAppState.shared.logDebug("[CoachArtifactInboxView] Routing to training (tab 1)")
-            VelaAppState.shared.routeToTab(1)
+            VelaAppState.shared.logDebug("[CoachArtifactInboxView] Routing to training")
+            VelaAppState.shared.routeToTab(VelaAppState.trainingTabIndex)
         } else if action.type.contains("check") || action.type.contains("journal") {
             VelaAppState.shared.logDebug("[CoachArtifactInboxView] Triggering journal")
             VelaAppState.shared.triggerJournal = true
@@ -2161,8 +2289,8 @@ struct CoachArtifactDetailWrapper: View {
             VelaAppState.shared.logDebug("[CoachArtifactDetailWrapper] Routing to recovery (tab 2)")
             VelaAppState.shared.routeToRecoveryDetail()
         } else if action.type.contains("training") || action.type.contains("workout") || action.type.contains("summary") {
-            VelaAppState.shared.logDebug("[CoachArtifactDetailWrapper] Routing to training (tab 1)")
-            VelaAppState.shared.routeToTab(1)
+            VelaAppState.shared.logDebug("[CoachArtifactDetailWrapper] Routing to training")
+            VelaAppState.shared.routeToTab(VelaAppState.trainingTabIndex)
         } else if action.type.contains("check") || action.type.contains("journal") {
             VelaAppState.shared.logDebug("[CoachArtifactDetailWrapper] Triggering journal")
             VelaAppState.shared.triggerJournal = true

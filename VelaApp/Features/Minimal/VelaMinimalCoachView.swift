@@ -70,6 +70,12 @@ struct VelaSettingsView: View {
                         
                         Divider().padding(.leading, 56)
 
+                        NavigationLink(destination: VelaAlgorithmsView()) {
+                            settingsRow(icon: "point.3.connected.trianglepath.dotted", iconBg: Color(uiColor: .systemTeal), title: "算法与模型", value: "公式 · 权重 · 数据源")
+                        }
+
+                        Divider().padding(.leading, 56)
+
                         NavigationLink(destination: CoachPersonalitySettingsView()) {
                             settingsRow(icon: "brain.head.profile", iconBg: Color(hex: "#FF5E3A"), title: "教练风格", value: currentCoachPersonalityName)
                         }
@@ -276,9 +282,9 @@ struct VelaSettingsView: View {
                 Text("本机健康资料")
                     .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
-                Text("Local-first 存储")
+                Text("Apple ID · iCloud · 媒体与购买")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(VelaTheme.accent)
+                    .foregroundStyle(VelaTheme.fg2)
             }
             
             Spacer()
@@ -287,6 +293,226 @@ struct VelaSettingsView: View {
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
         .padding(.horizontal, 16)
+    }
+}
+
+struct VelaAlgorithmDefinition: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let range: String
+    let icon: String
+    let color: Color
+    let summary: String
+    let formula: String
+    let factors: [(String, Int)]
+
+    static let all: [VelaAlgorithmDefinition] = [
+        .init(
+            id: "recovery",
+            name: "Recovery 评分",
+            range: "0–100",
+            icon: "waveform.path.ecg",
+            color: .green,
+            summary: "综合 HRV、RHR、睡眠和昨日负荷，反映身体应对今日训练的能力。",
+            formula: "Recovery = 100 · σ(0.35·z(HRV) − 0.25·z(RHR) + 0.25·z(Sleep) − 0.15·z(Strain−1))",
+            factors: [("HRV vs 基线", 35), ("RHR vs 基线", 25), ("睡眠质量", 25), ("昨日 Strain", 15)]
+        ),
+        .init(
+            id: "sleep",
+            name: "Sleep 评分",
+            range: "0–100",
+            icon: "moon.fill",
+            color: .indigo,
+            summary: "由时长、规律性、中断和睡眠阶段综合得出。",
+            formula: "Sleep = 0.4·duration + 0.3·consistency + 0.2·(1−awakeness) + 0.1·stages",
+            factors: [("时长 vs 目标", 40), ("节律一致性", 30), ("中断惩罚", 20), ("深睡 / REM", 10)]
+        ),
+        .init(
+            id: "strain",
+            name: "Strain 评分",
+            range: "0–21",
+            icon: "flame.fill",
+            color: .orange,
+            summary: "训练和非训练负荷经个体化对数压缩后映射到 0–21。",
+            formula: "Strain = 21 · log(1 + ΣTRIMP + α·kcal + β·steps) / log(1 + K)",
+            factors: [("训练心率累积", 55), ("活动能量", 20), ("步数 / 站立", 15), ("RPE 校正", 10)]
+        ),
+        .init(
+            id: "stress",
+            name: "Stress 指数",
+            range: "0–100",
+            icon: "brain.head.profile",
+            color: .purple,
+            summary: "基于昼间 HR、HRV、呼吸、体温偏离个人基线的生理压力代理指标。",
+            formula: "Stress = 100 · σ(Σwᵢ·|z(xᵢ)| − τ)",
+            factors: [("RHR 偏离", 25), ("HRV 偏离", 25), ("呼吸率", 15), ("睡眠债", 15), ("体温", 10), ("负荷", 10)]
+        ),
+        .init(
+            id: "energy",
+            name: "Energy Bank",
+            range: "0–100%",
+            icon: "battery.75percent",
+            color: .green,
+            summary: "早晨由恢复与睡眠决定，白天按活动、压力和昼夜节律消耗。",
+            formula: "E₀ = 0.45·Recovery + 0.35·Sleep + 0.20·Stability; Eₜ = E₀ − ∫drain dt",
+            factors: [("Recovery", 45), ("Sleep", 35), ("夜间稳定性", 20)]
+        ),
+        .init(
+            id: "bioage",
+            name: "生物年龄",
+            range: "−10 ~ +10 岁",
+            icon: "figure.mind.and.body",
+            color: .teal,
+            summary: "化验完整时使用 Levine PhenoAge；不足时退回可穿戴趋势模型。",
+            formula: "PhenoAge = 141.50 + log(−0.00553·log(1−M)) / 0.09165",
+            factors: [("白蛋白", 12), ("肌酐", 12), ("空腹血糖", 14), ("CRP", 14), ("淋巴细胞", 10), ("其他", 38)]
+        )
+    ]
+
+    static func == (lhs: VelaAlgorithmDefinition, rhs: VelaAlgorithmDefinition) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+}
+
+struct VelaAlgorithmsView: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                VelaMakeCard {
+                    HStack(alignment: .top, spacing: 12) {
+                        VelaMakeIconTile(systemName: "eye.fill", color: .indigo)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("透明可审计")
+                                .font(.system(size: 15, weight: .semibold))
+                            Text("每个评分都公开公式、权重、数据来源与限制说明。")
+                                .font(.system(size: 13))
+                                .foregroundStyle(VelaTheme.fg2)
+                        }
+                    }
+                }
+
+                VelaMakeSectionHeader(title: "评分模型")
+                VStack(spacing: 0) {
+                    ForEach(Array(VelaAlgorithmDefinition.all.enumerated()), id: \.element.id) { index, algorithm in
+                        NavigationLink(destination: VelaAlgorithmDetailView(algorithm: algorithm)) {
+                            HStack(spacing: 12) {
+                                VelaMakeIconTile(systemName: algorithm.icon, color: algorithm.color)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(algorithm.name)
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundStyle(VelaTheme.fg)
+                                    Text("\(algorithm.range) · \(algorithm.factors.count) 个因子")
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(VelaTheme.fg2)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(VelaTheme.meta)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 11)
+                        }
+                        .buttonStyle(.plain)
+                        if index < VelaAlgorithmDefinition.all.count - 1 {
+                            Divider().padding(.leading, 64)
+                        }
+                    }
+                }
+                .background(VelaTheme.cardBg)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                VelaMakeSectionHeader(title: "LLM & Agent")
+                VelaMakeCard {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("DeepSeek Chat · 主对话与工具调用", systemImage: "cpu.fill")
+                        Label("本地评分引擎 · 设备内计算", systemImage: "iphone")
+                        Label("Morning Brief / Wiki Sync / Weekly Review", systemImage: "point.3.connected.trianglepath.dotted")
+                    }
+                    .font(.system(size: 14))
+                }
+            }
+            .padding(16)
+            .padding(.bottom, 30)
+        }
+        .background(VelaTheme.systemGroupedBackground)
+        .navigationTitle("算法与模型")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+struct VelaAlgorithmDetailView: View {
+    let algorithm: VelaAlgorithmDefinition
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                VelaMakeCard(padding: 20) {
+                    HStack(alignment: .top, spacing: 12) {
+                        VelaMakeIconTile(systemName: algorithm.icon, color: algorithm.color, size: 44)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(algorithm.name)
+                                .font(.system(size: 22, weight: .bold))
+                            Text(algorithm.range)
+                                .font(.system(size: 13))
+                                .foregroundStyle(VelaTheme.fg2)
+                        }
+                    }
+                    Text(algorithm.summary)
+                        .font(.system(size: 15))
+                        .foregroundStyle(VelaTheme.fg2)
+                        .padding(.top, 12)
+                }
+
+                VelaMakeSectionHeader(title: "因子权重")
+                VelaMakeCard {
+                    VStack(spacing: 12) {
+                        ForEach(algorithm.factors, id: \.0) { factor in
+                            VStack(spacing: 5) {
+                                HStack {
+                                    Text(factor.0)
+                                    Spacer()
+                                    Text("\(factor.1)%")
+                                        .foregroundStyle(VelaTheme.fg2)
+                                }
+                                .font(.system(size: 14, weight: .medium))
+                                GeometryReader { proxy in
+                                    Capsule()
+                                        .fill(VelaTheme.elevatedBg)
+                                        .overlay(alignment: .leading) {
+                                            Capsule()
+                                                .fill(algorithm.color)
+                                                .frame(width: proxy.size.width * CGFloat(factor.1) / 100)
+                                        }
+                                }
+                                .frame(height: 6)
+                            }
+                        }
+                    }
+                }
+
+                VelaMakeSectionHeader(title: "公式")
+                VelaMakeCard {
+                    Text(algorithm.formula)
+                        .font(.system(size: 13, design: .monospaced))
+                        .foregroundStyle(VelaTheme.fg)
+                        .textSelection(.enabled)
+                }
+
+                Text("仅用于个人健康趋势和训练决策，不构成医疗诊断。")
+                    .font(.system(size: 12))
+                    .foregroundStyle(VelaTheme.fg2)
+                    .padding(.horizontal, 4)
+            }
+            .padding(16)
+        }
+        .background(VelaTheme.systemGroupedBackground)
+        .navigationTitle(algorithm.name)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
