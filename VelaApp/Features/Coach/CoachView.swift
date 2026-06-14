@@ -488,51 +488,148 @@ struct VelaCoachView: View {
 
     // MARK: - Welcome
 
-    private var intelligenceWorkspace: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            workspaceSectionTitle("INTELLIGENCE WORKSPACE", "主动洞察与可执行产物")
+    private var welcomeHeader: some View {
+        VStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 76, height: 76)
+                    .overlay(Circle().stroke(Color(hex: "#E5E5EA"), lineWidth: 0.8))
+                    .shadow(color: Color.black.opacity(0.04), radius: 8, y: 3)
 
-            workspaceCard(
-                title: todayCommandState.bodyStateTitle,
-                detail: todayCommandState.summary,
-                icon: "sparkles",
-                confidence: todayCommandState.readinessDecision.confidence
-            ) {
-                sendMessage("解释今天最重要的身体状态驱动，并给一个具体行动。")
+                AlpacaView(
+                    strokeColor: Color(hex: "#007AFF"),
+                    size: 58,
+                    lineWidth: 2.6
+                )
             }
 
-            if let plan = operatingPlans.first {
-                workspaceCard(
-                    title: plan.title,
-                    detail: decodedPlanSummary(plan),
-                    icon: "checklist",
-                    confidence: plan.confidence
-                ) {
-                    appState.routeToTab(0)
-                }
-            }
+            Text("Coach")
+                .font(VelaTheme.title2())
+                .foregroundStyle(VelaTheme.fg)
 
-            if !pendingMemoryProposals.isEmpty {
-                memoryInboxBanner
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-            }
+            Text("你的 AI 身体智能代理。你可以与我讨论训练、恢复、睡眠或营养，我将基于你的健康数据为你提供个性化建议。")
+                .font(VelaTheme.subheadline())
+                .foregroundStyle(VelaTheme.muted)
+                .multilineTextAlignment(.center)
+                .lineSpacing(4)
+                .padding(.horizontal, 20)
+        }
+        .padding(.vertical, 8)
+    }
 
-            if !agentArtifacts.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    workspaceSectionTitle("RECENT ARTIFACTS", "近期产物")
-                    ForEach(agentArtifacts.prefix(4)) { artifact in
-                        workspaceCard(
+    private var workspaceCarousel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            workspaceSectionTitle(L10n.t("INTELLIGENCE WORKSPACE", "智能决策舱"), L10n.t("Active insights & actionable plans", "主动智能洞察与建议"))
+                .padding(.horizontal, 4)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    carouselCard(
+                        title: todayCommandState.bodyStateTitle,
+                        detail: todayCommandState.summary,
+                        icon: "sparkles",
+                        footer: "置信度 \(Int((todayCommandState.readinessDecision.confidence * 100).rounded()))% · 身体状态"
+                    ) {
+                        sendMessage("解释今天最重要的身体状态驱动，并给一个具体行动。")
+                    }
+
+                    if let plan = operatingPlans.first {
+                        carouselCard(
+                            title: plan.title,
+                            detail: decodedPlanSummary(plan),
+                            icon: "checklist",
+                            footer: "置信度 \(Int((plan.confidence * 100).rounded()))% · 训练建议"
+                        ) {
+                            appState.routeToTab(0)
+                        }
+                    }
+
+                    if !pendingMemoryProposals.isEmpty {
+                        carouselCard(
+                            title: "待确认长期记忆",
+                            detail: "\(pendingMemoryProposals.count) 条候选内容，确认后才会写入你的档案。",
+                            icon: "brain.head.profile",
+                            footer: "点击进行归档确认",
+                            accentColor: Color.orange
+                        ) {
+                            showWikiProfile = true
+                        }
+                    }
+
+                    ForEach(agentArtifacts.prefix(3)) { artifact in
+                        carouselCard(
                             title: artifact.title,
-                            detail: artifact.type.replacingOccurrences(of: "_", with: " "),
+                            detail: localizedArtifactType(artifact.type),
                             icon: artifactIcon(artifact.type),
-                            confidence: artifact.confidence
+                            footer: "置信度 \(Int((artifact.confidence * 100).rounded()))% · 历史产物"
                         ) {
                             sendMessage("基于产物 \(artifact.title) 给我下一步行动。")
                         }
                     }
                 }
+                .padding(.vertical, 4)
+                .padding(.horizontal, 2)
             }
+        }
+    }
 
+    private func carouselCard(
+        title: String,
+        detail: String,
+        icon: String,
+        footer: String,
+        accentColor: Color = VelaTheme.accent,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: icon)
+                        .foregroundStyle(accentColor)
+                        .font(.system(size: 14, weight: .bold))
+                        .frame(width: 30, height: 30)
+                        .background(Circle().fill(accentColor.opacity(0.12)))
+                    
+                    Text(title)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(VelaTheme.fg)
+                        .lineLimit(1)
+                    
+                    Spacer()
+                }
+                
+                Text(detail)
+                    .font(.system(size: 12))
+                    .foregroundStyle(VelaTheme.fg2)
+                    .lineLimit(3)
+                    .frame(height: 54, alignment: .topLeading)
+                    .multilineTextAlignment(.leading)
+                
+                Spacer(minLength: 0)
+                
+                Text(footer)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(VelaTheme.muted)
+                    .lineLimit(1)
+            }
+            .frame(width: 250, height: 132)
+            .padding(14)
+            .background(RoundedRectangle(cornerRadius: 18).fill(VelaTheme.cardBg))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var intelligenceWorkspace: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            welcomeHeader
+            
+            workspaceCarousel
+            
             Button {
                 showWikiProfile = true
             } label: {
@@ -545,10 +642,39 @@ struct VelaCoachView: View {
                 .foregroundStyle(VelaTheme.fg)
                 .padding(14)
                 .background(RoundedRectangle(cornerRadius: 16).fill(VelaTheme.surface))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
             }
             .buttonStyle(.plain)
 
-            welcomeViewWithArtifact
+            // Suggestion questions
+            VStack(alignment: .leading, spacing: 10) {
+                Text(L10n.t("QUICK SUGGESTIONS", "快捷提问"))
+                    .font(VelaTheme.caption2().weight(.bold))
+                    .foregroundStyle(VelaTheme.muted)
+                    .tracking(0.5)
+                    .padding(.leading, 4)
+
+                FlexStack(spacing: 8) {
+                    ForEach(vm.quickQuestions, id: \.self) { text in
+                        Button(text) {
+                            sendMessage(text)
+                        }
+                        .font(VelaTheme.subheadline())
+                        .foregroundStyle(VelaTheme.fg)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(VelaTheme.cardBg)
+                                .overlay(
+                                    Capsule(style: .continuous)
+                                        .stroke(VelaTheme.borderSoft, lineWidth: 0.7)
+                                )
+                        )
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
         }
     }
 
@@ -561,39 +687,6 @@ struct VelaCoachView: View {
                 .font(.caption)
                 .foregroundStyle(VelaTheme.muted)
         }
-    }
-
-    private func workspaceCard(
-        title: String,
-        detail: String,
-        icon: String,
-        confidence: Double,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: icon)
-                    .foregroundStyle(VelaTheme.accent)
-                    .frame(width: 34, height: 34)
-                    .background(Circle().fill(VelaTheme.accent.opacity(0.12)))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(VelaTheme.fg)
-                    Text(detail)
-                        .font(.caption)
-                        .foregroundStyle(VelaTheme.muted)
-                        .lineLimit(3)
-                    Text("置信度 \(Int((confidence * 100).rounded()))% · 一般健康建议，不构成医疗诊断")
-                        .font(.caption2)
-                        .foregroundStyle(VelaTheme.muted)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(14)
-            .background(RoundedRectangle(cornerRadius: 16).fill(VelaTheme.surface))
-        }
-        .buttonStyle(.plain)
     }
 
     private func decodedPlanSummary(_ plan: DailyOperatingPlanRecord) -> String {
@@ -613,107 +706,6 @@ struct VelaCoachView: View {
         case "wiki_diff": "doc.badge.gearshape"
         case "nutrition_feedback": "fork.knife"
         default: "doc.text.fill"
-        }
-    }
-
-    private var memoryInboxBanner: some View {
-        Button {
-            showWikiProfile = true
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "brain.head.profile")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#007AFF"))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("待确认长期记忆")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(VelaTheme.fg)
-                    Text("\(pendingMemoryProposals.count) 条候选内容，确认后才会写入你的档案")
-                        .font(.system(size: 11))
-                        .foregroundStyle(VelaTheme.muted)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(VelaTheme.muted)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(Color(hex: "#FFF8F2"))
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(Color(hex: "#E5E5EA"))
-                    .frame(height: 0.5)
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var welcomeViewWithArtifact: some View {
-        VStack(spacing: 24) {
-            Spacer().frame(height: 10)
-
-            // Alpaca Logo & Title
-            VStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(Color.white)
-                        .frame(width: 76, height: 76)
-                        .overlay(Circle().stroke(Color(hex: "#E5E5EA"), lineWidth: 0.8))
-                        .shadow(color: Color.black.opacity(0.04), radius: 8, y: 3)
-
-                    AlpacaView(
-                        strokeColor: Color(hex: "#007AFF"),
-                        size: 58,
-                        lineWidth: 2.6
-                    )
-                }
-
-                Text("Coach")
-                    .font(VelaTheme.title2())
-                    .foregroundStyle(VelaTheme.fg)
-
-                Text("你的 AI 身体智能代理。你可以与我讨论训练、恢复、睡眠或营养，我将基于你的健康数据为你提供个性化建议。")
-                    .font(VelaTheme.subheadline())
-                    .foregroundStyle(VelaTheme.muted)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(4)
-                    .padding(.horizontal, 20)
-            }
-
-            // Quick Suggestions
-            VStack(alignment: .leading, spacing: 10) {
-                Text("快捷提问 / QUICK SUGGESTIONS")
-                    .font(VelaTheme.caption2())
-                    .fontWeight(.bold)
-                    .foregroundStyle(VelaTheme.muted)
-                    .tracking(0.5)
-                    .padding(.leading, 4)
-
-                FlexStack(spacing: 8) {
-                    ForEach(vm.quickQuestions, id: \.self) { text in
-                        Button(text) {
-                            sendMessage(text)
-                        }
-                        .font(VelaTheme.subheadline())
-                        .foregroundStyle(VelaTheme.fg)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(VelaTheme.surface)
-                                .overlay(
-                                    Capsule(style: .continuous)
-                                        .stroke(VelaTheme.border, lineWidth: 0.5)
-                                )
-                        )
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
         }
     }
 

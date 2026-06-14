@@ -5,6 +5,7 @@ enum ActiveStatusSettings {
     static let statusKey = "vela_active_status"
     static let durationKey = "vela_active_status_duration"
     static let expiresAtKey = "vela_active_status_expires_at"
+    private static let validStatuses: Set<String> = ["active", "sick", "injured", "resting"]
 
     static func update(
         status: String,
@@ -22,13 +23,33 @@ enum ActiveStatusSettings {
         }
     }
 
-    static func journalFlags(now: Date = Date(), defaults: UserDefaults = .standard) -> Set<String> {
-        guard defaults.object(forKey: statusKey) != nil else { return [] }
-        let status = defaults.string(forKey: statusKey) ?? "resting"
-        guard ["sick", "injured", "resting"].contains(status) else { return [] }
-        if let expiresAt = defaults.object(forKey: expiresAtKey) as? Date, expiresAt <= now {
-            return []
+    static func resolveCurrentStatus(
+        now: Date = Date(),
+        defaults: UserDefaults = .standard
+    ) -> String {
+        guard defaults.object(forKey: statusKey) != nil else {
+            return "active"
         }
+
+        let storedStatus = defaults.string(forKey: statusKey) ?? "active"
+        guard validStatuses.contains(storedStatus) else {
+            defaults.set("active", forKey: statusKey)
+            defaults.removeObject(forKey: expiresAtKey)
+            return "active"
+        }
+
+        if let expiresAt = defaults.object(forKey: expiresAtKey) as? Date,
+           expiresAt <= now {
+            defaults.set("active", forKey: statusKey)
+            defaults.removeObject(forKey: expiresAtKey)
+            return "active"
+        }
+        return storedStatus
+    }
+
+    static func journalFlags(now: Date = Date(), defaults: UserDefaults = .standard) -> Set<String> {
+        let status = resolveCurrentStatus(now: now, defaults: defaults)
+        guard ["sick", "injured", "resting"].contains(status) else { return [] }
         return [status]
     }
 
@@ -236,7 +257,7 @@ final class DailySummaryUseCase {
         let sleepScore = metrics.sleepScore
         let resolvedSleepSummary = ScoreEngineFactory.resolvedSleepSummary(
             from: context,
-            sleepScore: sleepScore.score
+            sleepScore: sleepScore.value
         )
         let recovery = metrics.recovery
         let strain = metrics.strain
@@ -252,35 +273,63 @@ final class DailySummaryUseCase {
             )
         )
         
-        var activePlan: TrainingPlanRecord? = nil
-        var journalFlags: Set<String> = []
+        var activePlan: TrainingPlanRecord?
+        var currentDailySummary: DailyHealthSummaryRecord?
+        var recentWorkoutEvents: [WorkoutEventRecord] = []
         var recentStrengthWorkouts: [StrengthWorkoutRecord] = []
+        var recentTrainingResponses: [TrainingResponseRecord] = []
+        var todayFoodLogs: [FoodLogRecord] = []
+        var recentJournalEntries: [JournalEntryRecord] = []
         if let modelContext {
             let activePlanFetch = FetchDescriptor<TrainingPlanRecord>(
                 predicate: #Predicate<TrainingPlanRecord> { $0.isActive }
             )
             activePlan = (try? modelContext.fetch(activePlanFetch))?.first
-            
-            let todayRange = DateRangeQuery.today(containing: now, calendar: calendar)
-            let todayStart = todayRange.start
-            let todayEnd = todayRange.end
-            let journalFetch = FetchDescriptor<JournalEntryRecord>(
-                predicate: #Predicate<JournalEntryRecord> { $0.createdAt >= todayStart && $0.createdAt < todayEnd }
+
+            let dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: now, calendar: calendar)
+            let summaryFetch = FetchDescriptor<DailyHealthSummaryRecord>(
+                predicate: #Predicate<DailyHealthSummaryRecord> { $0.dayIdentifier == dayIdentifier }
             )
-            if let journals = try? modelContext.fetch(journalFetch) {
-                for j in journals {
-                    for tag in j.tags {
-                        journalFlags.insert(tag)
-                    }
-                }
-            }
-            let recentStrengthStart = calendar.date(byAdding: .day, value: -14, to: now) ?? now
+            currentDailySummary = (try? modelContext.fetch(summaryFetch))?.first
+
+            let recentEventStart = calendar.date(byAdding: .hour, value: -48, to: now) ?? now
+            var eventFetch = FetchDescriptor<WorkoutEventRecord>(
+                predicate: #Predicate<WorkoutEventRecord> { $0.startedAt >= recentEventStart && $0.startedAt <= now },
+                sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+            )
+            eventFetch.fetchLimit = 100
+            recentWorkoutEvents = (try? modelContext.fetch(eventFetch)) ?? []
+
+            let recentJournalStart = calendar.date(byAdding: .hour, value: -36, to: now) ?? now
+            let journalFetch = FetchDescriptor<JournalEntryRecord>(
+                predicate: #Predicate<JournalEntryRecord> { $0.createdAt >= recentJournalStart && $0.createdAt <= now },
+                sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+            )
+            recentJournalEntries = (try? modelContext.fetch(journalFetch)) ?? []
+
+            let recentStrengthStart = calendar.date(byAdding: .day, value: -28, to: now) ?? now
             let strengthFetch = FetchDescriptor<StrengthWorkoutRecord>(
-                predicate: #Predicate<StrengthWorkoutRecord> { $0.startedAt >= recentStrengthStart }
+                predicate: #Predicate<StrengthWorkoutRecord> { $0.startedAt >= recentStrengthStart && $0.startedAt <= now },
+                sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
             )
             recentStrengthWorkouts = (try? modelContext.fetch(strengthFetch)) ?? []
+
+            let responseStart = calendar.date(byAdding: .day, value: -28, to: now) ?? now
+            let responseFetch = FetchDescriptor<TrainingResponseRecord>(
+                predicate: #Predicate<TrainingResponseRecord> { $0.date >= responseStart && $0.date <= now },
+                sortBy: [SortDescriptor(\.date, order: .reverse)]
+            )
+            recentTrainingResponses = (try? modelContext.fetch(responseFetch)) ?? []
+
+            let foodRange = DateRangeQuery.today(containing: now, calendar: calendar)
+            let foodStart = foodRange.start
+            let foodEnd = foodRange.end
+            let foodFetch = FetchDescriptor<FoodLogRecord>(
+                predicate: #Predicate<FoodLogRecord> { $0.createdAt >= foodStart && $0.createdAt < foodEnd },
+                sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+            )
+            todayFoodLogs = (try? modelContext.fetch(foodFetch)) ?? []
         }
-        journalFlags.formUnion(ActiveStatusSettings.journalFlags(now: now))
 
         var dashboard = DashboardSummary(
             date: context.date,
@@ -299,12 +348,33 @@ final class DailySummaryUseCase {
             dailyInsight: dailyInsight(recovery: recovery, sleepScore: sleepScore, strain: strain, source: .healthKit),
             source: .healthKit
         )
-        dashboard.trainingDecision = TrainingDecisionEngine.evaluate(
-            dashboard,
-            journalFlags: journalFlags,
+        let activeStatus = ActiveStatusSettings.resolveCurrentStatus(now: now)
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: dashboard,
+            dailySummary: currentDailySummary,
+            workoutEvents: recentWorkoutEvents,
+            strengthWorkouts: recentStrengthWorkouts,
+            trainingResponses: recentTrainingResponses,
+            foodLogs: todayFoodLogs,
+            journalEntries: recentJournalEntries,
             activePlan: activePlan,
-            history: snapshots42,
-            strengthWorkouts: recentStrengthWorkouts
+            activeStatus: activeStatus,
+            generatedAt: now
+        ))
+        let recentStrengthSummary = TrainingAnalyticsService().buildRecentSummary(
+            workouts: recentStrengthWorkouts,
+            days: 28,
+            endingAt: now
+        )
+        let dailyTrainingDecision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
+            bodyState: bodyState,
+            activePlan: activePlan,
+            recentStrengthSummary: recentStrengthSummary,
+            trainingResponses: recentTrainingResponses
+        ))
+        dashboard.trainingDecision = TrainingDecision.compatibilityView(
+            of: dailyTrainingDecision,
+            bodyState: bodyState
         )
         
         let persistedSnapshot = makeSnapshot(from: dashboard, context: context, date: now)
@@ -318,6 +388,12 @@ final class DailySummaryUseCase {
                     calendar: calendar
                 )
                 try modelContext.save()
+                try DailyOperatingPlanCoordinator.upsert(
+                    bodyState: bodyState,
+                    decision: dailyTrainingDecision,
+                    modelContext: modelContext,
+                    calendar: calendar
+                )
             } catch {
                 PipelineDiagnosticsLogger.log(
                     modelContext: modelContext,
@@ -405,7 +481,7 @@ final class DailySummaryUseCase {
             let recovery = RecoveryScoreEngine().calculate(
                 from: ScoreEngineFactory.recovery(
                     from: context,
-                    sleepScore: sleepScore.score,
+                    sleepScore: sleepScore.value,
                     strainScoreYesterday: nil,
                     hrvHistory: [],
                     rhrHistory: []
@@ -422,7 +498,7 @@ final class DailySummaryUseCase {
             let stress = StressIndexEngine().calculate(
                 from: ScoreEngineFactory.stress(
                     from: context,
-                    sleepScore: sleepScore.score,
+                    sleepScore: sleepScore.value,
                     strainScore: strain.score,
                     hrvHistory: [],
                     rhrHistory: []
@@ -432,7 +508,7 @@ final class DailySummaryUseCase {
                 from: ScoreEngineFactory.energyBank(
                     from: context,
                     recoveryScore: recovery.score,
-                    sleepScore: context.sleepSummary == nil ? nil : sleepScore.score,
+                    sleepScore: sleepScore.value,
                     strainScore: strain.score,
                     stressIndex: stress.stressIndex,
                     strainHistory: []
@@ -519,7 +595,7 @@ final class DailySummaryUseCase {
             let recovery = RecoveryScoreEngine().calculate(
                 from: ScoreEngineFactory.recovery(
                     from: context,
-                    sleepScore: sleepScore.score,
+                    sleepScore: sleepScore.value,
                     strainScoreYesterday: nil,
                     hrvHistory: [],
                     rhrHistory: []
@@ -536,7 +612,7 @@ final class DailySummaryUseCase {
             let stress = StressIndexEngine().calculate(
                 from: ScoreEngineFactory.stress(
                     from: context,
-                    sleepScore: sleepScore.score,
+                    sleepScore: sleepScore.value,
                     strainScore: strain.score,
                     hrvHistory: [],
                     rhrHistory: []
@@ -546,7 +622,7 @@ final class DailySummaryUseCase {
                 from: ScoreEngineFactory.energyBank(
                     from: context,
                     recoveryScore: recovery.score,
-                    sleepScore: context.sleepSummary == nil ? nil : sleepScore.score,
+                    sleepScore: sleepScore.value,
                     strainScore: strain.score,
                     stressIndex: stress.stressIndex,
                     strainHistory: []

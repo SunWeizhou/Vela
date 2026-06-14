@@ -89,13 +89,19 @@ struct DeepSeekProvider: LLMProvider {
         )
         urlRequest.httpBody = try JSONEncoder().encode(body)
 
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: urlRequest)
+        } catch {
+            throw LLMProviderError.classify(error)
+        }
         guard let httpResponse = response as? HTTPURLResponse else {
             throw LLMProviderError.invalidResponse
         }
         guard (200..<300).contains(httpResponse.statusCode) else {
             let body = String(data: data, encoding: .utf8) ?? ""
-            throw LLMProviderError.requestFailed("DeepSeek request failed with status \(httpResponse.statusCode): \(body.prefix(200))")
+            throw LLMProviderError.httpFailure(statusCode: httpResponse.statusCode, body: body)
         }
 
         let decoded = try JSONDecoder().decode(DeepSeekChatResponse.self, from: data)
@@ -156,7 +162,7 @@ struct DeepSeekProvider: LLMProvider {
                         for try await line in bytes.lines {
                             errorBody += line + "\n"
                         }
-                        throw LLMProviderError.requestFailed("DeepSeek request failed with status \(httpResponse.statusCode): \(errorBody.prefix(200))")
+                        throw LLMProviderError.httpFailure(statusCode: httpResponse.statusCode, body: errorBody)
                     }
 
                     var didReceiveDone = false
@@ -181,7 +187,7 @@ struct DeepSeekProvider: LLMProvider {
                 } catch is CancellationError {
                     continuation.finish(throwing: CancellationError())
                 } catch {
-                    continuation.finish(throwing: error)
+                    continuation.finish(throwing: LLMProviderError.classify(error))
                 }
             }
             continuation.onTermination = { _ in

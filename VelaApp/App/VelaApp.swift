@@ -215,18 +215,6 @@ struct VelaApp: App {
         do {
             modelContainer = try VelaModelContainer.make()
         } catch {
-            #if DEBUG
-            // In DEBUG, VelaModelContainer.make() already deletes files on catch.
-            // But if it still fails, fallback to in-memory:
-            if let memoryContainer = try? VelaModelContainer.make(inMemory: true) {
-                VelaAppState.shared.isFallbackStore = true
-                modelContainer = memoryContainer
-            } else {
-                preconditionFailure("Vela: Could not create ModelContainer in any configuration.")
-            }
-            #else
-            // In Release, catch schema migration / store failures, activate read-only safety mode,
-            // and fallback to in-memory store so the app can launch, preventing data loss.
             VelaAppState.shared.isReadOnlySafetyMode = true
             PersistenceWriteGate.shared.setReadOnly(true)
             VelaAppState.shared.isFallbackStore = true
@@ -235,7 +223,6 @@ struct VelaApp: App {
             } else {
                 preconditionFailure("Vela: Could not create ModelContainer in any configuration.")
             }
-            #endif
         }
 
         // Register background task handler

@@ -1,6 +1,8 @@
 import SwiftUI
+import SwiftData
 
 struct AppCoordinator: View {
+    @Environment(\.modelContext) private var modelContext
     @AppStorage("vela_app_language") private var languageRaw = AppLanguage.simplifiedChinese.rawValue
     @AppStorage("vela_dark_mode") private var darkModeRaw = "system"
     @AppStorage("vela_onboarding_completed") private var onboardingCompleted = false
@@ -40,6 +42,9 @@ struct AppCoordinator: View {
         .animation(.easeOut(duration: 0.3), value: appState.isFallbackStore || appState.isReadOnlySafetyMode)
         .task {
             BackgroundTaskManager.schedule()
+            guard !appState.isReadOnlySafetyMode else { return }
+            try? await Task.sleep(for: .seconds(2))
+            _ = try? RetentionPolicyService().prune(modelContext: modelContext)
         }
     }
 
@@ -61,15 +66,20 @@ struct AppCoordinator: View {
                 .foregroundStyle(VelaTheme.energy)
             Text(appState.isReadOnlySafetyMode
                  ? (language.isChinese
-                    ? "数据库严重损坏！已进入只读安全模式，数据无法保存。"
-                    : "Database corrupted! Safe Read-Only Mode active. Changes won't save.")
+                    ? "数据库无法打开，原文件已备份并进入只读安全模式。"
+                    : "The database could not be opened. Original files were backed up and read-only safety mode is active.")
                  : (language.isChinese
                     ? "存储不可用，数据不会跨启动保存。"
                     : "Storage unavailable. Data won't persist across launches."))
                 .font(.caption.weight(.medium))
                 .foregroundStyle(VelaTheme.primaryText)
             Spacer()
-            if !appState.isReadOnlySafetyMode {
+            if appState.isReadOnlySafetyMode {
+                Button(language.isChinese ? "恢复/导出" : "Recover/Export") {
+                    appState.routeToTab(4)
+                }
+                .font(.caption.weight(.bold))
+            } else {
                 Button {
                     withAnimation {
                         appState.isFallbackStore = false

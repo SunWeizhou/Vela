@@ -1,11 +1,56 @@
 import Foundation
 
 @MainActor
+final class AppSyncCoordinator: ObservableObject {
+    enum Source: Hashable {
+        case healthKit
+        case xunji
+    }
+
+    @Published private(set) var activeSources: Set<Source> = []
+
+    private let minimumInterval: TimeInterval
+    private var inFlight: [Source: Task<Void, Never>] = [:]
+    private var lastCompletedAt: [Source: Date] = [:]
+
+    init(minimumInterval: TimeInterval = 30) {
+        self.minimumInterval = minimumInterval
+    }
+
+    func run(
+        source: Source,
+        force: Bool = false,
+        operation: @escaping @MainActor () async -> Void
+    ) async {
+        if let running = inFlight[source] {
+            await running.value
+            return
+        }
+        if !force,
+           let lastCompletedAt = lastCompletedAt[source],
+           Date().timeIntervalSince(lastCompletedAt) < minimumInterval {
+            return
+        }
+
+        activeSources.insert(source)
+        let task = Task { @MainActor in
+            await operation()
+        }
+        inFlight[source] = task
+        await task.value
+        inFlight[source] = nil
+        lastCompletedAt[source] = Date()
+        activeSources.remove(source)
+    }
+}
+
+@MainActor
 final class VelaServices: ObservableObject {
     let queryService: HealthKitQueryService
     let refreshService: HealthDataRefreshService
     let contextBuilder: AIContextBuilder
     let dailySummaryUseCase: DailySummaryUseCase
+    let syncCoordinator: AppSyncCoordinator
     let coachChat = CoachChatVM()
 
     /// WebSearchService uses a private singleton — expose via computed property.
@@ -22,6 +67,7 @@ final class VelaServices: ObservableObject {
         self.queryService = queryService
         self.refreshService = HealthDataRefreshService(queryService: queryService)
         self.contextBuilder = AIContextBuilder()
+        self.syncCoordinator = AppSyncCoordinator()
         self.dailySummaryUseCase = DailySummaryUseCase(
             refreshService: refreshService,
             queryService: queryService

@@ -113,13 +113,63 @@ extension LLMProvider {
 
 enum LLMProviderError: LocalizedError, Hashable, Sendable {
     case missingAPIKey
+    case authenticationFailed
+    case networkUnavailable
+    case timedOut
     case invalidResponse
     case requestFailed(String)
+
+    static func classify(_ error: Error) -> LLMProviderError {
+        if let providerError = error as? LLMProviderError {
+            return providerError
+        }
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .notConnectedToInternet, .networkConnectionLost, .cannotFindHost, .cannotConnectToHost:
+                return .networkUnavailable
+            case .timedOut:
+                return .timedOut
+            default:
+                return .requestFailed(urlError.localizedDescription)
+            }
+        }
+        return .requestFailed(error.localizedDescription)
+    }
+
+    static func httpFailure(statusCode: Int, body: String) -> LLMProviderError {
+        if statusCode == 401 || statusCode == 403 {
+            return .authenticationFailed
+        }
+        return .requestFailed("DeepSeek request failed with status \(statusCode): \(body.prefix(200))")
+    }
+
+    func userFacingMessage(isChinese: Bool) -> String {
+        switch self {
+        case .missingAPIKey:
+            return isChinese ? "请先在设置中添加 DeepSeek API Key。" : "Add your DeepSeek API key in Settings."
+        case .authenticationFailed:
+            return isChinese ? "DeepSeek API Key 无效，请前往设置更新后重试。" : "Your DeepSeek API key is invalid. Update it in Settings and retry."
+        case .networkUnavailable:
+            return isChinese ? "当前网络不可用。本地健康、训练和日志功能仍可使用，联网后可重试 Coach。" : "The network is unavailable. Local health, training, and journal features still work; retry Coach when online."
+        case .timedOut:
+            return isChinese ? "Coach 请求超时，未写入空回复。请检查网络后重试。" : "The Coach request timed out and no empty reply was saved. Check the network and retry."
+        case .invalidResponse:
+            return isChinese ? "AI 服务返回了无法解析的内容，请稍后重试。" : "The AI provider returned an unreadable response. Please retry."
+        case .requestFailed:
+            return isChinese ? "AI 服务暂时不可用，本地功能不受影响。请稍后重试。" : "The AI provider is temporarily unavailable. Local features are unaffected; please retry."
+        }
+    }
 
     var errorDescription: String? {
         switch self {
         case .missingAPIKey:
             return "DeepSeek API key is missing."
+        case .authenticationFailed:
+            return "DeepSeek API authentication failed."
+        case .networkUnavailable:
+            return "The network is unavailable."
+        case .timedOut:
+            return "The provider request timed out."
         case .invalidResponse:
             return "The provider returned an invalid response."
         case .requestFailed(let message):

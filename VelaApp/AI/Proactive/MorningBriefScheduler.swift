@@ -151,7 +151,7 @@ final class MorningBriefScheduler: ObservableObject {
                 foodLogs: Array(foodLogs.prefix(8)),
                 journalEntries: journals,
                 activePlan: activePlan,
-                activeStatus: UserDefaults.standard.string(forKey: "vela_active_status") ?? "active"
+                activeStatus: ActiveStatusSettings.resolveCurrentStatus()
             ))
             let (context, contextMeta) = (services?.contextBuilder ?? AIContextBuilder()).build(
                 dashboard: dashboard,

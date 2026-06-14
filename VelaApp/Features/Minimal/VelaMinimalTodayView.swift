@@ -56,7 +56,7 @@ struct VelaTodayView: View {
             foodLogs: foodLogs,
             journalEntries: journalEntries,
             activePlan: activePlan,
-            activeStatus: activeStatusRaw,
+            activeStatus: ActiveStatusSettings.resolveCurrentStatus(),
             generatedAt: Date()
         ))
     }
@@ -120,7 +120,10 @@ struct VelaTodayView: View {
     }
 
     private var todayShareText: String {
-        "\(dateHeaderString(for: dashboardVM.selectedDate))\n恢复 \(Int(dashboard.recovery.score.rounded())) · 睡眠 \(Int(dashboard.sleepScore.score.rounded())) · 负荷 \(Int(dashboard.strain.score.rounded()))\n\(coachMessage)"
+        let recoveryText = dashboard.recovery.hasData ? "\(Int(dashboard.recovery.score.rounded()))" : "--"
+        let sleepText = dashboard.sleepScore.hasData ? "\(Int(dashboard.sleepScore.score.rounded()))" : "--"
+        let strainText = dashboard.strain.hasData ? "\(Int(dashboard.strain.score.rounded()))" : "--"
+        return "\(dateHeaderString(for: dashboardVM.selectedDate))\n恢复 \(recoveryText) · 睡眠 \(sleepText) · 负荷 \(strainText)\n\(coachMessage)"
     }
 
     // Dynamic Weather Sync States
@@ -128,8 +131,11 @@ struct VelaTodayView: View {
     @State private var weatherLocation: String = "天气数据待同步"
 
     // Active Status Settings Toggles (Replicating Screenshot 2)
-    @AppStorage("vela_active_status") private var activeStatusRaw = "resting"
+    @AppStorage("vela_active_status") private var activeStatusRaw = "active"
     @AppStorage("vela_active_status_duration") private var activeStatusDuration = "明天之前"
+    private var resolvedActiveStatus: String {
+        ActiveStatusSettings.resolveCurrentStatus()
+    }
 
     // Sheets trigger states
     @State private var showCalendarOverview = false
@@ -141,7 +147,7 @@ struct VelaTodayView: View {
     @State private var isVisible = false
 
     private var statusPillIcon: String {
-        switch activeStatusRaw {
+        switch resolvedActiveStatus {
         case "active": return "figure.run"
         case "sick": return "bed.double.fill"
         case "injured": return "bandage.fill"
@@ -150,7 +156,7 @@ struct VelaTodayView: View {
     }
 
     private var statusPillColor: Color {
-        switch activeStatusRaw {
+        switch resolvedActiveStatus {
         case "active": return Color(hex: "#34C759") // Teal green
         case "sick": return Color(hex: "#FF9F0A") // Orange yellow
         case "injured": return Color(hex: "#FF3B30") // Red pink
@@ -159,11 +165,11 @@ struct VelaTodayView: View {
     }
 
     private var statusPillTitle: String {
-        switch activeStatusRaw {
-        case "active": return "活跃"
-        case "sick": return "生病"
-        case "injured": return "受伤"
-        default: return "休息中"
+        switch resolvedActiveStatus {
+        case "active": return L10n.t("Active", "活跃")
+        case "sick": return L10n.t("Sick", "生病")
+        case "injured": return L10n.t("Injured", "受伤")
+        default: return L10n.t("Resting", "休息中")
         }
     }
 
@@ -196,49 +202,38 @@ struct VelaTodayView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                // 1. Date Header with Selector & Share & Avatar
-                dateHeaderRow
+            VStack(alignment: .leading, spacing: 18) {
+                // 1. Date, Status, and Weather Header
+                dateAndStatusHeader
                     .opacity(isVisible ? 1.0 : 0.0)
                     .offset(y: isVisible ? 0.0 : 10.0)
                     .animation(VelaTheme.snappy.delay(0.0), value: isVisible)
  
                 errorMessageView
 
-                todayOSCard
+                // 2. Unified Today OS Cockpit Control Center
+                todayControlCenterCard
                     .opacity(isVisible ? 1 : 0)
                     .offset(y: isVisible ? 0 : 10)
-                    .animation(VelaTheme.snappy.delay(0.025), value: isVisible)
- 
-                // 2. Horizontal Status & Weather Pills
-                pillsRow
-                    .opacity(isVisible ? 1 : 0)
-                    .offset(y: isVisible ? 0 : 10)
-                    .animation(VelaTheme.snappy.delay(0.035), value: isVisible)
-
-                // 3. White Cockpit Card (Strain, Recovery, Sleep side-by-side rings)
-                cockpitCard
-                    .opacity(isVisible ? 1 : 0)
-                    .offset(y: isVisible ? 0 : 12)
-                    .animation(VelaTheme.snappy.delay(0.055), value: isVisible)
- 
-                // 5. Stress & Energy Section
+                    .animation(VelaTheme.snappy.delay(0.03), value: isVisible)
+  
+                // 3. Stress & Energy Section (Side-by-Side)
                 stressAndEnergySection
                     .opacity(isVisible ? 1 : 0)
                     .offset(y: isVisible ? 0 : 12)
-                    .animation(VelaTheme.snappy.delay(0.105), value: isVisible)
+                    .animation(VelaTheme.snappy.delay(0.06), value: isVisible)
  
-                // 6. Daily Activity Section
+                // 4. Daily Activity Section (3-Column Grid)
                 dailyActivitySection
                     .opacity(isVisible ? 1 : 0)
                     .offset(y: isVisible ? 0 : 12)
-                    .animation(VelaTheme.snappy.delay(0.14), value: isVisible)
+                    .animation(VelaTheme.snappy.delay(0.09), value: isVisible)
  
-                // 7. Nutrition (营养) Section
+                // 5. Nutrition (营养) Section
                 nutritionSection
                     .opacity(isVisible ? 1 : 0)
                     .offset(y: isVisible ? 0 : 12)
-                    .animation(VelaTheme.snappy.delay(0.175), value: isVisible)
+                    .animation(VelaTheme.snappy.delay(0.12), value: isVisible)
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
@@ -330,40 +325,120 @@ struct VelaTodayView: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 
-    private var todayOSCard: some View {
+    private var todayControlCenterCard: some View {
         let state = bodyState
         let decision = trainingDecision
         let planTitle = persistedOperatingPlan?.title ?? decision.userFacingSummary
-        let cause = state.drivers.first?.detail ?? L10n.t(
-            "Local records are available while health baselines are still forming.",
-            "健康基线仍在建立，当前先使用本地记录给出保守建议。"
-        )
-        let watch = state.drivers.first(where: { $0.impact < 0 })?.title
+        let cause: String
+        if let detail = state.drivers.first?.detail {
+            cause = localizedDriverDetail(detail)
+        } else {
+            cause = L10n.t(
+                "Local records are available while health baselines are still forming.",
+                "健康基线仍在建立，当前先使用本地记录给出保守建议。"
+            )
+        }
+        let watchRaw = state.drivers.first(where: { $0.impact < 0 })?.title
             ?? L10n.t("Training quality and perceived effort", "训练质量与主观用力")
-        return VStack(alignment: .leading, spacing: 14) {
+        let watch = localizedDriverTitle(watchRaw)
+        let cmdState = todayCommandState
+        let accentColor = readinessColor(cmdState.readinessDecision.decision)
+        
+        return VStack(alignment: .leading, spacing: 16) {
+            // Header Row: Readiness & Confidence Info
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(L10n.t("TODAY OS", "今日 OS"))
-                        .font(.caption2.weight(.bold))
+                    Text(L10n.t("TODAY OS", "今日状态决策"))
+                        .font(.system(size: 10, weight: .bold))
+                        .tracking(0.5)
                         .foregroundStyle(VelaTheme.muted)
+                    
                     Text(bodyStateTitle(state.readiness))
-                        .font(.system(size: 26, weight: .bold, design: .rounded))
-                        .foregroundStyle(VelaTheme.fg)
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundStyle(accentColor)
                 }
+                
                 Spacer()
+                
                 VStack(alignment: .trailing, spacing: 3) {
                     Text("\(Int((decision.confidence * 100).rounded()))%")
-                        .font(.headline.weight(.bold))
-                    Text("\(state.confidence.rawValue) · \(state.freshness.rawValue)")
-                        .font(.caption2)
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundStyle(accentColor)
+                    
+                    Text("\(localizedDataConfidence(state.confidence)) · \(localizedDataFreshness(state.freshness))")
+                        .font(.system(size: 10))
                         .foregroundStyle(VelaTheme.muted)
                 }
             }
+            
+            // Core Rings (Strain, Recovery, Sleep) Side-by-Side inside the OS Card
+            HStack(alignment: .center, spacing: 0) {
+                // Strain (耗力)
+                NavigationLink(destination: VelaMetricDetailView(metric: .strain)) {
+                    BevelScoreRing(
+                        score: strainScore,
+                        color: VelaTheme.strainColor,
+                        useGradient: false,
+                        size: 64,
+                        label: "耗力",
+                        valueText: dashboard.strain.hasData ? VelaMinimalFormatting.roundedPercentage(dashboard.strain.score) : "--"
+                    )
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
 
-            todayOSRow(label: L10n.t("Cause", "原因"), value: cause)
-            todayOSRow(label: L10n.t("Plan", "计划"), value: planTitle)
-            todayOSRow(label: L10n.t("Watch", "观察"), value: watch)
+                Rectangle()
+                    .fill(VelaTheme.borderSoft)
+                    .frame(width: 0.5, height: 48)
 
+                // Recovery (恢复)
+                NavigationLink(destination: VelaMetricDetailView(metric: .recovery)) {
+                    BevelScoreRing(
+                        score: recoveryScore,
+                        color: VelaTheme.recoveryColor,
+                        useGradient: true,
+                        size: 64,
+                        label: "恢复",
+                        valueText: dashboard.recovery.hasData ? VelaMinimalFormatting.roundedPercentage(dashboard.recovery.score) : "--"
+                    )
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
+
+                Rectangle()
+                    .fill(VelaTheme.borderSoft)
+                    .frame(width: 0.5, height: 48)
+
+                // Sleep (睡眠)
+                NavigationLink(destination: VelaMetricDetailView(metric: .sleep)) {
+                    BevelScoreRing(
+                        score: sleepScore,
+                        color: VelaTheme.sleepColor,
+                        useGradient: true,
+                        size: 64,
+                        label: "睡眠",
+                        valueText: dashboard.sleepScore.hasData ? VelaMinimalFormatting.roundedPercentage(dashboard.sleepScore.score) : "--"
+                    )
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
+            }
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(VelaTheme.elevatedBg.opacity(0.4))
+            )
+            
+            Divider()
+            
+            // Reasons & Decisions Rows
+            VStack(alignment: .leading, spacing: 10) {
+                todayOSRow(label: "原因", value: cause)
+                todayOSRow(label: "计划", value: planTitle)
+                todayOSRow(label: "观察", value: watch)
+            }
+            
+            // Primary Action Button
             Button {
                 if decision.decision == .rest {
                     showTodayEvidence = true
@@ -377,21 +452,74 @@ struct VelaTodayView: View {
                     Spacer()
                     Image(systemName: "arrow.right")
                 }
-                .font(.subheadline.weight(.bold))
+                .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(Color.white)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
-                .background(RoundedRectangle(cornerRadius: 14).fill(VelaTheme.accent))
+                .background(RoundedRectangle(cornerRadius: 14).fill(accentColor))
             }
             .buttonStyle(.plain)
-
-            Text("\(persistedOperatingPlan?.source ?? decision.source) · \(decision.safetyNotice)")
-                .font(.caption2)
-                .foregroundStyle(VelaTheme.muted)
+            
+            // Quick logging pills (from commandCenter)
+            if let artifact = cmdState.coachArtifact, !artifact.actions.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(artifact.actions) { action in
+                            ActionPill(
+                                title: action.label,
+                                systemImage: icon(for: action),
+                                isPrimary: action.id == artifact.actions.first?.id
+                            ) {
+                                handleCoachArtifactAction(action, artifact: artifact)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 1)
+                }
+            } else if !cmdState.actions.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(cmdState.actions.prefix(3)) { action in
+                            ActionPill(
+                                title: action.title,
+                                systemImage: icon(for: action),
+                                isPrimary: action.isPrimary
+                            ) {
+                                handleTodayAction(action)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 1)
+                }
+            }
+            
+            HStack {
+                Text("\(persistedOperatingPlan?.source ?? decision.source) · \(decision.safetyNotice)")
+                    .font(.caption2)
+                    .foregroundStyle(VelaTheme.muted)
+                Spacer()
+                Button {
+                    showTodayEvidence = true
+                } label: {
+                    HStack(spacing: 3) {
+                        Text("查看决策依据")
+                        Image(systemName: "chevron.right")
+                    }
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(VelaTheme.accent)
+                }
+            }
         }
         .padding(18)
-        .background(RoundedRectangle(cornerRadius: 22).fill(VelaTheme.surface))
-        .overlay(RoundedRectangle(cornerRadius: 22).stroke(VelaTheme.accent.opacity(0.16), lineWidth: 1))
+        .background(
+            RoundedRectangle(cornerRadius: 24)
+                .fill(VelaTheme.cardBg)
+                .shadow(color: VelaTheme.cardShadow(cs), radius: 10, y: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24)
+                .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+        )
     }
 
     private func todayOSRow(label: String, value: String) -> some View {
@@ -425,135 +553,122 @@ struct VelaTodayView: View {
         }
     }
 
+    // MARK: - Date, Status & Weather Header
+    private var dateAndStatusHeader: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Date Row
+            HStack(alignment: .center) {
+                Button {
+                    showCalendarOverview = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(dateHeaderString(for: dashboardVM.selectedDate))
+                            .font(.system(size: 26, weight: .bold))
+                            .foregroundStyle(VelaTheme.fg)
+                        
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(VelaTheme.muted)
+                    }
+                }
+                .buttonStyle(.plain)
+                
+                Spacer()
+                
+                HStack(spacing: 16) {
+                    // Share button
+                    ShareLink(item: todayShareText) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(VelaTheme.muted)
+                            .frame(width: 36, height: 36)
+                    }
+                    .buttonStyle(.plain)
+                    
+                    // Profile Avatar
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "person.crop.circle.fill")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 32, height: 32)
+                            .foregroundStyle(VelaTheme.accent)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            
+            // Status & Weather Capsules
+            HStack(spacing: 8) {
+                // Active status pill
+                Button {
+                    showActiveStatus = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: statusPillIcon)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(statusPillColor)
+                        
+                        Text(statusPillTitle)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(VelaTheme.fg)
+                        
+                        Text(activeStatusDuration)
+                            .font(.system(size: 10))
+                            .foregroundStyle(VelaTheme.muted)
+                        
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(VelaTheme.muted)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(VelaTheme.cardBg))
+                    .overlay(Capsule().stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+                }
+                .buttonStyle(.plain)
+                
+                // Weather status pill
+                HStack(spacing: 6) {
+                    Image(systemName: "cloud.sun.fill")
+                        .font(.system(size: 12))
+                        .symbolRenderingMode(.multicolor)
+                    
+                    Text(weatherTemp)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(VelaTheme.fg)
+                    
+                    Text(weatherLocation)
+                        .font(.system(size: 10))
+                        .foregroundStyle(VelaTheme.muted)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(VelaTheme.cardBg))
+                .overlay(Capsule().stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+                
+                Spacer()
+                
+                if dashboard.source == .preview {
+                    Text("模拟数据")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Color.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(VelaTheme.accent))
+                }
+            }
+        }
+    }
+
     private func persistDailyOperatingPlan() {
         _ = try? DailyOperatingPlanCoordinator.upsert(
             bodyState: bodyState,
             decision: trainingDecision,
             modelContext: modelContext
         )
-    }
-
-    // MARK: - Date Header Row
-    private var dateHeaderRow: some View {
-        HStack(alignment: .center) {
-            Button {
-                showCalendarOverview = true
-            } label: {
-                HStack(spacing: 6) {
-                    Text(dateHeaderString(for: dashboardVM.selectedDate))
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(Color(hex: "#1A1917"))
-
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
-
-                    if dashboard.source == .preview {
-                        Text("模拟数据")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(Color.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2.5)
-                            .background(Capsule().fill(Color(hex: "#007AFF")))
-                    }
-                }
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
-
-            HStack(spacing: 16) {
-                // Share button
-                ShareLink(item: todayShareText) {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
-                        .frame(width: 36, height: 36)
-                }
-                .buttonStyle(.plain)
-
-                // Profile Avatar
-                Button {
-                    showSettings = true
-                } label: {
-                    Image(systemName: "person.crop.circle.fill")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 34, height: 34)
-                        .foregroundStyle(Color(hex: "#007AFF"))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    private var todayCommandCenterCard: some View {
-        let state = todayCommandState
-        let accentColor = readinessColor(state.readinessDecision.decision)
-        return VelaHeroCard(
-            title: "Today Command Center",
-            subtitle: "把恢复、睡眠、负荷和训练历史合成一个今日决策",
-            systemImage: "scope",
-            accent: accentColor
-        ) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(state.bodyStateTitle)
-                            .font(.system(size: 26, weight: .bold, design: .rounded))
-                            .foregroundStyle(VelaTheme.fg)
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.8)
-
-                        Text(state.coachArtifact?.summary ?? state.summary)
-                            .font(VelaTheme.subheadline())
-                            .foregroundStyle(VelaTheme.muted)
-                            .lineSpacing(3)
-                    }
-
-                    Spacer(minLength: 0)
-
-                    VStack(alignment: .trailing, spacing: 6) {
-                        ConfidenceBadge(confidence: state.dataConfidence)
-                        Text("\(Int((state.readinessDecision.confidence * 100).rounded()))%")
-                            .font(.system(size: 20, weight: .bold, design: .rounded))
-                            .foregroundStyle(accentColor)
-                    }
-                }
-
-                if let artifact = state.coachArtifact, !artifact.actions.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(artifact.actions) { action in
-                                ActionPill(
-                                    title: action.label,
-                                    systemImage: icon(for: action),
-                                    isPrimary: action.id == artifact.actions.first?.id
-                                ) {
-                                    handleCoachArtifactAction(action, artifact: artifact)
-                                }
-                            }
-                        }
-                        .padding(.vertical, 1)
-                    }
-                } else if !state.actions.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(state.actions.prefix(3)) { action in
-                                ActionPill(
-                                    title: action.title,
-                                    systemImage: icon(for: action),
-                                    isPrimary: action.isPrimary
-                                ) {
-                                    handleTodayAction(action)
-                                }
-                            }
-                        }
-                        .padding(.vertical, 1)
-                    }
-                }
-            }
-        }
     }
 
     private func readinessColor(_ decision: ReadinessDecisionKind) -> Color {
@@ -625,18 +740,6 @@ struct VelaTodayView: View {
             return id
         }
         return nil
-    }
-
-    private func routeLegacyCoachArtifactAction(_ action: CoachArtifactAction) {
-        if action.type.contains("training") || action.type.contains("workout") {
-            appState.routeToTab(1)
-        } else if action.type.contains("check") || action.type.contains("journal") {
-            appState.triggerJournal = true
-        } else if action.type.contains("recovery") {
-            appState.routeToRecoveryDetail()
-        } else {
-            appState.routeToCoach(question: action.label)
-        }
     }
 
     // MARK: - Date formatting helpers
@@ -739,449 +842,223 @@ struct VelaTodayView: View {
             : uniqueParts.joined(separator: ", ")
     }
 
-    // MARK: - Status & Weather Pills Row
-    private var pillsRow: some View {
-        HStack(spacing: 12) {
-            // Dynamic Active status pill (Clicking opens selection card)
-            Button {
-                showActiveStatus = true
-            } label: {
-                HStack(spacing: 8) {
-                    ZStack {
-                        Circle()
-                            .fill(statusPillColor)
-                            .frame(width: 32, height: 32)
-
-                        Image(systemName: statusPillIcon)
-                            .font(.system(size: 15))
-                            .foregroundStyle(.white)
-                    }
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(statusPillTitle)
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(Color(hex: "#1A1917"))
-                        Text(activeStatusDuration)
-                            .font(.system(size: 10))
-                            .foregroundStyle(Color(hex: "#8E8A80"))
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(Color(hex: "#BFB9AC"))
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.white)
-                        .shadow(color: Color.black.opacity(0.015), radius: 10, y: 4)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color(hex: "#E5E5EA"), lineWidth: 0.5)
-                )
-            }
-            .buttonStyle(.plain)
-
-            // Dynamic Weather status pill (Successfully auto-syncs)
-            HStack(spacing: 8) {
-                ZStack {
-                    Circle()
-                        .fill(Color(hex: "#F1F3F4"))
-                        .frame(width: 32, height: 32)
-
-                    Image(systemName: "cloud.sun.fill")
-                        .font(.system(size: 14))
-                        .symbolRenderingMode(.multicolor)
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(weatherTemp)
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Color(hex: "#1A1917"))
-                    Text(weatherLocation)
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color(hex: "#8E8A80"))
-                        .lineLimit(1)
-                }
-
-                Spacer()
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.white)
-                    .shadow(color: Color.black.opacity(0.015), radius: 10, y: 4)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color(hex: "#E5E5EA"), lineWidth: 0.5)
-            )
-        }
-    }
-
-    // MARK: - Cockpit Card (Strain, Recovery, Sleep side-by-side rings)
-    private var cockpitCard: some View {
-        let state = todayCommandState
-        let accentColor = readinessColor(state.readinessDecision.decision)
-
-        return VStack(alignment: .leading, spacing: 16) {
-            // Three circular gauges
-            HStack(alignment: .center, spacing: 0) {
-                // Strain (耗力) - Grey Theme
-                NavigationLink(destination: VelaMetricDetailView(metric: .strain)) {
-                    BevelScoreRing(
-                        score: strainScore,
-                        color: Color(hex: "#8E8A80"),
-                        useGradient: false,
-                        size: 78,
-                        label: "耗力",
-                        valueText: dashboard.strain.hasData ? VelaMinimalFormatting.roundedPercentage(dashboard.strain.score) : "--"
-                    )
-                }
-                .buttonStyle(.plain)
-                .frame(maxWidth: .infinity)
-
-                // Vertical divider line
-                Rectangle()
-                    .fill(Color(hex: "#E5E5EA"))
-                    .frame(width: 0.5, height: 60)
-
-                // Recovery (恢复) - Yellow Green Gradient
-                NavigationLink(destination: VelaMetricDetailView(metric: .recovery)) {
-                    BevelScoreRing(
-                        score: recoveryScore,
-                        color: Color(hex: "#9CCC65"),
-                        useGradient: true,
-                        size: 78,
-                        label: "恢复",
-                        valueText: dashboard.recovery.hasData ? VelaMinimalFormatting.roundedPercentage(dashboard.recovery.score) : "--"
-                    )
-                }
-                .buttonStyle(.plain)
-                .frame(maxWidth: .infinity)
-
-                // Vertical divider line
-                Rectangle()
-                    .fill(Color(hex: "#E5E5EA"))
-                    .frame(width: 0.5, height: 60)
-
-                // Sleep (睡眠) - Blue Indigo Gradient
-                NavigationLink(destination: VelaMetricDetailView(metric: .sleep)) {
-                    BevelScoreRing(
-                        score: sleepScore,
-                        color: Color(hex: "#5C6BC0"),
-                        useGradient: true,
-                        size: 78,
-                        label: "睡眠",
-                        valueText: dashboard.sleepScore.hasData ? VelaMinimalFormatting.roundedPercentage(dashboard.sleepScore.score) : "--"
-                    )
-                }
-                .buttonStyle(.plain)
-                .frame(maxWidth: .infinity)
-            }
-            .padding(.top, 8)
-
-            Divider()
-
-            // Integrated Guidance / Today Command Center
-            VStack(alignment: .leading, spacing: 12) {
-                Button {
-                    showTodayEvidence = true
-                } label: {
-                    HStack(alignment: .center) {
-                        Text("指导 / COMMAND CENTER")
-                            .font(.system(size: 11, weight: .bold))
-                            .tracking(0.5)
-                            .foregroundStyle(Color(hex: "#8E8A80"))
-                        
-                        Spacer()
-                        
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(Color(hex: "#BFB9AC"))
-                    }
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    showTodayEvidence = true
-                } label: {
-                    HStack(alignment: .top, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(state.bodyStateTitle)
-                                .font(.system(size: 18, weight: .bold, design: .rounded))
-                                .foregroundStyle(accentColor)
-                            
-                            Text(state.coachArtifact?.summary ?? state.summary)
-                                .font(VelaTheme.subheadline())
-                                .foregroundStyle(VelaTheme.fg2)
-                                .lineSpacing(3)
-                                .multilineTextAlignment(.leading)
-                        }
-                        
-                        Spacer()
-                        
-                        VStack(alignment: .trailing, spacing: 4) {
-                            ConfidenceBadge(confidence: state.dataConfidence)
-                            Text("\(Int((state.readinessDecision.confidence * 100).rounded()))%")
-                                .font(.system(size: 16, weight: .bold, design: .rounded))
-                                .foregroundStyle(accentColor)
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-
-                if let artifact = state.coachArtifact, !artifact.actions.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(artifact.actions) { action in
-                                ActionPill(
-                                    title: action.label,
-                                    systemImage: icon(for: action),
-                                    isPrimary: action.id == artifact.actions.first?.id
-                                ) {
-                                    handleCoachArtifactAction(action, artifact: artifact)
-                                }
-                            }
-                        }
-                        .padding(.vertical, 1)
-                    }
-                } else if !state.actions.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(state.actions.prefix(3)) { action in
-                                ActionPill(
-                                    title: action.title,
-                                    systemImage: icon(for: action),
-                                    isPrimary: action.isPrimary
-                                ) {
-                                    handleTodayAction(action)
-                                }
-                            }
-                        }
-                        .padding(.vertical, 1)
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.015), radius: 10, y: 4)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color(hex: "#E5E5EA"), lineWidth: 0.5)
-        )
-    }
-
     // MARK: - Stress & Energy Section
     private var stressAndEnergySection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("压力和能量")
-                .font(.system(size: 13, weight: .semibold))
+            Text(L10n.t("VITALS", "压力与能量"))
+                .font(.system(size: 11, weight: .bold))
                 .tracking(0.5)
-                .textCase(.uppercase)
-                .foregroundStyle(Color(hex: "#8E8A80"))
+                .foregroundStyle(VelaTheme.muted)
                 .padding(.leading, 2)
-
-            // 1. Stress Card
-            NavigationLink(destination: VelaMetricDetailView(metric: .stress)) {
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack {
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(Color(hex: "#81C784"))
-                                .frame(width: 8, height: 8)
-
-                            Text("今天的压力")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(Color(hex: "#1A1917"))
-
-                            Text(dashboard.stress.hasData ? "已同步" : "暂无数据")
-                                .font(.system(size: 10))
-                                .foregroundStyle(Color(hex: "#8E8A80"))
+            
+            HStack(spacing: 12) {
+                // Left Card: Energy Bank
+                NavigationLink(destination: VelaMetricDetailView(metric: .energy)) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            HStack(spacing: 6) {
+                                Image(systemName: "bolt.fill")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(VelaTheme.energyColor)
+                                
+                                Text("能量银行")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(VelaTheme.fg)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(VelaTheme.muted)
                         }
-
-                        Spacer()
-
-                        Image(systemName: "arrow.right")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Color(hex: "#BFB9AC"))
+                        
+                        HStack(alignment: .bottom) {
+                            Text(dashboard.energy.hasData ? "\(Int(energyScore))%" : "--")
+                                .font(.system(size: 26, weight: .bold, design: .rounded).monospacedDigit())
+                                .foregroundStyle(VelaTheme.energyColor)
+                            Spacer()
+                            
+                            // A mini horizontal battery block or gauge
+                            HStack(spacing: 1) {
+                                ForEach(0..<15, id: \.self) { idx in
+                                    let threshold = Double(idx) / 15.0 * 100.0
+                                    RoundedRectangle(cornerRadius: 1.0)
+                                        .fill(energyScore >= threshold ? VelaTheme.energyColor : VelaTheme.borderSoft)
+                                        .frame(width: 2.2, height: 12)
+                                }
+                            }
+                            .padding(.bottom, 4)
+                        }
                     }
-
-                    HStack(alignment: .center) {
-                        VStack(alignment: .leading, spacing: 2) {
+                    .padding(14)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(VelaTheme.cardBg)
+                            .shadow(color: VelaTheme.cardShadow(cs), radius: 8, y: 3)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+                    )
+                }
+                .buttonStyle(.plain)
+                
+                // Right Card: Stress Level
+                NavigationLink(destination: VelaMetricDetailView(metric: .stress)) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            HStack(spacing: 6) {
+                                Image(systemName: "gauge.with.needle.fill")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(VelaTheme.stressColor)
+                                
+                                Text("压力指数")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(VelaTheme.fg)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(VelaTheme.muted)
+                        }
+                        
+                        HStack(alignment: .bottom) {
                             Text(dashboard.stress.hasData ? "\(Int(stressLevel.rounded()))" : "--")
-                                .font(.system(size: 20, weight: .bold, design: .rounded).monospacedDigit())
-                                .foregroundStyle(Color(hex: "#FF7043"))
-                            Text("每日指数")
-                                .font(.system(size: 10))
-                                .foregroundStyle(Color(hex: "#8E8A80"))
-                        }
-
-                        Spacer()
-
-                        if dashboard.stress.hasData {
-                            let baseData = [0.15, 0.22, 0.35, 0.30, 0.42, 0.38, 0.50, 0.38, 0.30, 0.25]
-                            let factor = max(0.1, min(1.8, stressLevel / 50.0))
-                            let stressHistory = baseData.map { max(0.01, min(0.99, $0 * factor)) }
-                            SparklineLineGraph(data: stressHistory, color: Color(hex: "#FF7043"), height: 26, width: 110)
-                        } else {
-                            Text("暂无数据")
-                                .font(.system(size: 11))
-                                .foregroundStyle(Color(hex: "#8E8A80"))
+                                .font(.system(size: 26, weight: .bold, design: .rounded).monospacedDigit())
+                                .foregroundStyle(VelaTheme.stressColor)
+                            Spacer()
+                            
+                            if dashboard.stress.hasData {
+                                let baseData = [0.15, 0.22, 0.35, 0.30, 0.42, 0.38, 0.50, 0.38, 0.30, 0.25]
+                                let factor = max(0.1, min(1.8, stressLevel / 50.0))
+                                let stressHistory = baseData.map { max(0.01, min(0.99, $0 * factor)) }
+                                SparklineLineGraph(data: stressHistory, color: VelaTheme.stressColor, height: 16, width: 50)
+                                    .padding(.bottom, 2)
+                            } else {
+                                Text("无数据")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(VelaTheme.muted)
+                            }
                         }
                     }
+                    .padding(14)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(VelaTheme.cardBg)
+                            .shadow(color: VelaTheme.cardShadow(cs), radius: 8, y: 3)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+                    )
                 }
-                .padding(16)
-                .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(Color.white)
-                        .shadow(color: Color.black.opacity(0.015), radius: 10, y: 4)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(Color(hex: "#E5E5EA"), lineWidth: 0.5)
-                )
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
- 
-            // 2. Energy Card (Bevel High-Fidelity Segmented Battery Card)
-            NavigationLink(destination: VelaMetricDetailView(metric: .energy)) {
-                HStack(spacing: 12) {
-                    Image(systemName: "bolt.fill")
-                        .font(.system(size: 16, weight: .bold))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(Color(hex: "#34C759")) // Vibrant Bevel green
- 
-                    Spacer()
- 
-                    // 40 Ticks
-                    HStack(spacing: 1.2) {
-                        ForEach(0..<40, id: \.self) { idx in
-                            let threshold = Double(idx) / 40.0 * 100.0
-                            RoundedRectangle(cornerRadius: 1.0)
-                                .fill(animatedEnergyScore >= threshold ? Color(hex: "#34C759") : Color(hex: "#E5E5EA").opacity(0.7))
-                                .frame(width: 1.8, height: 10)
-                        }
-                    }
- 
-                    Spacer()
- 
-                    Text(dashboard.energy.hasData ? "\(Int(energyScore))%" : "--")
-                        .font(.system(size: 16, weight: .bold, design: .rounded).monospacedDigit())
-                        .foregroundStyle(Color(hex: "#1A1917"))
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(Color.white)
-                        .shadow(color: Color.black.opacity(0.015), radius: 10, y: 4)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(Color(hex: "#E5E5EA"), lineWidth: 0.5)
-                )
-            }
-            .buttonStyle(.plain)
         }
     }
 
     // MARK: - Daily Activity Section
     private var dailyActivitySection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("日常活动")
-                .font(.system(size: 13, weight: .semibold))
+            Text(L10n.t("DAILY ACTIVITY", "日常活动"))
+                .font(.system(size: 11, weight: .bold))
                 .tracking(0.5)
-                .textCase(.uppercase)
-                .foregroundStyle(Color(hex: "#8E8A80"))
+                .foregroundStyle(VelaTheme.muted)
                 .padding(.leading, 2)
-
-            VStack(spacing: 0) {
-                ForEach(Array(DailyActivityDetailCatalog.metrics.enumerated()), id: \.element.rawValue) { index, metric in
-                    if index > 0 {
-                        Divider()
-                            .padding(.leading, 60)
+            
+            HStack(spacing: 8) {
+                // Column 1: Steps
+                NavigationLink(destination: VelaMetricDetailView(metric: .steps)) {
+                    VStack(spacing: 8) {
+                        Circle()
+                            .fill(dailyActivityColor(for: .steps).opacity(0.12))
+                            .frame(width: 36, height: 36)
+                            .overlay(
+                                Image(systemName: dailyActivityIcon(for: .steps))
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(dailyActivityColor(for: .steps))
+                            )
+                        
+                        VStack(spacing: 2) {
+                            Text(dailyActivityValue(for: .steps))
+                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                                .foregroundStyle(VelaTheme.fg)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                            
+                            Text("步数")
+                                .font(.system(size: 11))
+                                .foregroundStyle(VelaTheme.muted)
+                        }
                     }
-
-                    NavigationLink(destination: VelaMetricDetailView(metric: metric)) {
-                        dailyActivityRow(metric)
-                    }
-                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(RoundedRectangle(cornerRadius: 18).fill(VelaTheme.cardBg))
+                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
                 }
+                .buttonStyle(.plain)
+                
+                // Column 2: Calories
+                NavigationLink(destination: VelaMetricDetailView(metric: .activeCalories)) {
+                    VStack(spacing: 8) {
+                        Circle()
+                            .fill(dailyActivityColor(for: .activeCalories).opacity(0.12))
+                            .frame(width: 36, height: 36)
+                            .overlay(
+                                Image(systemName: dailyActivityIcon(for: .activeCalories))
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(dailyActivityColor(for: .activeCalories))
+                            )
+                        
+                        VStack(spacing: 2) {
+                            Text(dailyActivityValue(for: .activeCalories))
+                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                                .foregroundStyle(VelaTheme.fg)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                            
+                            Text("千卡")
+                                .font(.system(size: 11))
+                                .foregroundStyle(VelaTheme.muted)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(RoundedRectangle(cornerRadius: 18).fill(VelaTheme.cardBg))
+                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+                }
+                .buttonStyle(.plain)
+                
+                // Column 3: Active Minutes
+                NavigationLink(destination: VelaMetricDetailView(metric: .activeMinutes)) {
+                    VStack(spacing: 8) {
+                        Circle()
+                            .fill(dailyActivityColor(for: .activeMinutes).opacity(0.12))
+                            .frame(width: 36, height: 36)
+                            .overlay(
+                                Image(systemName: dailyActivityIcon(for: .activeMinutes))
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(dailyActivityColor(for: .activeMinutes))
+                            )
+                        
+                        VStack(spacing: 2) {
+                            Text(dailyActivityValue(for: .activeMinutes))
+                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                                .foregroundStyle(VelaTheme.fg)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                            
+                            Text("分钟")
+                                .font(.system(size: 11))
+                                .foregroundStyle(VelaTheme.muted)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(RoundedRectangle(cornerRadius: 18).fill(VelaTheme.cardBg))
+                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+                }
+                .buttonStyle(.plain)
             }
-            .padding(.vertical, 2)
-            .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(Color.white)
-                    .shadow(color: Color.black.opacity(0.015), radius: 10, y: 4)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(Color(hex: "#E5E5EA"), lineWidth: 0.5)
-            )
-        }
-    }
-
-    private func dailyActivityRow(_ metric: VelaMetricDetailView.MetricType) -> some View {
-        HStack(spacing: 12) {
-            Circle()
-                .fill(dailyActivityColor(for: metric).opacity(0.14))
-                .frame(width: 36, height: 36)
-                .overlay(
-                    Image(systemName: dailyActivityIcon(for: metric))
-                        .font(.system(size: 15, weight: .semibold))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(dailyActivityColor(for: metric))
-                )
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(dailyActivityTitle(for: metric))
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
-                Text(dailyActivitySubtitle(for: metric))
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color(hex: "#8E8A80"))
-            }
-
-            Spacer()
-
-            Text(dailyActivityValue(for: metric))
-                .font(.system(size: 15, weight: .bold, design: .rounded).monospacedDigit())
-                .foregroundStyle(Color(hex: "#1A1917"))
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(Color(hex: "#BFB9AC"))
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-    }
-
-    private func dailyActivityTitle(for metric: VelaMetricDetailView.MetricType) -> String {
-        switch metric {
-        case .steps: return "步数"
-        case .activeCalories: return "活动消耗"
-        case .activeMinutes: return "活跃时长"
-        default: return metric.rawValue
-        }
-    }
-
-    private func dailyActivitySubtitle(for metric: VelaMetricDetailView.MetricType) -> String {
-        switch metric {
-        case .steps: return "每日基础移动"
-        case .activeCalories: return "训练与日常活动"
-        case .activeMinutes: return "中高强度活动时间"
-        default: return ""
         }
     }
 
@@ -1207,11 +1084,11 @@ struct VelaTodayView: View {
         let metrics = dashboard.strain.metrics
         switch metric {
         case .steps:
-            return metrics["steps_raw"].map { "\(Int($0.rounded())) 步" } ?? "--"
+            return metrics["steps_raw"].map { "\(Int($0.rounded()))" } ?? "--"
         case .activeCalories:
-            return metrics["active_energy_raw"].map { "\(Int($0.rounded())) kcal" } ?? "--"
+            return metrics["active_energy_raw"].map { "\(Int($0.rounded()))" } ?? "--"
         case .activeMinutes:
-            return metrics["exercise_minutes_raw"].map { "\(Int($0.rounded())) 分钟" } ?? "--"
+            return metrics["exercise_minutes_raw"].map { "\(Int($0.rounded()))" } ?? "--"
         default:
             return "--"
         }
@@ -1220,7 +1097,7 @@ struct VelaTodayView: View {
     // MARK: - Nutrition (营养) Section
     private var nutritionSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("今日膳食营养")
+            Text(L10n.t("NUTRITION", "今日膳食营养"))
                 .font(.system(size: 13, weight: .semibold))
                 .tracking(0.5)
                 .textCase(.uppercase)
@@ -1233,7 +1110,7 @@ struct VelaTodayView: View {
                         Text("\(todayCalories)")
                             .font(.system(size: 32, weight: .bold, design: .rounded))
                             .foregroundStyle(Color(hex: "#1A1917"))
-                        Text("已消耗卡路里 / 目标 \(dailyCalorieTarget)")
+                        Text(L10n.t("Kcal Intake / Target \(dailyCalorieTarget)", "卡路里已摄入 / 目标 \(dailyCalorieTarget)"))
                             .font(.system(size: 12))
                             .foregroundStyle(Color(hex: "#8E8A80"))
                     }
@@ -1270,11 +1147,11 @@ struct VelaTodayView: View {
 
                 // Macros (Protein, Carbs, Fat)
                 HStack(spacing: 0) {
-                    macroIndicator(title: "蛋白质", target: "90g", current: "\(todayProtein)g", color: Color(hex: "#FF7043"))
+                    macroIndicator(title: L10n.t("Protein", "蛋白质"), target: "90g", current: "\(todayProtein)g", color: Color(hex: "#FF7043"))
                     Spacer()
-                    macroIndicator(title: "碳水", target: "220g", current: "\(todayCarbs)g", color: Color(hex: "#FFB74D"))
+                    macroIndicator(title: L10n.t("Carbs", "碳水"), target: "220g", current: "\(todayCarbs)g", color: Color(hex: "#FFB74D"))
                     Spacer()
-                    macroIndicator(title: "脂肪", target: "65g", current: "\(todayFat)g", color: Color(hex: "#42A5F5"))
+                    macroIndicator(title: L10n.t("Fat", "脂肪"), target: "65g", current: "\(todayFat)g", color: Color(hex: "#42A5F5"))
                 }
             }
             .padding(18)
@@ -2229,7 +2106,7 @@ private struct TodayDecisionEvidenceSheet: View {
                 if !state.readinessDecision.reasons.isEmpty {
                     Section("决策详细逻辑推理") {
                         ForEach(state.readinessDecision.reasons, id: \.self) { reason in
-                            Text(reason)
+                            Text(localizedReason(reason))
                                 .font(VelaTheme.subheadline())
                                 .foregroundStyle(VelaTheme.fg2)
                                 .lineSpacing(3)

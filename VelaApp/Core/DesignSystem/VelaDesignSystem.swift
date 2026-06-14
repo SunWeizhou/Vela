@@ -611,7 +611,7 @@ struct SignalRow: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text(signal.title)
+                    Text(localizedSignalTitle(signal.title))
                         .font(VelaTheme.subheadline())
                         .fontWeight(.semibold)
                         .foregroundStyle(VelaTheme.fg)
@@ -619,13 +619,13 @@ struct SignalRow: View {
                     ConfidenceBadge(confidence: signal.confidence)
                 }
 
-                Text(signal.value)
+                Text(localizedSignalValue(signal.value))
                     .font(VelaTheme.caption1())
                     .fontWeight(.semibold)
                     .foregroundStyle(VelaTheme.fg2)
 
                 if let baseline = signal.baseline {
-                    Text(baseline)
+                    Text(localizedSignalBaseline(baseline))
                         .font(VelaTheme.caption2())
                         .foregroundStyle(VelaTheme.meta)
                 }
@@ -1005,8 +1005,6 @@ struct DayPill: View {
     }
 }
 
-// MARK: - MessageBubble
-
 struct MessageBubble: View {
     let text: String
     let isUser: Bool
@@ -1030,17 +1028,15 @@ struct MessageBubble: View {
                     .background(
                         Group {
                             if isUser {
-                                VelaTheme.accent
+                                LinearGradient(
+                                    colors: [VelaTheme.accent, Color(hex: "#00A2FF")],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
                             } else {
-                                VelaTheme.surface
+                                VelaTheme.cardBg
                             }
                         }
-                    )
-                    .clipShape(
-                        RoundedRectangle(
-                            cornerRadius: VelaTheme.radiusLg,
-                            style: .continuous
-                        )
                     )
                     .clipShape(
                         UnevenRoundedRectangle(
@@ -1051,15 +1047,30 @@ struct MessageBubble: View {
                             style: .continuous
                         )
                     )
-                    .frame(maxWidth: 280, alignment: isUser ? .trailing : .leading)
+                    .overlay(
+                        UnevenRoundedRectangle(
+                            topLeadingRadius: isUser ? VelaTheme.radiusLg : 4,
+                            bottomLeadingRadius: VelaTheme.radiusLg,
+                            bottomTrailingRadius: VelaTheme.radiusLg,
+                            topTrailingRadius: isUser ? 4 : VelaTheme.radiusLg,
+                            style: .continuous
+                        )
+                        .stroke(isUser ? Color.clear : VelaTheme.borderSoft, lineWidth: 0.8)
+                    )
+                    .shadow(color: isUser ? VelaTheme.accent.opacity(0.1) : Color.black.opacity(0.015), radius: 5, y: 2)
+                    .frame(maxWidth: 285, alignment: isUser ? .trailing : .leading)
 
                 if !time.isEmpty {
                     Text(time)
                         .font(VelaTheme.caption2())
                         .foregroundStyle(VelaTheme.meta)
-                        .padding(.horizontal, 4)
+                        .padding(.horizontal, 8)
                 }
             }
+            .transition(.asymmetric(
+                insertion: .scale(scale: 0.96, anchor: isUser ? .bottomTrailing : .bottomLeading).combined(with: .opacity),
+                removal: .opacity
+            ))
 
             if !isUser { Spacer() }
         }

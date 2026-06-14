@@ -167,7 +167,7 @@ final class AgentActionParserTests: XCTestCase {
     }
 
     @MainActor
-    func testAgentLoopStreamsOnlyAfterNoToolCallsRemain() async throws {
+    func testAgentLoopPublishesExistingFinalResponseWithoutDuplicateStreamingRequest() async throws {
         let provider = FakeAgentChatProvider(
             responses: [
                 LLMResponse(
@@ -189,11 +189,29 @@ final class AgentActionParserTests: XCTestCase {
             onStreamDelta: { streamed += $0 }
         )
 
-        XCTAssertEqual(result.response, "stream final")
-        XCTAssertEqual(streamed, "stream final")
+        XCTAssertEqual(result.response, "non-stream final")
+        XCTAssertEqual(streamed, "non-stream final")
         XCTAssertEqual(result.executedTools.map(\.name), ["first_tool"])
-        XCTAssertEqual(provider.streamCallCount, 1)
+        XCTAssertEqual(provider.streamCallCount, 0)
         XCTAssertEqual(provider.chatCallToolAvailability, [true, true])
+        XCTAssertEqual(result.trace.providerCallCount, 2)
+    }
+
+    func testProviderFailureMessageClassifiesOfflineTimeoutAndAuthentication() {
+        XCTAssertEqual(
+            LLMProviderError.classify(URLError(.notConnectedToInternet)),
+            .networkUnavailable
+        )
+        XCTAssertEqual(
+            LLMProviderError.classify(URLError(.timedOut)),
+            .timedOut
+        )
+        XCTAssertEqual(
+            LLMProviderError.httpFailure(statusCode: 401, body: "invalid key"),
+            .authenticationFailed
+        )
+        XCTAssertTrue(LLMProviderError.networkUnavailable.userFacingMessage(isChinese: true).contains("网络"))
+        XCTAssertTrue(LLMProviderError.authenticationFailed.userFacingMessage(isChinese: false).contains("Settings"))
     }
 
     @MainActor

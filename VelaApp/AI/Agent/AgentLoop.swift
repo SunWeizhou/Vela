@@ -41,6 +41,7 @@ struct AgentLoop {
         var executedTools: [ExecutedTool] = []
         var activeDataVersion = initialDataVersion
         var dataVersionWarnings: [String] = []
+        var providerCallCount = 0
 
         for _ in 0..<maxIterations {
             // ── Inject data-version notice if tools returned fresher data than the snapshot ──
@@ -52,6 +53,7 @@ struct AgentLoop {
                 }
             }
 
+            providerCallCount += 1
             let response = try await provider.chat(
                 messages: agentMessages,
                 tools: toolRegistry.definitions
@@ -88,18 +90,22 @@ struct AgentLoop {
 
             // Final text response (no more tool calls)
             if let onStreamDelta {
-                fullResponse = try await streamFinalResponse(messages: agentMessages, onStreamDelta: onStreamDelta)
+                fullResponse = response.content
+                if !fullResponse.isEmpty {
+                    await onStreamDelta(fullResponse)
+                }
                 return AgentLoopResult(
                     response: fullResponse,
                     executedTools: executedTools,
                     finalMessages: agentMessages,
-                    wasStreamed: true,
+                    wasStreamed: false,
                     trace: makeTrace(
                         startedAt: startedAt,
                         inputMessages: messages,
                         executedTools: executedTools,
                         finalResponse: fullResponse,
-                        contextHash: initialDataVersion
+                        contextHash: initialDataVersion,
+                        providerCallCount: providerCallCount
                     )
                 )
             } else {
@@ -110,21 +116,28 @@ struct AgentLoop {
 
         if fullResponse.isEmpty {
             if let onStreamDelta {
-                fullResponse = try await streamFinalResponse(messages: agentMessages, onStreamDelta: onStreamDelta)
+                providerCallCount += 1
+                let finalResponse = try await provider.chat(messages: agentMessages, tools: nil)
+                fullResponse = finalResponse.content
+                if !fullResponse.isEmpty {
+                    await onStreamDelta(fullResponse)
+                }
                 return AgentLoopResult(
                     response: fullResponse,
                     executedTools: executedTools,
                     finalMessages: agentMessages,
-                    wasStreamed: true,
+                    wasStreamed: false,
                     trace: makeTrace(
                         startedAt: startedAt,
                         inputMessages: messages,
                         executedTools: executedTools,
                         finalResponse: fullResponse,
-                        contextHash: initialDataVersion
+                        contextHash: initialDataVersion,
+                        providerCallCount: providerCallCount
                     )
                 )
             } else {
+                providerCallCount += 1
                 let finalResponse = try await provider.chat(messages: agentMessages, tools: nil)
                 fullResponse = finalResponse.content.isEmpty
                     ? "I wasn't able to generate a response. Please try again."
@@ -142,7 +155,8 @@ struct AgentLoop {
                 inputMessages: messages,
                 executedTools: executedTools,
                 finalResponse: fullResponse,
-                contextHash: initialDataVersion
+                contextHash: initialDataVersion,
+                providerCallCount: providerCallCount
             )
         )
     }
@@ -152,7 +166,8 @@ struct AgentLoop {
         inputMessages: [ChatMessage],
         executedTools: [ExecutedTool],
         finalResponse: String,
-        contextHash: String?
+        contextHash: String?,
+        providerCallCount: Int
     ) -> AgentRunTrace {
         let resolvedHash = contextHash ?? ContentHash.hash(
             inputMessages.map { "\($0.role.rawValue):\($0.content)" }.joined(separator: "\n")
@@ -177,7 +192,8 @@ struct AgentLoop {
             },
             finalResponse: finalResponse,
             contextHash: resolvedHash,
-            schemaVersion: "agentTrace.v1"
+            schemaVersion: "agentTrace.v1",
+            providerCallCount: providerCallCount
         )
     }
 
@@ -189,18 +205,6 @@ struct AgentLoop {
             ?? obj["context_hash"] as? String
     }
 
-    private func streamFinalResponse(
-        messages: [ChatMessage],
-        onStreamDelta: @MainActor @Sendable (String) -> Void
-    ) async throws -> String {
-        let stream = provider.streamChat(messages: messages)
-        var streamedText = ""
-        for try await delta in stream {
-            streamedText += delta
-            await onStreamDelta(delta)
-        }
-        return streamedText
-    }
 }
 
 struct AgentLoopResult {
@@ -259,6 +263,7 @@ struct AgentRunTrace: Codable {
     var finalResponse: String
     var contextHash: String
     var schemaVersion: String
+    var providerCallCount: Int?
 
     struct ChatMessageSnapshot: Codable {
         var role: String

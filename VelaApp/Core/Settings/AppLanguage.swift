@@ -66,6 +66,28 @@ func localizedConfidence(_ confidence: MetricConfidence) -> String {
     }
 }
 
+func localizedDataConfidence(_ confidence: DataConfidence) -> String {
+    guard AppLanguage.stored.isChinese else { return confidence.rawValue }
+    switch confidence {
+    case .high: return "高置信度"
+    case .medium: return "中置信度"
+    case .low: return "低置信度"
+    case .unavailable: return "置信度未知"
+    }
+}
+
+func localizedDataFreshness(_ freshness: DataFreshness) -> String {
+    guard AppLanguage.stored.isChinese else { return freshness.rawValue }
+    switch freshness {
+    case .live: return "实时同步"
+    case .today: return "今日更新"
+    case .recent: return "近期更新"
+    case .stale: return "数据滞后"
+    case .missing: return "数据缺失"
+    }
+}
+
+
 func localizedTarget(_ status: StrainTargetStatus) -> String {
     guard AppLanguage.stored.isChinese else { return status.rawValue }
     switch status {
@@ -195,3 +217,161 @@ func localizedMetricName(_ name: String) -> String {
         return name.replacingOccurrences(of: "_", with: " ")
     }
 }
+
+func localizedArtifactType(_ type: String) -> String {
+    guard AppLanguage.stored.isChinese else {
+        return type.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+    switch type.lowercased() {
+    case "daily_plan": return "每日训练计划"
+    case "training_adjustment": return "训练强度调整"
+    case "weekly_report": return "每周身体总结"
+    case "correlation_chart": return "指标关联图表"
+    case "wiki_diff": return "身体特征更新"
+    case "nutrition_feedback": return "营养健康反馈"
+    default: return type.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+}
+
+func localizedDriverTitle(_ title: String) -> String {
+    guard AppLanguage.stored.isChinese else { return title }
+    if title.contains("local fatigue") {
+        let muscle = title.replacingOccurrences(of: " local fatigue", with: "").trimmingCharacters(in: .whitespaces)
+        let localizedMuscle: String
+        switch muscle.lowercased() {
+        case "chest": localizedMuscle = "胸部"
+        case "back": localizedMuscle = "背部"
+        case "quads", "quadriceps": localizedMuscle = "股四头肌"
+        case "hamstrings": localizedMuscle = "股二头肌"
+        case "shoulders", "shoulder": localizedMuscle = "肩部"
+        case "arms", "arm", "biceps", "triceps": localizedMuscle = "手臂"
+        case "core", "abs": localizedMuscle = "核心"
+        case "legs", "leg": localizedMuscle = "腿部"
+        default: localizedMuscle = muscle.capitalized
+        }
+        return "\(localizedMuscle)局部肌肉疲劳"
+    }
+    switch title {
+    case "Recent training response": return "近期训练恢复反应"
+    case "Active status": return "当前生活状态"
+    case "Nutrition logged": return "今日营养记录"
+    case "Recent self-report": return "近期主观记录"
+    case "Active training plan": return "当前激活的计划"
+    case "Recent training load": return "近期训练负荷"
+    case "Limited data coverage": return "数据覆盖不足"
+    default: return title
+    }
+}
+
+func localizedDriverDetail(_ detail: String) -> String {
+    guard AppLanguage.stored.isChinese else { return detail }
+    
+    // 1. Local fatigue details: "X effective sets in 48h and Y in 7d."
+    if detail.contains("effective sets in 48h and") {
+        let components = detail.components(separatedBy: CharacterSet.decimalDigits.inverted).filter { !$0.isEmpty }
+        if components.count >= 2 {
+            return "过去 48 小时进行了 \(components[0]) 组有效训练，7 天内累计 \(components[1]) 组。"
+        }
+    }
+    
+    // 2. Recent training response: "A [muscles] session was followed by a [change] recovery change."
+    if detail.contains("session was followed by a") {
+        var clean = detail
+        clean = clean.replacingOccurrences(of: "A ", with: "")
+        clean = clean.replacingOccurrences(of: " session was followed by a ", with: "训练后，次日恢复评分发生了 ")
+        clean = clean.replacingOccurrences(of: " recovery change.", with: " 的变化。")
+        // Translate muscle names
+        clean = clean.replacingOccurrences(of: "chest", with: "胸部")
+        clean = clean.replacingOccurrences(of: "back", with: "背部")
+        clean = clean.replacingOccurrences(of: "shoulders", with: "肩部")
+        clean = clean.replacingOccurrences(of: "quads", with: "股四头肌")
+        clean = clean.replacingOccurrences(of: "hamstrings", with: "大腿后侧")
+        clean = clean.replacingOccurrences(of: "arms", with: "手臂")
+        clean = clean.replacingOccurrences(of: "core", with: "核心")
+        return clean
+    }
+    
+    // 3. User status: "User status is [status]."
+    if detail.contains("User status is") {
+        let status = detail.replacingOccurrences(of: "User status is ", with: "").replacingOccurrences(of: ".", with: "").trimmingCharacters(in: .whitespaces)
+        let localizedStatus: String
+        switch status {
+        case "sick": localizedStatus = "生病"
+        case "injured": localizedStatus = "受伤"
+        case "resting": localizedStatus = "休息/调整"
+        default: localizedStatus = status
+        }
+        return "用户标记当前处于【\(localizedStatus)】状态。"
+    }
+    
+    // 4. Nutrition: "[calories] kcal and [protein] g protein recorded today."
+    if detail.contains("kcal and") && detail.contains("protein recorded today") {
+        let components = detail.components(separatedBy: CharacterSet.decimalDigits.inverted).filter { !$0.isEmpty }
+        if components.count >= 2 {
+            return "今日已记录 \(components[0]) 千卡热量及 \(components[1]) 克蛋白质。"
+        }
+    }
+    
+    // 5. Recent activity: "[X] sessions and [Y] minutes in 48h."
+    if detail.contains("sessions and") && detail.contains("minutes in 48h") {
+        let components = detail.components(separatedBy: CharacterSet.decimalDigits.inverted).filter { !$0.isEmpty }
+        if components.count >= 2 {
+            return "过去 48 小时内累计进行了 \(components[0]) 次训练，时长达 \(components[1]) 分钟。"
+        }
+    }
+    
+    // 6. Data coverage fallback
+    if detail.contains("Vela is using a conservative fallback") {
+        return "在获取充足的 HealthKit 历史基线或本地训练记录之前，Vela 将使用保守基线进行评估。"
+    }
+    
+    return detail
+}
+
+func localizedSignalTitle(_ title: String) -> String {
+    guard AppLanguage.stored.isChinese else { return title }
+    switch title.lowercased() {
+    case "recovery": return "恢复得分"
+    case "sleep": return "睡眠得分"
+    case "hrv vs baseline": return "HRV 变异率"
+    case "resting hr": return "静息心率"
+    case "training load": return "今日耗力负荷"
+    case "local fatigue": return "局部肌群疲劳"
+    default: return title
+    }
+}
+
+func localizedSignalValue(_ value: String) -> String {
+    guard AppLanguage.stored.isChinese else { return value }
+    if value.hasSuffix(" min") {
+        return value.replacingOccurrences(of: " min", with: " 分钟")
+    }
+    if value.hasSuffix(" sets") {
+        var clean = value.replacingOccurrences(of: " sets", with: " 组")
+        clean = clean.replacingOccurrences(of: "chest", with: "胸部")
+        clean = clean.replacingOccurrences(of: "back", with: "背部")
+        clean = clean.replacingOccurrences(of: "shoulders", with: "肩部")
+        clean = clean.replacingOccurrences(of: "quads", with: "股四头肌")
+        clean = clean.replacingOccurrences(of: "hamstrings", with: "大腿后侧")
+        clean = clean.replacingOccurrences(of: "arms", with: "手臂")
+        clean = clean.replacingOccurrences(of: "core", with: "核心")
+        return clean
+    }
+    return value
+}
+
+func localizedSignalBaseline(_ baseline: String) -> String {
+    guard AppLanguage.stored.isChinese else { return baseline }
+    if baseline == "7d effective sets" {
+        return "7 天有效训练组数"
+    }
+    if baseline.contains("baseline") {
+        return baseline.replacingOccurrences(of: " baseline", with: " 基线")
+    }
+    if baseline.contains("target") {
+        return baseline.replacingOccurrences(of: "target ", with: "目标范围 ")
+    }
+    return baseline
+}
+
+

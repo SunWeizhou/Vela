@@ -203,6 +203,24 @@ public final class WorkoutAggregationService {
         sessionRPE: Double? = nil,
         calendar: Calendar = .current
     ) throws -> WorkoutEventRecord {
+        let event = try prepareWorkoutEvent(
+            from: strengthWorkout,
+            modelContext: modelContext,
+            sessionRPE: sessionRPE,
+            calendar: calendar
+        )
+        try aggregateDay(date: strengthWorkout.startedAt, modelContext: modelContext, calendar: calendar)
+        try modelContext.save()
+        return event
+    }
+
+    @discardableResult
+    func prepareWorkoutEvent(
+        from strengthWorkout: StrengthWorkoutRecord,
+        modelContext: ModelContext,
+        sessionRPE: Double? = nil,
+        calendar: Calendar = .current
+    ) throws -> WorkoutEventRecord {
         let workoutID = strengthWorkout.id
         let descriptor = FetchDescriptor<WorkoutEventRecord>(
             predicate: #Predicate<WorkoutEventRecord> { $0.linkedStrengthWorkoutId == workoutID }
@@ -256,8 +274,6 @@ public final class WorkoutAggregationService {
         strengthWorkout.sessionRPE = resolvedRPE
         strengthWorkout.completedAt = strengthWorkout.endedAt
         try linkActivePlanDay(for: event, strengthWorkout: strengthWorkout, modelContext: modelContext, calendar: calendar)
-        try aggregateDay(date: strengthWorkout.startedAt, modelContext: modelContext, calendar: calendar)
-        try modelContext.save()
         return event
     }
 
@@ -667,6 +683,141 @@ public final class WorkoutAggregationService {
         // 4. Recalculate summary and aggregation for the affected day
         try aggregateDay(date: workoutDate, modelContext: modelContext, calendar: calendar)
         try modelContext.save()
+    }
+}
+
+@MainActor
+struct WorkoutSaveCoordinator {
+    enum Stage: Int, CaseIterable, Sendable {
+        case workoutInsertion = 1
+        case eventUpsert
+        case artifactInsertion
+        case aggregation
+        case draftDeletion
+        case save
+    }
+
+    struct CommitResult {
+        let workout: StrengthWorkoutRecord
+        let event: WorkoutEventRecord
+    }
+
+    typealias FailureInjector = @MainActor (Stage) throws -> Void
+
+    private let failureInjector: FailureInjector
+    private let aggregationService: WorkoutAggregationService
+    private let calendar: Calendar
+
+    init(
+        aggregationService: WorkoutAggregationService = .shared,
+        calendar: Calendar = .current,
+        failureInjector: @escaping FailureInjector = { _ in }
+    ) {
+        self.aggregationService = aggregationService
+        self.calendar = calendar
+        self.failureInjector = failureInjector
+    }
+
+    init(failureInjector: @escaping FailureInjector) {
+        self.init(
+            aggregationService: .shared,
+            calendar: .current,
+            failureInjector: failureInjector
+        )
+    }
+
+    func commitNewWorkout(
+        workout: StrengthWorkoutRecord,
+        artifact: CoachArtifactRecord,
+        sessionRPE: Double?,
+        modelContext: ModelContext
+    ) throws -> CommitResult {
+        do {
+            try PersistenceWriteGate.shared.assertWritable(
+                operation: "WorkoutSaveCoordinator.commitNewWorkout",
+                modelContext: modelContext
+            )
+
+            try failureInjector(.workoutInsertion)
+            modelContext.insert(workout)
+
+            try failureInjector(.eventUpsert)
+            let event = try aggregationService.prepareWorkoutEvent(
+                from: workout,
+                modelContext: modelContext,
+                sessionRPE: sessionRPE,
+                calendar: calendar
+            )
+
+            try failureInjector(.artifactInsertion)
+            modelContext.insert(artifact)
+
+            try failureInjector(.aggregation)
+            try aggregationService.aggregateDay(
+                date: workout.startedAt,
+                modelContext: modelContext,
+                calendar: calendar
+            )
+
+            try failureInjector(.draftDeletion)
+            try deleteActiveDrafts(modelContext: modelContext)
+
+            try failureInjector(.save)
+            try modelContext.save()
+            return CommitResult(workout: workout, event: event)
+        } catch {
+            modelContext.rollback()
+            throw error
+        }
+    }
+
+    func commitWorkoutEdit(
+        workout: StrengthWorkoutRecord,
+        previousStartDate: Date,
+        sessionRPE: Double?,
+        modelContext: ModelContext
+    ) throws -> CommitResult {
+        do {
+            try PersistenceWriteGate.shared.assertWritable(
+                operation: "WorkoutSaveCoordinator.commitWorkoutEdit",
+                modelContext: modelContext
+            )
+
+            try failureInjector(.eventUpsert)
+            let event = try aggregationService.prepareWorkoutEvent(
+                from: workout,
+                modelContext: modelContext,
+                sessionRPE: sessionRPE,
+                calendar: calendar
+            )
+
+            try failureInjector(.aggregation)
+            if !calendar.isDate(previousStartDate, inSameDayAs: workout.startedAt) {
+                try aggregationService.aggregateDay(
+                    date: previousStartDate,
+                    modelContext: modelContext,
+                    calendar: calendar
+                )
+            }
+            try aggregationService.aggregateDay(
+                date: workout.startedAt,
+                modelContext: modelContext,
+                calendar: calendar
+            )
+
+            try failureInjector(.save)
+            try modelContext.save()
+            return CommitResult(workout: workout, event: event)
+        } catch {
+            modelContext.rollback()
+            throw error
+        }
+    }
+
+    private func deleteActiveDrafts(modelContext: ModelContext) throws {
+        for draft in try modelContext.fetch(FetchDescriptor<ActiveWorkoutDraftRecord>()) {
+            modelContext.delete(draft)
+        }
     }
 }
 

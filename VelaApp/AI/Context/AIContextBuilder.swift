@@ -364,7 +364,7 @@ struct AIContextBuilder {
         let analytics = TrainingAnalyticsService()
         let recent7d = analytics.buildRecentSummary(workouts: workouts, days: 7, endingAt: generatedAt)
         let recent14d = analytics.buildRecentSummary(workouts: workouts, days: 14, endingAt: generatedAt)
-        let adaptation = trainingAdaptation(dashboard: dashboard, localFatigue: recent7d.localFatigue)
+        let adaptation = trainingAdaptationSummary(dashboard: dashboard)
         let response = trainingResponseSummary(trainingResponses, generatedAt: generatedAt)
         let progressList = exerciseProgressSummaries(workouts: workouts, generatedAt: generatedAt)
             .map {
@@ -388,7 +388,7 @@ struct AIContextBuilder {
             "muscle_groups_14d": formatMuscleGroups(recent14d.muscleGroupSets),
             "recent_prs": recent14d.recentPRs.map(\.summary).joined(separator: "\n"),
             "local_fatigue": formatFatigue(recent7d.localFatigue),
-            "training_adaptation": adaptation.modifiedWorkoutDescription + " " + adaptation.reasons.joined(separator: " "),
+            "training_adaptation": adaptation,
             "recovery_response_summary": response.summary,
             "average_next_day_recovery_delta": response.averageNextDayRecoveryDelta.map { String(format: "%+.1f", $0) } ?? "N/A",
             "flagged_response_count": "\(response.flaggedCount)",
@@ -407,7 +407,7 @@ struct AIContextBuilder {
         let analytics = TrainingAnalyticsService()
         let recent7d = analytics.buildRecentSummary(workouts: workouts, days: 7, endingAt: generatedAt)
         let recent14d = analytics.buildRecentSummary(workouts: workouts, days: 14, endingAt: generatedAt)
-        let adaptation = trainingAdaptation(dashboard: dashboard, localFatigue: recent7d.localFatigue)
+        let adaptation = trainingAdaptationSummary(dashboard: dashboard)
         let response = trainingResponseSummary(trainingResponses, generatedAt: generatedAt)
         return StrengthTrainingContext(
             sessions7d: recent7d.sessions,
@@ -422,7 +422,7 @@ struct AIContextBuilder {
             localFatigue: recent7d.localFatigue,
             recentExerciseProgress: exerciseProgressSummaries(workouts: workouts, generatedAt: generatedAt),
             lastSessionSummary: recent14d.lastWorkoutSummary ?? "No strength training sessions logged in the past 14 days.",
-            trainingAdaptation: adaptation.modifiedWorkoutDescription + " " + adaptation.reasons.joined(separator: " "),
+            trainingAdaptation: adaptation,
             recoveryResponseSummary: response.summary,
             averageNextDayRecoveryDelta: response.averageNextDayRecoveryDelta,
             flaggedResponseCount: response.flaggedCount,
@@ -517,19 +517,16 @@ struct AIContextBuilder {
         }.sorted(by: { $0.exerciseName < $1.exerciseName })
     }
 
-    private func trainingAdaptation(
-        dashboard: DashboardSummary,
-        localFatigue: [String: LocalMuscleFatigue]
-    ) -> TrainingAdaptationRecommendation {
-        RecoveryTrainingAdapter().adapt(input: RecoveryTrainingInput(
-            recoveryScore: dashboard.recovery.score,
-            sleepScore: dashboard.sleepScore.score,
-            hrvZScore: dashboard.recovery.metrics["hrv_z_score"],
-            restingHRZScore: dashboard.recovery.metrics["rhr_z_score"],
-            tsb: dashboard.energy.metrics["tsb"],
-            energyScore: dashboard.energy.currentEnergy,
-            localFatigue: localFatigue
-        ))
+    private func trainingAdaptationSummary(dashboard: DashboardSummary) -> String {
+        let decision = dashboard.trainingDecision
+        return [
+            decision.body,
+            "\(Int((decision.volumeMultiplier * 100).rounded()))% volume.",
+            "\(decision.maxIntensity) cap.",
+            decision.whyThis
+        ]
+        .filter { !$0.isEmpty }
+        .joined(separator: " ")
     }
 
     private func formatMuscleGroups(_ values: [String: Int]) -> String {

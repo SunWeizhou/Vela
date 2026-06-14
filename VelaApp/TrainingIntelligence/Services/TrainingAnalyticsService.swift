@@ -848,6 +848,224 @@ private extension KeyedDecodingContainer {
     }
 }
 
+enum TrainingScheduleResolver {
+    static func resolve(
+        plan: TrainingPlanRecord,
+        on date: Date,
+        events: [WorkoutEventRecord],
+        calendar: Calendar = .current
+    ) -> TrainingDay? {
+        let selectedDay = calendar.startOfDay(for: date)
+        let planStart = calendar.startOfDay(for: plan.startDate)
+        guard selectedDay >= planStart else { return nil }
+
+        let selectedDayEnd = calendar.date(byAdding: .day, value: 1, to: selectedDay) ?? selectedDay
+        let completedDayIDs = Set(
+            events
+                .filter { $0.startedAt < selectedDayEnd }
+                .compactMap(\.linkedTrainingPlanDayId)
+        )
+        let executableDays = plan.days.filter {
+            !$0.isCompleted && !completedDayIDs.contains($0.id)
+        }
+        guard !executableDays.isEmpty else { return nil }
+
+        let scheduled = executableDays.compactMap { day -> (day: TrainingDay, date: Date)? in
+            guard let scheduledDate = scheduledDate(
+                for: day,
+                planStart: planStart,
+                calendar: calendar
+            ) else {
+                return nil
+            }
+            return (day, scheduledDate)
+        }
+        .sorted {
+            if $0.date == $1.date {
+                return $0.day.id.uuidString < $1.day.id.uuidString
+            }
+            return $0.date < $1.date
+        }
+
+        if let exact = scheduled.first(where: {
+            calendar.isDate($0.date, inSameDayAs: selectedDay)
+        }) {
+            return exact.day
+        }
+        if let earliestOverdue = scheduled.first(where: { $0.date < selectedDay }) {
+            return earliestOverdue.day
+        }
+        return scheduled.first(where: { $0.date > selectedDay })?.day
+    }
+
+    static func scheduledDate(
+        for day: TrainingDay,
+        planStart: Date,
+        calendar: Calendar = .current
+    ) -> Date? {
+        let start = calendar.startOfDay(for: planStart)
+        let weekday = calendar.component(.weekday, from: start)
+        let daysSinceMonday = (weekday + 5) % 7
+        guard let weekOneMonday = calendar.date(
+            byAdding: .day,
+            value: -daysSinceMonday,
+            to: start
+        ) else {
+            return nil
+        }
+        let offset = max(0, day.weekNumber - 1) * 7 + max(0, min(6, day.dayNumber - 1))
+        return calendar.date(byAdding: .day, value: offset, to: weekOneMonday)
+    }
+}
+
+struct TrainingSessionDraft: Equatable {
+    enum Action: String, Equatable {
+        case strength
+        case cardio
+        case flexibility
+        case rest
+        case unsupported
+    }
+
+    var action: Action
+    var title: String
+    var startedAt: Date
+    var durationMinutes: Int
+    var notes: String
+    var exercises: [StrengthExerciseLog]
+    var planDayId: UUID
+}
+
+struct TrainingSessionDraftBuilder {
+    func build(
+        day: TrainingDay,
+        decision: DailyTrainingDecision,
+        history: [StrengthWorkoutRecord],
+        scheduledAt: Date
+    ) -> TrainingSessionDraft {
+        let action = action(for: day.focus)
+        let exercises = action == .strength
+            ? strengthExercises(day: day, decision: decision, history: history)
+            : []
+        let notes = [
+            day.description,
+            decision.userFacingSummary,
+            decision.reasons.joined(separator: " ")
+        ]
+        .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        .joined(separator: "\n")
+
+        return TrainingSessionDraft(
+            action: action,
+            title: day.title,
+            startedAt: scheduledAt,
+            durationMinutes: day.durationMinutes,
+            notes: notes,
+            exercises: exercises,
+            planDayId: day.id
+        )
+    }
+
+    private func action(for focus: String) -> TrainingSessionDraft.Action {
+        switch focus.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "strength":
+            return .strength
+        case "cardio":
+            return .cardio
+        case "flexibility", "mobility":
+            return .flexibility
+        case "rest", "recovery":
+            return .rest
+        default:
+            return .unsupported
+        }
+    }
+
+    private func strengthExercises(
+        day: TrainingDay,
+        decision: DailyTrainingDecision,
+        history: [StrengthWorkoutRecord]
+    ) -> [StrengthExerciseLog] {
+        guard let data = day.plannedExercisesJSON.data(using: .utf8),
+              let planned = try? JSONDecoder().decode([WorkoutTemplateExercise].self, from: data) else {
+            return []
+        }
+        let library = ExerciseLibraryService.defaultDefinitions()
+
+        return planned.map { item in
+            let previousSets = StrengthWorkoutSessionPrefill.previousCompletedSets(
+                for: item.name,
+                in: history
+            )
+            let definition = library.first {
+                if let key = item.exerciseCanonicalKey {
+                    return $0.canonicalKey == key
+                }
+                return $0.name.caseInsensitiveCompare(item.name) == .orderedSame
+            }
+            let targetSetCount = max(
+                1,
+                Int((Double(item.targetSets) * decision.volumeMultiplier).rounded(.down))
+            )
+            let targetReps = StrengthWorkoutTemplateParser.reps(from: item.targetReps)
+            let targetRPE = min(
+                item.targetRPE ?? Double(decision.intensityCap),
+                Double(decision.intensityCap)
+            )
+            let fallbackWeight = ExerciseLoadDefaults.initialWeight(
+                equipment: definition?.equipment ?? "other",
+                exerciseName: item.name,
+                previousSets: previousSets
+            )
+            let sets = (0..<targetSetCount).map { index in
+                let previous = index < previousSets.count ? previousSets[index] : nil
+                return StrengthSetLog(
+                    repetitions: targetReps,
+                    weightKilograms: previous?.weightKilograms ?? fallbackWeight,
+                    isWarmup: false,
+                    rpe: targetRPE,
+                    rir: nil,
+                    isCompleted: false,
+                    completedAt: nil
+                )
+            }
+
+            return StrengthExerciseLog(
+                exerciseDefinitionId: item.exerciseDefinitionId ?? definition?.id,
+                exerciseCanonicalKey: item.exerciseCanonicalKey ?? definition?.canonicalKey,
+                name: item.name,
+                equipment: definition?.equipment ?? "other",
+                primaryMuscleGroup: definition?.primaryMuscleGroup,
+                sets: sets
+            )
+        }
+    }
+}
+
+enum ExerciseLoadDefaults {
+    static func initialWeight(
+        equipment: String,
+        exerciseName: String,
+        previousSets: [StrengthSetLog]
+    ) -> Double {
+        if let previous = previousSets.first {
+            return previous.weightKilograms
+        }
+        let normalizedEquipment = equipment.lowercased()
+        let normalizedName = exerciseName.lowercased()
+        if normalizedEquipment.contains("bodyweight")
+            || normalizedEquipment.contains("assisted")
+            || normalizedName.contains("pull up")
+            || normalizedName.contains("pull-up")
+            || normalizedName.contains("push up")
+            || normalizedName.contains("push-up")
+            || normalizedName.contains("dip") {
+            return 0
+        }
+        return 0
+    }
+}
+
 private extension String {
     var trimmedNonEmpty: String? {
         let value = trimmingCharacters(in: .whitespacesAndNewlines)

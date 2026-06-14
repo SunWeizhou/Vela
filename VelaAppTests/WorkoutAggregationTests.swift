@@ -67,6 +67,101 @@ final class WorkoutAggregationTests: XCTestCase {
         return try context.fetch(descriptor).first
     }
 
+    private func makePostWorkoutArtifact(
+        workout: StrengthWorkoutRecord,
+        summary: StrengthWorkoutAnalysis
+    ) -> CoachArtifactRecord {
+        CoachArtifactRecord(artifact: CoachArtifact.postWorkoutReview(
+            workout: workout,
+            summary: summary,
+            readinessDecision: "keep",
+            sourceContextHash: "test-\(workout.id.uuidString)"
+        ))
+    }
+
+    func testWorkoutSaveCoordinatorCommitsWorkoutEventArtifactSummaryAndDraftDeletion() throws {
+        let store = try makeStore()
+        let start = makeDate()
+        let workout = makeStrengthWorkout(start: start)
+        let draft = ActiveWorkoutDraftRecord(title: "Draft", startedAt: start)
+        store.context.insert(draft)
+        try store.context.save()
+        let analysis = TrainingAnalyticsService().summarizeWorkout(
+            workout,
+            history: [],
+            exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
+        )
+        workout.analyticsJSON = try String(
+            data: JSONEncoder().encode(analysis),
+            encoding: .utf8
+        )
+        let artifact = makePostWorkoutArtifact(workout: workout, summary: analysis)
+
+        let result = try WorkoutSaveCoordinator().commitNewWorkout(
+            workout: workout,
+            artifact: artifact,
+            sessionRPE: 8,
+            modelContext: store.context
+        )
+
+        XCTAssertEqual(result.workout.id, workout.id)
+        XCTAssertEqual(result.event.linkedStrengthWorkoutId, workout.id)
+        XCTAssertEqual(try store.context.fetch(FetchDescriptor<StrengthWorkoutRecord>()).count, 1)
+        XCTAssertEqual(try fetchEvents(store.context).count, 1)
+        XCTAssertEqual(try store.context.fetch(FetchDescriptor<CoachArtifactRecord>()).count, 1)
+        XCTAssertEqual(try store.context.fetch(FetchDescriptor<ActiveWorkoutDraftRecord>()).count, 0)
+        let summary = try XCTUnwrap(fetchDailySummary(store.context, date: start))
+        XCTAssertEqual(summary.workoutCount, 1)
+        XCTAssertEqual(summary.workoutDuration ?? -1, 60, accuracy: 0.1)
+    }
+
+    func testWorkoutSaveCoordinatorRollsBackEveryStageAndPreservesDraft() throws {
+        for stage in WorkoutSaveCoordinator.Stage.allCases {
+            let store = try makeStore()
+            let start = makeDate(minute: stage.rawValue)
+            let workout = makeStrengthWorkout(start: start)
+            let draft = ActiveWorkoutDraftRecord(title: "Draft", startedAt: start)
+            store.context.insert(draft)
+            try store.context.save()
+            let analysis = TrainingAnalyticsService().summarizeWorkout(
+                workout,
+                history: [],
+                exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
+            )
+            let artifact = makePostWorkoutArtifact(workout: workout, summary: analysis)
+            let coordinator = WorkoutSaveCoordinator { currentStage in
+                if currentStage == stage {
+                    throw TestCommitError.injected(stage)
+                }
+            }
+
+            XCTAssertThrowsError(try coordinator.commitNewWorkout(
+                workout: workout,
+                artifact: artifact,
+                sessionRPE: 8,
+                modelContext: store.context
+            ))
+
+            XCTAssertEqual(
+                try store.context.fetch(FetchDescriptor<StrengthWorkoutRecord>()).count,
+                0,
+                "stage \(stage) left a workout"
+            )
+            XCTAssertEqual(try fetchEvents(store.context).count, 0, "stage \(stage) left an event")
+            XCTAssertEqual(
+                try store.context.fetch(FetchDescriptor<CoachArtifactRecord>()).count,
+                0,
+                "stage \(stage) left an artifact"
+            )
+            XCTAssertEqual(
+                try store.context.fetch(FetchDescriptor<ActiveWorkoutDraftRecord>()).count,
+                1,
+                "stage \(stage) deleted the draft"
+            )
+            XCTAssertNil(try fetchDailySummary(store.context, date: start), "stage \(stage) left a daily summary")
+        }
+    }
+
     func testStrengthWorkoutUpsertCreatesWorkoutEvent() throws {
         let store = try makeStore()
         let start = makeDate()
@@ -655,4 +750,8 @@ final class WorkoutAggregationTests: XCTestCase {
         XCTAssertTrue(fetched.artifact.actions.contains { $0.type == "start_check_in" && $0.payload["workout_id"] == workout.id.uuidString })
         XCTAssertTrue(fetched.artifact.actions.contains { $0.type == "open_recovery_detail" && $0.payload["workout_id"] == workout.id.uuidString })
     }
+}
+
+private enum TestCommitError: Error {
+    case injected(WorkoutSaveCoordinator.Stage)
 }

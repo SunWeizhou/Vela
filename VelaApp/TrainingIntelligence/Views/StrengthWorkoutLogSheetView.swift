@@ -74,12 +74,18 @@ struct StrengthWorkoutLogSheetView: View {
     @StateObject private var sessionViewModel = StrengthWorkoutSessionViewModel()
 
     private let startingTemplateID: UUID?
+    private let initialDraft: TrainingSessionDraft?
     private let editingWorkout: StrengthWorkoutRecord?
     private let equipmentOptions = ["杠铃", "哑铃", "固定器械", "绳索", "壶铃", "自重", "其他"]
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
-    init(startingTemplateID: UUID? = nil, editingWorkout: StrengthWorkoutRecord? = nil) {
+    init(
+        startingTemplateID: UUID? = nil,
+        initialDraft: TrainingSessionDraft? = nil,
+        editingWorkout: StrengthWorkoutRecord? = nil
+    ) {
         self.startingTemplateID = startingTemplateID
+        self.initialDraft = initialDraft
         self.editingWorkout = editingWorkout
     }
 
@@ -295,7 +301,7 @@ struct StrengthWorkoutLogSheetView: View {
 
             HStack(spacing: 16) {
                 Button {
-                    let lastWeight = exercise.wrappedValue.sets.last?.weightKilograms ?? 20.0
+                    let lastWeight = exercise.wrappedValue.sets.last?.weightKilograms ?? 0
                     let lastReps = exercise.wrappedValue.sets.last?.repetitions ?? 10
                     exercise.wrappedValue.sets.append(StrengthSetLog(repetitions: lastReps, weightKilograms: lastWeight, isWarmup: false, rpe: nil, rir: nil, isCompleted: false, completedAt: nil))
                 } label: {
@@ -462,6 +468,7 @@ struct StrengthWorkoutLogSheetView: View {
         }
         
         if let editingWorkout {
+            let previousStartDate = editingWorkout.startedAt
             editingWorkout.title = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "力量训练" : title
             editingWorkout.startedAt = startedAt
             editingWorkout.durationMinutes = durationMinutes
@@ -477,14 +484,12 @@ struct StrengthWorkoutLogSheetView: View {
                 )
                 editingWorkout.analyticsJSON = (try? String(data: JSONEncoder().encode(analysis), encoding: .utf8)) ?? "{}"
                 
-                _ = try WorkoutAggregationService.shared.upsertWorkoutEvent(
-                    from: editingWorkout,
-                    modelContext: modelContext,
-                    sessionRPE: exertionScore
+                _ = try WorkoutSaveCoordinator().commitWorkoutEdit(
+                    workout: editingWorkout,
+                    previousStartDate: previousStartDate,
+                    sessionRPE: exertionScore,
+                    modelContext: modelContext
                 )
-                
-                try modelContext.save()
-                try WorkoutAggregationService.shared.aggregateDay(date: startedAt, modelContext: modelContext)
                 
                 VelaAppState.shared.markLocalDataChanged()
                 completedWorkout = editingWorkout
@@ -503,7 +508,7 @@ struct StrengthWorkoutLogSheetView: View {
                 notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
                 exercises: exercisesToSave
             )
-            modelContext.insert(record)
+            record.planDayId = initialDraft?.planDayId
             do {
                 let analysis = TrainingAnalyticsService().summarizeWorkout(
                     record,
@@ -521,21 +526,26 @@ struct StrengthWorkoutLogSheetView: View {
                     }
                 }
                 
+                let planDayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: record.startedAt)
+                let planDescriptor = FetchDescriptor<DailyOperatingPlanRecord>(
+                    predicate: #Predicate<DailyOperatingPlanRecord> {
+                        $0.dayIdentifier == planDayIdentifier
+                    }
+                )
+                let readinessDecision = (try? modelContext.fetch(planDescriptor))?.first?.primaryActionType
+                    ?? dashboardVM.dashboard.trainingDecision.kind.rawValue
                 let artifact = CoachArtifact.postWorkoutReview(
                     workout: record,
                     summary: analysis,
-                    readinessDecision: dashboardVM.dashboard.trainingDecision.kind.rawValue,
+                    readinessDecision: readinessDecision,
                     sourceContextHash: ContentHash.hash("\(record.id.uuidString)-\(record.analyticsJSON ?? "")")
                 )
-                modelContext.insert(CoachArtifactRecord(artifact: artifact))
-                _ = try WorkoutAggregationService.shared.upsertWorkoutEvent(
-                    from: record,
-                    modelContext: modelContext,
-                    sessionRPE: exertionScore
+                _ = try WorkoutSaveCoordinator().commitNewWorkout(
+                    workout: record,
+                    artifact: CoachArtifactRecord(artifact: artifact),
+                    sessionRPE: exertionScore,
+                    modelContext: modelContext
                 )
-                
-                // Delete drafts
-                clearDraft()
                 
                 VelaAppState.shared.markLocalDataChanged()
                 completedWorkout = record
@@ -544,7 +554,6 @@ struct StrengthWorkoutLogSheetView: View {
                     await dashboardVM.refresh(modelContext: modelContext)
                 }
             } catch {
-                modelContext.delete(record)
                 saveError = "训练暂时无法保存，请稍后再试。\(error.localizedDescription)"
             }
         }
@@ -553,7 +562,19 @@ struct StrengthWorkoutLogSheetView: View {
     private func addExercise(_ definition: ExerciseDefinitionRecord) {
         let previousSets = previousCompletedSets(for: definition.name)
         let seedSets = previousSets.isEmpty
-            ? [StrengthSetLog(repetitions: 10, weightKilograms: 20.0, isWarmup: false, rpe: nil, rir: nil, isCompleted: false, completedAt: nil)]
+            ? [StrengthSetLog(
+                repetitions: 10,
+                weightKilograms: ExerciseLoadDefaults.initialWeight(
+                    equipment: definition.equipment,
+                    exerciseName: definition.name,
+                    previousSets: []
+                ),
+                isWarmup: false,
+                rpe: nil,
+                rir: nil,
+                isCompleted: false,
+                completedAt: nil
+            )]
             : previousSets.prefix(3).map {
                 StrengthSetLog(
                     repetitions: $0.repetitions,
@@ -605,7 +626,11 @@ struct StrengthWorkoutLogSheetView: View {
             let reps = StrengthWorkoutTemplateParser.reps(from: item.targetReps)
             
             let previousSets = previousCompletedSets(for: item.name)
-            let defaultWeight = previousSets.first?.weightKilograms ?? 20.0
+            let defaultWeight = ExerciseLoadDefaults.initialWeight(
+                equipment: definition?.equipment ?? libDef?.equipment ?? "other",
+                exerciseName: item.name,
+                previousSets: previousSets
+            )
             return StrengthExerciseLog(
                 exerciseDefinitionId: finalId,
                 exerciseCanonicalKey: finalKey,
@@ -743,6 +768,15 @@ struct StrengthWorkoutLogSheetView: View {
                     self.exertionScore = event.rpe ?? 7.0
                 }
             }
+        } else if let initialDraft {
+            self.title = initialDraft.title
+            self.startedAt = initialDraft.startedAt
+            self.notes = initialDraft.notes
+            self.exercises = initialDraft.exercises
+            self.exertionScore = initialDraft.exercises
+                .flatMap(\.sets)
+                .compactMap(\.rpe)
+                .max() ?? 7
         } else {
             let descriptor = FetchDescriptor<ActiveWorkoutDraftRecord>()
             if let draft = (try? modelContext.fetch(descriptor))?.first {

@@ -10,6 +10,7 @@ struct VelaTrainingView: View {
     @Environment(\.velaScrollDirection) private var scrollDirection
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var dashboardVM: DashboardViewModel
+    @EnvironmentObject private var services: VelaServices
     @ObservedObject private var appState = VelaAppState.shared
     @Query(sort: \StrengthWorkoutRecord.startedAt, order: .reverse) private var strengthWorkouts: [StrengthWorkoutRecord]
     @Query(sort: \WorkoutEventRecord.startedAt, order: .reverse) private var localWorkoutEvents: [WorkoutEventRecord]
@@ -27,10 +28,31 @@ struct VelaTrainingView: View {
     }
     private var todaySession: TrainingDay? {
         guard let activePlan else { return nil }
-        let weekday = Calendar.current.component(.weekday, from: dashboardVM.selectedDate)
-        let mondayBasedDay = ((weekday + 5) % 7) + 1
-        return activePlan.days.first(where: { $0.dayNumber == mondayBasedDay && !$0.isCompleted })
-            ?? activePlan.days.first(where: { !$0.isCompleted })
+        return TrainingScheduleResolver.resolve(
+            plan: activePlan,
+            on: dashboardVM.selectedDate,
+            events: localWorkoutEvents
+        )
+    }
+    private var todayDecision: DailyTrainingDecision? {
+        guard let plan = todayPlan,
+              let payloadData = plan.payloadJSON.data(using: .utf8),
+              let payload = try? JSONDecoder().decode(DailyOperatingPlanPayload.self, from: payloadData) else {
+            return nil
+        }
+        let reasons = plan.reasonsJSON.data(using: .utf8)
+            .flatMap { try? JSONDecoder().decode([String].self, from: $0) } ?? []
+        return DailyTrainingDecision(
+            decision: payload.decision,
+            targetSessionTitle: payload.targetSessionTitle,
+            volumeMultiplier: payload.volumeMultiplier,
+            intensityCap: payload.intensityCap,
+            reasons: reasons,
+            userFacingSummary: payload.summary,
+            confidence: plan.confidence,
+            source: plan.source ?? "BodyStateKernel + TrainingDecisionKernel",
+            safetyNotice: plan.safetyNotice ?? "General wellness and training guidance only."
+        )
     }
     private let xunjiKeychainAccount = "xunji_open_api_key"
 
@@ -47,6 +69,8 @@ struct VelaTrainingView: View {
     @State private var recentWorkouts: [WorkoutSummary] = []
     @State private var showStrengthWorkoutLog = false
     @State private var selectedTemplateID: UUID?
+    @State private var selectedSessionDraft: TrainingSessionDraft?
+    @State private var trainingExecutionMessage: String?
     @State private var showXunjiImport = false
     @State private var xunjiImportDate = Date()
     @State private var xunjiAPIKey = ""
@@ -54,6 +78,7 @@ struct VelaTrainingView: View {
     @State private var isImportingXunji = false
     @State private var xunjiImportMessage: String?
     @State private var isAutoImportingXunji = false
+    @State private var selectedAnalyticsTab = 0
 
     var body: some View {
         ScrollView {
@@ -61,28 +86,13 @@ struct VelaTrainingView: View {
                 // 1. Fitness Title Header
                 fitnessHeader
 
-                trainingExecutionCard
-                
-                // 2. Double-Month Thinned Activity Heatmap Card
-                trainingIntelligenceCard
+                adaptiveCockpitCard
 
                 muscleVolumeCard
 
                 templateLibraryCard
 
-                activityHeatmapCard
-                
-                // 3. Activity Summary Card (活动摘要 with orange filled area curve)
-                NavigationLink(destination: FitnessActivitySummaryDetailView()) {
-                    activitySummaryCard
-                }
-                .buttonStyle(.plain)
-                
-                // 4. Exertion Fatigue Load Card (耗力表现 with safe-zone range band)
-                NavigationLink(destination: VelaMetricDetailView(metric: .strain)) {
-                    exertionLoadCard
-                }
-                .buttonStyle(.plain)
+                performanceAnalyticsCard
 
                 recentWorkoutsSection
             }
@@ -120,11 +130,23 @@ struct VelaTrainingView: View {
         }
         .sheet(isPresented: $showStrengthWorkoutLog, onDismiss: {
             selectedTemplateID = nil
+            selectedSessionDraft = nil
         }) {
-            StrengthWorkoutLogSheetView(startingTemplateID: selectedTemplateID)
+            StrengthWorkoutLogSheetView(
+                startingTemplateID: selectedTemplateID,
+                initialDraft: selectedSessionDraft
+            )
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(VelaTheme.systemGroupedBackground)
+        }
+        .alert("今日训练", isPresented: Binding(
+            get: { trainingExecutionMessage != nil },
+            set: { if !$0 { trainingExecutionMessage = nil } }
+        )) {
+            Button("好", role: .cancel) { trainingExecutionMessage = nil }
+        } message: {
+            Text(trainingExecutionMessage ?? "")
         }
         .sheet(isPresented: $showXunjiImport) {
             XunjiImportSheet(
@@ -144,34 +166,59 @@ struct VelaTrainingView: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 
-    private var trainingExecutionCard: some View {
+        private var adaptiveCockpitCard: some View {
         let session = todaySession
         let payload = todayPlan.flatMap { plan -> DailyOperatingPlanPayload? in
             guard let data = plan.payloadJSON.data(using: .utf8) else { return nil }
             return try? JSONDecoder().decode(DailyOperatingPlanPayload.self, from: data)
         }
-        return VStack(alignment: .leading, spacing: 12) {
+        let reasons = todayPlan.flatMap { plan -> [String]? in
+            guard let data = plan.reasonsJSON.data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode([String].self, from: data)
+        } ?? []
+        let shouldTrain = payload.map { $0.decision != .rest } ?? false
+        let intensity = payload.map { "RPE \($0.intensityCap)" } ?? "--"
+        let confidence = todayPlan?.confidence ?? 0.85
+
+        return VStack(alignment: .leading, spacing: 14) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("今日训练执行")
+                    Text("今日智能自适应")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(VelaTheme.muted)
                     Text(session?.title ?? activePlan?.title ?? "自由训练")
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
                         .foregroundStyle(VelaTheme.fg)
                 }
                 Spacer()
                 Text(todayPlan?.primaryActionType.uppercased() ?? "READY")
                     .font(.caption2.weight(.bold))
-                    .foregroundStyle(VelaTheme.accent)
+                    .foregroundStyle(shouldTrain ? VelaTheme.accent : VelaTheme.sleepColor)
                     .padding(.horizontal, 9)
                     .padding(.vertical, 6)
-                    .background(Capsule().fill(VelaTheme.accent.opacity(0.12)))
+                    .background(Capsule().fill((shouldTrain ? VelaTheme.accent : VelaTheme.sleepColor).opacity(0.12)))
             }
 
-            Text(session?.description ?? payload?.summary ?? "选择模板开始记录；每组完成后自动启动休息计时。")
-                .font(.subheadline)
-                .foregroundStyle(VelaTheme.muted)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(shouldTrain ? "建议训练 · \(intensity)" : "建议恢复或休息")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(shouldTrain ? VelaTheme.accent : VelaTheme.sleepColor)
+                
+                Text(session?.description ?? payload?.summary ?? "选择模板开始记录；每组完成后自动启动休息计时。")
+                    .font(.subheadline)
+                    .foregroundStyle(VelaTheme.fg2)
+                    .lineSpacing(4)
+                
+                if !reasons.isEmpty {
+                    Text(reasons.map { localizedReason($0) }.joined(separator: " "))
+                        .font(.caption2)
+                        .foregroundStyle(VelaTheme.muted)
+                        .lineSpacing(3)
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.surface))
 
             HStack(spacing: 10) {
                 executionMetric("容量", payload.map { "\(Int(($0.volumeMultiplier * 100).rounded()))%" } ?? "--")
@@ -180,30 +227,195 @@ struct VelaTrainingView: View {
             }
 
             if let latest = recentStrengthSummary.lastWorkoutSummary {
-                Text("上次表现：\(latest)")
-                    .font(.caption)
-                    .foregroundStyle(VelaTheme.muted)
-                    .lineLimit(2)
+                HStack(spacing: 6) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.caption)
+                        .foregroundStyle(VelaTheme.muted)
+                    Text("上次表现：\(latest)")
+                        .font(.caption)
+                        .foregroundStyle(VelaTheme.muted)
+                        .lineLimit(1)
+                }
+                .padding(.top, 2)
             }
 
             Button {
                 startStrengthWorkout()
             } label: {
-                Label("开始并记录训练", systemImage: "play.fill")
-                    .font(.subheadline.weight(.bold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .foregroundStyle(.white)
-                    .background(RoundedRectangle(cornerRadius: 14).fill(VelaTheme.accent))
+                HStack(spacing: 6) {
+                    Image(systemName: "play.fill")
+                    Text("开始今日自适应训练")
+                }
+                .font(.subheadline.weight(.bold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 13)
+                .foregroundStyle(.white)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(LinearGradient(
+                            colors: [VelaTheme.accent, Color(hex: "#00C6FF")],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        ))
+                )
+                .shadow(color: VelaTheme.accent.opacity(0.25), radius: 8, y: 3)
             }
             .buttonStyle(.plain)
 
-            Text("\(todayPlan?.source ?? "DailyOperatingPlan") · \(todayPlan?.safetyNotice ?? "一般训练建议，不构成医疗诊断。")")
-                .font(.caption2)
-                .foregroundStyle(VelaTheme.muted)
+            HStack {
+                Text("\(todayPlan?.source ?? "BodyStateKernel") · \(todayPlan?.safetyNotice ?? "一般建议，不构成医疗诊断。")")
+                Spacer()
+                Text("置信度 \(Int((confidence * 100).rounded()))%")
+            }
+            .font(.system(size: 9))
+            .foregroundStyle(VelaTheme.muted)
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 22).fill(VelaTheme.cardBg))
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(VelaTheme.cardBg)
+                .shadow(color: Color.black.opacity(0.015), radius: 10, y: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+        )
+    }
+
+    private var performanceAnalyticsCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                HStack(spacing: 6) {
+                    Image(systemName: selectedAnalyticsTab == 0 ? "bolt.heart.fill" : (selectedAnalyticsTab == 1 ? "chart.bar.fill" : "calendar"))
+                        .font(.system(size: 14))
+                        .foregroundStyle(VelaTheme.muted)
+                    Text("表现与分析")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(VelaTheme.fg)
+                }
+                Spacer()
+                
+                Picker("", selection: $selectedAnalyticsTab) {
+                    Text("负荷").tag(0)
+                    Text("趋势").tag(1)
+                    Text("热力").tag(2)
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 160)
+            }
+
+            Divider()
+
+            switch selectedAnalyticsTab {
+            case 0:
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(changePercentageText)
+                                .font(.system(size: 26, weight: .bold, design: .rounded))
+                                .foregroundStyle(VelaTheme.fg)
+                            Text(dynamicExertionWorkload.isEmpty ? "暂无耗力记录" : (isExertionBelowTarget ? "低于目标值" : "高于目标值"))
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(isExertionBelowTarget ? Color(hex: "#4285F4") : Color(hex: "#66BB6A"))
+                        }
+                        Spacer()
+                        NavigationLink(destination: VelaMetricDetailView(metric: .strain)) {
+                            HStack(spacing: 4) {
+                                Text("详情")
+                                Image(systemName: "chevron.right")
+                            }
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(VelaTheme.accent)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    
+                    SafeZoneWorkloadChartView(workload: dynamicExertionWorkload)
+                        .frame(height: 72)
+                        .padding(.vertical, 4)
+                }
+            case 1:
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(totalWorkoutDurationText)
+                                .font(.system(size: 26, weight: .bold, design: .rounded))
+                                .foregroundStyle(VelaTheme.fg)
+                            Text("过去 30 天耗力趋势")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(VelaTheme.muted)
+                        }
+                        Spacer()
+                        NavigationLink(destination: FitnessActivitySummaryDetailView()) {
+                            HStack(spacing: 4) {
+                                Text("分析")
+                                Image(systemName: "chevron.right")
+                            }
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(VelaTheme.accent)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    
+                    ZStack(alignment: .topTrailing) {
+                        AreaChartCurveView(points: summaryWorkPathPoints)
+                            .frame(height: 100)
+                            .padding(.top, 10)
+                        
+                        Text(summaryPeakStrainText)
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color(hex: "#BFB9AC"))
+                            .offset(y: -4)
+                        
+                        HStack {
+                            Text("30天前")
+                            Spacer()
+                            Text("15天前")
+                            Spacer()
+                            Text("今天")
+                        }
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Color(hex: "#BFB9AC"))
+                        .padding(.top, 114)
+                    }
+                }
+            default:
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .top, spacing: 12) {
+                        monthHeatmap(
+                            monthTitle: monthTitle(for: previousMonthStart),
+                            totalDays: dayCount(in: previousMonthStart),
+                            startOffset: startOffset(for: previousMonthStart),
+                            activeTiers: previousMonthActiveTiers
+                        )
+                        
+                        monthHeatmap(
+                            monthTitle: monthTitle(for: currentMonthStart),
+                            totalDays: dayCount(in: currentMonthStart),
+                            startOffset: startOffset(for: currentMonthStart),
+                            activeTiers: currentMonthActiveTiers
+                        )
+                    }
+                    
+                    HStack(spacing: 12) {
+                        legendItem(color: Color(hex: "#A5D6A7"), label: "1 项活动")
+                        legendItem(color: Color(hex: "#66BB6A"), label: "2 项活动")
+                        legendItem(color: Color(hex: "#29B6F6"), label: "3+ 活动")
+                    }
+                    .padding(.top, 4)
+                }
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(VelaTheme.cardBg)
+                .shadow(color: Color.black.opacity(0.012), radius: 10, y: 3)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
+        )
     }
 
     private func executionMetric(_ title: String, _ value: String) -> some View {
@@ -278,44 +490,7 @@ struct VelaTrainingView: View {
     }
 
     // MARK: - Double-Month Activity Heatmap Card
-    private var activityHeatmapCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 16) {
-                monthHeatmap(
-                    monthTitle: monthTitle(for: previousMonthStart),
-                    totalDays: dayCount(in: previousMonthStart),
-                    startOffset: startOffset(for: previousMonthStart),
-                    activeTiers: previousMonthActiveTiers
-                )
-                
-                monthHeatmap(
-                    monthTitle: monthTitle(for: currentMonthStart),
-                    totalDays: dayCount(in: currentMonthStart),
-                    startOffset: startOffset(for: currentMonthStart),
-                    activeTiers: currentMonthActiveTiers
-                )
-            }
-            
-            // Legend
-            HStack(spacing: 12) {
-                legendItem(color: Color(hex: "#A5D6A7"), label: "1 项活动")
-                legendItem(color: Color(hex: "#66BB6A"), label: "2 项活动")
-                legendItem(color: Color(hex: "#29B6F6"), label: "3+ 活动")
-            }
-            .padding(.top, 4)
-            .padding(.leading, 2)
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(VelaTheme.cardBg)
-                .shadow(color: Color.black.opacity(0.012), radius: 10, y: 3)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
-        )
-    }
+    // Combined into performanceAnalyticsCard
 
     // Individual Month Heatmap builder
     private func monthHeatmap(
@@ -384,120 +559,7 @@ struct VelaTrainingView: View {
     }
 
     // MARK: - Activity Summary Card (活动摘要 with orange filled area curve)
-    private var activitySummaryCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                HStack(spacing: 6) {
-                    Image(systemName: "chart.bar.fill")
-                        .font(.system(size: 14))
-                        .foregroundStyle(VelaTheme.muted)
-                    
-                    Text("活动摘要")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(VelaTheme.fg)
-                }
-                
-                Spacer()
-                
-                Image(systemName: "arrow.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#BFB9AC"))
-            }
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text(totalWorkoutDurationText)
-                    .font(.system(size: 26, weight: .bold, design: .rounded))
-                    .foregroundStyle(VelaTheme.fg)
-                
-                HStack(spacing: 8) {
-                    Text("过去 30 天耗力趋势")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(VelaTheme.muted)
-                }
-            }
-            
-            // Filled Workload Area Chart
-            ZStack(alignment: .topTrailing) {
-                AreaChartCurveView(points: summaryWorkPathPoints)
-                    .frame(height: 100)
-                    .padding(.top, 10)
-                
-                Text(summaryPeakStrainText)
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color(hex: "#BFB9AC"))
-                    .offset(y: -4)
-                
-                HStack {
-                    Text("30天前")
-                    Spacer()
-                    Text("15天前")
-                    Spacer()
-                    Text("今天")
-                }
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(Color(hex: "#BFB9AC"))
-                .padding(.top, 114)
-            }
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(VelaTheme.cardBg)
-                .shadow(color: Color.black.opacity(0.012), radius: 10, y: 3)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
-        )
-    }
-
-    // MARK: - Exertion Fatigue Load Card (耗力表现 with safe-zone range band)
-    private var exertionLoadCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                HStack(spacing: 6) {
-                    Image(systemName: "bolt.heart.fill")
-                        .font(.system(size: 14))
-                        .foregroundStyle(VelaTheme.muted)
-                    
-                    Text("耗力表现")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(VelaTheme.fg)
-                }
-                
-                Spacer()
-                
-                Image(systemName: "arrow.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#BFB9AC"))
-            }
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text(changePercentageText)
-                    .font(.system(size: 26, weight: .bold, design: .rounded))
-                    .foregroundStyle(VelaTheme.fg)
-                
-                Text(dynamicExertionWorkload.isEmpty ? "暂无耗力记录" : (isExertionBelowTarget ? "低于目标值" : "高于目标值"))
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(isExertionBelowTarget ? Color(hex: "#4285F4") : Color(hex: "#66BB6A")) // Soft Blue or Green
-            }
-            
-            // Workload graph with Safe Range Band
-            SafeZoneWorkloadChartView(workload: dynamicExertionWorkload)
-                .frame(height: 72)
-                .padding(.vertical, 8)
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(VelaTheme.cardBg)
-                .shadow(color: Color.black.opacity(0.012), radius: 10, y: 3)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
-        )
-    }
+    // Combined into performanceAnalyticsCard
 
     private var currentMonthStart: Date {
         monthStart(for: dashboardVM.selectedDate)
@@ -535,95 +597,107 @@ struct VelaTrainingView: View {
         TrainingAnalyticsService().buildRecentSummary(workouts: strengthWorkouts, days: 7)
     }
 
-    private var trainingAdaptation: TrainingAdaptationRecommendation {
-        RecoveryTrainingAdapter().adapt(input: RecoveryTrainingInput(
-            recoveryScore: dashboard.recovery.score,
-            sleepScore: dashboard.sleepScore.score,
-            hrvZScore: dashboard.recovery.metrics["hrv_z_score"],
-            restingHRZScore: dashboard.recovery.metrics["rhr_z_score"],
-            tsb: dashboard.energy.metrics["tsb"],
-            energyScore: dashboard.energy.currentEnergy,
-            localFatigue: recentStrengthSummary.localFatigue
-        ))
-    }
-
-    private var trainingIntelligenceCard: some View {
-        let recommendation = trainingAdaptation
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label("今日训练建议", systemImage: recommendation.shouldTrain ? "figure.strengthtraining.traditional" : "figure.cooldown")
-                    .font(.system(size: 15, weight: .bold))
-                Spacer()
-                Text("\(Int((recommendation.volumeMultiplier * 100).rounded()))% 容量")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(VelaTheme.accent)
-            }
-            Text(recommendation.shouldTrain ? "建议训练 · \(recommendation.recommendedIntensity)" : "建议恢复或休息")
-                .font(.system(size: 20, weight: .bold))
-            Text(recommendation.reasons.joined(separator: " "))
-                .font(.system(size: 12))
-                .foregroundStyle(VelaTheme.muted)
-            if !recommendation.avoidMuscleGroups.isEmpty {
-                Text("今天避开：\(recommendation.avoidMuscleGroups.joined(separator: "、"))")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Color(hex: "#FF3B30"))
-            }
-        }
-        .padding(16)
-        .background(RoundedRectangle(cornerRadius: 22).fill(VelaTheme.cardBg))
-    }
+    // Combined into adaptiveCockpitCard
 
     private var muscleVolumeCard: some View {
         let summary = recentStrengthSummary
-        return VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text("过去 7 天肌群有效组")
                     .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(VelaTheme.fg)
                 Spacer()
                 Text("\(summary.sessions) 次力量训练")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(VelaTheme.muted)
             }
+            
             if summary.muscleGroupSets.isEmpty {
-                Text("完成力量训练后，这里会显示肌群训练量和局部疲劳。")
+                Text("完成力量训练后，这里会显示肌群训练量 and 局部疲劳。")
                     .font(.system(size: 12))
                     .foregroundStyle(VelaTheme.muted)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 12)
             } else {
-                ForEach(summary.muscleGroupSets.sorted { $0.key < $1.key }, id: \.key) { muscle, sets in
-                    HStack {
-                        Text(muscle)
-                        Spacer()
-                        Text("\(sets) 组")
-                            .foregroundStyle(sets >= 18 ? Color(hex: "#FF3B30") : (sets < 6 ? Color(hex: "#4285F4") : Color(hex: "#34C759")))
+                VStack(spacing: 10) {
+                    ForEach(summary.muscleGroupSets.sorted { $0.key < $1.key }, id: \.key) { muscle, sets in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(muscle)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(VelaTheme.fg)
+                                Spacer()
+                                Text("\(sets) 组")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(sets >= 18 ? Color(hex: "#FF3B30") : (sets < 6 ? Color(hex: "#4285F4") : Color(hex: "#34C759")))
+                            }
+                            
+                            GeometryReader { geo in
+                                let pct = min(CGFloat(sets) / 20.0, 1.0)
+                                let barColor = sets >= 18 ? Color(hex: "#FF3B30") : (sets < 6 ? Color(hex: "#4285F4") : Color(hex: "#34C759"))
+                                ZStack(alignment: .leading) {
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .fill(VelaTheme.surface)
+                                        .frame(height: 6)
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .fill(barColor)
+                                        .frame(width: geo.size.width * pct, height: 6)
+                                }
+                            }
+                            .frame(height: 6)
+                        }
                     }
-                    .font(.system(size: 12, weight: .bold))
                 }
             }
+            
             if !summary.recentPRs.isEmpty {
                 Divider()
-                Text("近期 PR：\(summary.recentPRs.prefix(3).map(\.summary).joined(separator: " · "))")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(VelaTheme.accent)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("近期 PR")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(VelaTheme.muted)
+                    Text(summary.recentPRs.prefix(3).map(\.summary).joined(separator: " · "))
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(VelaTheme.accent)
+                }
             }
+            
             if let latest = summary.lastWorkoutSummary {
                 Divider()
-                Text("最近一次：\(latest)")
-                    .font(.system(size: 12))
-                    .foregroundStyle(VelaTheme.muted)
-            }
-            if !exerciseProgressLines.isEmpty {
-                Divider()
-                Text("常练动作进步")
-                    .font(.system(size: 12, weight: .bold))
-                ForEach(exerciseProgressLines.prefix(3), id: \.self) { line in
-                    Text(line)
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.uturn.left")
+                        .font(.caption2)
+                        .foregroundStyle(VelaTheme.muted)
+                    Text("最近一次：\(latest)")
                         .font(.system(size: 12))
                         .foregroundStyle(VelaTheme.muted)
                 }
             }
+            
+            if !exerciseProgressLines.isEmpty {
+                Divider()
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("常练动作进步")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(VelaTheme.fg)
+                    ForEach(exerciseProgressLines.prefix(3), id: \.self) { line in
+                        Text("• \(line)")
+                            .font(.system(size: 12))
+                            .foregroundStyle(VelaTheme.muted)
+                    }
+                }
+            }
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 22).fill(VelaTheme.cardBg))
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(VelaTheme.cardBg)
+                .shadow(color: Color.black.opacity(0.012), radius: 10, y: 3)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+        )
     }
 
     private var templateLibraryCard: some View {
@@ -920,8 +994,45 @@ struct VelaTrainingView: View {
     }
 
     private func startStrengthWorkout(templateID: UUID? = nil) {
-        selectedTemplateID = templateID
-        showStrengthWorkoutLog = true
+        if let templateID {
+            selectedTemplateID = templateID
+            selectedSessionDraft = nil
+            showStrengthWorkoutLog = true
+            return
+        }
+
+        guard let day = todaySession else {
+            trainingExecutionMessage = "所选日期没有可执行的训练计划。你仍可从下方模板开始自由训练。"
+            return
+        }
+        guard let decision = todayDecision else {
+            trainingExecutionMessage = "今日训练决策尚未生成，请先刷新 Today 页面。"
+            return
+        }
+        let draft = TrainingSessionDraftBuilder().build(
+            day: day,
+            decision: decision,
+            history: strengthWorkouts,
+            scheduledAt: Date()
+        )
+        switch draft.action {
+        case .strength:
+            guard !draft.exercises.isEmpty else {
+                trainingExecutionMessage = "该力量训练日还没有配置动作，请先在训练计划中补充动作。"
+                return
+            }
+            selectedSessionDraft = draft
+            selectedTemplateID = nil
+            showStrengthWorkoutLog = true
+        case .cardio:
+            trainingExecutionMessage = "今天是有氧训练：\(day.description.isEmpty ? "\(day.durationMinutes) 分钟" : day.description)。请使用 Apple Watch 或 Apple 健康记录本次训练。"
+        case .flexibility:
+            trainingExecutionMessage = "今天是灵活性/活动度训练：\(day.description.isEmpty ? "\(day.durationMinutes) 分钟" : day.description)。"
+        case .rest:
+            trainingExecutionMessage = "今天是休息日。无需打开力量训练记录。"
+        case .unsupported:
+            trainingExecutionMessage = "暂不支持直接执行“\(day.focus)”类型的计划日，请在计划中改为力量、有氧、灵活性或休息。"
+        }
     }
 
     private func deleteTemplate(_ template: WorkoutTemplateRecord) {
@@ -1089,30 +1200,32 @@ struct VelaTrainingView: View {
     }
 
     private func syncRealFitnessData(force: Bool = false) async {
-        loadRealFitnessData()
-        await dashboardVM.refresh(modelContext: modelContext, force: force)
-        loadRealFitnessData()
-        let healthKit = (try? await HealthKitQueryService().recentWorkouts(limit: 30)) ?? []
-        let deletedRecords = (try? modelContext.fetch(FetchDescriptor<DeletedWorkoutRecord>())) ?? []
-        let blacklistedIDs = Set(deletedRecords.map(\.id))
-        let filteredHealthKit = healthKit.filter { !blacklistedIDs.contains($0.id.uuidString) }
-        
-        let local = localWorkoutEvents.map {
-            WorkoutSummary(
-                id: $0.id,
-                start: $0.startedAt,
-                end: $0.endedAt,
-                activityName: $0.activityType,
-                energyKilocalories: $0.energyKilocalories,
-                averageHeartRate: $0.averageHeartRate,
-                source: $0.source,
-                rpe: $0.rpe
-            )
+        await services.syncCoordinator.run(source: .healthKit, force: force) {
+            loadRealFitnessData()
+            await dashboardVM.refresh(modelContext: modelContext, force: force)
+            loadRealFitnessData()
+            let healthKit = (try? await services.queryService.recentWorkouts(limit: 30)) ?? []
+            let deletedRecords = (try? modelContext.fetch(FetchDescriptor<DeletedWorkoutRecord>())) ?? []
+            let blacklistedIDs = Set(deletedRecords.map(\.id))
+            let filteredHealthKit = healthKit.filter { !blacklistedIDs.contains($0.id.uuidString) }
+
+            let local = localWorkoutEvents.map {
+                WorkoutSummary(
+                    id: $0.id,
+                    start: $0.startedAt,
+                    end: $0.endedAt,
+                    activityName: $0.activityType,
+                    energyKilocalories: $0.energyKilocalories,
+                    averageHeartRate: $0.averageHeartRate,
+                    source: $0.source,
+                    rpe: $0.rpe
+                )
+            }
+            let localIDs = Set(local.map(\.id))
+            let representedHealthKitIDs = Set(localWorkoutEvents.compactMap(\.linkedHealthKitWorkoutId))
+            recentWorkouts = (filteredHealthKit.filter { !localIDs.contains($0.id) && !representedHealthKitIDs.contains($0.id) } + local)
+                .sorted { $0.start > $1.start }
         }
-        let localIDs = Set(local.map(\.id))
-        let representedHealthKitIDs = Set(localWorkoutEvents.compactMap(\.linkedHealthKitWorkoutId))
-        recentWorkouts = (filteredHealthKit.filter { !localIDs.contains($0.id) && !representedHealthKitIDs.contains($0.id) } + local)
-            .sorted { $0.start > $1.start }
     }
 
     private func sourceLabel(for source: String?) -> String {
@@ -1146,14 +1259,17 @@ struct VelaTrainingView: View {
         let previousMonthStart = calendar.date(byAdding: .month, value: -1, to: currentMonthStart) ?? currentMonthStart
         let nextMonthStart = calendar.date(byAdding: .month, value: 1, to: currentMonthStart) ?? now
         
-        // Fetch all records to filter in memory (highly performant and compile-safe)
+        let lowerBound = min(previousMonthStart, calendar.date(byAdding: .day, value: -29, to: now) ?? now)
+        let upperBound = nextMonthStart
         let descriptor = FetchDescriptor<DailyHealthSummaryRecord>(
+            predicate: #Predicate<DailyHealthSummaryRecord> {
+                $0.date >= lowerBound && $0.date < upperBound
+            },
             sortBy: [SortDescriptor(\DailyHealthSummaryRecord.date, order: .forward)]
         )
         
         do {
             let allRecords = try modelContext.fetch(descriptor)
-            
             let records = allRecords.filter { $0.date >= previousMonthStart && $0.date < nextMonthStart }
             
             var apTiers: [Int: Int] = [:]

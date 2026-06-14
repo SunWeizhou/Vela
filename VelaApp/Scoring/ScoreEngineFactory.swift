@@ -262,7 +262,7 @@ enum ScoreEngineFactory {
 
     static func resolvedSleepSummary(
         from context: DailyHealthContext,
-        sleepScore: Double
+        sleepScore: Double?
     ) -> SleepSummary {
         let summary = context.sleepSummary ?? SleepSummary(
             date: context.date,

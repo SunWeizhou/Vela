@@ -93,6 +93,24 @@ public struct SleepScoreEngine: ScoreEngine {
     }
 
     public func calculate(from input: SleepScoreInput) -> MetricResult {
+        guard let totalSleep = input.totalSleepMinutes, totalSleep > 0 else {
+            let dataWindow = DateInterval(start: Calendar.current.date(byAdding: .day, value: -13, to: Date()) ?? Date(), end: Date())
+            return MetricResult(
+                name: "Sleep Score",
+                value: nil,
+                band: .low,
+                confidence: .low,
+                components: [:],
+                componentWeights: [:],
+                reasons: ["缺少睡眠时长数据"],
+                missingInputs: ["totalSleepMinutes"],
+                dataWindow: dataWindow,
+                source: .healthKit,
+                algorithmVersion: "1.0.0",
+                lastUpdated: Date()
+            )
+        }
+
         var components: [String: Double] = [:]
         var componentWeights: [String: Double] = [:]
         var reasons: [String] = []

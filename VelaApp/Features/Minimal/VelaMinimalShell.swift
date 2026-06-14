@@ -350,11 +350,11 @@ struct VelaShell: View {
 
     private func label(for tab: VelaTab) -> String {
         switch tab {
-        case .today:    "Today"
-        case .training: "Training"
-        case .insights: "Insights"
-        case .coach:    "Coach"
-        case .me:       "Me"
+        case .today:    L10n.t("Today", "今日")
+        case .training: L10n.t("Training", "训练")
+        case .insights: L10n.t("Insights", "趋势")
+        case .coach:    L10n.t("Coach", "Coach")
+        case .me:       L10n.t("Me", "个人")
         }
     }
 

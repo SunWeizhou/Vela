@@ -21,8 +21,10 @@ struct DashboardSummary: Hashable, @unchecked Sendable {
     private var _trainingDecision: TrainingDecision?
     var trainingDecision: TrainingDecision {
         get {
-            if let _trainingDecision { return _trainingDecision }
-            return TrainingDecisionEngine.evaluate(self)
+            guard let _trainingDecision else {
+                preconditionFailure("DashboardSummary must initialize a canonical training decision.")
+            }
+            return _trainingDecision
         }
         set {
             _trainingDecision = newValue
@@ -62,6 +64,14 @@ struct DashboardSummary: Hashable, @unchecked Sendable {
         self.dailyInsight = dailyInsight
         self.source = source
         self._trainingDecision = nil
+
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: self,
+            activeStatus: "active",
+            generatedAt: date
+        ))
+        let decision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(bodyState: bodyState))
+        self._trainingDecision = TrainingDecision.compatibilityView(of: decision, bodyState: bodyState)
     }
 
     enum DataSource: String, Hashable {
@@ -106,7 +116,7 @@ struct DashboardSummary: Hashable, @unchecked Sendable {
             ),
             sleepScore: MetricResult(
                 name: "Sleep Score",
-                value: 0,
+                value: nil,
                 band: .low,
                 confidence: .low,
                 components: [:],

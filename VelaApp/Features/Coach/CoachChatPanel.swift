@@ -487,7 +487,6 @@ final class CoachChatVM: ObservableObject {
 
             let agentMessages = chatMessages
             var fullResponse = ""
-            var wasStreamed = false
             var wikiFiles: [String] = []
             var wikiUpdateSummaries: [String] = []
             var agentTrace: AgentRunTrace?
@@ -504,7 +503,6 @@ final class CoachChatVM: ObservableObject {
                     fullResponse += delta
                     streamingContent = fullResponse
                 }
-                wasStreamed = true
                 agentTrace = AgentRunTrace(
                     id: UUID(),
                     startedAt: agentStartedAt,
@@ -519,7 +517,8 @@ final class CoachChatVM: ObservableObject {
                     executedTools: [],
                     finalResponse: fullResponse,
                     contextHash: contextHash,
-                    schemaVersion: "agentTrace.v1"
+                    schemaVersion: "agentTrace.v1",
+                    providerCallCount: 1
                 )
             } else {
                 let agentLoop = AgentLoop(provider: provider, toolRegistry: toolRegistry)
@@ -535,7 +534,6 @@ final class CoachChatVM: ObservableObject {
                 wikiFiles = loopResult.wikiFiles
                 wikiUpdateSummaries = loopResult.wikiUpdateSummaries
                 fullResponse = loopResult.response
-                wasStreamed = loopResult.wasStreamed
                 var loopTrace = loopResult.trace
                 loopTrace.contextHash = contextHash
                 agentTrace = loopTrace
@@ -569,17 +567,6 @@ final class CoachChatVM: ObservableObject {
 
             let finalText = parsed.displayText.isEmpty ? fullResponse : parsed.displayText
             
-            if !wasStreamed {
-                // Smooth character-by-character typing simulation for non-streamed response
-                var accumulated = ""
-                for char in finalText {
-                    try? await Task.sleep(nanoseconds: 10_000_000) // 10ms per character
-                    accumulated.append(char)
-                    streamingContent = accumulated
-                }
-                streamingContent = ""
-            }
-
             // Finalize message
             if let idx = messages.firstIndex(where: { $0.id == assistantId }) {
                 messages[idx] = ChatMsg(
@@ -625,7 +612,12 @@ final class CoachChatVM: ObservableObject {
             if shouldRetry {
                 isAwaitingForegroundRetry = true
             } else {
-                messages.append(ChatMsg(id: assistantId, role: .assistant, content: error.localizedDescription))
+                let providerError = LLMProviderError.classify(error)
+                messages.append(ChatMsg(
+                    id: assistantId,
+                    role: .assistant,
+                    content: providerError.userFacingMessage(isChinese: AppLanguage.stored.isChinese)
+                ))
             }
             persistThread(modelContext: modelContext)
         }
@@ -779,7 +771,7 @@ final class CoachChatVM: ObservableObject {
             foodLogs: foodLogs,
             journalEntries: journalEntries,
             activePlan: activePlan,
-            activeStatus: UserDefaults.standard.string(forKey: "vela_active_status") ?? "active"
+            activeStatus: ActiveStatusSettings.resolveCurrentStatus()
         ))
         var onboardingDescriptor = FetchDescriptor<OnboardingState>(
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]

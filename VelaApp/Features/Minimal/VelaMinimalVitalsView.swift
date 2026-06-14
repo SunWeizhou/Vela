@@ -14,13 +14,21 @@ struct VelaVitalsView: View {
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
 
-    // Dynamic states for RHR, HRV, Weight, Fat histories
+    // Dynamic states for RHR, HRV, Weight, Fat histories (normalized for sparklines)
     @State private var weightHistoryData: [Double] = []
     @State private var hrvHistoryData: [Double] = []
     @State private var rhrHistoryData: [Double] = []
     @State private var respiratoryRateHistoryData: [Double] = []
     @State private var bloodOxygenHistoryData: [Double] = []
     @State private var fatHistoryData: [Double] = []
+
+    // Raw (non-normalized) history arrays for trend evaluations
+    @State private var rawWeightHistory: [Double] = []
+    @State private var rawHrvHistory: [Double] = []
+    @State private var rawRhrHistory: [Double] = []
+    @State private var rawRespiratoryRateHistory: [Double] = []
+    @State private var rawBloodOxygenHistory: [Double] = []
+    @State private var rawFatHistory: [Double] = []
 
     @State private var hrvValueText: String = "--"
     @State private var rhrValueText: String = "--"
@@ -125,6 +133,16 @@ struct VelaVitalsView: View {
             return String(format: delta < 0 ? "比实际年龄年轻 %.1f 岁" : "比实际年龄高 %.1f 岁", abs(delta))
         }()
 
+        let deltaColor: Color = {
+            guard let result, chronologicalAge != nil else { return VelaTheme.muted }
+            guard result.isPhenoAge else { return Color(hex: "#5B8C6F") }
+            let delta = result.biologicalAge - age
+            if abs(delta) < 0.05 {
+                return VelaTheme.muted
+            }
+            return delta < 0 ? Color(hex: "#5B8C6F") : VelaTheme.strainColor
+        }()
+
         return VStack(spacing: 8) {
             // Header
             HStack {
@@ -181,7 +199,7 @@ struct VelaVitalsView: View {
 
                     Text(deltaText)
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(result == nil ? VelaTheme.muted : Color(hex: "#5B8C6F"))
+                        .foregroundStyle(deltaColor)
                         .padding(.top, 4)
 
                     if isPhenoAge {
@@ -275,85 +293,91 @@ struct VelaVitalsView: View {
 
             VStack(spacing: 12) {
                 // Card 1: 体重 (Weight)
+                let weightEval = evaluateBiomarker(.weight, latestValue: rawWeightHistory.last, history: rawWeightHistory)
                 NavigationLink(destination: VelaMetricDetailView(metric: .weight)) {
                     biomarkerRow(
                         title: "体重",
-                        trendText: syncStatusText(for: weightValueText),
-                        trendIcon: "arrow.right",
+                        trendText: weightEval.text,
+                        trendIcon: weightEval.icon,
                         valueText: weightValueText,
-                        valueColor: VelaTheme.fg,
+                        valueColor: weightEval.color,
                         history: weightHistoryData,
-                        graphColor: VelaTheme.muted
+                        graphColor: weightEval.color
                     )
                 }
                 .buttonStyle(.plain)
 
                 // Card 2: HRV 基线 (HRV Baseline) - Open HRV Detail
+                let hrvEval = evaluateBiomarker(.hrv, latestValue: rawHrvHistory.last, history: rawHrvHistory)
                 NavigationLink(destination: VelaMetricDetailView(metric: .hrv)) {
                     biomarkerRow(
                         title: "HRV 基线",
-                        trendText: syncStatusText(for: hrvValueText),
-                        trendIcon: "arrow.right",
+                        trendText: hrvEval.text,
+                        trendIcon: hrvEval.icon,
                         valueText: hrvValueText,
-                        valueColor: VelaTheme.fg,
+                        valueColor: hrvEval.color,
                         history: hrvHistoryData,
-                        graphColor: Color(hex: "#6E6A63")
+                        graphColor: hrvEval.color
                     )
                 }
                 .buttonStyle(.plain)
 
                 // Card 3: RHR 基线 (RHR Baseline) - Open RHR Detail
+                let rhrEval = evaluateBiomarker(.rhr, latestValue: rawRhrHistory.last, history: rawRhrHistory)
                 NavigationLink(destination: VelaMetricDetailView(metric: .rhr)) {
                     biomarkerRow(
                         title: "RHR 基线",
-                        trendText: syncStatusText(for: rhrValueText),
-                        trendIcon: "arrow.right",
+                        trendText: rhrEval.text,
+                        trendIcon: rhrEval.icon,
                         valueText: rhrValueText,
-                        valueColor: Color(hex: "#5B8C6F"), // Sage Green for healthy RHR
+                        valueColor: rhrEval.color,
                         history: rhrHistoryData,
-                        graphColor: Color(hex: "#5B8C6F")
+                        graphColor: rhrEval.color
                     )
                 }
                 .buttonStyle(.plain)
 
                 // Card 4: 呼吸率 (Respiratory Rate)
+                let respEval = evaluateBiomarker(.respiratoryRate, latestValue: rawRespiratoryRateHistory.last, history: rawRespiratoryRateHistory)
                 NavigationLink(destination: VelaMetricDetailView(metric: .respiratoryRate)) {
                     biomarkerRow(
                         title: "呼吸率",
-                        trendText: syncStatusText(for: respiratoryRateValueText),
-                        trendIcon: "arrow.right",
+                        trendText: respEval.text,
+                        trendIcon: respEval.icon,
                         valueText: respiratoryRateValueText,
-                        valueColor: Color(hex: "#5B8C6F"),
+                        valueColor: respEval.color,
                         history: respiratoryRateHistoryData,
-                        graphColor: Color(hex: "#5B8C6F")
+                        graphColor: respEval.color
                     )
                 }
                 .buttonStyle(.plain)
 
                 // Card 5: 血氧 (Blood Oxygen)
+                let o2Eval = evaluateBiomarker(.bloodOxygen, latestValue: rawBloodOxygenHistory.last, history: rawBloodOxygenHistory)
                 NavigationLink(destination: VelaMetricDetailView(metric: .bloodOxygen)) {
                     biomarkerRow(
                         title: "血氧",
-                        trendText: syncStatusText(for: bloodOxygenValueText),
-                        trendIcon: "arrow.right",
+                        trendText: o2Eval.text,
+                        trendIcon: o2Eval.icon,
                         valueText: bloodOxygenValueText,
-                        valueColor: VelaTheme.accent,
+                        valueColor: o2Eval.color,
                         history: bloodOxygenHistoryData,
-                        graphColor: VelaTheme.accent
+                        graphColor: o2Eval.color
                     )
                 }
                 .buttonStyle(.plain)
 
                 // Card 6: 体脂 (Body Fat)
+                let fatEval = evaluateBiomarker(.bodyFat, latestValue: rawFatHistory.last, history: rawFatHistory)
                 NavigationLink(destination: VelaMetricDetailView(metric: .bodyFat)) {
                     biomarkerRow(
                         title: "体脂",
-                        trendText: syncStatusText(for: fatValueText),
-                        trendIcon: "arrow.right",
+                        trendText: fatEval.text,
+                        trendIcon: fatEval.icon,
                         valueText: fatValueText,
-                        valueColor: VelaTheme.fg,
+                        valueColor: fatEval.color,
                         history: fatHistoryData,
-                        graphColor: VelaTheme.muted
+                        graphColor: fatEval.color
                     )
                 }
                 .buttonStyle(.plain)
@@ -458,6 +482,14 @@ struct VelaVitalsView: View {
                     }
                 }
 
+                // Update raw arrays
+                rawWeightHistory = rawWeight
+                rawHrvHistory = rawHRV
+                rawRhrHistory = rawRHR
+                rawRespiratoryRateHistory = rawRespiratoryRate
+                rawBloodOxygenHistory = rawBloodOxygen
+                rawFatHistory = rawFat
+
                 // Normalize to 0...1 for sparklines
                 hrvHistoryData = normalizeData(rawHRV)
                 rhrHistoryData = normalizeData(rawRHR)
@@ -491,6 +523,13 @@ struct VelaVitalsView: View {
         weightHistoryData = []
         fatHistoryData = []
 
+        rawWeightHistory = []
+        rawHrvHistory = []
+        rawRhrHistory = []
+        rawRespiratoryRateHistory = []
+        rawBloodOxygenHistory = []
+        rawFatHistory = []
+
         hrvValueText = "--"
         rhrValueText = "--"
         respiratoryRateValueText = "--"
@@ -499,8 +538,85 @@ struct VelaVitalsView: View {
         fatValueText = "--"
     }
 
-    private func syncStatusText(for valueText: String) -> String {
-        valueText == "--" ? "暂无数据" : "已同步"
+    struct BiomarkerEvaluation {
+        let text: String
+        let icon: String
+        let color: Color
+    }
+
+    private func evaluateBiomarker(
+        _ metric: VelaMetricDetailView.MetricType,
+        latestValue: Double?,
+        history: [Double]
+    ) -> BiomarkerEvaluation {
+        guard let latestValue else {
+            return BiomarkerEvaluation(text: "暂无数据", icon: "questionmark.circle", color: VelaTheme.muted)
+        }
+        
+        let validHistory = history.filter { $0 > 0 }
+        let avg = validHistory.isEmpty ? latestValue : validHistory.reduce(0, +) / Double(validHistory.count)
+        
+        switch metric {
+        case .weight:
+            let diff = latestValue - avg
+            if diff > 0.2 {
+                return BiomarkerEvaluation(text: "呈上升趋势", icon: "arrow.up.forward", color: VelaTheme.fg)
+            } else if diff < -0.2 {
+                return BiomarkerEvaluation(text: "呈下降趋势", icon: "arrow.down.forward", color: Color(hex: "#5B8C6F"))
+            } else {
+                return BiomarkerEvaluation(text: "保持稳定", icon: "minus", color: VelaTheme.muted)
+            }
+            
+        case .hrv:
+            let diffPercent = avg > 0 ? (latestValue - avg) / avg : 0.0
+            if diffPercent > 0.05 {
+                return BiomarkerEvaluation(text: "高于基线", icon: "arrow.up.forward", color: Color(hex: "#5B8C6F"))
+            } else if diffPercent < -0.05 {
+                return BiomarkerEvaluation(text: "低于基线", icon: "arrow.down.forward", color: VelaTheme.strainColor)
+            } else {
+                return BiomarkerEvaluation(text: "稳定", icon: "minus", color: VelaTheme.fg)
+            }
+            
+        case .rhr:
+            let diff = latestValue - avg
+            if diff > 2.0 {
+                return BiomarkerEvaluation(text: "偏高", icon: "arrow.up.forward", color: VelaTheme.strainColor)
+            } else if diff < -2.0 {
+                return BiomarkerEvaluation(text: "优秀/偏低", icon: "arrow.down.forward", color: Color(hex: "#5B8C6F"))
+            } else {
+                return BiomarkerEvaluation(text: "稳定", icon: "minus", color: Color(hex: "#5B8C6F"))
+            }
+            
+        case .respiratoryRate:
+            let diff = latestValue - avg
+            if diff > 1.0 {
+                return BiomarkerEvaluation(text: "偏快", icon: "arrow.up.forward", color: VelaTheme.strainColor)
+            } else if diff < -1.0 {
+                return BiomarkerEvaluation(text: "偏慢", icon: "arrow.down.forward", color: VelaTheme.muted)
+            } else {
+                return BiomarkerEvaluation(text: "正常", icon: "minus", color: Color(hex: "#5B8C6F"))
+            }
+            
+        case .bloodOxygen:
+            if latestValue >= 95.0 {
+                return BiomarkerEvaluation(text: "正常", icon: "checkmark.circle.fill", color: Color(hex: "#5B8C6F"))
+            } else {
+                return BiomarkerEvaluation(text: "偏低", icon: "exclamationmark.triangle.fill", color: VelaTheme.strainColor)
+            }
+            
+        case .bodyFat:
+            let diff = latestValue - avg
+            if diff > 0.2 {
+                return BiomarkerEvaluation(text: "有所上升", icon: "arrow.up.forward", color: VelaTheme.fg)
+            } else if diff < -0.2 {
+                return BiomarkerEvaluation(text: "有所下降", icon: "arrow.down.forward", color: Color(hex: "#5B8C6F"))
+            } else {
+                return BiomarkerEvaluation(text: "稳定", icon: "minus", color: VelaTheme.muted)
+            }
+            
+        default:
+            return BiomarkerEvaluation(text: "已同步", icon: "arrow.right", color: VelaTheme.fg)
+        }
     }
 }
 

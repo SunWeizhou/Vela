@@ -118,4 +118,33 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertLessThanOrEqual(decision.intensityCap, 2)
         XCTAssertTrue(decision.safetyNotice.contains("not a medical diagnosis"))
     }
+
+    func testLegacyTrainingDecisionIsACompatibilityViewOfCanonicalDecision() {
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: .preview(),
+            activeStatus: "active"
+        ))
+        let canonical = DailyTrainingDecision(
+            decision: .reduce,
+            targetSessionTitle: "Upper Strength",
+            volumeMultiplier: 0.72,
+            intensityCap: 7,
+            reasons: ["Sleep: below baseline"],
+            userFacingSummary: "Reduce planned volume.",
+            confidence: 0.75,
+            source: "BodyStateKernel + TrainingDecisionKernel",
+            safetyNotice: "General guidance only."
+        )
+
+        let compatibility = TrainingDecision.compatibilityView(
+            of: canonical,
+            bodyState: bodyState
+        )
+
+        XCTAssertEqual(compatibility.kind, .maintain)
+        XCTAssertEqual(compatibility.volumeMultiplier, canonical.volumeMultiplier)
+        XCTAssertEqual(compatibility.maxIntensity, "RPE 7")
+        XCTAssertEqual(compatibility.whyThis, canonical.reasons.joined(separator: " "))
+        XCTAssertEqual(compatibility.body, canonical.userFacingSummary)
+    }
 }
