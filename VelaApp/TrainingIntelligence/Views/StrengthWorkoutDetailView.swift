@@ -57,6 +57,7 @@ struct StrengthWorkoutDetailView: View {
                             .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(VelaTheme.accent)
                     }
+                    .buttonStyle(.cardPress)
                     
                     Button(role: .destructive) {
                         showDeleteConfirmation = true
@@ -65,6 +66,7 @@ struct StrengthWorkoutDetailView: View {
                             .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(Color.red)
                     }
+                    .buttonStyle(.cardPress)
                 }
             }
         }
@@ -117,117 +119,118 @@ struct StrengthWorkoutDetailView: View {
     }
 
     private var hero: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(workout.title)
-                        .font(.system(size: 30, weight: .bold, design: .rounded))
-                        .foregroundStyle(bodyTextColor)
-                    Text(workout.startedAt.formatted(date: .abbreviated, time: .shortened))
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(mutedColor)
+        VelaGlassCard(padding: 18, cornerRadius: 24) {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text(workout.title)
+                            .font(.system(size: 30, weight: .bold, design: .rounded))
+                            .foregroundStyle(bodyTextColor)
+                        Text(workout.startedAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(mutedColor)
+                    }
+                    Spacer()
+                    Image(systemName: "figure.strengthtraining.traditional")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(accentColor)
+                        .frame(width: 46, height: 46)
+                        .background(Circle().fill(Color(hex: "#EAF3FF")))
                 }
-                Spacer()
-                Image(systemName: "figure.strengthtraining.traditional")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(accentColor)
-                    .frame(width: 46, height: 46)
-                    .background(Circle().fill(Color(hex: "#EAF3FF")))
-            }
 
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
-                heroMetric("时长", "\(workout.durationMinutes)", "分钟")
-                heroMetric("容量", "\(Int(analysis.totalVolumeKg.rounded()))", "kg")
-                heroMetric("有效组", "\(analysis.effectiveSets)", "组")
-            }
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
+                    heroMetric("时长", "\(workout.durationMinutes)", "分钟")
+                    heroMetric("容量", "\(Int(analysis.totalVolumeKg.rounded()))", "kg")
+                    heroMetric("有效组", "\(analysis.effectiveSets)", "组")
+                }
 
-            TrainingVolumeSparkline(exercises: workout.exercises)
-                .frame(height: 74)
-                .padding(.top, 2)
+                TrainingVolumeSparkline(exercises: workout.exercises)
+                    .frame(height: 74)
+                    .padding(.top, 2)
+            }
         }
-        .padding(18)
-        .background(heroBackground)
     }
 
     private var intelligenceStrip: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("训练智能摘要", systemImage: "sparkles")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(bodyTextColor)
-                Spacer()
-                Text("\(completedSets)/\(workout.totalSetCount) 完成")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(accentColor)
-            }
+        VelaGlassCard(padding: 16, cornerRadius: 20) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label("训练智能摘要", systemImage: "sparkles")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(bodyTextColor)
+                    Spacer()
+                    Text("\(completedSets)/\(workout.totalSetCount) 完成")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(accentColor)
+                }
 
-            Text(analysis.summaryText)
-                .font(.system(size: 13))
-                .foregroundStyle(mutedColor)
+                Text(analysis.summaryText)
+                    .font(.system(size: 13))
+                    .foregroundStyle(mutedColor)
 
-            if !analysis.personalRecords.isEmpty {
-                VStack(alignment: .leading, spacing: 7) {
-                    ForEach(Array(analysis.personalRecords.prefix(3))) { record in
-                        HStack {
-                            Image(systemName: "trophy.fill")
-                                .foregroundStyle(Color(hex: "#D89B28"))
-                            Text(record.summary)
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(bodyTextColor)
-                            Spacer()
+                if !analysis.personalRecords.isEmpty {
+                    VStack(alignment: .leading, spacing: 7) {
+                        ForEach(Array(analysis.personalRecords.prefix(3))) { record in
+                            HStack {
+                                Image(systemName: "trophy.fill")
+                                    .foregroundStyle(Color(hex: "#D89B28"))
+                                Text(record.summary)
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(bodyTextColor)
+                                Spacer()
+                            }
                         }
                     }
                 }
             }
         }
-        .padding(16)
-        .background(cardBackground)
+        .appleIntelligenceGlow(isHighlighted: true, radius: 20)
     }
 
     private var muscleDistribution: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("肌群分布")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(bodyTextColor)
-                Spacer()
-                Text("有效组")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(mutedColor)
-            }
+        VelaGlassCard(padding: 16, cornerRadius: 20) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("肌群分布")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(bodyTextColor)
+                    Spacer()
+                    Text("有效组")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(mutedColor)
+                }
 
-            if analysis.muscleGroupSets.isEmpty {
-                Text("这次训练暂未形成有效组。")
-                    .font(.system(size: 13))
-                    .foregroundStyle(mutedColor)
-            } else {
-                ForEach(analysis.muscleGroupSets.sorted { $0.value > $1.value }, id: \.key) { muscle, sets in
-                    let maxSets = max(analysis.muscleGroupSets.values.max() ?? 1, 1)
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(localizedMuscle(muscle))
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(bodyTextColor)
-                            Spacer()
-                            Text("\(sets) 组")
-                                .font(.system(size: 12, weight: .bold, design: .rounded))
-                                .foregroundStyle(mutedColor)
-                        }
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                Capsule().fill(Color(hex: "#EFEAE2"))
-                                Capsule()
-                                    .fill(muscleColor(muscle))
-                                    .frame(width: geo.size.width * CGFloat(Double(sets) / Double(maxSets)))
+                if analysis.muscleGroupSets.isEmpty {
+                    Text("这次训练暂未形成有效组。")
+                        .font(.system(size: 13))
+                        .foregroundStyle(mutedColor)
+                } else {
+                    ForEach(analysis.muscleGroupSets.sorted { $0.value > $1.value }, id: \.key) { muscle, sets in
+                        let maxSets = max(analysis.muscleGroupSets.values.max() ?? 1, 1)
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text(localizedMuscle(muscle))
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(bodyTextColor)
+                                Spacer()
+                                Text("\(sets) 组")
+                                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                                    .foregroundStyle(mutedColor)
                             }
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    Capsule().fill(Color(hex: "#EFEAE2"))
+                                    Capsule()
+                                        .fill(muscleColor(muscle))
+                                        .frame(width: geo.size.width * CGFloat(Double(sets) / Double(maxSets)))
+                                }
+                            }
+                            .frame(height: 8)
                         }
-                        .frame(height: 8)
                     }
                 }
             }
         }
-        .padding(16)
-        .background(cardBackground)
     }
 
     private var exerciseList: some View {
@@ -237,64 +240,64 @@ struct StrengthWorkoutDetailView: View {
                 .foregroundStyle(bodyTextColor)
 
             ForEach(workout.exercises) { exercise in
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(exercise.name)
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundStyle(bodyTextColor)
-                            Text("\(exercise.equipment) · \(Int(exercise.volumeKilograms.rounded())) kg")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(mutedColor)
-                        }
-                        Spacer()
-                        if let e1RM = analysis.estimatedOneRepMaxByExercise[exercise.name] {
-                            VStack(alignment: .trailing, spacing: 3) {
-                                Text("\(Int(e1RM.rounded())) kg")
-                                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                                    .foregroundStyle(accentColor)
-                                Text("e1RM")
-                                    .font(.system(size: 10, weight: .bold))
+                VelaGlassCard(padding: 16, cornerRadius: 20) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(exercise.name)
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundStyle(bodyTextColor)
+                                Text("\(exercise.equipment) · \(Int(exercise.volumeKilograms.rounded())) kg")
+                                    .font(.system(size: 11, weight: .medium))
                                     .foregroundStyle(mutedColor)
                             }
-                        }
-                    }
-
-                    if !exercise.sets.isEmpty {
-                        HStack(spacing: 12) {
-                            Text("组")
-                                .frame(width: 32, alignment: .leading)
-                            Text("重量")
-                                .frame(width: 70, alignment: .center)
                             Spacer()
-                            Text("次数")
-                                .frame(width: 50, alignment: .center)
-                            Text("RPE")
-                                .frame(width: 44, alignment: .center)
-                            Text("状态")
-                                .frame(width: 32, alignment: .trailing)
+                            if let e1RM = analysis.estimatedOneRepMaxByExercise[exercise.name] {
+                                VStack(alignment: .trailing, spacing: 3) {
+                                    Text("\(Int(e1RM.rounded())) kg")
+                                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                                        .foregroundStyle(accentColor)
+                                    Text("e1RM")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundStyle(mutedColor)
+                                }
+                            }
                         }
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(mutedColor)
-                        .padding(.horizontal, 4)
-                        .padding(.bottom, 2)
-                    }
 
-                    ForEach(Array(exercise.sets.enumerated()), id: \.element.id) { index, set in
-                        Button {
-                            selectedSet = StrengthSetDetail(
-                                exerciseName: exercise.name,
-                                setIndex: index + 1,
-                                set: set
-                            )
-                        } label: {
-                            setRow(index: index, set: set)
+                        if !exercise.sets.isEmpty {
+                            HStack(spacing: 12) {
+                                Text("组")
+                                    .frame(width: 32, alignment: .leading)
+                                Text("重量")
+                                    .frame(width: 70, alignment: .center)
+                                Spacer()
+                                Text("次数")
+                                    .frame(width: 50, alignment: .center)
+                                Text("RPE")
+                                    .frame(width: 44, alignment: .center)
+                                Text("状态")
+                                    .frame(width: 32, alignment: .trailing)
+                            }
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(mutedColor)
+                            .padding(.horizontal, 4)
+                            .padding(.bottom, 2)
                         }
-                        .buttonStyle(.plain)
+
+                        ForEach(Array(exercise.sets.enumerated()), id: \.element.id) { index, set in
+                            Button {
+                                selectedSet = StrengthSetDetail(
+                                    exerciseName: exercise.name,
+                                    setIndex: index + 1,
+                                    set: set
+                                )
+                            } label: {
+                                setRow(index: index, set: set)
+                            }
+                            .buttonStyle(.cardPress)
+                        }
                     }
                 }
-                .padding(16)
-                .background(cardBackground)
             }
         }
     }
@@ -302,17 +305,16 @@ struct StrengthWorkoutDetailView: View {
     @ViewBuilder
     private var notesCard: some View {
         if !workout.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("训练备注")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(bodyTextColor)
-                Text(workout.notes)
-                    .font(.system(size: 13))
-                    .foregroundStyle(mutedColor)
+            VelaGlassCard(padding: 16, cornerRadius: 20) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("训练备注")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(bodyTextColor)
+                    Text(workout.notes)
+                        .font(.system(size: 13))
+                        .foregroundStyle(mutedColor)
+                }
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(cardBackground)
         }
     }
 

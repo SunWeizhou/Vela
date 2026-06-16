@@ -236,22 +236,22 @@ public struct EnergyBankEngine: ScoreEngine {
     ) -> (atl: Double, ctl: Double, tsb: Double, acwr: Double) {
         let history = strainHistory ?? []
         let loadsIncludingToday = history + [todayStrain]
-        let acuteLoads = loadsIncludingToday.suffix(7)
-        let chronicLoads = loadsIncludingToday.suffix(42)
-        let chronic28Loads = loadsIncludingToday.suffix(28)
 
-        let atl = average(acuteLoads)
-        let ctl = average(chronicLoads)
-        let acute7 = acuteLoads.reduce(0, +)
-        let chronic28Equivalent = chronic28Loads.reduce(0, +) / 4.0
-        let acwr = chronic28Equivalent > 0 ? acute7 / chronic28Equivalent : 1.0
+        let atl = ewma(loadsIncludingToday, lambda: 2.0 / (7.0 + 1.0))
+        let ctl = ewma(loadsIncludingToday, lambda: 2.0 / (42.0 + 1.0))
+
+        let ctl28 = ewma(loadsIncludingToday, lambda: 2.0 / (28.0 + 1.0))
+        let acwr = ctl28 > 0 ? atl / ctl28 : 1.0
 
         return (atl: atl, ctl: ctl, tsb: ctl - atl, acwr: acwr)
     }
 
-    private func average<S: Sequence>(_ values: S) -> Double where S.Element == Double {
-        let values = Array(values)
+    private func ewma(_ values: [Double], lambda: Double) -> Double {
         guard !values.isEmpty else { return 0 }
-        return values.reduce(0, +) / Double(values.count)
+        var result = values[0]
+        for i in 1..<values.count {
+            result = values[i] * lambda + result * (1.0 - lambda)
+        }
+        return result
     }
 }

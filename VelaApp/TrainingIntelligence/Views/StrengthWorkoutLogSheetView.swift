@@ -117,7 +117,7 @@ struct StrengthWorkoutLogSheetView: View {
                             .padding(.vertical, 14)
                             .velaNativeCard(radius: 16)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.cardPress)
                 }
                 .padding(16)
                 .padding(.bottom, 24)
@@ -248,7 +248,7 @@ struct StrengthWorkoutLogSheetView: View {
                         Image(systemName: "trash")
                             .foregroundStyle(Color.red)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.cardPress)
                 }
             }
 
@@ -309,7 +309,7 @@ struct StrengthWorkoutLogSheetView: View {
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(VelaTheme.accent)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
 
                 if let last = exercise.wrappedValue.sets.last {
                     Button {
@@ -323,7 +323,7 @@ struct StrengthWorkoutLogSheetView: View {
                             .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(VelaTheme.muted)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.cardPress)
                 }
             }
             .padding(.top, 4)
@@ -358,7 +358,7 @@ struct StrengthWorkoutLogSheetView: View {
                     .frame(width: 24, height: 24)
                     .background(Circle().fill(set.wrappedValue.isWarmup ? Color(hex: "#FF9500") : VelaTheme.accent))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
             .frame(width: 32, alignment: .leading)
 
             // 前次表现
@@ -413,6 +413,7 @@ struct StrengthWorkoutLogSheetView: View {
                     .frame(width: 44, height: 26)
                     .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.04)))
             }
+            .buttonStyle(.cardPress)
 
             // 完成状态
             Button {
@@ -422,7 +423,7 @@ struct StrengthWorkoutLogSheetView: View {
                     .foregroundStyle((set.wrappedValue.isCompleted ?? false) ? VelaTheme.success : VelaTheme.accent)
                     .font(.system(size: 22))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
             .frame(width: 32, alignment: .trailing)
         }
         .padding(.vertical, 4)
@@ -723,11 +724,13 @@ struct StrengthWorkoutLogSheetView: View {
             Spacer()
             Text("\(restSecondsRemaining)s").monospacedDigit()
             Button("跳过") { restTimer = nil }
+                .buttonStyle(.cardPress)
         }
         .font(.system(size: 13, weight: .bold))
         .foregroundStyle(VelaTheme.accent)
         .padding(14)
         .velaNativeCard(radius: 16)
+        .appleIntelligenceGlow(isHighlighted: true, radius: 16)
     }
 
     private func saveCompletedWorkoutAsTemplate() {

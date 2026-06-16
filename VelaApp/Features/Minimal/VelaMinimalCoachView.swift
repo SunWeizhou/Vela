@@ -1267,6 +1267,7 @@ struct DataSourceSettingsView: View {
 
 struct HealthDataResyncSettingsView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var services: VelaServices
     @State private var isSyncing = false
     @State private var statusMessage = ""
 
@@ -1303,14 +1304,16 @@ struct HealthDataResyncSettingsView: View {
         isSyncing = true
         statusMessage = "正在重新同步..."
         Task { @MainActor in
-            do {
-                try await HealthKitSyncEngine(
-                    queryService: HealthKitQueryService(),
-                    modelContext: modelContext
-                ).syncPastDays(90, forceRefreshRecentDays: 90)
-                statusMessage = "最近 90 天健康数据已重新同步。"
-            } catch {
-                statusMessage = "重新同步失败：\(error.localizedDescription)"
+            await services.syncCoordinator.run(source: .healthKit, force: true) {
+                do {
+                    try await HealthKitSyncEngine(
+                        queryService: services.queryService,
+                        modelContext: modelContext
+                    ).syncPastDays(90, forceRefreshRecentDays: 90)
+                    statusMessage = "最近 90 天健康数据已重新同步。"
+                } catch {
+                    statusMessage = "重新同步失败：\(error.localizedDescription)"
+                }
             }
             isSyncing = false
         }
@@ -1756,19 +1759,135 @@ struct ExportDataSettingsView: View {
     }
     
     private func exportHealthData(modelContext: ModelContext) -> Data? {
-        let repo = SwiftDataDailyHealthSummaryRepository(modelContext: modelContext)
-        let range = DateRangeQuery.recentDays(90, endingAt: Date(), calendar: .current)
-        let records = (try? repo.fetch(in: range)) ?? []
-
-        let exportRecords: [[String: Any]] = records.map { record in
-            [
+        // 1. Fetch Daily Summaries
+        let summariesDesc = FetchDescriptor<DailyHealthSummaryRecord>(sortBy: [SortDescriptor(\.date, order: .forward)])
+        let summaries = (try? modelContext.fetch(summariesDesc)) ?? []
+        let exportSummaries: [[String: Any]] = summaries.map { record in
+            var dict: [String: Any] = [
                 "date": record.date.formatted(.iso8601),
-                "sleep_score": record.sleepScore as Any,
-                "recovery_score": record.recoveryScore as Any,
-                "strain_score": record.strainScore as Any,
-                "stress_index": record.stressIndex as Any,
-                "morning_energy": record.morningEnergy as Any,
-                "current_energy": record.currentEnergy as Any
+                "dayIdentifier": record.dayIdentifier
+            ]
+            if let val = record.sleepScore { dict["sleepScore"] = val }
+            if let val = record.recoveryScore { dict["recoveryScore"] = val }
+            if let val = record.strainScore { dict["strainScore"] = val }
+            if let val = record.stressIndex { dict["stressIndex"] = val }
+            if let val = record.morningEnergy { dict["morningEnergy"] = val }
+            if let val = record.currentEnergy { dict["currentEnergy"] = val }
+            if let val = record.energyBank { dict["energyBank"] = val }
+            if let val = record.hrvAverage { dict["hrvAverage"] = val }
+            if let val = record.restingHeartRate { dict["restingHeartRate"] = val }
+            if let val = record.sleepHours { dict["sleepHours"] = val }
+            if let val = record.deepSleepPercent { dict["deepSleepPercent"] = val }
+            if let val = record.remSleepPercent { dict["remSleepPercent"] = val }
+            if let val = record.sleepEfficiency { dict["sleepEfficiency"] = val }
+            if let val = record.steps { dict["steps"] = val }
+            if let val = record.activeCalories { dict["activeCalories"] = val }
+            if let val = record.activeMinutes { dict["activeMinutes"] = val }
+            if let val = record.workoutCount { dict["workoutCount"] = val }
+            if let val = record.workoutDuration { dict["workoutDuration"] = val }
+            if let val = record.bodyWeight { dict["bodyWeight"] = val }
+            if let val = record.bodyFatPercent { dict["bodyFatPercent"] = val }
+            if let val = record.oxygenSaturation { dict["oxygenSaturation"] = val }
+            if let val = record.respiratoryRate { dict["respiratoryRate"] = val }
+            if let val = record.wristTemperature { dict["wristTemperature"] = val }
+            if let val = record.dailyLoad { dict["dailyLoad"] = val }
+            return dict
+        }
+
+        // 2. Fetch Strength Workouts
+        let workoutsDesc = FetchDescriptor<StrengthWorkoutRecord>(sortBy: [SortDescriptor(\.startedAt, order: .forward)])
+        let workouts = (try? modelContext.fetch(workoutsDesc)) ?? []
+        let exportWorkouts: [[String: Any]] = workouts.map { record in
+            var dict: [String: Any] = [
+                "id": record.id.uuidString,
+                "title": record.title,
+                "startedAt": record.startedAt.formatted(.iso8601),
+                "durationMinutes": record.durationMinutes,
+                "notes": record.notes
+            ]
+            if let val = record.linkedWorkoutEventId { dict["linkedWorkoutEventId"] = val.uuidString }
+            if let val = record.sourceTemplateId { dict["sourceTemplateId"] = val.uuidString }
+            if let val = record.planDayId { dict["planDayId"] = val.uuidString }
+            if let val = record.sessionRPE { dict["sessionRPE"] = val }
+            if let val = record.completedAt { dict["completedAt"] = val.formatted(.iso8601) }
+            if let val = record.analyticsJSON { dict["analyticsJSON"] = val }
+            // Decode and embed raw exercises JSON
+            if let exercisesObj = try? JSONSerialization.jsonObject(with: record.exercisesData) {
+                dict["exercises"] = exercisesObj
+            }
+            return dict
+        }
+
+        // 3. Fetch Journals
+        let journalsDesc = FetchDescriptor<JournalEntryRecord>(sortBy: [SortDescriptor(\.createdAt, order: .forward)])
+        let journals = (try? modelContext.fetch(journalsDesc)) ?? []
+        let exportJournals: [[String: Any]] = journals.map { record in
+            var dict: [String: Any] = [
+                "createdAt": record.createdAt.formatted(.iso8601),
+                "tags": record.tags,
+                "note": record.note
+            ]
+            if let val = record.value { dict["value"] = val }
+            if let val = record.unit { dict["unit"] = val }
+            return dict
+        }
+
+        // 4. Fetch Food Logs
+        let foodLogsDesc = FetchDescriptor<FoodLogRecord>(sortBy: [SortDescriptor(\.createdAt, order: .forward)])
+        let foodLogs = (try? modelContext.fetch(foodLogsDesc)) ?? []
+        let exportFoodLogs: [[String: Any]] = foodLogs.map { record in
+            var dict: [String: Any] = [
+                "id": record.id.uuidString,
+                "mealName": record.mealName,
+                "createdAt": record.createdAt.formatted(.iso8601),
+                "updatedAt": record.updatedAt.formatted(.iso8601),
+                "source": record.source,
+                "totalCalories": record.totalCalories,
+                "proteinGrams": record.proteinGrams,
+                "carbsGrams": record.carbsGrams,
+                "fatGrams": record.fatGrams,
+                "fiberGrams": record.fiberGrams,
+                "healthScore": record.healthScore,
+                "rawAnalysis": record.rawAnalysis
+            ]
+            if let foodsData = record.serializedFoods.data(using: .utf8),
+               let foodsObj = try? JSONSerialization.jsonObject(with: foodsData) {
+                dict["foods"] = foodsObj
+            }
+            if let suggestionsData = record.serializedSuggestions.data(using: .utf8),
+               let suggestionsObj = try? JSONSerialization.jsonObject(with: suggestionsData) {
+                dict["suggestions"] = suggestionsObj
+            }
+            return dict
+        }
+
+        // 5. Fetch Biomarkers
+        let biomarkersDesc = FetchDescriptor<BiomarkerRecord>(sortBy: [SortDescriptor(\.date, order: .forward)])
+        let biomarkers = (try? modelContext.fetch(biomarkersDesc)) ?? []
+        let exportBiomarkers: [[String: Any]] = biomarkers.map { record in
+            var dict: [String: Any] = [
+                "id": record.id.uuidString,
+                "name": record.name,
+                "value": record.value,
+                "unit": record.unit,
+                "date": record.date.formatted(.iso8601),
+                "isOptimal": record.isOptimal,
+                "referenceMin": record.referenceMin,
+                "referenceMax": record.referenceMax
+            ]
+            if let val = record.sourceDocumentName { dict["sourceDocumentName"] = val }
+            return dict
+        }
+
+        // 6. Fetch User Wiki Documents
+        let wikiDesc = FetchDescriptor<UserWikiDocumentRecord>(sortBy: [SortDescriptor(\.filename, order: .forward)])
+        let wikiDocs = (try? modelContext.fetch(wikiDesc)) ?? []
+        let exportWikiDocs: [[String: Any]] = wikiDocs.map { record in
+            [
+                "filename": record.filename,
+                "title": record.title,
+                "markdownContent": record.markdownContent,
+                "updatedAt": record.updatedAt.formatted(.iso8601)
             ]
         }
 
@@ -1776,8 +1895,12 @@ struct ExportDataSettingsView: View {
             "app": "Vela",
             "export_date": Date().formatted(.iso8601),
             "config_version": VelaAppMetadata.configVersion,
-            "record_count": exportRecords.count,
-            "records": exportRecords
+            "summaries": exportSummaries,
+            "workouts": exportWorkouts,
+            "journals": exportJournals,
+            "food_logs": exportFoodLogs,
+            "biomarkers": exportBiomarkers,
+            "wiki_documents": exportWikiDocs
         ]
 
         return try? JSONSerialization.data(withJSONObject: export, options: [.prettyPrinted, .sortedKeys])

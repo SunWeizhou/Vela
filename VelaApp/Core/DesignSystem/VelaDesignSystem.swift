@@ -1080,7 +1080,7 @@ struct MessageBubble: View {
 // MARK: - TypingIndicator
 
 struct TypingIndicator: View {
-    @State private var phase = 0
+    @State private var animate = false
 
     var body: some View {
         HStack(spacing: 6) {
@@ -1088,9 +1088,14 @@ struct TypingIndicator: View {
                 Circle()
                     .fill(VelaTheme.meta)
                     .frame(width: 7, height: 7)
-                    .scaleEffect(phase == i ? 1 : 0.6)
-                    .opacity(phase == i ? 1 : 0.3)
-                    .animation(.easeInOut(duration: 0.32).repeatForever(autoreverses: true), value: phase)
+                    .scaleEffect(animate ? 1.0 : 0.4)
+                    .opacity(animate ? 1.0 : 0.3)
+                    .animation(
+                        .easeInOut(duration: 0.6)
+                        .repeatForever(autoreverses: true)
+                        .delay(Double(i) * 0.2),
+                        value: animate
+                    )
             }
         }
         .padding(.horizontal, 18)
@@ -1106,10 +1111,7 @@ struct TypingIndicator: View {
             .fill(VelaTheme.surface)
         )
         .onAppear {
-            phase = 0
-            withAnimation(.easeInOut(duration: 0.32).delay(0.32)) { phase = 1 }
-            withAnimation(.easeInOut(duration: 0.32).delay(0.64)) { phase = 2 }
-            withAnimation(.easeInOut(duration: 0.32).delay(0.96)) { phase = 0 }
+            animate = true
         }
     }
 }
@@ -1579,7 +1581,48 @@ struct VelaNativeCardModifier: ViewModifier {
     }
 }
 
+struct AppleIntelligenceGlowModifier: ViewModifier {
+    let isHighlighted: Bool
+    let radius: CGFloat
+    @State private var rotation: Double = 0.0
+    
+    func body(content: Content) -> some View {
+        if isHighlighted {
+            content
+                .overlay(
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    Color(hex: "#9C5FF2"),
+                                    Color(hex: "#00A2FF"),
+                                    Color(hex: "#FF2D55"),
+                                    Color(hex: "#FF9F0A"),
+                                    Color(hex: "#9C5FF2")
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1.5
+                        )
+                        .hueRotation(.degrees(rotation))
+                )
+                .onAppear {
+                    withAnimation(.linear(duration: 4.0).repeatForever(autoreverses: false)) {
+                        rotation = 360.0
+                    }
+                }
+        } else {
+            content
+        }
+    }
+}
+
 extension View {
+    func appleIntelligenceGlow(isHighlighted: Bool = true, radius: CGFloat = 18) -> some View {
+        self.modifier(AppleIntelligenceGlowModifier(isHighlighted: isHighlighted, radius: radius))
+    }
+
     func ambientGlow(color: Color, intensity: CGFloat = 0.05) -> some View {
         self.modifier(AmbientGlowModifier(color: color, intensity: intensity))
     }
@@ -1882,6 +1925,18 @@ struct VelaGlassCard<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.ultraThinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(
+                        LinearGradient(
+                            colors: [.white.opacity(0.25), .clear, .white.opacity(0.1)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.5
+                    )
+            )
+            .shadow(color: Color.black.opacity(0.04), radius: 8, y: 3)
     }
 }
 
@@ -2269,3 +2324,270 @@ struct SparklineLineGraph: View {
         }
     }
 }
+
+// MARK: - Premium Shimmer & Skeleton View Modifiers
+
+struct ShimmerModifier: ViewModifier {
+    @State private var phase: CGFloat = 0.0
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(
+                GeometryReader { geo in
+                    let width = geo.size.width
+                    
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            .white.opacity(0.12),
+                            .white.opacity(0.35),
+                            .white.opacity(0.12),
+                            .clear
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .rotationEffect(.degrees(15))
+                    .scaleEffect(1.5)
+                    .offset(x: -width + (phase * width * 2.5))
+                }
+            )
+            .mask(content)
+            .onAppear {
+                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
+                    phase = 1.0
+                }
+            }
+    }
+}
+
+struct SkeletonModifier<S: Shape>: ViewModifier {
+    var show: Bool
+    var shape: S
+    
+    func body(content: Content) -> some View {
+        if show {
+            shape
+                .fill(VelaTheme.borderSoft)
+                .shimmer()
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func shimmer() -> some View {
+        self.modifier(ShimmerModifier())
+    }
+    
+    func skeleton<S: Shape>(show: Bool, shape: S) -> some View {
+        self.modifier(SkeletonModifier(show: show, shape: shape))
+    }
+}
+
+// MARK: - TripleConcentricScoreRing (Concentric Recovery/Sleep/Strain activity-style rings)
+
+struct TripleConcentricScoreRing: View {
+    let recovery: Double // 0...1
+    let sleep: Double    // 0...1
+    let strain: Double   // 0...1
+    
+    @State private var animRecovery: Double = 0.0
+    @State private var animSleep: Double = 0.0
+    @State private var animStrain: Double = 0.0
+    
+    var body: some View {
+        ZStack {
+            // Blurred depth glow backing
+            RadialGradient(
+                colors: [
+                    VelaTheme.recoveryColor.opacity(0.12),
+                    VelaTheme.sleepColor.opacity(0.08),
+                    Color.clear
+                ],
+                center: .center,
+                startRadius: 0,
+                endRadius: 50
+            )
+            .frame(width: 100, height: 100)
+            .blur(radius: 6)
+
+            // Recovery (Outer)
+            Circle()
+                .stroke(VelaTheme.recoveryColor.opacity(0.12), lineWidth: 8.5)
+                .frame(width: 100, height: 100)
+            Circle()
+                .trim(from: 0, to: max(0.01, animRecovery))
+                .stroke(
+                    VelaTheme.recoveryColor.gradient,
+                    style: StrokeStyle(lineWidth: 8.5, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+                .frame(width: 100, height: 100)
+                .shadow(color: VelaTheme.recoveryColor.opacity(0.25), radius: 2)
+            
+            // Sleep (Middle)
+            Circle()
+                .stroke(VelaTheme.sleepColor.opacity(0.12), lineWidth: 8.5)
+                .frame(width: 78, height: 78)
+            Circle()
+                .trim(from: 0, to: max(0.01, animSleep))
+                .stroke(
+                    VelaTheme.sleepColor.gradient,
+                    style: StrokeStyle(lineWidth: 8.5, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+                .frame(width: 78, height: 78)
+                .shadow(color: VelaTheme.sleepColor.opacity(0.25), radius: 2)
+            
+            // Strain (Inner)
+            Circle()
+                .stroke(VelaTheme.strainColor.opacity(0.12), lineWidth: 8.5)
+                .frame(width: 56, height: 56)
+            Circle()
+                .trim(from: 0, to: max(0.01, animStrain))
+                .stroke(
+                    VelaTheme.strainColor.gradient,
+                    style: StrokeStyle(lineWidth: 8.5, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+                .frame(width: 56, height: 56)
+                .shadow(color: VelaTheme.strainColor.opacity(0.25), radius: 2)
+        }
+        .onAppear {
+            withAnimation(.spring(response: 1.0, dampingFraction: 0.82)) {
+                animRecovery = recovery
+                animSleep = sleep
+                animStrain = strain
+            }
+        }
+        .onChange(of: recovery) { _, newRecovery in
+            withAnimation(.spring(response: 1.0, dampingFraction: 0.82)) { animRecovery = newRecovery }
+        }
+        .onChange(of: sleep) { _, newSleep in
+            withAnimation(.spring(response: 1.0, dampingFraction: 0.82)) { animSleep = newSleep }
+        }
+        .onChange(of: strain) { _, newStrain in
+            withAnimation(.spring(response: 1.0, dampingFraction: 0.82)) { animStrain = newStrain }
+        }
+    }
+}
+
+// MARK: - MiniMetricRow (Row showing inline indicator bars for triple rings)
+
+struct MiniMetricRow: View {
+    let icon: String
+    let label: String
+    let value: String
+    let progress: Double // 0...1
+    let color: Color
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(color)
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(color.opacity(0.12)))
+            
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Text(label)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(VelaTheme.fg)
+                    Spacer()
+                    Text(value)
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundStyle(color)
+                }
+                
+                // Capsule Progress Bar
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(VelaTheme.borderSoft)
+                            .frame(height: 5)
+                        
+                        Capsule()
+                            .fill(color.gradient)
+                            .frame(width: geo.size.width * CGFloat(progress), height: 5)
+                    }
+                }
+                .frame(height: 5)
+            }
+        }
+        .padding(.vertical, 3)
+    }
+}
+
+// MARK: - AppleIntelligenceOrb (Glowing Siri-like animated orb)
+
+struct AppleIntelligenceOrb: View {
+    @State private var animate = false
+
+    var body: some View {
+        ZStack {
+            // Glow layer 1 (Indigo/Purple)
+            Circle()
+                .fill(LinearGradient(colors: [Color(hex: "#9C5FF2"), Color(hex: "#6B6FA0")], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .frame(width: 80, height: 80)
+                .blur(radius: 20)
+                .scaleEffect(animate ? 1.25 : 0.8)
+                .offset(x: animate ? 12 : -12, y: animate ? -6 : 6)
+                .opacity(0.6)
+
+            // Glow layer 2 (Blue/Teal)
+            Circle()
+                .fill(LinearGradient(colors: [Color(hex: "#00A2FF"), Color(hex: "#5B8C6F")], startPoint: .topTrailing, endPoint: .bottomLeading))
+                .frame(width: 75, height: 75)
+                .blur(radius: 18)
+                .scaleEffect(animate ? 0.85 : 1.3)
+                .offset(x: animate ? -14 : 14, y: animate ? 8 : -8)
+                .opacity(0.6)
+
+            // Glow layer 3 (Pink/Rose/Orange)
+            Circle()
+                .fill(LinearGradient(colors: [Color(hex: "#FF2D55"), Color(hex: "#FF9F0A")], startPoint: .bottomLeading, endPoint: .topTrailing))
+                .frame(width: 70, height: 70)
+                .blur(radius: 16)
+                .scaleEffect(animate ? 1.35 : 0.85)
+                .offset(x: animate ? 6 : -6, y: animate ? 14 : -14)
+                .opacity(0.5)
+
+            // Core sphere (translucent glass)
+            Circle()
+                .fill(.ultraThinMaterial)
+                .frame(width: 68, height: 68)
+                .overlay(
+                    Circle()
+                        .stroke(
+                            LinearGradient(
+                                colors: [.white.opacity(0.6), .clear, .white.opacity(0.2)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 0.5
+                        )
+                )
+                .shadow(color: Color.black.opacity(0.12), radius: 10, y: 5)
+                .overlay(
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [Color(hex: "#0A84FF"), Color(hex: "#AF52DE"), Color(hex: "#FF2D55")],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                )
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 3.5).repeatForever(autoreverses: true)) {
+                animate = true
+            }
+        }
+    }
+}
+

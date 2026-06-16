@@ -20,14 +20,28 @@ struct TrainingView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        trainingHeader
                         trainingReadinessHero
                         trainingQuickActions
                         TrainingCalendarView()
                     }
-                    .padding(VelaTheme.screenPadding)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
                     .padding(.bottom, 96)
                 }
+                .scrollIndicators(.hidden)
+            }
+        }
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .top) {
+            VStack(spacing: 0) {
+                trainingHeader
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(.ultraThinMaterial)
+                
+                Divider()
+                    .opacity(0.4)
             }
         }
         .task {
@@ -65,7 +79,7 @@ struct TrainingView: View {
                     .background(Circle().fill(VelaTheme.surface))
                     .overlay(Circle().stroke(Color.black.opacity(0.06), lineWidth: 0.5))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
         }
         .padding(.top, 4)
     }
@@ -114,7 +128,8 @@ struct TrainingView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .heroCardSurface(accent: VelaTheme.strain)
+        .padding(18)
+        .velaNativeCard(radius: 20)
     }
 
     private var trainingQuickActions: some View {
@@ -204,10 +219,10 @@ struct TrainingView: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.surface))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.black.opacity(0.06), lineWidth: 0.5))
+            .velaNativeCard(radius: 16)
+            .appleIntelligenceGlow(isHighlighted: icon == "sparkles", radius: 16)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.cardPress)
     }
 
     // MARK: - Strain Hero Section

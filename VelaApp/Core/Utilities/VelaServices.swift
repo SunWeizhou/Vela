@@ -67,10 +67,12 @@ final class VelaServices: ObservableObject {
         self.queryService = queryService
         self.refreshService = HealthDataRefreshService(queryService: queryService)
         self.contextBuilder = AIContextBuilder()
-        self.syncCoordinator = AppSyncCoordinator()
+        let sync = AppSyncCoordinator()
+        self.syncCoordinator = sync
         self.dailySummaryUseCase = DailySummaryUseCase(
             refreshService: refreshService,
-            queryService: queryService
+            queryService: queryService,
+            syncCoordinator: sync
         )
     }
 

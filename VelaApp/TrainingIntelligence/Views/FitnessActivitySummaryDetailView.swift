@@ -73,179 +73,226 @@ struct FitnessActivitySummaryDetailView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                summaryHero
-                activityStats
-                workoutHeartRateCard
-                trendCard
-                guidanceCard
+        ZStack {
+            VelaBackground()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    summaryHero
+                    activityStats
+                    workoutHeartRateCard
+                    trendCard
+                    guidanceCard
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 96)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .padding(.bottom, 80)
+            .scrollIndicators(.hidden)
         }
-        .scrollIndicators(.hidden)
-        .background(detailBackground.ignoresSafeArea())
-        .navigationTitle("活动摘要")
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.visible, for: .navigationBar)
-    }
-
-    private var summaryHero: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("过去 30 天")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(VelaTheme.muted)
-            Text("\(workoutMinutes / 60)小时 \(workoutMinutes % 60)分钟")
-                .font(.system(size: 34, weight: .bold, design: .rounded))
-                .foregroundStyle(VelaTheme.fg)
-            Text("Apple 健康训练与日常活动汇总")
-                .font(.system(size: 13))
-                .foregroundStyle(VelaTheme.muted)
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(activityCardBackground)
-    }
-
-    private var activityStats: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 2), spacing: 10) {
-            activityStat(title: "活跃天数", value: "\(activeDays) 天", icon: "calendar")
-            activityStat(title: "训练次数", value: "\(workoutCount) 次", icon: "figure.run")
-            activityStat(title: "活动消耗", value: "\(activeCalories) kcal", icon: "flame.fill")
-            activityStat(title: "平均耗力", value: averageStrain.map { String(format: "%.0f", $0) } ?? "--", icon: "bolt.heart.fill")
-        }
-    }
-
-    private var trendCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("耗力趋势")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(VelaTheme.fg)
-            if chartPoints.isEmpty {
-                Text("积累至少 2 天记录后显示趋势。")
-                    .font(.system(size: 13))
-                    .foregroundStyle(VelaTheme.muted)
-                    .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
-            } else {
-                AreaChartCurveView(points: chartPoints)
-                    .frame(height: 112)
-            }
-        }
-        .padding(16)
-        .background(activityCardBackground)
-    }
-
-    private var workoutHeartRateCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("训练心率波动")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(VelaTheme.fg)
-                    Text("来自统一训练记录的平均心率")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(VelaTheme.muted)
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(averageWorkoutHeartRate.map { "\(Int($0.rounded()))" } ?? "--")
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
-                        .foregroundStyle(VelaTheme.fg)
-                    Text("bpm 平均")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(VelaTheme.muted)
-                }
-            }
-
-            if workoutHeartRates.count < 2 {
-                Text("导入或同步至少 2 次带心率的训练后显示波动图。")
-                    .font(.system(size: 13))
-                    .foregroundStyle(VelaTheme.muted)
-                    .frame(maxWidth: .infinity, minHeight: 96, alignment: .leading)
-            } else {
-                WorkoutHeartRateRibbonView(values: workoutHeartRates)
-                    .frame(height: 126)
-                HStack {
-                    Label("峰值 \(Int((maxWorkoutHeartRate ?? 0).rounded())) bpm", systemImage: "heart.fill")
+        .safeAreaInset(edge: .top) {
+            VStack(spacing: 0) {
+                HStack(alignment: .center) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("活动摘要")
+                            .font(.system(size: 26, weight: .bold, design: .rounded))
+                            .foregroundStyle(VelaTheme.primaryText)
+                        Text("过去 30 天")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(VelaTheme.secondaryText)
+                    }
                     Spacer()
-                    Text("\(workoutHeartRates.count) 次训练")
+                    Image(systemName: "figure.run.circle.fill")
+                        .font(.system(size: 28, weight: .semibold))
+                        .foregroundStyle(VelaTheme.accent)
                 }
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(VelaTheme.accent)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(.ultraThinMaterial)
+                Divider().opacity(0.4)
             }
         }
-        .padding(16)
-        .background(activityCardBackground)
     }
 
+    // MARK: - Summary Hero Card
+    private var summaryHero: some View {
+        VelaGlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("训练总时长")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(VelaTheme.secondaryText)
+                            .textCase(.uppercase)
+                            .tracking(0.5)
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            Text("\(workoutMinutes / 60)")
+                                .font(.system(size: 42, weight: .bold, design: .rounded))
+                                .foregroundStyle(VelaTheme.primaryText)
+                            Text("小时")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(VelaTheme.secondaryText)
+                            Text("\(workoutMinutes % 60)")
+                                .font(.system(size: 42, weight: .bold, design: .rounded))
+                                .foregroundStyle(VelaTheme.primaryText)
+                            Text("分钟")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(VelaTheme.secondaryText)
+                        }
+                    }
+                    Spacer()
+                    Image(systemName: "timer")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(VelaTheme.accent)
+                        .frame(width: 44, height: 44)
+                        .background(Circle().fill(VelaTheme.accent.opacity(0.12)))
+                }
+                Text("Apple 健康训练与日常活动汇总")
+                    .font(.system(size: 13))
+                    .foregroundStyle(VelaTheme.secondaryText)
+            }
+        }
+    }
+
+    // MARK: - Activity Stats Grid
+    private var activityStats: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
+            activityStat(title: "活跃天数", value: "\(activeDays) 天", icon: "calendar", color: VelaTheme.accent)
+            activityStat(title: "训练次数", value: "\(workoutCount) 次", icon: "figure.run", color: VelaTheme.strain)
+            activityStat(title: "活动消耗", value: "\(activeCalories) kcal", icon: "flame.fill", color: Color(hex: "#FF9F0A"))
+            activityStat(title: "平均耗力", value: averageStrain.map { String(format: "%.0f", $0) } ?? "--", icon: "bolt.heart.fill", color: VelaTheme.recovery)
+        }
+    }
+
+    private func activityStat(title: String, value: String, icon: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(color)
+                .frame(width: 32, height: 32)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(color.opacity(0.12)))
+            Text(value)
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .foregroundStyle(VelaTheme.primaryText)
+                .minimumScaleFactor(0.7)
+                .lineLimit(1)
+            Text(title)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(VelaTheme.secondaryText)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .velaNativeCard(radius: 16)
+    }
+
+    // MARK: - Workout Heart Rate Card
+    private var workoutHeartRateCard: some View {
+        VelaGlassCard {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Label("训练心率波动", systemImage: "waveform.path.ecg")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(VelaTheme.primaryText)
+                        Text("来自统一训练记录的平均心率")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(VelaTheme.secondaryText)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(averageWorkoutHeartRate.map { "\(Int($0.rounded()))" } ?? "--")
+                            .font(.system(size: 26, weight: .bold, design: .rounded))
+                            .foregroundStyle(VelaTheme.primaryText)
+                        Text("bpm 平均")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(VelaTheme.secondaryText)
+                    }
+                }
+
+                if workoutHeartRates.count < 2 {
+                    HStack(spacing: 8) {
+                        Image(systemName: "info.circle")
+                            .foregroundStyle(VelaTheme.secondaryText)
+                        Text("导入或同步至少 2 次带心率的训练后显示波动图。")
+                            .font(.system(size: 13))
+                            .foregroundStyle(VelaTheme.secondaryText)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
+                } else {
+                    WorkoutHeartRateRibbonView(values: workoutHeartRates)
+                        .frame(height: 126)
+                    HStack {
+                        Label("峰值 \(Int((maxWorkoutHeartRate ?? 0).rounded())) bpm", systemImage: "heart.fill")
+                        Spacer()
+                        Text("\(workoutHeartRates.count) 次训练")
+                    }
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(VelaTheme.accent)
+                }
+            }
+        }
+    }
+
+    // MARK: - Strain Trend Card
+    private var trendCard: some View {
+        VelaGlassCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("耗力趋势", systemImage: "chart.line.uptrend.xyaxis")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(VelaTheme.primaryText)
+                if chartPoints.isEmpty {
+                    HStack(spacing: 8) {
+                        Image(systemName: "info.circle")
+                            .foregroundStyle(VelaTheme.secondaryText)
+                        Text("积累至少 2 天记录后显示趋势。")
+                            .font(.system(size: 13))
+                            .foregroundStyle(VelaTheme.secondaryText)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
+                } else {
+                    AreaChartCurveView(points: chartPoints)
+                        .frame(height: 112)
+                }
+            }
+        }
+    }
+
+    // MARK: - Coach Guidance Card (AI Glow)
     private var guidanceCard: some View {
         Button {
             VelaAppState.shared.routeToCoach(
                 question: "请结合我过去 30 天的活动摘要、耗力趋势、恢复和睡眠，给出下一次训练的明确建议。"
             )
         } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "sparkles")
-                    .foregroundStyle(VelaTheme.accent)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("让 Coach 分析活动趋势")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(VelaTheme.fg)
-                    Text("结合恢复、睡眠和能量给出下一步建议")
-                        .font(.system(size: 12))
-                        .foregroundStyle(VelaTheme.muted)
+            VelaGlassCard {
+                HStack(spacing: 14) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(VelaTheme.accent)
+                        .frame(width: 42, height: 42)
+                        .background(Circle().fill(VelaTheme.accent.opacity(0.12)))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("让 Coach 分析活动趋势")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(VelaTheme.primaryText)
+                        Text("结合恢复、睡眠和能量给出下一步建议")
+                            .font(.system(size: 12))
+                            .foregroundStyle(VelaTheme.secondaryText)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(VelaTheme.secondaryText)
                 }
-                Spacer()
-                Image(systemName: "arrow.right")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Color(hex: "#BFB9AC"))
             }
-            .padding(16)
-            .background(activityCardBackground)
+            .appleIntelligenceGlow(isHighlighted: true, radius: 20)
         }
-        .buttonStyle(.plain)
-    }
-
-    private func activityStat(title: String, value: String, icon: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Image(systemName: icon)
-                .font(.system(size: 14))
-                .foregroundStyle(VelaTheme.accent)
-            Text(value)
-                .font(.system(size: 20, weight: .bold, design: .rounded))
-                .foregroundStyle(VelaTheme.fg)
-            Text(title)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(VelaTheme.muted)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(activityCardBackground)
-    }
-
-    private var activityCardBackground: some View {
-        RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .fill(VelaTheme.cardBg)
-            .shadow(color: Color.black.opacity(0.012), radius: 10, y: 3)
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
-            )
-    }
-
-    private var detailBackground: some View {
-        ZStack {
-            VelaTheme.systemGroupedBackground
-            LinearGradient(
-                colors: [Color(hex: "#EAF3FF"), VelaTheme.systemGroupedBackground, Color(hex: "#EEF7F5")],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
+        .buttonStyle(.cardPress)
     }
 }
+
+// MARK: - Area Chart Curve View
 
 struct AreaChartCurveView: View {
     let points: [CGPoint]
@@ -266,7 +313,7 @@ struct AreaChartCurveView: View {
                 }
                 .fill(
                     LinearGradient(
-                        colors: [Color(hex: "#FFAB91").opacity(0.24), Color(hex: "#FFAB91").opacity(0.0)],
+                        colors: [VelaTheme.accent.opacity(0.22), VelaTheme.accent.opacity(0.0)],
                         startPoint: .top,
                         endPoint: .bottom
                     )
@@ -304,6 +351,8 @@ struct AreaChartCurveView: View {
     }
 }
 
+// MARK: - Workout Heart Rate Ribbon View
+
 struct WorkoutHeartRateRibbonView: View {
     let values: [Double]
 
@@ -314,14 +363,14 @@ struct WorkoutHeartRateRibbonView: View {
             let range = maxValue - minValue
             ZStack {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(hex: "#EAF3FF"))
+                    .fill(VelaTheme.accent.opacity(0.06))
                     .frame(height: geo.size.height * 0.42)
                     .position(x: geo.size.width / 2, y: geo.size.height * 0.52)
 
                 ForEach(0..<4, id: \.self) { idx in
                     Rectangle()
-                        .fill(Color(hex: "#E5E5EA"))
-                        .frame(height: 0.7)
+                        .fill(VelaTheme.separatorSoft)
+                        .frame(height: 0.5)
                         .position(x: geo.size.width / 2, y: geo.size.height * CGFloat(idx + 1) / 5)
                 }
 

@@ -18,27 +18,11 @@ struct VelaTrainingView: View {
         Calendar.current.date(byAdding: .day, value: -Self.lookbackDays, to: dashboardVM.selectedDate) ?? dashboardVM.selectedDate
     }
 
-    @Query(sort: \StrengthWorkoutRecord.startedAt, order: .reverse) private var allStrengthWorkouts: [StrengthWorkoutRecord]
-    @Query(sort: \WorkoutEventRecord.startedAt, order: .reverse) private var allWorkoutEvents: [WorkoutEventRecord]
-    @Query(sort: \WorkoutTemplateRecord.title) private var allWorkoutTemplates: [WorkoutTemplateRecord]
-    @Query(sort: \TrainingPlanRecord.updatedAt, order: .reverse) private var allTrainingPlans: [TrainingPlanRecord]
-    @Query(sort: \DailyOperatingPlanRecord.generatedAt, order: .reverse) private var allOperatingPlans: [DailyOperatingPlanRecord]
-
-    private var strengthWorkouts: [StrengthWorkoutRecord] {
-        allStrengthWorkouts.filter { $0.startedAt >= trainingLookbackStart }
-    }
-    private var localWorkoutEvents: [WorkoutEventRecord] {
-        allWorkoutEvents.filter { $0.startedAt >= trainingLookbackStart }
-    }
-    private var workoutTemplates: [WorkoutTemplateRecord] {
-        allWorkoutTemplates
-    }
-    private var trainingPlans: [TrainingPlanRecord] {
-        allTrainingPlans
-    }
-    private var operatingPlans: [DailyOperatingPlanRecord] {
-        allOperatingPlans
-    }
+    @State private var strengthWorkouts: [StrengthWorkoutRecord] = []
+    @State private var localWorkoutEvents: [WorkoutEventRecord] = []
+    @State private var workoutTemplates: [WorkoutTemplateRecord] = []
+    @State private var trainingPlans: [TrainingPlanRecord] = []
+    @State private var operatingPlans: [DailyOperatingPlanRecord] = []
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
     private var activePlan: TrainingPlanRecord? {
@@ -105,9 +89,6 @@ struct VelaTrainingView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                // 1. Fitness Title Header
-                fitnessHeader
-
                 adaptiveCockpitCard
 
                 muscleVolumeCard
@@ -119,11 +100,22 @@ struct VelaTrainingView: View {
                 recentWorkoutsSection
             }
             .padding(.horizontal, 16)
-            .padding(.top, 8)
+            .padding(.top, 12)
             .padding(.bottom, 100)
         }
         .scrollIndicators(.hidden)
         .velaTrackScroll(direction: scrollDirection)
+        .safeAreaInset(edge: .top) {
+            VStack(spacing: 0) {
+                fitnessHeader
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+                    .background(.ultraThinMaterial)
+                
+                Divider()
+                    .opacity(0.4)
+            }
+        }
         .background(VelaTheme.systemGroupedBackground)
         .onAppear {
             loadRealFitnessData()
@@ -349,7 +341,7 @@ struct VelaTrainingView: View {
                             .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(VelaTheme.accent)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.cardPress)
                     }
                     
                     SafeZoneWorkloadChartView(workload: dynamicExertionWorkload)
@@ -376,7 +368,7 @@ struct VelaTrainingView: View {
                             .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(VelaTheme.accent)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.cardPress)
                     }
                     
                     ZStack(alignment: .topTrailing) {
@@ -794,7 +786,7 @@ struct VelaTrainingView: View {
                                         .stroke(Color(hex: "#E5E5EA"), lineWidth: 0.7)
                                 )
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.cardPress)
                             .contextMenu {
                                 Button(role: .destructive) {
                                     deleteTemplate(template)
@@ -894,7 +886,7 @@ struct VelaTrainingView: View {
                     NavigationLink(destination: WorkoutDetailView(workout: workout)) {
                         workoutRow(workout)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.cardPress)
                 }
             }
         }
@@ -1094,29 +1086,31 @@ struct VelaTrainingView: View {
         xunjiImportMessage = "正在读取 \(datestr) 的训记训练..."
         defer { isImportingXunji = false }
 
-        do {
-            let responseData = try await xunjiResponseData(
-                apiKey: key,
-                datestr: datestr,
-                includeFullData: xunjiIncludeFullData
-            )
-            let summary = try XunjiTrainingImportService().importResponseData(
-                responseData,
-                datestr: datestr,
-                modelContext: modelContext
-            )
-            loadRealFitnessData()
-            await dashboardVM.refresh(modelContext: modelContext)
-            loadRealFitnessData()
-            if summary.importedCount == 0, summary.updatedCount == 0 {
-                xunjiImportMessage = "没有可导入的训练。"
-            } else {
-                let titles = summary.importedTitles.prefix(3).joined(separator: "、")
-                xunjiImportMessage = "已合并 \(summary.importedCount) 条新训练，更新 \(summary.updatedCount) 条。\(titles.isEmpty ? "" : " \(titles)")"
-                VelaAppState.shared.markLocalDataChanged()
+        await services.syncCoordinator.run(source: .xunji, force: true) {
+            do {
+                let responseData = try await xunjiResponseData(
+                    apiKey: key,
+                    datestr: datestr,
+                    includeFullData: xunjiIncludeFullData
+                )
+                let summary = try XunjiTrainingImportService().importResponseData(
+                    responseData,
+                    datestr: datestr,
+                    modelContext: modelContext
+                )
+                loadRealFitnessData()
+                await dashboardVM.refresh(modelContext: modelContext)
+                loadRealFitnessData()
+                if summary.importedCount == 0, summary.updatedCount == 0 {
+                    xunjiImportMessage = "没有可导入的训练。"
+                } else {
+                    let titles = summary.importedTitles.prefix(3).joined(separator: "、")
+                    xunjiImportMessage = "已合并 \(summary.importedCount) 条新训练，更新 \(summary.updatedCount) 条。\(titles.isEmpty ? "" : " \(titles)")"
+                    VelaAppState.shared.markLocalDataChanged()
+                }
+            } catch {
+                xunjiImportMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             }
-        } catch {
-            xunjiImportMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 
@@ -1129,33 +1123,35 @@ struct VelaTrainingView: View {
         isAutoImportingXunji = true
         defer { isAutoImportingXunji = false }
 
-        let calendar = Calendar.current
-        var changed = false
-        for offset in 0..<3 {
-            guard let date = calendar.date(byAdding: .day, value: -offset, to: Date()) else { continue }
-            let datestr = xunjiDateString(date)
-            do {
-                let responseData = try await xunjiResponseData(
-                    apiKey: key,
-                    datestr: datestr,
-                    includeFullData: true
-                )
-                let summary = try XunjiTrainingImportService().importResponseData(
-                    responseData,
-                    datestr: datestr,
-                    modelContext: modelContext
-                )
-                changed = changed || summary.importedCount > 0 || summary.updatedCount > 0
-            } catch {
-                continue
+        await services.syncCoordinator.run(source: .xunji, force: false) {
+            let calendar = Calendar.current
+            var changed = false
+            for offset in 0..<3 {
+                guard let date = calendar.date(byAdding: .day, value: -offset, to: Date()) else { continue }
+                let datestr = xunjiDateString(date)
+                do {
+                    let responseData = try await xunjiResponseData(
+                        apiKey: key,
+                        datestr: datestr,
+                        includeFullData: true
+                    )
+                    let summary = try XunjiTrainingImportService().importResponseData(
+                        responseData,
+                        datestr: datestr,
+                        modelContext: modelContext
+                    )
+                    changed = changed || summary.importedCount > 0 || summary.updatedCount > 0
+                } catch {
+                    continue
+                }
             }
-        }
 
-        if changed {
-            loadRealFitnessData()
-            await dashboardVM.refresh(modelContext: modelContext)
-            loadRealFitnessData()
-            VelaAppState.shared.markLocalDataChanged()
+            if changed {
+                loadRealFitnessData()
+                await dashboardVM.refresh(modelContext: modelContext)
+                loadRealFitnessData()
+                VelaAppState.shared.markLocalDataChanged()
+            }
         }
     }
 
@@ -1165,8 +1161,13 @@ struct VelaTrainingView: View {
         datestr: String,
         includeFullData: Bool
     ) async throws -> Data {
-        let caches = try modelContext.fetch(FetchDescriptor<XunjiDailyCacheRecord>())
-        if let cache = caches.first(where: { XunjiCachePolicy.shouldReuse($0, datestr: datestr, includeFullData: includeFullData) }) {
+        var desc = FetchDescriptor<XunjiDailyCacheRecord>(
+            predicate: #Predicate<XunjiDailyCacheRecord> { $0.datestr == datestr }
+        )
+        desc.fetchLimit = 1
+        let caches = (try? modelContext.fetch(desc)) ?? []
+
+        if let cache = caches.first, XunjiCachePolicy.shouldReuse(cache, datestr: datestr, includeFullData: includeFullData) {
             return cache.responseData
         }
 
@@ -1176,7 +1177,7 @@ struct VelaTrainingView: View {
             includeFullData: includeFullData
         )
 
-        if let cache = caches.first(where: { $0.datestr == datestr }) {
+        if let cache = caches.first {
             cache.fetchedAt = Date()
             cache.includeFullData = includeFullData
             cache.responseData = data
@@ -1390,6 +1391,45 @@ struct VelaTrainingView: View {
         } catch {
             useEmptyFitnessDefaults()
         }
+        loadDynamicData()
+    }
+
+    private func loadDynamicData() {
+        let calendar = Calendar.current
+        let refDate = dashboardVM.selectedDate
+        let startOfDayRef = calendar.startOfDay(for: refDate)
+        
+        let startLimit = calendar.startOfDay(for: calendar.date(byAdding: .day, value: -Self.lookbackDays, to: startOfDayRef) ?? startOfDayRef)
+        let endLimit = calendar.date(byAdding: .day, value: 1, to: startOfDayRef) ?? startOfDayRef
+        
+        let strengthDesc = FetchDescriptor<StrengthWorkoutRecord>(
+            predicate: #Predicate<StrengthWorkoutRecord> { $0.startedAt >= startLimit && $0.startedAt <= endLimit },
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+        self.strengthWorkouts = (try? modelContext.fetch(strengthDesc)) ?? []
+
+        let eventsDesc = FetchDescriptor<WorkoutEventRecord>(
+            predicate: #Predicate<WorkoutEventRecord> { $0.startedAt >= startLimit && $0.startedAt <= endLimit },
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+        self.localWorkoutEvents = (try? modelContext.fetch(eventsDesc)) ?? []
+
+        let templatesDesc = FetchDescriptor<WorkoutTemplateRecord>(
+            sortBy: [SortDescriptor(\.title, order: .forward)]
+        )
+        self.workoutTemplates = (try? modelContext.fetch(templatesDesc)) ?? []
+
+        var plansDesc = FetchDescriptor<TrainingPlanRecord>(
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        plansDesc.fetchLimit = 10
+        self.trainingPlans = (try? modelContext.fetch(plansDesc)) ?? []
+
+        var opPlansDesc = FetchDescriptor<DailyOperatingPlanRecord>(
+            sortBy: [SortDescriptor(\.generatedAt, order: .reverse)]
+        )
+        opPlansDesc.fetchLimit = 50
+        self.operatingPlans = (try? modelContext.fetch(opPlansDesc)) ?? []
     }
     
     private func useEmptyFitnessDefaults() {

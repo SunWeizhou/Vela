@@ -146,23 +146,23 @@ struct VelaCoachView: View {
                     .scrollIndicators(.hidden)
                     .scrollDismissesKeyboard(.immediately)
                     .onChange(of: vm.messages.count) { _, _ in
-                        scrollToBottom(using: proxy)
+                        scrollToBottom(using: proxy, animated: true)
                     }
                     .onChange(of: vm.isStreaming) { _, streaming in
                         guard streaming else { return }
-                        scrollToBottom(using: proxy)
+                        scrollToBottom(using: proxy, animated: true)
                     }
                     .onChange(of: vm.streamingContent) { _, content in
                         guard !content.isEmpty else { return }
-                        scrollToBottom(using: proxy)
+                        scrollToBottom(using: proxy, animated: false)
                     }
                     .onChange(of: isKeyboardVisible) { _, visible in
                         guard visible else { return }
-                        scrollToBottom(using: proxy)
+                        scrollToBottom(using: proxy, animated: true)
                     }
                     .onChange(of: isFocused) { _, focused in
                         guard focused else { return }
-                        scrollToBottom(using: proxy)
+                        scrollToBottom(using: proxy, animated: true)
                     }
                 }
             }
@@ -489,33 +489,22 @@ struct VelaCoachView: View {
     // MARK: - Welcome
 
     private var welcomeHeader: some View {
-        VStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(Color.white)
-                    .frame(width: 76, height: 76)
-                    .overlay(Circle().stroke(Color(hex: "#E5E5EA"), lineWidth: 0.8))
-                    .shadow(color: Color.black.opacity(0.04), radius: 8, y: 3)
+        VStack(spacing: 16) {
+            AppleIntelligenceOrb()
+                .padding(.top, 10)
 
-                AlpacaView(
-                    strokeColor: Color(hex: "#007AFF"),
-                    size: 58,
-                    lineWidth: 2.6
-                )
-            }
-
-            Text("Coach")
-                .font(VelaTheme.title2())
+            Text("Vela Coach")
+                .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundStyle(VelaTheme.fg)
 
             Text("你的 AI 身体智能代理。你可以与我讨论训练、恢复、睡眠或营养，我将基于你的健康数据为你提供个性化建议。")
                 .font(VelaTheme.subheadline())
                 .foregroundStyle(VelaTheme.muted)
                 .multilineTextAlignment(.center)
-                .lineSpacing(4)
-                .padding(.horizontal, 20)
+                .lineSpacing(4.5)
+                .padding(.horizontal, 24)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 14)
     }
 
     private var workspaceCarousel: some View {
@@ -529,7 +518,8 @@ struct VelaCoachView: View {
                         title: todayCommandState.bodyStateTitle,
                         detail: todayCommandState.summary,
                         icon: "sparkles",
-                        footer: "置信度 \(Int((todayCommandState.readinessDecision.confidence * 100).rounded()))% · 身体状态"
+                        footer: "置信度 \(Int((todayCommandState.readinessDecision.confidence * 100).rounded()))% · 身体状态",
+                        isAI: true
                     ) {
                         sendMessage("解释今天最重要的身体状态驱动，并给一个具体行动。")
                     }
@@ -580,6 +570,7 @@ struct VelaCoachView: View {
         icon: String,
         footer: String,
         accentColor: Color = VelaTheme.accent,
+        isAI: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -620,8 +611,9 @@ struct VelaCoachView: View {
                 RoundedRectangle(cornerRadius: 18)
                     .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
             )
+            .appleIntelligenceGlow(isHighlighted: isAI, radius: 18)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.cardPress)
     }
 
     private var intelligenceWorkspace: some View {
@@ -761,10 +753,14 @@ struct VelaCoachView: View {
 
     // MARK: - Actions
 
-    private func scrollToBottom(using proxy: ScrollViewProxy) {
+    private func scrollToBottom(using proxy: ScrollViewProxy, animated: Bool = true) {
         Task { @MainActor in
             await Task.yield()
-            withAnimation {
+            if animated {
+                withAnimation(.easeOut(duration: 0.25)) {
+                    proxy.scrollTo(CoachChatLayout.bottomAnchorID, anchor: .bottom)
+                }
+            } else {
                 proxy.scrollTo(CoachChatLayout.bottomAnchorID, anchor: .bottom)
             }
         }

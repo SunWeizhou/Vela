@@ -186,14 +186,7 @@ struct VelaOnboardingView: View {
             .pickerStyle(.segmented)
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(VelaTheme.surface.opacity(0.68))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(VelaTheme.outline, lineWidth: 0.5)
-                )
-        )
+        .velaNativeCard(radius: 18)
     }
 
     private var signalPreviewCard: some View {
@@ -232,11 +225,9 @@ struct VelaOnboardingView: View {
                     .foregroundStyle(VelaTheme.background)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
+                    .background(Capsule().fill(VelaTheme.recovery))
             }
-            .background(
-                RoundedRectangle(cornerRadius: 99, style: .continuous)
-                    .fill(VelaTheme.recovery)
-            )
+            .buttonStyle(.cardPress)
 
             Button {
                 finishOnboarding(missingSignals: [])
@@ -244,8 +235,9 @@ struct VelaOnboardingView: View {
                 Text(L10n.t("Build model without Health for now", "先建立模型，稍后连接健康数据"))
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(VelaTheme.muted)
+                    .padding(.vertical, 8)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
         }
     }
 
@@ -267,7 +259,7 @@ struct VelaOnboardingView: View {
                         .stroke(VelaTheme.outline, lineWidth: 0.5)
                 )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.cardPress)
     }
 
     private func connectHealthAndFinish() async {
@@ -381,35 +373,28 @@ struct VelaOnboardingView: View {
     }
 
     private func featureCard(icon: String, bgColor: Color, fgColor: Color, title: String, detail: String) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.system(size: 16))
-                .foregroundStyle(fgColor)
-                .frame(width: 40, height: 40)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(bgColor)
-                )
+        VelaGlassCard(padding: 16, cornerRadius: 16) {
+            HStack(spacing: 14) {
+                Image(systemName: icon)
+                    .font(.system(size: 16))
+                    .foregroundStyle(fgColor)
+                    .frame(width: 40, height: 40)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(bgColor)
+                    )
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(VelaTheme.onSurface)
-                Text(detail)
-                    .font(.system(size: 13))
-                    .foregroundStyle(VelaTheme.muted)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(VelaTheme.onSurface)
+                    Text(detail)
+                        .font(.system(size: 13))
+                        .foregroundStyle(VelaTheme.muted)
+                }
+
+                Spacer()
             }
-
-            Spacer()
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(VelaTheme.surface.opacity(0.6))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(VelaTheme.outline, lineWidth: 0.5)
-                )
-        )
     }
 }

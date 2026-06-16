@@ -34,8 +34,8 @@ struct LocalMuscleFatigue: Codable, Hashable, Sendable {
     }
 
     var fatigueLevel: String {
-        if setsLast48h >= 8 || setsLast7d >= 18 { return "high" }
-        if setsLast48h >= 4 || setsLast7d >= 12 { return "moderate" }
+        if setsLast48h >= 14 || setsLast7d >= 24 { return "high" }
+        if setsLast48h >= 8 || setsLast7d >= 14 { return "moderate" }
         return "low"
     }
 

@@ -10,7 +10,7 @@ struct VelaVitalsView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     @ObservedObject private var appState = VelaAppState.shared
-    @Query(sort: \BiomarkerRecord.date, order: .reverse) private var biomarkers: [BiomarkerRecord]
+    @State private var biomarkers: [BiomarkerRecord] = []
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
 
@@ -37,6 +37,32 @@ struct VelaVitalsView: View {
     @State private var weightValueText: String = "--"
     @State private var fatValueText: String = "--"
 
+    // MARK: - Vitals Title Header
+    private var vitalsHeader: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("体征")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundStyle(VelaTheme.fg)
+                Text("生物年龄与核心指标健康度")
+                    .font(.system(size: 12))
+                    .foregroundStyle(VelaTheme.muted)
+            }
+            
+            Spacer()
+            
+            Button {
+                VelaAppState.shared.triggerBloodLog = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(VelaTheme.muted)
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -47,11 +73,22 @@ struct VelaVitalsView: View {
                 otherBiomarkersSection
             }
             .padding(.horizontal, 16)
-            .padding(.top, 8)
+            .padding(.top, 12)
             .padding(.bottom, 100)
         }
         .scrollIndicators(.hidden)
         .velaTrackScroll(direction: scrollDirection)
+        .safeAreaInset(edge: .top) {
+            VStack(spacing: 0) {
+                vitalsHeader
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+                    .background(.ultraThinMaterial)
+                
+                Divider()
+                    .opacity(0.4)
+            }
+        }
         .background(VelaTheme.systemGroupedBackground)
         .onAppear {
             loadRealVitalsData()
@@ -305,7 +342,7 @@ struct VelaVitalsView: View {
                         graphColor: weightEval.color
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
 
                 // Card 2: HRV 基线 (HRV Baseline) - Open HRV Detail
                 let hrvEval = evaluateBiomarker(.hrv, latestValue: rawHrvHistory.last, history: rawHrvHistory)
@@ -320,7 +357,7 @@ struct VelaVitalsView: View {
                         graphColor: hrvEval.color
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
 
                 // Card 3: RHR 基线 (RHR Baseline) - Open RHR Detail
                 let rhrEval = evaluateBiomarker(.rhr, latestValue: rawRhrHistory.last, history: rawRhrHistory)
@@ -335,7 +372,7 @@ struct VelaVitalsView: View {
                         graphColor: rhrEval.color
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
 
                 // Card 4: 呼吸率 (Respiratory Rate)
                 let respEval = evaluateBiomarker(.respiratoryRate, latestValue: rawRespiratoryRateHistory.last, history: rawRespiratoryRateHistory)
@@ -350,7 +387,7 @@ struct VelaVitalsView: View {
                         graphColor: respEval.color
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
 
                 // Card 5: 血氧 (Blood Oxygen)
                 let o2Eval = evaluateBiomarker(.bloodOxygen, latestValue: rawBloodOxygenHistory.last, history: rawBloodOxygenHistory)
@@ -365,7 +402,7 @@ struct VelaVitalsView: View {
                         graphColor: o2Eval.color
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
 
                 // Card 6: 体脂 (Body Fat)
                 let fatEval = evaluateBiomarker(.bodyFat, latestValue: rawFatHistory.last, history: rawFatHistory)
@@ -380,7 +417,7 @@ struct VelaVitalsView: View {
                         graphColor: fatEval.color
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
             }
         }
     }
@@ -437,6 +474,13 @@ struct VelaVitalsView: View {
         let startDate = calendar.date(byAdding: .day, value: -9, to: now) ?? now // Fetch 10 points
         let startOfDay = calendar.startOfDay(for: startDate)
         let endOfDay = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: now) ?? now
+
+        // Fetch biomarkers dynamically
+        var biomarkerDesc = FetchDescriptor<BiomarkerRecord>(
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        biomarkerDesc.fetchLimit = 100
+        self.biomarkers = (try? modelContext.fetch(biomarkerDesc)) ?? []
 
         // Fetch DailyHealthSummaryRecord from SwiftData
         var descriptor = FetchDescriptor<DailyHealthSummaryRecord>(

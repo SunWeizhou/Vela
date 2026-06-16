@@ -74,7 +74,7 @@ final class ScoringEngineTests: XCTestCase {
                     name: "Squat",
                     equipment: "barbell",
                     primaryMuscleGroup: "legs",
-                    sets: (0..<8).map { _ in
+                    sets: (0..<14).map { _ in
                         StrengthSetLog(repetitions: 8, weightKilograms: 100, rpe: 8, isCompleted: true)
                     }
                 )

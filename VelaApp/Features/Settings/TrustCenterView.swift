@@ -37,11 +37,37 @@ struct TrustCenterView: View {
                         }
                     }
                     .padding(VelaTheme.screenPadding)
+                    .padding(.top, 4)
+                    .padding(.bottom, 40)
                 }
             }
         }
-        .navigationTitle(AppLanguage.stored.isChinese ? "信任中心" : "Trust Center")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .top) {
+            if !runRecords.isEmpty {
+                VStack(spacing: 0) {
+                    HStack(alignment: .center) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(AppLanguage.stored.isChinese ? "信任中心" : "Trust Center")
+                                .font(.system(size: 26, weight: .bold, design: .rounded))
+                                .foregroundStyle(VelaTheme.primaryText)
+                            Text(AppLanguage.stored.isChinese ? "Agent 审计日志" : "Agent Audit Logs")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(VelaTheme.secondaryText)
+                        }
+                        Spacer()
+                        Image(systemName: "checkmark.shield.fill")
+                            .font(.system(size: 24))
+                            .foregroundStyle(VelaTheme.accent)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(.ultraThinMaterial)
+                    Divider().opacity(0.4)
+                }
+            }
+        }
         .sheet(item: $selectedRun) { run in
             runDetailSheet(run)
         }
@@ -91,20 +117,20 @@ struct TrustCenterView: View {
         } label: {
             VelaGlassCard(padding: 14, cornerRadius: 14) {
                 HStack(alignment: .top, spacing: 12) {
-                Image(systemName: iconFor(run.agentName))
-                    .font(.title3)
-                    .foregroundStyle(colorFor(run.status))
-                    .frame(width: 36, height: 36)
-                    .background(Circle().fill(colorFor(run.status).opacity(0.12)))
+                    Image(systemName: iconFor(run.agentName))
+                        .font(.title3)
+                        .foregroundStyle(colorFor(run.status))
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(colorFor(run.status).opacity(0.12)))
 
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(alignment: .top) {
-                        Text(labelFor(run.agentName))
+                            Text(labelFor(run.agentName))
                                 .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(VelaTheme.primaryText)
-                        Spacer()
-                        statusBadge(run.status)
-                    }
+                                .foregroundStyle(VelaTheme.primaryText)
+                            Spacer()
+                            statusBadge(run.status)
+                        }
 
                         Text(run.startedAt.formatted(date: .abbreviated, time: .shortened))
                             .font(.caption)
@@ -136,8 +162,9 @@ struct TrustCenterView: View {
                     }
                 }
             }
+            .appleIntelligenceGlow(isHighlighted: run.status == "running", radius: 14)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.cardPress)
     }
 
     // MARK: - Detail Sheet

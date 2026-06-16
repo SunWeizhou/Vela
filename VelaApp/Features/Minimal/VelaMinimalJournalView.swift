@@ -6,6 +6,7 @@ struct VelaMeView: View {
     @Environment(\.velaScrollDirection) private var scrollDirection
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var dashboardVM: DashboardViewModel
+    @ObservedObject private var appState = VelaAppState.shared
 
     private static let lookbackDays = 42
     private var lookbackStart: Date {
@@ -14,34 +15,15 @@ struct VelaMeView: View {
 
     @Query(sort: \OnboardingState.updatedAt, order: .reverse)
     private var onboardingStates: [OnboardingState]
-    @Query(sort: \CoachArtifactRecord.createdAt, order: .reverse)
-    private var allCoachArtifacts: [CoachArtifactRecord]
-    @Query(sort: \JournalEntryRecord.createdAt, order: .reverse)
-    private var allJournalEntries: [JournalEntryRecord]
-    @Query(sort: \DailyHealthSummaryRecord.date, order: .reverse)
-    private var allDailySummaries: [DailyHealthSummaryRecord]
-    @Query(sort: \StrengthWorkoutRecord.startedAt, order: .reverse)
-    private var allStrengthWorkouts: [StrengthWorkoutRecord]
-    @Query(sort: \TrainingResponseRecord.date, order: .reverse)
-    private var allTrainingResponses: [TrainingResponseRecord]
-
-    private var coachArtifacts: [CoachArtifactRecord] {
-        allCoachArtifacts.filter { $0.createdAt >= lookbackStart }
-    }
-    private var journalEntries: [JournalEntryRecord] {
-        allJournalEntries.filter { $0.createdAt >= lookbackStart }
-    }
-    private var dailySummaries: [DailyHealthSummaryRecord] {
-        allDailySummaries.filter { $0.date >= lookbackStart }
-    }
-    private var strengthWorkouts: [StrengthWorkoutRecord] {
-        allStrengthWorkouts.filter { $0.startedAt >= lookbackStart }
-    }
-    private var trainingResponses: [TrainingResponseRecord] {
-        allTrainingResponses.filter { $0.date >= lookbackStart }
-    }
+    @State private var coachArtifacts: [CoachArtifactRecord] = []
+    @State private var journalEntries: [JournalEntryRecord] = []
+    @State private var dailySummaries: [DailyHealthSummaryRecord] = []
+    @State private var strengthWorkouts: [StrengthWorkoutRecord] = []
+    @State private var trainingResponses: [TrainingResponseRecord] = []
 
     @State private var selectedWorkoutForDetail: WorkoutSummary?
+    @AppStorage("vela_coach_text_model") private var textModel = "DeepSeek V4 Pro"
+    @AppStorage("vela_daily_calorie_target") private var dailyCalorieTarget = 2000
 
     private var onboarding: OnboardingState? { onboardingStates.first }
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
@@ -78,6 +60,15 @@ struct VelaMeView: View {
                 WorkoutDetailView(workout: summary)
             }
         }
+        .onAppear {
+            loadMeData()
+        }
+        .onChange(of: dashboardVM.selectedDate) { _, _ in
+            loadMeData()
+        }
+        .onChange(of: appState.localDataRevision) { _, _ in
+            loadMeData()
+        }
     }
 
     private var bodyModelUnifiedCard: some View {
@@ -100,7 +91,7 @@ struct VelaMeView: View {
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(VelaTheme.accent)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
             }
 
             VStack(alignment: .leading, spacing: 14) {
@@ -334,7 +325,7 @@ struct VelaMeView: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
 
                 if !coachArtifacts.isEmpty {
                     Divider().padding(.leading, 54)
@@ -381,7 +372,7 @@ struct VelaMeView: View {
                             .padding(.horizontal, 14)
                             .padding(.vertical, 10)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.cardPress)
                         
                         if record.id != coachArtifacts.prefix(3).last?.id {
                             Divider().padding(.leading, 54)
@@ -528,7 +519,24 @@ struct VelaMeView: View {
     }
 
     private var actionSettingsHub: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let calendar = Calendar.current
+        let todayEntries = journalEntries.filter { calendar.isDate($0.createdAt, inSameDayAs: dashboardVM.selectedDate) }
+        let journalSub = todayEntries.isEmpty ? "日常状态手记" : "今日已记 \(todayEntries.count) 条"
+        
+        let wikiSub = "成熟度: \(bodyModelMaturityTitle(bodyModelState.maturity.overall))"
+        
+        let initialWeight = dashboard.bodyMetrics.weightKilograms ?? 72.0
+        let bioSub = "\(Int(initialWeight.rounded())) kg · \(Int(dashboard.recoveryMetrics.restingHeartRate ?? 60)) bpm"
+        
+        let aiModelSub = textModel
+        
+        let signalSub = "同步质量: \(displayConfidence(onboarding?.initialBodySnapshot.dataConfidence.rawValue.uppercased() ?? dashboard.recovery.confidence.rawValue.uppercased()).prefix(1))"
+        
+        let trustSub = "已确认 \(coachArtifacts.count) 个建议"
+        
+        let settingsSub = "\(dailyCalorieTarget) kcal 目标"
+
+        return VStack(alignment: .leading, spacing: 10) {
             Text(L10n.t("Action & Settings Hub", "功能与设置中心"))
                 .font(VelaTheme.caption1())
                 .fontWeight(.bold)
@@ -537,13 +545,13 @@ struct VelaMeView: View {
                 .padding(.leading, 2)
             
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                hubActionCell(title: "健康手记", sub: L10n.t("Journal", "日常状态手记"), icon: "book.pages.fill", color: Color(hex: "#FF9F0A"), destination: VelaJournalView())
-                hubActionCell(title: "身体 Wiki", sub: L10n.t("Wiki", "习惯与身体特征"), icon: "doc.text.fill", color: VelaTheme.muted, destination: UserWikiArchiveView())
-                hubActionCell(title: "生物资料", sub: L10n.t("Biology", "生理参数底表"), icon: "person.text.rectangle.fill", color: Color(hex: "#00A896"), destination: BiologyView())
-                hubActionCell(title: "AI 模型", sub: L10n.t("Model", "提示词与AI模型"), icon: "cpu.fill", color: Color(hex: "#AF52DE"), destination: AIModelSettingsView())
-                hubActionCell(title: "数据信号", sub: L10n.t("Signals", "健康数据同步"), icon: "waveform.path.ecg.rectangle.fill", color: Color(hex: "#30A2FF"), destination: DataCoverageView())
-                hubActionCell(title: "信任中心", sub: L10n.t("Logs", "诊断与运行日志"), icon: "checkmark.shield.fill", color: VelaTheme.success, destination: TrustCenterView())
-                hubActionCell(title: "系统设置", sub: L10n.t("Settings", "通用偏好设置"), icon: "gearshape.fill", color: Color(hex: "#5C6BC0"), destination: VelaSettingsView())
+                hubActionCell(title: "健康手记", sub: journalSub, icon: "book.pages.fill", color: Color(hex: "#FF9F0A"), destination: VelaJournalView())
+                hubActionCell(title: "身体 Wiki", sub: wikiSub, icon: "doc.text.fill", color: VelaTheme.muted, destination: UserWikiArchiveView())
+                hubActionCell(title: "生物资料", sub: bioSub, icon: "person.text.rectangle.fill", color: Color(hex: "#00A896"), destination: BiologyView())
+                hubActionCell(title: "AI 模型", sub: aiModelSub, icon: "cpu.fill", color: Color(hex: "#AF52DE"), destination: AIModelSettingsView())
+                hubActionCell(title: "数据信号", sub: signalSub, icon: "waveform.path.ecg.rectangle.fill", color: Color(hex: "#30A2FF"), destination: DataCoverageView())
+                hubActionCell(title: "信任中心", sub: trustSub, icon: "checkmark.shield.fill", color: VelaTheme.success, destination: TrustCenterView())
+                hubActionCell(title: "系统设置", sub: settingsSub, icon: "gearshape.fill", color: Color(hex: "#5C6BC0"), destination: VelaSettingsView())
             }
         }
     }
@@ -582,7 +590,7 @@ struct VelaMeView: View {
             .background(RoundedRectangle(cornerRadius: 14).fill(VelaTheme.cardBg))
             .overlay(RoundedRectangle(cornerRadius: 14).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.cardPress)
     }
 
     private func profileGridItem(title: String, value: String, icon: String, color: Color) -> some View {
@@ -750,6 +758,45 @@ struct VelaMeView: View {
         case .askCoachAnswer: return "教练解答"
         }
     }
+
+    private func loadMeData() {
+        let calendar = Calendar.current
+        let refDate = dashboardVM.selectedDate
+        let startOfDayRef = calendar.startOfDay(for: refDate)
+        
+        let startLimit = calendar.startOfDay(for: calendar.date(byAdding: .day, value: -Self.lookbackDays, to: startOfDayRef) ?? startOfDayRef)
+        let endLimit = calendar.date(byAdding: .day, value: 1, to: startOfDayRef) ?? startOfDayRef
+        
+        let artifactsDesc = FetchDescriptor<CoachArtifactRecord>(
+            predicate: #Predicate<CoachArtifactRecord> { $0.createdAt >= startLimit && $0.createdAt <= endLimit },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        self.coachArtifacts = (try? modelContext.fetch(artifactsDesc)) ?? []
+
+        let journalDesc = FetchDescriptor<JournalEntryRecord>(
+            predicate: #Predicate<JournalEntryRecord> { $0.createdAt >= startLimit && $0.createdAt <= endLimit },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        self.journalEntries = (try? modelContext.fetch(journalDesc)) ?? []
+
+        let summaryDesc = FetchDescriptor<DailyHealthSummaryRecord>(
+            predicate: #Predicate<DailyHealthSummaryRecord> { $0.date >= startLimit && $0.date <= endLimit },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        self.dailySummaries = (try? modelContext.fetch(summaryDesc)) ?? []
+
+        let strengthDesc = FetchDescriptor<StrengthWorkoutRecord>(
+            predicate: #Predicate<StrengthWorkoutRecord> { $0.startedAt >= startLimit && $0.startedAt <= endLimit },
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+        self.strengthWorkouts = (try? modelContext.fetch(strengthDesc)) ?? []
+
+        let responsesDesc = FetchDescriptor<TrainingResponseRecord>(
+            predicate: #Predicate<TrainingResponseRecord> { $0.date >= startLimit && $0.date <= endLimit },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        self.trainingResponses = (try? modelContext.fetch(responsesDesc)) ?? []
+    }
 }
 
 // MARK: - VelaJournalView — Bevel Replica Journal Tab
@@ -760,17 +807,14 @@ struct VelaJournalView: View {
     @Environment(\.velaScrollDirection) private var scrollDirection
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var dashboardVM: DashboardViewModel
+    @ObservedObject private var appState = VelaAppState.shared
 
     private static let lookbackDays = 42
     private var lookbackStart: Date {
         Calendar.current.date(byAdding: .day, value: -Self.lookbackDays, to: dashboardVM.selectedDate) ?? dashboardVM.selectedDate
     }
 
-    @Query(sort: \JournalEntryRecord.createdAt, order: .reverse)
-    private var allEntries: [JournalEntryRecord]
-    private var entries: [JournalEntryRecord] {
-        allEntries.filter { $0.createdAt >= lookbackStart }
-    }
+    @State private var entries: [JournalEntryRecord] = []
 
     // Local states for custom segmented values (0:✕, 1:–, 2:✓)
     @State private var lowCarbState: Int = 1
@@ -958,6 +1002,9 @@ struct VelaJournalView: View {
         .onChange(of: entries) { _, _ in
             loadRealJournalData()
         }
+        .onChange(of: appState.localDataRevision) { _, _ in
+            loadRealJournalData()
+        }
         .sheet(isPresented: $showCaffeineLogger) {
             CaffeineLoggerView { amount in
                 saveQuickEntry(tags: ["caffeine", "咖啡因"], note: "摄入咖啡因 \(Int(amount)) mg", value: amount, unit: "mg")
@@ -1098,7 +1145,23 @@ struct VelaJournalView: View {
     }
 
     // MARK: - SwiftData Loading Engine
+    private func fetchEntries() {
+        let calendar = Calendar.current
+        let refDate = dashboardVM.selectedDate
+        let startOfDayRef = calendar.startOfDay(for: refDate)
+        
+        let startLimit = calendar.startOfDay(for: calendar.date(byAdding: .day, value: -Self.lookbackDays, to: startOfDayRef) ?? startOfDayRef)
+        let endLimit = calendar.date(byAdding: .day, value: 1, to: startOfDayRef) ?? startOfDayRef
+        
+        let journalDesc = FetchDescriptor<JournalEntryRecord>(
+            predicate: #Predicate<JournalEntryRecord> { $0.createdAt >= startLimit && $0.createdAt <= endLimit },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        self.entries = (try? modelContext.fetch(journalDesc)) ?? []
+    }
+
     private func loadRealJournalData() {
+        fetchEntries()
         let calendar = Calendar.current
         let targetDay = calendar.startOfDay(for: dashboardVM.selectedDate)
         
@@ -1340,7 +1403,7 @@ struct VelaJournalView: View {
         .velaNativeCard(radius: 18)
     }
 
-    // MARK: - Segmented Action Row (✕, –, ✓ toggles)
+    // MARK: - Segmented Action Row (High-Fidelity SF Symbol Toggles)
     private func segmentedJournalRow(icon: String, title: String, state: Binding<Int>) -> some View {
         HStack(alignment: .center) {
             HStack(spacing: 10) {
@@ -1358,21 +1421,21 @@ struct VelaJournalView: View {
             
             Spacer()
             
-            // Custom segment selector container (✕, –, ✓)
+            // Custom segment selector container (✕/circle/✓ SF Symbols)
             HStack(spacing: 0) {
-                segmentButton(title: title, label: "✕", index: 0, state: state)
+                segmentButton(title: title, index: 0, state: state)
                 
                 Rectangle()
                     .fill(VelaTheme.separatorSoft)
                     .frame(width: 0.5, height: 20)
                 
-                segmentButton(title: title, label: "–", index: 1, state: state)
+                segmentButton(title: title, index: 1, state: state)
                 
                 Rectangle()
                     .fill(VelaTheme.separatorSoft)
                     .frame(width: 0.5, height: 20)
                 
-                segmentButton(title: title, label: "✓", index: 2, state: state)
+                segmentButton(title: title, index: 2, state: state)
             }
             .background(VelaTheme.systemGroupedBackground)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -1386,22 +1449,39 @@ struct VelaJournalView: View {
         .velaNativeCard(radius: 16)
     }
 
-    private func segmentButton(title: String, label: String, index: Int, state: Binding<Int>) -> some View {
-        Button {
+    private func segmentButton(title: String, index: Int, state: Binding<Int>) -> some View {
+        let isActive = state.wrappedValue == index
+        let activeLabelText = index == 0 ? "✕" : (index == 2 ? "✓" : "–")
+        return Button {
+            VelaHaptic.selection()
             state.wrappedValue = index
-            saveQuickEntry(tags: [title], note: "习惯打卡: \(title) - \(label)", value: Double(index))
+            saveQuickEntry(tags: [title], note: "习惯打卡: \(title) - \(activeLabelText)", value: Double(index))
         } label: {
-            Text(label)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(state.wrappedValue == index ? VelaTheme.fg : VelaTheme.meta)
-                .frame(width: 32, height: 30)
-                .background(
-                    Group {
-                        if state.wrappedValue == index {
-                            VelaTheme.cardBg
-                        }
+            Group {
+                switch index {
+                case 0:
+                    Image(systemName: isActive ? "xmark.circle.fill" : "xmark.circle")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(isActive ? VelaTheme.danger : VelaTheme.meta)
+                case 2:
+                    Image(systemName: isActive ? "checkmark.circle.fill" : "checkmark.circle")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(isActive ? VelaTheme.success : VelaTheme.meta)
+                default:
+                    Image(systemName: isActive ? "circle.fill" : "circle")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(isActive ? VelaTheme.muted : VelaTheme.meta)
+                }
+            }
+            .frame(width: 38, height: 32)
+            .background(
+                Group {
+                    if isActive {
+                        VelaTheme.cardBg
+                            .shadow(color: Color.black.opacity(0.04), radius: 2, y: 1)
                     }
-                )
+                }
+            )
         }
         .buttonStyle(.plain)
     }
@@ -1603,6 +1683,7 @@ private struct BehaviorQuickNoteSheet: View {
                     .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
 
                     Button {
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
                         onSave(note)
                         dismiss()
                     } label: {
@@ -1704,6 +1785,7 @@ struct CaffeineLoggerView: View {
                             HStack(spacing: 12) {
                                 ForEach(quickOptions, id: \.1) { name, key, val, icon in
                                     Button {
+                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                         customAmount = val
                                     } label: {
                                         VStack(spacing: 8) {
@@ -1737,6 +1819,7 @@ struct CaffeineLoggerView: View {
                     }
                     
                     Button {
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
                         onSave(customAmount)
                         dismiss()
                     } label: {
@@ -1832,6 +1915,7 @@ struct WaterLoggerView: View {
                             HStack(spacing: 12) {
                                 ForEach(quickOptions, id: \.1) { name, val, icon in
                                     Button {
+                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                         customAmount = val
                                     } label: {
                                         VStack(spacing: 8) {
@@ -1865,6 +1949,7 @@ struct WaterLoggerView: View {
                     }
                     
                     Button {
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
                         onSave(customAmount)
                         dismiss()
                     } label: {
@@ -1936,6 +2021,7 @@ struct MoodLoggerView: View {
                     HStack(spacing: 10) {
                         ForEach(moodOptions, id: \.0) { score, emoji, label in
                             Button {
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                 selectedScore = score
                             } label: {
                                 VStack(spacing: 6) {
@@ -1981,6 +2067,7 @@ struct MoodLoggerView: View {
                     .padding(.top, 8)
                     
                     Button {
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
                         onSave(selectedScore, noteText)
                         dismiss()
                     } label: {
@@ -2591,14 +2678,10 @@ struct BodyModelDetailView: View {
     
     @Query(sort: \OnboardingState.updatedAt, order: .reverse)
     private var onboardingStates: [OnboardingState]
-    @Query(sort: \JournalEntryRecord.createdAt, order: .reverse)
-    private var journalEntries: [JournalEntryRecord]
-    @Query(sort: \DailyHealthSummaryRecord.date, order: .reverse)
-    private var dailySummaries: [DailyHealthSummaryRecord]
-    @Query(sort: \StrengthWorkoutRecord.startedAt, order: .reverse)
-    private var strengthWorkouts: [StrengthWorkoutRecord]
-    @Query(sort: \TrainingResponseRecord.date, order: .reverse)
-    private var trainingResponses: [TrainingResponseRecord]
+    @State private var journalEntries: [JournalEntryRecord] = []
+    @State private var dailySummaries: [DailyHealthSummaryRecord] = []
+    @State private var strengthWorkouts: [StrengthWorkoutRecord] = []
+    @State private var trainingResponses: [TrainingResponseRecord] = []
     
     private var onboarding: OnboardingState? { onboardingStates.first }
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
@@ -2640,6 +2723,9 @@ struct BodyModelDetailView: View {
         .navigationTitle("身体机能数字化模型")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
+            loadModelData()
+        }
+        .onChange(of: dashboardVM.selectedDate) {
             loadModelData()
         }
     }
@@ -2874,11 +2960,27 @@ struct BodyModelDetailView: View {
     }
     
     private func loadModelData() {
+        var summariesDesc = FetchDescriptor<DailyHealthSummaryRecord>(sortBy: [SortDescriptor(\.date, order: .reverse)])
+        summariesDesc.fetchLimit = 35
+        self.dailySummaries = (try? modelContext.fetch(summariesDesc)) ?? []
+
+        var journalDesc = FetchDescriptor<JournalEntryRecord>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        journalDesc.fetchLimit = 100
+        self.journalEntries = (try? modelContext.fetch(journalDesc)) ?? []
+
+        var workoutsDesc = FetchDescriptor<StrengthWorkoutRecord>(sortBy: [SortDescriptor(\.startedAt, order: .reverse)])
+        workoutsDesc.fetchLimit = 50
+        self.strengthWorkouts = (try? modelContext.fetch(workoutsDesc)) ?? []
+
+        var responsesDesc = FetchDescriptor<TrainingResponseRecord>(sortBy: [SortDescriptor(\.date, order: .reverse)])
+        responsesDesc.fetchLimit = 50
+        self.trainingResponses = (try? modelContext.fetch(responsesDesc)) ?? []
+
         let repo = HealthSnapshotRepository(modelContext: modelContext)
         if let snaps = try? repo.fetchSnapshots(days: 30) {
             self.healthSnapshots = snaps
             let engine = JournalCorrelationEngine()
-            self.insights = engine.calculateInsights(journalEntries: journalEntries, snapshots: snaps)
+            self.insights = engine.calculateInsights(journalEntries: self.journalEntries, snapshots: snaps)
         }
     }
     

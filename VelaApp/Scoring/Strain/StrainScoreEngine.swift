@@ -274,13 +274,10 @@ public struct StrainScoreEngine: ScoreEngine {
         reasons.append("非运动日常活动负荷为 \(Int(activityLoad)) (步数: \(Int(steps)), 活动能量: \(Int(activeEnergy)) kcal)")
 
         // 4. Training Load Status (ATL / CTL)
-        let acute7 = dailyLoad + input.last28DaysDailyLoads.suffix(6).reduce(0, +)
-        
-        let chronicHistory = Array(input.last28DaysDailyLoads.suffix(28))
-        let chronicSum = chronicHistory.reduce(0, +)
-        let chronic28Equivalent = chronicHistory.isEmpty ? baselineDailyLoad * 7.0 : chronicSum / 4.0
-        
-        let trainingLoadRatio = chronic28Equivalent > 0 ? acute7 / chronic28Equivalent : 1.0
+        let loadsIncludingToday = input.last28DaysDailyLoads + [dailyLoad]
+        let atl = ewma(loadsIncludingToday, lambda: 2.0 / (7.0 + 1.0))
+        let ctl28 = ewma(loadsIncludingToday, lambda: 2.0 / (28.0 + 1.0))
+        let trainingLoadRatio = ctl28 > 0 ? atl / ctl28 : 1.0
 
         var baseConfidence: MetricConfidence = input.activeEnergyToday != nil ? .high : .medium
         
@@ -310,8 +307,8 @@ public struct StrainScoreEngine: ScoreEngine {
             }
 
             components["training_load_ratio"] = trainingLoadRatio
-            components["acute_7d_load"] = acute7
-            components["chronic_28d_equivalent"] = chronic28Equivalent
+            components["acute_7d_load"] = atl * 7.0
+            components["chronic_28d_equivalent"] = ctl28 * 7.0
             let statusCode: Double
             switch loadStatus {
             case .wellBelow: statusCode = 0.0
@@ -360,5 +357,14 @@ public struct StrainScoreEngine: ScoreEngine {
         } else {
             return 55...85   // High recovery → can push harder
         }
+    }
+
+    private func ewma(_ values: [Double], lambda: Double) -> Double {
+        guard !values.isEmpty else { return 0 }
+        var result = values[0]
+        for i in 1..<values.count {
+            result = values[i] * lambda + result * (1.0 - lambda)
+        }
+        return result
     }
 }

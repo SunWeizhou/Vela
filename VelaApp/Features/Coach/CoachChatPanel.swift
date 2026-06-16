@@ -779,6 +779,12 @@ final class CoachChatVM: ObservableObject {
         onboardingDescriptor.fetchLimit = 1
         let onboardingState = (try? modelContext.fetch(onboardingDescriptor))?.first
 
+        let biomarkers = (try? modelContext.fetch(
+            FetchDescriptor<BiomarkerRecord>(
+                sortBy: [SortDescriptor<BiomarkerRecord>(\.date, order: .reverse)]
+            )
+        )) ?? []
+
         let contextJSON = budgetCapped(buildCompactContextSnapshot(
             dashboard: dashboard,
             wiki: wiki,
@@ -787,7 +793,8 @@ final class CoachChatVM: ObservableObject {
             trainingResponses: trainingResponses,
             onboardingState: onboardingState,
             dailySummaries: dailySummaries,
-            bodyState: bodyState
+            bodyState: bodyState,
+            biomarkers: biomarkers
         ))
 
         let composer = CoachPromptComposer(
@@ -853,7 +860,8 @@ final class CoachChatVM: ObservableObject {
         trainingResponses: [TrainingResponseRecord],
         onboardingState: OnboardingState?,
         dailySummaries: [DailyHealthSummaryRecord],
-        bodyState: BodyState
+        bodyState: BodyState,
+        biomarkers: [BiomarkerRecord]
     ) -> String {
         let td = dashboard.trainingDecision
         let hrv = dashboard.recoveryMetrics.hrvMilliseconds.map { "\(Int($0.rounded()))ms" } ?? "N/A"
@@ -864,13 +872,66 @@ final class CoachChatVM: ObservableObject {
             .map { "\($0.title): \($0.detail)" }
             .joined(separator: " | ")
 
-        // ── Scores at a glance ──
         let lang = AppLanguage.stored
+        
+        // Calculate Biological Age
+        var bioAgeLine = ""
+        if let chronologicalAge = WikiFileService.getAgeFromWiki() ?? dashboard.extendedMetrics.age {
+            let restingHR = dashboard.recoveryMetrics.restingHeartRate
+            let vo2Max = dashboard.bodyMetrics.vo2Max
+            let sleepHours = dashboard.sleepSummary.totalSleepMinutes > 0
+                ? Double(dashboard.sleepSummary.totalSleepMinutes) / 60.0
+                : nil
+            let sleepEfficiency = dashboard.sleepScore.metrics["sleep_efficiency"].map { $0 / 100.0 }
+            let steps = dashboard.strain.metrics["steps_raw"]
+            
+            let hasLiveSignal = restingHR != nil
+                || vo2Max != nil
+                || sleepHours != nil
+                || sleepEfficiency != nil
+                || steps != nil
+                || !biomarkers.isEmpty
+                
+            if hasLiveSignal {
+                let bioAgeResult = BiologicalAgeEngine().calculate(
+                    input: BiologicalAgeInput(
+                        chronologicalAge: Double(chronologicalAge),
+                        restingHR: restingHR,
+                        vo2Max: vo2Max,
+                        sleepHours: sleepHours,
+                        sleepEfficiency: sleepEfficiency,
+                        steps: steps,
+                        biomarkers: biomarkers
+                    )
+                )
+                
+                let isPhenoAge = bioAgeResult.isPhenoAge
+                let bioAgeVal = String(format: "%.1f", bioAgeResult.biologicalAge)
+                let suboptimalText = bioAgeResult.factors.filter { !$0.isOptimal && $0.type == .biomarker }.map { "\($0.name) (score: \(Int($0.score)))" }.joined(separator: ", ")
+                
+                if lang.isChinese {
+                    bioAgeLine = "- 生物年龄: \(bioAgeVal) 岁 (实际年龄: \(chronologicalAge) 岁, 基于 \(isPhenoAge ? "Levine PhenoAge 临床化验模型" : "可穿戴设备数据"))"
+                    if !suboptimalText.isEmpty {
+                        bioAgeLine += "\n- 亚健康指标: \(suboptimalText)"
+                    }
+                } else {
+                    bioAgeLine = "- Biological Age: \(bioAgeVal) yrs (Chronological: \(chronologicalAge) yrs, based on \(isPhenoAge ? "Levine PhenoAge" : "wearable signals"))"
+                    if !suboptimalText.isEmpty {
+                        bioAgeLine += "\n- Sub-optimal Biomarkers: \(suboptimalText)"
+                    }
+                }
+            }
+        }
+
+        // ── Scores at a glance ──
         if lang.isChinese {
             lines.append("## 今日紧凑快照（完整数据需调用 get_today_health）")
             lines.append("- BodyState \(bodyState.readiness.rawValue) · 置信度 \(bodyState.confidence.rawValue) · 新鲜度 \(bodyState.freshness.rawValue)")
             lines.append("- 驱动: \(bodyDrivers.isEmpty ? "暂无可靠驱动" : bodyDrivers)")
             lines.append("- 来源: \(bodyState.source) · 一般健康建议，不构成医疗诊断")
+            if !bioAgeLine.isEmpty {
+                lines.append(bioAgeLine)
+            }
             lines.append("- 恢复 \(Int(dashboard.recovery.score.rounded())) (\(dashboard.recovery.band.rawValue)) · 睡眠 \(Int(dashboard.sleepScore.score.rounded())) (\(dashboard.sleepScore.band.rawValue)) · 负荷 \(Int(dashboard.strain.score.rounded())) (\(dashboard.strain.band.rawValue))")
             lines.append("- 能量 \(Int(dashboard.energy.currentEnergy.rounded())) (\(dashboard.energy.status.rawValue)) · 压力 \(Int(dashboard.stress.stressIndex.rounded())) (\(dashboard.stress.band.rawValue))")
             lines.append("- HRV \(hrv) · 静息心率 \(rhr)")
@@ -881,6 +942,9 @@ final class CoachChatVM: ObservableObject {
             lines.append("- BodyState \(bodyState.readiness.rawValue) · confidence \(bodyState.confidence.rawValue) · freshness \(bodyState.freshness.rawValue)")
             lines.append("- Drivers: \(bodyDrivers.isEmpty ? "No reliable driver yet" : bodyDrivers)")
             lines.append("- Source: \(bodyState.source) · general wellness guidance, not a medical diagnosis")
+            if !bioAgeLine.isEmpty {
+                lines.append(bioAgeLine)
+            }
             lines.append("- Recovery \(Int(dashboard.recovery.score.rounded())) (\(dashboard.recovery.band.rawValue)) · Sleep \(Int(dashboard.sleepScore.score.rounded())) (\(dashboard.sleepScore.band.rawValue)) · Strain \(Int(dashboard.strain.score.rounded())) (\(dashboard.strain.band.rawValue))")
             lines.append("- Energy \(Int(dashboard.energy.currentEnergy.rounded())) (\(dashboard.energy.status.rawValue)) · Stress \(Int(dashboard.stress.stressIndex.rounded())) (\(dashboard.stress.band.rawValue))")
             lines.append("- HRV \(hrv) · RHR \(rhr)")
@@ -1052,62 +1116,101 @@ struct CoachChatPanel: View {
                 }
                 .onChange(of: vm.messages.count) {
                     if let id = vm.messages.last?.id {
-                        withAnimation { proxy.scrollTo(id, anchor: .bottom) }
+                        withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .bottom) }
                     }
                 }
                 .onChange(of: vm.streamingContent) {
-                    withAnimation { proxy.scrollTo("streaming", anchor: .bottom) }
+                    proxy.scrollTo("streaming", anchor: .bottom)
                 }
             }
 
-            HStack(spacing: 10) {
-                // Camera button for food photo analysis
-                Menu {
-                    Button {
-                        showCameraPicker = true
+            HStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    Menu {
+                        Button {
+                            showCameraPicker = true
+                        } label: {
+                            Label(L10n.t("Take Photo", "拍照"), systemImage: "camera.fill")
+                        }
+                        Button {
+                            showPhotoLibraryPicker = true
+                        } label: {
+                            Label(L10n.t("Choose from Library", "从相册选择"), systemImage: "photo.on.rectangle")
+                        }
                     } label: {
-                        Label(L10n.t("Take Photo", "拍照"), systemImage: "camera.fill")
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(vm.isStreaming || vm.isAnalyzingFood ? VelaTheme.muted : VelaTheme.accent)
+                            .frame(width: 32, height: 32)
+                            .background(Circle().fill(VelaTheme.borderSoft.opacity(0.5)))
                     }
+                    .disabled(vm.isStreaming || vm.isAnalyzingFood)
+                    .buttonStyle(.plain)
+
+                    TextField(L10n.t("Ask...", "提问..."), text: $vm.draft, axis: .vertical)
+                        .lineLimit(1...4)
+                        .focused($inputFocused)
+                        .font(.system(size: 14))
+                        .foregroundStyle(VelaTheme.fg)
+                        .padding(.vertical, 8)
+
                     Button {
-                        showPhotoLibraryPicker = true
+                        if !vm.isStreaming {
+                            inputFocused = false
+                            Task {
+                                await vm.send(
+                                    text: vm.draft,
+                                    dashboard: dashboard,
+                                    modelContext: modelContext,
+                                    journalEntries: journalEntries,
+                                    savedReports: savedReports,
+                                    focus: focus,
+                                    services: services
+                                )
+                            }
+                        }
                     } label: {
-                        Label(L10n.t("Choose from Library", "从相册选择"), systemImage: "photo.on.rectangle")
+                        Image(systemName: vm.isStreaming ? "stop.circle.fill" : "arrow.up.circle.fill")
+                            .resizable()
+                            .frame(width: 28, height: 28)
+                            .foregroundStyle(
+                                vm.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !vm.isStreaming
+                                ? VelaTheme.muted
+                                : VelaTheme.accent
+                            )
                     }
-                } label: {
-                    Image(systemName: "camera.fill")
-                        .font(.body)
-                        .foregroundStyle(vm.isStreaming || vm.isAnalyzingFood ? VelaTheme.mutedText : VelaTheme.accent)
+                    .disabled(vm.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !vm.isStreaming)
+                    .buttonStyle(.plain)
                 }
-                .disabled(vm.isStreaming || vm.isAnalyzingFood)
-
-                TextField(L10n.t("Ask...", "提问..."), text: $vm.draft, axis: .vertical)
-                    .lineLimit(1...3)
-                    .focused($inputFocused)
-                    .padding(10)
-                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.elevatedSurface))
-                    .foregroundStyle(VelaTheme.primaryText)
-
-                Button {
-                    inputFocused = false
-                    Task {
-                        await vm.send(
-                            text: vm.draft,
-                            dashboard: dashboard,
-                            modelContext: modelContext,
-                            journalEntries: journalEntries,
-                            savedReports: savedReports,
-                            focus: focus,
-                            services: services
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(VelaTheme.cardBg)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(
+                            inputFocused
+                            ? LinearGradient(
+                                colors: [Color(hex: "#9C5FF2"), Color(hex: "#00A2FF"), Color(hex: "#FF2D55")],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                              )
+                            : LinearGradient(
+                                colors: [VelaTheme.borderSoft, VelaTheme.borderSoft],
+                                startPoint: .top,
+                                endPoint: .bottom
+                              ),
+                            lineWidth: inputFocused ? 1.5 : 0.8
                         )
-                    }
-                } label: {
-                    Image(systemName: vm.isStreaming ? "hourglass" : "arrow.up.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(VelaTheme.accent)
-                }
-                .disabled(vm.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || vm.isStreaming)
+                )
+                .shadow(color: Color.black.opacity(0.04), radius: 6, y: 3)
+                .animation(.easeIn(duration: 0.15), value: inputFocused)
             }
-            .padding(12)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(.ultraThinMaterial)
         }
         .onAppear { vm.refreshKeyState() }
         .sheet(isPresented: $showCameraPicker) {
@@ -1177,40 +1280,101 @@ private func parseMessageContent(_ content: String) -> [MessageSegment] {
     return segments.isEmpty ? [.text(content)] : segments
 }
 
+struct AppleIntelligenceLoaderDots: View {
+    @State private var pulse = false
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(Color(hex: "#9C5FF2"))
+                .frame(width: 6, height: 6)
+                .scaleEffect(pulse ? 1.4 : 0.8)
+                .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: pulse)
+            Circle()
+                .fill(Color(hex: "#00A2FF"))
+                .frame(width: 6, height: 6)
+                .scaleEffect(pulse ? 1.4 : 0.8)
+                .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true).delay(0.2), value: pulse)
+            Circle()
+                .fill(Color(hex: "#FF2D55"))
+                .frame(width: 6, height: 6)
+                .scaleEffect(pulse ? 1.4 : 0.8)
+                .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true).delay(0.4), value: pulse)
+        }
+        .onAppear {
+            pulse = true
+        }
+    }
+}
+
 private struct MiniBubble: View {
     let message: CoachChatVM.ChatMsg
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(message.role == .user
-                ? (AppLanguage.stored.isChinese ? "你" : "You")
-                : "Vela")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(message.role == .user ? VelaTheme.accent : VelaTheme.recovery)
+        HStack {
+            if message.role == .user {
+                Spacer(minLength: 50)
+            }
 
-            let segments = parseMessageContent(message.content)
-            ForEach(segments) { segment in
-                switch segment {
-                case .text(let text):
-                    MarkdownText(markdown: text, font: .subheadline, color: VelaTheme.primaryText, isStreaming: message.isStreaming)
-                case .artifact(let type, let key):
-                    if type == "correlation" {
-                        CorrelationArtifactView(key: key)
-                            .padding(.vertical, 4)
-                    } else {
-                        Text("[Artifact: \(type) - \(key)]")
-                            .font(.caption)
-                            .foregroundStyle(VelaTheme.mutedText)
+            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 6) {
+                Text(message.role == .user
+                    ? (AppLanguage.stored.isChinese ? "你" : "You")
+                    : "Vela")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(message.role == .user ? VelaTheme.muted : VelaTheme.recoveryColor)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    let segments = parseMessageContent(message.content)
+                    ForEach(segments) { segment in
+                        switch segment {
+                        case .text(let text):
+                            MarkdownText(
+                                markdown: text,
+                                font: .subheadline,
+                                color: message.role == .user ? .white : VelaTheme.fg,
+                                isStreaming: message.isStreaming
+                            )
+                        case .artifact(let type, let key):
+                            if type == "correlation" {
+                                CorrelationArtifactView(key: key)
+                                    .padding(.vertical, 4)
+                            } else {
+                                Text("[Artifact: \(type) - \(key)]")
+                                    .font(.caption)
+                                    .foregroundStyle(message.role == .user ? .white.opacity(0.7) : VelaTheme.muted)
+                            }
+                        }
                     }
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(
+                            message.role == .user
+                            ? LinearGradient(
+                                colors: [VelaTheme.accent, VelaTheme.accent.opacity(0.85)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                              )
+                            : LinearGradient(
+                                colors: [VelaTheme.cardBg, VelaTheme.cardBg],
+                                startPoint: .top,
+                                endPoint: .bottom
+                              )
+                        )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(message.role == .user ? Color.clear : VelaTheme.borderSoft, lineWidth: 0.5)
+                )
+                .shadow(color: Color.black.opacity(message.role == .user ? 0.04 : 0.02), radius: 3, y: 1.5)
+            }
+
+            if message.role == .assistant {
+                Spacer(minLength: 50)
             }
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(message.role == .user ? VelaTheme.elevatedSurface : VelaTheme.surface)
-        )
     }
 }
 
@@ -1218,27 +1382,45 @@ private struct MiniStreamingBubble: View {
     let content: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Vela")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(VelaTheme.recovery)
-            if content.isEmpty {
-                ProgressView()
-            } else {
-                MarkdownText(
-                    markdown: content,
-                    font: .subheadline,
-                    color: VelaTheme.primaryText,
-                    isStreaming: true
+        HStack {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Vela")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(VelaTheme.recoveryColor)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    if content.isEmpty {
+                        HStack(spacing: 8) {
+                            AppleIntelligenceLoaderDots()
+                            Text("Vela 正在思考...")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(VelaTheme.muted)
+                        }
+                        .padding(.vertical, 4)
+                    } else {
+                        MarkdownText(
+                            markdown: content,
+                            font: .subheadline,
+                            color: VelaTheme.fg,
+                            isStreaming: true
+                        )
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(VelaTheme.cardBg)
                 )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+                )
+                .shadow(color: Color.black.opacity(0.02), radius: 3, y: 1.5)
             }
+
+            Spacer(minLength: 50)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(VelaTheme.surface)
-        )
     }
 }
 

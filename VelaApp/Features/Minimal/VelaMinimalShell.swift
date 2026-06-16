@@ -170,6 +170,7 @@ struct VelaShell: View {
             .presentationBackground(VelaTheme.systemGroupedBackground)
         }
         .tint(VelaTheme.accent)
+        .sensoryFeedback(.selection, trigger: appState.selectedTab)
     }
 
     @ViewBuilder
@@ -625,9 +626,21 @@ private struct PostWorkoutImpactSheet: View {
                 header
 
                 if isLoading {
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 36)
+                    VStack(alignment: .leading, spacing: 16) {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(VelaTheme.borderSoft)
+                            .frame(height: 100)
+                            .shimmer()
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(VelaTheme.borderSoft)
+                            .frame(height: 140)
+                            .shimmer()
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(VelaTheme.borderSoft)
+                            .frame(height: 120)
+                            .shimmer()
+                    }
+                    .frame(maxWidth: .infinity)
                 } else if let impact {
                     trendSection(impact)
                     summaryGrid(impact)

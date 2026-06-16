@@ -72,15 +72,18 @@ final class DailySummaryUseCase {
     private let refreshService: HealthDataRefreshService
     private let queryService: HealthKitQueryService
     private let calendar: Calendar
+    private let syncCoordinator: AppSyncCoordinator?
 
     init(
         refreshService: HealthDataRefreshService? = nil,
         queryService: HealthKitQueryService = HealthKitQueryService(),
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        syncCoordinator: AppSyncCoordinator? = nil
     ) {
         self.queryService = queryService
         self.refreshService = refreshService ?? HealthDataRefreshService(queryService: queryService)
         self.calendar = calendar
+        self.syncCoordinator = syncCoordinator
     }
 
     func loadDashboard(
@@ -93,16 +96,32 @@ final class DailySummaryUseCase {
         // 1. Sync recent HealthKit data first. App foreground refreshes the latest 3 days by default.
         if let modelContext {
             let syncEngine = HealthKitSyncEngine(queryService: queryService, modelContext: modelContext, calendar: calendar)
-            do {
-                try await syncEngine.syncPastDays(syncDays, endingAt: now, forceRefreshRecentDays: syncDays)
-            } catch {
-                PipelineDiagnosticsLogger.log(
-                    modelContext: modelContext,
-                    stage: "DailySummaryUseCase.loadDashboard.syncPastDays",
-                    isSuccess: false,
-                    summary: "HealthKit background sync failed.",
-                    error: error
-                )
+            if let syncCoordinator {
+                await syncCoordinator.run(source: .healthKit, force: false) {
+                    do {
+                        try await syncEngine.syncPastDays(syncDays, endingAt: now, forceRefreshRecentDays: syncDays)
+                    } catch {
+                        PipelineDiagnosticsLogger.log(
+                            modelContext: modelContext,
+                            stage: "DailySummaryUseCase.loadDashboard.syncPastDays",
+                            isSuccess: false,
+                            summary: "HealthKit background sync failed.",
+                            error: error
+                        )
+                    }
+                }
+            } else {
+                do {
+                    try await syncEngine.syncPastDays(syncDays, endingAt: now, forceRefreshRecentDays: syncDays)
+                } catch {
+                    PipelineDiagnosticsLogger.log(
+                        modelContext: modelContext,
+                        stage: "DailySummaryUseCase.loadDashboard.syncPastDays",
+                        isSuccess: false,
+                        summary: "HealthKit background sync failed.",
+                        error: error
+                    )
+                }
             }
         }
         

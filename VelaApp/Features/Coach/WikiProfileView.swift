@@ -36,10 +36,34 @@ struct WikiProfileView: View {
                     }
                 }
                 .padding(VelaTheme.screenPadding)
+                .padding(.top, 4)
+                .padding(.bottom, 40)
             }
         }
-        .navigationTitle(L10n.t("My Profile", "我的档案"))
-        .navigationBarTitleDisplayMode(.large)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .top) {
+            VStack(spacing: 0) {
+                HStack(alignment: .center) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L10n.t("My Profile", "我的档案"))
+                            .font(.system(size: 26, weight: .bold, design: .rounded))
+                            .foregroundStyle(VelaTheme.primaryText)
+                        Text(L10n.t("Health memory & knowledge base", "健康记忆与知识档案库"))
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(VelaTheme.secondaryText)
+                    }
+                    Spacer()
+                    Image(systemName: "brain.head.profile")
+                        .font(.system(size: 24))
+                        .foregroundStyle(VelaTheme.accent)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(.ultraThinMaterial)
+                Divider().opacity(0.4)
+            }
+        }
         .task {
             WikiSyncManager.sync(modelContext: modelContext)
             let allDocs = WikiFileService.loadAllDocuments()
@@ -93,22 +117,26 @@ struct WikiProfileView: View {
 
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(VelaTheme.elevatedSurface)
+                        Capsule()
+                            .fill(VelaTheme.borderSoft)
                             .frame(height: 6)
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(VelaTheme.accent)
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [VelaTheme.accent, Color(hex: "#AF52DE")],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
                             .frame(width: total > 0 ? geo.size.width * CGFloat(filled) / CGFloat(total) : 0, height: 6)
+                            .shadow(color: VelaTheme.accent.opacity(0.3), radius: 3)
                     }
                 }
                 .frame(height: 6)
             }
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(VelaTheme.surface)
-        )
+        .velaNativeCard(radius: 18)
     }
 
     // MARK: - Baseline Card
@@ -182,10 +210,7 @@ struct WikiProfileView: View {
             }
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(VelaTheme.surface)
-        )
+        .velaNativeCard(radius: 18)
     }
 
     private struct BaselineMetric {
@@ -306,10 +331,7 @@ struct WikiProfileView: View {
                 }
             }
         }
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(VelaTheme.surface)
-        )
+        .velaNativeCard(radius: 18)
     }
 
     // MARK: - Read-Only Field Row
@@ -622,6 +644,7 @@ struct WikiProfileView: View {
                 }
             }
         }
+        .appleIntelligenceGlow(isHighlighted: true, radius: 18)
     }
 
     @ViewBuilder

@@ -109,7 +109,7 @@ struct TrainingCalendarView: View {
                     .foregroundStyle(VelaTheme.mutedText)
                 }
             }
-        })
+        }.appleIntelligenceGlow(isHighlighted: true, radius: 24))
     }
 
     private func adaptationRow(_ adaptation: TrainingPlanAdaptationRecord, plan: TrainingPlanRecord) -> some View {
@@ -158,6 +158,7 @@ struct TrainingCalendarView: View {
                         .frame(maxWidth: .infinity, minHeight: 34)
                         .background(Capsule().fill(VelaTheme.accent))
                 }
+                .buttonStyle(.cardPress)
 
                 Button {
                     rejectAdaptation(adaptation)
@@ -169,11 +170,19 @@ struct TrainingCalendarView: View {
                         .background(Capsule().fill(VelaTheme.elevatedSurface))
                         .overlay(Capsule().stroke(VelaTheme.stroke, lineWidth: 0.7))
                 }
+                .buttonStyle(.cardPress)
             }
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.surface.opacity(0.78)))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.energy.opacity(0.20), lineWidth: 0.8))
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(VelaTheme.cardBg)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(VelaTheme.energy.opacity(0.35), lineWidth: 1.0)
+        )
+        .shadow(color: VelaTheme.energy.opacity(0.08), radius: 6, y: 2)
     }
 
     private func trainingAdaptationDetail(title: String, value: String, icon: String) -> some View {
@@ -303,7 +312,8 @@ struct TrainingCalendarView: View {
                     .frame(height: 6)
                 }
             }
-            .heroCardSurface(accent: VelaTheme.accent)
+            .padding(16)
+            .velaNativeCard(radius: 20)
 
             // Week Selector Horizontal Pills
             ScrollView(.horizontal, showsIndicators: false) {
@@ -328,6 +338,7 @@ struct TrainingCalendarView: View {
                                         .stroke(Color.white.opacity(selectedWeek == week ? 0 : 0.05), lineWidth: 0.5)
                                 )
                         }
+                        .buttonStyle(.cardPress)
                     }
                 }
                 .padding(.horizontal, 2)
@@ -351,75 +362,82 @@ struct TrainingCalendarView: View {
         let hasPendingAdaptation = pendingAdaptation(for: day, plan: plan) != nil
         
         return HStack(spacing: 14) {
-            // Left color-gated bar
-            Rectangle()
-                .fill(day.isCompleted ? VelaTheme.recovery : focusColor)
-                .frame(width: 4)
-                .cornerRadius(2)
+            Button(action: {
+                selectedDayForSheet = day
+            }) {
+                HStack(spacing: 14) {
+                    // Left color-gated bar
+                    Rectangle()
+                        .fill(day.isCompleted ? VelaTheme.recovery : focusColor)
+                        .frame(width: 4)
+                        .cornerRadius(2)
 
-            // Card Body
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    // Day and Focus Label
-                    Text(L10n.t("Day \(day.dayNumber) • \(dayName(day.dayNumber))", "第 \(day.dayNumber) 天 • \(dayName(day.dayNumber))"))
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(VelaTheme.mutedText)
+                    // Card Body
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            // Day and Focus Label
+                            Text(L10n.t("Day \(day.dayNumber) • \(dayName(day.dayNumber))", "第 \(day.dayNumber) 天 • \(dayName(day.dayNumber))"))
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(VelaTheme.mutedText)
 
-                    Spacer()
+                            Spacer()
 
-                    // Focus Pill
-                    HStack(spacing: 3) {
-                        Image(systemName: focusSymbol)
-                            .font(.system(size: 8))
-                        Text(focusName(day.focus))
-                            .font(.system(size: 8, weight: .bold))
-                    }
-                    .foregroundStyle(focusColor)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(focusColor.opacity(0.12)))
-                }
-
-                if hasPendingAdaptation {
-                    VelaStatusBadge(
-                        label: AppLanguage.stored.isChinese ? "Vela 建议调整" : "Suggested",
-                        systemImage: "sparkles",
-                        tint: VelaTheme.energy
-                    )
-                }
-
-                // Session Title
-                Text(day.title)
-                    .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                    .foregroundStyle(day.isCompleted ? VelaTheme.mutedText : VelaTheme.primaryText)
-                    .strikethrough(day.isCompleted, color: VelaTheme.mutedText)
-
-                // Subtitle / Timing
-                if day.focus == "rest" {
-                    Text(L10n.t("Rest & Restore Energy", "休息以恢复能量储蓄"))
-                        .font(.caption2)
-                        .foregroundStyle(VelaTheme.mutedText)
-                } else {
-                    HStack(spacing: 8) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "clock")
-                                .font(.system(size: 10))
-                            Text("\(day.durationMinutes) \(L10n.t("mins", "分钟"))")
+                            // Focus Pill
+                            HStack(spacing: 3) {
+                                Image(systemName: focusSymbol)
+                                    .font(.system(size: 8))
+                                Text(focusName(day.focus))
+                                    .font(.system(size: 8, weight: .bold))
+                            }
+                            .foregroundStyle(focusColor)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(focusColor.opacity(0.12)))
                         }
-                        
-                        Text("•")
-                        
-                        Text(intensityName(day.intensity))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(Capsule().fill(getIntensityColor(day.intensity).opacity(0.12)))
-                            .foregroundStyle(getIntensityColor(day.intensity))
+
+                        if hasPendingAdaptation {
+                            VelaStatusBadge(
+                                label: AppLanguage.stored.isChinese ? "Vela 建议调整" : "Suggested",
+                                systemImage: "sparkles",
+                                tint: VelaTheme.energy
+                            )
+                        }
+
+                        // Session Title
+                        Text(day.title)
+                            .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                            .foregroundStyle(day.isCompleted ? VelaTheme.mutedText : VelaTheme.primaryText)
+                            .strikethrough(day.isCompleted, color: VelaTheme.mutedText)
+
+                        // Subtitle / Timing
+                        if day.focus == "rest" {
+                            Text(L10n.t("Rest & Restore Energy", "休息以恢复能量储蓄"))
+                                .font(.caption2)
+                                .foregroundStyle(VelaTheme.mutedText)
+                        } else {
+                            HStack(spacing: 8) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "clock")
+                                        .font(.system(size: 10))
+                                    Text("\(day.durationMinutes) \(L10n.t("mins", "分钟"))")
+                                }
+                                
+                                Text("•")
+                                
+                                Text(intensityName(day.intensity))
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(Capsule().fill(getIntensityColor(day.intensity).opacity(0.12)))
+                                    .foregroundStyle(getIntensityColor(day.intensity))
+                            }
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(VelaTheme.secondaryText)
+                        }
                     }
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(VelaTheme.secondaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .buttonStyle(.cardPress)
 
             // Checkbox Circle
             Button(action: {
@@ -454,9 +472,7 @@ struct TrainingCalendarView: View {
             RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard, style: .continuous)
                 .stroke(day.isCompleted ? VelaTheme.recovery.opacity(0.12) : Color.black.opacity(0.04), lineWidth: 0.5)
         )
-        .onTapGesture {
-            selectedDayForSheet = day
-        }
+        .appleIntelligenceGlow(isHighlighted: hasPendingAdaptation, radius: VelaTheme.cornerRadiusCard)
     }
 
     // MARK: - Empty Plan View (Bevel CTA Style)
@@ -475,19 +491,19 @@ struct TrainingCalendarView: View {
                     .shadow(color: VelaTheme.accent.opacity(0.4), radius: 6)
             }
 
-            VStack(spacing: 8) {
-                Text(L10n.t("Your Training Schedule", "你的智能课表"))
-                    .font(.system(.title3, design: .rounded).weight(.bold))
-                    .foregroundStyle(VelaTheme.primaryText)
-                
-                Text(L10n.t("No active training plan. Ask your Coach Agent to generate a multi-week athletic progression program tailored to your recovery, sleep, and fitness goals.", "当前没有激活的训练课表。让你的 AI 教练根据你的恢复、睡眠以及运动目标，为你定制一份长期的多周智能训练计划吧！"))
-                    .font(.subheadline)
-                    .foregroundStyle(VelaTheme.secondaryText)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(4)
-                    .padding(.horizontal, 10)
+            VelaGlassCard(padding: 24, cornerRadius: 20) {
+                VStack(spacing: 16) {
+                    Text(L10n.t("Your Training Schedule", "你的智能课表"))
+                        .font(.system(.title3, design: .rounded).weight(.bold))
+                        .foregroundStyle(VelaTheme.primaryText)
+                    
+                    Text(L10n.t("No active training plan. Ask your Coach Agent to generate a multi-week athletic progression program tailored to your recovery, sleep, and fitness goals.", "当前没有激活的训练课表。让你的 AI 教练根据你的恢复、睡眠以及运动目标，为你定制一份长期的多周智能训练计划吧！"))
+                        .font(.subheadline)
+                        .foregroundStyle(VelaTheme.secondaryText)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                }
             }
-            .cardSurface()
 
             Button(action: {
                 let generator = UIImpactFeedbackGenerator(style: .medium)
@@ -510,6 +526,7 @@ struct TrainingCalendarView: View {
                 .background(Capsule().fill(VelaTheme.accent))
                 .shadow(color: VelaTheme.accent.opacity(0.3), radius: 8)
             }
+            .buttonStyle(.cardPress)
 
             Spacer().frame(height: 40)
         }

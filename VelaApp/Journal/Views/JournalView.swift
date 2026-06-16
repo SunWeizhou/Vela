@@ -61,52 +61,52 @@ struct JournalView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    journalHeader
-                    journalDateStrip
                     journalHabitBoard
                     journalOverviewCard
 
                     if !foodLogs.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Label(L10n.t("Nutrition", "营养记录"), systemImage: "fork.knife.circle.fill")
+                        VelaGlassCard(padding: 16, cornerRadius: 20) {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Label(L10n.t("Nutrition", "营养记录"), systemImage: "fork.knife.circle.fill")
+                                    .font(.headline)
+                                    .foregroundStyle(VelaTheme.primaryText)
+
+                                ForEach(Array(foodLogs.prefix(5))) { log in
+                                    nutritionLogCard(log)
+                                }
+                            }
+                        }
+                    }
+
+                    VelaGlassCard(padding: 16, cornerRadius: 20) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Label(L10n.t("Quick Tags", "快速标签"), systemImage: "tag.fill")
                                 .font(.headline)
                                 .foregroundStyle(VelaTheme.primaryText)
 
-                            ForEach(Array(foodLogs.prefix(5))) { log in
-                                nutritionLogCard(log)
-                            }
-                        }
-                        .cardSurface()
-                    }
-
-                    VStack(alignment: .leading, spacing: 14) {
-                        Label(L10n.t("Quick Tags", "快速标签"), systemImage: "tag.fill")
-                            .font(.headline)
-                            .foregroundStyle(VelaTheme.primaryText)
-
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 8)], alignment: .leading, spacing: 8) {
-                            ForEach(quickTags, id: \.self) { tag in
-                                Button {
-                                    toggle(tag)
-                                } label: {
-                                    Text(tag.capitalized)
-                                        .frame(maxWidth: .infinity)
-                                        .font(.caption.weight(.semibold))
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 8)
-                                        .background(
-                                            Capsule()
-                                                .fill(selectedTags.contains(tag) ? VelaTheme.accent.opacity(0.22) : VelaTheme.elevatedSurface)
-                                        )
-                                        .overlay(
-                                            Capsule()
-                                                .stroke(selectedTags.contains(tag) ? VelaTheme.accent.opacity(0.14) : Color.black.opacity(0.04), lineWidth: 0.5)
-                                        )
-                                        .foregroundStyle(selectedTags.contains(tag) ? VelaTheme.accent : VelaTheme.secondaryText)
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 8)], alignment: .leading, spacing: 8) {
+                                ForEach(quickTags, id: \.self) { tag in
+                                    Button {
+                                        toggle(tag)
+                                    } label: {
+                                        Text(tag.capitalized)
+                                            .frame(maxWidth: .infinity)
+                                            .font(.caption.weight(.semibold))
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            .background(
+                                                Capsule()
+                                                    .fill(selectedTags.contains(tag) ? VelaTheme.accent.opacity(0.22) : VelaTheme.elevatedSurface)
+                                            )
+                                            .overlay(
+                                                Capsule()
+                                                    .stroke(selectedTags.contains(tag) ? VelaTheme.accent.opacity(0.14) : Color.black.opacity(0.04), lineWidth: 0.5)
+                                            )
+                                            .foregroundStyle(selectedTags.contains(tag) ? VelaTheme.accent : VelaTheme.secondaryText)
+                                    }
+                                    .buttonStyle(.cardPress)
                                 }
-                                .buttonStyle(.plain)
                             }
-                        }
 
                         TextField(L10n.t("What changed today?", "今天有什么变化？"), text: $note, axis: .vertical)
                             .lineLimit(3...6)
@@ -177,82 +177,90 @@ struct JournalView: View {
                             }
                         }
 
-                        Button {
-                            saveEntry()
-                        } label: {
-                            Label(L10n.t("Save Entry", "保存记录"), systemImage: "square.and.pencil")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(VelaTheme.accent)
-                        .disabled(note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && selectedTags.isEmpty)
+                            Button {
+                                saveEntry()
+                            } label: {
+                                Label(L10n.t("Save Entry", "保存记录"), systemImage: "square.and.pencil")
+                                    .font(.system(.body, design: .rounded).weight(.bold))
+                                    .foregroundStyle(Color.black)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(Capsule().fill(VelaTheme.accent))
+                            }
+                            .buttonStyle(.cardPress)
+                            .disabled(note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && selectedTags.isEmpty)
 
-                        if !statusMessage.isEmpty {
-                            Text(statusMessage)
-                                .font(.footnote)
-                                .foregroundStyle(VelaTheme.secondaryText)
-                        }
-                    }
-                    .cardSurface()
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label(L10n.t("Recent Entries", "最近记录"), systemImage: "clock.fill")
-                            .font(.headline)
-                            .foregroundStyle(VelaTheme.primaryText)
-
-                        // Tag correlation insights
-                        if !tagCorrelations.isEmpty {
-                            VStack(alignment: .leading, spacing: 10) {
-                                Label(L10n.t("Tag Insights (30 days)", "标签洞察（30天）"), systemImage: "chart.bar.doc.horizontal.fill")
-                                    .font(.subheadline.weight(.medium))
-                                    .foregroundStyle(VelaTheme.accent)
-
-                                ForEach(tagCorrelations.prefix(5), id: \.tag) { stat in
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        // Tag chip with color-coded impact indicator
-                                        HStack(spacing: 8) {
-                                            // Impact dot
-                                            Circle()
-                                                .fill(stat.impactColor)
-                                                .frame(width: 8, height: 8)
-
-                                            // Tag label
-                                            Text(stat.tag.capitalized)
-                                                .font(.caption.weight(.semibold))
-                                                .foregroundStyle(VelaTheme.primaryText)
-
-                                            Spacer()
-
-                                            // Count badge
-                                            Text("\(stat.count)d")
-                                                .font(.caption2.weight(.medium))
-                                                .foregroundStyle(VelaTheme.secondaryText)
-                                        }
-
-                                        // Score bars
-                                        HStack(spacing: 12) {
-                                            scoreMeter(
-                                                label: L10n.t("Sleep", "睡眠"),
-                                                value: stat.avgSleep,
-                                                baseline: stat.withoutAvgSleep,
-                                                color: VelaTheme.sleep
-                                            )
-                                            scoreMeter(
-                                                label: L10n.t("Recovery", "恢复"),
-                                                value: stat.avgRecovery,
-                                                baseline: stat.withoutAvgRecovery,
-                                                color: VelaTheme.recovery
-                                            )
-                                        }
-                                    }
-                                    .padding(10)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                            .fill(VelaTheme.elevatedSurface)
-                                    )
-                                }
+                            if !statusMessage.isEmpty {
+                                Text(statusMessage)
+                                    .font(.footnote)
+                                    .foregroundStyle(VelaTheme.secondaryText)
                             }
                         }
+                    }
+
+                    VelaGlassCard(padding: 16, cornerRadius: 20) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label(L10n.t("Recent Entries", "最近记录"), systemImage: "clock.fill")
+                                .font(.headline)
+                                .foregroundStyle(VelaTheme.primaryText)
+
+                            // Tag correlation insights
+                            if !tagCorrelations.isEmpty {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Label(L10n.t("Tag Insights (30 days)", "标签洞察（30天）"), systemImage: "chart.bar.doc.horizontal.fill")
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundStyle(VelaTheme.accent)
+
+                                    ForEach(tagCorrelations.prefix(5), id: \.tag) { stat in
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            // Tag chip with color-coded impact indicator
+                                            HStack(spacing: 8) {
+                                                // Impact dot
+                                                Circle()
+                                                    .fill(stat.impactColor)
+                                                    .frame(width: 8, height: 8)
+
+                                                // Tag label
+                                                Text(stat.tag.capitalized)
+                                                    .font(.caption.weight(.semibold))
+                                                    .foregroundStyle(VelaTheme.primaryText)
+
+                                                Spacer()
+
+                                                // Count badge
+                                                Text("\(stat.count)d")
+                                                    .font(.caption2.weight(.medium))
+                                                    .foregroundStyle(VelaTheme.secondaryText)
+                                            }
+
+                                            // Score bars
+                                            HStack(spacing: 12) {
+                                                scoreMeter(
+                                                    label: L10n.t("Sleep", "睡眠"),
+                                                    value: stat.avgSleep,
+                                                    baseline: stat.withoutAvgSleep,
+                                                    color: VelaTheme.sleep
+                                                )
+                                                scoreMeter(
+                                                    label: L10n.t("Recovery", "恢复"),
+                                                    value: stat.avgRecovery,
+                                                    baseline: stat.withoutAvgRecovery,
+                                                    color: VelaTheme.recovery
+                                                )
+                                            }
+                                        }
+                                        .padding(10)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                                .fill(VelaTheme.elevatedSurface)
+                                        )
+                                    }
+                                }
+                                .padding(12)
+                                .velaNativeCard(radius: 16)
+                                .appleIntelligenceGlow(isHighlighted: true, radius: 16)
+                                .padding(.bottom, 8)
+                            }
 
                         if journalDaySummaries.isEmpty {
                             Text(L10n.t("No journal entries yet.", "还没有日记记录。"))
@@ -294,15 +302,30 @@ struct JournalView: View {
                             }
                         }
                     }
-                    .cardSurface()
                 }
-                .padding(VelaTheme.screenPadding)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
             }
             .safeAreaInset(edge: .bottom) {
                 Color.clear.frame(height: 88)
             }
+            }
         }
         .navigationTitle("")
+        .safeAreaInset(edge: .top) {
+            VStack(spacing: 12) {
+                journalHeader
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                journalDateStrip
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+                
+                Divider()
+                    .opacity(0.4)
+            }
+            .background(.ultraThinMaterial)
+        }
     }
 
     private struct JournalHabitDefinition: Identifiable {
@@ -424,7 +447,8 @@ struct JournalView: View {
                     .overlay(Capsule(style: .continuous).stroke(Color.black.opacity(0.06), lineWidth: 0.5))
                     .shadow(color: Color.black.opacity(0.05), radius: 12, y: 6)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
+            .appleIntelligenceGlow(isHighlighted: true, radius: 18)
         }
     }
 
@@ -465,33 +489,34 @@ struct JournalView: View {
                         }
                         .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.cardPress)
                 }
             }
         }
     }
 
     private var journalHabitBoard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.t("Today's entries", "今天的条目"))
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(VelaTheme.primaryText)
-                Text(L10n.t(
-                    "These entries will be used for tomorrow's analysis and Wiki memory.",
-                    "这些条目会用于明天的分析和 Wiki 记忆。"
-                ))
-                .font(.caption)
-                .foregroundStyle(VelaTheme.secondaryText)
-            }
+        VelaGlassCard(padding: 16, cornerRadius: 20) {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L10n.t("Today's entries", "今天的条目"))
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(VelaTheme.primaryText)
+                    Text(L10n.t(
+                        "These entries will be used for tomorrow's analysis and Wiki memory.",
+                        "这些条目会用于明天的分析和 Wiki 记忆。"
+                    ))
+                    .font(.caption)
+                    .foregroundStyle(VelaTheme.secondaryText)
+                }
 
-            VStack(spacing: 9) {
-                ForEach(dailyHabits) { habit in
-                    journalHabitRow(habit)
+                VStack(spacing: 9) {
+                    ForEach(dailyHabits) { habit in
+                        journalHabitRow(habit)
+                    }
                 }
             }
         }
-        .cardSurface()
     }
 
     private func journalHabitRow(_ habit: JournalHabitDefinition) -> some View {
@@ -526,14 +551,14 @@ struct JournalView: View {
             .padding(.vertical, 11)
             .background(
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .fill(isSelected ? habit.tint.opacity(0.10) : Color.white.opacity(0.82))
+                    .fill(isSelected ? habit.tint.opacity(0.10) : VelaTheme.surface.opacity(0.82))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .stroke(isSelected ? habit.tint.opacity(0.16) : Color.black.opacity(0.05), lineWidth: 0.5)
+                    .stroke(isSelected ? habit.tint.opacity(0.16) : Color.white.opacity(0.15), lineWidth: 0.5)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.cardPress)
     }
 
     private func weekdayLabel(for date: Date) -> String {
@@ -548,35 +573,36 @@ struct JournalView: View {
         let topTag = tagCorrelations.first?.tag.capitalized ?? "--"
         let foodCount = foodLogs.filter { Calendar.current.isDateInToday($0.createdAt) }.count
 
-        return VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(L10n.t("Daily context", "今日上下文"))
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(VelaTheme.primaryText)
-                Spacer()
-                Text(L10n.t("Agent memory", "Agent 记忆"))
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(VelaTheme.accent)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Capsule(style: .continuous).fill(VelaTheme.accent.opacity(0.12)))
-            }
+        return VelaGlassCard(padding: 16, cornerRadius: 20) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(L10n.t("Daily context", "今日上下文"))
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(VelaTheme.primaryText)
+                    Spacer()
+                    Text(L10n.t("Agent memory", "Agent 记忆"))
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(VelaTheme.accent)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Capsule(style: .continuous).fill(VelaTheme.accent.opacity(0.12)))
+                }
 
-            Text(L10n.t(
-                "Short logs help the coach connect symptoms, training, travel, sleep, and routines without asking you the same questions again.",
-                "简短记录会帮助 Coach 关联症状、训练、旅行、睡眠和日常习惯，减少重复询问。"
-            ))
-            .font(.subheadline)
-            .foregroundStyle(VelaTheme.secondaryText)
-            .lineSpacing(3)
+                Text(L10n.t(
+                    "Short logs help the coach connect symptoms, training, travel, sleep, and routines without asking you the same questions again.",
+                    "简短记录会帮助 Coach 关联症状、训练、旅行、睡眠和日常习惯，减少重复询问。"
+                ))
+                .font(.subheadline)
+                .foregroundStyle(VelaTheme.secondaryText)
+                .lineSpacing(3)
 
-            HStack(spacing: 8) {
-                journalStatPill(title: L10n.t("Today", "今日"), value: "\(todayEntries)", tint: VelaTheme.accent)
-                journalStatPill(title: L10n.t("Top tag", "高频标签"), value: topTag, tint: VelaTheme.sleep)
-                journalStatPill(title: L10n.t("Meals", "餐食"), value: "\(foodCount)", tint: VelaTheme.energy)
+                HStack(spacing: 8) {
+                    journalStatPill(title: L10n.t("Today", "今日"), value: "\(todayEntries)", tint: VelaTheme.accent)
+                    journalStatPill(title: L10n.t("Top tag", "高频标签"), value: topTag, tint: VelaTheme.sleep)
+                    journalStatPill(title: L10n.t("Meals", "餐食"), value: "\(foodCount)", tint: VelaTheme.energy)
+                }
             }
         }
-        .cardSurface()
     }
 
     private func journalStatPill(title: String, value: String, tint: Color) -> some View {

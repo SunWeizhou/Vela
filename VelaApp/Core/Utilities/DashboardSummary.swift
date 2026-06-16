@@ -876,7 +876,15 @@ enum TodayCommandBuilder {
         )
     }
 
-    private static func readinessDecision(
+    private static func numericConfidence(_ confidence: MetricConfidence) -> Double {
+        switch confidence {
+        case .high: return 1.0
+        case .medium: return 0.7
+        case .low: return 0.4
+        }
+    }
+
+    public static func readinessDecision(
         from dashboard: DashboardSummary,
         signals: [TodayHealthSignal],
         recentStrengthSummary: RecentTrainingSummary?
@@ -886,39 +894,46 @@ enum TodayCommandBuilder {
             return (.reduce, 0.32, ["恢复基线数据不足，先按保守方案执行。"])
         }
 
+        let recConf = dashboard.recovery.hasData ? numericConfidence(dashboard.recovery.confidence) : 0.0
+        let sleepConf = dashboard.sleepScore.hasData ? numericConfidence(dashboard.sleepScore.confidence) : 0.0
+        let stressConf = dashboard.stress.hasData ? numericConfidence(dashboard.stress.confidence) : 0.0
+        
+        let computedConf = 0.50 * recConf + 0.30 * sleepConf + 0.20 * stressConf
+        let dynamicConfidence = max(0.3, min(1.0, computedConf))
+
         if let first = dashboard.recovery.reasons.first {
             reasons.append(first)
         }
         if dashboard.recovery.score < 40 {
             reasons.append("Recovery \(Int(dashboard.recovery.score.rounded())) is below the recovery-day threshold.")
-            return (.recover, 0.86, reasons)
+            return (.recover, 0.86 * dynamicConfidence, reasons)
         }
         if dashboard.sleepScore.hasData, dashboard.sleepScore.score < 55 {
             reasons.append("Sleep score \(Int(dashboard.sleepScore.score.rounded())) is limiting readiness.")
-            return (.recover, 0.78, reasons)
+            return (.recover, 0.78 * dynamicConfidence, reasons)
         }
         if dashboard.stress.hasData, dashboard.stress.stressIndex > 78 {
             reasons.append("Physiological stress is elevated.")
-            return (.recover, 0.74, reasons)
+            return (.recover, 0.74 * dynamicConfidence, reasons)
         }
         if let summary = recentStrengthSummary,
-           summary.localFatigue.values.contains(where: { $0.setsLast48h >= 10 || $0.setsLast7d >= 18 }) {
+           summary.localFatigue.values.contains(where: { $0.setsLast48h >= 15 || $0.setsLast7d >= 25 }) {
             reasons.append("Local muscle fatigue is high from recent strength work.")
-            return (.swap, 0.72, reasons)
+            return (.swap, 0.72 * dynamicConfidence, reasons)
         }
         if dashboard.recovery.score < 62 || dashboard.sleepScore.score < 68 {
             reasons.append("Recovery or sleep is not low enough for rest, but not strong enough for full volume.")
-            return (.reduce, 0.68, reasons)
+            return (.reduce, 0.68 * dynamicConfidence, reasons)
         }
         if dashboard.strain.hasData, dashboard.strain.score > Double(dashboard.strain.recommendedRange.upperBound) {
             reasons.append("Current strain is already above today's target range.")
-            return (.reduce, 0.7, reasons)
+            return (.reduce, 0.70 * dynamicConfidence, reasons)
         }
 
         if reasons.isEmpty {
             reasons.append("Recovery, sleep, and strain are within an actionable range.")
         }
-        return (.keep, 0.76, reasons)
+        return (.keep, 0.76 * dynamicConfidence, reasons)
     }
 
     private static func keySignals(

@@ -25,30 +25,57 @@ struct WorkoutDetailView: View {
     private let queryService = HealthKitQueryService()
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                hero
-                intelligenceStrip
-                heartRateChartSection
-                
-                if let strength = linkedStrengthWorkout {
-                    muscleDistribution(strength)
-                    exerciseList(strength)
-                    notesCard(strength)
+        ZStack {
+            detailBackground.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    hero
+                    intelligenceStrip
+                    heartRateChartSection
+                    
+                    if let strength = linkedStrengthWorkout {
+                        muscleDistribution(strength)
+                        exerciseList(strength)
+                        notesCard(strength)
+                    }
+                    
+                    if !routeCoordinates.isEmpty {
+                        gpsRouteSection
+                    }
+                    workoutCoachCard
                 }
-                
-                if !routeCoordinates.isEmpty {
-                    gpsRouteSection
-                }
-                workoutCoachCard
+                .padding(16)
+                .padding(.bottom, 96)
             }
-            .padding(16)
-            .padding(.bottom, 88)
+            .scrollIndicators(.hidden)
         }
-        .scrollIndicators(.hidden)
-        .background(detailBackground.ignoresSafeArea())
-        .navigationTitle("健身详情")
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .top) {
+            VStack(spacing: 0) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(workout.activityName)
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundStyle(VelaTheme.primaryText)
+                            .lineLimit(1)
+                        Text(workout.start.formatted(date: .abbreviated, time: .shortened))
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(VelaTheme.secondaryText)
+                    }
+                    Spacer()
+                    Image(systemName: iconForWorkout(workout.activityName))
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(workoutAccentColor)
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(workoutAccentColor.opacity(0.14)))
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.ultraThinMaterial)
+                Divider().opacity(0.4)
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 12) {
@@ -108,35 +135,15 @@ struct WorkoutDetailView: View {
     private var mutedColor: Color { VelaTheme.muted }
     private var accentColor: Color { VelaTheme.accent }
 
-    private var heroBackground: some View {
-        RoundedRectangle(cornerRadius: 24, style: .continuous)
-            .fill(VelaTheme.cardBg.opacity(colorScheme == .dark ? 0.62 : 0.92))
-            .shadow(color: VelaTheme.nativeShadow(colorScheme), radius: 10, y: 3)
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
-            )
-    }
-
     private var detailBackground: some View {
         ZStack {
-            VelaTheme.systemGroupedBackground
+            VelaTheme.bg
             LinearGradient(
-                colors: [Color(hex: "#EAF3FF"), VelaTheme.systemGroupedBackground, Color(hex: "#EEF7F5")],
+                colors: [workoutAccentColor.opacity(0.06), VelaTheme.bg, VelaTheme.bg],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
         }
-    }
-
-    private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .fill(VelaTheme.cardBg)
-            .shadow(color: VelaTheme.nativeShadow(colorScheme), radius: 8, y: 2)
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
-            )
     }
 
     private func heroMetric(_ title: String, _ value: String, _ unit: String) -> some View {
@@ -146,6 +153,7 @@ struct WorkoutDetailView: View {
                     .font(.system(size: 22, weight: .bold, design: .rounded))
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
+                    .foregroundStyle(VelaTheme.primaryText)
                 Text(unit)
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(mutedColor)
@@ -158,71 +166,83 @@ struct WorkoutDetailView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.72)))
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.primaryText.opacity(0.06)))
     }
 
     private var hero: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(workout.activityName)
-                        .font(.system(size: 30, weight: .bold, design: .rounded))
-                        .foregroundStyle(bodyTextColor)
-                    Text(workout.start.formatted(date: .abbreviated, time: .shortened))
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(mutedColor)
-                }
-                Spacer()
-                Image(systemName: iconForWorkout(workout.activityName))
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(workoutAccentColor)
-                    .frame(width: 46, height: 46)
-                    .background(Circle().fill(workoutAccentColor.opacity(0.14)))
-            }
-
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
-                heroMetric("时长", "\(Int((workout.end.timeIntervalSince(workout.start) / 60).rounded()))", "分钟")
-                heroMetric("活动消耗", workout.energyKilocalories.map { "\(Int($0))" } ?? "--", "kcal")
-                if let dist = workout.distanceMeters, dist > 0 {
-                    heroMetric("距离", dist >= 1000 ? String(format: "%.1f", dist/1000) : "\(Int(dist.rounded()))", dist >= 1000 ? "km" : "m")
-                } else {
-                    heroMetric("平均心率", workout.averageHeartRate.map { "\(Int($0))" } ?? "--", "bpm")
+        VelaGlassCard(padding: 18, cornerRadius: 22) {
+            VStack(alignment: .leading, spacing: 16) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
+                    heroMetric("时长", "\(Int((workout.end.timeIntervalSince(workout.start) / 60).rounded()))", "分钟")
+                    heroMetric("活动消耗", workout.energyKilocalories.map { "\(Int($0))" } ?? "--", "kcal")
+                    if let dist = workout.distanceMeters, dist > 0 {
+                        heroMetric("距离", dist >= 1000 ? String(format: "%.1f", dist/1000) : "\(Int(dist.rounded()))", dist >= 1000 ? "km" : "m")
+                    } else {
+                        heroMetric("平均心率", workout.averageHeartRate.map { "\(Int($0))" } ?? "--", "bpm")
+                    }
                 }
             }
         }
-        .padding(18)
-        .background(heroBackground)
     }
 
     private var intelligenceStrip: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("训练智能摘要", systemImage: "sparkles")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(bodyTextColor)
-
-            Text("本次为 \(workout.activityName) 运动，持续时间约 \(Int((workout.end.timeIntervalSince(workout.start) / 60).rounded())) 分钟。")
-                .font(.system(size: 13))
-                .foregroundStyle(mutedColor)
+        VelaGlassCard(padding: 16, cornerRadius: 20) {
+            HStack(spacing: 14) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(VelaTheme.accent)
+                    .frame(width: 38, height: 38)
+                    .background(Circle().fill(VelaTheme.accent.opacity(0.12)))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("训练智能摘要")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(VelaTheme.primaryText)
+                    Text("本次为 \(workout.activityName) 运动，持续时间约 \(Int((workout.end.timeIntervalSince(workout.start) / 60).rounded())) 分钟。")
+                        .font(.system(size: 13))
+                        .foregroundStyle(VelaTheme.secondaryText)
+                        .lineLimit(2)
+                }
+            }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBackground)
+        .appleIntelligenceGlow(isHighlighted: true, radius: 20)
     }
     
     private var heartRateChartSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VelaGlassCard(padding: 18, cornerRadius: 20) {
+          VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
                 Image(systemName: "waveform.path.ecg")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Color(hex: "#FF5252")) // Vibrant pulse red
+                    .foregroundStyle(Color(hex: "#FF5252"))
                 
                 Text(L10n.t("Heart Rate Fluctuation", "心率波动趋势"))
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(VelaTheme.fg)
+                    .foregroundStyle(VelaTheme.primaryText)
             }
             
             if isLoading {
-                ProgressView().tint(VelaTheme.accent).frame(height: 160).frame(maxWidth: .infinity)
+                VStack(spacing: 12) {
+                    HStack(spacing: 10) {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(VelaTheme.borderSoft)
+                            .frame(height: 60)
+                            .shimmer()
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(VelaTheme.borderSoft)
+                            .frame(height: 60)
+                            .shimmer()
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(VelaTheme.borderSoft)
+                            .frame(height: 60)
+                            .shimmer()
+                    }
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(VelaTheme.borderSoft)
+                        .frame(height: 28)
+                        .shimmer()
+                }
+                .frame(height: 160)
+                .frame(maxWidth: .infinity)
             } else if heartRates.isEmpty {
                 Text(L10n.t("No heart rate details recorded for this period.", "此时间段未记录心率明细。"))
                     .font(.system(size: 13))
@@ -308,39 +328,43 @@ struct WorkoutDetailView: View {
                 }
                 .buttonStyle(.plain)
             }
+          }
         }
-        .padding(18)
-        .background(cardBackground)
     }
 
     private func heartRateFact(title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(value)
                 .font(.system(size: 14, weight: .bold, design: .rounded))
-                .foregroundStyle(VelaTheme.fg)
+                .foregroundStyle(VelaTheme.primaryText)
             Text(title)
                 .font(.system(size: 10))
-                .foregroundStyle(VelaTheme.muted)
+                .foregroundStyle(VelaTheme.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.systemGroupedBackground))
+        .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.primaryText.opacity(0.05)))
     }
     
     private var gpsRouteSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VelaGlassCard(padding: 18, cornerRadius: 20) {
+          VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
                 Image(systemName: "map.fill")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Color(hex: "#4CAF50")) // Map green
+                    .foregroundStyle(Color(hex: "#4CAF50"))
                 
                 Text(L10n.t("GPS Workout Route", "GPS 运动轨迹"))
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(VelaTheme.fg)
+                    .foregroundStyle(VelaTheme.primaryText)
             }
             
             if isLoading {
-                ProgressView().tint(VelaTheme.accent).frame(height: 220).frame(maxWidth: .infinity)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(VelaTheme.borderSoft)
+                    .frame(height: 220)
+                    .shimmer()
+                    .frame(maxWidth: .infinity)
             } else if routeCoordinates.isEmpty {
                 Text(L10n.t("No GPS route mapping recorded for this workout.", "此项运动未记录 GPS 运动轨迹。"))
                     .font(.system(size: 13))
@@ -380,9 +404,8 @@ struct WorkoutDetailView: View {
                         .stroke(Color.black.opacity(0.06), lineWidth: 0.6)
                 )
             }
+          }
         }
-        .padding(18)
-        .background(cardBackground)
     }
     
     private var workoutCoachCard: some View {
@@ -659,15 +682,16 @@ struct WorkoutDetailView: View {
             history: strengthWorkouts.filter { $0.startedAt < strength.startedAt },
             exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
         )
-        return VStack(alignment: .leading, spacing: 12) {
+        return VelaGlassCard(padding: 16, cornerRadius: 20) {
+          VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("肌群分布")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(bodyTextColor)
+                    .foregroundStyle(VelaTheme.primaryText)
                 Spacer()
                 Text("有效组")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(mutedColor)
+                    .foregroundStyle(VelaTheme.secondaryText)
             }
 
             if analysis.muscleGroupSets.isEmpty {
@@ -699,9 +723,8 @@ struct WorkoutDetailView: View {
                     }
                 }
             }
+          }
         }
-        .padding(16)
-        .background(cardBackground)
     }
 
     private func exerciseList(_ strength: StrengthWorkoutRecord) -> some View {
@@ -713,7 +736,7 @@ struct WorkoutDetailView: View {
         return VStack(alignment: .leading, spacing: 12) {
             Text("动作与组次")
                 .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(bodyTextColor)
+                .foregroundStyle(VelaTheme.primaryText)
 
             ForEach(strength.exercises) { exercise in
                 VStack(alignment: .leading, spacing: 12) {
@@ -769,11 +792,11 @@ struct WorkoutDetailView: View {
                         } label: {
                             setRow(index: index, set: set)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.cardPress)
                     }
                 }
                 .padding(16)
-                .background(cardBackground)
+                .velaNativeCard(radius: 16)
             }
         }
     }
@@ -816,17 +839,16 @@ struct WorkoutDetailView: View {
     @ViewBuilder
     private func notesCard(_ strength: StrengthWorkoutRecord) -> some View {
         if !strength.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("训练备注")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(bodyTextColor)
-                Text(strength.notes)
-                    .font(.system(size: 13))
-                    .foregroundStyle(mutedColor)
+            VelaGlassCard(padding: 16, cornerRadius: 20) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("训练备注", systemImage: "note.text")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(VelaTheme.primaryText)
+                    Text(strength.notes)
+                        .font(.system(size: 13))
+                        .foregroundStyle(VelaTheme.secondaryText)
+                }
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(cardBackground)
         }
     }
 

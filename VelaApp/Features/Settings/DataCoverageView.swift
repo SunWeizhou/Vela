@@ -27,12 +27,33 @@ struct DataCoverageView: View {
                             coverageGroupCard(group)
                         }
                     }
-                    .padding(VelaTheme.screenPadding)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+                    .padding(.bottom, 80)
+                }
+                .scrollIndicators(.hidden)
+            }
+        }
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .top) {
+            if !isLoading {
+                VStack(spacing: 0) {
+                    HStack {
+                        Text(AppLanguage.stored.isChinese ? "数据覆盖" : "Data Coverage")
+                            .font(.system(size: 26, weight: .bold, design: .rounded))
+                            .foregroundStyle(VelaTheme.primaryText)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(.ultraThinMaterial)
+
+                    Divider()
+                        .opacity(0.4)
                 }
             }
         }
-        .navigationTitle(AppLanguage.stored.isChinese ? "数据覆盖" : "Data Coverage")
-        .navigationBarTitleDisplayMode(.large)
         .task {
             await loadCoverage()
         }
@@ -104,6 +125,7 @@ struct DataCoverageView: View {
                 )
             }
         }
+        .appleIntelligenceGlow(isHighlighted: pct >= 85, radius: 24)
     }
 
     // MARK: - Group Card

@@ -14,18 +14,33 @@ struct VitalsMetricDetailView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    metricHeader
-                    DateNavigationBar()
                     hero
                     trendCard
                     contextCard
                     actionCard
                 }
-                .padding(VelaTheme.screenPadding)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
                 .padding(.bottom, 96)
             }
+            .scrollIndicators(.hidden)
         }
         .navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("")
+        .safeAreaInset(edge: .top) {
+            VStack(spacing: 8) {
+                metricHeader
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                DateNavigationBar()
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+                
+                Divider()
+                    .opacity(0.4)
+            }
+            .background(.ultraThinMaterial)
+        }
         .task {
             await reload()
         }
@@ -57,7 +72,7 @@ struct VitalsMetricDetailView: View {
                     .background(Circle().fill(VelaTheme.surface))
                     .overlay(Circle().stroke(VelaTheme.stroke, lineWidth: 0.5))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
         }
         .padding(.top, 4)
     }
@@ -97,91 +112,94 @@ struct VitalsMetricDetailView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .heroCardSurface(accent: metric.tint)
+        .padding(18)
+        .velaNativeCard(radius: 20)
     }
 
     private var trendCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label(L10n.t("Trend", "趋势"), systemImage: "chart.xyaxis.line")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(VelaTheme.primaryText)
-                Spacer()
-                rangeSelector
-            }
-
-            if filteredTrend.isEmpty {
-                Text(L10n.t("Trend data will appear after more daily summaries are saved.", "保存更多每日摘要后会显示趋势。"))
-                    .font(.subheadline)
-                    .foregroundStyle(VelaTheme.secondaryText)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 18)
-            } else {
-                Chart(filteredTrend) { item in
-                    LineMark(
-                        x: .value("Day", item.date),
-                        y: .value(metric.shortTitle, item.value)
-                    )
-                    .foregroundStyle(metric.tint)
-                    .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
-                    .interpolationMethod(.catmullRom)
-
-                    PointMark(
-                        x: .value("Day", item.date),
-                        y: .value(metric.shortTitle, item.value)
-                    )
-                    .foregroundStyle(metric.tint)
-
-                    if let baseline = metric.baselineValue(in: viewModel.dashboard) {
-                        RuleMark(y: .value("Baseline", baseline))
-                            .foregroundStyle(VelaTheme.mutedText.opacity(0.42))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
-                    }
+        VelaGlassCard(padding: 16, cornerRadius: 20) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label(L10n.t("Trend", "趋势"), systemImage: "chart.xyaxis.line")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(VelaTheme.primaryText)
+                    Spacer()
+                    rangeSelector
                 }
-                .chartXAxis(.hidden)
-                .chartYAxis(.hidden)
-                .frame(height: 164)
+
+                if filteredTrend.isEmpty {
+                    Text(L10n.t("Trend data will appear after more daily summaries are saved.", "保存更多每日摘要后会显示趋势。"))
+                        .font(.subheadline)
+                        .foregroundStyle(VelaTheme.secondaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 18)
+                } else {
+                    Chart(filteredTrend) { item in
+                        LineMark(
+                            x: .value("Day", item.date),
+                            y: .value(metric.shortTitle, item.value)
+                        )
+                        .foregroundStyle(metric.tint)
+                        .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                        .interpolationMethod(.catmullRom)
+
+                        PointMark(
+                            x: .value("Day", item.date),
+                            y: .value(metric.shortTitle, item.value)
+                        )
+                        .foregroundStyle(metric.tint)
+
+                        if let baseline = metric.baselineValue(in: viewModel.dashboard) {
+                            RuleMark(y: .value("Baseline", baseline))
+                                .foregroundStyle(VelaTheme.mutedText.opacity(0.42))
+                                .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                        }
+                    }
+                    .chartXAxis(.hidden)
+                    .chartYAxis(.hidden)
+                    .frame(height: 164)
+                }
             }
         }
-        .cardSurface()
     }
 
     private var contextCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(L10n.t("Context", "指标背景"), systemImage: "slider.horizontal.3")
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(VelaTheme.primaryText)
+        VelaGlassCard(padding: 16, cornerRadius: 20) {
+            VStack(alignment: .leading, spacing: 12) {
+                Label(L10n.t("Context", "指标背景"), systemImage: "slider.horizontal.3")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(VelaTheme.primaryText)
 
-            if metric.supportsRangeBar {
-                VelaRangeBar(
-                    label: metric.shortTitle,
-                    todayValue: metric.currentValue(in: viewModel.dashboard),
-                    baselineValue: metric.baselineValue(in: viewModel.dashboard),
-                    isLowerBetter: metric.lowerIsBetter,
-                    unit: metric.unit
+                if metric.supportsRangeBar {
+                    VelaRangeBar(
+                        label: metric.shortTitle,
+                        todayValue: metric.currentValue(in: viewModel.dashboard),
+                        baselineValue: metric.baselineValue(in: viewModel.dashboard),
+                        isLowerBetter: metric.lowerIsBetter,
+                        unit: metric.unit
+                    )
+                }
+
+                contextRow(
+                    title: L10n.t("Today", "今日"),
+                    value: metric.valueText(in: viewModel.dashboard),
+                    icon: metric.icon,
+                    tint: metric.tint
                 )
+
+                contextRow(
+                    title: L10n.t("Baseline", "基线"),
+                    value: metric.baselineText(in: viewModel.dashboard),
+                    icon: "scope",
+                    tint: VelaTheme.secondaryText
+                )
+
+                Text(metric.explanation)
+                    .font(.caption)
+                    .foregroundStyle(VelaTheme.secondaryText)
+                    .lineSpacing(3)
             }
-
-            contextRow(
-                title: L10n.t("Today", "今日"),
-                value: metric.valueText(in: viewModel.dashboard),
-                icon: metric.icon,
-                tint: metric.tint
-            )
-
-            contextRow(
-                title: L10n.t("Baseline", "基线"),
-                value: metric.baselineText(in: viewModel.dashboard),
-                icon: "scope",
-                tint: VelaTheme.secondaryText
-            )
-
-            Text(metric.explanation)
-                .font(.caption)
-                .foregroundStyle(VelaTheme.secondaryText)
-                .lineSpacing(3)
         }
-        .cardSurface()
     }
 
     private var actionCard: some View {
@@ -205,7 +223,7 @@ struct VitalsMetricDetailView: View {
                         .padding(.vertical, 5)
                         .background(Capsule(style: .continuous).fill(selectedRange == range ? VelaTheme.strongControl : VelaTheme.subtleFill))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
             }
         }
     }
@@ -575,7 +593,7 @@ private struct DateNavigationBar: View {
                         .frame(width: 36, height: 36)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
 
                 Spacer()
 
@@ -596,7 +614,7 @@ private struct DateNavigationBar: View {
                         }
                     }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
                 .sheet(isPresented: $showDatePicker) {
                     datePickerSheet
                 }
@@ -615,7 +633,7 @@ private struct DateNavigationBar: View {
                         .frame(width: 36, height: 36)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
                 .disabled(viewModel.isToday)
             }
             .padding(.horizontal, 8)
@@ -632,7 +650,7 @@ private struct DateNavigationBar: View {
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(VelaTheme.accent)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
                 .padding(.top, 2)
             }
         }
@@ -663,12 +681,12 @@ private struct DateNavigationBar: View {
         .padding(.vertical, 4)
         .background(
             Capsule(style: .continuous)
-                .fill(Color.white.opacity(0.70))
-                .shadow(color: Color.black.opacity(0.05), radius: 14, y: 6)
+                .fill(.ultraThinMaterial)
+                .shadow(color: Color.black.opacity(0.04), radius: 10, y: 4)
         )
         .overlay(
             Capsule(style: .continuous)
-                .stroke(Color.black.opacity(0.06), lineWidth: 0.5)
+                .stroke(Color.white.opacity(0.3), lineWidth: 0.5)
         )
     }
 

@@ -41,72 +41,95 @@ struct BiologyView: View {
         return BiologicalAgeEngine().calculate(input: input)
     }
 
-    var body: some View {
-        ZStack {
-            VelaBackground()
+    // MARK: - Biology Title Header
+    private var biologyHeader: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(bioAgeResult.isPhenoAge
+                    ? L10n.t("Biological Age Estimate", "生物年龄估算")
+                    : L10n.t("Health Age Trend Beta", "健康年龄趋势 Beta")
+                )
+                .font(.system(size: 26, weight: .bold, design: .rounded))
+                .foregroundStyle(VelaTheme.primaryText)
+                Text(L10n.t("BIOLOGY DASHBOARD", "生物特征仪表盘"))
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(VelaTheme.accent)
+                    .tracking(0.8)
+            }
+            Spacer()
             
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Header Section
-                    VStack(spacing: 4) {
-                        Text(L10n.t("BIOLOGY DASHBOARD", "生物特征面板"))
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(VelaTheme.accent)
-                            .tracking(1.5)
-                        
-                        Text(bioAgeResult.isPhenoAge
-                            ? L10n.t("Biological Age Estimate", "生物年龄估算")
-                            : L10n.t("Health Age Trend Beta", "健康年龄趋势 Beta")
-                        )
-                            .font(.system(size: 28, weight: .bold, design: .rounded))
-                            .foregroundStyle(VelaTheme.primaryText)
-                    }
-                    .padding(.top, 16)
+            Button {
+                UISelectionFeedbackGenerator().selectionChanged()
+                showLogSheet = true
+            } label: {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 26, weight: .medium))
+                    .foregroundStyle(VelaTheme.accent)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                if chronologicalAge == nil {
+                    profileSetupCard
+                } else {
+                    // Arc Gauge Hero Card
+                    bioAgeArcCard
                     
-                    if chronologicalAge == nil {
-                        profileSetupCard
-                    } else {
-                        // Arc Gauge Hero Card
-                        bioAgeArcCard
+                    // Stats Breakdown Grid
+                    statsGrid
+                    
+                    // Wearables and Biomarkers Sections
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionLabel(title: L10n.t("Wearable Physiology", "生理可穿戴指标"), icon: "appletwatch")
+                        wearableFactorsSection
                         
-                        // Stats Breakdown Grid
-                        statsGrid
-                        
-                        // Wearables and Biomarkers Sections
-                        VStack(alignment: .leading, spacing: 16) {
-                            SectionLabel(title: L10n.t("Wearable Physiology", "生理可穿戴指标"), icon: "appletwatch")
-                            wearableFactorsSection
-                            
-                            HStack {
-                                SectionLabel(title: L10n.t("Lab Blood Biomarkers", "血检生化指标"), icon: "drop.fill")
-                                Spacer()
-                                Button {
-                                    UISelectionFeedbackGenerator().selectionChanged()
-                                    showLogSheet = true
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "plus.circle.fill")
-                                        Text(L10n.t("Add Lab Results", "录入血检"))
-                                    }
-                                    .font(.caption.bold())
-                                    .foregroundStyle(VelaTheme.accent)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 6)
-                                    .background(VelaTheme.accent.opacity(0.12))
-                                    .clipShape(Capsule())
+                        HStack {
+                            SectionLabel(title: L10n.t("Lab Blood Biomarkers", "血检生化指标"), icon: "drop.fill")
+                            Spacer()
+                            Button {
+                                UISelectionFeedbackGenerator().selectionChanged()
+                                showLogSheet = true
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "plus.circle.fill")
+                                    Text(L10n.t("Add Lab Results", "录入血检"))
                                 }
+                                .font(.caption.bold())
+                                .foregroundStyle(VelaTheme.accent)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(VelaTheme.accent.opacity(0.12))
+                                .clipShape(Capsule())
                             }
-                            .padding(.top, 8)
-                            
-                            biomarkersSection
                         }
-                        .padding(.horizontal, VelaTheme.screenPadding)
+                        .padding(.top, 8)
+                        
+                        biomarkersSection
                     }
-                    
-                    Spacer(minLength: 40)
+                    .padding(.horizontal, VelaTheme.screenPadding)
                 }
+                
+                Spacer(minLength: 40)
+            }
+            .padding(.top, 12)
+        }
+        .scrollIndicators(.hidden)
+        .safeAreaInset(edge: .top) {
+            VStack(spacing: 0) {
+                biologyHeader
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(.ultraThinMaterial)
+                
+                Divider()
+                    .opacity(0.4)
             }
         }
+        .background(VelaTheme.systemGroupedBackground)
         .sheet(isPresented: $showLogSheet) {
             BloodLogSheetView()
                 .presentationDetents([.medium, .large])
@@ -263,15 +286,8 @@ struct BiologyView: View {
         .padding(.vertical, 24)
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard, style: .continuous)
-                .fill(VelaTheme.cardBackground.opacity(0.4))
-                .shadow(color: VelaTheme.cardShadowColor, radius: 10, x: 0, y: 5)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard, style: .continuous)
-                .stroke(VelaTheme.stroke, lineWidth: 1)
-        )
+        .velaNativeCard(radius: 24)
+        .appleIntelligenceGlow(isHighlighted: isPositive, radius: 24)
         .padding(.horizontal, VelaTheme.screenPadding)
     }
     
@@ -315,12 +331,7 @@ struct BiologyView: View {
             }
         }
         .padding(14)
-        .background(VelaTheme.cardBackground.opacity(0.4))
-        .cornerRadius(VelaTheme.cornerRadiusCard)
-        .overlay(
-            RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard, style: .continuous)
-                .stroke(VelaTheme.stroke, lineWidth: 1)
-        )
+        .velaNativeCard(radius: 16)
     }
     
     private var biomarkersSection: some View {
@@ -366,12 +377,7 @@ struct BiologyView: View {
             }
         }
         .padding(14)
-        .background(VelaTheme.cardBackground.opacity(0.4))
-        .cornerRadius(VelaTheme.cornerRadiusCard)
-        .overlay(
-            RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard, style: .continuous)
-                .stroke(VelaTheme.stroke, lineWidth: 1)
-        )
+        .velaNativeCard(radius: 16)
     }
 }
 
@@ -426,12 +432,7 @@ struct StatGridCard: View {
             }
         }
         .padding(14)
-        .background(VelaTheme.cardBackground.opacity(0.4))
-        .cornerRadius(VelaTheme.cornerRadiusTile)
-        .overlay(
-            RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusTile, style: .continuous)
-                .stroke(VelaTheme.stroke, lineWidth: 1)
-        )
+        .velaNativeCard(radius: 16)
     }
 }
 

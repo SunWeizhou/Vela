@@ -83,8 +83,10 @@ struct VelaMetricDetailView: View {
     let metric: MetricType
     @Environment(\.colorScheme) private var cs
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var dashboardVM: DashboardViewModel
-    @Query(sort: \DailyHealthSummaryRecord.date, order: .forward) private var dailyRecords: [DailyHealthSummaryRecord]
+    @ObservedObject private var appState = VelaAppState.shared
+    @State private var dailyRecords: [DailyHealthSummaryRecord] = []
     @AppStorage(SleepTargetSettings.hoursKey) private var sleepTargetHours = SleepTargetSettings.defaultHours
     @AppStorage("agent_bedtime_hour") private var targetBedtimeHour = 22
     @AppStorage("agent_bedtime_minute") private var targetBedtimeMinute = 0
@@ -163,6 +165,31 @@ struct VelaMetricDetailView: View {
         .task(id: strainWorkoutQueryKey) {
             guard metric == .strain else { return }
             await loadHeartRateZones()
+        }
+        .onAppear {
+            loadDailyRecords()
+        }
+        .onChange(of: dashboardVM.selectedDate) {
+            loadDailyRecords()
+        }
+        .onChange(of: appState.localDataRevision) {
+            loadDailyRecords()
+        }
+    }
+
+    private func loadDailyRecords() {
+        let calendar = Calendar.current
+        let endDate = calendar.startOfDay(for: dashboardVM.selectedDate)
+        let end = calendar.date(byAdding: .day, value: 1, to: endDate) ?? endDate
+        // Max range we need for charts is 180 days (.halfYear)
+        let start = calendar.date(byAdding: .day, value: -190, to: end) ?? end
+        
+        let descriptor = FetchDescriptor<DailyHealthSummaryRecord>(
+            predicate: #Predicate<DailyHealthSummaryRecord> { $0.date >= start && $0.date <= end },
+            sortBy: [SortDescriptor(\.date, order: .forward)]
+        )
+        if let fetched = try? modelContext.fetch(descriptor) {
+            self.dailyRecords = fetched
         }
     }
 
@@ -1247,9 +1274,8 @@ struct VelaMetricDetailView: View {
                             .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
                     }
 
-                    Text("当前仅有每日压力指数。日内压力曲线和高、中、低时长需要连续采样数据，暂不展示。")
-                        .font(VelaTheme.caption1())
-                        .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                    DailyStressChartView(isSleep: isSleep)
+                        .frame(height: 145)
                         .padding(.vertical, 8)
                 }
                 .padding(16)
