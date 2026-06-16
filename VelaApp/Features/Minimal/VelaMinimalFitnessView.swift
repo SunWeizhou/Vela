@@ -12,11 +12,33 @@ struct VelaTrainingView: View {
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     @EnvironmentObject private var services: VelaServices
     @ObservedObject private var appState = VelaAppState.shared
-    @Query(sort: \StrengthWorkoutRecord.startedAt, order: .reverse) private var strengthWorkouts: [StrengthWorkoutRecord]
-    @Query(sort: \WorkoutEventRecord.startedAt, order: .reverse) private var localWorkoutEvents: [WorkoutEventRecord]
-    @Query(sort: \WorkoutTemplateRecord.title) private var workoutTemplates: [WorkoutTemplateRecord]
-    @Query(sort: \TrainingPlanRecord.updatedAt, order: .reverse) private var trainingPlans: [TrainingPlanRecord]
-    @Query(sort: \DailyOperatingPlanRecord.generatedAt, order: .reverse) private var operatingPlans: [DailyOperatingPlanRecord]
+
+    private static let lookbackDays = 90
+    private var trainingLookbackStart: Date {
+        Calendar.current.date(byAdding: .day, value: -Self.lookbackDays, to: dashboardVM.selectedDate) ?? dashboardVM.selectedDate
+    }
+
+    @Query(sort: \StrengthWorkoutRecord.startedAt, order: .reverse) private var allStrengthWorkouts: [StrengthWorkoutRecord]
+    @Query(sort: \WorkoutEventRecord.startedAt, order: .reverse) private var allWorkoutEvents: [WorkoutEventRecord]
+    @Query(sort: \WorkoutTemplateRecord.title) private var allWorkoutTemplates: [WorkoutTemplateRecord]
+    @Query(sort: \TrainingPlanRecord.updatedAt, order: .reverse) private var allTrainingPlans: [TrainingPlanRecord]
+    @Query(sort: \DailyOperatingPlanRecord.generatedAt, order: .reverse) private var allOperatingPlans: [DailyOperatingPlanRecord]
+
+    private var strengthWorkouts: [StrengthWorkoutRecord] {
+        allStrengthWorkouts.filter { $0.startedAt >= trainingLookbackStart }
+    }
+    private var localWorkoutEvents: [WorkoutEventRecord] {
+        allWorkoutEvents.filter { $0.startedAt >= trainingLookbackStart }
+    }
+    private var workoutTemplates: [WorkoutTemplateRecord] {
+        allWorkoutTemplates
+    }
+    private var trainingPlans: [TrainingPlanRecord] {
+        allTrainingPlans
+    }
+    private var operatingPlans: [DailyOperatingPlanRecord] {
+        allOperatingPlans
+    }
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
     private var activePlan: TrainingPlanRecord? {

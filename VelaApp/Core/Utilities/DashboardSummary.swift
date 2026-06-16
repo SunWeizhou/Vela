@@ -22,7 +22,19 @@ struct DashboardSummary: Hashable, @unchecked Sendable {
     var trainingDecision: TrainingDecision {
         get {
             guard let _trainingDecision else {
-                preconditionFailure("DashboardSummary must initialize a canonical training decision.")
+                return TrainingDecision.compatibilityView(
+                    of: DailyTrainingDecision(
+                        decision: .rest,
+                        volumeMultiplier: 0.5,
+                        intensityCap: 50,
+                        reasons: ["等待综合身体状态分析"],
+                        userFacingSummary: "等待数据同步完成后生成",
+                        confidence: 0.0,
+                        source: "DashboardSummary.fallback",
+                        safetyNotice: "General wellness and training guidance only."
+                    ),
+                    bodyState: bodyState
+                )
             }
             return _trainingDecision
         }
@@ -30,7 +42,60 @@ struct DashboardSummary: Hashable, @unchecked Sendable {
             _trainingDecision = newValue
         }
     }
-    
+
+    private var _bodyState: BodyState?
+    var bodyState: BodyState {
+        get {
+            _bodyState ?? BodyState(
+                date: date,
+                readiness: .unknown,
+                recovery: MetricResult(
+                    name: "Recovery", value: nil, band: .low, confidence: .low,
+                    components: [:], componentWeights: [:], reasons: ["No data"],
+                    missingInputs: ["hrv", "rhr", "sleep"],
+                    dataWindow: DateInterval(start: date, end: date),
+                    source: .derived, algorithmVersion: "1.0", lastUpdated: date
+                ),
+                sleep: MetricResult(
+                    name: "Sleep", value: nil, band: .low, confidence: .low,
+                    components: [:], componentWeights: [:], reasons: ["No data"],
+                    missingInputs: ["duration"],
+                    dataWindow: DateInterval(start: date, end: date),
+                    source: .derived, algorithmVersion: "1.0", lastUpdated: date
+                ),
+                strain: MetricResult(
+                    name: "Strain", value: nil, band: .low, confidence: .low,
+                    components: [:], componentWeights: [:], reasons: ["No data"],
+                    missingInputs: ["daily_load"],
+                    dataWindow: DateInterval(start: date, end: date),
+                    source: .derived, algorithmVersion: "1.0", lastUpdated: date
+                ),
+                energy: MetricResult(
+                    name: "Energy Bank", value: nil, band: .low, confidence: .low,
+                    components: [:], componentWeights: [:], reasons: ["No data"],
+                    missingInputs: ["recovery", "sleep"],
+                    dataWindow: DateInterval(start: date, end: date),
+                    source: .derived, algorithmVersion: "1.0", lastUpdated: date
+                ),
+                stress: MetricResult(
+                    name: "Stress", value: nil, band: .low, confidence: .low,
+                    components: [:], componentWeights: [:], reasons: ["No data"],
+                    missingInputs: ["hrv", "rhr"],
+                    dataWindow: DateInterval(start: date, end: date),
+                    source: .derived, algorithmVersion: "1.0", lastUpdated: date
+                ),
+                localFatigue: [:],
+                drivers: [],
+                confidence: .unavailable,
+                freshness: .stale,
+                source: "DashboardSummary.fallback",
+                activeStatus: "active",
+                hash: ""
+            )
+        }
+        set { _bodyState = newValue }
+    }
+
     init(
         date: Date,
         sleepSummary: SleepSummary,
@@ -64,14 +129,7 @@ struct DashboardSummary: Hashable, @unchecked Sendable {
         self.dailyInsight = dailyInsight
         self.source = source
         self._trainingDecision = nil
-
-        let bodyState = BodyStateKernel().build(input: BodyStateInput(
-            dashboard: self,
-            activeStatus: "active",
-            generatedAt: date
-        ))
-        let decision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(bodyState: bodyState))
-        self._trainingDecision = TrainingDecision.compatibilityView(of: decision, bodyState: bodyState)
+        self._bodyState = nil
     }
 
     enum DataSource: String, Hashable {

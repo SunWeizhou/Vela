@@ -372,6 +372,7 @@ final class DailySummaryUseCase {
             recentStrengthSummary: recentStrengthSummary,
             trainingResponses: recentTrainingResponses
         ))
+        dashboard.bodyState = bodyState
         dashboard.trainingDecision = TrainingDecision.compatibilityView(
             of: dailyTrainingDecision,
             bodyState: bodyState

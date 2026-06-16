@@ -300,12 +300,18 @@ struct VelaShell: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         let isActive = appState.selectedTab == tab.rawValue
-        return content()
-            .opacity(isActive ? 1 : 0)
-            .animation(VelaTheme.snappy, value: appState.selectedTab)
-            .allowsHitTesting(isActive)
-            .accessibilityHidden(!isActive)
-            .zIndex(isActive ? 1 : 0)
+        if isActive {
+            return AnyView(
+                content()
+                    .zIndex(1)
+            )
+        } else {
+            return AnyView(
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .zIndex(0)
+            )
+        }
     }
 
     private func customTabButton(_ tab: VelaTab) -> some View {

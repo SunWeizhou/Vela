@@ -1302,6 +1302,10 @@ struct CreateTrainingPlanTool: AgentTool {
                             .string("intensity")
                         ])
                     ])
+                ]),
+                "idempotency_key": .object([
+                    "type": .string("string"),
+                    "description": .string("Unique key for idempotency. Generate once and reuse on retry to prevent duplicate plan creation. Use a UUID string.")
                 ])
             ]),
             "required": .array([.string("title"), .string("goal_description"), .string("weeks_count"), .string("days")])
@@ -1318,6 +1322,7 @@ struct CreateTrainingPlanTool: AgentTool {
             }
 
         struct PlanInput: Codable {
+            let idempotency_key: String?
             let title: String
             let goal_description: String
             let weeks_count: Int
@@ -1340,6 +1345,17 @@ struct CreateTrainingPlanTool: AgentTool {
             input = try decoder.decode(PlanInput.self, from: data)
         } catch {
             return "JSON decode error: \(error.localizedDescription)"
+        }
+
+        // Check idempotency: skip if a plan with this key already exists
+        let idempotencyKey = input.idempotency_key ?? UUID().uuidString
+        if let key = input.idempotency_key {
+            let keyFetch = FetchDescriptor<TrainingPlanRecord>(
+                predicate: #Predicate { $0.idempotencyKey == key }
+            )
+            if let existing = try? modelContext.fetch(keyFetch), let plan = existing.first {
+                return "Plan already exists: \(plan.title) (idempotency_key=\(key)). No duplicate created."
+            }
         }
 
         // Deactivate all existing plans first
@@ -1373,6 +1389,7 @@ struct CreateTrainingPlanTool: AgentTool {
             isActive: true,
             days: trainingDays
         )
+        plan.idempotencyKey = idempotencyKey
 
         modelContext.insert(plan)
         try modelContext.save()

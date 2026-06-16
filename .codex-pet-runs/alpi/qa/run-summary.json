@@ -1,9 +1,0 @@
-{
-  "ok": true,
-  "run_dir": "/Users/sunweizhou/Desktop/AI Project/Vela/.codex-pet-runs/alpi",
-  "spritesheet": "/Users/sunweizhou/Desktop/AI Project/Vela/.codex-pet-runs/alpi/final/spritesheet.webp",
-  "validation": "/Users/sunweizhou/Desktop/AI Project/Vela/.codex-pet-runs/alpi/final/validation.json",
-  "contact_sheet": "/Users/sunweizhou/Desktop/AI Project/Vela/.codex-pet-runs/alpi/qa/contact-sheet.png",
-  "review": "/Users/sunweizhou/Desktop/AI Project/Vela/.codex-pet-runs/alpi/qa/review.json",
-  "package": "/Users/sunweizhou/.codex/pets/alpi"
-}

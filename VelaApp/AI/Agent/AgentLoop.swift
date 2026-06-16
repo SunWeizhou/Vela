@@ -1,6 +1,14 @@
 import Foundation
 import SwiftData
 
+/// Risk level for tool operations — AgentLoop uses this for guardrails.
+enum ToolRiskLevel: String, Sendable {
+    case read        // Query data, no side effects — execute freely
+    case propose     // Generate suggestion that needs user confirmation
+    case write       // Mutate data with idempotency — allow with key check
+    case destructive // Delete or deactivate — require explicit confirmation
+}
+
 // MARK: - Agent Loop
 
 protocol AgentChatProvider: Sendable {
@@ -17,11 +25,23 @@ struct AgentLoop {
     let provider: any AgentChatProvider
     let toolRegistry: ToolRegistry
     let maxIterations: Int
+    /// Maximum total tool calls allowed per loop run (across all iterations).
+    let maxToolCalls: Int
+    /// Timeout per individual tool execution in seconds.
+    let toolTimeoutSeconds: Int
 
-    init(provider: any AgentChatProvider, toolRegistry: ToolRegistry, maxIterations: Int = 3) {
+    init(
+        provider: any AgentChatProvider,
+        toolRegistry: ToolRegistry,
+        maxIterations: Int = 3,
+        maxToolCalls: Int = 15,
+        toolTimeoutSeconds: Int = 20
+    ) {
         self.provider = provider
         self.toolRegistry = toolRegistry
         self.maxIterations = maxIterations
+        self.maxToolCalls = maxToolCalls
+        self.toolTimeoutSeconds = toolTimeoutSeconds
     }
 
     /// Runs the agentic loop and returns the final response plus tool execution details.
@@ -42,6 +62,8 @@ struct AgentLoop {
         var activeDataVersion = initialDataVersion
         var dataVersionWarnings: [String] = []
         var providerCallCount = 0
+        var duplicateToolTracker: Set<String> = []
+        var toolCallBudget = maxToolCalls
 
         for _ in 0..<maxIterations {
             // ── Inject data-version notice if tools returned fresher data than the snapshot ──
@@ -51,6 +73,14 @@ struct AgentLoop {
                     dataVersionWarnings.append(notice)
                     agentMessages.append(ChatMessage(role: .system, content: notice))
                 }
+            }
+
+            guard toolCallBudget > 0 else {
+                agentMessages.append(ChatMessage(
+                    role: .system,
+                    content: "[BUDGET EXCEEDED: Maximum tool calls (\(maxToolCalls)) reached. Please summarize what was done so far and suggest next steps to the user.]"
+                ))
+                break
             }
 
             providerCallCount += 1
@@ -68,7 +98,27 @@ struct AgentLoop {
                 ))
 
                 for tc in toolCalls {
-                    let result = await toolRegistry.execute(name: tc.name, arguments: tc.arguments)
+                    toolCallBudget -= 1
+
+                    // Duplicate tool call detection (same name + same args within this loop)
+                    let callSignature = "\(tc.name):\(tc.arguments)"
+                    if !duplicateToolTracker.insert(callSignature).inserted {
+                        agentMessages.append(ChatMessage(
+                            role: .tool,
+                            content: "[DUPLICATE DETECTED: Tool \(tc.name) called with identical arguments already executed this session. The result was not re-executed. Use the previous result instead.]",
+                            toolCallId: tc.id
+                        ))
+                        continue
+                    }
+
+                    // Execute with timeout
+                    let result: String
+                    if toolTimeoutSeconds > 0 {
+                        result = await executeWithTimeout(name: tc.name, arguments: tc.arguments)
+                    } else {
+                        result = await toolRegistry.execute(name: tc.name, arguments: tc.arguments)
+                    }
+
                     agentMessages.append(ChatMessage(
                         role: .tool,
                         content: result,
@@ -179,15 +229,15 @@ struct AgentLoop {
             inputMessages: inputMessages.map {
                 AgentRunTrace.ChatMessageSnapshot(
                     role: $0.role.rawValue,
-                    content: $0.content,
+                    content: sanitizeForTrace($0.content),
                     toolCalls: $0.toolCalls?.map(\.name)
                 )
             },
             executedTools: executedTools.map {
                 AgentRunTrace.ExecutedToolSnapshot(
                     name: $0.name,
-                    arguments: $0.arguments,
-                    result: $0.result
+                    arguments: redactToolArguments($0.name, arguments: $0.arguments),
+                    result: sanitizeForTrace($0.result)
                 )
             },
             finalResponse: finalResponse,
@@ -197,12 +247,86 @@ struct AgentLoop {
         )
     }
 
+    /// Truncates and hashes sensitive health/diet/journal content for trace storage,
+    /// while preserving enough context for debugging.
+    private func sanitizeForTrace(_ text: String) -> String {
+        let sensitivePatterns = [
+            "food_analysis", "calories", "protein", "carbohydrates",
+            "fat", "journal", "日记", "饮食", "food_log", "meal_photo",
+            "blood", "血糖", "glucose", "heart_rate", "心率",
+            "HRV", "睡眠", "sleep", "recovery", "恢复"
+        ]
+        guard text.count > 200 else { return text }
+
+        // Check if content likely contains sensitive health/diet data
+        let lowercased = text.lowercased()
+        let needsTruncation = sensitivePatterns.contains(where: { lowercased.contains($0.lowercased()) })
+        guard needsTruncation else { return text }
+
+        let hash = ContentHash.hash(text)
+        let prefix = String(text.prefix(80)).replacingOccurrences(of: "\n", with: " ")
+        return "[TRUNCATED] \(prefix)... hash=\(hash.prefix(12)) (original length=\(text.count))"
+    }
+
+    /// Redacts sensitive tool arguments while preserving non-sensitive ones.
+    private func redactToolArguments(_ toolName: String, arguments: String) -> String {
+        let fullyRedacted = ["food_photo", "food_search", "update_food_log", "journal_entry", "journal_search"]
+        guard !fullyRedacted.contains(toolName) else {
+            return "[REDACTED: tool=\(toolName)]"
+        }
+        // For wiki tools, preserve the file name but redact content
+        if toolName == "update_user_wiki",
+           let data = arguments.data(using: .utf8),
+           var obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            obj["content"] = "[REDACTED: content omitted from trace]"
+            if let redacted = try? JSONSerialization.data(withJSONObject: obj, options: .sortedKeys) {
+                return String(data: redacted, encoding: .utf8) ?? arguments
+            }
+        }
+        return arguments
+    }
+
     /// Extracts the data_version field from a JSON tool result.
     private static func extractDataVersion(from jsonResult: String) -> String? {
         guard let data = jsonResult.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         return obj["data_version"] as? String
             ?? obj["context_hash"] as? String
+    }
+
+    /// Executes a tool with a timeout. If the tool exceeds the timeout, returns an error message.
+    private func executeWithTimeout(name: String, arguments: String) async -> String {
+        return await withTaskGroup(of: String.self) { group in
+            group.addTask {
+                return await self.toolRegistry.execute(name: name, arguments: arguments)
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(self.toolTimeoutSeconds) * 1_000_000_000)
+                return "[TIMEOUT: Tool \(name) exceeded \(self.toolTimeoutSeconds)s limit. Result may be incomplete.]"
+            }
+            let first = await group.next() ?? "[ERROR: Tool execution failed to return a result.]"
+            group.cancelAll()
+            return first
+        }
+    }
+
+    /// Maps a tool name to its risk level for guardrail enforcement.
+    static func riskLevel(for toolName: String) -> ToolRiskLevel {
+        switch toolName {
+        case "web_search", "today_health", "health_history", "health_trend",
+             "workout_history", "strength_workout_history", "training_response_history",
+             "journal_correlation", "render_correlation_chart":
+            return .read
+        case "update_user_wiki":
+            return .propose
+        case "update_food_log", "food_photo", "food_search", "create_training_plan":
+            return .write
+        case "delete_plan", "deactivate_all_plans":
+            return .destructive
+        default:
+            // Default conservative: unknown tools are write-risk
+            return .write
+        }
     }
 
 }

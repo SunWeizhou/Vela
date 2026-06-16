@@ -15,25 +15,66 @@ struct VelaTodayView: View {
     @ObservedObject private var appState = VelaAppState.shared
     @ObservedObject private var locationManager = LocationManager.shared
     @Query(sort: \CoachArtifactRecord.createdAt, order: .reverse)
-    private var coachArtifacts: [CoachArtifactRecord]
+    private var allCoachArtifacts: [CoachArtifactRecord]
     @Query(sort: \StrengthWorkoutRecord.startedAt, order: .reverse)
-    private var strengthWorkouts: [StrengthWorkoutRecord]
+    private var allStrengthWorkouts: [StrengthWorkoutRecord]
     @Query(sort: \WorkoutEventRecord.startedAt, order: .reverse)
-    private var workoutEvents: [WorkoutEventRecord]
+    private var allWorkoutEvents: [WorkoutEventRecord]
     @Query(sort: \TrainingResponseRecord.date, order: .reverse)
-    private var trainingResponses: [TrainingResponseRecord]
+    private var allTrainingResponses: [TrainingResponseRecord]
     @Query(sort: \FoodLogRecord.createdAt, order: .reverse)
-    private var foodLogs: [FoodLogRecord]
+    private var allFoodLogs: [FoodLogRecord]
     @Query(sort: \JournalEntryRecord.createdAt, order: .reverse)
-    private var journalEntries: [JournalEntryRecord]
+    private var allJournalEntries: [JournalEntryRecord]
     @Query(sort: \DailyHealthSummaryRecord.date, order: .reverse)
-    private var dailySummaries: [DailyHealthSummaryRecord]
+    private var allDailySummaries: [DailyHealthSummaryRecord]
     @Query(sort: \TrainingPlanRecord.updatedAt, order: .reverse)
-    private var trainingPlans: [TrainingPlanRecord]
+    private var allTrainingPlans: [TrainingPlanRecord]
     @Query(sort: \DailyOperatingPlanRecord.generatedAt, order: .reverse)
-    private var operatingPlans: [DailyOperatingPlanRecord]
+    private var allOperatingPlans: [DailyOperatingPlanRecord]
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
+
+    /// Lookback window for health-related queries (42 days matches recovery engine baseline)
+    private static let healthLookbackDays = 42
+    /// Recent window for strength/training queries
+    private static let trainingLookbackDays = 30
+
+    private var lookbackStart: Date {
+        Calendar.current.date(byAdding: .day, value: -Self.healthLookbackDays, to: dashboardVM.selectedDate) ?? dashboardVM.selectedDate
+    }
+
+    private var trainingLookbackStart: Date {
+        Calendar.current.date(byAdding: .day, value: -Self.trainingLookbackDays, to: dashboardVM.selectedDate) ?? dashboardVM.selectedDate
+    }
+
+    private var coachArtifacts: [CoachArtifactRecord] {
+        allCoachArtifacts.filter { $0.createdAt >= trainingLookbackStart }
+    }
+    private var strengthWorkouts: [StrengthWorkoutRecord] {
+        allStrengthWorkouts.filter { $0.startedAt >= trainingLookbackStart }
+    }
+    private var workoutEvents: [WorkoutEventRecord] {
+        allWorkoutEvents.filter { $0.startedAt >= trainingLookbackStart }
+    }
+    private var trainingResponses: [TrainingResponseRecord] {
+        allTrainingResponses.filter { $0.date >= lookbackStart }
+    }
+    private var foodLogs: [FoodLogRecord] {
+        allFoodLogs.filter { $0.createdAt >= lookbackStart }
+    }
+    private var journalEntries: [JournalEntryRecord] {
+        allJournalEntries.filter { $0.createdAt >= lookbackStart }
+    }
+    private var dailySummaries: [DailyHealthSummaryRecord] {
+        allDailySummaries.filter { $0.date >= lookbackStart }
+    }
+    private var trainingPlans: [TrainingPlanRecord] {
+        allTrainingPlans
+    }
+    private var operatingPlans: [DailyOperatingPlanRecord] {
+        allOperatingPlans
+    }
     private var recentStrengthSummary: RecentTrainingSummary {
         TrainingAnalyticsService().buildRecentSummary(
             workouts: strengthWorkouts,

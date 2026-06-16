@@ -1466,6 +1466,7 @@ public final class TrainingPlanRecord {
     public var createdAt: Date
     public var updatedAt: Date
     public var serializedDays: String
+    public var idempotencyKey: String?
 
     @Transient
     public var days: [TrainingDay] {

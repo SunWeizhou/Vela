@@ -7,19 +7,40 @@ struct VelaMeView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var dashboardVM: DashboardViewModel
 
+    private static let lookbackDays = 42
+    private var lookbackStart: Date {
+        Calendar.current.date(byAdding: .day, value: -Self.lookbackDays, to: dashboardVM.selectedDate) ?? dashboardVM.selectedDate
+    }
+
     @Query(sort: \OnboardingState.updatedAt, order: .reverse)
     private var onboardingStates: [OnboardingState]
     @Query(sort: \CoachArtifactRecord.createdAt, order: .reverse)
-    private var coachArtifacts: [CoachArtifactRecord]
+    private var allCoachArtifacts: [CoachArtifactRecord]
     @Query(sort: \JournalEntryRecord.createdAt, order: .reverse)
-    private var journalEntries: [JournalEntryRecord]
+    private var allJournalEntries: [JournalEntryRecord]
     @Query(sort: \DailyHealthSummaryRecord.date, order: .reverse)
-    private var dailySummaries: [DailyHealthSummaryRecord]
+    private var allDailySummaries: [DailyHealthSummaryRecord]
     @Query(sort: \StrengthWorkoutRecord.startedAt, order: .reverse)
-    private var strengthWorkouts: [StrengthWorkoutRecord]
+    private var allStrengthWorkouts: [StrengthWorkoutRecord]
     @Query(sort: \TrainingResponseRecord.date, order: .reverse)
-    private var trainingResponses: [TrainingResponseRecord]
-    
+    private var allTrainingResponses: [TrainingResponseRecord]
+
+    private var coachArtifacts: [CoachArtifactRecord] {
+        allCoachArtifacts.filter { $0.createdAt >= lookbackStart }
+    }
+    private var journalEntries: [JournalEntryRecord] {
+        allJournalEntries.filter { $0.createdAt >= lookbackStart }
+    }
+    private var dailySummaries: [DailyHealthSummaryRecord] {
+        allDailySummaries.filter { $0.date >= lookbackStart }
+    }
+    private var strengthWorkouts: [StrengthWorkoutRecord] {
+        allStrengthWorkouts.filter { $0.startedAt >= lookbackStart }
+    }
+    private var trainingResponses: [TrainingResponseRecord] {
+        allTrainingResponses.filter { $0.date >= lookbackStart }
+    }
+
     @State private var selectedWorkoutForDetail: WorkoutSummary?
 
     private var onboarding: OnboardingState? { onboardingStates.first }
@@ -740,8 +761,16 @@ struct VelaJournalView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var dashboardVM: DashboardViewModel
 
+    private static let lookbackDays = 42
+    private var lookbackStart: Date {
+        Calendar.current.date(byAdding: .day, value: -Self.lookbackDays, to: dashboardVM.selectedDate) ?? dashboardVM.selectedDate
+    }
+
     @Query(sort: \JournalEntryRecord.createdAt, order: .reverse)
-    private var entries: [JournalEntryRecord]
+    private var allEntries: [JournalEntryRecord]
+    private var entries: [JournalEntryRecord] {
+        allEntries.filter { $0.createdAt >= lookbackStart }
+    }
 
     // Local states for custom segmented values (0:✕, 1:–, 2:✓)
     @State private var lowCarbState: Int = 1
