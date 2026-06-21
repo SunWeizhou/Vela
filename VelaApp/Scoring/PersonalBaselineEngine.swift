@@ -21,6 +21,7 @@ struct PersonalBaselines {
 // MARK: - Personal Baseline Engine
 
 enum PersonalBaselineEngine {
+    private static let minimumSamples = 7
 
     // MARK: - Compute
 
@@ -40,23 +41,31 @@ enum PersonalBaselineEngine {
         let caloriesValues = recent.compactMap(\.activeCalories)
 
         return PersonalBaselines(
-            hrvBaselineMean: meanOf(hrvValues),
-            hrvBaselineSD: standardDeviationOf(hrvValues),
-            rhrBaselineMean: meanOf(rhrValues),
-            rhrBaselineSD: standardDeviationOf(rhrValues),
-            sleepHoursBaseline: meanOf(sleepHoursValues),
-            sleepEfficiencyBaseline: meanOf(sleepEfficiencyValues),
-            deepSleepPercentBaseline: meanOf(deepSleepValues),
-            remSleepPercentBaseline: meanOf(remSleepValues),
-            strainBaselineMean: meanOf(strainValues),
-            stepsBaseline: meanOf(stepsValues),
-            activeCaloriesBaseline: meanOf(caloriesValues),
+            hrvBaselineMean: meanOfIfReady(hrvValues),
+            hrvBaselineSD: standardDeviationIfReady(hrvValues),
+            rhrBaselineMean: meanOfIfReady(rhrValues),
+            rhrBaselineSD: standardDeviationIfReady(rhrValues),
+            sleepHoursBaseline: meanOfIfReady(sleepHoursValues),
+            sleepEfficiencyBaseline: meanOfIfReady(sleepEfficiencyValues),
+            deepSleepPercentBaseline: meanOfIfReady(deepSleepValues),
+            remSleepPercentBaseline: meanOfIfReady(remSleepValues),
+            strainBaselineMean: meanOfIfReady(strainValues),
+            stepsBaseline: meanOfIfReady(stepsValues),
+            activeCaloriesBaseline: meanOfIfReady(caloriesValues),
             calculatedAt: Date(),
             daysOfData: recent.count
         )
     }
 
     // MARK: - Thresholds for AI Context
+
+    private static func meanOfIfReady(_ values: [Double]) -> Double? {
+        values.count >= minimumSamples ? meanOf(values) : nil
+    }
+
+    private static func standardDeviationIfReady(_ values: [Double]) -> Double? {
+        values.count >= minimumSamples ? standardDeviationOf(values) : nil
+    }
 
     /// Formats baselines as key-value strings suitable for AI coach context injection.
     static func thresholds(for baselines: PersonalBaselines) -> [String: String] {

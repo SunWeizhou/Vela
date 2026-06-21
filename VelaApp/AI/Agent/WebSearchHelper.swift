@@ -21,36 +21,74 @@ actor WebSearchHelper {
               let html = String(data: data, encoding: .utf8) else {
             return ""
         }
-        return parseResults(from: html, max: maxResults)
+        return Self.formatResults(Self.parseResults(from: html, max: maxResults))
     }
 
-    private func parseResults(from html: String, max: Int) -> String {
-        var results: [String] = []
+    static func parseResults(from html: String, max: Int) -> [WebSearchResult] {
+        var results: [WebSearchResult] = []
         guard let regex = try? NSRegularExpression(
             pattern: #"<li class="b_algo"[^>]*>(.+?)</li>"#,
             options: [.dotMatchesLineSeparators]
-        ) else { return "" }
+        ) else { return [] }
         let nsRange = NSRange(html.startIndex..., in: html)
         for match in regex.matches(in: html, options: [], range: nsRange).prefix(max) {
-            let block = String(html[Range(match.range(at: 1), in: html)!])
+            guard let blockRange = Range(match.range(at: 1), in: html) else { continue }
+            let block = String(html[blockRange])
             let title = extractBingTitle(from: block)
+            let url = extractBingURL(from: block)
             let snippet = extractBingSnippet(from: block)
             if !title.isEmpty {
-                results.append("[\(title)] \(snippet)")
+                results.append(WebSearchResult(title: title, url: url, snippet: snippet))
             }
         }
-        return results.isEmpty ? "" : results.joined(separator: "\n")
+        return results
     }
 
-    private func extractBingTitle(from block: String) -> String {
+    static func formatResults(_ results: [WebSearchResult]) -> String {
+        let lines = results.map { result in
+            let title = result.url.isEmpty ? "[\(result.title)]" : "[\(result.title)](\(result.url))"
+            return result.snippet.isEmpty ? title : "\(title) \(result.snippet)"
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private static func extractBingTitle(from block: String) -> String {
         guard let range = block.range(of: #"<h2[^>]*>(.+?)</h2>"#, options: .regularExpression) else { return "" }
         return String(block[range]).replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func extractBingSnippet(from block: String) -> String {
-        guard let range = block.range(of: #"<p class="b_lineclamp[^"]*">(.+?)</p>"#, options: .regularExpression) else { return "" }
+    private static func extractBingURL(from block: String) -> String {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"<a[^>]*href="([^"]+)""#,
+            options: [.dotMatchesLineSeparators]
+        ) else { return "" }
+        let nsRange = NSRange(block.startIndex..., in: block)
+        guard let match = regex.firstMatch(in: block, options: [], range: nsRange),
+              let urlRange = Range(match.range(at: 1), in: block) else {
+            return ""
+        }
+        return decodeHTMLEntities(String(block[urlRange]))
+    }
+
+    private static func extractBingSnippet(from block: String) -> String {
+        guard let range = block.range(of: #"<p[^>]*>(.+?)</p>"#, options: .regularExpression) else { return "" }
         return String(block[range]).replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    private static func decodeHTMLEntities(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+    }
+}
+
+struct WebSearchResult: Equatable, Sendable {
+    let title: String
+    let url: String
+    let snippet: String
 }

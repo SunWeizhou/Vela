@@ -54,33 +54,33 @@ enum ExerciseLibraryService {
 
     static func defaultTemplates() -> [WorkoutTemplateRecord] {
         [
-            template("Push Day", [
+            template("推力训练", [
                 ("barbell_bench_press", "杠铃卧推"),
                 ("overhead_press", "推举"),
                 ("triceps_pushdown", "绳索下压")
             ]),
-            template("Pull Day", [
+            template("拉力训练", [
                 ("lat_pulldown", "高位下拉"),
                 ("barbell_row", "杠铃划船"),
                 ("barbell_curl", "杠铃弯举")
             ]),
-            template("Leg Day", [
+            template("腿部训练", [
                 ("squat", "深蹲"),
                 ("romanian_deadlift", "罗马尼亚硬拉"),
                 ("leg_curl", "腿弯举")
             ]),
-            template("Upper Body", [
+            template("上肢训练", [
                 ("barbell_bench_press", "杠铃卧推"),
                 ("lat_pulldown", "高位下拉"),
                 ("overhead_press", "推举"),
                 ("seated_row", "坐姿划船")
             ]),
-            template("Lower Body", [
+            template("下肢训练", [
                 ("squat", "深蹲"),
                 ("romanian_deadlift", "罗马尼亚硬拉"),
                 ("leg_curl", "腿弯举")
             ]),
-            template("Full Body", [
+            template("全身训练", [
                 ("squat", "深蹲"),
                 ("barbell_bench_press", "杠铃卧推"),
                 ("barbell_row", "杠铃划船")

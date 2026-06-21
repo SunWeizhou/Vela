@@ -130,7 +130,7 @@ public struct StressIndexEngine: ScoreEngine {
                 componentWeights["rhr_stress"] = weights["rhr_stress"]!
 
                 if rhrZ > 1.2 {
-                    reasons.append("静息心率出现异常上升")
+                    reasons.append("静息心率高于近期个人基线")
                 }
             } else {
                 missingInputs.append("quietHRToday")
@@ -157,7 +157,7 @@ public struct StressIndexEngine: ScoreEngine {
                 componentWeights["hrv_stress"] = weights["hrv_stress"]!
 
                 if hrvZ < -1.2 {
-                    reasons.append("今日 HRV 出现明显抑制")
+                    reasons.append("今日 HRV 低于近期个人基线")
                 }
             } else {
                 missingInputs.append("hrvToday")
@@ -189,7 +189,7 @@ public struct StressIndexEngine: ScoreEngine {
                 reasons.append("夜间皮肤温度检测到轻微波动")
             } else {
                 tempStress = 80.0
-                reasons.append("夜间体温偏差异常，表明系统性生理对抗")
+                reasons.append("夜间皮肤温度偏离个人参考范围，已纳入压力评分")
             }
             components["temp_stress"] = tempStress
             componentWeights["temp_stress"] = weights["temp_stress"]!

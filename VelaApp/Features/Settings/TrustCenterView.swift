@@ -45,27 +45,26 @@ struct TrustCenterView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .top) {
-            if !runRecords.isEmpty {
-                VStack(spacing: 0) {
-                    HStack(alignment: .center) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(AppLanguage.stored.isChinese ? "信任中心" : "Trust Center")
-                                .font(.system(size: 26, weight: .bold, design: .rounded))
-                                .foregroundStyle(VelaTheme.primaryText)
-                            Text(AppLanguage.stored.isChinese ? "Agent 审计日志" : "Agent Audit Logs")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(VelaTheme.secondaryText)
-                        }
-                        Spacer()
-                        Image(systemName: "checkmark.shield.fill")
-                            .font(.system(size: 24))
-                            .foregroundStyle(VelaTheme.accent)
+            VStack(spacing: 0) {
+                HStack(alignment: .center) {
+                    VelaDetailBackButton(label: AppLanguage.stored.isChinese ? "返回设置" : "Back to Settings")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(AppLanguage.stored.isChinese ? "信任中心" : "Trust Center")
+                            .font(.system(size: 21, weight: .bold, design: .rounded))
+                            .foregroundStyle(VelaTheme.primaryText)
+                        Text(AppLanguage.stored.isChinese ? "AI 运行记录" : "AI Run History")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(VelaTheme.secondaryText)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(.ultraThinMaterial)
-                    Divider().opacity(0.4)
+                    Spacer()
+                    Image(systemName: "checkmark.shield.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(VelaTheme.accent)
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.ultraThinMaterial)
+                Divider().opacity(0.4)
             }
         }
         .sheet(item: $selectedRun) { run in

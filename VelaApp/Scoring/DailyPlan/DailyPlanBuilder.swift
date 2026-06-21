@@ -364,9 +364,9 @@ struct DailyPlanBuilder {
         switch state {
         case .great:
             if lang.isChinese {
-                return ("今天适合高强度训练", "恢复评分 \(Int(recovery))，能量充足 (\(Int(energy)))，TSB +\(Int(tsb))")
+                return ("今天可按计划训练", "恢复评分 \(Int(recovery))，能量 \(Int(energy))，TSB +\(Int(tsb))；强度保持可控")
             }
-            return ("Ready for high-intensity training", "Recovery \(Int(recovery)), energy \(Int(energy)), TSB +\(Int(tsb))")
+            return ("Ready for the planned session", "Recovery \(Int(recovery)), energy \(Int(energy)), TSB +\(Int(tsb)); keep intensity controlled")
         case .good:
             if lang.isChinese {
                 return ("今天可以正常训练", "恢复评分 \(Int(recovery))，建议中等强度")
@@ -406,8 +406,8 @@ struct DailyPlanBuilder {
         case .great:
             return DailyAction(
                 type: .train,
-                title: lang.isChinese ? "🏋️ 高强度训练日" : "🏋️ High-Intensity Training",
-                subtitle: lang.isChinese ? "目标心率 Zone 4-5，力量训练 5x5" : "Target HR Zone 4-5, strength 5x5",
+                title: lang.isChinese ? "🏋️ 计划训练日" : "🏋️ Planned Training",
+                subtitle: lang.isChinese ? "按既定计划训练，动作质量与主观用力优先" : "Follow the planned session; prioritize technique and perceived effort",
                 detailMarkdown: buildTrainingDetail(recovery: recovery, tsb: tsb, wiki: wiki, lang: lang),
                 whyThis: whyItems,
                 priority: 0
@@ -495,7 +495,7 @@ struct DailyPlanBuilder {
             if tsbInt < -15 {
                 interpretation = AppLanguage.stored.isChinese ? "训练负荷累积较高，建议减载" : "High accumulated fatigue, deload recommended"
             } else if tsbInt > 10 {
-                interpretation = AppLanguage.stored.isChinese ? "身体充分恢复，可承受高负荷" : "Well recovered, ready for high load"
+                interpretation = AppLanguage.stored.isChinese ? "训练压力平衡为正，可作为当天训练安排的参考之一" : "Training stress balance is positive and can inform today's plan"
             } else {
                 interpretation = AppLanguage.stored.isChinese ? "训练负荷适中" : "Training load is balanced"
             }
@@ -517,20 +517,20 @@ struct DailyPlanBuilder {
         var detail = ""
 
         if lang.isChinese {
-            detail += "**为什么今天是高强度训练日**\n\n"
-            detail += "- 恢复评分 \(Int(recovery))/100：身体已充分恢复\n"
-            detail += "- TSB +\(Int(tsb))：训练压力平衡为正，可承受高负荷\n\n"
+            detail += "**为什么今天可以按计划训练**\n\n"
+            detail += "- 恢复评分 \(Int(recovery))/100：当前恢复信号处于可训练范围\n"
+            detail += "- TSB +\(Int(tsb))：训练压力平衡为正，仅作为训练安排的辅助参考\n\n"
             detail += "**建议训练方案**\n\n"
             detail += "- 热身：10 分钟动态拉伸 + Zone 1-2\n"
-            detail += "- 主体：Zone 4-5 间歇训练 或 力量 5x5\n"
+            detail += "- 主体：按既定计划训练；根据动作质量和主观用力调整强度\n"
             detail += "- 放松：10 分钟静态拉伸\n"
         } else {
-            detail += "**Why today is a high-intensity day**\n\n"
-            detail += "- Recovery \(Int(recovery))/100: body is well recovered\n"
-            detail += "- TSB +\(Int(tsb)): positive training stress balance\n\n"
+            detail += "**Why the planned session is reasonable today**\n\n"
+            detail += "- Recovery \(Int(recovery))/100: current signals are within a trainable range\n"
+            detail += "- TSB +\(Int(tsb)): positive training stress balance is only a supporting input\n\n"
             detail += "**Recommended Plan**\n\n"
             detail += "- Warmup: 10 min dynamic stretch + Zone 1-2\n"
-            detail += "- Main: Zone 4-5 intervals or strength 5x5\n"
+            detail += "- Main: follow the planned session and adjust intensity to technique and perceived effort\n"
             detail += "- Cooldown: 10 min static stretch\n"
         }
 
@@ -543,23 +543,25 @@ struct DailyPlanBuilder {
 
     private func buildSleepAction(dashboard: DashboardSummary) -> DailyAction {
         let lang = AppLanguage.stored
-        let efficiency = dashboard.sleepScore.metrics["sleep_efficiency"] ?? 0
+        let efficiency = dashboard.sleepScore.metrics["sleep_efficiency"]
         return DailyAction(
             type: .sleepTip,
             title: lang.isChinese ? "😴 优化睡眠" : "😴 Improve Sleep",
             subtitle: lang.isChinese
-                ? "睡眠效率 \(String(format: "%.0f", efficiency))%，建议提前 30 分钟入睡"
-                : "Sleep efficiency \(String(format: "%.0f", efficiency))%, try going to bed 30 min earlier",
+                ? (efficiency.map { "睡眠效率 \(String(format: "%.0f", $0))%，建议结合近期作息调整" } ?? "睡眠效率待同步；先观察近期作息规律")
+                : (efficiency.map { "Sleep efficiency \(String(format: "%.0f", $0))%; adjust only in the context of recent routines" } ?? "Sleep efficiency is pending sync; review recent routines first"),
             detailMarkdown: lang.isChinese
                 ? "睡眠效率偏低。建议：睡前 1 小时不看屏幕，保持卧室凉爽（18-20°C），避免午后咖啡因。"
                 : "Sleep efficiency is low. Tips: no screens 1h before bed, cool bedroom (18-20°C), avoid afternoon caffeine.",
             whyThis: [
                 WhyThisItem(
                     metricName: "Sleep Efficiency",
-                    currentValue: "\(String(format: "%.0f", efficiency))%",
-                    baselineValue: "85%",
-                    interpretation: lang.isChinese ? "低于 85% 理想值，可通过睡眠卫生改善" : "Below 85% ideal, improvable via sleep hygiene",
-                    confidence: .high,
+                    currentValue: efficiency.map { "\(String(format: "%.0f", $0))%" } ?? "--",
+                    baselineValue: nil,
+                    interpretation: efficiency == nil
+                        ? (lang.isChinese ? "等待睡眠效率同步后再解读。" : "Wait for sleep-efficiency sync before interpreting.")
+                        : (lang.isChinese ? "结合个人基线和近期作息观察。" : "Interpret with personal baseline and recent routines."),
+                    confidence: efficiency == nil ? .low : .medium,
                     source: .healthKit
                 )
             ],

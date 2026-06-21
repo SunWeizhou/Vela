@@ -4,6 +4,7 @@ import SwiftUI
 struct VitalsMetricDetailView: View {
     @EnvironmentObject var viewModel: DashboardViewModel
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     @State private var selectedRange: RecoveryDetailRange = .month
 
     let metric: VitalsMetricDetailKind
@@ -51,9 +52,20 @@ struct VitalsMetricDetailView: View {
 
     private var metricHeader: some View {
         HStack(alignment: .center) {
+            Button(action: dismiss.callAsFunction) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(VelaTheme.accent)
+                    .frame(width: 38, height: 38)
+                    .background(Circle().fill(VelaTheme.surface))
+                    .overlay(Circle().stroke(VelaTheme.stroke, lineWidth: 0.5))
+            }
+            .buttonStyle(.cardPress)
+            .accessibilityLabel("返回")
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(metric.title)
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                    .font(.system(size: 21, weight: .bold, design: .rounded))
                     .foregroundStyle(VelaTheme.primaryText)
                 Text(viewModel.isToday ? L10n.t("Today", "今日") : viewModel.selectedDate.formatted(date: .abbreviated, time: .omitted))
                     .font(.subheadline)
@@ -379,11 +391,11 @@ enum VitalsMetricDetailKind {
         case .hrv:
             return L10n.t("HRV is compared to your personal baseline and is one of the strongest recovery drivers.", "HRV 会与个人基线比较，是恢复评分中最重要的信号之一。")
         case .restingHeartRate:
-            return L10n.t("Resting heart rate rising above baseline often indicates stress, fatigue, illness, or poor recovery.", "静息心率高于基线通常提示压力、疲劳、疾病风险或恢复不足。")
+            return L10n.t("Resting heart rate is best interpreted against your personal baseline alongside sleep, stress, and recovery signals.", "静息心率应结合个人基线、睡眠、压力和恢复信号一起观察。")
         case .sleepHeartRate:
             return L10n.t("Sleep heart rate helps reveal overnight cardiovascular load and recovery quality.", "睡眠心率能帮助判断夜间心血管负担和恢复质量。")
         case .respiratoryRate:
-            return L10n.t("Respiratory rate is useful as a freshness and illness-watch signal when it moves away from baseline.", "呼吸率偏离基线时，可作为状态新鲜度和疾病风险观察信号。")
+            return L10n.t("Respiratory rate is useful as a freshness signal when it moves away from baseline.", "呼吸率偏离基线时，可作为状态变化的观察信号。")
         case .bloodOxygen:
             return L10n.t("Blood oxygen is a spot signal from HealthKit. Treat isolated readings cautiously and watch repeated changes.", "血氧是来自健康数据的采样信号。单次读数需要谨慎解读，更应关注重复变化。")
         case .weight:

@@ -67,6 +67,53 @@ final class WorkoutAggregationTests: XCTestCase {
         return try context.fetch(descriptor).first
     }
 
+    func testDefaultWorkoutTemplatesUseChineseUserFacingTitles() {
+        let titles = ExerciseLibraryService.defaultTemplates().map(\.title)
+
+        XCTAssertTrue(titles.contains("推力训练"))
+        XCTAssertTrue(titles.contains("腿部训练"))
+        XCTAssertFalse(titles.contains("Push Day"))
+        XCTAssertFalse(titles.contains("Leg Day"))
+        XCTAssertFalse(titles.contains("Upper Body"))
+    }
+
+    func testStrengthWorkoutAnalysisUsesChineseUserFacingSummary() {
+        let workout = makeStrengthWorkout(start: makeDate(), title: "上肢训练")
+
+        let analysis = TrainingAnalyticsService().summarizeWorkout(
+            workout,
+            history: [],
+            exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
+        )
+
+        XCTAssertTrue(analysis.summaryText.contains("已完成 2/2 组"))
+        XCTAssertTrue(analysis.summaryText.contains("有效组"))
+        XCTAssertTrue(analysis.summaryText.contains("胸部"))
+        XCTAssertFalse(analysis.summaryText.contains("completed sets"))
+        XCTAssertFalse(analysis.summaryText.contains("effective sets"))
+        XCTAssertFalse(analysis.summaryText.contains("chest 2"))
+    }
+
+    func testPersonalRecordUsesChineseUserFacingDescription() {
+        let weightRecord = PersonalRecord(
+            exerciseName: "卧推",
+            kind: "max_weight",
+            value: 80,
+            previousValue: 75
+        )
+        let estimatedRecord = PersonalRecord(
+            exerciseName: "卧推",
+            kind: "estimated_1rm",
+            value: 101.3,
+            previousValue: 96
+        )
+
+        XCTAssertEqual(weightRecord.summary, "卧推 重量新高：80 kg")
+        XCTAssertEqual(estimatedRecord.summary, "卧推 估算最大重量新高：101.3 kg")
+        XCTAssertFalse(weightRecord.summary.contains("max_weight"))
+        XCTAssertFalse(estimatedRecord.summary.contains("estimated_1rm"))
+    }
+
     private func makePostWorkoutArtifact(
         workout: StrengthWorkoutRecord,
         summary: StrengthWorkoutAnalysis

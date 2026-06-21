@@ -143,6 +143,45 @@ enum LLMProviderError: LocalizedError, Hashable, Sendable {
         return .requestFailed("DeepSeek request failed with status \(statusCode): \(body.prefix(200))")
     }
 
+    var isRetryable: Bool {
+        switch self {
+        case .networkUnavailable, .timedOut:
+            return true
+        case .requestFailed(let message):
+            return message.contains("status 408")
+                || message.contains("status 429")
+                || message.contains("status 500")
+                || message.contains("status 502")
+                || message.contains("status 503")
+                || message.contains("status 504")
+        case .missingAPIKey, .authenticationFailed, .invalidResponse:
+            return false
+        }
+    }
+
+    func recoveryAction(isChinese: Bool) -> LLMErrorRecoveryAction {
+        switch self {
+        case .missingAPIKey, .authenticationFailed:
+            return LLMErrorRecoveryAction(
+                title: isChinese ? "打开设置" : "Open Settings",
+                systemImage: "key.fill",
+                destination: .settings
+            )
+        case .networkUnavailable, .timedOut, .requestFailed:
+            return LLMErrorRecoveryAction(
+                title: isChinese ? "重试 Coach" : "Retry Coach",
+                systemImage: "arrow.clockwise",
+                destination: .retry
+            )
+        case .invalidResponse:
+            return LLMErrorRecoveryAction(
+                title: isChinese ? "稍后重试" : "Retry Later",
+                systemImage: "exclamationmark.triangle.fill",
+                destination: .retry
+            )
+        }
+    }
+
     func userFacingMessage(isChinese: Bool) -> String {
         switch self {
         case .missingAPIKey:
@@ -176,4 +215,15 @@ enum LLMProviderError: LocalizedError, Hashable, Sendable {
             return message
         }
     }
+}
+
+struct LLMErrorRecoveryAction: Hashable, Sendable, Codable {
+    enum Destination: String, Hashable, Sendable, Codable {
+        case settings
+        case retry
+    }
+
+    var title: String
+    var systemImage: String
+    var destination: Destination
 }

@@ -17,6 +17,16 @@ struct BiologyView: View {
     private var chronologicalAge: Int? {
         WikiFileService.getAgeFromWiki() ?? dashboardVM.dashboard.extendedMetrics.age
     }
+
+    private var hasHealthAgeInput: Bool {
+        let dashboard = dashboardVM.dashboard
+        return dashboard.recoveryMetrics.restingHeartRate != nil
+            || dashboard.bodyMetrics.vo2Max != nil
+            || dashboard.sleepSummary.totalSleepMinutes > 0
+            || dashboard.sleepScore.metrics["sleep_efficiency"] != nil
+            || dashboard.strain.metrics["steps_raw"] != nil
+            || !biomarkers.isEmpty
+    }
     
     // Calculated Result
     private var bioAgeResult: BiologicalAgeResult {
@@ -45,9 +55,9 @@ struct BiologyView: View {
     private var biologyHeader: some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(bioAgeResult.isPhenoAge
+                Text(hasHealthAgeInput && bioAgeResult.isPhenoAge
                     ? L10n.t("Biological Age Estimate", "生物年龄估算")
-                    : L10n.t("Health Age Trend Beta", "健康年龄趋势 Beta")
+                    : L10n.t("Health Signal Reference", "健康信号参考")
                 )
                 .font(.system(size: 26, weight: .bold, design: .rounded))
                 .foregroundStyle(VelaTheme.primaryText)
@@ -75,6 +85,8 @@ struct BiologyView: View {
             VStack(spacing: 20) {
                 if chronologicalAge == nil {
                     profileSetupCard
+                } else if !hasHealthAgeInput {
+                    healthSignalSetupCard
                 } else {
                     // Arc Gauge Hero Card
                     bioAgeArcCard
@@ -168,6 +180,25 @@ struct BiologyView: View {
         .background(RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard).fill(VelaTheme.surface))
         .padding(.horizontal, VelaTheme.screenPadding)
     }
+
+    private var healthSignalSetupCard: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "waveform.path.ecg.rectangle")
+                .font(.system(size: 34))
+                .foregroundStyle(VelaTheme.accent)
+            Text("健康信号尚未形成")
+                .font(.headline)
+                .foregroundStyle(VelaTheme.primaryText)
+            Text("同步至少一项静息心率、睡眠、活动、最大摄氧量或化验记录后，才会显示健康信号参考。完整 PhenoAge 化验组合齐全后才生成生物年龄估算。")
+                .font(.caption)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(VelaTheme.secondaryText)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity)
+        .background(RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard).fill(VelaTheme.surface))
+        .padding(.horizontal, VelaTheme.screenPadding)
+    }
     
     private var bioAgeArcCard: some View {
         let result = bioAgeResult
@@ -249,7 +280,7 @@ struct BiologyView: View {
                             .font(.system(size: 28, weight: .black, design: .rounded))
                             .foregroundStyle(VelaTheme.primaryText)
 
-                        Text(L10n.t("Health Age Trend Beta", "健康年龄趋势 Beta"))
+                        Text(L10n.t("Health Signal Reference", "健康信号参考"))
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(VelaTheme.mutedText)
                             .tracking(1)
@@ -265,9 +296,9 @@ struct BiologyView: View {
                 
                 Text(result.isPhenoAge
                     ? (diff >= 0
-                        ? L10n.t(String(format: "You are running %.1f years younger!", diff), String(format: "你的生理年龄年轻了 %.1f 岁！", diff))
-                        : L10n.t(String(format: "You are running %.1f years older.", -diff), String(format: "你的生理年龄偏高了 %.1f 岁。", -diff)))
-                    : L10n.t("Health Age Trend Beta: \(result.healthAgeTrendLabel)", "健康年龄趋势 Beta：\(result.healthAgeTrendLabel)")
+                        ? L10n.t(String(format: "Estimated biological age is %.1f years below chronological age.", diff), String(format: "生物年龄估算比实际年龄低 %.1f 岁。", diff))
+                        : L10n.t(String(format: "Estimated biological age is %.1f years above chronological age.", -diff), String(format: "生物年龄估算比实际年龄高 %.1f 岁。", -diff)))
+                    : L10n.t("Current health signals: \(result.healthAgeTrendLabel)", "当前健康信号：\(result.healthAgeTrendLabel)")
                 )
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(VelaTheme.primaryText)
@@ -349,7 +380,7 @@ struct BiologyView: View {
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(VelaTheme.primaryText)
                     
-                    Text(L10n.t("Tap 'Add Lab Results' above to register blood biomarkers like Vitamin D, Cortisol, or Cholesterol to calibrate Biological Age.", "点击上方“录入血检”来录入 Vitamin D, Cortisol 或 Cholesterol 指标，精准校正生物年龄。"))
+                    Text(L10n.t("Record lab values here for reference. A biological-age estimate appears only when the complete PhenoAge laboratory set is available.", "可在这里记录化验指标供参考；只有完整的 PhenoAge 化验组合齐全后才会生成生物年龄估算。"))
                         .font(.caption)
                         .foregroundStyle(VelaTheme.mutedText)
                         .multilineTextAlignment(.center)

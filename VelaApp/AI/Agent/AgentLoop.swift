@@ -18,6 +18,117 @@ protocol AgentChatProvider: Sendable {
 
 extension DeepSeekProvider: AgentChatProvider {}
 
+/// Retries provider transport failures without replaying AgentLoop tool execution.
+struct RetryingAgentChatProvider: AgentChatProvider {
+    let base: any AgentChatProvider
+    let maxAttempts: Int
+    let initialDelayNanoseconds: UInt64
+    let sleeper: @Sendable (UInt64) async throws -> Void
+
+    init(
+        base: any AgentChatProvider,
+        maxAttempts: Int = 3,
+        initialDelayNanoseconds: UInt64 = 350_000_000,
+        sleeper: @escaping @Sendable (UInt64) async throws -> Void = { delay in
+            try await Task.sleep(nanoseconds: delay)
+        }
+    ) {
+        self.base = base
+        self.maxAttempts = max(1, maxAttempts)
+        self.initialDelayNanoseconds = initialDelayNanoseconds
+        self.sleeper = sleeper
+    }
+
+    func chat(messages: [ChatMessage], tools: [[String: Value]]?) async throws -> LLMResponse {
+        try await retrying {
+            try await base.chat(messages: messages, tools: tools)
+        }
+    }
+
+    func streamChat(messages: [ChatMessage]) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                var attempt = 1
+
+                while true {
+                    var didYield = false
+                    do {
+                        let stream = base.streamChat(messages: messages)
+                        for try await delta in stream {
+                            didYield = true
+                            continuation.yield(delta)
+                        }
+                        continuation.finish()
+                        return
+                    } catch is CancellationError {
+                        continuation.finish(throwing: CancellationError())
+                        return
+                    } catch {
+                        let providerError = LLMProviderError.classify(error)
+                        guard !didYield, shouldRetry(error: providerError, attempt: attempt) else {
+                            continuation.finish(throwing: providerError)
+                            return
+                        }
+                        do {
+                            try await sleepBeforeRetry(attempt: attempt)
+                        } catch {
+                            continuation.finish(throwing: error)
+                            return
+                        }
+                        attempt += 1
+                    }
+                }
+            }
+
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
+    }
+
+    private func retrying<T>(_ operation: () async throws -> T) async throws -> T {
+        var attempt = 1
+
+        while true {
+            do {
+                return try await operation()
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                let providerError = LLMProviderError.classify(error)
+                guard shouldRetry(error: providerError, attempt: attempt) else {
+                    throw providerError
+                }
+                try await sleepBeforeRetry(attempt: attempt)
+                attempt += 1
+            }
+        }
+    }
+
+    private func shouldRetry(error: LLMProviderError, attempt: Int) -> Bool {
+        attempt < maxAttempts && error.isRetryable
+    }
+
+    private func sleepBeforeRetry(attempt: Int) async throws {
+        let delay = delayNanoseconds(for: attempt)
+        guard delay > 0 else { return }
+        try await sleeper(delay)
+    }
+
+    private func delayNanoseconds(for attempt: Int) -> UInt64 {
+        guard initialDelayNanoseconds > 0 else { return 0 }
+        let multiplier = UInt64(1 << min(max(attempt - 1, 0), 4))
+        return initialDelayNanoseconds.saturatingMultiply(multiplier)
+    }
+}
+
+private extension UInt64 {
+    func saturatingMultiply(_ multiplier: UInt64) -> UInt64 {
+        let (result, overflow) = multipliedReportingOverflow(by: multiplier)
+        return overflow ? UInt64.max : result
+    }
+}
+
 /// Encapsulates the tool-call loop: sends messages to LLM, executes tool calls, collects results.
 /// Extracted from CoachChatVM.send() so that CoachChatPanel.swift remains UI-only.
 struct AgentLoop {

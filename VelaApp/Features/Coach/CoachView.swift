@@ -17,7 +17,9 @@ enum CoachChatLayout {
         keyboardVisible: Bool,
         usesOverlayNavigation: Bool = true
     ) -> CGFloat {
-        presentation == .embedded && !keyboardVisible && usesOverlayNavigation ? 92 : 0
+        presentation == .embedded && !keyboardVisible && usesOverlayNavigation
+            ? VelaFloatingNavigationMetrics.coachComposerClearance
+            : 0
     }
 }
 
@@ -47,6 +49,7 @@ struct VelaCoachView: View {
     @State private var showWikiProfile = false
     @State private var showModelSettings = false
     @State private var handledRouteRevision = -1
+    @State private var dataCoverageSummary = DataCoverageSummaryModel.unknown
 
     @Query(
         filter: #Predicate<JournalEntryRecord> { _ in true },
@@ -63,26 +66,15 @@ struct VelaCoachView: View {
         sort: \MemoryEventRecord.createdAt, order: .reverse
     ) private var pendingMemoryProposals: [MemoryEventRecord]
 
-    @Query(sort: \CoachArtifactRecord.createdAt, order: .reverse)
-    private var coachArtifacts: [CoachArtifactRecord]
-
-    @Query(sort: \StrengthWorkoutRecord.startedAt, order: .reverse)
-    private var strengthWorkouts: [StrengthWorkoutRecord]
     @Query(sort: \DailyOperatingPlanRecord.generatedAt, order: .reverse)
     private var operatingPlans: [DailyOperatingPlanRecord]
     @Query(sort: \AgentArtifactRecord.createdAt, order: .reverse)
     private var agentArtifacts: [AgentArtifactRecord]
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
-    private var recentStrengthSummary: RecentTrainingSummary {
-        TrainingAnalyticsService().buildRecentSummary(workouts: strengthWorkouts, days: 7)
-    }
-    private var todayCommandState: TodayCommandState {
-        TodayCommandBuilder.build(
-            from: dashboard,
-            recentStrengthSummary: recentStrengthSummary,
-            coachArtifact: coachArtifacts.first?.artifact
-        )
+    private var todayOperatingPlan: DailyOperatingPlanRecord? {
+        let identifier = DailyHealthSummaryRecord.dayIdentifier(for: dashboardVM.selectedDate)
+        return operatingPlans.first(where: { $0.dayIdentifier == identifier })
     }
 
     init(
@@ -110,11 +102,23 @@ struct VelaCoachView: View {
                             }
 
                             ForEach(vm.messages.filter { !$0.isStreaming }) { msg in
-                                MessageBubble(
-                                    text: msg.content,
-                                    isUser: msg.role == .user,
-                                    time: msg.timestamp.formatted(.dateTime.hour().minute())
-                                )
+                                VStack(alignment: .leading, spacing: 8) {
+                                    MessageBubble(
+                                        text: msg.content,
+                                        isUser: msg.role == .user,
+                                        time: msg.timestamp.formatted(.dateTime.hour().minute())
+                                    )
+
+                                    if let action = msg.recoveryAction, msg.role == .assistant {
+                                        HStack {
+                                            CoachRecoveryActionButton(action: action) {
+                                                handleRecoveryAction(action)
+                                            }
+                                            Spacer(minLength: 0)
+                                        }
+                                        .padding(.leading, 8)
+                                    }
+                                }
                             }
 
                             if vm.isStreaming {
@@ -204,6 +208,10 @@ struct VelaCoachView: View {
             vm.loadSessions(modelContext: modelContext)
             consumePendingRouteIfVisible()
             try? DailyLogService.refresh(dashboard: dashboard)
+        }
+        .task {
+            await dashboardVM.refresh(modelContext: modelContext)
+            await loadDataCoverageSummary()
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             withAnimation(.easeOut(duration: 0.2)) {
@@ -382,7 +390,7 @@ struct VelaCoachView: View {
                     Text("本机健康资料")
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(Color(hex: "#1A1917"))
-                    Text("Local-first 存储")
+                    Text("本机优先存储")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(Color(hex: "#007AFF"))
                 }
@@ -493,7 +501,7 @@ struct VelaCoachView: View {
             AppleIntelligenceOrb()
                 .padding(.top, 10)
 
-            Text("Vela Coach")
+            Text("Vela 教练")
                 .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundStyle(VelaTheme.fg)
 
@@ -514,24 +522,25 @@ struct VelaCoachView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    carouselCard(
-                        title: todayCommandState.bodyStateTitle,
-                        detail: todayCommandState.summary,
-                        icon: "sparkles",
-                        footer: "置信度 \(Int((todayCommandState.readinessDecision.confidence * 100).rounded()))% · 身体状态",
-                        isAI: true
-                    ) {
-                        sendMessage("解释今天最重要的身体状态驱动，并给一个具体行动。")
-                    }
-
-                    if let plan = operatingPlans.first {
+                    if let plan = todayOperatingPlan {
+                        let display = displayModel(for: plan)
                         carouselCard(
-                            title: plan.title,
-                            detail: decodedPlanSummary(plan),
-                            icon: "checklist",
-                            footer: "置信度 \(Int((plan.confidence * 100).rounded()))% · 训练建议"
+                            title: display.statusTitle,
+                            detail: display.summary,
+                            icon: "sparkles",
+                            footer: "\(display.confidenceLabel) · 训练建议"
                         ) {
-                            appState.routeToTab(0)
+                            appState.routeToTab(1)
+                        }
+                    } else {
+                        carouselCard(
+                            title: "今日计划正在生成",
+                            detail: "正在读取恢复、睡眠、训练负荷和近期训练记录；完成后会与训练页保持同一条建议。",
+                            icon: "arrow.triangle.2.circlepath",
+                            footer: "数据同步中",
+                            isAI: true
+                        ) {
+                            sendMessage("请根据当前可用数据生成保守的今日训练建议。")
                         }
                     }
 
@@ -626,7 +635,7 @@ struct VelaCoachView: View {
                 showWikiProfile = true
             } label: {
                 HStack {
-                    Label("身体 Wiki 与长期记忆", systemImage: "books.vertical.fill")
+                    Label("健康档案与长期记忆", systemImage: "books.vertical.fill")
                     Spacer()
                     Image(systemName: "chevron.right")
                 }
@@ -681,10 +690,28 @@ struct VelaCoachView: View {
         }
     }
 
+    private func displayModel(for plan: DailyOperatingPlanRecord) -> DailyOperatingPlanDisplayModel {
+        let payload: DailyOperatingPlanPayload? = {
+            guard let data = plan.payloadJSON.data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode(DailyOperatingPlanPayload.self, from: data)
+        }()
+        return DailyOperatingPlanDisplayModel.build(
+            payload: payload,
+            primaryActionType: plan.primaryActionType,
+            source: plan.source,
+            safetyNotice: plan.safetyNotice,
+            confidence: plan.confidence
+        )
+    }
+
     private func decodedPlanSummary(_ plan: DailyOperatingPlanRecord) -> String {
+        let display = displayModel(for: plan)
+        if AppLanguage.stored.isChinese {
+            return display.summary
+        }
         guard let data = plan.payloadJSON.data(using: .utf8),
               let payload = try? JSONDecoder().decode(DailyOperatingPlanPayload.self, from: data) else {
-            return plan.primaryActionType
+            return display.summary
         }
         return payload.summary
     }
@@ -704,42 +731,48 @@ struct VelaCoachView: View {
     // MARK: - Composer
 
     private var composerView: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            TextField("输入消息…", text: $inputText, axis: .vertical)
-                .font(VelaTheme.callout())
-                .lineLimit(1...5)
-                .focused($isFocused)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(VelaTheme.surface)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                                .stroke(isFocused ? VelaTheme.accent : VelaTheme.border, lineWidth: 0.5)
-                        )
-                )
-                .onSubmit {
+        VStack(spacing: 8) {
+            CoachDataCoverageStrip(model: dataCoverageSummary) {
+                appState.showSettings = true
+            }
+
+            HStack(alignment: .bottom, spacing: 8) {
+                TextField("输入消息…", text: $inputText, axis: .vertical)
+                    .font(VelaTheme.callout())
+                    .lineLimit(1...5)
+                    .focused($isFocused)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .fill(VelaTheme.surface)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                    .stroke(isFocused ? VelaTheme.accent : VelaTheme.border, lineWidth: 0.5)
+                            )
+                    )
+                    .onSubmit {
+                        guard !inputText.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                        sendMessage(inputText)
+                    }
+
+                Button {
                     guard !inputText.trimmingCharacters(in: .whitespaces).isEmpty else { return }
                     sendMessage(inputText)
+                } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(
+                            Circle()
+                                .fill(inputText.trimmingCharacters(in: .whitespaces).isEmpty
+                                    ? VelaTheme.border : VelaTheme.accent)
+                        )
                 }
-
-            Button {
-                guard !inputText.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-                sendMessage(inputText)
-            } label: {
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 34, height: 34)
-                    .background(
-                        Circle()
-                            .fill(inputText.trimmingCharacters(in: .whitespaces).isEmpty
-                                ? VelaTheme.border : VelaTheme.accent)
-                    )
+                .disabled(inputText.trimmingCharacters(in: .whitespaces).isEmpty)
+                .buttonStyle(.plusButton)
             }
-            .disabled(inputText.trimmingCharacters(in: .whitespaces).isEmpty)
-            .buttonStyle(.plusButton)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -849,6 +882,33 @@ struct VelaCoachView: View {
             focus: .general,
             services: services
         )
+    }
+
+    private func handleRecoveryAction(_ action: LLMErrorRecoveryAction) {
+        switch action.destination {
+        case .settings:
+            if presentation == .quickCover {
+                dismiss()
+            }
+            appState.showSettings = true
+        case .retry:
+            vm.retryLastFailedRequest(
+                dashboard: dashboard,
+                modelContext: modelContext,
+                journalEntries: journalEntries,
+                savedReports: savedReports,
+                focus: .general,
+                services: services
+            )
+        }
+    }
+
+    private func loadDataCoverageSummary() async {
+        let groups = await DataCoverageGroupFactory.loadPriorityGroups()
+        let summary = DataCoverageSummaryModel.build(groups: groups)
+        withAnimation(VelaTheme.smooth) {
+            dataCoverageSummary = summary
+        }
     }
 
 }

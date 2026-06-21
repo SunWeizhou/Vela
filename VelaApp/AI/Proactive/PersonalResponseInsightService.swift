@@ -189,8 +189,8 @@ struct TrainingResponseInsightService {
         let journalTags = Set(weekJournalEntries.flatMap(\.tags)).sorted().joined(separator: "、")
         
         // --- 1. 睡眠-训练表现分析 (Sleep vs Performance) ---
-        var sleepPerformanceAnalysis = "样本不足（近一周需要至少 2 次力量训练且前一日有睡眠分记录）"
-        if weekWorkouts.count >= 2 {
+        var sleepPerformanceAnalysis = "样本不足（需要至少 4 次带前一晚睡眠分的力量训练，且高、低睡眠组各至少 2 次）"
+        if weekWorkouts.count >= 4 {
             var sleepScoresWithRPE: [(sleep: Double, rpe: Double)] = []
             for workout in weekWorkouts {
                 let workoutDay = calendar.startOfDay(for: workout.startedAt)
@@ -205,28 +205,28 @@ struct TrainingResponseInsightService {
                 }
             }
             
-            if sleepScoresWithRPE.count >= 2 {
+            if sleepScoresWithRPE.count >= 4 {
                 let highSleep = sleepScoresWithRPE.filter { $0.sleep >= 75 }
                 let lowSleep = sleepScoresWithRPE.filter { $0.sleep < 75 }
                 
-                if !highSleep.isEmpty && !lowSleep.isEmpty {
+                if highSleep.count >= 2 && lowSleep.count >= 2 {
                     let avgRPEHigh = highSleep.map(\.rpe).reduce(0, +) / Double(highSleep.count)
                     let avgRPELow = lowSleep.map(\.rpe).reduce(0, +) / Double(lowSleep.count)
                     let diff = avgRPELow - avgRPEHigh
                     if diff > 0 {
-                        sleepPerformanceAnalysis = "高睡眠质量（睡眠分 >= 75）的日子里，力量训练主观疲劳 RPE 平均低 \(String(format: "%.1f", diff)) 分，表现出更佳的体能状态。"
+                        sleepPerformanceAnalysis = "本周记录中，高睡眠组（n=\(highSleep.count)）的训练主观疲劳 RPE 平均低 \(String(format: "%.1f", diff)) 分，低睡眠组为 n=\(lowSleep.count)。这只是观察到的组间差异，不代表睡眠是唯一原因。"
                     } else {
-                        sleepPerformanceAnalysis = "睡眠充足与不足时的训练疲劳度无明显差异，可能受其他心理、营养等因素的代偿影响。"
+                        sleepPerformanceAnalysis = "本周高、低睡眠组（分别 n=\(highSleep.count) / n=\(lowSleep.count)）的训练主观疲劳 RPE 未见明确平均差异。"
                     }
                 } else {
                     let avgSleep = sleepScoresWithRPE.map(\.sleep).reduce(0, +) / Double(sleepScoresWithRPE.count)
-                    sleepPerformanceAnalysis = "近一周训练日前一晚的睡眠分较为单一（平均 \(String(format: "%.0f", avgSleep)) 分），相关性分析尚不显著。"
+                    sleepPerformanceAnalysis = "训练日前一晚的睡眠分分布较为单一（平均 \(String(format: "%.0f", avgSleep)) 分），无法形成平衡的组间观察。"
                 }
             }
         }
         
         // --- 2. 饮食-恢复分析 (Diet vs Recovery) ---
-        var dietRecoveryAnalysis = "样本不足（近一周需要至少 3 条餐食记录）"
+        var dietRecoveryAnalysis = "样本不足（需要至少 2 个有餐食记录日和 2 个无餐食记录日，且均有恢复分）"
         if weekFoodLogs.count >= 3 {
             var daysWithFoodLogs = Set<String>()
             for log in weekFoodLogs {
@@ -247,17 +247,17 @@ struct TrainingResponseInsightService {
                 }
             }
             
-            if !recoveryWithFood.isEmpty && !recoveryWithoutFood.isEmpty {
+            if recoveryWithFood.count >= 2 && recoveryWithoutFood.count >= 2 {
                 let avgWith = recoveryWithFood.reduce(0, +) / Double(recoveryWithFood.count)
                 let avgWithout = recoveryWithoutFood.reduce(0, +) / Double(recoveryWithoutFood.count)
                 let diff = avgWith - avgWithout
                 if diff > 0 {
-                    dietRecoveryAnalysis = "进行了完整餐食记录的日子里，当天的生理恢复分平均比未记录餐食的日子高出 \(String(format: "%.1f", diff)) 分，提示规律进食可能加速生理系统重建。"
+                    dietRecoveryAnalysis = "本周有餐食记录日（n=\(recoveryWithFood.count)）的恢复分平均比无记录日（n=\(recoveryWithoutFood.count)）高 \(String(format: "%.1f", diff)) 分。这是记录状态的观察差异，不代表记录或进食本身造成了恢复变化。"
                 } else {
-                    dietRecoveryAnalysis = "饮食记录与今日恢复无明显线性相关，建议继续保持营养追踪。"
+                    dietRecoveryAnalysis = "本周有餐食记录日（n=\(recoveryWithFood.count)）与无记录日（n=\(recoveryWithoutFood.count)）的恢复分未见明确平均差异。"
                 }
             } else {
-                dietRecoveryAnalysis = "本周饮食追踪记录分布较为单一，建议增加记录频率以辅助生理恢复分析。"
+                dietRecoveryAnalysis = "本周餐食记录或恢复分的分布不足，暂不做饮食与恢复的关联解读。"
             }
         }
         
@@ -292,31 +292,31 @@ struct TrainingResponseInsightService {
             var findings: [String] = []
             let normalRecovery = recoveryAverage ?? 70.0
             
-            if !lateImpact.isEmpty {
+            if lateImpact.count >= 2 {
                 let avg = lateImpact.reduce(0, +) / Double(lateImpact.count)
                 let diff = avg - normalRecovery
-                findings.append("熬夜日子平均恢复分为 \(String(format: "%.1f", avg))（比日常平均变动 \(String(format: "%+.1f", diff))）")
+                findings.append("熬夜标签日（n=\(lateImpact.count)）平均恢复分为 \(String(format: "%.1f", avg))（相对本周平均 \(String(format: "%+.1f", diff))）")
             }
-            if !alcoholImpact.isEmpty {
+            if alcoholImpact.count >= 2 {
                 let avg = alcoholImpact.reduce(0, +) / Double(alcoholImpact.count)
                 let diff = avg - normalRecovery
-                findings.append("饮酒日子平均恢复分为 \(String(format: "%.1f", avg))（比日常平均变动 \(String(format: "%+.1f", diff))）")
+                findings.append("饮酒标签日（n=\(alcoholImpact.count)）平均恢复分为 \(String(format: "%.1f", avg))（相对本周平均 \(String(format: "%+.1f", diff))）")
             }
-            if !stressImpact.isEmpty {
+            if stressImpact.count >= 2 {
                 let avg = stressImpact.reduce(0, +) / Double(stressImpact.count)
                 let diff = avg - normalRecovery
-                findings.append("高压力日子平均恢复分为 \(String(format: "%.1f", avg))（比日常平均变动 \(String(format: "%+.1f", diff))）")
+                findings.append("高压力标签日（n=\(stressImpact.count)）平均恢复分为 \(String(format: "%.1f", avg))（相对本周平均 \(String(format: "%+.1f", diff))）")
             }
-            if !caffeineImpact.isEmpty {
+            if caffeineImpact.count >= 2 {
                 let avg = caffeineImpact.reduce(0, +) / Double(caffeineImpact.count)
                 let diff = avg - normalRecovery
-                findings.append("摄入咖啡因日子平均恢复分为 \(String(format: "%.1f", avg))（比日常平均变动 \(String(format: "%+.1f", diff))）")
+                findings.append("咖啡因标签日（n=\(caffeineImpact.count)）平均恢复分为 \(String(format: "%.1f", avg))（相对本周平均 \(String(format: "%+.1f", diff))）")
             }
             
             if !findings.isEmpty {
-                stressorAnalysis = "- " + findings.joined(separator: "\n- ")
+                stressorAnalysis = "以下为本周记录的观察值，不代表因果关系：\n- " + findings.joined(separator: "\n- ")
             } else {
-                stressorAnalysis = "已记录日志，但暂不包含咖啡因、熬夜、高压力或酒精等显著生理相关标签，生理压力源相关性暂不显著。"
+                stressorAnalysis = "可识别的压力源标签样本不足，暂不做关联解读。"
             }
         }
 

@@ -8,6 +8,13 @@ enum VelaNavigationVisibility {
     }
 }
 
+enum VelaFloatingNavigationMetrics {
+    static let barHeight: CGFloat = 58
+    static let navBottomPadding: CGFloat = 14
+    static let contentBottomPadding: CGFloat = 32
+    static let coachComposerClearance: CGFloat = 116
+}
+
 enum VelaNavigationMotion {
     static let destinationFadeDuration = 0.16
 }
@@ -57,7 +64,6 @@ struct VelaShell: View {
 
     @State private var showPlusSheet = false
     @State private var showCoach     = false
-    @State private var showSettings  = false
     @State private var keyboardVisible = false
 
     @ObservedObject private var appState = VelaAppState.shared
@@ -108,7 +114,7 @@ struct VelaShell: View {
         .fullScreenCover(isPresented: $showCoach) {
             VelaCoachView(presentation: .quickCover, vm: services.coachChat)
         }
-        .sheet(isPresented: $showSettings) {
+        .sheet(isPresented: $appState.showSettings) {
             NavigationStack { VelaSettingsView() }
         }
         .sheet(isPresented: $appState.triggerWeightLog, onDismiss: appState.markLocalDataChanged) {
@@ -186,7 +192,7 @@ struct VelaShell: View {
     private var nativeTabNavigation: some View {
         TabView(selection: $appState.selectedTab) {
             nativeTabSurface(.today) {
-                VelaTodayView(showCoach: $showCoach, showSettings: $showSettings)
+                VelaTodayView(showCoach: $showCoach, showSettings: $appState.showSettings)
             }
             .tabItem {
                 Label(label(for: .today), systemImage: iconName(for: .today))
@@ -232,14 +238,14 @@ struct VelaShell: View {
     }
 
     private var legacyFloatingNavigation: some View {
-        ZStack(alignment: .bottom) {
+        ZStack {
             VelaTheme.systemGroupedBackground.ignoresSafeArea()
 
             // Keep legacy primary surfaces mounted so cached SwiftData content
             // is already hydrated when the user switches tabs.
             ZStack {
                 tabSurface(.today) {
-                    VelaTodayView(showCoach: $showCoach, showSettings: $showSettings)
+                    VelaTodayView(showCoach: $showCoach, showSettings: $appState.showSettings)
                 }
                 tabSurface(.training) {
                     VelaTrainingView()
@@ -261,11 +267,12 @@ struct VelaShell: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .ignoresSafeArea(.container, edges: .bottom)
-
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             if VelaNavigationVisibility.shouldShowBottomBar(keyboardVisible: keyboardVisible) {
                 bottomGlassNavBar
-                    .padding(.bottom, 8)
+                    .padding(.top, 6)
+                    .padding(.bottom, VelaFloatingNavigationMetrics.navBottomPadding)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -331,7 +338,7 @@ struct VelaShell: View {
             }
             .foregroundStyle(isActive ? VelaTheme.fg : VelaTheme.muted)
             .frame(maxWidth: .infinity)
-            .frame(height: 46)
+            .frame(height: VelaFloatingNavigationMetrics.barHeight - 12)
             .background(
                 ZStack {
                     if isActive {
@@ -360,7 +367,7 @@ struct VelaShell: View {
         case .today:    L10n.t("Today", "今日")
         case .training: L10n.t("Training", "训练")
         case .insights: L10n.t("Insights", "趋势")
-        case .coach:    L10n.t("Coach", "Coach")
+        case .coach:    L10n.t("Coach", "教练")
         case .me:       L10n.t("Me", "个人")
         }
     }
@@ -685,75 +692,63 @@ private struct PostWorkoutImpactSheet: View {
 
     private func summaryGrid(_ impact: PostWorkoutImpact) -> some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
-            impactCard(title: "耗力代价", value: impact.strainCostText, caption: impact.strainSourceText)
+            impactCard(title: "训练负荷估算", value: impact.strainCostText, caption: impact.strainSourceText)
             impactCard(title: "能量消耗", value: impact.energyText, caption: "训练记录")
-            impactCard(title: "0-2h 心率", value: impact.postHeartRateText, caption: "结束后窗口")
+            impactCard(title: "训练后心率", value: impact.postHeartRateText, caption: "0-2 小时实测均值")
         }
     }
 
     private func trendSection(_ impact: PostWorkoutImpact) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("2 小时趋势")
+                Text("训练后心率")
                     .font(VelaTheme.headline())
                     .foregroundStyle(VelaTheme.fg)
-                Text("按训练后心率回落、RPE、能量消耗和当天电量推估。")
+                Text("仅展示训练结束后 2 小时内 Apple 健康实际采集的心率，不补全或推算缺失时段。")
                     .font(VelaTheme.caption1())
                     .foregroundStyle(VelaTheme.muted)
             }
 
-            VStack(spacing: 10) {
-                trendCard(
-                    title: "恢复情况",
-                    value: impact.recoveryTrendValueText,
-                    caption: "越高表示越接近恢复",
-                    color: VelaTheme.recovery,
-                    points: impact.recoveryTrend
-                )
-                trendCard(
-                    title: "耗力情况",
-                    value: impact.strainTrendValueText,
-                    caption: "越高表示身体仍在承压",
-                    color: VelaTheme.stress,
-                    points: impact.strainTrend
-                )
-                trendCard(
-                    title: "电量情况",
-                    value: impact.energyTrendValueText,
-                    caption: "越高表示可用能量越充足",
-                    color: VelaTheme.accent,
-                    points: impact.energyTrend
-                )
+            if impact.postWorkoutHeartRateTrend.count >= 2 {
+                observedHeartRateTrendCard(impact)
+            } else {
+                Text("训练结束后尚无足够的心率采样。同步完成后，这里只会补充实际记录。")
+                    .font(VelaTheme.subheadline())
+                    .foregroundStyle(VelaTheme.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(VelaTheme.elevatedSurface)
+                    )
             }
         }
         .padding(16)
         .velaNativeCard(radius: 18)
     }
 
-    private func trendCard(
-        title: String,
-        value: String,
-        caption: String,
-        color: Color,
-        points: [PostWorkoutTrendPoint]
-    ) -> some View {
+    private func observedHeartRateTrendCard(_ impact: PostWorkoutImpact) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
+                    Text("心率变化")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(VelaTheme.fg)
-                    Text(caption)
+                    Text("\(impact.postWorkoutHeartRateTrend.count) 个实际采样点")
                         .font(VelaTheme.caption2())
                         .foregroundStyle(VelaTheme.muted)
                 }
                 Spacer()
-                Text(value)
+                Text(impact.postPeakHeartRateText)
                     .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundStyle(color)
+                    .foregroundStyle(VelaTheme.strain)
             }
 
-            PostWorkoutTrendLine(points: points, color: color)
+            PostWorkoutTrendLine(
+                points: impact.postWorkoutHeartRateTrend,
+                color: VelaTheme.strain,
+                valueRange: impact.postWorkoutHeartRateRange
+            )
                 .frame(height: 86)
 
             HStack {
@@ -913,6 +908,7 @@ private struct PostWorkoutImpactSheet: View {
                 response: response,
                 todaySummary: todaySummary,
                 nextDaySummary: nextDaySummary,
+                postWorkoutStart: end,
                 postWorkoutHeartRates: postSamples
             )
             errorText = nil
@@ -936,9 +932,7 @@ private struct PostWorkoutImpact {
     let nextDayHRVDelta: Double?
     let nextDayRHRDelta: Double?
     let nextDaySleepScore: Double?
-    let recoveryTrend: [PostWorkoutTrendPoint]
-    let strainTrend: [PostWorkoutTrendPoint]
-    let energyTrend: [PostWorkoutTrendPoint]
+    let postWorkoutHeartRateTrend: [PostWorkoutTrendPoint]
 
     init(
         workout: StrengthWorkoutRecord?,
@@ -946,6 +940,7 @@ private struct PostWorkoutImpact {
         response: TrainingResponseRecord?,
         todaySummary: DailyHealthSummaryRecord?,
         nextDaySummary: DailyHealthSummaryRecord?,
+        postWorkoutStart: Date,
         postWorkoutHeartRates: [HeartRateSample]
     ) {
         title = workout?.title ?? event?.title ?? "训练后恢复影响"
@@ -953,10 +948,10 @@ private struct PostWorkoutImpact {
         let duration = Double(workout?.durationMinutes ?? Int(event?.durationMinutes ?? 0))
         if let response {
             strainCost = Double(response.totalEffectiveSets) * (response.sessionRPE ?? rpe ?? 6)
-            strainSourceText = "有效组 x RPE"
+            strainSourceText = "按有效组 x RPE 估算"
         } else if duration > 0 {
             strainCost = duration * (rpe ?? 6) / 10
-            strainSourceText = "时长 x RPE"
+            strainSourceText = "按时长 x RPE 估算"
         } else {
             strainCost = nil
             strainSourceText = "待同步"
@@ -971,18 +966,14 @@ private struct PostWorkoutImpact {
         nextDayHRVDelta = response?.nextDayHRVDelta ?? Self.delta(nextDaySummary?.hrvAverage, todaySummary?.hrvAverage)
         nextDayRHRDelta = response?.nextDayRHRDelta ?? Self.delta(nextDaySummary?.restingHeartRate, todaySummary?.restingHeartRate)
         nextDaySleepScore = response?.nextDaySleepScore ?? nextDaySummary?.sleepScore
-
-        let trends = Self.buildTrends(
-            samples: postWorkoutHeartRates,
-            restingHeartRate: todaySummary?.restingHeartRate,
-            eventAverageHeartRate: event?.averageHeartRate,
-            strainCost: strainCost,
-            energyKilocalories: energyKilocalories,
-            energyBank: energyBank
-        )
-        recoveryTrend = trends.recovery
-        strainTrend = trends.strain
-        energyTrend = trends.energy
+        postWorkoutHeartRateTrend = postWorkoutHeartRates
+            .map { sample in
+                PostWorkoutTrendPoint(
+                    minute: max(0, min(120, sample.date.timeIntervalSince(postWorkoutStart) / 60)),
+                    value: sample.bpm
+                )
+            }
+            .sorted { $0.minute < $1.minute }
     }
 
     var strainCostText: String { roundedText(strainCost, suffix: "") }
@@ -996,9 +987,13 @@ private struct PostWorkoutImpact {
     var hrvDeltaText: String { signedText(nextDayHRVDelta, suffix: " ms") }
     var rhrDeltaText: String { signedText(nextDayRHRDelta, suffix: " bpm") }
     var sleepScoreText: String { roundedText(nextDaySleepScore, suffix: "/100") }
-    var recoveryTrendValueText: String { trendValueText(recoveryTrend) }
-    var strainTrendValueText: String { trendValueText(strainTrend) }
-    var energyTrendValueText: String { trendValueText(energyTrend) }
+    var postWorkoutHeartRateRange: ClosedRange<Double> {
+        let values = postWorkoutHeartRateTrend.map(\.value)
+        guard let minimum = values.min(), let maximum = values.max() else { return 40...180 }
+        let lower = max(30, floor((minimum - 8) / 10) * 10)
+        let upper = max(lower + 20, ceil((maximum + 8) / 10) * 10)
+        return lower...upper
+    }
 
     var interpretation: String {
         if nextDayRecoveryDelta == nil && nextDayHRVDelta == nil && nextDayRHRDelta == nil {
@@ -1008,7 +1003,7 @@ private struct PostWorkoutImpact {
             return "这次训练的恢复代价偏高。下一次训练应降低同肌群容量或强度，优先看睡眠、HRV 和静息心率是否回到基线。"
         }
         if (todayStrain ?? 0) >= 75 || (strainCost ?? 0) >= 70 {
-            return "这次训练本身耗力较高，但暂时没有看到明确的次日恢复崩塌。下一次训练可以保留计划，但不要叠加高强度同肌群。"
+            return "这次训练本身耗力较高，目前未见明确的次日恢复下降信号。下一次同肌群训练先观察睡眠、HRV、静息心率和主观疲劳，再决定是否加量。"
         }
         return "这次训练的恢复代价目前看可控。可以按计划推进，但仍建议结合主观疲劳和睡眠质量判断是否加量。"
     }
@@ -1021,72 +1016,6 @@ private struct PostWorkoutImpact {
     private static func delta(_ next: Double?, _ current: Double?) -> Double? {
         guard let next, let current else { return nil }
         return next - current
-    }
-
-    private static func buildTrends(
-        samples: [HeartRateSample],
-        restingHeartRate: Double?,
-        eventAverageHeartRate: Double?,
-        strainCost: Double?,
-        energyKilocalories: Double?,
-        energyBank: Double?
-    ) -> (recovery: [PostWorkoutTrendPoint], strain: [PostWorkoutTrendPoint], energy: [PostWorkoutTrendPoint]) {
-        let resting = restingHeartRate ?? 62
-        let peak = max(samples.map(\.bpm).max() ?? 0, eventAverageHeartRate ?? 0, resting + 55)
-        let highRange = max(35, peak - resting)
-        let baseStrain = clamp((strainCost ?? 35) / 85)
-        let baseEnergy = clamp(energyBank ?? 68, min: 15, max: 95)
-        let energyDrain = clamp((energyKilocalories ?? (strainCost ?? 45) * 4) / 18, min: 8, max: 34)
-        let firstSampleDate = samples.map(\.date).min()
-
-        var recovery: [PostWorkoutTrendPoint] = []
-        var strain: [PostWorkoutTrendPoint] = []
-        var energy: [PostWorkoutTrendPoint] = []
-
-        for minute in stride(from: 0.0, through: 120.0, by: 15.0) {
-            let hr = heartRateAtMinute(
-                minute,
-                samples: samples,
-                firstSampleDate: firstSampleDate,
-                fallbackAverage: eventAverageHeartRate,
-                resting: resting
-            )
-            let hrLoad = clamp((hr - resting) / highRange)
-            let strainValue = clamp((hrLoad * 0.72 + baseStrain * 0.28) * 100)
-            let recoveryValue = clamp(100 - strainValue * 0.78 + (baseEnergy - 50) * 0.16)
-            let energyValue = clamp(baseEnergy - energyDrain * exp(-minute / 80))
-
-            recovery.append(PostWorkoutTrendPoint(minute: minute, value: recoveryValue))
-            strain.append(PostWorkoutTrendPoint(minute: minute, value: strainValue))
-            energy.append(PostWorkoutTrendPoint(minute: minute, value: energyValue))
-        }
-
-        return (recovery, strain, energy)
-    }
-
-    private static func heartRateAtMinute(
-        _ minute: Double,
-        samples: [HeartRateSample],
-        firstSampleDate: Date?,
-        fallbackAverage: Double?,
-        resting: Double
-    ) -> Double {
-        if let firstSampleDate {
-            let nearby = samples.filter { sample in
-                let sampleMinute = sample.date.timeIntervalSince(firstSampleDate) / 60
-                return abs(sampleMinute - minute) <= 8
-            }
-            if let average = average(nearby.map(\.bpm)) {
-                return average
-            }
-        }
-
-        let elevated = max((fallbackAverage ?? resting + 42) - resting, 18)
-        return resting + elevated * exp(-minute / 48)
-    }
-
-    private static func clamp(_ value: Double, min lower: Double = 0, max upper: Double = 100) -> Double {
-        Swift.min(Swift.max(value, lower), upper)
     }
 
     private func roundedText(_ value: Double?, suffix: String) -> String {
@@ -1103,10 +1032,6 @@ private struct PostWorkoutImpact {
         return "\(rounded)\(suffix)"
     }
 
-    private func trendValueText(_ points: [PostWorkoutTrendPoint]) -> String {
-        guard let value = points.last?.value else { return "--" }
-        return "\(Int(value.rounded()))"
-    }
 }
 
 private struct PostWorkoutTrendPoint: Identifiable, Hashable {
@@ -1118,6 +1043,7 @@ private struct PostWorkoutTrendPoint: Identifiable, Hashable {
 private struct PostWorkoutTrendLine: View {
     let points: [PostWorkoutTrendPoint]
     let color: Color
+    let valueRange: ClosedRange<Double>
 
     var body: some View {
         GeometryReader { proxy in
@@ -1148,7 +1074,8 @@ private struct PostWorkoutTrendLine: View {
             var line = Path()
             for (index, point) in points.enumerated() {
                 let x = size.width * point.minute / 120
-                let y = size.height * (1 - min(max(point.value, 0), 100) / 100)
+                let normalized = (point.value - valueRange.lowerBound) / (valueRange.upperBound - valueRange.lowerBound)
+                let y = size.height * (1 - min(max(normalized, 0), 1))
                 let cgPoint = CGPoint(x: x, y: y)
                 if index == 0 {
                     line.move(to: cgPoint)
@@ -1161,7 +1088,8 @@ private struct PostWorkoutTrendLine: View {
 
             if let last = points.last {
                 let x = size.width * last.minute / 120
-                let y = size.height * (1 - min(max(last.value, 0), 100) / 100)
+                let normalized = (last.value - valueRange.lowerBound) / (valueRange.upperBound - valueRange.lowerBound)
+                let y = size.height * (1 - min(max(normalized, 0), 1))
                 let marker = CGRect(x: x - 3.5, y: y - 3.5, width: 7, height: 7)
                 context.fill(Path(ellipseIn: marker), with: .color(color))
             }

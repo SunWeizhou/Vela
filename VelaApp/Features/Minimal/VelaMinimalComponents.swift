@@ -48,6 +48,26 @@ enum VelaMinimalFormatting {
     }
 }
 
+struct VelaDetailBackButton: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var tint: Color = VelaTheme.accent
+    var label: String = "返回"
+
+    var body: some View {
+        Button(action: dismiss.callAsFunction) {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 38, height: 38)
+                .background(Circle().fill(VelaTheme.surface))
+                .overlay(Circle().stroke(VelaTheme.stroke, lineWidth: 0.5))
+        }
+        .buttonStyle(.cardPress)
+        .accessibilityLabel(label)
+    }
+}
+
 // MARK: - VelaMetricDetailView — 指标详情 (Bevel iOS 26 Parity Rebuild)
 // 100% Visual Parity with Bevel App: Warm-White Canvas, White cockpit cards, Custom Circular dials, Spline Stress Charts & Starry Sleep Dark Mode
 
@@ -200,6 +220,7 @@ struct VelaMetricDetailView: View {
                 isSleep: isSleep,
                 action: { dismiss() }
             )
+            .accessibilityLabel("返回")
 
             Spacer()
 
@@ -234,6 +255,7 @@ struct VelaMetricDetailView: View {
                 .frame(width: 36, height: 36)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("分享\(navTitle)")
     }
 
     private func metricNavigationButton(
@@ -269,7 +291,9 @@ struct VelaMetricDetailView: View {
 
     private var chartPoints: [ChartPoint] {
         if selectedRange == .day {
-            return hourlyPoints
+            // DailyHealthSummaryRecord only contains a daily aggregate. Do not
+            // fabricate an hourly curve from it.
+            return []
         }
         let snapshots = dailyRecords.map { $0.toSnapshot() }
         let calendar = Calendar.current
@@ -285,130 +309,6 @@ struct VelaMetricDetailView: View {
             guard let val = metricValue(for: snap) else { return nil }
             return ChartPoint(date: snap.date, value: val)
         }
-    }
-
-    private var hourlyPoints: [ChartPoint] {
-        let calendar = Calendar.current
-        let baseDate = calendar.startOfDay(for: dashboardVM.selectedDate)
-        
-        // Find if there is a daily record for the selected date
-        let targetRecord = dailyRecords.first { calendar.isDate($0.date, inSameDayAs: baseDate) }
-        
-        let snap: DailyHealthSnapshot
-        if let targetRecord {
-            snap = targetRecord.toSnapshot()
-        } else {
-            snap = DailyHealthSnapshot(
-                date: baseDate,
-                sleepScore: dashboard.sleepScore.hasData ? dashboard.sleepScore.score : nil,
-                recoveryScore: dashboard.recovery.hasData ? dashboard.recovery.score : nil,
-                strainScore: dashboard.strain.hasData ? dashboard.strain.score : nil,
-                stressIndex: dashboard.stress.hasData ? dashboard.stress.stressIndex : nil,
-                morningEnergy: dashboard.energy.hasData ? dashboard.energy.currentEnergy : nil,
-                currentEnergy: dashboard.energy.hasData ? dashboard.energy.currentEnergy : nil,
-                energyBank: dashboard.energy.hasData ? dashboard.energy.currentEnergy : nil,
-                hrvAverage: dashboard.recoveryMetrics.hrvMilliseconds,
-                restingHeartRate: dashboard.recoveryMetrics.restingHeartRate
-            )
-        }
-        
-        var points: [ChartPoint] = []
-        
-        switch metric {
-        case .strain:
-            // Cumulative load rising throughout the day, e.g. from 0 to strainScore
-            let score = snap.strainScore ?? 0.0
-            var currentCumulative = 0.0
-            for hour in 0...23 {
-                let hourDate = calendar.date(byAdding: .hour, value: hour, to: baseDate) ?? baseDate
-                var hourlyIncrement = 0.01 * (score / 15.0)
-                if hour >= 8 && hour <= 22 {
-                    // Small increments during active hours
-                    hourlyIncrement += Double(hour % 3 == 0 ? 0.05 : 0.02) * (score / 15.0)
-                }
-                if hour == 18 || hour == 19 {
-                    // Workout peak
-                    hourlyIncrement += Double(0.35) * (score / 15.0)
-                }
-                currentCumulative = min(score, currentCumulative + hourlyIncrement)
-                points.append(ChartPoint(date: hourDate, value: currentCumulative))
-            }
-            
-        case .recovery:
-            // Intraday average heart rate
-            let rhr = snap.restingHeartRate ?? 60.0
-            for hour in 0...23 {
-                let hourDate = calendar.date(byAdding: .hour, value: hour, to: baseDate) ?? baseDate
-                var hr = rhr
-                if hour >= 0 && hour <= 6 {
-                    // Sleeping: low HR, close to RHR
-                    let offset = Double(sin(Double(hour) * 0.5)) * 2.0
-                    hr = rhr + offset
-                } else if hour == 18 || hour == 19 {
-                    // Active workout hour
-                    hr = rhr + 65.0
-                } else {
-                    // Active daytime
-                    let offset = Double(sin(Double(hour - 7) * 0.3)) * 10.0
-                    hr = rhr + 15.0 + offset
-                }
-                points.append(ChartPoint(date: hourDate, value: max(35.0, hr)))
-            }
-            
-        case .stress:
-            // Stress index (0-100) hourly
-            let dailyStress = snap.stressIndex ?? 35.0
-            for hour in 0...23 {
-                let hourDate = calendar.date(byAdding: .hour, value: hour, to: baseDate) ?? baseDate
-                var baseStress = 12.0
-                if hour >= 8 && hour <= 22 {
-                    let offset = Double(sin(Double(hour - 8) * 0.4)) * 12.0
-                    baseStress = dailyStress + offset
-                    if hour == 10 || hour == 15 || hour == 20 {
-                        baseStress += 15.0
-                    }
-                } else {
-                    baseStress = 6.0 + Double(hour % 2 == 0 ? 3 : 1)
-                }
-                points.append(ChartPoint(date: hourDate, value: max(1.0, min(99.0, baseStress))))
-            }
-            
-        case .energy:
-            // Energy Bank (100% down to 20%, charging during sleep)
-            let maxEnergy = snap.morningEnergy ?? 85.0
-            let minEnergy = snap.currentEnergy ?? 20.0
-            var currentEnergy = maxEnergy
-            for hour in 0...23 {
-                let hourDate = calendar.date(byAdding: .hour, value: hour, to: baseDate) ?? baseDate
-                if hour >= 0 && hour <= 7 {
-                    let progress = Double(hour) / 7.0
-                    currentEnergy = minEnergy + (maxEnergy - minEnergy) * progress
-                } else {
-                    let wakeHours = Double(hour - 7)
-                    let drainProgress = wakeHours / 16.0
-                    let baseDrain = (maxEnergy - minEnergy) * drainProgress
-                    var workoutDrain = 0.0
-                    if hour >= 18 && hour <= 20 {
-                        workoutDrain = 10.0 * Double(hour - 17)
-                    }
-                    currentEnergy = max(minEnergy, maxEnergy - baseDrain - workoutDrain + Double(hour % 5 == 0 ? 3 : -1))
-                }
-                points.append(ChartPoint(date: hourDate, value: max(1.0, min(100.0, currentEnergy))))
-            }
-            
-        default:
-            // Other metrics: fallback to a split calculation of daily value with slight random variance
-            let baseVal = metricValue(for: snap) ?? 0.0
-            for hour in 0...23 {
-                let hourDate = calendar.date(byAdding: .hour, value: hour, to: baseDate) ?? baseDate
-                let hourlyVal = isBarChart 
-                    ? (hour >= 8 && hour <= 21 ? (baseVal / 14.0) + Double(hour % 4 == 0 ? 0.05 : -0.05) * (baseVal / 14.0) : 0.0)
-                    : baseVal + Double(sin(Double(hour) * 0.5)) * 0.05 * baseVal
-                points.append(ChartPoint(date: hourDate, value: max(0.0, hourlyVal)))
-            }
-        }
-        
-        return points
     }
 
     private func metricValue(for snapshot: DailyHealthSnapshot) -> Double? {
@@ -516,7 +416,7 @@ struct VelaMetricDetailView: View {
             if points.isEmpty {
                 VStack {
                     Spacer()
-                    Text("暂无趋势数据")
+                    Text(selectedRange == .day ? "当天仅有日汇总；切换至 7 天查看真实趋势" : "暂无趋势数据")
                         .font(.system(size: 13))
                         .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
                     Spacer()
@@ -1093,7 +993,7 @@ struct VelaMetricDetailView: View {
                             .font(VelaTheme.footnote())
                             .fontWeight(.bold)
                             .foregroundStyle(isSleep ? Color(hex: "#F2EFE8") : VelaTheme.fg)
-                        Text("此期间没有进行 any 活动。")
+                        Text("此期间没有记录到活动。")
                             .font(VelaTheme.caption1())
                             .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
                     } else {
@@ -1391,17 +1291,20 @@ struct VelaMetricDetailView: View {
             }
         }
 
-        let age = UserProfileSettings.age()
+        guard let age = UserProfileSettings.age()
             ?? WikiFileService.getAgeFromWiki()
-            ?? dashboard.extendedMetrics.age
-            ?? 30
+            ?? dashboard.extendedMetrics.age,
+              let restingHeartRate = dashboard.recoveryMetrics.restingHeartRate else {
+            heartRateZoneSummary = nil
+            return
+        }
         let maxHeartRate = UserProfileSettings.resolvedMaxHeartRate(
             age: age,
             wiki: WikiFileService.getMaxHeartRateFromWiki()
         )
         heartRateZoneSummary = HeartRateZoneCalculator.summarize(
             sampleGroups: sampleGroups,
-            restingHeartRate: dashboard.recoveryMetrics.restingHeartRate ?? 60,
+            restingHeartRate: restingHeartRate,
             maxHeartRate: maxHeartRate
         )
     }
@@ -1676,7 +1579,7 @@ struct VelaMetricDetailView: View {
         case .respiratoryRate:  "基线平均"
         case .bloodOxygen:      "血氧基线"
         case .steps:            "昨日步数"
-        case .activeCalories:   "基础代谢"
+        case .activeCalories:   "活动消耗"
         case .activeMinutes:    "昨日活跃"
         }
     }
@@ -1712,11 +1615,7 @@ struct VelaMetricDetailView: View {
         case .steps:
             return dashboard.strain.metrics["steps_raw"].map { "\(Int($0)) 步" } ?? "--"
         case .activeCalories:
-            let age = dashboard.extendedMetrics.age ?? 30
-            let weight = dashboard.bodyMetrics.weightKilograms ?? 70.0
-            let height = dashboard.extendedMetrics.heightCm ?? 175.0
-            let bmr = 10.0 * weight + 6.25 * height - 5.0 * Double(age) + 5.0
-            return "\(Int(bmr)) kcal"
+            return dashboard.strain.metrics["active_energy_raw"].map { "\(Int($0)) kcal" } ?? "--"
         case .activeMinutes:
             return dashboard.strain.metrics["exercise_minutes_raw"].map { "\(Int($0)) 分钟" } ?? "--"
         }
@@ -1759,7 +1658,7 @@ struct VelaMetricDetailView: View {
         case .respiratoryRate:  "今日读数"
         case .bloodOxygen:      "今日读数"
         case .steps:            "今日步数"
-        case .activeCalories:   "活动消耗"
+        case .activeCalories:   "当天负荷"
         case .activeMinutes:    "今日活跃"
         }
     }
@@ -1795,7 +1694,7 @@ struct VelaMetricDetailView: View {
         case .steps:
             return dashboard.strain.metrics["steps_raw"].map { "\(Int($0)) 步" } ?? "--"
         case .activeCalories:
-            return dashboard.strain.metrics["active_energy_raw"].map { "\(Int($0)) kcal" } ?? "--"
+            return dashboard.strain.hasData ? "\(Int(dashboard.strain.score.rounded())) / 100" : "--"
         case .activeMinutes:
             return dashboard.strain.metrics["exercise_minutes_raw"].map { "\(Int($0)) 分钟" } ?? "--"
         }
@@ -1974,8 +1873,8 @@ struct VelaMetricDetailView: View {
             ]
         case .steps, .activeCalories, .activeMinutes:
             [
-                "运动负荷与能量代谢对明日的心血管恢复存在 12-24 小时的生理滞后性影响。",
-                "高负荷日之后注意补充充足的糖原与蛋白质，有利于肌肉纤维重建。"
+                "运动负荷与能量摄入可能影响次日恢复；结合连续几天的趋势比单次读数更有参考价值。",
+                "高负荷日后可根据饥饿感、训练安排和个人目标，保证规律进食、补水与休息。"
             ]
         }
     }
@@ -2186,7 +2085,7 @@ struct CoreMetricCoachContext {
             suggestedQuestion = L10n.t("Analyze my resting heart rate against baseline and tell me what to watch today.", "请结合基线分析我的静息心率，并告诉我今天需要关注什么。")
         case .weight:
             title = L10n.t("Weight", "体重")
-            systemContext = L10n.t("Analyze body weight trend, body fat percentage, BMR estimation, and composition adjustments.", "分析体重变化趋势、身体体脂率、基础代谢率估算及身体成分调整。")
+            systemContext = L10n.t("Analyze body weight trend and body composition context. Estimate BMR only when the required profile data is complete.", "分析体重变化趋势和身体成分背景；仅在档案数据完整时估算基础代谢。")
             suggestedQuestion = L10n.t("Explain my recent weight fluctuations and give me a practical recommendation on body composition.", "请解释我近期的体重波动，并针对身体成分给我一个可行的建议。")
         case .bodyFat:
             title = L10n.t("Body Fat", "体脂")
@@ -2198,19 +2097,19 @@ struct CoreMetricCoachContext {
             suggestedQuestion = L10n.t("Has my breathing frequency stayed within baseline? Explain what it signifies for my recovery.", "我的呼吸频率是否维持在基线范围内？请说明这对我的恢复有什么指示意义。")
         case .bloodOxygen:
             title = L10n.t("Blood Oxygen", "血氧")
-            systemContext = L10n.t("Analyze daily blood oxygen levels (SpO2), minimums, averages, and systemic oxygenation trends.", "分析每日血氧饱和度（SpO2）水平、最低值、平均值以及全身氧合趋势。")
-            suggestedQuestion = L10n.t("Evaluate my blood oxygen metrics and let me know if everything is in ideal balance.", "评估我的血氧指标，并告诉我一切是否都处于理想的平衡状态。")
+            systemContext = L10n.t("Analyze available blood oxygen readings and repeated changes. Treat isolated readings cautiously and do not diagnose.", "分析可用的血氧读数和重复变化；谨慎解读单次读数，不作诊断。")
+            suggestedQuestion = L10n.t("Summarize my available blood oxygen trend and explain what is worth monitoring.", "总结我可用的血氧趋势，并说明哪些变化值得持续观察。")
         case .steps:
             title = L10n.t("Steps", "步数")
-            systemContext = L10n.t("Analyze daily step count, movement trends, cardiovascular health impact, and daily activity baseline.", "分析每日步数、运动趋势、心血管健康影响以及每日活动基线。")
+            systemContext = L10n.t("Analyze daily step count, movement trends, consistency, and the user's activity baseline.", "分析每日步数、活动趋势、一致性和个人活动基线。")
             suggestedQuestion = L10n.t("Analyze my daily steps history and suggest how to optimize my movement levels.", "分析我的每日步数历史，并建议如何优化我的日常活动量。")
         case .activeCalories:
             title = L10n.t("Active Calories", "活动消耗")
-            systemContext = L10n.t("Analyze active calorie burn, workout energy expenditure, daily BMR comparison, and metabolic balance.", "分析活动卡路里消耗、运动能量支出、每日基础代谢对比及代谢平衡。")
-            suggestedQuestion = L10n.t("Evaluate my active calorie burn and explain how it compares to my metabolic baseline.", "评估我的活动热量消耗，并说明它与我的基础代谢基线相比如何。")
+            systemContext = L10n.t("Analyze recorded active calorie burn and workout energy expenditure. Do not infer total energy needs or BMR without the required profile data.", "分析已记录的活动消耗和运动能量支出；缺少完整档案时，不推断总能量需求或基础代谢。")
+            suggestedQuestion = L10n.t("Evaluate my recorded active calorie burn and explain the trend without inferring an unmeasured metabolic baseline.", "评估我已记录的活动消耗趋势，不推断未测得的代谢基线。")
         case .activeMinutes:
             title = L10n.t("Active Minutes", "活跃时间")
-            systemContext = L10n.t("Analyze active exercise duration, intensity, weekly activity consistency, and cardio impact.", "分析运动活跃时长、强度分布、每周活动一致性以及心肺健康影响。")
+            systemContext = L10n.t("Analyze recorded active exercise duration, intensity distribution, and weekly activity consistency.", "分析已记录的活跃时长、强度分布和每周活动一致性。")
             suggestedQuestion = L10n.t("Analyze my active minutes trend and give me recommendations to optimize my efficiency.", "分析我的活跃分钟数趋势，并给我优化锻炼效率的建议。")
         }
 
@@ -2695,98 +2594,22 @@ struct SleepClockWheelView: View {
     }
 }
 
-// MARK: - STRESS DAILY LINE CHART VIEW
+// MARK: - STRESS DAILY STATE VIEW
 struct DailyStressChartView: View {
     let isSleep: Bool
-    
-    var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            let h = geo.size.height
-            
-            ZStack {
-                // Background grid lines (horizontal dashed lines)
-                VStack(spacing: h / 4 - 1.5) {
-                    ForEach(0..<4) { _ in
-                        Line()
-                            .stroke(isSleep ? Color(hex: "#2E2B25").opacity(0.6) : VelaTheme.borderSoft.opacity(0.8), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                            .frame(height: 1)
-                    }
-                }
-                
-                // Curve spline Area Gradient Fill
-                Path { path in
-                    path.move(to: CGPoint(x: 0, y: h))
-                    path.addLine(to: CGPoint(x: 0, y: h - 18))
-                    path.addCurve(to: CGPoint(x: w * 0.25, y: h - 55), control1: CGPoint(x: w * 0.1, y: h - 22), control2: CGPoint(x: w * 0.18, y: h - 65))
-                    path.addCurve(to: CGPoint(x: w * 0.50, y: h - 25), control1: CGPoint(x: w * 0.32, y: h - 45), control2: CGPoint(x: w * 0.42, y: h - 15))
-                    path.addCurve(to: CGPoint(x: w * 0.75, y: h - 85), control1: CGPoint(x: w * 0.60, y: h - 35), control2: CGPoint(x: w * 0.68, y: h - 95))
-                    path.addCurve(to: CGPoint(x: w, y: h - 30), control1: CGPoint(x: w * 0.85, y: h - 75), control2: CGPoint(x: w * 0.92, y: h - 25))
-                    path.addLine(to: CGPoint(x: w, y: h))
-                    path.closeSubpath()
-                }
-                .fill(
-                    LinearGradient(
-                        colors: [VelaTheme.stressColor.opacity(0.35), VelaTheme.stressColor.opacity(0.0)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                
-                // Spline multi-colored line
-                Path { path in
-                    path.move(to: CGPoint(x: 0, y: h - 18))
-                    path.addCurve(to: CGPoint(x: w * 0.25, y: h - 55), control1: CGPoint(x: w * 0.1, y: h - 22), control2: CGPoint(x: w * 0.18, y: h - 65))
-                    path.addCurve(to: CGPoint(x: w * 0.50, y: h - 25), control1: CGPoint(x: w * 0.32, y: h - 45), control2: CGPoint(x: w * 0.42, y: h - 15))
-                    path.addCurve(to: CGPoint(x: w * 0.75, y: h - 85), control1: CGPoint(x: w * 0.60, y: h - 35), control2: CGPoint(x: w * 0.68, y: h - 95))
-                    path.addCurve(to: CGPoint(x: w, y: h - 30), control1: CGPoint(x: w * 0.85, y: h - 75), control2: CGPoint(x: w * 0.92, y: h - 25))
-                }
-                .stroke(
-                    LinearGradient(
-                        colors: [VelaTheme.success, VelaTheme.warn, VelaTheme.stressColor],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    ),
-                    style: StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round)
-                )
 
-                // Highlighting dots at specific key points
-                Circle()
-                    .fill(VelaTheme.success)
-                    .frame(width: 8, height: 8)
-                    .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
-                    .position(x: w * 0.50, y: h - 25)
-                
-                Circle()
-                    .fill(VelaTheme.stressColor)
-                    .frame(width: 8, height: 8)
-                    .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
-                    .position(x: w * 0.75, y: h - 85)
-                
-                // Timeline x-axis labels
-                HStack {
-                    Text("00:00")
-                    Spacer()
-                    Text("06:00")
-                    Spacer()
-                    Text("12:00")
-                    Spacer()
-                    Text("18:00")
-                }
-                .font(.system(size: 9, weight: .bold, design: .rounded))
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "chart.line.uptrend.xyaxis")
+                .font(.system(size: 24, weight: .medium))
                 .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
-                .offset(y: h / 2 + 10)
-            }
+            Text("暂无连续压力采样")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(isSleep ? Color(hex: "#F2EFE8") : VelaTheme.fg)
+            Text("同步更多日记录后，这里会展示真实趋势。")
+                .font(.system(size: 11))
+                .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
         }
-    }
-    
-    // Minimal vector gridline drawer
-    struct Line: Shape {
-        func path(in rect: CGRect) -> Path {
-            var path = Path()
-            path.move(to: CGPoint(x: 0, y: 0))
-            path.addLine(to: CGPoint(x: rect.width, y: 0))
-            return path
-        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

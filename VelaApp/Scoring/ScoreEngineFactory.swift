@@ -5,6 +5,7 @@ enum UserProfileSettings {
     static let weightKey = "vela_user_weight"
     static let heightKey = "vela_user_height"
     static let maxHeartRateKey = "vela_max_hr"
+    static let biologicalSexKey = "vela_user_biological_sex"
 
     static func age(defaults: UserDefaults = .standard) -> Int? {
         guard let value = defaults.object(forKey: ageKey) as? NSNumber else { return nil }
@@ -27,6 +28,40 @@ enum UserProfileSettings {
         guard let value = defaults.object(forKey: heightKey) as? NSNumber else { return nil }
         let height = value.doubleValue
         return (100...250).contains(height) ? height : nil
+    }
+
+    static func biologicalSex(defaults: UserDefaults = .standard) -> String? {
+        let value = defaults.string(forKey: biologicalSexKey)
+        return ["male", "female", "other"].contains(value) ? value : nil
+    }
+
+    static func hydrateMissingValuesFromHealth(
+        age: Int?,
+        weightKilograms: Double?,
+        heightCentimeters: Double?,
+        biologicalSex: String?,
+        defaults: UserDefaults = .standard
+    ) {
+        if Self.age(defaults: defaults) == nil,
+           let age,
+           (10...100).contains(age) {
+            defaults.set(age, forKey: ageKey)
+        }
+        if Self.weightKilograms(defaults: defaults) == nil,
+           let weightKilograms,
+           (25...350).contains(weightKilograms) {
+            defaults.set(weightKilograms, forKey: weightKey)
+        }
+        if Self.heightCentimeters(defaults: defaults) == nil,
+           let heightCentimeters,
+           (100...250).contains(heightCentimeters) {
+            defaults.set(heightCentimeters, forKey: heightKey)
+        }
+        if Self.biologicalSex(defaults: defaults) == nil,
+           let biologicalSex,
+           ["male", "female", "other"].contains(biologicalSex) {
+            defaults.set(biologicalSex, forKey: biologicalSexKey)
+        }
     }
 
     static func bodyMassIndex(weightKilograms: Double?, heightCentimeters: Double?) -> Double? {
@@ -106,7 +141,7 @@ enum ScoreEngineFactory {
             respiratoryRateToday: context.recoveryMetrics.respiratoryRate,
             respiratoryRateBaseline: context.recoveryBaseline.respiratoryRate,
             respiratoryRateHistory: [],
-            bodyTempDelta: context.extendedMetrics.bodyTemperature.map { $0 - 36.5 },
+            bodyTempDelta: nil,
             SpO2: context.extendedMetrics.oxygenSaturation
         )
     }
@@ -137,22 +172,22 @@ enum ScoreEngineFactory {
             ))
         }
         let age = profileAge
+            ?? context.extendedMetrics.age
             ?? UserProfileSettings.age()
             ?? WikiFileService.getAgeFromWiki()
             ?? context.extendedMetrics.age
-            ?? 30
-        let maxHeartRate = UserProfileSettings.resolvedMaxHeartRate(
-            age: age,
-            explicit: profileMaxHeartRate,
-            wiki: WikiFileService.getMaxHeartRateFromWiki()
-        )
+        let maxHeartRate = profileMaxHeartRate
+            ?? UserProfileSettings.maxHeartRate()
+            ?? WikiFileService.getMaxHeartRateFromWiki()
+            ?? age.map(UserProfileSettings.inferredMaxHeartRate)
+            ?? 0
 
         return StrainScoreInput(
             workouts: workoutInputs,
             activeEnergyToday: context.strainToday.activeEnergyKilocalories,
             exerciseMinutesToday: context.strainToday.exerciseMinutes,
             stepCount: context.strainToday.stepCount,
-            restingHR: context.recoveryMetrics.restingHeartRate ?? 60.0,
+            restingHR: context.recoveryMetrics.restingHeartRate ?? 0,
             maxHR: maxHeartRate,
             biologicalSex: context.extendedMetrics.biologicalSex,
             last28DaysDailyLoads: last28DaysDailyLoads,
@@ -187,7 +222,7 @@ enum ScoreEngineFactory {
             respRateToday: context.recoveryMetrics.respiratoryRate,
             respRateBaseline: context.recoveryBaseline.respiratoryRate,
             respRateSD: nil,
-            bodyTempDelta: context.extendedMetrics.bodyTemperature.map { $0 - 36.5 },
+            bodyTempDelta: nil,
             sleepScoreLastNight: sleepScore,
             strainScoreToday: strainScore,
             isWithinWorkoutWindow: isWorkoutWindow
@@ -220,7 +255,7 @@ enum ScoreEngineFactory {
             rhrBaseline: context.recoveryBaseline.restingHeartRate,
             sleepHours: context.sleepSummary.map { Double($0.totalSleepMinutes) / 60.0 },
             strainHistory: strainHistory,
-            bodyTempDelta: context.extendedMetrics.bodyTemperature.map { $0 - 36.5 },
+            bodyTempDelta: nil,
             hoursSinceWake: hoursSinceWake,
             respiratoryRateZ: nil,
             SpO2: context.extendedMetrics.oxygenSaturation,

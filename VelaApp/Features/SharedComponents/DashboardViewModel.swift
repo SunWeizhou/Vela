@@ -260,6 +260,13 @@ final class DashboardViewModel: ObservableObject {
     }
 
     private func computeWeeklyComparison(modelContext: ModelContext) {
+        // Clear prior-date values before calculating so a sparse historical day
+        // never keeps a comparison produced for the previously selected date.
+        weeklyRecovery = nil
+        weeklySleep = nil
+        weeklyHRV = nil
+        weeklyStrain = nil
+
         let repo = SwiftDataDailyHealthSummaryRepository(modelContext: modelContext)
         let calendar = Calendar.current
         let now = selectedDate
@@ -377,15 +384,15 @@ final class DashboardViewModel: ObservableObject {
 
     func loadHeatmap(modelContext: ModelContext) async {
         let repository = SwiftDataDailyHealthSummaryRepository(modelContext: modelContext)
-        // Query the last 15 days ending at Date() (anchored to today)
-        let range = DateRangeQuery.recentDays(15, endingAt: Date(), calendar: .current)
+        let endDate = selectedDate
+        let range = DateRangeQuery.recentDays(15, endingAt: endDate, calendar: .current)
         let records = (try? repository.fetch(in: range)) ?? []
         
         let calendar = Calendar.current
         var points: [HeatmapPoint] = []
         
         for i in (0..<15).reversed() {
-            let day = calendar.date(byAdding: .day, value: -i, to: Date()) ?? Date()
+            let day = calendar.date(byAdding: .day, value: -i, to: endDate) ?? endDate
             let id = DailyHealthSummaryRecord.dayIdentifier(for: day, calendar: calendar)
             let record = records.first(where: { $0.dayIdentifier == id })
             let score = record?.recoveryScore

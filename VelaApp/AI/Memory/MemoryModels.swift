@@ -96,7 +96,7 @@ final class MemoryEventRecord {
         self.operation = operation
         self.content = content
         self.evidence = evidence
-        self.confidence = confidence
+        self.confidence = min(1, max(0, confidence))
         self.status = status.rawValue
         self.userNote = userNote
         self.previousContentHash = previousContentHash

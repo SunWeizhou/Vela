@@ -135,8 +135,8 @@ public final class DailyPlanLimiterEngine {
             limiters.append(PlanLimiter(
                 id: "high_temp",
                 severity: 3,
-                reason: L10n.t("Nightly skin temperature has elevated abnormally", "夜间体温出现异常上升"),
-                recommendation: L10n.t("Signs of metabolic or systemic immune fight. Sleep and rest only", "提示机体面临全身性免疫或代谢对抗，强烈建议静养休息")
+                reason: L10n.t("Nightly skin temperature is notably above your recent range", "夜间皮肤温度明显高于近期范围"),
+                recommendation: L10n.t("Pause planned training today and monitor how you feel. Seek clinical advice for concerning or persistent symptoms.", "今天暂停计划训练并留意身体感受；若症状明显或持续，请咨询专业人士。")
             ))
         }
 
@@ -146,7 +146,7 @@ public final class DailyPlanLimiterEngine {
                 id: "journal_sick_injured",
                 severity: 3,
                 reason: L10n.t("Self-reported sickness or orthopedic pain", "手记记录了生病或关节伤病"),
-                recommendation: L10n.t("Suspend all training immediately to focus on recovery", "立即停止任何负荷训练，遵医嘱并静养恢复")
+                recommendation: L10n.t("Skip planned training today and prioritize rest. Seek appropriate professional advice when needed.", "今天跳过计划训练并优先休息；必要时请寻求专业建议。")
             ))
         } else if input.journalFlags.contains("resting") {
             limiters.append(PlanLimiter(
@@ -169,12 +169,12 @@ public final class DailyPlanLimiterEngine {
 
         if hasSeverity3 {
             action = .rest
-            recommendedTrainingType = L10n.t("Passive Recovery / Mobility", "完全静养 / 关节伸展")
+            recommendedTrainingType = L10n.t("Rest / Gentle Mobility", "休息 / 温和活动度练习")
             maxIntensity = "Zone 1 / Mobility"
             volumeMultiplier = 0.0
             
             let primaryReason = limiters.first { $0.severity == 3 }?.reason ?? ""
-            whyThis = L10n.t("Action based on critical warnings: \(primaryReason).", "由于关键指标发出红色生理警报（\(primaryReason)），今日建议完全休息。")
+            whyThis = L10n.t("Today's plan is limited by: \(primaryReason).", "今天存在需要优先处理的限制信号（\(primaryReason)），建议暂停计划训练。")
         } else if totalSeverity >= 4 {
             action = .reduce
             recommendedTrainingType = L10n.t("Active Recovery / Base Cardio", "主动恢复 / 基础低强度有氧")
@@ -183,10 +183,10 @@ public final class DailyPlanLimiterEngine {
             whyThis = L10n.t("Multiple mild constraints exist. Recommending a moderate deload.", "存在多项轻微生理限制因素，今日建议控制训练量，降低负荷。")
         } else if input.recoveryScore >= 75 && input.sleepScore >= 75 && input.stressIndex < 50 {
             action = .keep
-            recommendedTrainingType = L10n.t("Strength / High-Intensity Cardio", "力量重训 / 高强度心肺刺激")
-            maxIntensity = "Zone 4-5"
-            volumeMultiplier = 1.1
-            whyThis = L10n.t("Excellent physiological resilience today. Good window to push performance.", "今日多项生理指标极佳，身体展现出强健的代偿与超量恢复潜力，适合冲击运动表现。")
+            recommendedTrainingType = L10n.t("Planned Strength / Cardio", "按计划力量或有氧训练")
+            maxIntensity = "Zone 3-4"
+            volumeMultiplier = 1.0
+            whyThis = L10n.t("Current recovery, sleep, and stress signals support the planned session. Keep intensity controlled and adjust to technique and perceived effort.", "当前恢复、睡眠与压力信号支持按计划训练；强度保持可控，并根据动作质量和主观用力调整。")
         } else {
             action = .keep
             recommendedTrainingType = L10n.t("Base Aerobic Cardio / Core Workouts", "常规有氧 / 核心力量维持")

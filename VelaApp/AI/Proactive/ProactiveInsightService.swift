@@ -94,9 +94,9 @@ enum ProactiveInsightService {
                 severity: .alert,
                 title: isChinese ? "今天先把强度降下来" : "Reduce intensity today",
                 body: isChinese
-                    ? "HRV 明显低于你的个人基线，身体更像处在高压力输出状态。今天硬顶强度，收益会比风险低。"
-                    : "HRV is well below your personal baseline, suggesting elevated physiological strain. Pushing hard today has a poor risk-to-reward ratio.",
-                suggestedAction: isChinese ? "把训练改为低强度有氧、技术练习或拉伸；睡前做 10 分钟慢呼吸。" : "Switch to low-intensity cardio, technique work, or mobility; add 10 minutes of slow breathing before bed.",
+                    ? "HRV 明显低于你的个人基线。这是一项需要结合睡眠、近期训练和主观感受观察的恢复信号。"
+                    : "HRV is well below your personal baseline. Treat it as a recovery signal to consider alongside sleep, recent training, and how you feel.",
+                suggestedAction: isChinese ? "可考虑把计划换成轻松活动、技术练习或活动度训练；若有不适，暂停训练并寻求专业建议。" : "Consider light activity, technique work, or mobility; pause training and seek professional advice if you feel unwell.",
                 relatedMetrics: ["hrv", "recovery"],
                 evidence: [
                     isChinese ? "HRV Z-Score \(String(format: "%.2f", hrvZScore))" : "HRV Z-score \(String(format: "%.2f", hrvZScore))",
@@ -116,13 +116,13 @@ enum ProactiveInsightService {
                 severity: .warning,
                 title: isChinese ? "睡眠没有完全接住恢复" : "Sleep did not fully support recovery",
                 body: isChinese
-                    ? "昨晚睡眠效率偏低，说明在床时间没有充分转化为有效恢复。今天更适合稳定节奏，而不是临时加量。"
-                    : "Sleep efficiency was low, so time in bed did not fully convert into recovery. Keep the day steady instead of adding load.",
-                suggestedAction: isChinese ? "下午后不碰咖啡因；晚间提前 30 分钟降光、热水浴或拉伸。" : "Avoid caffeine after midday; dim lights 30 minutes earlier and use a warm bath or light stretching.",
+                    ? "昨晚睡眠效率偏低。今天可优先保持稳定节奏，避免基于这一项信号临时增加训练量。"
+                    : "Sleep efficiency was low last night. Keep the day steady and avoid adding training volume based on this signal alone.",
+                suggestedAction: isChinese ? "如符合你的习惯，可减少下午后的咖啡因，并在睡前预留一段低刺激放松时间。" : "If it fits your routine, reduce caffeine later in the day and leave some low-stimulation wind-down time before bed.",
                 relatedMetrics: ["sleep"],
                 evidence: [
                     isChinese ? "睡眠效率 \(String(format: "%.1f%%", sleepEfficiency))" : "Sleep efficiency \(String(format: "%.1f%%", sleepEfficiency))",
-                    isChinese ? "连续性不足会影响恢复质量" : "Fragmented sleep can reduce recovery quality"
+                    isChinese ? "睡眠连续性偏低" : "Sleep continuity was lower than usual"
                 ],
                 priority: 20,
                 coachPresetQuestion: isChinese
@@ -138,35 +138,37 @@ enum ProactiveInsightService {
                 severity: .warning,
                 title: isChinese ? "下肢动作先做保守处理" : "Treat lower-body movement conservatively",
                 body: isChinese
-                    ? "步行不对称性升高时，深蹲、跑步和跳跃类训练更容易放大代偿。先把动作质量放在强度前面。"
-                    : "Elevated walking asymmetry can amplify compensation during squats, running, and jumping. Prioritize movement quality before intensity.",
+                    ? "步行不对称性高于近期参考时，今天可把动作质量放在强度前面，并结合身体感受观察。"
+                    : "When walking asymmetry is above its recent reference, prioritize movement quality over intensity today and consider how you feel.",
                 suggestedAction: isChinese ? "热身加入单腿臀桥、髋踝活动和轻量单侧训练；今天避免冲刺。" : "Add single-leg bridges, hip/ankle mobility, and light unilateral work; avoid sprinting today.",
                 relatedMetrics: ["walking_asymmetry"],
                 evidence: [
                     isChinese ? "步行不对称性 \(String(format: "%.1f%%", walkingAsymmetry))" : "Walking asymmetry \(String(format: "%.1f%%", walkingAsymmetry))",
-                    isChinese ? "高于常见健康范围" : "Above the common healthy range"
+                    isChinese ? "高于当前参考阈值" : "Above the current reference threshold"
                 ],
                 priority: 30,
                 coachPresetQuestion: isChinese
-                    ? "我的步行不对称性偏高，这跟运动损伤有关系吗？该怎么做拉伸？"
-                    : "My walking asymmetry is high. Is it related to potential injuries, and how should I stretch?"
+                    ? "我的步行不对称性偏高，今天训练应如何调整？"
+                    : "My walking asymmetry is elevated. How should I adjust today's training?"
             ))
         }
         
-        // Rule 4: High Recovery Window (HRV Z-Score > 0.5 & RHR Z-Score < -0.5 & Sleep Score > 80)
-        let hrvZScore = dashboard.recovery.metrics["hrv_z_score"] ?? 0.0
-        let rhrZScore = dashboard.recovery.metrics["rhr_z_score"] ?? 0.0
+        // Rule 4: Signals that can support following the existing plan. This is
+        // never a standalone prescription to increase training intensity.
+        let hrvZScore = dashboard.recovery.metrics["hrv_z_score"]
+        let rhrZScore = dashboard.recovery.metrics["rhr_z_score"]
         let sleepScore = dashboard.sleepScore.score
         
-        if hrvZScore > 0.5 && rhrZScore < -0.5 && sleepScore > 80 {
+        if let hrvZScore, let rhrZScore,
+           hrvZScore > 0.5 && rhrZScore < -0.5 && sleepScore > 80 {
             insights.append(ProactiveInsight(
                 focus: .training,
                 severity: .info,
-                title: isChinese ? "今天可以推进核心训练目标" : "Today is a good window to push",
+                title: isChinese ? "当前信号支持按计划训练" : "Current signals support the planned session",
                 body: isChinese
-                    ? "恢复、静息心率和睡眠共同指向较好的准备度。今天适合把最重要的训练放在前半程完成。"
-                    : "Recovery, resting heart rate, and sleep point to strong readiness. Put your most important training work early in the session.",
-                suggestedAction: isChinese ? "优先安排主项或渐进超负荷；结束后保留 10 分钟冷身恢复。" : "Prioritize your main lift or progressive overload; keep 10 minutes for cooldown recovery.",
+                    ? "恢复、静息心率和睡眠信号支持既定计划。训练中仍以动作质量和主观用力调节。"
+                    : "Recovery, resting heart rate, and sleep signals support the existing plan. Keep regulating with technique and perceived effort.",
+                suggestedAction: isChinese ? "按既定训练计划执行；动作质量或主观用力变差时，不再加量。" : "Follow the existing plan; stop adding load if technique or perceived effort worsens.",
                 relatedMetrics: ["recovery", "hrv", "sleep"],
                 evidence: [
                     isChinese ? "睡眠分数 \(Int(sleepScore.rounded()))" : "Sleep score \(Int(sleepScore.rounded()))",
@@ -174,8 +176,8 @@ enum ProactiveInsightService {
                 ],
                 priority: 40,
                 coachPresetQuestion: isChinese
-                    ? "我今天的恢复状态非常棒！可以安排哪些挑战性的训练？"
-                    : "My recovery is outstanding today! What kind of high-intensity training do you recommend?"
+                    ? "当前恢复信号支持按计划训练。怎样把今天的训练保持在可控范围内？"
+                    : "Current recovery signals support my planned session. How can I keep today's training controlled?"
             ))
         }
         
@@ -187,13 +189,13 @@ enum ProactiveInsightService {
                 severity: .alert,
                 title: isChinese ? "身体储备偏低，别硬扛" : "Energy reserve is low",
                 body: isChinese
-                    ? "当前能量储备已经偏低，说明近期负荷、睡眠或压力可能正在透支恢复能力。今天的目标应该是回补。"
-                    : "Your current energy reserve is low, suggesting recent load, sleep, or stress is drawing down recovery capacity. Today should focus on replenishment.",
-                suggestedAction: isChinese ? "训练量减少 30-40%；补足碳水和水分，晚上优先早睡。" : "Reduce training volume by 30-40%; refill carbs and fluids, then prioritize an earlier bedtime.",
+                    ? "当前能量储备偏低。这是一个综合估算值，适合结合饮食、睡眠、训练安排和主观疲劳再决定当天节奏。"
+                    : "Your energy reserve is low. It is a composite estimate, so combine it with meals, sleep, training plans, and perceived fatigue before deciding today's pace.",
+                suggestedAction: isChinese ? "可考虑降低计划负荷，保证正常进食、饮水和休息；不要依赖单一分数做激进调整。" : "Consider a lighter planned load, regular meals, fluids, and rest; avoid aggressive changes based on one score.",
                 relatedMetrics: ["energy"],
                 evidence: [
                     isChinese ? "能量 \(Int(energyValue.rounded()))/100" : "Energy \(Int(energyValue.rounded()))/100",
-                    isChinese ? "恢复储备不足" : "Low recovery reserve"
+                    isChinese ? "综合储备估算偏低" : "Composite reserve estimate is low"
                 ],
                 priority: 12,
                 coachPresetQuestion: isChinese
@@ -211,9 +213,9 @@ enum ProactiveInsightService {
                 severity: .alert,
                 title: isChinese ? "负荷和恢复出现错配" : "Load and recovery are mismatched",
                 body: isChinese
-                    ? "训练负荷偏高，但恢复分数没有跟上。继续加量可能让后续几天的训练质量下降。"
-                    : "Training load is high while recovery has not caught up. Adding more volume may reduce training quality over the next few days.",
-                suggestedAction: isChinese ? "今天保留动作模式，减少组数和接近力竭的训练。" : "Keep movement patterns, but reduce sets and avoid near-failure work today.",
+                    ? "训练负荷偏高，而恢复评分偏低。两个信号同时出现时，今天更适合重新核对既定计划和主观感受。"
+                    : "Training load is high while the recovery score is low. When both signals appear, review the plan alongside your perceived readiness.",
+                suggestedAction: isChinese ? "可保留熟悉的动作模式，并优先减少额外组数或接近力竭的安排。" : "Consider keeping familiar movement patterns while avoiding extra sets or near-failure work.",
                 relatedMetrics: ["strain", "recovery"],
                 evidence: [
                     isChinese ? "负荷 \(Int(dashboard.strain.score.rounded()))/100" : "Strain \(Int(dashboard.strain.score.rounded()))/100",
@@ -232,13 +234,13 @@ enum ProactiveInsightService {
                 severity: .warning,
                 title: isChinese ? "先把压力降下来" : "Lower stress before adding load",
                 body: isChinese
-                    ? "压力指数偏高时，身体更难进入恢复模式。训练前先做短时间降压，会让后面的输出更稳定。"
-                    : "When stress is elevated, the body has a harder time shifting into recovery. Downshifting before training can stabilize output.",
-                suggestedAction: isChinese ? "训练前 5 分钟鼻吸慢呼；今天少做高刺激收尾。" : "Do 5 minutes of slow nasal breathing before training; skip high-stimulation finishers today.",
+                    ? "压力指数偏高是基于可用信号的估算。可先确认自己是否适合训练，再决定当天是否保持原计划。"
+                    : "The stress index is an estimate from available signals. Check whether you feel ready to train before deciding whether to keep the original plan.",
+                suggestedAction: isChinese ? "训练前可安排几分钟安静呼吸或轻松热身；若感觉不适，选择休息或轻量活动。" : "Consider a few minutes of quiet breathing or an easy warm-up; choose rest or light activity if you feel unwell.",
                 relatedMetrics: ["stress"],
                 evidence: [
                     isChinese ? "压力 \(Int(dashboard.stress.stressIndex.rounded()))/100" : "Stress \(Int(dashboard.stress.stressIndex.rounded()))/100",
-                    isChinese ? "恢复切换可能受影响" : "Recovery switching may be impaired"
+                    isChinese ? "需要结合主观压力感受确认" : "Confirm alongside perceived stress"
                 ],
                 priority: 24,
                 coachPresetQuestion: isChinese

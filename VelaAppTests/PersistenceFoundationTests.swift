@@ -8,6 +8,13 @@ private final class SyncExecutionCounter {
 }
 
 final class PersistenceFoundationTests: XCTestCase {
+    @MainActor
+    func testDemoDataSeedRequiresExplicitLaunchArgument() {
+        XCTAssertFalse(DailySummaryUseCase.isDemoDataSeedingEnabled(arguments: []))
+        XCTAssertFalse(DailySummaryUseCase.isDemoDataSeedingEnabled(arguments: ["-velaInitialTab", "0"]))
+        XCTAssertTrue(DailySummaryUseCase.isDemoDataSeedingEnabled(arguments: ["-velaSeedDemoData"]))
+    }
+
     func testActiveStatusDefaultsToActiveWhenNoValueExists() {
         let suiteName = "ActiveStatusDefaults-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -67,6 +74,41 @@ final class PersistenceFoundationTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: backup.appending(path: "Vela.store")), Data("store".utf8))
         XCTAssertEqual(try Data(contentsOf: backup.appending(path: "Vela.store-wal")), Data("wal".utf8))
         XCTAssertEqual(try Data(contentsOf: backup.appending(path: "Vela.store-shm")), Data("shm".utf8))
+    }
+
+    func testPrivacyDataInventoryModelExplainsExportAndDeleteScopes() {
+        let model = PrivacyDataInventoryModel.build(counts: [
+            "daily_summaries": 2,
+            "strength_workouts": 1,
+            "journals": 3,
+            "coach_sessions": 4,
+            "agent_runs": 5
+        ])
+
+        XCTAssertEqual(model.totalExportedItems, 6)
+        XCTAssertTrue(model.exportCategories.contains { $0.id == "daily_summaries" && $0.count == 2 })
+        XCTAssertTrue(model.exportCategories.contains { $0.id == "journals" && $0.count == 3 })
+        XCTAssertTrue(model.deleteGroups.contains { $0.id == "ai_history" && $0.isDestructive })
+        XCTAssertTrue(model.localOnlyNotice.contains("Apple Health"))
+    }
+
+    @MainActor
+    func testPrivacyDataInventoryBuilderCountsSwiftDataRecords() throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        context.insert(DailyHealthSummaryRecord(
+            dayIdentifier: "2026-06-17",
+            date: Date(timeIntervalSince1970: 1_781_654_400)
+        ))
+        context.insert(JournalEntryRecord(tags: ["sleep"], note: "睡得不错"))
+        context.insert(CoachSessionRecord(title: "恢复建议"))
+        try context.save()
+
+        let model = PrivacyDataInventoryBuilder.build(modelContext: context)
+
+        XCTAssertEqual(model.category(id: "daily_summaries")?.count, 1)
+        XCTAssertEqual(model.category(id: "journals")?.count, 1)
+        XCTAssertEqual(model.category(id: "coach_sessions")?.count, 1)
     }
 
     @MainActor
@@ -258,7 +300,7 @@ final class PersistenceFoundationTests: XCTestCase {
         XCTAssertEqual(plans.count, 1)
         XCTAssertEqual(artifacts.count, 1)
         XCTAssertEqual(plans.first?.bodyStateHash, bodyState.hash)
-        XCTAssertTrue(plans.first?.safetyNotice?.contains("not a medical diagnosis") == true)
+        XCTAssertTrue(plans.first?.safetyNotice?.contains("不构成医疗诊断") == true)
     }
 
     @MainActor

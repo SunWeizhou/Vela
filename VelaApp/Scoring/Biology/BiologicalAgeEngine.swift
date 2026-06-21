@@ -66,11 +66,11 @@ public struct BiologicalAgeResult {
     public var healthAgeTrendLabel: String {
         switch healthAgeTrend {
         case "improving":
-            return L10n.t("Improving", "改善")
+            return L10n.t("Favorable signals", "信号积极")
         case "worsening":
-            return L10n.t("Worsening", "变差")
+            return L10n.t("Needs attention", "需关注")
         default:
-            return L10n.t("Stable", "稳定")
+            return L10n.t("Mixed signals", "信号中性")
         }
     }
 }
@@ -274,7 +274,7 @@ public final class BiologicalAgeEngine {
             return BiologicalAgeResult(
                 biologicalAge: phenoAge,
                 overallScore: overallScore,
-                wearableScore: 90.0,
+                wearableScore: 0.0,
                 biomarkerScore: overallScore,
                 suboptimalCount: suboptimalCount,
                 optimalCount: optimalCount,
@@ -297,7 +297,7 @@ public final class BiologicalAgeEngine {
                     name: L10n.t("VO2 Max", "最大摄氧量"),
                     score: dir > 0 ? 100.0 : (dir < 0 ? 30.0 : 70.0),
                     isOptimal: dir >= 0,
-                    description: dir > 0 ? L10n.t("Superb aerobic capacity.", "心肺耐力水平极佳。") : L10n.t("Aerobic fitness has room to improve.", "心肺耐力有待提升。"),
+                    description: dir > 0 ? L10n.t("Above the current reference threshold.", "高于当前参考阈值。") : L10n.t("Below the current reference threshold.", "低于当前参考阈值，可结合个人基线观察。"),
                     type: .wearable
                 ))
             }
@@ -310,7 +310,7 @@ public final class BiologicalAgeEngine {
                     name: L10n.t("Resting Heart Rate", "静息心率"),
                     score: dir > 0 ? 100.0 : (dir < 0 ? 30.0 : 70.0),
                     isOptimal: dir >= 0,
-                    description: dir > 0 ? L10n.t("Excellent cardiac efficiency.", "心肺效率极佳。") : L10n.t("Elevated heart rate indicates load.", "心肺负荷略有升高。"),
+                    description: dir > 0 ? L10n.t("Below the current reference threshold.", "低于当前参考阈值，仍建议结合个人基线解读。") : L10n.t("Above the current reference threshold.", "高于当前参考阈值，需结合睡眠、压力和个人基线观察。"),
                     type: .wearable
                 ))
             }
@@ -323,7 +323,7 @@ public final class BiologicalAgeEngine {
                     name: L10n.t("Sleep Quality", "睡眠质量"),
                     score: dir > 0 ? 100.0 : (dir < 0 ? 30.0 : 70.0),
                     isOptimal: dir >= 0,
-                    description: dir > 0 ? L10n.t("Excellent restorative sleep.", "深度睡眠恢复极佳。") : L10n.t("Poor sleep recovery.", "睡眠恢复质量欠佳。"),
+                    description: dir > 0 ? L10n.t("At or above the current reference threshold.", "达到当前参考阈值。") : L10n.t("Below the current reference threshold.", "低于当前参考阈值。"),
                     type: .wearable
                 ))
             }
@@ -336,7 +336,7 @@ public final class BiologicalAgeEngine {
                     name: L10n.t("Daily Steps", "每日步数"),
                     score: dir > 0 ? 100.0 : (dir < 0 ? 30.0 : 70.0),
                     isOptimal: dir >= 0,
-                    description: dir > 0 ? L10n.t("Highly active metabolic status.", "代谢非常活跃。") : L10n.t("Sedentary metabolic status.", "日常久坐活动量低。"),
+                    description: dir > 0 ? L10n.t("Activity is above the current reference threshold.", "活动量高于当前参考阈值。") : L10n.t("Activity is below the current reference threshold.", "活动量低于当前参考阈值。"),
                     type: .wearable
                 ))
             }
@@ -365,7 +365,7 @@ public final class BiologicalAgeEngine {
                 biologicalAge: biologicalAge,
                 overallScore: overallScore,
                 wearableScore: overallScore,
-                biomarkerScore: 80.0, // default neutral
+                biomarkerScore: 0.0,
                 suboptimalCount: suboptimalCount,
                 optimalCount: optimalCount,
                 factors: factors,

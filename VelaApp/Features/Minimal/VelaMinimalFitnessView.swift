@@ -57,7 +57,7 @@ struct VelaTrainingView: View {
             userFacingSummary: payload.summary,
             confidence: plan.confidence,
             source: plan.source ?? "BodyStateKernel + TrainingDecisionKernel",
-            safetyNotice: plan.safetyNotice ?? "General wellness and training guidance only."
+            safetyNotice: plan.safetyNotice ?? "仅提供一般健康与训练建议，不构成医疗诊断。"
         )
     }
     private let xunjiKeychainAccount = "xunji_open_api_key"
@@ -85,23 +85,24 @@ struct VelaTrainingView: View {
     @State private var xunjiImportMessage: String?
     @State private var isAutoImportingXunji = false
     @State private var selectedAnalyticsTab = 0
+    @State private var handledAdaptiveTrainingStartRequest = 0
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 16) {
+                performanceAnalyticsCard
+
                 adaptiveCockpitCard
+
+                recentWorkoutsSection
 
                 muscleVolumeCard
 
                 templateLibraryCard
-
-                performanceAnalyticsCard
-
-                recentWorkoutsSection
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
-            .padding(.bottom, 100)
+            .padding(.bottom, VelaFloatingNavigationMetrics.contentBottomPadding)
         }
         .scrollIndicators(.hidden)
         .velaTrackScroll(direction: scrollDirection)
@@ -120,6 +121,7 @@ struct VelaTrainingView: View {
         .onAppear {
             loadRealFitnessData()
             loadXunjiAPIKey()
+            consumeAdaptiveTrainingStartIfNeeded()
         }
         .task {
             try? ExerciseLibraryService.seedDefaultsIfNeeded(modelContext: modelContext)
@@ -141,6 +143,9 @@ struct VelaTrainingView: View {
             Task {
                 await syncRealFitnessData()
             }
+        }
+        .onChange(of: appState.adaptiveTrainingStartRequest) { _, _ in
+            consumeAdaptiveTrainingStartIfNeeded()
         }
         .sheet(isPresented: $showStrengthWorkoutLog, onDismiss: {
             selectedTemplateID = nil
@@ -190,14 +195,17 @@ struct VelaTrainingView: View {
             guard let data = plan.reasonsJSON.data(using: .utf8) else { return nil }
             return try? JSONDecoder().decode([String].self, from: data)
         } ?? []
-        let shouldTrain = payload.map { $0.decision != .rest } ?? false
-        let intensity = payload.map { "RPE \($0.intensityCap)" } ?? "--"
-        let confidence = todayPlan?.confidence ?? 0.85
-
-        return VStack(alignment: .leading, spacing: 14) {
+        let display = DailyOperatingPlanDisplayModel.build(
+            payload: payload,
+            primaryActionType: todayPlan?.primaryActionType,
+            source: todayPlan?.source,
+            safetyNotice: todayPlan?.safetyNotice,
+            confidence: todayPlan?.confidence ?? 0.0
+        )
+        return VStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("今日智能自适应")
+                    Text("基于今日状态的训练建议")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(VelaTheme.muted)
                     Text(session?.title ?? activePlan?.title ?? "自由训练")
@@ -205,34 +213,33 @@ struct VelaTrainingView: View {
                         .foregroundStyle(VelaTheme.fg)
                 }
                 Spacer()
-                Text(todayPlan?.primaryActionType.uppercased() ?? "READY")
+                Text(display.actionLabel)
                     .font(.caption2.weight(.bold))
-                    .foregroundStyle(shouldTrain ? VelaTheme.accent : VelaTheme.sleepColor)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill((shouldTrain ? VelaTheme.accent : VelaTheme.sleepColor).opacity(0.12)))
+                    .foregroundStyle(VelaTheme.accent)
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text(shouldTrain ? "建议训练 · \(intensity)" : "建议恢复或休息")
+            VStack(alignment: .leading, spacing: 6) {
+                Text(display.statusTitle)
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(shouldTrain ? VelaTheme.accent : VelaTheme.sleepColor)
+                    .foregroundStyle(VelaTheme.accent)
                 
-                Text(session?.description ?? payload?.summary ?? "选择模板开始记录；每组完成后自动启动休息计时。")
+                Text(session?.description ?? display.summary)
                     .font(.subheadline)
                     .foregroundStyle(VelaTheme.fg2)
                     .lineSpacing(4)
+                    .lineLimit(3)
                 
                 if !reasons.isEmpty {
                     Text(reasons.map { localizedReason($0) }.joined(separator: " "))
                         .font(.caption2)
                         .foregroundStyle(VelaTheme.muted)
                         .lineSpacing(3)
+                        .lineLimit(2)
                 }
             }
-            .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.surface))
+
+            Divider()
 
             HStack(spacing: 10) {
                 executionMetric("容量", payload.map { "\(Int(($0.volumeMultiplier * 100).rounded()))%" } ?? "--")
@@ -258,7 +265,7 @@ struct VelaTrainingView: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "play.fill")
-                    Text("开始今日自适应训练")
+                    Text("执行建议并记录训练")
                 }
                 .font(.subheadline.weight(.bold))
                 .frame(maxWidth: .infinity)
@@ -266,32 +273,28 @@ struct VelaTrainingView: View {
                 .foregroundStyle(.white)
                 .background(
                     RoundedRectangle(cornerRadius: 16)
-                        .fill(LinearGradient(
-                            colors: [VelaTheme.accent, Color(hex: "#00C6FF")],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        ))
+                        .fill(VelaTheme.accent)
                 )
-                .shadow(color: VelaTheme.accent.opacity(0.25), radius: 8, y: 3)
             }
             .buttonStyle(.plain)
 
             HStack {
-                Text("\(todayPlan?.source ?? "BodyStateKernel") · \(todayPlan?.safetyNotice ?? "一般建议，不构成医疗诊断。")")
+                Text(display.evidenceLine)
+                    .lineLimit(2)
                 Spacer()
-                Text("置信度 \(Int((confidence * 100).rounded()))%")
+                Text(display.confidenceLabel)
+                    .lineLimit(1)
             }
             .font(.system(size: 9))
             .foregroundStyle(VelaTheme.muted)
         }
-        .padding(16)
+        .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(VelaTheme.cardBg)
-                .shadow(color: Color.black.opacity(0.015), radius: 10, y: 4)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
         )
     }
@@ -450,10 +453,10 @@ struct VelaTrainingView: View {
     private var fitnessHeader: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text("健身")
+                Text("训练分析")
                     .font(.system(size: 24, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
-                Text("过去 30 天")
+                Text("历史表现与今日建议")
                     .font(.system(size: 12))
                     .foregroundStyle(VelaTheme.muted)
             }
@@ -627,7 +630,7 @@ struct VelaTrainingView: View {
             }
             
             if summary.muscleGroupSets.isEmpty {
-                Text("完成力量训练后，这里会显示肌群训练量 and 局部疲劳。")
+                Text("完成力量训练后，这里会显示肌群训练量与局部疲劳。")
                     .font(.system(size: 12))
                     .foregroundStyle(VelaTheme.muted)
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -637,7 +640,7 @@ struct VelaTrainingView: View {
                     ForEach(summary.muscleGroupSets.sorted { $0.key < $1.key }, id: \.key) { muscle, sets in
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
-                                Text(muscle)
+                                Text(localizedMuscleGroup(muscle))
                                     .font(.system(size: 12, weight: .semibold))
                                     .foregroundStyle(VelaTheme.fg)
                                 Spacer()
@@ -765,7 +768,7 @@ struct VelaTrainingView: View {
                                             .foregroundStyle(VelaTheme.muted)
                                     }
 
-                                    Text(template.title)
+                                    Text(localizedWorkoutTemplateTitle(template.title))
                                         .font(.system(size: 13, weight: .bold))
                                         .foregroundStyle(VelaTheme.fg)
                                         .lineLimit(1)
@@ -1016,7 +1019,11 @@ struct VelaTrainingView: View {
         }
 
         guard let day = todaySession else {
-            trainingExecutionMessage = "所选日期没有可执行的训练计划。你仍可从下方模板开始自由训练。"
+            // A plan is optional. The primary action and the blank-template action
+            // must always open the full logger instead of sending users to a dead end.
+            selectedTemplateID = nil
+            selectedSessionDraft = nil
+            showStrengthWorkoutLog = true
             return
         }
         guard let decision = todayDecision else {
@@ -1049,6 +1056,14 @@ struct VelaTrainingView: View {
         }
     }
 
+    private func consumeAdaptiveTrainingStartIfNeeded() {
+        let request = appState.adaptiveTrainingStartRequest
+        guard request > handledAdaptiveTrainingStartRequest else { return }
+        handledAdaptiveTrainingStartRequest = request
+        loadDynamicData()
+        startStrengthWorkout()
+    }
+
     private func deleteTemplate(_ template: WorkoutTemplateRecord) {
         modelContext.insert(DeletedWorkoutRecord(id: "template:\(template.title)"))
         modelContext.delete(template)
@@ -1078,7 +1093,7 @@ struct VelaTrainingView: View {
         let datestr = xunjiDateString(xunjiImportDate)
         let key = storedXunjiAPIKey()
         guard !key.isEmpty else {
-            xunjiImportMessage = "请先填写训记 Open API Key。"
+            xunjiImportMessage = "请先填写训记密钥。"
             return
         }
 
@@ -1522,13 +1537,13 @@ private struct XunjiImportSheet: View {
                     VStack(alignment: .leading, spacing: 12) {
                         DatePicker("训练日期", selection: $selectedDate, displayedComponents: .date)
                             .datePickerStyle(.compact)
-                        SecureField("训记 Open API Key", text: $apiKey)
+                        SecureField("训记密钥", text: $apiKey)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .textFieldStyle(.roundedBorder)
                         Toggle("读取完整组数据", isOn: $includeFullData)
                             .font(.system(size: 13, weight: .semibold))
-                        Text("完整模式会保留未完成组、RPE、备注、超级组和部分记录型动作摘要。90 秒内同一天会复用本地缓存。")
+                        Text("完整模式会保留未完成组、RPE、备注、超级组和动作摘要。短时间重复导入同一天训练时，会直接复用刚读取的数据，减少等待。")
                             .font(.system(size: 11))
                             .foregroundStyle(VelaTheme.muted)
                     }

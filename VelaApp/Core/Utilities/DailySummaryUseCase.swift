@@ -86,6 +86,10 @@ final class DailySummaryUseCase {
         self.syncCoordinator = syncCoordinator
     }
 
+    static func isDemoDataSeedingEnabled(arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
+        arguments.contains("-velaSeedDemoData")
+    }
+
     func loadDashboard(
         for date: Date = Date(),
         modelContext: ModelContext? = nil,
@@ -148,14 +152,14 @@ final class DailySummaryUseCase {
         // 3. Locate today's snapshot
         let todaySnapshot = snapshots42.first(where: { calendar.isDate($0.date, inSameDayAs: now) })
         
-        // 4. Require today's snapshot with real HealthKit-synced data.
-        //    Mock/preview seeding only fires when there is NO SwiftData cache at all
-        //    (30-day repo is empty). If a snapshot exists but has zeroes for everything
-        //    it means HealthKit returned no sleep/HRV/RHR today — show empty, not fake data.
+        // 4. Require today's snapshot with real HealthKit-synced data. A debug
+        // demo seed is opt-in through a launch argument; a normal device must
+        // never receive synthetic health records simply because it is empty.
         guard let snapshot = todaySnapshot,
               (snapshot.hrvAverage != nil || snapshot.restingHeartRate != nil || snapshot.sleepHours != nil) else {
             #if DEBUG
-            if let modelContext {
+            if Self.isDemoDataSeedingEnabled(),
+               let modelContext {
                 let repo = SwiftDataDailyHealthSummaryRepository(modelContext: modelContext)
                 let range = DateRangeQuery.recentDays(30, endingAt: now, calendar: calendar)
                 let existing = (try? repo.fetch(in: range)) ?? []
@@ -176,9 +180,12 @@ final class DailySummaryUseCase {
         }
         
         // 5. Build clean DailyHealthContext and historical rolling baselines from snapshots
-        let hrvHistory = snapshots42.compactMap(\.hrvAverage)
-        let rhrHistory = snapshots42.compactMap(\.restingHeartRate)
-        let respHistory = snapshots42.compactMap(\.respiratoryRate)
+        let baselineSnapshots = snapshots42.filter {
+            !calendar.isDate($0.date, inSameDayAs: now)
+        }
+        let hrvHistory = baselineSnapshots.compactMap(\.hrvAverage)
+        let rhrHistory = baselineSnapshots.compactMap(\.restingHeartRate)
+        let respHistory = baselineSnapshots.compactMap(\.respiratoryRate)
         // Get raw workout list from HealthKit for the current day to preserve sample details
         let todayRange = DateRangeQuery.today(containing: now, calendar: calendar)
         let todayStrainSummary = try? await queryService.strainSummary(in: todayRange)
@@ -205,6 +212,12 @@ final class DailySummaryUseCase {
         let resolvedSleep = try? await queryService.sleepSummary(in: DateRangeQuery.recentDays(2, endingAt: now, calendar: calendar))
         let profileWeight = UserProfileSettings.weightKilograms()
         let profileHeight = UserProfileSettings.heightCentimeters()
+        UserProfileSettings.hydrateMissingValuesFromHealth(
+            age: liveExtended.age,
+            weightKilograms: snapshot.bodyWeight,
+            heightCentimeters: liveExtended.heightCm,
+            biologicalSex: liveExtended.biologicalSex
+        )
         let resolvedWeight = snapshot.bodyWeight ?? profileWeight
         var extendedMetrics = liveExtended
         extendedMetrics.age = extendedMetrics.age ?? UserProfileSettings.age()
@@ -226,10 +239,10 @@ final class DailySummaryUseCase {
         )
         
         let recoveryBaseline = RecoveryMetricSummary(
-            hrvMilliseconds: calculateMedian(hrvHistory),
-            restingHeartRate: calculateMedian(rhrHistory),
+            hrvMilliseconds: hrvHistory.count >= 5 ? calculateMedian(hrvHistory) : nil,
+            restingHeartRate: rhrHistory.count >= 5 ? calculateMedian(rhrHistory) : nil,
             sleepHeartRate: nil,
-            respiratoryRate: calculateMedian(respHistory)
+            respiratoryRate: respHistory.count >= 5 ? calculateMedian(respHistory) : nil
         )
         
         let context = DailyHealthContext(
@@ -736,6 +749,13 @@ final class DailySummaryUseCase {
         guard snapshots.count >= 7 else { return }
 
         let baselines = PersonalBaselineEngine.computeBaselines(from: snapshots)
+        let hasPublishedBaseline = [
+            baselines.hrvBaselineMean,
+            baselines.rhrBaselineMean,
+            baselines.sleepHoursBaseline,
+            baselines.strainBaselineMean
+        ].contains { $0 != nil }
+        guard hasPublishedBaseline else { return }
         PersonalBaselineEngine.saveBaselinesToWiki(baselines)
         WikiSyncManager.sync(modelContext: modelContext)
     }

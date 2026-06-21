@@ -41,9 +41,20 @@ struct TrainingAnalyticsService: Sendable {
 
         let records = detectPersonalRecords(workout: workout, history: history)
         let density = workout.durationMinutes > 0 ? volume / Double(workout.durationMinutes) : 0
-        let muscleText = muscleGroupSets.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }.joined(separator: ", ")
+        let muscleText = muscleGroupSets
+            .sorted { $0.key < $1.key }
+            .map { "\(localizedMuscle($0.key)) \($0.value) 组" }
+            .joined(separator: "、")
         let uncompletedSets = max(0, plannedSets - completedSets)
-        let summary = "\(workout.title): \(completedSets)/\(plannedSets) completed sets, \(effectiveSets) effective sets, \(Int(volume.rounded())) kg\(uncompletedSets > 0 ? ", \(uncompletedSets) uncompleted" : "")\(muscleText.isEmpty ? "" : ", \(muscleText)")"
+        let summary = localizedWorkoutSummary(
+            title: workout.title,
+            completedSets: completedSets,
+            plannedSets: plannedSets,
+            effectiveSets: effectiveSets,
+            volume: volume,
+            uncompletedSets: uncompletedSets,
+            muscleText: muscleText
+        )
         return StrengthWorkoutAnalysis(
             totalVolumeKg: volume,
             plannedSets: plannedSets,
@@ -160,6 +171,61 @@ struct TrainingAnalyticsService: Sendable {
         if let rpe = set.rpe, rpe < 6 { return false }
         if let rir = set.rir, rir > 4 { return false }
         return true
+    }
+
+    private func localizedWorkoutSummary(
+        title: String,
+        completedSets: Int,
+        plannedSets: Int,
+        effectiveSets: Int,
+        volume: Double,
+        uncompletedSets: Int,
+        muscleText: String
+    ) -> String {
+        let volumeText = "\(Int(volume.rounded())) kg"
+        if AppLanguage.stored.isChinese {
+            var facts = [
+                "已完成 \(completedSets)/\(plannedSets) 组",
+                "\(effectiveSets) 组有效组",
+                "训练容量 \(volumeText)"
+            ]
+            if uncompletedSets > 0 {
+                facts.append("另有 \(uncompletedSets) 组未完成")
+            }
+            if !muscleText.isEmpty {
+                facts.append(muscleText)
+            }
+            return "\(title) · \(facts.joined(separator: " · "))"
+        }
+
+        var facts = [
+            "\(completedSets)/\(plannedSets) sets completed",
+            "\(effectiveSets) effective sets",
+            "\(volumeText) volume"
+        ]
+        if uncompletedSets > 0 {
+            facts.append("\(uncompletedSets) unfinished")
+        }
+        if !muscleText.isEmpty {
+            facts.append(muscleText)
+        }
+        return "\(title) · \(facts.joined(separator: " · "))"
+    }
+
+    private func localizedMuscle(_ muscle: String) -> String {
+        guard AppLanguage.stored.isChinese else { return muscle }
+        return [
+            "chest": "胸部",
+            "back": "背部",
+            "quads": "股四头肌",
+            "hamstrings": "腘绳肌",
+            "glutes": "臀部",
+            "shoulders": "肩部",
+            "biceps": "肱二头肌",
+            "triceps": "肱三头肌",
+            "core": "核心",
+            "other": "其他"
+        ][muscle] ?? muscle
     }
 
     public func resolvedMuscleGroup(for exercise: StrengthExerciseLog, library: [ExerciseDefinitionRecord]) -> String {

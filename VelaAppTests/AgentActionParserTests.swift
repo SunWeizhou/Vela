@@ -3,8 +3,66 @@ import SwiftData
 @testable import Vela
 
 final class AgentActionParserTests: XCTestCase {
-    func testAgentActionParserPlaceholder() {
-        XCTAssertTrue(true)
+    func testAgentActionParserPreservesActionOrderAndCleansDisplayText() {
+        let raw = """
+        我会先更新长期档案，然后记录今天日志。
+
+        [ACTION:update_wiki]
+        file: training.md
+        用户决定每周二固定进行下肢力量训练。
+        [/ACTION]
+
+        [ACTION:create_daily_log]
+        今天训练后主观疲劳为 7/10。
+        [/ACTION]
+        """
+
+        let parsed = AgentActionParser.parse(raw)
+
+        XCTAssertEqual(parsed.displayText, "我会先更新长期档案，然后记录今天日志。")
+        XCTAssertEqual(parsed.actions.map(\.type), [.updateWiki, .createDailyLog])
+        XCTAssertEqual(parsed.actions.first?.target, "training.md")
+        XCTAssertEqual(parsed.actions.first?.content, "用户决定每周二固定进行下肢力量训练。")
+        XCTAssertEqual(parsed.actions.last?.target, "daily")
+        XCTAssertEqual(parsed.actions.last?.content, "今天训练后主观疲劳为 7/10。")
+    }
+
+    func testWebSearchHelperParsesTraceableResultLinks() {
+        let html = """
+        <ol>
+          <li class="b_algo">
+            <h2><a href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC123/?a=1&amp;b=2">Creatine and strength review</a></h2>
+            <div class="b_caption"><p class="b_lineclamp2">A review of creatine supplementation and resistance training outcomes.</p></div>
+          </li>
+          <li class="b_algo">
+            <h2><a href="https://www.acsm.org/guidelines">ACSM training guidance</a></h2>
+            <p>Guidance for training load and recovery decisions.</p>
+          </li>
+        </ol>
+        """
+
+        let results = WebSearchHelper.parseResults(from: html, max: 2)
+        let formatted = WebSearchHelper.formatResults(results)
+
+        XCTAssertEqual(results.count, 2)
+        XCTAssertEqual(results.first?.title, "Creatine and strength review")
+        XCTAssertEqual(results.first?.url, "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC123/?a=1&b=2")
+        XCTAssertEqual(results.first?.snippet, "A review of creatine supplementation and resistance training outcomes.")
+        XCTAssertTrue(formatted.contains("[Creatine and strength review](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC123/?a=1&b=2)"))
+        XCTAssertTrue(formatted.contains("Guidance for training load and recovery decisions."))
+    }
+
+    func testWebSearchToolDetectsSourcePolicyForChineseHealthAndTrainingQueries() {
+        XCTAssertEqual(WebSearchTool.detectPolicy(for: "最新肌酸研究对力量训练有什么建议？"), .medicalPrimary)
+        XCTAssertEqual(WebSearchTool.detectPolicy(for: "最近关于增肌和恢复的运动科学研究"), .sportsScience)
+
+        let enrichedMedical = WebSearchTool.enrichQuery("最新肌酸研究", policy: .medicalPrimary)
+        let enrichedSports = WebSearchTool.enrichQuery("增肌恢复研究", policy: .sportsScience)
+
+        XCTAssertTrue(enrichedMedical.contains("site:nih.gov"))
+        XCTAssertTrue(enrichedMedical.contains("site:ncbi.nlm.nih.gov"))
+        XCTAssertTrue(enrichedSports.contains("site:acsm.org"))
+        XCTAssertTrue(enrichedSports.contains("site:jissn.biomedcentral.com"))
     }
 
     func testCoachArtifactParserParsesStructuredJSON() throws {
@@ -214,6 +272,99 @@ final class AgentActionParserTests: XCTestCase {
         XCTAssertTrue(LLMProviderError.authenticationFailed.userFacingMessage(isChinese: false).contains("Settings"))
     }
 
+    func testRetryingAgentChatProviderRetriesTransientFailures() async throws {
+        let base = ScriptedAgentChatProvider(steps: [
+            .failure(LLMProviderError.timedOut),
+            .failure(LLMProviderError.networkUnavailable),
+            .success(LLMResponse(content: "recovered", toolCalls: nil))
+        ])
+        let provider = RetryingAgentChatProvider(
+            base: base,
+            maxAttempts: 3,
+            initialDelayNanoseconds: 0,
+            sleeper: { _ in }
+        )
+
+        let response = try await provider.chat(
+            messages: [ChatMessage(role: .user, content: "coach me")],
+            tools: nil
+        )
+
+        XCTAssertEqual(response.content, "recovered")
+        XCTAssertEqual(base.chatCallCount, 3)
+    }
+
+    func testRetryingAgentChatProviderDoesNotRetryAuthenticationFailures() async throws {
+        let base = ScriptedAgentChatProvider(steps: [
+            .failure(LLMProviderError.authenticationFailed),
+            .success(LLMResponse(content: "should not be used", toolCalls: nil))
+        ])
+        let provider = RetryingAgentChatProvider(
+            base: base,
+            maxAttempts: 3,
+            initialDelayNanoseconds: 0,
+            sleeper: { _ in }
+        )
+
+        do {
+            _ = try await provider.chat(
+                messages: [ChatMessage(role: .user, content: "coach me")],
+                tools: nil
+            )
+            XCTFail("Authentication errors must not be retried.")
+        } catch {
+            XCTAssertEqual(error as? LLMProviderError, .authenticationFailed)
+            XCTAssertEqual(base.chatCallCount, 1)
+        }
+    }
+
+    func testAgentLoopRetryDoesNotReplaySuccessfulWriteTool() async throws {
+        let writeTool = CountingAgentTool(
+            name: "create_training_plan",
+            result: #"{"status":"saved","idempotency_key":"plan-1"}"#
+        )
+        let base = ScriptedAgentChatProvider(steps: [
+            .success(LLMResponse(
+                content: "",
+                toolCalls: [ToolCall(
+                    id: "call-1",
+                    name: "create_training_plan",
+                    arguments: #"{"title":"4 week plan","idempotency_key":"plan-1"}"#
+                )]
+            )),
+            .failure(LLMProviderError.timedOut),
+            .success(LLMResponse(content: "plan saved", toolCalls: nil))
+        ])
+        let provider = RetryingAgentChatProvider(
+            base: base,
+            maxAttempts: 2,
+            initialDelayNanoseconds: 0,
+            sleeper: { _ in }
+        )
+        let loop = AgentLoop(
+            provider: provider,
+            toolRegistry: ToolRegistry(tools: [writeTool]),
+            maxIterations: 2
+        )
+
+        let result = try await loop.run(messages: [ChatMessage(role: .user, content: "make a plan")])
+
+        XCTAssertEqual(result.response, "plan saved")
+        XCTAssertEqual(result.executedTools.map(\.name), ["create_training_plan"])
+        XCTAssertEqual(writeTool.executionCount, 1)
+        XCTAssertEqual(base.chatCallCount, 3)
+    }
+
+    func testProviderErrorRecoveryRoutesAuthenticationToSettingsAndTransientErrorsToRetry() {
+        let auth = LLMProviderError.authenticationFailed.recoveryAction(isChinese: true)
+        XCTAssertEqual(auth.destination, .settings)
+        XCTAssertTrue(auth.title.contains("设置"))
+
+        let timeout = LLMProviderError.timedOut.recoveryAction(isChinese: true)
+        XCTAssertEqual(timeout.destination, .retry)
+        XCTAssertTrue(timeout.title.contains("重试"))
+    }
+
     @MainActor
     func testUnifiedWorkoutHistoryToolReturnsMergedWorkoutTimeline() async throws {
         let container = try VelaModelContainer.make(inMemory: true)
@@ -333,6 +484,44 @@ final class AgentActionParserTests: XCTestCase {
         XCTAssertTrue(output.contains(#""body_weight" : 76.5"#))
         XCTAssertTrue(output.contains(#""daily_load" : 88"#))
     }
+
+    func testCoachPromptPinsTrainingAdviceToCanonicalDecisionAndMissingDataRules() {
+        let composer = CoachPromptComposer(
+            lang: .english,
+            personality: .guardian,
+            wikiText: "",
+            baselinePrompt: "",
+            activePlan: nil,
+            contextJSON: #"{"body_state":{"confidence":"low"},"training_decision":{"decision":"reduce","source":"TrainingDecisionKernel"}}"#,
+            correlationText: "",
+            wikiFiles: "profile.md"
+        )
+
+        let prompt = composer.compose(for: ResponseLengthPolicy.focused)
+
+        XCTAssertTrue(prompt.contains("TrainingDecisionKernel"))
+        XCTAssertTrue(prompt.contains("DailyOperatingPlanPayload"))
+        XCTAssertTrue(prompt.contains("Do not apply cross-diagnosis patterns unless every required input field is present"))
+        XCTAssertTrue(prompt.contains("Missing or unavailable data is not normal data"))
+    }
+
+    func testChineseCoachPromptIncludesEvidenceBoundariesBeforeScientificPatterns() {
+        let prompt = CoachPromptComposer(
+            lang: .simplifiedChinese,
+            personality: .guardian,
+            wikiText: "",
+            baselinePrompt: "",
+            activePlan: nil,
+            contextJSON: #"{"body_state":{"confidence":"unavailable"}}"#,
+            correlationText: "",
+            wikiFiles: "profile.md"
+        ).compose(for: .full)
+
+        XCTAssertTrue(prompt.contains("TrainingDecisionKernel"))
+        XCTAssertTrue(prompt.contains("DailyOperatingPlanPayload"))
+        XCTAssertTrue(prompt.contains("缺失或不可用的数据不是正常数据"))
+        XCTAssertTrue(prompt.contains("只有当所需字段全部存在"))
+    }
 }
 
 private final class FakeAgentChatProvider: AgentChatProvider, @unchecked Sendable {
@@ -368,6 +557,53 @@ private final class FakeAgentChatProvider: AgentChatProvider, @unchecked Sendabl
     }
 }
 
+private enum AgentProviderScriptStep {
+    case success(LLMResponse)
+    case failure(Error)
+}
+
+private final class ScriptedAgentChatProvider: AgentChatProvider, @unchecked Sendable {
+    private var steps: [AgentProviderScriptStep]
+    private let lock = NSLock()
+    private var _chatCallCount: Int = 0
+
+    var chatCallCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return _chatCallCount
+    }
+
+    init(steps: [AgentProviderScriptStep]) {
+        self.steps = steps
+    }
+
+    func chat(messages: [ChatMessage], tools: [[String: Value]]?) async throws -> LLMResponse {
+        let step = nextStep()
+
+        switch step {
+        case .success(let response):
+            return response
+        case .failure(let error):
+            throw error
+        case .none:
+            return LLMResponse(content: "", toolCalls: nil)
+        }
+    }
+
+    private func nextStep() -> AgentProviderScriptStep? {
+        lock.lock()
+        defer { lock.unlock() }
+        _chatCallCount += 1
+        return steps.isEmpty ? nil : steps.removeFirst()
+    }
+
+    func streamChat(messages: [ChatMessage]) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.finish()
+        }
+    }
+}
+
 private struct StaticAgentTool: AgentTool {
     let name: String
     let result: String
@@ -376,5 +612,37 @@ private struct StaticAgentTool: AgentTool {
 
     func execute(arguments: String) async throws -> String {
         result
+    }
+}
+
+private final class CountingAgentTool: AgentTool, @unchecked Sendable {
+    let name: String
+    let result: String
+    let description = "Counting test tool."
+    let parameters: [String: Value] = ["type": .string("object")]
+
+    private let lock = NSLock()
+    private var count = 0
+
+    var executionCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
+    }
+
+    init(name: String, result: String) {
+        self.name = name
+        self.result = result
+    }
+
+    func execute(arguments: String) async throws -> String {
+        recordExecution()
+        return result
+    }
+
+    private func recordExecution() {
+        lock.lock()
+        count += 1
+        lock.unlock()
     }
 }

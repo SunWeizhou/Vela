@@ -93,6 +93,27 @@ struct StrengthWorkoutLogSheetView: View {
         max(1, Int(now.timeIntervalSince(startedAt) / 60))
     }
 
+    private var completedSetCount: Int {
+        exercises.flatMap(\.sets).filter { $0.isCompleted == true }.count
+    }
+
+    private var totalSetCount: Int {
+        exercises.flatMap(\.sets).count
+    }
+
+    private var setProgressText: String {
+        totalSetCount == 0 ? "未添加组" : "\(completedSetCount)/\(totalSetCount) 组"
+    }
+
+    private var hasMeaningfulDraft: Bool {
+        guard editingWorkout == nil else { return false }
+        if !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
+        if title.trimmingCharacters(in: .whitespacesAndNewlines) != "力量训练" { return true }
+        return exercises.contains { exercise in
+            !exercise.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !exercise.sets.isEmpty
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -128,7 +149,7 @@ struct StrengthWorkoutLogSheetView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("放弃") { showDiscardConfirmation = true }
+                    Button(editingWorkout == nil ? "关闭" : "取消") { requestClose() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完成") { requestSave() }
@@ -168,11 +189,15 @@ struct StrengthWorkoutLogSheetView: View {
                 }
             )
         }
-        .confirmationDialog("要放弃这次训练吗？", isPresented: $showDiscardConfirmation, titleVisibility: .visible) {
-            Button("放弃训练", role: .destructive) { discardWorkout() }
+        .confirmationDialog("要关闭这次训练吗？", isPresented: $showDiscardConfirmation, titleVisibility: .visible) {
+            Button("保存草稿并关闭") {
+                saveDraft()
+                dismiss()
+            }
+            Button("丢弃草稿", role: .destructive) { discardWorkout() }
             Button("继续训练", role: .cancel) {}
         } message: {
-            Text("放弃后将清除本次训练的草稿。")
+            Text("已记录的动作和组次可以保留为草稿，下次打开会继续显示。")
         }
         .confirmationDialog("忽略未完成组？", isPresented: $showIgnoreUncompletedConfirmation, titleVisibility: .visible) {
             Button("忽略并保存", role: .destructive) { save(ignoringUncompletedSets: true) }
@@ -192,16 +217,22 @@ struct StrengthWorkoutLogSheetView: View {
 
     private var sessionCard: some View {
         VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Label("\(durationMinutes) 分钟", systemImage: "timer")
+                Label(setProgressText, systemImage: "checkmark.circle")
+                Spacer()
+            }
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(VelaTheme.muted)
+
             TextField("训练名称", text: $title)
                 .font(.system(size: 18, weight: .bold))
             HStack {
-                Label("\(durationMinutes) 分钟", systemImage: "timer")
-                    .font(.system(size: 14, weight: .semibold))
                 Spacer()
                 Menu("从模板开始") {
                     Button("空白训练") { exercises = [] }
                     ForEach(availableTemplates) { template in
-                        Menu(template.title) {
+                        Menu(localizedWorkoutTemplateTitle(template.title)) {
                             Button("应用模板") { applyTemplate(template) }
                             Button("删除模板", role: .destructive) { deleteTemplate(template) }
                         }
@@ -598,7 +629,7 @@ struct StrengthWorkoutLogSheetView: View {
     }
 
     private func applyTemplate(_ template: WorkoutTemplateRecord) {
-        title = template.title
+        title = localizedWorkoutTemplateTitle(template.title)
         template.lastUsedAt = Date()
         template.updatedAt = Date()
         exercises = template.exercises.map { item in
@@ -826,6 +857,19 @@ struct StrengthWorkoutLogSheetView: View {
         validExercises.flatMap(\.sets).contains { $0.isCompleted != true }
     }
 
+    private func requestClose() {
+        if editingWorkout != nil {
+            dismiss()
+            return
+        }
+        if hasMeaningfulDraft {
+            showDiscardConfirmation = true
+        } else {
+            clearDraft()
+            dismiss()
+        }
+    }
+
     private func discardWorkout() {
         clearDraft()
         dismiss()
@@ -867,7 +911,7 @@ struct ExercisePickerSheet: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(definition.name)
-                            Text("\(definition.primaryMuscleGroup) · \(definition.equipment)")
+                            Text("\(localizedMuscle(definition.primaryMuscleGroup)) · \(localizedEquipment(definition.equipment))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -897,6 +941,33 @@ struct ExercisePickerSheet: View {
             try? ExerciseLibraryService.seedDefaultsIfNeeded(modelContext: modelContext)
         }
     }
+
+    private func localizedMuscle(_ muscle: String) -> String {
+        [
+            "chest": "胸部",
+            "back": "背部",
+            "quads": "股四头肌",
+            "hamstrings": "腘绳肌",
+            "glutes": "臀部",
+            "shoulders": "肩部",
+            "biceps": "肱二头肌",
+            "triceps": "肱三头肌",
+            "core": "核心",
+            "other": "其他"
+        ][muscle] ?? muscle
+    }
+
+    private func localizedEquipment(_ equipment: String) -> String {
+        [
+            "barbell": "杠铃",
+            "dumbbell": "哑铃",
+            "machine": "器械",
+            "cable": "绳索",
+            "bodyweight": "自重",
+            "kettlebell": "壶铃",
+            "other": "其他"
+        ][equipment] ?? equipment
+    }
 }
 
 // MARK: - Strength Workout Summary Sheet
@@ -908,12 +979,55 @@ struct StrengthWorkoutSummarySheet: View {
     let onSaveTemplate: () -> Void
     let onDone: () -> Void
 
+    private var muscleSetSummary: String {
+        let lines = summary.muscleGroupSets
+            .sorted { $0.value > $1.value }
+            .map { "\(localizedMuscle($0.key))：\($0.value) 组" }
+        return lines.isEmpty ? "本次没有形成可计入分析的有效组。" : lines.joined(separator: "\n")
+    }
+
+    private var recoveryRecommendation: String {
+        guard summary.effectiveSets > 0 else {
+            return "本次没有形成足够的有效训练量。下一次训练前，优先根据动作完成度、主观疲劳和当天恢复信号重新安排。"
+        }
+        let muscles = summary.muscleGroupSets
+            .sorted { $0.value > $1.value }
+            .prefix(2)
+            .map { localizedMuscle($0.key) }
+            .joined(separator: "、")
+        let loadText = summary.effectiveSets >= 12 ? "本次有效训练量较高" : "本次训练量处于可跟踪范围"
+        let focusText = muscles.isEmpty ? "涉及肌群" : "\(muscles)等涉及肌群"
+        return "\(loadText)。接下来 24–48 小时留意\(focusText)的酸痛、动作稳定性和精神状态；如这些信号明显变差，下一次同部位训练应减量或改做低强度活动。"
+    }
+
+    private var nutritionRecommendation: String {
+        "训练后的进食以全天总能量、蛋白质和碳水安排为先。选择你方便的下一餐补充蛋白质、主食和水分即可；无需为了固定的时间窗口强行进食。"
+    }
+
+    private var nextSessionRecommendation: String {
+        if summary.uncompletedSets > 0 {
+            return "本次仍有 \(summary.uncompletedSets) 组未完成。下次优先复盘重量、次数或休息时间，而不是直接加量。"
+        }
+        if summary.effectiveSets >= 12 {
+            return "下一次同部位训练前先查看今日恢复和局部疲劳；恢复不足时可保留动作，但降低组数或强度。"
+        }
+        return "下一次训练可从本次已完成的动作和重量开始，再根据动作质量与主观用力程度小幅调整。"
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text(workout?.title ?? "训练总结")
-                        .font(.system(size: 24, weight: .bold))
+                    VStack(alignment: .leading, spacing: 5) {
+                        Label("训练已保存", systemImage: "checkmark.circle.fill")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(VelaTheme.recoveryColor)
+                        Text(workout?.title ?? "力量训练")
+                            .font(.system(size: 24, weight: .bold))
+                        Text("基于本次已完成的训练组生成")
+                            .font(.system(size: 12))
+                            .foregroundStyle(VelaTheme.muted)
+                    }
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                         metric("时长", "\(workout?.durationMinutes ?? 0) 分钟")
                         metric("总容量", "\(Int(summary.totalVolumeKg.rounded())) kg")
@@ -924,20 +1038,24 @@ struct StrengthWorkoutSummarySheet: View {
                         metric("总次数", "\(summary.totalReps)")
                         metric("训练密度", "\(Int(summary.densityKgPerMinute.rounded())) kg/min")
                     }
-                    summaryCard("肌群组数", summary.muscleGroupSets.sorted { $0.key < $1.key }.map { "\($0.key): \($0.value) 组" }.joined(separator: "\n"))
+                    summaryCard("肌群组数", muscleSetSummary)
                     summaryCard("e1RM", summary.estimatedOneRepMaxByExercise.sorted { $0.key < $1.key }.map { "\($0.key): \(Int($0.value.rounded())) kg" }.joined(separator: "\n"))
                     summaryCard("PR", summary.personalRecords.isEmpty ? "历史数据不足，完成更多训练后会自动识别 PR。" : summary.personalRecords.map(\.summary).joined(separator: "\n"))
-                    summaryCard("恢复建议", "恢复是成长的一部分。建议今晚优先保证 8 小时高质量睡眠。局部肌群在 48 小时内仍处于超补偿重建期，尽量避免对同一肌群的连续力竭刺激。")
-                    summaryCard("饮食建议", "训练后 2 小时是营养合成窗口期，补充 30g 优质蛋白质与充足碳水（比例约 1:3 ），加速糖原储备重建，促进肌肉纤维修复。")
-                    summaryCard("下次训练建议", "配合智能负荷监控，当明天 HRV 恢复正常、主观酸痛减轻后可进行下一部位的力量训练。")
-                    Button("保存为模板", action: onSaveTemplate)
+                    summaryCard("恢复建议", recoveryRecommendation)
+                    summaryCard("饮食与补水", nutritionRecommendation)
+                    summaryCard("下次训练", nextSessionRecommendation)
+                    Button(action: onSaveTemplate) {
+                        Label("保存为训练模板", systemImage: "bookmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .frame(maxWidth: .infinity)
+                    }
                         .buttonStyle(.bordered)
                 }
                 .padding(16)
             }
             .scrollContentBackground(.hidden)
             .background(VelaTheme.systemGroupedBackground)
-            .navigationTitle("Workout Summary")
+            .navigationTitle("训练完成")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完成") {
@@ -967,6 +1085,21 @@ struct StrengthWorkoutSummarySheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .velaNativeCard(radius: 16)
+    }
+
+    private func localizedMuscle(_ muscle: String) -> String {
+        [
+            "chest": "胸部",
+            "back": "背部",
+            "quads": "股四头肌",
+            "hamstrings": "腘绳肌",
+            "glutes": "臀部",
+            "shoulders": "肩部",
+            "biceps": "肱二头肌",
+            "triceps": "肱三头肌",
+            "core": "核心",
+            "other": "其他"
+        ][muscle] ?? muscle
     }
 }
 

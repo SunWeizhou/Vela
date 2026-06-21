@@ -9,8 +9,54 @@ struct TrainingView: View {
     @Query(sort: \TrainingPlanRecord.createdAt, order: .reverse)
     private var plans: [TrainingPlanRecord]
 
+    @Query(sort: \DailyOperatingPlanRecord.generatedAt, order: .reverse)
+    private var operatingPlans: [DailyOperatingPlanRecord]
+
     private var activePlan: TrainingPlanRecord? {
         plans.first(where: { $0.isActive })
+    }
+
+    private var trainingBodyState: BodyState {
+        BodyStateKernel().build(input: BodyStateInput(
+            dashboard: viewModel.dashboard,
+            activePlan: activePlan,
+            activeStatus: ActiveStatusSettings.resolveCurrentStatus(),
+            generatedAt: viewModel.dashboard.date
+        ))
+    }
+
+    private var trainingDecision: DailyTrainingDecision {
+        TrainingDecisionKernel().decide(input: TrainingDecisionInput(
+            bodyState: trainingBodyState,
+            activePlan: activePlan
+        ))
+    }
+
+    private var todayExperience: TodayExperienceModel {
+        TodayExperienceModel.build(
+            dashboard: viewModel.dashboard,
+            bodyState: trainingBodyState,
+            trainingDecision: trainingDecision,
+            nutrition: .empty
+        )
+    }
+
+    private var todayOperatingPlanPayload: DailyOperatingPlanPayload? {
+        let identifier = DailyHealthSummaryRecord.dayIdentifier(for: viewModel.dashboard.date)
+        guard let plan = operatingPlans.first(where: { $0.dayIdentifier == identifier }),
+              let data = plan.payloadJSON.data(using: .utf8) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(DailyOperatingPlanPayload.self, from: data)
+    }
+
+    private var trainingSurfaceSummary: TrainingSurfaceSummaryModel {
+        TrainingSurfaceSummaryModel.build(
+            dashboard: viewModel.dashboard,
+            todayExperience: todayExperience,
+            trainingDecision: trainingDecision,
+            operatingPlan: todayOperatingPlanPayload
+        )
     }
 
     var body: some View {
@@ -85,7 +131,8 @@ struct TrainingView: View {
     }
 
     private var trainingReadinessHero: some View {
-        HStack(alignment: .center, spacing: 18) {
+        let summary = trainingSurfaceSummary
+        return HStack(alignment: .center, spacing: 18) {
             ArcProgressView(
                 score: viewModel.dashboard.strain.score,
                 tint: VelaTheme.strain,
@@ -96,35 +143,76 @@ struct TrainingView: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(L10n.t("Today's Training Window", "今日训练窗口"))
+                    Text(summary.confidenceLabel)
                         .font(.caption.weight(.bold))
                         .foregroundStyle(VelaTheme.mutedText)
                         .textCase(.uppercase)
 
-                    Text(targetRangeText)
+                    Text(summary.headline)
                         .font(.system(size: 26, weight: .bold, design: .rounded))
                         .foregroundStyle(VelaTheme.primaryText)
-                        .monospacedDigit()
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.82)
                 }
 
                 HStack(spacing: 8) {
                     trainingSignalPill(
                         title: L10n.t("Recovery", "恢复"),
-                        value: viewModel.dashboard.recovery.hasData ? "\(Int(viewModel.dashboard.recovery.score))" : "--",
+                        value: summary.recoveryValue,
                         tint: VelaTheme.recovery
                     )
                     trainingSignalPill(
                         title: L10n.t("Sleep", "睡眠"),
-                        value: viewModel.dashboard.sleepSummary.sleepScore.map { "\(Int($0))" } ?? "--",
+                        value: summary.sleepValue,
                         tint: VelaTheme.sleep
+                    )
+                    trainingSignalPill(
+                        title: L10n.t("RPE Cap", "RPE 上限"),
+                        value: summary.intensityCapText,
+                        tint: VelaTheme.energy
                     )
                 }
 
-                Text(trainingReadinessCopy)
-                    .font(.caption)
-                    .foregroundStyle(VelaTheme.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .lineLimit(3)
+                VStack(alignment: .leading, spacing: 5) {
+                    if let sessionTitle = summary.sessionTitle, !sessionTitle.isEmpty {
+                        Text(sessionTitle)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(VelaTheme.primaryText)
+                            .lineLimit(1)
+                    }
+
+                    Text(summary.guidance)
+                        .font(.caption)
+                        .foregroundStyle(VelaTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(3)
+                }
+
+                HStack(spacing: 8) {
+                    Button {
+                        performTrainingSummaryAction(summary)
+                    } label: {
+                        Label(summary.primaryActionTitle, systemImage: trainingSummaryActionIcon(summary.decision))
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(Color.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .frame(maxWidth: .infinity)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(trainingDecisionAccent(summary.decision))
+                            )
+                    }
+                    .buttonStyle(.cardPress)
+
+                    Text(L10n.t("Target", "目标") + " \(summary.targetRangeText)")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(VelaTheme.mutedText)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -133,7 +221,8 @@ struct TrainingView: View {
     }
 
     private var trainingQuickActions: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+        let summary = trainingSurfaceSummary
+        return LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
             trainingActionTile(
                 title: L10n.t("Generate Plan", "生成计划"),
                 subtitle: L10n.t("7-day adaptive block", "7 天自适应周期"),
@@ -147,32 +236,39 @@ struct TrainingView: View {
 
             trainingActionTile(
                 title: L10n.t("Adjust Today", "调整今天"),
-                subtitle: L10n.t("Session fit check", "检查今日安排"),
+                subtitle: summary.primaryActionTitle,
                 icon: "slider.horizontal.3",
-                tint: VelaTheme.recovery,
-                question: L10n.t(
-                    "Check whether today's training should be progressed, maintained, or reduced. Give one exact session recommendation.",
-                    "请判断今天训练应该加量、维持还是降级，并给出一个明确训练建议。"
-                )
+                tint: trainingDecisionAccent(summary.decision),
+                question: summary.coachQuestion
             )
         }
     }
 
-    private var targetRangeText: String {
-        let range = viewModel.dashboard.strain.recommendedRange
-        return "\(range.lowerBound)-\(range.upperBound)"
+    private func trainingSummaryActionIcon(_ decision: DailyTrainingDecisionType) -> String {
+        switch decision {
+        case .keep: return "play.fill"
+        case .reduce: return "arrow.down.forward.circle.fill"
+        case .swap: return "arrow.triangle.2.circlepath"
+        case .rest: return "heart.fill"
+        }
     }
 
-    private var trainingReadinessCopy: String {
-        let range = viewModel.dashboard.strain.recommendedRange
-        let score = Int(viewModel.dashboard.strain.score)
-        if range.contains(score) {
-            return L10n.t("Current strain is inside the recommended window. Keep the next session controlled and purposeful.", "当前负荷在建议窗口内。下一次训练保持可控和明确目标。")
+    private func trainingDecisionAccent(_ decision: DailyTrainingDecisionType) -> Color {
+        switch decision {
+        case .keep: return VelaTheme.recovery
+        case .reduce: return VelaTheme.strain
+        case .swap: return VelaTheme.accent
+        case .rest: return VelaTheme.sleep
         }
-        if score > range.upperBound {
-            return L10n.t("Current strain is above today's window. Prioritize recovery or low-intensity work.", "当前负荷高于今日窗口。优先恢复或低强度活动。")
+    }
+
+    private func performTrainingSummaryAction(_ summary: TrainingSurfaceSummaryModel) {
+        switch summary.decision {
+        case .keep, .reduce, .swap:
+            VelaAppState.shared.routeToAdaptiveTrainingStart()
+        case .rest:
+            VelaAppState.shared.routeToRecoveryDetail()
         }
-        return L10n.t("You still have room in today's window. Choose a session that matches recovery and the active plan.", "今日窗口仍有空间。选择匹配恢复状态和当前计划的训练。")
     }
 
     private func trainingSignalPill(title: String, value: String, tint: Color) -> some View {
@@ -180,10 +276,13 @@ struct TrainingView: View {
             Text(title)
                 .font(.caption2.weight(.bold))
                 .foregroundStyle(VelaTheme.mutedText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
             Text(value)
                 .font(.caption.weight(.bold))
                 .foregroundStyle(VelaTheme.primaryText)
                 .lineLimit(1)
+                .minimumScaleFactor(0.78)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
@@ -225,248 +324,4 @@ struct TrainingView: View {
         .buttonStyle(.cardPress)
     }
 
-    // MARK: - Strain Hero Section
-    private var strainHero: some View {
-        HStack(spacing: 20) {
-            // Left side: Mini Arc Progress
-            ArcProgressView(
-                score: viewModel.dashboard.strain.score,
-                tint: VelaTheme.strain,
-                recommendedRange: viewModel.dashboard.strain.recommendedRange,
-                size: 110,
-                lineWidth: 10
-            )
-
-            // Right side: Optimal strain targets and status
-            VStack(alignment: .leading, spacing: 10) {
-                // Title/Status Row
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(L10n.t("STRAIN STATUS", "负荷状态"))
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(VelaTheme.mutedText)
-                    
-                    HStack(spacing: 6) {
-                        Text(viewModel.dashboard.strain.hasData ? localizedTarget(viewModel.dashboard.strain.targetStatus) : "--")
-                            .font(.system(.subheadline, design: .rounded).weight(.bold))
-                            .foregroundStyle(VelaTheme.primaryText)
-                        
-                        let s = Int(viewModel.dashboard.strain.score)
-                        let range = viewModel.dashboard.strain.recommendedRange
-                        let pillColor = range.contains(s) ? VelaTheme.recovery : (s > range.upperBound ? VelaTheme.stress : VelaTheme.energy)
-                        let pillLabel = range.contains(s) ? L10n.t("Optimal", "最佳") : (s > range.upperBound ? L10n.t("Overreaching", "超负荷") : L10n.t("Recovery Day", "恢复日"))
-                        
-                        Text(pillLabel)
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(pillColor)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(pillColor.opacity(0.12)))
-                    }
-                }
-
-                Divider().background(Color.black.opacity(0.08))
-
-                // Target Zone
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(L10n.t("OPTIMAL TARGET ZONE", "建议负荷区间"))
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(VelaTheme.mutedText)
-                    
-                    let range = viewModel.dashboard.strain.recommendedRange
-                    Text("\(range.lowerBound).0 – \(range.upperBound).0")
-                        .font(.system(.title3, design: .rounded).weight(.bold))
-                        .foregroundStyle(VelaTheme.primaryText)
-                }
-
-                Divider().background(Color.black.opacity(0.08))
-
-                // Capacity Gauge
-                VStack(alignment: .leading, spacing: 4) {
-                    let score = viewModel.dashboard.strain.score
-                    let upperBound = Double(viewModel.dashboard.strain.recommendedRange.upperBound)
-                    let capacityPct = upperBound > 0 ? min(score / upperBound, 1.2) : 0
-                    
-                    HStack {
-                        Text(L10n.t("CAPACITY LOADED", "负荷已用容量"))
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(VelaTheme.mutedText)
-                        Spacer()
-                        Text("\(Int(capacityPct * 100))%")
-                            .font(.system(size: 9, weight: .bold, design: .rounded))
-                            .foregroundStyle(capacityPct > 1.0 ? VelaTheme.stress : VelaTheme.recovery)
-                    }
-                    
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule()
-                                .fill(Color.black.opacity(0.06))
-                                .frame(height: 4)
-                            
-                            Capsule()
-                                .fill(capacityPct > 1.0 ? VelaTheme.stress : VelaTheme.strain)
-                                .frame(width: geo.size.width * min(capacityPct, 1.0), height: 4)
-                                .shadow(color: (capacityPct > 1.0 ? VelaTheme.stress : VelaTheme.strain).opacity(0.3), radius: 2)
-                        }
-                    }
-                    .frame(height: 4)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .heroCardSurface(accent: VelaTheme.strain)
-    }
-
-    // MARK: - Strain Content Section
-    private var strainContent: some View {
-        VStack(spacing: 20) {
-            // Calculated Scores Grid
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                metricCardMini(
-                    title: L10n.t("Energy Load", "能量评分"),
-                    value: viewModel.dashboard.strain.components["energy_load_score"]?.formatted(.number.precision(.fractionLength(0))) ?? "--",
-                    icon: "bolt.fill",
-                    tint: VelaTheme.energy
-                )
-                metricCardMini(
-                    title: L10n.t("Exercise", "运动评分"),
-                    value: viewModel.dashboard.strain.components["exercise_duration_score"]?.formatted(.number.precision(.fractionLength(0))) ?? "--",
-                    icon: "figure.run",
-                    tint: VelaTheme.recovery
-                )
-                metricCardMini(
-                    title: L10n.t("Intensity", "强度评分"),
-                    value: viewModel.dashboard.strain.components["workout_intensity_score"]?.formatted(.number.precision(.fractionLength(0))) ?? "--",
-                    icon: "flame.fill",
-                    tint: VelaTheme.strain
-                )
-            }
-            
-            // Raw Indicators Grid
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                metricCardMini(
-                    title: L10n.t("Active Burn", "活动消耗"),
-                    value: viewModel.dashboard.strain.metrics["active_energy_raw"].map { "\(Int($0)) kcal" } ?? "--",
-                    icon: "flame",
-                    tint: VelaTheme.strain
-                )
-                metricCardMini(
-                    title: L10n.t("Active Time", "活跃时长"),
-                    value: viewModel.dashboard.strain.metrics["exercise_minutes_raw"].map { "\(Int($0))m" } ?? "--",
-                    icon: "clock.badge.checkmark",
-                    tint: VelaTheme.sleep
-                )
-                metricCardMini(
-                    title: L10n.t("Daily Steps", "今日步数"),
-                    value: viewModel.dashboard.strain.metrics["steps_raw"].map { "\(Int($0))" } ?? "--",
-                    icon: "shoeprints.fill",
-                    tint: VelaTheme.accent
-                )
-            }
-
-            // 30-Day Trend Chart
-            VStack(alignment: .leading, spacing: 12) {
-                Label(L10n.t("30-Day Strain Trend", "30 天负荷趋势"), systemImage: "chart.xyaxis.line")
-                    .font(.headline)
-                    .foregroundStyle(VelaTheme.primaryText)
-
-                if viewModel.strainTrend.isEmpty {
-                    Text(L10n.t("Trend data will appear after more days of use.", "使用更多天后趋势数据会出现。"))
-                        .font(.subheadline)
-                        .foregroundStyle(VelaTheme.secondaryText)
-                } else {
-                    Chart(viewModel.strainTrend) { item in
-                        AreaMark(
-                            x: .value("Day", item.date),
-                            y: .value("Score", item.value)
-                        )
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [VelaTheme.strain.opacity(0.2), VelaTheme.strain.opacity(0.02)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .interpolationMethod(.catmullRom)
-                        
-                        LineMark(
-                            x: .value("Day", item.date),
-                            y: .value("Score", item.value)
-                        )
-                        .foregroundStyle(VelaTheme.strain)
-                        .lineStyle(StrokeStyle(lineWidth: 2))
-                        .interpolationMethod(.catmullRom)
-                        
-                        PointMark(
-                            x: .value("Day", item.date),
-                            y: .value("Score", item.value)
-                        )
-                        .foregroundStyle(VelaTheme.strain)
-                        .symbolSize(20)
-                    }
-                    .chartYScale(domain: 0...100)
-                    .chartXAxis(.hidden)
-                    .frame(height: 160)
-                }
-            }
-            .cardSurface()
-
-            PlaceholderInsightCard(
-                title: L10n.t("Recommended Range", "建议范围"),
-                bodyText: L10n.t("Today's target is derived from recovery: \(viewModel.dashboard.strain.recommendedRange.lowerBound)-\(viewModel.dashboard.strain.recommendedRange.upperBound).", "今日目标由恢复状态推导：\(viewModel.dashboard.strain.recommendedRange.lowerBound)-\(viewModel.dashboard.strain.recommendedRange.upperBound)。")
-            )
-
-            PlaceholderInsightCard(
-                title: L10n.t("Factor Breakdown", "因素拆解"),
-                bodyText: viewModel.dashboard.strain.reasons.map(localizedReason).joined(separator: " ")
-            )
-
-            PlaceholderInsightCard(
-                title: L10n.t("Strain Formula", "负荷评分公式"),
-                bodyText: L10n.t(
-                    "Strain = 0.40 × EnergyLoad + 0.25 × Duration + 0.35 × WorkoutIntensity.\n\nEnergy Load: TRIMP-inspired (Banister 1991) — log-transformed active calorie burn.\nDuration: workout + movement time (log-mapped).\nWorkout Intensity: HR-based exponential scoring (1 − e^(−0.03×load)).",
-                    "负荷 = 0.40 × 能量消耗 + 0.25 × 时长 + 0.35 × 训练强度。\n\n能量消耗：TRIMP 启发式 (Banister 1991) — 活动热量对数变换。\n时长：运动 + 活动时间（对数映射）。\n训练强度：基于心率的指数评分 (1 − e^(−0.03×负荷))。"
-                )
-            )
-
-            MetricCoachCard(
-                dashboard: viewModel.dashboard,
-                focus: CoachContextFocus(
-                    title: L10n.t("Strain", "负荷"),
-                    systemContext: L10n.t(
-                        "Analyze today's strain score, active energy, exercise duration, workouts, recovery-adjusted recommended range, and workout readiness.",
-                        "分析今日负荷评分、活动能量、锻炼时长、训练记录、由恢复状态调整的建议范围和训练准备度。"
-                    )
-                )
-            )
-        }
-    }
-
-    // MARK: - Mini Card Helper
-    private func metricCardMini(title: String, value: String, icon: String, tint: Color) -> some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(tint)
-                Text(title)
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(VelaTheme.secondaryText)
-                    .lineLimit(1)
-            }
-            Text(value)
-                .font(.system(size: 16, weight: .bold, design: .rounded))
-                .foregroundStyle(VelaTheme.primaryText)
-                .lineLimit(1)
-        }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(VelaTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.black.opacity(0.04), lineWidth: 0.5)
-        )
-    }
 }

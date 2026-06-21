@@ -62,6 +62,7 @@ final class CoachChatVM: ObservableObject {
         var timestamp: Date = Date()
         var isStreaming: Bool = false
         var wikiUpdates: [String] = []
+        var recoveryAction: LLMErrorRecoveryAction?
 
         enum Role: String, Codable, Hashable {
             case user
@@ -69,16 +70,25 @@ final class CoachChatVM: ObservableObject {
         }
 
         enum CodingKeys: String, CodingKey {
-            case id, role, content, timestamp, wikiUpdates
+            case id, role, content, timestamp, wikiUpdates, recoveryAction
         }
 
-        init(id: UUID = UUID(), role: Role, content: String, timestamp: Date = Date(), isStreaming: Bool = false, wikiUpdates: [String] = []) {
+        init(
+            id: UUID = UUID(),
+            role: Role,
+            content: String,
+            timestamp: Date = Date(),
+            isStreaming: Bool = false,
+            wikiUpdates: [String] = [],
+            recoveryAction: LLMErrorRecoveryAction? = nil
+        ) {
             self.id = id
             self.role = role
             self.content = content
             self.timestamp = timestamp
             self.isStreaming = isStreaming
             self.wikiUpdates = wikiUpdates
+            self.recoveryAction = recoveryAction
         }
     }
 
@@ -161,7 +171,7 @@ final class CoachChatVM: ObservableObject {
         guard let apiKey = try? keychain.read(account: kimiApiKeyAccount), !apiKey.isEmpty else {
             messages.append(ChatMsg(
                 role: .assistant,
-                content: L10n.t("Please add your Kimi API key in Settings first for food photo analysis.", "请先在设置中添加 Kimi API Key，用于食物照片识别。")
+                content: L10n.t("Please add your Kimi API key in Settings first for food photo analysis.", "请先在设置中添加 Kimi 密钥，用于食物照片识别。")
             ))
             return
         }
@@ -387,6 +397,32 @@ final class CoachChatVM: ObservableObject {
         startPendingRequest(appendingUserMessage: false)
     }
 
+    func retryLastFailedRequest(
+        dashboard: DashboardSummary,
+        modelContext: ModelContext,
+        journalEntries: [JournalEntryRecord],
+        savedReports: [AIReportRecord],
+        focus: CoachContextFocus = .general,
+        services: VelaServices? = nil
+    ) {
+        guard activeResponseTask == nil,
+              let lastUserText = messages.last(where: { $0.role == .user })?.content else {
+            return
+        }
+
+        messages.removeAll { $0.role == .assistant && $0.recoveryAction?.destination == .retry }
+        serviceHost = services
+        pendingRequest = PendingRequest(
+            text: lastUserText,
+            dashboard: dashboard,
+            modelContext: modelContext,
+            journalEntries: journalEntries,
+            savedReports: savedReports,
+            focus: focus
+        )
+        startPendingRequest(appendingUserMessage: false)
+    }
+
     private func startPendingRequest(appendingUserMessage: Bool) {
         guard activeResponseTask == nil, let pendingRequest else { return }
         isAwaitingForegroundRetry = false
@@ -449,9 +485,11 @@ final class CoachChatVM: ObservableObject {
         }
 
         guard let apiKey = try? keychain.read(account: apiKeyAccount), !apiKey.isEmpty else {
+            let providerError = LLMProviderError.missingAPIKey
             messages.append(ChatMsg(
                 role: .assistant,
-                content: L10n.t("Please add your DeepSeek API key in Settings first.", "请先在设置中添加 DeepSeek API Key。")
+                content: providerError.userFacingMessage(isChinese: AppLanguage.stored.isChinese),
+                recoveryAction: providerError.recoveryAction(isChinese: AppLanguage.stored.isChinese)
             ))
             isReady = false
             persistThread(modelContext: modelContext)
@@ -479,7 +517,8 @@ final class CoachChatVM: ObservableObject {
                 services: services
             )
 
-            let provider = services?.deepSeekProvider(apiKey: apiKey) ?? DeepSeekProvider(apiKey: apiKey)
+            let baseProvider = services?.deepSeekProvider(apiKey: apiKey) ?? DeepSeekProvider(apiKey: apiKey)
+            let provider = RetryingAgentChatProvider(base: baseProvider)
             let toolRegistry = ToolFactory.makeRegistry(
                 modelContext: modelContext,
                 dashboard: dashboard
@@ -616,7 +655,8 @@ final class CoachChatVM: ObservableObject {
                 messages.append(ChatMsg(
                     id: assistantId,
                     role: .assistant,
-                    content: providerError.userFacingMessage(isChinese: AppLanguage.stored.isChinese)
+                    content: providerError.userFacingMessage(isChinese: AppLanguage.stored.isChinese),
+                    recoveryAction: providerError.recoveryAction(isChinese: AppLanguage.stored.isChinese)
                 ))
             }
             persistThread(modelContext: modelContext)
@@ -808,9 +848,17 @@ final class CoachChatVM: ObservableObject {
             wikiFiles: wikiFiles
         )
         let systemPrompt = composer.compose(for: policy)
+        let coverageSummary = DataCoverageSummaryModel.build(
+            groups: await DataCoverageGroupFactory.loadPriorityGroups()
+        )
 
         var result: [ChatMessage] = [
-            ChatMessage(role: .system, content: systemPrompt)
+            ChatMessage(role: .system, content: systemPrompt),
+            ChatMessage(role: .system, content: """
+            ## Data Coverage Guardrail
+            \(coverageSummary.coachContextLine)
+            If coverage is low or a relevant blocker is listed, lower certainty, avoid pretending missing signals are normal, and tell the user which signal would improve the recommendation.
+            """)
         ]
 
         // Web search: for data-oriented queries that need up-to-date information
@@ -906,18 +954,21 @@ final class CoachChatVM: ObservableObject {
                 )
                 
                 let isPhenoAge = bioAgeResult.isPhenoAge
-                let bioAgeVal = String(format: "%.1f", bioAgeResult.biologicalAge)
                 let suboptimalText = bioAgeResult.factors.filter { !$0.isOptimal && $0.type == .biomarker }.map { "\($0.name) (score: \(Int($0.score)))" }.joined(separator: ", ")
                 
                 if lang.isChinese {
-                    bioAgeLine = "- 生物年龄: \(bioAgeVal) 岁 (实际年龄: \(chronologicalAge) 岁, 基于 \(isPhenoAge ? "Levine PhenoAge 临床化验模型" : "可穿戴设备数据"))"
+                    bioAgeLine = isPhenoAge
+                        ? "- 生物年龄估算: \(String(format: "%.1f", bioAgeResult.biologicalAge)) 岁（实际年龄: \(chronologicalAge) 岁；基于完整 Levine PhenoAge 化验指标）"
+                        : "- 健康信号参考: \(bioAgeResult.healthAgeTrendLabel)（基于当前可用可穿戴信号，不等同于生物年龄）"
                     if !suboptimalText.isEmpty {
-                        bioAgeLine += "\n- 亚健康指标: \(suboptimalText)"
+                        bioAgeLine += "\n- 参考范围外的化验指标: \(suboptimalText)"
                     }
                 } else {
-                    bioAgeLine = "- Biological Age: \(bioAgeVal) yrs (Chronological: \(chronologicalAge) yrs, based on \(isPhenoAge ? "Levine PhenoAge" : "wearable signals"))"
+                    bioAgeLine = isPhenoAge
+                        ? "- Biological age estimate: \(String(format: "%.1f", bioAgeResult.biologicalAge)) yrs (chronological: \(chronologicalAge) yrs; based on complete Levine PhenoAge labs)"
+                        : "- Health signal reference: \(bioAgeResult.healthAgeTrendLabel) (from current wearable signals; not a biological-age estimate)"
                     if !suboptimalText.isEmpty {
-                        bioAgeLine += "\n- Sub-optimal Biomarkers: \(suboptimalText)"
+                        bioAgeLine += "\n- Lab values outside the recorded reference range: \(suboptimalText)"
                     }
                 }
             }
@@ -1066,6 +1117,94 @@ struct CoachChatMessage: Identifiable, Hashable {
     var createdAt: Date = Date()
 }
 
+struct CoachRecoveryActionButton: View {
+    let action: LLMErrorRecoveryAction
+    var perform: () -> Void
+
+    var body: some View {
+        Button(action: perform) {
+            Label(action.title, systemImage: action.systemImage)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(VelaTheme.accent)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(VelaTheme.accent.opacity(0.10))
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(VelaTheme.accent.opacity(0.22), lineWidth: 0.8)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(action.title)
+    }
+}
+
+struct CoachDataCoverageStrip: View {
+    let model: DataCoverageSummaryModel
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: model.actionSystemImage)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(accent)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(accent.opacity(0.12)))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(model.title)
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(VelaTheme.fg)
+                            .lineLimit(1)
+                        Text(model.status == .unknown ? "--" : "\(model.scorePercent)%")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundStyle(accent)
+                            .monospacedDigit()
+                    }
+                    Text(model.status == .low
+                         ? "低覆盖时 Coach 会保守回答"
+                         : model.topBlockers.isEmpty ? "关键数据可用于本轮判断" : "缺口：\(model.topBlockers.joined(separator: "、"))")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(VelaTheme.muted)
+                    .lineLimit(1)
+                }
+
+                Spacer(minLength: 4)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(VelaTheme.muted)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(VelaTheme.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(accent.opacity(0.18), lineWidth: 0.7)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Coach 数据可信度 \(model.scorePercent)%")
+    }
+
+    private var accent: Color {
+        switch model.status {
+        case .high: return VelaTheme.energyColor
+        case .moderate: return VelaTheme.accent
+        case .low: return VelaTheme.strainColor
+        case .unknown: return VelaTheme.muted
+        }
+    }
+}
+
 // MARK: - Mini Coach Panel (for MetricCoachCard sheets)
 
 struct CoachChatPanel: View {
@@ -1083,6 +1222,7 @@ struct CoachChatPanel: View {
     @State private var showCameraPicker = false
     @State private var showPhotoLibraryPicker = false
     @State private var capturedImage: UIImage? = nil
+    @State private var dataCoverageSummary = DataCoverageSummaryModel.unknown
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1103,7 +1243,9 @@ struct CoachChatPanel: View {
                         }
 
                         ForEach(vm.messages.filter { !$0.isStreaming }) { msg in
-                            MiniBubble(message: msg)
+                            MiniBubble(message: msg) { action in
+                                handleRecoveryAction(action)
+                            }
                                 .id(msg.id)
                         }
 
@@ -1125,7 +1267,12 @@ struct CoachChatPanel: View {
             }
 
             HStack(spacing: 0) {
-                HStack(spacing: 10) {
+                VStack(spacing: 8) {
+                    CoachDataCoverageStrip(model: dataCoverageSummary) {
+                        VelaAppState.shared.showSettings = true
+                    }
+
+                    HStack(spacing: 10) {
                     Menu {
                         Button {
                             showCameraPicker = true
@@ -1157,17 +1304,15 @@ struct CoachChatPanel: View {
                     Button {
                         if !vm.isStreaming {
                             inputFocused = false
-                            Task {
-                                await vm.send(
-                                    text: vm.draft,
-                                    dashboard: dashboard,
-                                    modelContext: modelContext,
-                                    journalEntries: journalEntries,
-                                    savedReports: savedReports,
-                                    focus: focus,
-                                    services: services
-                                )
-                            }
+                            vm.submit(
+                                text: vm.draft,
+                                dashboard: dashboard,
+                                modelContext: modelContext,
+                                journalEntries: journalEntries,
+                                savedReports: savedReports,
+                                focus: focus,
+                                services: services
+                            )
                         }
                     } label: {
                         Image(systemName: vm.isStreaming ? "stop.circle.fill" : "arrow.up.circle.fill")
@@ -1181,6 +1326,7 @@ struct CoachChatPanel: View {
                     }
                     .disabled(vm.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !vm.isStreaming)
                     .buttonStyle(.plain)
+                    }
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
@@ -1213,6 +1359,9 @@ struct CoachChatPanel: View {
             .background(.ultraThinMaterial)
         }
         .onAppear { vm.refreshKeyState() }
+        .task {
+            await loadDataCoverageSummary()
+        }
         .sheet(isPresented: $showCameraPicker) {
             ImagePicker(sourceType: .camera, selectedImage: $capturedImage)
                 .ignoresSafeArea()
@@ -1233,6 +1382,30 @@ struct CoachChatPanel: View {
                     services: services
                 )
             }
+        }
+    }
+
+    private func handleRecoveryAction(_ action: LLMErrorRecoveryAction) {
+        switch action.destination {
+        case .settings:
+            VelaAppState.shared.showSettings = true
+        case .retry:
+            vm.retryLastFailedRequest(
+                dashboard: dashboard,
+                modelContext: modelContext,
+                journalEntries: journalEntries,
+                savedReports: savedReports,
+                focus: focus,
+                services: services
+            )
+        }
+    }
+
+    private func loadDataCoverageSummary() async {
+        let groups = await DataCoverageGroupFactory.loadPriorityGroups()
+        let summary = DataCoverageSummaryModel.build(groups: groups)
+        withAnimation(VelaTheme.smooth) {
+            dataCoverageSummary = summary
         }
     }
 }
@@ -1309,6 +1482,7 @@ struct AppleIntelligenceLoaderDots: View {
 
 private struct MiniBubble: View {
     let message: CoachChatVM.ChatMsg
+    var onRecoveryAction: (LLMErrorRecoveryAction) -> Void = { _ in }
 
     var body: some View {
         HStack {
@@ -1344,6 +1518,13 @@ private struct MiniBubble: View {
                                     .foregroundStyle(message.role == .user ? .white.opacity(0.7) : VelaTheme.muted)
                             }
                         }
+                    }
+
+                    if let action = message.recoveryAction, message.role == .assistant {
+                        CoachRecoveryActionButton(action: action) {
+                            onRecoveryAction(action)
+                        }
+                        .padding(.top, 4)
                     }
                 }
                 .padding(.horizontal, 14)

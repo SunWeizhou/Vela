@@ -33,15 +33,15 @@
 	<key>NSAccentColorName</key>
 	<string>AccentColor</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>Vela reads Apple Health summaries to calculate wellness trends on device.</string>
+	<string>Vela 读取 Apple 健康中的必要汇总数据，用于在本机生成恢复、睡眠和训练趋势。</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>Vela may save derived wellness summaries locally; it does not write raw HealthKit samples.</string>
+	<string>Vela 仅会保存由你确认的健康摘要，不会写入原始 Apple 健康样本。</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Vela uses your location while the app is open to show stable local weather.</string>
+	<string>Vela 仅在应用打开时使用位置，用于显示当地天气并辅助安排当天训练。</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Vela uses the camera only when you choose to photograph a meal for nutrition analysis.</string>
+	<string>仅在你主动拍摄餐食时使用相机，用于记录饮食。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Vela reads a meal photo only when you choose one for nutrition analysis.</string>
+	<string>仅在你主动选择餐食照片时访问相册，用于记录饮食。</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

@@ -48,8 +48,8 @@ struct ReportGenerator: Sendable {
         let rhrToday = context.recovery["rhr_bpm"] ?? "N/A"
         let rhrBaseline = context.recovery["rhr_baseline_bpm"] ?? "N/A"
         
-        let readinessLevel = context.todaySummary["readiness_level"] ?? "MODERATE"
-        let readinessGuidance = context.todaySummary["readiness_guidance"] ?? "Train at controlled intensity."
+        let readinessLevel = context.todaySummary["readiness_level"] ?? "N/A"
+        let readinessGuidance = context.todaySummary["readiness_guidance"] ?? "N/A"
 
         if language.isChinese {
             return """
@@ -88,14 +88,14 @@ struct ReportGenerator: Sendable {
         if language.isChinese {
             return """
             你是 Vela，一个 local-first 的私人健康数据分析与生活方式教练。
-            使用简体中文回答。不要做医疗诊断。Stress 只能解释为生理代理指标，Health Age Trend 是 beta 趋势，不代表真实生物年龄。
+            使用简体中文回答。不要做医疗诊断。压力指数只能解释为生理代理指标；“健康信号参考”不代表真实生物年龄，只有明确标记的完整 PhenoAge 化验估算才可称为生物年龄估算。
             输出使用 Markdown，结构包含：结论、依据、建议。语言克制、具体、可执行。
             每条建议必须注明来源、置信度（高/中/低），并附“安全声明：一般健康建议，不构成医疗诊断。”
             """
         }
         return """
         You are Vela, a private local-first health data analyst. Give cautious wellness guidance.
-        Do not diagnose. Explain stress as a proxy and health age as a beta trend.
+        Do not diagnose. Explain stress as a proxy and a health-signal reference as distinct from a biological-age estimate; only an explicitly complete PhenoAge lab estimate may be called biological age.
         Use conclusion, evidence, suggestion. Keep the answer concise.
         Every recommendation must include source, confidence (high/medium/low), and "Safety: General wellness guidance only; not a medical diagnosis."
         """
@@ -123,12 +123,12 @@ struct ReportGenerator: Sendable {
                 (给出最多 3 条具体的、高度可执行的今日健康与恢复建议，例如补水、睡眠卫生或压力管理)
                 
                 ## ⚡ 训练与负荷窗口
-                (根据恢复评分，推荐今日最适合的训练类型和心率区间，指明是否适合高负荷冲击)
+                (优先遵循本地训练决策；如关键数据缺失，仅说明保守选择和待补信号。不要仅凭恢复分推荐高负荷、心率区间或加量。)
                 """
             case .sleepReview:
                 return "生成睡眠复盘：结论、可能影响因素、今晚建议。"
             case .workoutReadiness:
-                return "生成训练准备度：建议轻量、中等、较高强度或恢复日，并说明依据。"
+                return "生成训练准备度：优先复述本地训练决策；数据不足时给出保守选择，并说明依据和待补信号。"
             case .weeklyReview:
                 return "基于可用趋势、日记和历史报告生成周复盘。"
             case .coachPrompt:

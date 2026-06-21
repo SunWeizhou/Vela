@@ -55,7 +55,7 @@ enum AdaptiveTrainingEngine {
         // Recovery-gated decision tree
         if recoveryScore > 75 && energyScore > 60 && tsb > 5 && sleepScore > 80 {
             adjustment = .keep
-            reason = AppLanguage.stored.isChinese ? "所有生理指标极佳。按原计划进行。" : "All readiness indicators are optimal. Stick to the plan."
+            reason = AppLanguage.stored.isChinese ? "当前恢复与睡眠信号支持按计划训练；训练中仍以动作质量和主观用力为准。" : "Current recovery and sleep signals support the planned session; keep technique and perceived effort in check."
             alternative = nil
         } else if recoveryScore > 50 && energyScore > 40 && tsb > -5 {
             adjustment = .reduce
@@ -67,7 +67,7 @@ enum AdaptiveTrainingEngine {
             alternative = buildRecoveryAlternative(for: todayStep)
         } else {
             adjustment = .rest
-            reason = AppLanguage.stored.isChinese ? "恢复状态极低。建议今天完全休息。" : "Recovery is critically low. Full rest day recommended."
+            reason = AppLanguage.stored.isChinese ? "当前恢复信号较低。建议暂停计划训练，以休息或温和活动为主。" : "Current recovery signals are low. Pause planned training and prioritize rest or gentle movement."
             alternative = nil
         }
 
@@ -78,8 +78,8 @@ enum AdaptiveTrainingEngine {
             finalAdjustment = .reduce
             finalReason = AppLanguage.stored.isChinese ? "体能负荷（TSB）处于深度负值（-\(Int(abs(tsb)))）。累积疲劳较高，建议降低训练容量。" : "TSB is deeply negative (-\(Int(abs(tsb)))). High accumulated fatigue requires reduced load."
         } else if tsb > 10 && adjustment == .reduce {
-            finalAdjustment = .keep
-            finalReason = AppLanguage.stored.isChinese ? "体能负荷（TSB）良好（+\(Int(tsb))）。虽然即时恢复度一般，但长期体能支持正常训练。" : "TSB is positive (+\(Int(tsb))). Despite moderate recovery, your chronic fitness allows normal training."
+            finalAdjustment = .reduce
+            finalReason = AppLanguage.stored.isChinese ? "长期负荷状态较好，但即时恢复仍未达到满量训练条件；今天继续按减量方案执行。" : "Long-term load is favorable, but current recovery still supports a reduced session today."
         } else {
             finalAdjustment = adjustment
             finalReason = reason
@@ -111,7 +111,7 @@ enum AdaptiveTrainingEngine {
         switch (fatigueLevel, interpretation.trainingWindow.isOpen) {
         case (.none, true):
             adjustment = .keep
-            reason = AppLanguage.stored.isChinese ? "所有生理准备指标良好。" : "All readiness indicators are optimal."
+            reason = AppLanguage.stored.isChinese ? "当前可用信号未发现明显限制因素；按计划训练并保留余力。" : "Available signals show no major limiter; follow the plan while keeping some reserve."
             alternative = nil
         case (.mild, true):
             if day.intensity == "high" {
@@ -147,7 +147,7 @@ enum AdaptiveTrainingEngine {
             alternative = nil
         default:
             adjustment = .keep
-            reason = AppLanguage.stored.isChinese ? "未检测到异常生理信号。" : "No significant issues detected."
+            reason = AppLanguage.stored.isChinese ? "当前可用信号未提示明显限制因素。" : "Available signals do not show a major limiter."
             alternative = nil
         }
 

@@ -45,9 +45,10 @@ struct WikiProfileView: View {
         .safeAreaInset(edge: .top) {
             VStack(spacing: 0) {
                 HStack(alignment: .center) {
+                    VelaDetailBackButton(label: L10n.t("Back to Settings", "返回设置"))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(L10n.t("My Profile", "我的档案"))
-                            .font(.system(size: 26, weight: .bold, design: .rounded))
+                            .font(.system(size: 21, weight: .bold, design: .rounded))
                             .foregroundStyle(VelaTheme.primaryText)
                         Text(L10n.t("Health memory & knowledge base", "健康记忆与知识档案库"))
                             .font(.system(size: 13, weight: .medium))

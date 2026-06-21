@@ -194,6 +194,9 @@ func localizedReason(_ reason: String) -> String {
     if reason.contains("Morning energy") { return "早晨能量基于恢复和睡眠估算。" }
     if reason.contains("Current energy subtracts") { return "当前能量会扣除负荷和压力代理消耗。" }
     if reason.contains("Health Age Trend") { return "健康年龄趋势是 beta 代理趋势，不代表真实生物年龄。" }
+    if reason.contains("Limited data coverage") {
+        return "数据覆盖不足：在健康或本地记录可用前，Vela 会使用保守训练建议。"
+    }
     return reason
 }
 
@@ -218,6 +221,105 @@ func localizedMetricName(_ name: String) -> String {
     }
 }
 
+func localizedWorkoutTemplateTitle(_ title: String) -> String {
+    guard AppLanguage.stored.isChinese else { return title }
+    switch title.lowercased() {
+    case "full body": return "全身训练"
+    case "leg day": return "腿部训练"
+    case "push day": return "推力训练"
+    case "pull day": return "拉力训练"
+    case "upper body": return "上肢训练"
+    case "lower body": return "下肢训练"
+    default: return title
+    }
+}
+
+func localizedOnboardingGoal(_ value: String) -> String {
+    switch value {
+    case "performance":
+        return L10n.t("Performance", "运动表现")
+    case "muscle_gain":
+        return L10n.t("Muscle", "增肌塑形")
+    case "fat_loss":
+        return L10n.t("Fat loss", "减脂")
+    case "health", "maintain":
+        return L10n.t("Health", "健康管理")
+    default:
+        return value.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+}
+
+func localizedOnboardingTrainingStyle(_ value: String) -> String {
+    switch value {
+    case "strength":
+        return L10n.t("Strength", "力量训练")
+    case "hybrid", "mixed":
+        return L10n.t("Hybrid", "力量+耐力")
+    case "endurance":
+        return L10n.t("Endurance", "耐力训练")
+    case "cardio":
+        return L10n.t("Cardio", "有氧训练")
+    case "yoga":
+        return L10n.t("Mobility", "瑜伽伸展")
+    default:
+        return value.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+}
+
+func localizedOnboardingExperience(_ value: String) -> String {
+    switch value {
+    case "beginner":
+        return L10n.t("Beginner", "刚开始")
+    case "intermediate":
+        return L10n.t("Intermediate", "有训练基础")
+    case "advanced":
+        return L10n.t("Advanced", "进阶训练者")
+    default:
+        return L10n.t("Unknown", "未确定")
+    }
+}
+
+func localizedOnboardingCoachStyle(_ value: String) -> String {
+    switch value {
+    case "direct":
+        return L10n.t("Direct", "直接给结论")
+    case "balanced":
+        return L10n.t("Balanced", "平衡解释")
+    case "encouraging":
+        return L10n.t("Encouraging", "积极鼓励")
+    case "explanatory":
+        return L10n.t("Detailed", "详细解释")
+    default:
+        return value.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+}
+
+func localizedOnboardingEquipment(_ value: String) -> String {
+    switch value {
+    case "gym":
+        return L10n.t("Gym", "健身房")
+    case "home_equipment":
+        return L10n.t("Home", "居家器械")
+    case "bodyweight":
+        return L10n.t("Bodyweight", "自重训练")
+    default:
+        return value.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+}
+
+func localizedOnboardingFirstBrief(
+    primaryGoal: String,
+    trainingStyle: String,
+    weeklyTrainingDays: Int
+) -> String {
+    let goal = localizedOnboardingGoal(primaryGoal)
+    let style = localizedOnboardingTrainingStyle(trainingStyle)
+    guard AppLanguage.stored.isChinese else {
+        return "Goal \(goal), training style \(style), \(weeklyTrainingDays)x per week. Vela will start with conservative daily decisions and increase automation as data coverage improves."
+    }
+    return "目标 \(goal)，训练偏好 \(style)，每周 \(weeklyTrainingDays) 次。Vela 会先用保守规则生成今日建议，数据覆盖提升后再提高自动化强度。"
+}
+
 func localizedArtifactType(_ type: String) -> String {
     guard AppLanguage.stored.isChinese else {
         return type.replacingOccurrences(of: "_", with: " ").capitalized
@@ -230,6 +332,23 @@ func localizedArtifactType(_ type: String) -> String {
     case "wiki_diff": return "身体特征更新"
     case "nutrition_feedback": return "营养健康反馈"
     default: return type.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+}
+
+func localizedMuscleGroup(_ muscle: String) -> String {
+    guard AppLanguage.stored.isChinese else { return muscle }
+    switch muscle.lowercased() {
+    case "chest": return "胸部"
+    case "back": return "背部"
+    case "shoulders", "shoulder": return "肩部"
+    case "biceps": return "肱二头肌"
+    case "triceps": return "肱三头肌"
+    case "quads", "quadriceps": return "股四头肌"
+    case "hamstrings": return "腘绳肌"
+    case "glutes": return "臀部"
+    case "core", "abs": return "核心"
+    case "legs", "leg": return "腿部"
+    default: return muscle
     }
 }
 
@@ -373,5 +492,3 @@ func localizedSignalBaseline(_ baseline: String) -> String {
     }
     return baseline
 }
-
-

@@ -24,6 +24,7 @@ final class VelaAppState: ObservableObject {
     @Published var isReadOnlySafetyMode = false
     @Published var selectedTab = 0
     @Published var showCoachHub = false
+    @Published var showSettings = false
     @Published var prefilledCoachQuestion: String? = nil
     @Published var homeNavigationStackId = UUID()
     
@@ -46,9 +47,26 @@ final class VelaAppState: ObservableObject {
     @Published private(set) var coachRouteDestination: CoachRouteDestination?
     @Published private(set) var coachRouteRevision = 0
     @Published private(set) var localDataRevision = 0
+    @Published private(set) var adaptiveTrainingStartRequest = 0
     @Published private(set) var deferredQuickAction: DeferredQuickAction?
     
     static let shared = VelaAppState()
+
+    init(arguments: [String] = ProcessInfo.processInfo.arguments) {
+        #if DEBUG
+        selectedTab = Self.initialTab(from: arguments)
+        #endif
+    }
+
+    nonisolated static func initialTab(from arguments: [String]) -> Int {
+        guard let flagIndex = arguments.firstIndex(of: "-velaInitialTab"),
+              arguments.indices.contains(arguments.index(after: flagIndex)),
+              let tab = Int(arguments[arguments.index(after: flagIndex)]),
+              0...4 ~= tab else {
+            return 0
+        }
+        return tab
+    }
 
     func routeToCoach(question: String?) {
         prepareCoachRoute(question: question)
@@ -82,6 +100,12 @@ final class VelaAppState: ObservableObject {
     func routeToTab(_ tab: Int) {
         logDebug("[VelaAppState] routeToTab called with tab=\(tab)")
         selectedTab = tab
+    }
+
+    func routeToAdaptiveTrainingStart() {
+        resetQuickActionSheetTriggers()
+        selectedTab = 1
+        adaptiveTrainingStartRequest += 1
     }
 
     func routeToFoodScanner(type: String) {

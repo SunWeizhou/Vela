@@ -13,7 +13,12 @@ enum BackgroundTaskManager {
     /// Call once on app launch to register task handlers with BGTaskScheduler.
     static func register() {
         BGTaskScheduler.shared.register(forTaskWithIdentifier: refreshTaskIdentifier, using: nil) { task in
-            handleRefreshTask(task: task as! BGAppRefreshTask)
+            guard let refreshTask = task as? BGAppRefreshTask else {
+                logger.error("Received unexpected background task type for \(self.refreshTaskIdentifier).")
+                task.setTaskCompleted(success: false)
+                return
+            }
+            handleRefreshTask(task: refreshTask)
         }
         logger.info("BGTask registered: \(self.refreshTaskIdentifier)")
     }

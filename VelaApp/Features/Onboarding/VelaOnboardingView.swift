@@ -50,7 +50,6 @@ struct VelaOnboardingView: View {
                     heroSection
                     bodyModelSetupCard
                     signalPreviewCard
-                    ctaButtons
 
                     Text(L10n.t(
                         "Your health data stays on-device. Nothing leaves without permission.",
@@ -60,11 +59,18 @@ struct VelaOnboardingView: View {
                     .foregroundStyle(VelaTheme.muted.opacity(0.55))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 22)
-                    .padding(.bottom, 24)
+                    .padding(.bottom, 132)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 46)
             }
+        }
+        .safeAreaInset(edge: .bottom) {
+            ctaButtons
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+                .padding(.bottom, 10)
+                .background(.ultraThinMaterial)
         }
         .alert(isPresented: $showingErrorAlert) {
             Alert(
@@ -122,32 +128,32 @@ struct VelaOnboardingView: View {
 
     private var bodyModelSetupCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("First-Day Body Model")
+            Text(L10n.t("First-Day Body Model", "首日身体模型"))
                 .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(VelaTheme.onSurface)
 
-            Picker("Goal", selection: $primaryGoal) {
-                Text("Performance").tag("performance")
-                Text("Muscle").tag("muscle_gain")
-                Text("Fat loss").tag("fat_loss")
-                Text("Health").tag("health")
+            Picker(L10n.t("Goal", "目标"), selection: $primaryGoal) {
+                Text(localizedOnboardingGoal("performance")).tag("performance")
+                Text(localizedOnboardingGoal("muscle_gain")).tag("muscle_gain")
+                Text(localizedOnboardingGoal("fat_loss")).tag("fat_loss")
+                Text(localizedOnboardingGoal("health")).tag("health")
             }
             .pickerStyle(.segmented)
 
-            Picker("Training", selection: $trainingStyle) {
-                Text("Strength").tag("strength")
-                Text("Hybrid").tag("hybrid")
-                Text("Endurance").tag("endurance")
+            Picker(L10n.t("Training", "训练"), selection: $trainingStyle) {
+                Text(localizedOnboardingTrainingStyle("strength")).tag("strength")
+                Text(localizedOnboardingTrainingStyle("hybrid")).tag("hybrid")
+                Text(localizedOnboardingTrainingStyle("endurance")).tag("endurance")
             }
             .pickerStyle(.segmented)
 
-            HStack(spacing: 12) {
+            VStack(spacing: 10) {
                 Stepper(value: $weeklyTrainingDays, in: 1...7) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("\(weeklyTrainingDays)x / week")
+                        Text(L10n.t("\(weeklyTrainingDays)x / week", "每周 \(weeklyTrainingDays) 次"))
                             .font(.system(size: 15, weight: .semibold, design: .rounded))
                             .foregroundStyle(VelaTheme.onSurface)
-                        Text("training frequency")
+                        Text(L10n.t("training frequency", "训练频次"))
                             .font(.system(size: 11))
                             .foregroundStyle(VelaTheme.muted)
                     }
@@ -158,30 +164,30 @@ struct VelaOnboardingView: View {
                         Text("\(sessionDurationMinutes) min")
                             .font(.system(size: 15, weight: .semibold, design: .rounded))
                             .foregroundStyle(VelaTheme.onSurface)
-                        Text("session")
+                        Text(L10n.t("session", "单次时长"))
                             .font(.system(size: 11))
                             .foregroundStyle(VelaTheme.muted)
                     }
                 }
             }
 
-            Picker("Experience", selection: $experienceLevel) {
-                Text("Beginner").tag("beginner")
-                Text("Intermediate").tag("intermediate")
-                Text("Advanced").tag("advanced")
+            Picker(L10n.t("Experience", "经验"), selection: $experienceLevel) {
+                Text(localizedOnboardingExperience("beginner")).tag("beginner")
+                Text(localizedOnboardingExperience("intermediate")).tag("intermediate")
+                Text(localizedOnboardingExperience("advanced")).tag("advanced")
             }
             .pickerStyle(.segmented)
 
             HStack(spacing: 8) {
-                equipmentToggle("Gym", isOn: $hasGym)
-                equipmentToggle("Home", isOn: $hasHomeEquipment)
-                equipmentToggle("Bodyweight", isOn: $hasBodyweight)
+                equipmentToggle(localizedOnboardingEquipment("gym"), isOn: $hasGym)
+                equipmentToggle(localizedOnboardingEquipment("home_equipment"), isOn: $hasHomeEquipment)
+                equipmentToggle(localizedOnboardingEquipment("bodyweight"), isOn: $hasBodyweight)
             }
 
-            Picker("Coach Style", selection: $coachStyle) {
-                Text("Direct").tag("direct")
-                Text("Balanced").tag("balanced")
-                Text("Detailed").tag("explanatory")
+            Picker(L10n.t("Coach Style", "教练风格"), selection: $coachStyle) {
+                Text(localizedOnboardingCoachStyle("direct")).tag("direct")
+                Text(localizedOnboardingCoachStyle("balanced")).tag("balanced")
+                Text(localizedOnboardingCoachStyle("explanatory")).tag("explanatory")
             }
             .pickerStyle(.segmented)
         }
@@ -276,7 +282,7 @@ struct VelaOnboardingView: View {
             if missing.isEmpty {
                 finishOnboarding(missingSignals: [])
             } else {
-                saveOnboardingState(missingSignals: missing, completed: false)
+                _ = saveOnboardingState(missingSignals: missing, completed: false)
                 missingSignals = missing
                 showingMissingAlert = true
             }
@@ -298,18 +304,22 @@ struct VelaOnboardingView: View {
         if missing.isEmpty {
             finishOnboarding(missingSignals: [])
         } else {
-            saveOnboardingState(missingSignals: missing, completed: false)
+            _ = saveOnboardingState(missingSignals: missing, completed: false)
             missingSignals = missing
             showingMissingAlert = true
         }
     }
 
     private func finishOnboarding(missingSignals: [HealthSignal]) {
-        saveOnboardingState(missingSignals: missingSignals, completed: true)
+        guard saveOnboardingState(missingSignals: missingSignals, completed: true) else { return }
         onboardingCompleted = true
+        VelaAppState.shared.markLocalDataChanged()
+        Task {
+            await dashboardVM.refresh(modelContext: modelContext, force: true)
+        }
     }
 
-    private func saveOnboardingState(missingSignals: [HealthSignal], completed: Bool) {
+    private func saveOnboardingState(missingSignals: [HealthSignal], completed: Bool) -> Bool {
         let state = onboardingStates.first ?? OnboardingState()
         state.currentStep = completed ? "completed" : "health_permissions"
         state.isCompleted = completed
@@ -343,7 +353,11 @@ struct VelaOnboardingView: View {
             missingData: missingSignals.map(\.name)
         )
         state.missingData = missingSignals.map(\.name)
-        state.firstBrief = "目标 \(primaryGoal)，训练偏好 \(trainingStyle)，每周 \(weeklyTrainingDays) 次。Vela 会先用保守规则生成今日建议，数据覆盖提升后再提高自动化强度。"
+        state.firstBrief = localizedOnboardingFirstBrief(
+            primaryGoal: primaryGoal,
+            trainingStyle: trainingStyle,
+            weeklyTrainingDays: weeklyTrainingDays
+        )
         state.firstActionPlan = [
             "完成 Apple 健康授权并建立 HRV/睡眠/负荷基线。",
             "记录第一周训练组数、RPE/RIR 和训练后主观反馈。",
@@ -353,7 +367,14 @@ struct VelaOnboardingView: View {
         if onboardingStates.isEmpty {
             modelContext.insert(state)
         }
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+            return true
+        } catch {
+            authError = "无法保存身体模型，请稍后重试。"
+            showingErrorAlert = true
+            return false
+        }
     }
 
     private var selectedEquipment: [String] {

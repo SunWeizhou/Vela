@@ -107,15 +107,24 @@ struct WebSearchTool: AgentTool {
 
         let enrichedQuery = Self.enrichQuery(query, policy: policy)
         let results = await WebSearchHelper.shared.search(enrichedQuery, maxResults: 3)
-        let citationSuffix = "\n\n[Source Policy: \(policy.rawValue.uppercased()) - Authoritative sources prioritized. Citation from primary databases only. Marketing/forum sources ignored.]"
+        let citationSuffix = "\n\n[Source Policy: \(policy.rawValue.uppercased()) - Search query biased toward authoritative sources when possible. Verify linked sources before applying medical, supplement, or training advice.]"
 
         return results.isEmpty ? "No search results found for '\(query)'." : (results + citationSuffix)
     }
 
-    private static func detectPolicy(for query: String) -> SearchSourcePolicy {
+    static func detectPolicy(for query: String) -> SearchSourcePolicy {
         let q = query.lowercased()
-        let medicalTerms = ["disease", "medicine", "supplement", "vitamin", "dose", "clinical", "study", "guideline", "nih", "who", "cdc", "health", "symptom", "blood", "hormone", "cortisol", "nutrition", "diet"]
-        let sportsTerms = ["vo2", "zone 2", "cardio", "training", "strength", "hypertrophy", "overreaching", "overtraining", "recovery", "acsm", "nsca", "heart rate"]
+        let medicalTerms = [
+            "disease", "medicine", "supplement", "vitamin", "dose", "clinical", "study", "guideline",
+            "nih", "who", "cdc", "health", "symptom", "blood", "hormone", "cortisol", "nutrition", "diet",
+            "疾病", "药", "药物", "补剂", "营养补充", "维生素", "剂量", "临床", "指南", "症状",
+            "血液", "激素", "皮质醇", "营养", "饮食", "肌酸", "咖啡因", "蛋白粉"
+        ]
+        let sportsTerms = [
+            "vo2", "zone 2", "cardio", "training", "strength", "hypertrophy", "overreaching",
+            "overtraining", "recovery", "acsm", "nsca", "heart rate",
+            "有氧", "力量", "训练", "增肌", "肌肥大", "运动科学", "恢复", "过度训练", "心率", "最大摄氧量"
+        ]
 
         if medicalTerms.contains(where: { q.contains($0) }) {
             return .medicalPrimary
@@ -126,7 +135,7 @@ struct WebSearchTool: AgentTool {
         }
     }
 
-    private static func enrichQuery(_ query: String, policy: SearchSourcePolicy) -> String {
+    static func enrichQuery(_ query: String, policy: SearchSourcePolicy) -> String {
         switch policy {
         case .medicalPrimary:
             return query + " (site:nih.gov OR site:who.int OR site:cdc.gov OR site:ncbi.nlm.nih.gov OR site:cochranelibrary.com OR site:fda.gov)"

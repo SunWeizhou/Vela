@@ -92,6 +92,20 @@ struct VelaTodayView: View {
             generatedAt: Date()
         )
     }
+    private var todayExperience: TodayExperienceModel {
+        TodayExperienceModel.build(
+            dashboard: dashboard,
+            bodyState: bodyState,
+            trainingDecision: trainingDecision,
+            nutrition: TodayExperienceNutrition(
+                calories: todayCalories,
+                calorieTarget: dailyCalorieTarget,
+                protein: todayProtein,
+                carbs: todayCarbs,
+                fat: todayFat
+            )
+        )
+    }
 
     // Real scores mapped to 0...1 for BevelScoreRing
     private var strainScore: Double { max(0, min(1.0, dashboard.strain.score / 100.0)) }
@@ -134,6 +148,17 @@ struct VelaTodayView: View {
     @State private var weatherTemp: String = "--"
     @State private var weatherLocation: String = "天气数据待同步"
 
+    private var weatherStatusText: String {
+        switch locationManager.authorizationStatus {
+        case .notDetermined:
+            return "点击更新天气"
+        case .denied, .restricted:
+            return "定位未授权"
+        default:
+            return weatherLocation
+        }
+    }
+
     // Active Status Settings Toggles (Replicating Screenshot 2)
     @AppStorage("vela_active_status") private var activeStatusRaw = "active"
     @AppStorage("vela_active_status_duration") private var activeStatusDuration = "明天之前"
@@ -149,6 +174,37 @@ struct VelaTodayView: View {
     @State private var showTodayEvidence = false
     @State private var animatedEnergyScore: Double = 0.0
     @State private var isVisible = false
+    @State private var experienceFeedbackTick = 0
+    @State private var dataCoverageSummary = DataCoverageSummaryModel.unknown
+
+    private var decisionDataCoverageSummary: DataCoverageSummaryModel {
+        guard dataCoverageSummary.status != .unknown,
+              !dashboard.recovery.hasData else { return dataCoverageSummary }
+
+        var adjusted = dataCoverageSummary
+        adjusted.domainSummaries = adjusted.domainSummaries.map { domain in
+            guard domain.id == "recovery" else { return domain }
+            return DataCoverageDomainSummary(
+                id: domain.id,
+                title: domain.title,
+                icon: domain.icon,
+                scorePercent: 0,
+                usableCount: 0,
+                totalCount: domain.totalCount
+            )
+        }
+        let usable = adjusted.domainSummaries.reduce(0) { $0 + $1.usableCount }
+        let total = adjusted.domainSummaries.reduce(0) { $0 + $1.totalCount }
+        adjusted.scorePercent = total > 0
+            ? Int((Double(usable) / Double(total) * 100).rounded())
+            : 0
+        adjusted.status = adjusted.scorePercent >= 50 ? .moderate : .low
+        adjusted.title = "今日恢复数据待同步"
+        adjusted.subtitle = "恢复信号尚未更新；今天的训练建议会按保守窗口处理。"
+        adjusted.topBlockers = Array((["今日恢复"] + adjusted.topBlockers).prefix(3))
+        adjusted.coachContextLine = "Today's recovery signal is unavailable. Keep training guidance conservative until recovery data syncs."
+        return adjusted
+    }
 
     private var statusPillIcon: String {
         switch resolvedActiveStatus {
@@ -206,36 +262,42 @@ struct VelaTodayView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 14) {
                 errorMessageView
 
-                // 2. Unified Today OS Cockpit Control Center
-                todayControlCenterCard
+                todayExperienceHeroCard(todayExperience)
                     .opacity(isVisible ? 1 : 0)
                     .offset(y: isVisible ? 0 : 10)
                     .animation(VelaTheme.snappy.delay(0.03), value: isVisible)
-  
-                // 3. Stress & Energy Section (Side-by-Side)
-                stressAndEnergySection
+
+                dataCoverageCompactCard(decisionDataCoverageSummary)
                     .opacity(isVisible ? 1 : 0)
                     .offset(y: isVisible ? 0 : 12)
-                    .animation(VelaTheme.snappy.delay(0.06), value: isVisible)
- 
-                // 4. Daily Activity Section (3-Column Grid)
-                dailyActivitySection
+                    .animation(VelaTheme.snappy.delay(0.05), value: isVisible)
+
+                todaySignalGrid(todayExperience)
                     .opacity(isVisible ? 1 : 0)
                     .offset(y: isVisible ? 0 : 12)
-                    .animation(VelaTheme.snappy.delay(0.09), value: isVisible)
- 
-                // 5. Nutrition (营养) Section
-                nutritionSection
+                    .animation(VelaTheme.snappy.delay(0.08), value: isVisible)
+
+                todayActionTimeline(todayExperience)
                     .opacity(isVisible ? 1 : 0)
                     .offset(y: isVisible ? 0 : 12)
-                    .animation(VelaTheme.snappy.delay(0.12), value: isVisible)
+                    .animation(VelaTheme.snappy.delay(0.11), value: isVisible)
+
+                nutritionCommandStrip(todayExperience.nutrition)
+                    .opacity(isVisible ? 1 : 0)
+                    .offset(y: isVisible ? 0 : 12)
+                    .animation(VelaTheme.snappy.delay(0.14), value: isVisible)
+
+                aiCoachPreviewCard(todayExperience)
+                    .opacity(isVisible ? 1 : 0)
+                    .offset(y: isVisible ? 0 : 12)
+                    .animation(VelaTheme.snappy.delay(0.17), value: isVisible)
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
-            .padding(.bottom, 140) // Floating tab bar safety gap
+            .padding(.bottom, VelaFloatingNavigationMetrics.contentBottomPadding)
         }
         .scrollIndicators(.hidden)
         .velaTrackScroll(direction: scrollDirection)
@@ -258,7 +320,7 @@ struct VelaTodayView: View {
             dashboardVM.hydrateFromCache(modelContext: modelContext)
             loadRealNutritionData()
             loadDynamicData()
-            locationManager.requestPermission()
+            locationManager.startUpdating()
             withAnimation(VelaTheme.smooth) {
                 animatedEnergyScore = energyScore
             }
@@ -268,6 +330,7 @@ struct VelaTodayView: View {
         }
         .task {
             await refreshDashboard()
+            await loadDataCoverageSummary()
             persistDailyOperatingPlan()
             withAnimation(VelaTheme.smooth) {
                 animatedEnergyScore = energyScore
@@ -275,6 +338,7 @@ struct VelaTodayView: View {
         }
         .refreshable {
             await refreshDashboard(force: true)
+            await loadDataCoverageSummary()
             persistDailyOperatingPlan()
         }
         .onChange(of: dashboardVM.selectedDate) { _, _ in
@@ -338,6 +402,457 @@ struct VelaTodayView: View {
             .presentationDragIndicator(.visible)
         }
         .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private func todayExperienceHeroCard(_ model: TodayExperienceModel) -> some View {
+        let accent = decisionAccent(trainingDecision.decision)
+        let scoreText = dashboard.recovery.hasData
+            ? "\(Int(dashboard.recovery.score.rounded()))"
+            : "--"
+
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("今日训练状态")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(VelaTheme.muted)
+
+                    Text(model.hero.decisionTitle)
+                        .font(.system(size: 23, weight: .bold))
+                        .foregroundStyle(VelaTheme.fg)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.8)
+
+                    HStack(spacing: 5) {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(model.hero.confidenceLabel)
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .foregroundStyle(accent)
+                }
+
+                Spacer(minLength: 12)
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(scoreText)
+                        .font(.system(size: 38, weight: .bold, design: .rounded))
+                        .foregroundStyle(VelaTheme.fg)
+                        .monospacedDigit()
+                    Text("恢复评分")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(VelaTheme.muted)
+                }
+            }
+
+            Rectangle()
+                .fill(accent.opacity(0.22))
+                .frame(height: 1)
+
+            Text(model.hero.summary)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(VelaTheme.fg2)
+                .lineSpacing(3)
+                .lineLimit(3)
+
+            HStack(spacing: 8) {
+                ForEach(model.evidenceChips.prefix(3), id: \.self) { chip in
+                    Text(localizedReason(chip))
+                        .font(.system(size: 11, weight: .medium))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.9)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .foregroundStyle(VelaTheme.fg2)
+                }
+            }
+
+            Button {
+                if let primary = model.actions.first(where: \.isPrimary) {
+                    performExperienceAction(primary)
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: primaryExperienceActionIcon(model))
+                    Text(model.hero.primaryActionTitle)
+                    Spacer()
+                    Image(systemName: "arrow.right")
+                }
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .frame(height: 52)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(accent))
+            }
+            .buttonStyle(.plain)
+            .sensoryFeedback(.impact(weight: .light), trigger: experienceFeedbackTick)
+        }
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(VelaTheme.cardBg)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(accent.opacity(0.22), lineWidth: 0.8)
+        )
+    }
+
+    private func todaySignalGrid(_ model: TodayExperienceModel) -> some View {
+        let columns = [
+            GridItem(.flexible(), spacing: 10),
+            GridItem(.flexible(), spacing: 10)
+        ]
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("关键体征")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(VelaTheme.fg)
+                Spacer()
+                Text(localizedDataFreshness(bodyState.freshness))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(VelaTheme.muted)
+            }
+
+            LazyVGrid(columns: columns, spacing: 10) {
+                ForEach(model.signalCards) { card in
+                    todaySignalCard(card)
+                }
+            }
+        }
+    }
+
+    private func todaySignalCard(_ card: TodayExperienceSignalCard) -> some View {
+        let accent = accentColor(card.accent)
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(card.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(VelaTheme.muted)
+                Spacer()
+                Text(card.value)
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .foregroundStyle(VelaTheme.fg)
+            }
+
+            if card.trend.count > 1 {
+                TodayMiniSparkline(values: card.trend, color: accent)
+                    .frame(height: 24)
+            } else {
+                Text("暂无连续趋势")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(VelaTheme.muted)
+                    .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+            }
+
+            Text(localizedReason(card.subtitle))
+                .font(.system(size: 11))
+                .lineLimit(2)
+                .foregroundStyle(VelaTheme.fg2)
+                .frame(minHeight: 28, alignment: .topLeading)
+        }
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, minHeight: 98, alignment: .topLeading)
+    }
+
+    private func todayActionTimeline(_ model: TodayExperienceModel) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("今日行动")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(VelaTheme.fg)
+                Spacer()
+                Button {
+                    showTodayEvidence = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("证据")
+                        Image(systemName: "chevron.right")
+                    }
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(VelaTheme.accent)
+                }
+                .buttonStyle(.plain)
+            }
+
+            VStack(spacing: 0) {
+                ForEach(Array(model.actions.enumerated()), id: \.element.id) { index, action in
+                    Button {
+                        performExperienceAction(action)
+                    } label: {
+                        HStack(alignment: .top, spacing: 12) {
+                            VStack(spacing: 0) {
+                                Circle()
+                                    .fill(action.isPrimary ? decisionAccent(trainingDecision.decision) : VelaTheme.border)
+                                    .frame(width: 10, height: 10)
+                                if index < model.actions.count - 1 {
+                                    Rectangle()
+                                        .fill(VelaTheme.borderSoft)
+                                        .frame(width: 1, height: 42)
+                                }
+                            }
+                            .padding(.top, 5)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(action.title)
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundStyle(VelaTheme.fg)
+                                Text(action.detail)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(VelaTheme.fg2)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+
+                            Spacer()
+
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(VelaTheme.muted)
+                                .padding(.top, 4)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func nutritionCommandStrip(_ nutrition: TodayExperienceNutrition) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("营养")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(VelaTheme.fg)
+                    Text(nutrition.macroText)
+                        .font(.system(size: 12))
+                        .foregroundStyle(VelaTheme.fg2)
+                }
+                Spacer()
+                Text(nutrition.calorieText)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(VelaTheme.energyColor)
+            }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(VelaTheme.borderSoft)
+                    Capsule()
+                        .fill(VelaTheme.energyColor)
+                        .frame(width: max(8, proxy.size.width * nutrition.calorieProgress))
+                }
+            }
+            .frame(height: 8)
+
+            HStack(spacing: 10) {
+                macroBadge("P", value: nutrition.protein, color: VelaTheme.recoveryColor)
+                macroBadge("C", value: nutrition.carbs, color: VelaTheme.sleepColor)
+                macroBadge("F", value: nutrition.fat, color: VelaTheme.strainColor)
+                Spacer()
+                Button {
+                    VelaAppState.shared.triggerFoodSearch = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 30)
+                        .background(Circle().fill(VelaTheme.energyColor))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(VelaTheme.cardBg))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+        )
+    }
+
+    private func aiCoachPreviewCard(_ model: TodayExperienceModel) -> some View {
+        Button {
+            VelaAppState.shared.routeToCoach(question: "根据今天的数据，帮我解释训练建议和优先行动。")
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                ZStack {
+                    Circle().fill(VelaTheme.accent.opacity(0.12))
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(VelaTheme.accent)
+                }
+                .frame(width: 42, height: 42)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("AI 教练")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(VelaTheme.fg)
+                    Text(model.coachPreview)
+                        .font(.system(size: 13))
+                        .foregroundStyle(VelaTheme.fg2)
+                        .lineSpacing(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(VelaTheme.muted)
+            }
+            .padding(14)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(VelaTheme.cardBg))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(VelaTheme.accent.opacity(0.14), lineWidth: 0.7)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func dataCoverageCompactCard(_ model: DataCoverageSummaryModel) -> some View {
+        let accent = dataCoverageColor(model.status)
+        return Button {
+            showSettings = true
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: model.actionSystemImage)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(accent)
+                    Text(model.title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(VelaTheme.fg)
+                    Spacer()
+                    Text(model.status == .unknown ? "--" : "\(model.scorePercent)%")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundStyle(accent)
+                        .monospacedDigit()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(VelaTheme.muted)
+                }
+
+                HStack(spacing: 8) {
+                    ForEach(model.domainSummaries.prefix(3)) { domain in
+                        Text("\(domain.title) \(domain.usableCount)/\(domain.totalCount)")
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .foregroundStyle(dataCoveragePercentColor(domain.scorePercent))
+                            .lineLimit(1)
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(accent.opacity(0.06))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(accent.opacity(0.16), lineWidth: 0.7)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("数据可信度 \(model.scorePercent)%")
+    }
+
+    private func dataCoverageDomainChip(_ domain: DataCoverageDomainSummary) -> some View {
+        let accent = dataCoveragePercentColor(domain.scorePercent)
+        return HStack(spacing: 6) {
+            Image(systemName: domain.icon)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(accent)
+            Text(domain.title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(VelaTheme.fg)
+                .lineLimit(1)
+            Spacer(minLength: 2)
+            Text("\(domain.usableCount)/\(domain.totalCount)")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(accent)
+                .monospacedDigit()
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .background(
+            Capsule(style: .continuous)
+                .fill(accent.opacity(0.09))
+        )
+        .accessibilityLabel("\(domain.title)数据：\(domain.usableCount)/\(domain.totalCount) 个信号可用")
+    }
+
+    private func macroBadge(_ label: String, value: Int, color: Color) -> some View {
+        HStack(spacing: 4) {
+            Text(label)
+                .font(.system(size: 11, weight: .bold))
+            Text("\(value)g")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+        }
+        .foregroundStyle(color)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(Capsule().fill(color.opacity(0.10)))
+    }
+
+    private func primaryExperienceActionIcon(_ model: TodayExperienceModel) -> String {
+        guard let action = model.actions.first(where: \.isPrimary) else { return "arrow.right" }
+        switch action.destination {
+        case "training": return "play.fill"
+        case "sync": return "arrow.triangle.2.circlepath"
+        case "recovery": return "heart.fill"
+        case "journal": return "square.and.pencil"
+        case "coach": return "sparkles"
+        default: return "arrow.right"
+        }
+    }
+
+    private func performExperienceAction(_ action: TodayExperienceAction) {
+        experienceFeedbackTick += 1
+        switch action.destination {
+        case "training":
+            appState.routeToAdaptiveTrainingStart()
+        case "journal":
+            appState.triggerJournal = true
+        case "coach":
+            VelaAppState.shared.routeToCoach(question: action.detail)
+        case "recovery", "sync", "evidence":
+            showTodayEvidence = true
+        default:
+            showTodayEvidence = true
+        }
+    }
+
+    private func decisionAccent(_ decision: DailyTrainingDecisionType) -> Color {
+        // The page identity stays stable across daily states. Semantic colors remain
+        // available in signal-level details instead of recoloring the entire surface.
+        VelaTheme.accent
+    }
+
+    private func dataCoverageColor(_ status: DataCoverageSummaryModel.Status) -> Color {
+        switch status {
+        case .high: return VelaTheme.energyColor
+        case .moderate: return VelaTheme.accent
+        case .low: return VelaTheme.strainColor
+        case .unknown: return VelaTheme.muted
+        }
+    }
+
+    private func dataCoveragePercentColor(_ percent: Int) -> Color {
+        if percent >= 80 { return VelaTheme.energyColor }
+        if percent >= 50 { return VelaTheme.accent }
+        return VelaTheme.strainColor
+    }
+
+    private func accentColor(_ accent: DailyPlanAccent) -> Color {
+        switch accent {
+        case .recovery: return VelaTheme.recoveryColor
+        case .sleep: return VelaTheme.sleepColor
+        case .strain: return VelaTheme.strainColor
+        case .energy: return VelaTheme.energyColor
+        case .stress: return VelaTheme.stressColor
+        }
     }
 
     private var todayControlCenterCard: some View {
@@ -646,25 +1161,32 @@ struct VelaTodayView: View {
                 }
                 .buttonStyle(.plain)
                 
-                // Weather status pill
-                HStack(spacing: 6) {
-                    Image(systemName: "cloud.sun.fill")
-                        .font(.system(size: 12))
-                        .symbolRenderingMode(.multicolor)
-                    
-                    Text(weatherTemp)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(VelaTheme.fg)
-                    
-                    Text(weatherLocation)
-                        .font(.system(size: 10))
-                        .foregroundStyle(VelaTheme.muted)
-                        .lineLimit(1)
+                // Weather only requests location after an explicit user action.
+                Button {
+                    requestWeatherUpdate()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "cloud.sun.fill")
+                            .font(.system(size: 12))
+                            .symbolRenderingMode(.multicolor)
+
+                        Text(weatherTemp)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(VelaTheme.fg)
+
+                        Text(weatherStatusText)
+                            .font(.system(size: 10))
+                            .foregroundStyle(VelaTheme.muted)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(VelaTheme.cardBg))
+                    .overlay(Capsule().stroke(VelaTheme.borderSoft, lineWidth: 0.5))
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Capsule().fill(VelaTheme.cardBg))
-                .overlay(Capsule().stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+                .buttonStyle(.plain)
+                .accessibilityLabel("天气：\(weatherStatusText)")
+                .accessibilityHint("点按更新本地天气")
                 
                 Spacer()
                 
@@ -779,6 +1301,21 @@ struct VelaTodayView: View {
     }
 
     // MARK: - Weather Sync
+    private func requestWeatherUpdate() {
+        switch locationManager.authorizationStatus {
+        case .notDetermined:
+            weatherLocation = "正在请求定位"
+            locationManager.requestPermission()
+        case .authorizedWhenInUse, .authorizedAlways:
+            locationManager.startUpdating()
+            fetchLocalWeather()
+        case .denied, .restricted:
+            weatherLocation = "定位未授权"
+        @unknown default:
+            weatherLocation = "天气暂不可用"
+        }
+    }
+
     private func fetchLocalWeather() {
         Task {
             let cached = WeatherLocationStore.load()
@@ -945,11 +1482,9 @@ struct VelaTodayView: View {
                             Spacer()
                             
                             if dashboard.stress.hasData {
-                                let baseData = [0.15, 0.22, 0.35, 0.30, 0.42, 0.38, 0.50, 0.38, 0.30, 0.25]
-                                let factor = max(0.1, min(1.8, stressLevel / 50.0))
-                                let stressHistory = baseData.map { max(0.01, min(0.99, $0 * factor)) }
-                                SparklineLineGraph(data: stressHistory, color: VelaTheme.stressColor, height: 16, width: 50)
-                                    .padding(.bottom, 2)
+                                Text("当天读数")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(VelaTheme.muted)
                             } else {
                                 Text("无数据")
                                     .font(.system(size: 10))
@@ -1295,6 +1830,104 @@ struct VelaTodayView: View {
         loadRealNutritionData()
         loadDynamicData()
         fetchLocalWeather()
+    }
+
+    private func loadDataCoverageSummary() async {
+        let groups = await DataCoverageGroupFactory.loadPriorityGroups()
+        let summary = DataCoverageSummaryModel.build(groups: groups)
+        withAnimation(VelaTheme.smooth) {
+            dataCoverageSummary = summary
+        }
+    }
+}
+
+private struct TodayReadinessDial: View {
+    let score: Double
+    let accent: Color
+
+    private var progress: Double {
+        min(1, max(0, score / 100.0))
+    }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(VelaTheme.borderSoft, lineWidth: 8)
+
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(
+                    accent,
+                    style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+                .animation(VelaTheme.smooth, value: progress)
+
+            VStack(spacing: 1) {
+                Text(score > 0 ? "\(Int(score.rounded()))" : "--")
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .foregroundStyle(VelaTheme.fg)
+                Text(L10n.t("Ready", "就绪"))
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(VelaTheme.muted)
+            }
+        }
+    }
+}
+
+private struct TodayMiniSparkline: View {
+    let values: [Double]
+    let color: Color
+
+    var body: some View {
+        Canvas { context, size in
+            guard values.count > 1 else {
+                var placeholder = Path()
+                placeholder.move(to: CGPoint(x: 0, y: size.height * 0.5))
+                placeholder.addLine(to: CGPoint(x: size.width, y: size.height * 0.5))
+                context.stroke(
+                    placeholder,
+                    with: .color(VelaTheme.border),
+                    style: StrokeStyle(lineWidth: 1.4, lineCap: .round, dash: [4, 5])
+                )
+                return
+            }
+            let minValue = values.min() ?? 0
+            let maxValue = values.max() ?? 100
+            let span = max(maxValue - minValue, 1)
+            let stepX = size.width / CGFloat(values.count - 1)
+
+            var path = Path()
+            for (index, value) in values.enumerated() {
+                let x = CGFloat(index) * stepX
+                let normalized = (value - minValue) / span
+                let y = size.height - CGFloat(normalized) * size.height
+                if index == 0 {
+                    path.move(to: CGPoint(x: x, y: y))
+                } else {
+                    path.addLine(to: CGPoint(x: x, y: y))
+                }
+            }
+
+            context.stroke(
+                path,
+                with: .color(color),
+                style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round)
+            )
+
+            if let last = values.last {
+                let normalized = (last - minValue) / span
+                let point = CGPoint(
+                    x: size.width,
+                    y: size.height - CGFloat(normalized) * size.height
+                )
+                context.fill(
+                    Path(ellipseIn: CGRect(x: point.x - 3, y: point.y - 3, width: 6, height: 6)),
+                    with: .color(color)
+                )
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 

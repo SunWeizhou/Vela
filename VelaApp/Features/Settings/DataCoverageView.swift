@@ -29,7 +29,7 @@ struct DataCoverageView: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 16)
-                    .padding(.bottom, 80)
+                    .padding(.bottom, 112)
                 }
                 .scrollIndicators(.hidden)
             }
@@ -37,21 +37,21 @@ struct DataCoverageView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .top) {
-            if !isLoading {
-                VStack(spacing: 0) {
-                    HStack {
-                        Text(AppLanguage.stored.isChinese ? "数据覆盖" : "Data Coverage")
-                            .font(.system(size: 26, weight: .bold, design: .rounded))
-                            .foregroundStyle(VelaTheme.primaryText)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(.ultraThinMaterial)
+            VStack(spacing: 0) {
+                HStack {
+                    VelaDetailBackButton(label: AppLanguage.stored.isChinese ? "返回设置" : "Back to Settings")
 
-                    Divider()
-                        .opacity(0.4)
+                    Text(AppLanguage.stored.isChinese ? "数据覆盖" : "Data Coverage")
+                        .font(.system(size: 21, weight: .bold, design: .rounded))
+                        .foregroundStyle(VelaTheme.primaryText)
+                    Spacer()
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.ultraThinMaterial)
+
+                Divider()
+                    .opacity(0.4)
             }
         }
         .task {
@@ -173,7 +173,7 @@ struct DataCoverageView: View {
                         .foregroundStyle(VelaTheme.mutedText)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 112), spacing: 8)], alignment: .leading, spacing: 8) {
                         ForEach(group.affectedJudgments, id: \.self) { judgment in
-                            VelaStatusBadge(label: judgment, systemImage: "scope", tint: tint)
+                            VelaStatusBadge(label: localizedJudgment(judgment), systemImage: "scope", tint: tint)
                         }
                     }
                 }
@@ -209,8 +209,204 @@ struct DataCoverageView: View {
     // MARK: - Data Loading
 
     private func loadCoverage() async {
-        let service = HealthSignalCoverageService()
+        coverageGroups = await DataCoverageGroupFactory.loadAllGroups()
+        isLoading = false
+    }
 
+    // MARK: - Helpers
+
+    private func coverageColor(_ pct: Int) -> Color {
+        if pct >= 80 { return VelaTheme.energy }
+        if pct >= 50 { return VelaTheme.accent }
+        return VelaTheme.strain
+    }
+
+    private func qualityColor(_ quality: SignalQuality) -> Color {
+        switch quality {
+        case .enough: return VelaTheme.energy
+        case .partial: return VelaTheme.accent
+        case .insufficient: return VelaTheme.strain
+        }
+    }
+
+    private func signalSubtitle(_ signal: HealthSignalCoverage) -> String {
+        if signal.authorizationState != .authorized {
+            return AppLanguage.stored.isChinese ? "未授权 · 需要在 Apple 健康中开启" : "Not authorized · enable in Apple Health"
+        }
+        return AppLanguage.stored.isChinese
+            ? "7天 \(signal.sampleCount7d) 条 · 30天 \(signal.sampleCount30d) 条 · \(signal.confidenceImpact)"
+            : "7d \(signal.sampleCount7d) samples · 30d \(signal.sampleCount30d) samples · \(signal.confidenceImpact)"
+    }
+
+    private func groupColor(_ group: CoverageGroup) -> Color {
+        switch group.id {
+        case "recovery": return VelaTheme.recovery
+        case "sleep": return VelaTheme.sleep
+        case "training": return VelaTheme.strain
+        case "gait": return VelaTheme.accent
+        case "cardio": return VelaTheme.energy
+        case "nutrition": return VelaTheme.stress
+        case "environment": return VelaTheme.secondaryText
+        default: return VelaTheme.accent
+        }
+    }
+
+    private func localizedJudgment(_ judgment: String) -> String {
+        guard AppLanguage.stored.isChinese else { return judgment }
+        switch judgment {
+        case "Recovery Score": return "恢复评分"
+        case "Autonomic Fatigue": return "恢复相关信号"
+        case "HRV Z-Score": return "HRV 基线偏离"
+        case "Sleep Score": return "睡眠评分"
+        case "Sleep Architecture": return "睡眠结构"
+        case "Sleep Deficit": return "睡眠缺口"
+        case "Strain Score": return "负荷评分"
+        case "Training Load": return "训练负荷"
+        case "TSB": return "训练状态平衡"
+        case "Gait Assessment": return "步态评估"
+        case "Movement Constraints": return "需关注的活动限制信号"
+        case "Muscular Fatigue": return "肌肉疲劳"
+        case "Cardio Fitness": return "心肺体能"
+        case "Health Signal Reference": return "健康信号参考"
+        case "Nutrition Score": return "营养评分"
+        case "Hydration Status": return "补水状态"
+        case "Sleep Quality": return "睡眠质量"
+        case "Circadian Rhythm": return "昼夜节律"
+        default: return judgment
+        }
+    }
+}
+
+// MARK: - Coverage Data Models
+
+struct CoverageGroup: Identifiable {
+    var id: String
+    var title: String
+    var icon: String
+    var signals: [HealthSignalCoverage]
+    var affectedJudgments: [String]
+}
+
+struct DataCoverageDomainSummary: Hashable, Sendable, Identifiable {
+    var id: String
+    var title: String
+    var icon: String
+    var scorePercent: Int
+    var usableCount: Int
+    var totalCount: Int
+}
+
+struct DataCoverageSummaryModel: Hashable, Sendable {
+    enum Status: String, Hashable, Sendable {
+        case high
+        case moderate
+        case low
+        case unknown
+    }
+
+    var scorePercent: Int
+    var status: Status
+    var title: String
+    var subtitle: String
+    var actionTitle: String
+    var actionSystemImage: String
+    var domainSummaries: [DataCoverageDomainSummary]
+    var topBlockers: [String]
+    var coachContextLine: String
+
+    static var unknown: DataCoverageSummaryModel {
+        DataCoverageSummaryModel(
+            scorePercent: 0,
+            status: .unknown,
+            title: AppLanguage.stored.isChinese ? "正在检查数据可信度" : "Checking data confidence",
+            subtitle: AppLanguage.stored.isChinese
+                ? "Vela 正在确认关键健康信号是否新鲜、完整、可用于判断。"
+                : "Vela is checking whether key health signals are fresh and usable.",
+            actionTitle: AppLanguage.stored.isChinese ? "查看数据" : "View data",
+            actionSystemImage: "waveform.path.ecg.rectangle",
+            domainSummaries: [],
+            topBlockers: [],
+            coachContextLine: "Data coverage unknown; avoid high-confidence physiological claims until coverage finishes loading."
+        )
+    }
+
+    static func build(groups: [CoverageGroup]) -> DataCoverageSummaryModel {
+        let signals = groups.flatMap(\.signals)
+        guard !signals.isEmpty else { return .unknown }
+
+        let usable = signals.filter(\.analyticallyUsable).count
+        let total = signals.count
+        let score = Int((Double(usable) / Double(max(total, 1)) * 100).rounded())
+        let status = status(for: score)
+        let blockers: [String] = Array(signals
+            .filter { !$0.analyticallyUsable }
+            .map { $0.signal.name }
+            .prefix(3))
+        let domains = groups.map { group in
+            let usable = group.signals.filter(\.analyticallyUsable).count
+            let total = group.signals.count
+            return DataCoverageDomainSummary(
+                id: group.id,
+                title: group.title,
+                icon: group.icon,
+                scorePercent: total > 0 ? Int((Double(usable) / Double(total) * 100).rounded()) : 0,
+                usableCount: usable,
+                totalCount: total
+            )
+        }
+
+        let title: String
+        let subtitle: String
+        switch status {
+        case .high:
+            title = AppLanguage.stored.isChinese ? "数据可信度高" : "High data confidence"
+            subtitle = AppLanguage.stored.isChinese
+                ? "关键健康信号足够新鲜，今日建议有较完整依据。"
+                : "Key health signals are fresh enough to support today's recommendations."
+        case .moderate:
+            title = AppLanguage.stored.isChinese ? "数据可信度中等" : "Moderate data confidence"
+            subtitle = AppLanguage.stored.isChinese
+                ? "建议具备部分依据；缺失信号会让训练和恢复判断更保守。"
+                : "Recommendations have partial support; missing signals make training and recovery judgments more conservative."
+        case .low:
+            title = AppLanguage.stored.isChinese ? "数据可信度低" : "Low data confidence"
+            subtitle = AppLanguage.stored.isChinese
+                ? "Vela 会保守处理今日建议，避免把缺失数据解读成确定结论。"
+                : "Vela will stay 保守 / conservative and avoid treating missing data as certainty."
+        case .unknown:
+            title = Self.unknown.title
+            subtitle = Self.unknown.subtitle
+        }
+
+        let reliableDomains = domains
+            .filter { $0.scorePercent >= 67 }
+            .map(\.id)
+            .joined(separator: ", ")
+        let blockerText = blockers.isEmpty ? "none" : blockers.joined(separator: ", ")
+
+        return DataCoverageSummaryModel(
+            scorePercent: score,
+            status: status,
+            title: title,
+            subtitle: subtitle,
+            actionTitle: AppLanguage.stored.isChinese ? "查看数据覆盖" : "View Data Coverage",
+            actionSystemImage: "waveform.path.ecg.rectangle",
+            domainSummaries: domains,
+            topBlockers: Array(blockers),
+            coachContextLine: "Data coverage \(score)% (status: \(status.rawValue)); reliable domains: \(reliableDomains.isEmpty ? "none" : reliableDomains); missing/stale: \(blockerText)."
+        )
+    }
+
+    private static func status(for score: Int) -> Status {
+        if score >= 80 { return .high }
+        if score >= 50 { return .moderate }
+        return .low
+    }
+}
+
+enum DataCoverageGroupFactory {
+    @MainActor
+    static func loadPriorityGroups(service: HealthSignalCoverageService = HealthSignalCoverageService()) async -> [CoverageGroup] {
         let recoverySigs = [
             await service.fetchCoverage(for: .hrvSDNN),
             await service.fetchCoverage(for: .restingHR),
@@ -226,10 +422,37 @@ struct DataCoverageView: View {
         let trainingSigs = [
             await service.fetchCoverage(for: .workouts),
             await service.fetchCoverage(for: .activeEnergy),
-            await service.fetchCoverage(for: .exerciseTime),
-            await service.fetchCoverage(for: .stepCount),
             await service.fetchCoverage(for: .workoutHR)
         ]
+
+        return [
+            CoverageGroup(
+                id: "recovery",
+                title: AppLanguage.stored.isChinese ? "恢复" : "Recovery",
+                icon: "heart.fill",
+                signals: recoverySigs,
+                affectedJudgments: ["Recovery Score", "Autonomic Fatigue", "HRV Z-Score"]
+            ),
+            CoverageGroup(
+                id: "sleep",
+                title: AppLanguage.stored.isChinese ? "睡眠" : "Sleep",
+                icon: "moon.zzz.fill",
+                signals: sleepSigs,
+                affectedJudgments: ["Sleep Score", "Sleep Architecture", "Sleep Deficit"]
+            ),
+            CoverageGroup(
+                id: "training",
+                title: AppLanguage.stored.isChinese ? "训练" : "Training",
+                icon: "figure.run",
+                signals: trainingSigs,
+                affectedJudgments: ["Strain Score", "Training Load", "TSB"]
+            )
+        ]
+    }
+
+    @MainActor
+    static func loadAllGroups(service: HealthSignalCoverageService = HealthSignalCoverageService()) async -> [CoverageGroup] {
+        let priority = await loadPriorityGroups(service: service)
 
         let gaitSigs = [
             await service.fetchCoverage(for: .walkingSpeed),
@@ -252,41 +475,20 @@ struct DataCoverageView: View {
             await service.fetchCoverage(for: .daylight)
         ]
 
-        coverageGroups = [
-            CoverageGroup(
-                id: "recovery",
-                title: AppLanguage.stored.isChinese ? "恢复" : "Recovery",
-                icon: "heart.fill",
-                signals: recoverySigs,
-                affectedJudgments: ["Recovery Score", "Autonomic Fatigue", "HRV Z-Score"]
-            ),
-            CoverageGroup(
-                id: "sleep",
-                title: AppLanguage.stored.isChinese ? "睡眠" : "Sleep",
-                icon: "moon.zzz.fill",
-                signals: sleepSigs,
-                affectedJudgments: ["Sleep Score", "Sleep Architecture", "Sleep Deficit"]
-            ),
-            CoverageGroup(
-                id: "training",
-                title: AppLanguage.stored.isChinese ? "训练" : "Training",
-                icon: "figure.run",
-                signals: trainingSigs,
-                affectedJudgments: ["Strain Score", "Training Load", "TSB"]
-            ),
+        return priority + [
             CoverageGroup(
                 id: "gait",
                 title: AppLanguage.stored.isChinese ? "步态与活动" : "Gait & Mobility",
                 icon: "figure.walk",
                 signals: gaitSigs,
-                affectedJudgments: ["Gait Assessment", "Injury Risk", "Muscular Fatigue"]
+                affectedJudgments: ["Gait Assessment", "Movement Constraints", "Muscular Fatigue"]
             ),
             CoverageGroup(
                 id: "cardio",
                 title: AppLanguage.stored.isChinese ? "心肺" : "Cardio",
                 icon: "lungs.fill",
                 signals: cardioSigs,
-                affectedJudgments: ["Cardio Fitness", "Health Age"]
+                affectedJudgments: ["Cardio Fitness", "Health Signal Reference"]
             ),
             CoverageGroup(
                 id: "nutrition",
@@ -303,55 +505,5 @@ struct DataCoverageView: View {
                 affectedJudgments: ["Sleep Quality", "Circadian Rhythm"]
             )
         ]
-
-        isLoading = false
     }
-
-    // MARK: - Helpers
-
-    private func coverageColor(_ pct: Int) -> Color {
-        if pct >= 80 { return VelaTheme.energy }
-        if pct >= 50 { return VelaTheme.accent }
-        return VelaTheme.strain
-    }
-
-    private func qualityColor(_ quality: SignalQuality) -> Color {
-        switch quality {
-        case .enough: return VelaTheme.energy
-        case .partial: return VelaTheme.accent
-        case .insufficient: return VelaTheme.strain
-        }
-    }
-
-    private func signalSubtitle(_ signal: HealthSignalCoverage) -> String {
-        if signal.authorizationState != .authorized {
-            return AppLanguage.stored.isChinese ? "未授权 · 相关判断置信度会下降" : "Not authorized · related judgments lose confidence"
-        }
-        return AppLanguage.stored.isChinese
-            ? "7天 \(signal.sampleCount7d) 条 · 30天 \(signal.sampleCount30d) 条 · \(signal.confidenceImpact)"
-            : "7d \(signal.sampleCount7d) samples · 30d \(signal.sampleCount30d) samples · \(signal.confidenceImpact)"
-    }
-
-    private func groupColor(_ group: CoverageGroup) -> Color {
-        switch group.id {
-        case "recovery": return VelaTheme.recovery
-        case "sleep": return VelaTheme.sleep
-        case "training": return VelaTheme.strain
-        case "gait": return VelaTheme.accent
-        case "cardio": return VelaTheme.energy
-        case "nutrition": return VelaTheme.stress
-        case "environment": return VelaTheme.secondaryText
-        default: return VelaTheme.accent
-        }
-    }
-}
-
-// MARK: - Coverage Data Models
-
-struct CoverageGroup: Identifiable {
-    var id: String
-    var title: String
-    var icon: String
-    var signals: [HealthSignalCoverage]
-    var affectedJudgments: [String]
 }

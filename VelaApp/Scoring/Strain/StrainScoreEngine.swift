@@ -133,7 +133,7 @@ public struct StrainScoreInput: Hashable {
         activeEnergyToday: Double? = nil,
         exerciseMinutesToday: Double? = nil,
         stepCount: Double? = nil,
-        restingHR: Double = 60,
+        restingHR: Double = 0,
         maxHR: Double = 0,
         biologicalSex: String? = nil,
         last28DaysDailyLoads: [Double] = [],
@@ -181,16 +181,16 @@ public struct StrainScoreEngine: ScoreEngine {
         var reasons: [String] = []
         let missingInputs: [String] = []
 
-        let restingHR = input.restingHR > 0 ? input.restingHR : 60.0
-        let fallbackMaxHR = UserProfileSettings.resolvedMaxHeartRate(age: UserProfileSettings.age() ?? 30)
-        let maxHR = input.maxHR > restingHR ? input.maxHR : fallbackMaxHR
+        let hasHeartRateReserve = input.restingHR > 0 && input.maxHR > input.restingHR
+        let restingHR = input.restingHR
+        let maxHR = input.maxHR
         let hrRange = maxHR - restingHR
 
         // 1. Calculate Workout Loads
         var totalWorkoutLoad = 0.0
         for workout in input.workouts {
             var workoutLoad = 0.0
-            if !workout.heartRateSamples.isEmpty {
+            if hasHeartRateReserve && !workout.heartRateSamples.isEmpty {
                 // Method A: Time-in-zone Lucia's TRIMP
                 let sampleWeight = workout.durationMinutes / Double(workout.heartRateSamples.count)
                 for hr in workout.heartRateSamples {
@@ -211,7 +211,7 @@ public struct StrainScoreEngine: ScoreEngine {
                     }
                     workoutLoad += sampleWeight * weight
                 }
-            } else if let avgHR = workout.averageHeartRate {
+            } else if hasHeartRateReserve, let avgHR = workout.averageHeartRate {
                 // Method B: Banister TRIMP using average heart rate fallback
                 let hrr = (avgHR - restingHR) / hrRange
                 let clampedHRR = ScoringMath.clamp(hrr, min: 0.01, max: 1.0)
@@ -249,6 +249,9 @@ public struct StrainScoreEngine: ScoreEngine {
 
         // 3. Baseline & Score Mapping
         let historyToUse = input.last28DaysDailyLoads.filter { $0 > 0 }
+        // A static reference scale is only used until a personal load history exists.
+        // It must never be described as the user's baseline.
+        let hasPersonalLoadBaseline = !historyToUse.isEmpty
         let baselineDailyLoad = calculateMedian(historyToUse) ?? 60.0
         let loadRatio = dailyLoad / baselineDailyLoad
         
@@ -280,11 +283,18 @@ public struct StrainScoreEngine: ScoreEngine {
         let trainingLoadRatio = ctl28 > 0 ? atl / ctl28 : 1.0
 
         var baseConfidence: MetricConfidence = input.activeEnergyToday != nil ? .high : .medium
+
+        if !hasHeartRateReserve && input.workouts.contains(where: { !$0.heartRateSamples.isEmpty || $0.averageHeartRate != nil }) {
+            baseConfidence = .low
+            reasons.append("缺少个人静息心率或最大心率，心率数据未用于个体化负荷计算。")
+        }
         
         if historyToUse.count < 7 {
             // Insufficient history for ATL/CTL
             baseConfidence = .low
-            reasons.append("今日负荷计算完成，但由于历史数据不足 7 天，已自动停用近期训练负荷状态评估。")
+            reasons.append(hasPersonalLoadBaseline
+                ? "历史负荷不足 7 天，已停用近期训练负荷状态评估。"
+                : "尚未形成个人历史负荷基线；当前负荷仅按统一参考尺度展示，置信度较低。")
             components["recommended_lower"] = Double(recommendedRange(for: input.recoveryScore).lowerBound)
             components["recommended_upper"] = Double(recommendedRange(for: input.recoveryScore).upperBound)
         } else {
@@ -297,13 +307,13 @@ public struct StrainScoreEngine: ScoreEngine {
                 reasons.append("近期训练负荷略低于基线水平。")
             } else if trainingLoadRatio <= 1.20 {
                 loadStatus = .optimal
-                reasons.append("近期训练负荷处于最佳提升区间，体能正在稳步发展。")
+                reasons.append("近期训练负荷处于个人历史范围附近，可继续结合恢复和主观用力观察。")
             } else if trainingLoadRatio <= 1.50 {
                 loadStatus = .elevated
                 reasons.append("近期训练负荷已偏高，建议控制强度，避免连续高负荷。")
             } else {
                 loadStatus = .highRisk
-                reasons.append("近期训练负荷显著高于过去 28 天平均水平，建议控制增量，防范运动伤病。")
+                reasons.append("近期训练负荷显著高于过去 28 天平均水平，建议控制增量并关注恢复与不适。")
             }
 
             components["training_load_ratio"] = trainingLoadRatio

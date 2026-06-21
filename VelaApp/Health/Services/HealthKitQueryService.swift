@@ -263,8 +263,22 @@ final class HealthKitQueryService: HealthQueryService {
         m.headphoneNoisedB = try? await averageQuantity(.headphoneAudioExposure, unit: .decibelAWeightedSoundPressureLevel(), range: range)
         m.timeInDaylight = try? await sumQuantity(.timeInDaylight, unit: .minute(), range: range)
 
-        // Temperature
-        m.bodyTemperature = try? await mostRecentQuantity(.bodyTemperature, unit: .degreeCelsius(), range: range)
+        // Apple Watch records nightly wrist temperature separately from manually-entered
+        // body temperature. Prefer the wearable signal and fall back only if absent.
+        let wristTemperature = try? await mostRecentQuantity(
+            .appleSleepingWristTemperature,
+            unit: .degreeCelsius(),
+            range: range
+        )
+        if let wristTemperature {
+            m.bodyTemperature = wristTemperature
+        } else {
+            m.bodyTemperature = try? await mostRecentQuantity(
+                .bodyTemperature,
+                unit: .degreeCelsius(),
+                range: range
+            )
+        }
 
         // Nutrition
         m.waterMl = try? await sumQuantity(.dietaryWater, unit: .literUnit(with: .milli), range: range)

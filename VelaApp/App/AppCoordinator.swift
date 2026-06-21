@@ -9,16 +9,18 @@ struct AppCoordinator: View {
     @StateObject private var services: VelaServices
     @StateObject private var appState = VelaAppState.shared
     @StateObject private var dashboardVM: DashboardViewModel
+    private let forceOnboarding: Bool
 
-    init() {
+    init(arguments: [String] = ProcessInfo.processInfo.arguments) {
         let localServices = VelaServices()
         _services = StateObject(wrappedValue: localServices)
         _dashboardVM = StateObject(wrappedValue: DashboardViewModel(useCase: localServices.dailySummaryUseCase, services: localServices))
+        forceOnboarding = Self.shouldForceOnboarding(arguments: arguments)
     }
 
     var body: some View {
         ZStack {
-            if onboardingCompleted {
+            if onboardingCompleted && !forceOnboarding {
                 VelaRootView()
                     .environmentObject(dashboardVM)
                     .environmentObject(services)
@@ -94,5 +96,13 @@ struct AppCoordinator: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(VelaTheme.elevatedSurface)
+    }
+
+    nonisolated static func shouldForceOnboarding(arguments: [String]) -> Bool {
+        #if DEBUG
+        arguments.contains("-velaForceOnboarding")
+        #else
+        false
+        #endif
     }
 }

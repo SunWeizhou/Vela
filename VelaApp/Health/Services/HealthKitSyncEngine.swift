@@ -21,6 +21,15 @@ final class HealthKitSyncEngine {
         forceRefreshRecentDays: Int? = nil
     ) async throws {
         let snapshotRepo = HealthSnapshotRepository(modelContext: modelContext, calendar: calendar)
+        if let healthKitQueryService = queryService as? HealthKitQueryService {
+            let characteristics = healthKitQueryService.queryCharacteristics()
+            UserProfileSettings.hydrateMissingValuesFromHealth(
+                age: characteristics.age,
+                weightKilograms: nil,
+                heightCentimeters: nil,
+                biologicalSex: characteristics.biologicalSex
+            )
+        }
 
         // Pass 1: Build and save the raw daily snapshots from HealthKit for the last (42 + days)
         // This ensures the database already has raw data for rolling baseline calculations in Pass 2!
@@ -315,6 +324,16 @@ final class MetricComputationPipeline {
         }
     }
 
+    private func wristTemperatureDelta(
+        current: Double?,
+        history: [DailyHealthSnapshot]
+    ) -> Double? {
+        guard let current else { return nil }
+        let samples = history.compactMap(\.wristTemperature)
+        guard samples.count >= 5, let baseline = calculateMedian(samples) else { return nil }
+        return current - baseline
+    }
+
     private func calculateStandardDeviation(_ values: [Double]) -> Double? {
         guard values.count >= 2 else { return nil }
         let mean = values.reduce(0.0, +) / Double(values.count)
@@ -350,6 +369,7 @@ final class MetricComputationPipeline {
         let hrvHistory = history.compactMap(\.hrvAverage)
         let rhrHistory = history.compactMap(\.restingHeartRate)
         let respHistory = history.compactMap(\.respiratoryRate)
+        let temperatureDelta = wristTemperatureDelta(current: snapshot.wristTemperature, history: history)
         
         let yesterday = calendar.date(byAdding: .day, value: -1, to: snapshot.date) ?? snapshot.date
         let yesterdayStrain = history.first(where: { calendar.isDate($0.date, inSameDayAs: yesterday) })?.strainScore
@@ -366,7 +386,7 @@ final class MetricComputationPipeline {
             respiratoryRateToday: snapshot.respiratoryRate,
             respiratoryRateBaseline: calculateMedian(respHistory),
             respiratoryRateHistory: respHistory,
-            bodyTempDelta: snapshot.wristTemperature.map { $0 - 36.5 },
+            bodyTempDelta: temperatureDelta,
             SpO2: snapshot.oxygenSaturation
         )
         let recoveryScore = RecoveryScoreEngine().calculate(from: recoveryInput)
@@ -383,20 +403,20 @@ final class MetricComputationPipeline {
             ))
         }
 
-        let age = UserProfileSettings.age() ?? WikiFileService.getAgeFromWiki() ?? 30
-        let maxHeartRate = UserProfileSettings.resolvedMaxHeartRate(
-            age: age,
-            wiki: WikiFileService.getMaxHeartRateFromWiki()
-        )
+        let age = UserProfileSettings.age() ?? WikiFileService.getAgeFromWiki()
+        let maxHeartRate = UserProfileSettings.maxHeartRate()
+            ?? WikiFileService.getMaxHeartRateFromWiki()
+            ?? age.map(UserProfileSettings.inferredMaxHeartRate)
+            ?? 0
 
         let strainInput = StrainScoreInput(
             workouts: workouts,
             activeEnergyToday: snapshot.activeCalories,
             exerciseMinutesToday: snapshot.activeMinutes ?? snapshot.workoutDuration,
             stepCount: snapshot.steps,
-            restingHR: snapshot.restingHeartRate ?? 60.0,
+            restingHR: snapshot.restingHeartRate ?? 0,
             maxHR: maxHeartRate,
-            biologicalSex: nil,
+            biologicalSex: UserProfileSettings.biologicalSex(),
             last28DaysDailyLoads: dailyLoadsHistory,
             recoveryScore: recoveryScore.value
         )
@@ -417,7 +437,7 @@ final class MetricComputationPipeline {
             respRateToday: snapshot.respiratoryRate,
             respRateBaseline: calculateMedian(respHistory),
             respRateSD: respRateSD,
-            bodyTempDelta: snapshot.wristTemperature.map { $0 - 36.5 },
+            bodyTempDelta: temperatureDelta,
             sleepScoreLastNight: sleepScore.value,
             strainScoreToday: strainScore.value,
             isWithinWorkoutWindow: false
@@ -446,7 +466,7 @@ final class MetricComputationPipeline {
             rhrBaseline: calculateMedian(rhrHistory),
             sleepHours: snapshot.sleepHours,
             strainHistory: dailyLoadsHistory,
-            bodyTempDelta: snapshot.wristTemperature.map { $0 - 36.5 },
+            bodyTempDelta: temperatureDelta,
             hoursSinceWake: hoursSinceWake,
             respiratoryRateZ: nil,
             SpO2: snapshot.oxygenSaturation,

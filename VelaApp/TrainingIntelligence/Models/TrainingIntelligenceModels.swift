@@ -15,8 +15,22 @@ struct PersonalRecord: Codable, Hashable, Identifiable, Sendable {
     }
 
     var summary: String {
+        let formattedValue = value.formatted(.number.precision(.fractionLength(0...1)))
+        if AppLanguage.stored.isChinese {
+            switch kind {
+            case "max_weight":
+                return "\(exerciseName) 重量新高：\(formattedValue) kg"
+            case "estimated_1rm":
+                return "\(exerciseName) 估算最大重量新高：\(formattedValue) kg"
+            case "max_reps":
+                return "\(exerciseName) 次数新高：\(formattedValue) 次"
+            default:
+                return "\(exerciseName)：\(formattedValue)"
+            }
+        }
+
         let unit = kind == "max_reps" ? " reps" : " kg"
-        return "\(exerciseName) \(kind): \(value.formatted(.number.precision(.fractionLength(0...1))))\(unit)"
+        return "\(exerciseName) \(kind): \(formattedValue)\(unit)"
     }
 }
 

@@ -44,7 +44,7 @@ struct VelaVitalsView: View {
                 Text("体征")
                     .font(.system(size: 24, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
-                Text("生物年龄与核心指标健康度")
+                Text("健康信号与核心指标")
                     .font(.system(size: 12))
                     .foregroundStyle(VelaTheme.muted)
             }
@@ -60,13 +60,15 @@ struct VelaVitalsView: View {
                     .frame(width: 36, height: 36)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("记录健康指标")
+            .accessibilityHint("添加化验或健康记录")
         }
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                // 1. Biological Age Card (生物年龄 cockpit)
+                // 1. Health-signal reference or complete PhenoAge estimate
                 biologicalAgeHero
 
                 // 2. Other Biomarkers Section
@@ -74,7 +76,7 @@ struct VelaVitalsView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
-            .padding(.bottom, 100)
+            .padding(.bottom, VelaFloatingNavigationMetrics.contentBottomPadding)
         }
         .scrollIndicators(.hidden)
         .velaTrackScroll(direction: scrollDirection)
@@ -161,13 +163,13 @@ struct VelaVitalsView: View {
                 return "连接 Apple Health 后生成"
             }
             guard result.isPhenoAge else {
-                return "健康年龄趋势 Beta：\(result.healthAgeTrendLabel)"
+                return "健康信号参考：\(result.healthAgeTrendLabel)"
             }
             let delta = result.biologicalAge - age
             if abs(delta) < 0.05 {
                 return "与实际年龄接近"
             }
-            return String(format: delta < 0 ? "比实际年龄年轻 %.1f 岁" : "比实际年龄高 %.1f 岁", abs(delta))
+            return String(format: delta < 0 ? "估算比实际年龄低 %.1f 岁" : "估算比实际年龄高 %.1f 岁", abs(delta))
         }()
 
         let deltaColor: Color = {
@@ -180,13 +182,17 @@ struct VelaVitalsView: View {
             return delta < 0 ? Color(hex: "#5B8C6F") : VelaTheme.strainColor
         }()
 
-        return VStack(spacing: 8) {
+        return Group {
+            if result == nil || chronologicalAge == nil {
+                biologicalAgeUnavailableCard
+            } else {
+                VStack(spacing: 8) {
             // Header
             HStack {
                 Spacer()
 
                 VStack(spacing: 4) {
-                    Text(isPhenoAge ? "生物年龄估算" : "健康年龄趋势 Beta")
+                    Text(isPhenoAge ? "生物年龄估算" : "健康信号参考")
                         .font(.system(size: 20, weight: .bold))
                         .foregroundStyle(VelaTheme.fg)
 
@@ -201,7 +207,7 @@ struct VelaVitalsView: View {
                 Button {
                     VelaAppState.shared.triggerBloodLog = true
                 } label: {
-                    Image(systemName: "ellipsis")
+                    Image(systemName: "plus")
                         .font(.system(size: 18, weight: .medium))
                         .foregroundStyle(VelaTheme.muted)
                         .frame(width: 36, height: 36)
@@ -251,6 +257,8 @@ struct VelaVitalsView: View {
                             .offset(x: 78, y: 37)
                     }
                 }
+                .accessibilityLabel("记录健康指标")
+                .accessibilityHint("添加化验或健康记录")
 
                 // End Dot indicator at bottom center
                 Circle()
@@ -282,6 +290,37 @@ struct VelaVitalsView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
+        )
+            }
+        }
+    }
+
+    private var biologicalAgeUnavailableCard: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "heart.text.square")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(VelaTheme.accent)
+                .frame(width: 42, height: 42)
+                .background(Circle().fill(VelaTheme.accent.opacity(0.12)))
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("健康信号尚未生成")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(VelaTheme.fg)
+                Text("填写年龄，并积累静息心率、睡眠或活动等核心信号后再生成参考趋势。")
+                    .font(.system(size: 12))
+                    .foregroundStyle(VelaTheme.muted)
+                    .lineSpacing(2)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
         )
     }

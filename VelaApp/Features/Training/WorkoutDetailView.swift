@@ -54,6 +54,17 @@ struct WorkoutDetailView: View {
         .safeAreaInset(edge: .top) {
             VStack(spacing: 0) {
                 HStack {
+                    Button(action: dismiss.callAsFunction) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(VelaTheme.accent)
+                            .frame(width: 38, height: 38)
+                            .background(Circle().fill(VelaTheme.surface))
+                            .overlay(Circle().stroke(VelaTheme.stroke, lineWidth: 0.5))
+                    }
+                    .buttonStyle(.cardPress)
+                    .accessibilityLabel("返回")
+
                     VStack(alignment: .leading, spacing: 2) {
                         Text(workout.activityName)
                             .font(.system(size: 20, weight: .bold, design: .rounded))
@@ -264,7 +275,7 @@ struct WorkoutDetailView: View {
                             .foregroundStyle(Color(hex: "#FF5252").opacity(0.6))
                             .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [3, 3]))
                             .annotation(position: .trailing, alignment: .center) {
-                                Text("AVG")
+                                Text(AppLanguage.stored.isChinese ? "均值" : "AVG")
                                     .font(.system(size: 9, weight: .bold))
                                     .foregroundStyle(Color(hex: "#FF5252"))
                             }
@@ -918,7 +929,7 @@ private struct HeartRateZoneRibbonView: View {
                 }
             }
         }
-        .accessibilityLabel("Heart rate zone distribution")
+        .accessibilityLabel(AppLanguage.stored.isChinese ? "心率区间分布" : "Heart rate zone distribution")
     }
 }
 

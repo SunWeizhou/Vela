@@ -75,9 +75,9 @@ final class HealthAuthorizationService {
         case .core:
             readTypes = Set(HealthDataTypeCatalog.coreTypes)
         case .enhanced:
-            readTypes = Set(HealthDataTypeCatalog.enhancedTypes)
+            readTypes = Set(HealthDataTypeCatalog.coreTypes + HealthDataTypeCatalog.enhancedTypes)
         case .advanced:
-            readTypes = Set(HealthDataTypeCatalog.advancedTypes)
+            readTypes = Set(HealthDataTypeCatalog.readTypes)
         }
 
         try await healthStore.requestAuthorization(toShare: [], read: readTypes)
@@ -120,7 +120,7 @@ final class HealthAuthorizationService {
             hasBodyFat: check(.bodyFatPercentage),
             hasLeanBodyMass: check(.leanBodyMass),
             hasOxygenSaturation: check(.oxygenSaturation),
-            hasBodyTemperature: check(.bodyTemperature),
+            hasBodyTemperature: check(.appleSleepingWristTemperature) || check(.bodyTemperature),
             
             hasBloodGlucose: check(.bloodGlucose),
             hasBloodPressure: check(.bloodPressureSystolic),
@@ -163,7 +163,8 @@ enum HealthDataTypeCatalog {
             HKObjectType.quantityType(forIdentifier: .bodyFatPercentage),
             HKObjectType.quantityType(forIdentifier: .leanBodyMass),
             HKObjectType.quantityType(forIdentifier: .oxygenSaturation),
-            HKObjectType.quantityType(forIdentifier: .bodyTemperature)
+            HKObjectType.quantityType(forIdentifier: .bodyTemperature),
+            HKObjectType.quantityType(forIdentifier: .appleSleepingWristTemperature)
         ].compactMap { $0 }
     }
 
@@ -205,7 +206,8 @@ enum HealthDataTypeCatalog {
             HKObjectType.quantityType(forIdentifier: .heartRate),
             HKObjectType.quantityType(forIdentifier: .respiratoryRate),
             HKObjectType.quantityType(forIdentifier: .oxygenSaturation),
-            HKObjectType.quantityType(forIdentifier: .bodyTemperature)
+            HKObjectType.quantityType(forIdentifier: .bodyTemperature),
+            HKObjectType.quantityType(forIdentifier: .appleSleepingWristTemperature)
         ].compactMap { $0 }
     }
     static var strainReadTypes: [HKObjectType] {

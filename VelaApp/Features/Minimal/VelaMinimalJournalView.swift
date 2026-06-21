@@ -27,6 +27,31 @@ struct VelaMeView: View {
 
     private var onboarding: OnboardingState? { onboardingStates.first }
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
+    private var hasCompletedOnboardingProfile: Bool { onboarding?.isCompleted == true }
+    private var profileSummary: String {
+        guard hasCompletedOnboardingProfile else {
+            return "完善训练目标、偏好和设备后，Coach 会将这些信息纳入个人上下文。"
+        }
+        return onboarding?.firstBrief.isEmpty == false
+            ? onboarding!.firstBrief
+            : "训练目标、偏好、设备和健康数据会共同构成 Coach 的个人上下文。"
+    }
+    private var profileGoalText: String {
+        guard hasCompletedOnboardingProfile else { return "尚未设置" }
+        return displayGoal(onboarding?.goalProfile.primaryGoal ?? "unknown")
+    }
+    private var profileExperienceText: String {
+        guard hasCompletedOnboardingProfile else { return "待补充" }
+        return displayExperience(onboarding?.goalProfile.experienceLevel ?? "unknown")
+    }
+    private var profileFrequencyText: String {
+        guard hasCompletedOnboardingProfile else { return "待设置" }
+        return "\(onboarding?.trainingPreference.weeklyTrainingDays ?? 0) 次 / 周"
+    }
+    private var profileDurationText: String {
+        guard hasCompletedOnboardingProfile else { return "待设置" }
+        return "\(onboarding?.trainingPreference.sessionDurationMinutes ?? 0) 分钟 / 次"
+    }
     private var bodyModelState: BodyModelState {
         BodyModelBuilder().build(
             onboarding: onboarding,
@@ -48,7 +73,7 @@ struct VelaMeView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
-            .padding(.bottom, 120)
+            .padding(.bottom, VelaFloatingNavigationMetrics.contentBottomPadding)
         }
         .scrollIndicators(.hidden)
         .velaTrackScroll(direction: scrollDirection)
@@ -101,7 +126,7 @@ struct VelaMeView: View {
                         .font(.system(size: 14))
                         .foregroundStyle(Color(hex: "#FFCC00"))
                         .padding(.top, 2)
-                    Text(onboarding?.firstBrief.isEmpty == false ? onboarding!.firstBrief : "你的训练目标、偏好、设备和健康数据已合并为 Coach 的个人上下文。")
+                    Text(profileSummary)
                         .font(.system(size: 13, weight: .regular))
                         .foregroundStyle(VelaTheme.fg2)
                         .lineSpacing(4)
@@ -118,10 +143,10 @@ struct VelaMeView: View {
                             Text(L10n.t("GOAL", "训练目标"))
                                 .font(.system(size: 10, weight: .bold))
                                 .foregroundStyle(VelaTheme.muted)
-                            Text(displayGoal(onboarding?.goalProfile.primaryGoal ?? "maintain"))
+                            Text(profileGoalText)
                                 .font(.system(size: 15, weight: .bold, design: .rounded))
                                 .foregroundStyle(VelaTheme.fg)
-                            Text(displayExperience(onboarding?.goalProfile.experienceLevel ?? "unknown"))
+                            Text(profileExperienceText)
                                 .font(VelaTheme.caption2())
                                 .foregroundStyle(VelaTheme.muted)
                         }
@@ -141,10 +166,10 @@ struct VelaMeView: View {
                             Text(L10n.t("TRAINING", "每周频次"))
                                 .font(.system(size: 10, weight: .bold))
                                 .foregroundStyle(VelaTheme.muted)
-                            Text("\(onboarding?.trainingPreference.weeklyTrainingDays ?? 3)x / 周")
+                            Text(profileFrequencyText)
                                 .font(.system(size: 15, weight: .bold, design: .rounded))
                                 .foregroundStyle(VelaTheme.fg)
-                            Text("\(onboarding?.trainingPreference.sessionDurationMinutes ?? 45) min/次")
+                            Text(profileDurationText)
                                 .font(VelaTheme.caption2())
                                 .foregroundStyle(VelaTheme.muted)
                         }
@@ -165,7 +190,9 @@ struct VelaMeView: View {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                     profileGridItem(
                         title: "训练风格",
-                        value: displayTrainingStyle(onboarding?.trainingPreference.trainingStyle ?? "mixed"),
+                        value: hasCompletedOnboardingProfile
+                            ? displayTrainingStyle(onboarding?.trainingPreference.trainingStyle ?? "unknown")
+                            : "待设置",
                         icon: "figure.run",
                         color: Color(hex: "#FF9F0A")
                     )
@@ -177,7 +204,9 @@ struct VelaMeView: View {
                     )
                     profileGridItem(
                         title: "教练风格",
-                        value: displayCoachingStyle(onboarding?.coachingPreference.style ?? "explanatory"),
+                        value: hasCompletedOnboardingProfile
+                            ? displayCoachingStyle(onboarding?.coachingPreference.style ?? "unknown")
+                            : "待设置",
                         icon: "brain.head.profile",
                         color: Color(hex: "#AF52DE")
                     )
@@ -525,8 +554,9 @@ struct VelaMeView: View {
         
         let wikiSub = "成熟度: \(bodyModelMaturityTitle(bodyModelState.maturity.overall))"
         
-        let initialWeight = dashboard.bodyMetrics.weightKilograms ?? 72.0
-        let bioSub = "\(Int(initialWeight.rounded())) kg · \(Int(dashboard.recoveryMetrics.restingHeartRate ?? 60)) bpm"
+        let weightText = dashboard.bodyMetrics.weightKilograms.map { String(format: "%.1f kg", $0) } ?? "体重待同步"
+        let heartRateText = dashboard.recoveryMetrics.restingHeartRate.map { "\(Int($0.rounded())) bpm" } ?? "静息心率待同步"
+        let bioSub = "\(weightText) · \(heartRateText)"
         
         let aiModelSub = textModel
         
@@ -546,7 +576,7 @@ struct VelaMeView: View {
             
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                 hubActionCell(title: "健康手记", sub: journalSub, icon: "book.pages.fill", color: Color(hex: "#FF9F0A"), destination: VelaJournalView())
-                hubActionCell(title: "身体 Wiki", sub: wikiSub, icon: "doc.text.fill", color: VelaTheme.muted, destination: UserWikiArchiveView())
+                hubActionCell(title: "健康档案", sub: wikiSub, icon: "doc.text.fill", color: VelaTheme.muted, destination: UserWikiArchiveView())
                 hubActionCell(title: "生物资料", sub: bioSub, icon: "person.text.rectangle.fill", color: Color(hex: "#00A896"), destination: BiologyView())
                 hubActionCell(title: "AI 模型", sub: aiModelSub, icon: "cpu.fill", color: Color(hex: "#AF52DE"), destination: AIModelSettingsView())
                 hubActionCell(title: "数据信号", sub: signalSub, icon: "waveform.path.ecg.rectangle.fill", color: Color(hex: "#30A2FF"), destination: DataCoverageView())
@@ -617,10 +647,13 @@ struct VelaMeView: View {
     }
 
     private var equipmentText: String {
-        guard let equipment = onboarding?.equipmentProfile.equipment, !equipment.isEmpty else {
-            return "home + gym"
-        }
-        return equipment.prefix(3).joined(separator: ", ")
+        guard hasCompletedOnboardingProfile,
+              let equipment = onboarding?.equipmentProfile.equipment,
+              !equipment.isEmpty else { return "待设置" }
+        let separator = AppLanguage.stored.isChinese ? "、" : ", "
+        return equipment.prefix(3)
+            .map(localizedOnboardingEquipment)
+            .joined(separator: separator)
     }
 
     private func profileLine(_ title: String, _ value: String, icon: String, color: Color) -> some View {
@@ -679,7 +712,7 @@ struct VelaMeView: View {
         case "fat_loss": return L10n.t("Fat Loss", "减脂")
         case "performance": return L10n.t("Performance", "运动表现提升")
         case "health": return L10n.t("Health", "健康维持")
-        default: return L10n.t("Maintain", "维持当前状态")
+        default: return L10n.t("Not set", "尚未设置")
         }
     }
 
@@ -688,7 +721,7 @@ struct VelaMeView: View {
         case "beginner": return L10n.t("Beginner", "健身新手")
         case "intermediate": return L10n.t("Intermediate", "中级水平")
         case "advanced": return L10n.t("Advanced", "高级水平")
-        default: return L10n.t("Unknown", "未知水平")
+        default: return L10n.t("Not set", "待补充")
         }
     }
 
@@ -698,7 +731,7 @@ struct VelaMeView: View {
         case "strength": return L10n.t("Strength", "力量训练")
         case "cardio": return L10n.t("Cardio", "有氧训练")
         case "yoga": return L10n.t("Yoga", "瑜伽伸展")
-        default: return style
+        default: return L10n.t("Not set", "待设置")
         }
     }
 
@@ -707,7 +740,7 @@ struct VelaMeView: View {
         case "explanatory": return L10n.t("Detailed", "详细解析")
         case "encouraging": return L10n.t("Encouraging", "积极鼓励")
         case "direct": return L10n.t("Direct", "直截了当")
-        default: return style
+        default: return L10n.t("Not set", "待设置")
         }
     }
 
@@ -738,10 +771,10 @@ struct VelaMeView: View {
 
     private func displayConfidence(_ conf: String) -> String {
         switch conf.lowercased() {
-        case "high": return "高 / High"
-        case "medium": return "中 / Medium"
-        case "low": return "低 / Low"
-        case "unavailable": return "不可用"
+        case "high": return L10n.t("High", "高")
+        case "medium": return L10n.t("Medium", "中")
+        case "low": return L10n.t("Low", "低")
+        case "unavailable": return L10n.t("Unavailable", "不可用")
         default: return conf
         }
     }
@@ -834,6 +867,7 @@ struct VelaJournalView: View {
     @State private var showWaterLogger = false
     @State private var showAlcoholLogger = false
     @State private var showBehaviorQuickNote = false
+    @State private var entryPendingDeletion: JournalEntryRecord?
 
     var body: some View {
         ScrollView {
@@ -962,7 +996,7 @@ struct VelaJournalView: View {
                                     Spacer()
                                     
                                     Button {
-                                        deleteEntry(entry)
+                                        entryPendingDeletion = entry
                                     } label: {
                                         Image(systemName: "trash")
                                             .font(.system(size: 13, weight: .semibold))
@@ -971,6 +1005,8 @@ struct VelaJournalView: View {
                                             .background(Circle().fill(VelaTheme.systemGroupedBackground))
                                     }
                                     .buttonStyle(.plain)
+                                    .accessibilityLabel("删除手记：\(displayTitleForEntry(entry))")
+                                    .accessibilityHint("删除前会要求确认")
                                 }
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 10)
@@ -988,7 +1024,7 @@ struct VelaJournalView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
-            .padding(.bottom, 100)
+            .padding(.bottom, VelaFloatingNavigationMetrics.contentBottomPadding)
         }
         .scrollIndicators(.hidden)
         .velaTrackScroll(direction: scrollDirection)
@@ -1004,6 +1040,24 @@ struct VelaJournalView: View {
         }
         .onChange(of: appState.localDataRevision) { _, _ in
             loadRealJournalData()
+        }
+        .alert(
+            "删除这条手记？",
+            isPresented: Binding(
+                get: { entryPendingDeletion != nil },
+                set: { if !$0 { entryPendingDeletion = nil } }
+            ),
+            presenting: entryPendingDeletion
+        ) { entry in
+            Button("删除", role: .destructive) {
+                deleteEntry(entry)
+                entryPendingDeletion = nil
+            }
+            Button("取消", role: .cancel) {
+                entryPendingDeletion = nil
+            }
+        } message: { entry in
+            Text("将永久删除“\(displayTitleForEntry(entry))”。")
         }
         .sheet(isPresented: $showCaffeineLogger) {
             CaffeineLoggerView { amount in
@@ -1351,6 +1405,7 @@ struct VelaJournalView: View {
                 let date = weekDates[idx]
                 let isSelected = calendar.isDate(date, inSameDayAs: selected)
                 let isToday = calendar.isDate(date, inSameDayAs: Date())
+                let isFuture = calendar.startOfDay(for: date) > calendar.startOfDay(for: Date())
                 let dayNumber = calendar.component(.day, from: date)
                 
                 // Let's check if there are habit entries on this day to show the golden checkmark!
@@ -1359,7 +1414,7 @@ struct VelaJournalView: View {
                 }
                 
                 Button {
-                    dashboardVM.selectedDate = date
+                    dashboardVM.selectDate(date)
                 } label: {
                     VStack(spacing: 8) {
                         Text(weekdays[idx])
@@ -1396,6 +1451,9 @@ struct VelaJournalView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.plain)
+                .disabled(isFuture)
+                .opacity(isFuture ? 0.38 : 1)
+                .accessibilityLabel("\(weekdays[idx]) \(dayNumber) 日，\(hasEntry ? "已有记录" : "暂无记录")\(isFuture ? "，未来日期不可选择" : "")")
             }
         }
         .padding(.vertical, 12)
@@ -1452,6 +1510,7 @@ struct VelaJournalView: View {
     private func segmentButton(title: String, index: Int, state: Binding<Int>) -> some View {
         let isActive = state.wrappedValue == index
         let activeLabelText = index == 0 ? "✕" : (index == 2 ? "✓" : "–")
+        let accessibilityState = index == 0 ? "否" : (index == 2 ? "是" : "未记录")
         return Button {
             VelaHaptic.selection()
             state.wrappedValue = index
@@ -1484,6 +1543,8 @@ struct VelaJournalView: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(title)：\(accessibilityState)")
+        .accessibilityHint("设置为\(accessibilityState)")
     }
 
     // MARK: - Input logger Row (Caffeine, water, mood logs)
@@ -1880,7 +1941,7 @@ struct WaterLoggerView: View {
             
             ScrollView {
                 VStack(spacing: 24) {
-                    Text("记录今天摄入的水分。水分补充充足可以提高身体在睡眠期间的自我恢复效能。")
+                    Text("记录今天摄入的水分，帮助你回顾补水习惯与后续状态。")
                         .font(.system(size: 14))
                         .foregroundStyle(VelaTheme.muted)
                         .lineSpacing(4)
@@ -2121,7 +2182,7 @@ struct AlcoholLoggerView: View {
             
             ScrollView {
                 VStack(spacing: 24) {
-                    Text("酒精摄入会强烈抑制副交感神经系统，导致夜间静息心率(RHR)升高，HRV 暴跌，深度及 REM 睡眠显著减少。")
+                    Text("饮酒可能影响睡眠连续性、夜间心率和次日恢复。影响程度会随摄入量、饮酒时间、睡眠和个体差异而变化；记录后可结合自己的趋势回看。")
                         .font(.system(size: 14))
                         .foregroundStyle(VelaTheme.muted)
                         .lineSpacing(4)
@@ -2165,11 +2226,11 @@ struct AlcoholLoggerView: View {
                     .padding(.horizontal, 16)
                     
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("💡 什么是 1 标准杯？")
+                        Text("标准杯换算")
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(VelaTheme.fg)
                         
-                        Text("一标准杯大约含有 10 克纯酒精：\n· 1 杯普通啤酒 (约 330ml, 4.5%)\n· 1 杯红葡萄酒 (约 150ml, 12%)\n· 1 盎司烈性白酒 (约 45ml, 40%)")
+                        Text("本页按约 10 克纯酒精记为 1 标准杯，便于统一记录。不同地区的标准不同，实际酒精量应以饮品容量和酒精度为准：\n· 普通啤酒约 330 ml、4.5%\n· 红葡萄酒约 150 ml、12%\n· 烈性酒约 45 ml、40%")
                             .font(.system(size: 12))
                             .foregroundStyle(VelaTheme.muted)
                             .lineSpacing(5)
@@ -2222,7 +2283,7 @@ struct CoachArtifactInboxView: View {
                     Text("收件箱为空")
                         .font(VelaTheme.headline())
                         .foregroundStyle(VelaTheme.fg)
-                    Text("与 Coach 聊天、记录训练或查看每日健康 analysis 后，将在此处收到主动生成的分析简报与优化建议。")
+                    Text("与 Coach 聊天、记录训练或查看每日健康分析后，将在此处收到主动生成的分析简报与优化建议。")
                         .font(VelaTheme.caption1())
                         .foregroundStyle(VelaTheme.muted)
                         .multilineTextAlignment(.center)
@@ -2246,7 +2307,7 @@ struct CoachArtifactInboxView: View {
         .listStyle(.insetGrouped)
         .background(VelaTheme.systemGroupedBackground)
         .scrollContentBackground(.hidden)
-        .navigationTitle("Coach Artifact 收件箱")
+        .navigationTitle("AI 建议收件箱")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $selectedWorkoutForDetail) { summary in
             NavigationStack {
@@ -2436,6 +2497,7 @@ struct CoachArtifactDetailWrapper: View {
 struct BodyModelEditView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var dashboardVM: DashboardViewModel
     @Environment(\.colorScheme) private var cs
     
     @Query(sort: \OnboardingState.updatedAt, order: .reverse)
@@ -2452,32 +2514,33 @@ struct BodyModelEditView: View {
     @State private var hasGym = true
     @State private var hasHomeEquipment = true
     @State private var hasBodyweight = true
+    @State private var saveError: String?
     
     var body: some View {
         Form {
-            Section(header: Text("健身目标 / GOAL")) {
+            Section(header: Text("健身目标")) {
                 Picker("主要目标", selection: $primaryGoal) {
-                    Text("运动表现 / Performance").tag("performance")
-                    Text("增肌 / Muscle").tag("muscle_gain")
-                    Text("减脂 / Fat loss").tag("fat_loss")
-                    Text("健康 / Health").tag("health")
+                    Text(localizedOnboardingGoal("performance")).tag("performance")
+                    Text(localizedOnboardingGoal("muscle_gain")).tag("muscle_gain")
+                    Text(localizedOnboardingGoal("fat_loss")).tag("fat_loss")
+                    Text(localizedOnboardingGoal("health")).tag("health")
                 }
                 .pickerStyle(.menu)
                 
                 Picker("体能经验", selection: $experienceLevel) {
-                    Text("新手 / Beginner").tag("beginner")
-                    Text("中级 / Intermediate").tag("intermediate")
-                    Text("高级 / Advanced").tag("advanced")
+                    Text(localizedOnboardingExperience("beginner")).tag("beginner")
+                    Text(localizedOnboardingExperience("intermediate")).tag("intermediate")
+                    Text(localizedOnboardingExperience("advanced")).tag("advanced")
                 }
                 .pickerStyle(.segmented)
             }
             
-            Section(header: Text("训练偏好 / PREFERENCE")) {
+            Section(header: Text("训练偏好")) {
                 Picker("训练风格", selection: $trainingStyle) {
-                    Text("混合训练 / Mixed").tag("mixed")
-                    Text("力量训练 / Strength").tag("strength")
-                    Text("有氧训练 / Cardio").tag("cardio")
-                    Text("瑜伽伸展 / Yoga").tag("yoga")
+                    Text(localizedOnboardingTrainingStyle("mixed")).tag("mixed")
+                    Text(localizedOnboardingTrainingStyle("strength")).tag("strength")
+                    Text(localizedOnboardingTrainingStyle("cardio")).tag("cardio")
+                    Text(localizedOnboardingTrainingStyle("yoga")).tag("yoga")
                 }
                 .pickerStyle(.menu)
                 
@@ -2502,20 +2565,20 @@ struct BodyModelEditView: View {
                 }
             }
             
-            Section(header: Text("训练设备 / EQUIPMENT")) {
-                Toggle("健身房设备 (Gym)", isOn: $hasGym)
+            Section(header: Text("训练设备")) {
+                Toggle(localizedOnboardingEquipment("gym"), isOn: $hasGym)
                     .tint(VelaTheme.accent)
-                Toggle("家用器械 (Home Equipment)", isOn: $hasHomeEquipment)
+                Toggle(localizedOnboardingEquipment("home_equipment"), isOn: $hasHomeEquipment)
                     .tint(VelaTheme.accent)
-                Toggle("自重/无器械 (Bodyweight)", isOn: $hasBodyweight)
+                Toggle(localizedOnboardingEquipment("bodyweight"), isOn: $hasBodyweight)
                     .tint(VelaTheme.accent)
             }
             
-            Section(header: Text("教练指导 / COACH STYLE")) {
+            Section(header: Text("教练指导")) {
                 Picker("指导风格", selection: $coachStyle) {
-                    Text("直截了当 / Direct").tag("direct")
-                    Text("积极鼓励 / Encouraging").tag("encouraging")
-                    Text("详细解析 / Detailed").tag("explanatory")
+                    Text(localizedOnboardingCoachStyle("direct")).tag("direct")
+                    Text(localizedOnboardingCoachStyle("encouraging")).tag("encouraging")
+                    Text(localizedOnboardingCoachStyle("explanatory")).tag("explanatory")
                 }
                 .pickerStyle(.segmented)
             }
@@ -2527,8 +2590,9 @@ struct BodyModelEditView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("保存") {
-                    saveEdits()
-                    dismiss()
+                    if saveEdits() {
+                        dismiss()
+                    }
                 }
                 .bold()
                 .foregroundStyle(VelaTheme.accent)
@@ -2536,6 +2600,14 @@ struct BodyModelEditView: View {
         }
         .onAppear {
             loadOnboardingState()
+        }
+        .alert("身体模型未保存", isPresented: Binding(
+            get: { saveError != nil },
+            set: { if !$0 { saveError = nil } }
+        )) {
+            Button("好", role: .cancel) { saveError = nil }
+        } message: {
+            Text(saveError ?? "")
         }
     }
     
@@ -2555,7 +2627,7 @@ struct BodyModelEditView: View {
         coachStyle = state.coachingPreference.style
     }
     
-    private func saveEdits() {
+    private func saveEdits() -> Bool {
         let state = onboarding ?? OnboardingState()
         state.goalProfile = UserGoalProfile(
             primaryGoal: primaryGoal,
@@ -2584,13 +2656,26 @@ struct BodyModelEditView: View {
             explanationDepth: coachStyle == "explanatory" ? "detailed" : "balanced",
             language: "zh-Hans"
         )
+        state.currentStep = "completed"
+        state.isCompleted = true
+        state.completedAt = state.completedAt ?? Date()
         state.updatedAt = Date()
         
         if onboardingStates.isEmpty {
             modelContext.insert(state)
         }
         
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+            VelaAppState.shared.markLocalDataChanged()
+            Task {
+                await dashboardVM.refresh(modelContext: modelContext, force: true)
+            }
+            return true
+        } catch {
+            saveError = "本次修改未能写入本机资料，请重试。"
+            return false
+        }
     }
 }
 
@@ -2608,7 +2693,7 @@ struct BaselineRangeIndicator: View {
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(VelaTheme.muted)
                 } else {
-                    Text("基线: --")
+                    Text("个人基线积累中（至少 7 天）")
                         .font(.system(size: 11))
                         .foregroundStyle(VelaTheme.muted)
                 }
@@ -2626,16 +2711,13 @@ struct BaselineRangeIndicator: View {
                 }
             }
             
-            // Linear scale
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    // Gray background track
-                    Capsule()
-                        .fill(VelaTheme.separatorSoft)
-                        .frame(height: 6)
-                    
-                    // Highlight baseline zone: +/- 10% around baseline
-                    if let base = baseline {
+            if let base = baseline {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(VelaTheme.separatorSoft)
+                            .frame(height: 6)
+
                         let width = geo.size.width
                         let startPct = 0.35
                         let endPct = 0.65
@@ -2644,16 +2726,12 @@ struct BaselineRangeIndicator: View {
                             .frame(width: width * (endPct - startPct), height: 6)
                             .offset(x: width * startPct)
                         
-                        // Baseline center tick
                         Rectangle()
                             .fill(VelaTheme.muted)
                             .frame(width: 1.5, height: 10)
                             .offset(x: width * 0.5, y: -2)
                         
-                        // Today's value dot
                         if let tod = today {
-                            // Map today relative to baseline. E.g., if tod == base, dot is at 50%.
-                            // Let's map delta of +/- 20% to 10% - 90% range.
                             let pct = 0.5 + (tod - base) / (base * 0.4) // max delta 20%
                             let clampedPct = min(max(pct, 0.05), 0.95)
                             Circle()
@@ -2664,8 +2742,12 @@ struct BaselineRangeIndicator: View {
                         }
                     }
                 }
+                .frame(height: 10)
+            } else {
+                Text("收集到足够的历史有效样本后，会在这里显示个人范围。")
+                    .font(.system(size: 10))
+                    .foregroundStyle(VelaTheme.muted)
             }
-            .frame(height: 10)
         }
     }
 }
@@ -2682,9 +2764,35 @@ struct BodyModelDetailView: View {
     @State private var dailySummaries: [DailyHealthSummaryRecord] = []
     @State private var strengthWorkouts: [StrengthWorkoutRecord] = []
     @State private var trainingResponses: [TrainingResponseRecord] = []
+    @AppStorage("vela_user_age") private var profileAge = 0
+    @AppStorage("vela_user_weight") private var profileWeight = 0.0
+    @AppStorage("vela_user_height") private var profileHeight = 0.0
+    @AppStorage("vela_user_biological_sex") private var profileSex = ""
     
     private var onboarding: OnboardingState? { onboardingStates.first }
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
+    private var hasCompletedProfile: Bool { onboarding?.isCompleted == true }
+    private var staticGoalText: String {
+        hasCompletedProfile ? displayGoal(onboarding?.goalProfile.primaryGoal ?? "unknown") : "尚未设置"
+    }
+    private var staticExperienceText: String {
+        hasCompletedProfile ? displayExperience(onboarding?.goalProfile.experienceLevel ?? "unknown") : "待补充"
+    }
+    private var staticFrequencyText: String {
+        guard hasCompletedProfile else { return "待设置" }
+        return "\(onboarding?.trainingPreference.weeklyTrainingDays ?? 0)次/周 · \(onboarding?.trainingPreference.sessionDurationMinutes ?? 0)分钟/次"
+    }
+    private var staticCoachStyleText: String {
+        hasCompletedProfile ? displayCoachingStyle(onboarding?.coachingPreference.style ?? "unknown") : "待设置"
+    }
+    private var healthProfileSummary: String {
+        var values: [String] = []
+        if (10...100).contains(profileAge) { values.append("\(profileAge) 岁") }
+        if (25...350).contains(profileWeight) { values.append(String(format: "%.1f kg", profileWeight)) }
+        if (100...250).contains(profileHeight) { values.append(String(format: "%.0f cm", profileHeight)) }
+        if let sex = ["male": "男性", "female": "女性", "other": "其他"][profileSex] { values.append(sex) }
+        return values.isEmpty ? "等待 Apple 健康或手动填写" : values.joined(separator: " · ")
+    }
     private var bodyModelState: BodyModelState {
         BodyModelBuilder().build(
             onboarding: onboarding,
@@ -2720,7 +2828,7 @@ struct BodyModelDetailView: View {
         }
         .scrollIndicators(.hidden)
         .background(VelaTheme.systemGroupedBackground)
-        .navigationTitle("身体机能数字化模型")
+        .navigationTitle("身体模型")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             loadModelData()
@@ -2731,44 +2839,26 @@ struct BodyModelDetailView: View {
     }
     
     private var headerCalibrationCard: some View {
-        VStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .stroke(LinearGradient(colors: [VelaTheme.accent.opacity(0.4), VelaTheme.accent.opacity(0.0)], startPoint: .top, endPoint: .bottom), lineWidth: 1.5)
-                    .frame(width: 80, height: 80)
-                
-                Circle()
-                    .stroke(LinearGradient(colors: [Color(hex: "#64D2FF").opacity(0.3), Color(hex: "#64D2FF").opacity(0.0)], startPoint: .top, endPoint: .bottom), lineWidth: 1)
-                    .frame(width: 110, height: 110)
-                
-                Image(systemName: "bolt.heart.fill")
-                    .font(.system(size: 32))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [VelaTheme.accent, Color(hex: "#64D2FF")],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "bolt.heart.fill")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(VelaTheme.accent)
+                .frame(width: 36, height: 36)
+                .background(RoundedRectangle(cornerRadius: 8).fill(VelaTheme.accent.opacity(0.12)))
+            VStack(alignment: .leading, spacing: 5) {
+                Text("身体模型校准状态")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(VelaTheme.fg)
+                Text("整合目标、训练事实、健康基线和随手记信号；样本不足时仅标记待学习区域。")
+                    .font(.system(size: 12))
+                    .foregroundStyle(VelaTheme.muted)
+                    .lineSpacing(3)
             }
-            .padding(.vertical, 8)
-            
-            Text("Vela Body Model 校准状态")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(VelaTheme.fg)
-            
-            Text("整合目标、训练事实、健康基线和随手记信号。样本不足时只显示正在学习的区域，不把早期观察包装成个人规律。")
-                .font(.system(size: 12))
-                .foregroundStyle(VelaTheme.muted)
-                .multilineTextAlignment(.center)
-                .lineSpacing(3)
-                .padding(.horizontal, 12)
         }
-        .padding(.vertical, 20)
-        .padding(.horizontal, 16)
+        .padding(14)
         .frame(maxWidth: .infinity)
-        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(VelaTheme.cardBg))
-        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(VelaTheme.cardBg))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
     }
     
     private var staticParametersSection: some View {
@@ -2790,13 +2880,15 @@ struct BodyModelDetailView: View {
             }
             
             VStack(spacing: 0) {
-                detailRow(title: "主要健身目标", value: displayGoal(onboarding?.goalProfile.primaryGoal ?? "maintain"))
+                detailRow(title: "基础健康档案", value: healthProfileSummary)
                 Divider().padding(.leading, 16)
-                detailRow(title: "体能训练经验", value: displayExperience(onboarding?.goalProfile.experienceLevel ?? "unknown"))
+                detailRow(title: "主要健身目标", value: staticGoalText)
                 Divider().padding(.leading, 16)
-                detailRow(title: "频次及单次时长", value: "\(onboarding?.trainingPreference.weeklyTrainingDays ?? 3)次/周 · \(onboarding?.trainingPreference.sessionDurationMinutes ?? 45)分钟/次")
+                detailRow(title: "体能训练经验", value: staticExperienceText)
                 Divider().padding(.leading, 16)
-                detailRow(title: "教练指导风格", value: displayCoachingStyle(onboarding?.coachingPreference.style ?? "explanatory"))
+                detailRow(title: "频次及单次时长", value: staticFrequencyText)
+                Divider().padding(.leading, 16)
+                detailRow(title: "教练指导风格", value: staticCoachStyleText)
             }
             .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
@@ -3003,38 +3095,23 @@ struct BodyModelDetailView: View {
     
     private func displayConfidence(_ conf: String) -> String {
         switch conf.lowercased() {
-        case "high": return "高 / High"
-        case "medium": return "中 / Medium"
-        case "low": return "低 / Low"
+        case "high": return L10n.t("High", "高")
+        case "medium": return L10n.t("Medium", "中")
+        case "low": return L10n.t("Low", "低")
+        case "unavailable": return L10n.t("Unavailable", "不可用")
         default: return conf
         }
     }
     
     private func displayGoal(_ goal: String) -> String {
-        switch goal {
-        case "muscle_gain": return "增肌 / Muscle Gain"
-        case "fat_loss": return "减脂 / Fat Loss"
-        case "performance": return "运动表现 / Performance"
-        case "health": return "健康维持 / Health"
-        default: return "维持 / Maintain"
-        }
+        localizedOnboardingGoal(goal)
     }
 
     private func displayExperience(_ level: String) -> String {
-        switch level {
-        case "beginner": return "新手 / Beginner"
-        case "intermediate": return "中级 / Intermediate"
-        case "advanced": return "高级 / Advanced"
-        default: return "未知 / Unknown"
-        }
+        localizedOnboardingExperience(level)
     }
 
     private func displayCoachingStyle(_ style: String) -> String {
-        switch style {
-        case "explanatory": return "详细解析 / Detailed"
-        case "encouraging": return "积极鼓励 / Encouraging"
-        case "direct": return "直截了当 / Direct"
-        default: return style
-        }
+        localizedOnboardingCoachStyle(style)
     }
 }

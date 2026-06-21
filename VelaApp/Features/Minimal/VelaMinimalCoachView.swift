@@ -13,11 +13,6 @@ struct VelaSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var cs
     
-    // Persistent baselines for health calculations
-    @AppStorage("vela_user_age") private var userAge = 30
-    @AppStorage("vela_user_weight") private var userWeight = 72.0
-    @AppStorage("vela_user_height") private var userHeight = 178.0
-    
     // Settings toggles
     @AppStorage("vela_dark_mode") private var darkModeRaw = "system"
     @AppStorage("agent_abnormal_metric_alerts") private var abnormalMetricAlertsOn = true
@@ -59,7 +54,7 @@ struct VelaSettingsView: View {
                         Divider().padding(.leading, 56)
                         
                         NavigationLink(destination: UserWikiArchiveView()) {
-                            settingsRow(icon: "doc.text.fill", iconBg: VelaTheme.muted, title: "用户健康档案 (Wiki)", value: "本地记忆库")
+                            settingsRow(icon: "doc.text.fill", iconBg: VelaTheme.muted, title: "健康档案", value: "本地长期记忆")
                         }
                         
                         Divider().padding(.leading, 56)
@@ -165,8 +160,14 @@ struct VelaSettingsView: View {
 
                         Divider().padding(.leading, 56)
 
+                        NavigationLink(destination: PrivacyDataControlsView()) {
+                            settingsRow(icon: "lock.shield.fill", iconBg: Color(hex: "#5856D6"), title: "隐私与数据控制", value: "导出 / 删除")
+                        }
+
+                        Divider().padding(.leading, 56)
+
                         NavigationLink(destination: ExportDataSettingsView()) {
-                            settingsRow(icon: "square.and.arrow.up.fill", iconBg: VelaTheme.muted, title: "数据导出", value: "JSON 格式")
+                            settingsRow(icon: "square.and.arrow.up.fill", iconBg: VelaTheme.muted, title: "数据导出", value: "本地资料")
                         }
                         
                         if VelaCapabilityAvailability.cloudKitSyncEnabled {
@@ -193,7 +194,7 @@ struct VelaSettingsView: View {
                     
                     VStack(spacing: 0) {
                         NavigationLink(destination: WhatsNewSettingsView()) {
-                            settingsRow(icon: "sparkles", iconBg: Color(hex: "#5856D6"), title: "最新变化", value: "v0.1.0")
+                            settingsRow(icon: "sparkles", iconBg: Color(hex: "#5856D6"), title: "最新变化", value: "更新记录")
                         }
                     }
                     .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
@@ -276,7 +277,7 @@ struct VelaSettingsView: View {
                 Text("本机健康资料")
                     .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
-                Text("Local-first 存储")
+                Text("本机优先存储")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(VelaTheme.accent)
             }
@@ -296,57 +297,120 @@ struct VelaSettingsView: View {
 
 // 1. Account Settings View
 struct AccountSettingsView: View {
-    @AppStorage("vela_user_age") private var userAge = 30
-    @AppStorage("vela_user_weight") private var userWeight = 72.0
-    @AppStorage("vela_user_height") private var userHeight = 178.0
+    @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var dashboardVM: DashboardViewModel
+    @AppStorage("vela_user_age") private var userAge = 0
+    @AppStorage("vela_user_weight") private var userWeight = 0.0
+    @AppStorage("vela_user_height") private var userHeight = 0.0
     @AppStorage("vela_max_hr") private var userMaxHR = 0
+    @AppStorage("vela_user_biological_sex") private var biologicalSex = ""
+    @State private var ageDraft = ""
+    @State private var weightDraft = ""
+    @State private var heightDraft = ""
+    @State private var maxHeartRateDraft = ""
+    @State private var validationMessage: String?
 
-    private var inferredMaxHR: Int {
-        Int(UserProfileSettings.inferredMaxHeartRate(age: userAge))
+    private var storedAge: Int? {
+        Int(ageDraft).flatMap { (10...100).contains($0) ? $0 : nil }
     }
 
-    private var displayedMaxHR: Int {
-        userMaxHR >= 100 ? userMaxHR : inferredMaxHR
+    private var inferredMaxHR: Int? {
+        storedAge.map { Int(UserProfileSettings.inferredMaxHeartRate(age: $0)) }
     }
 
-    private var maxHeartRateBinding: Binding<Int> {
-        Binding(
-            get: { displayedMaxHR },
-            set: { userMaxHR = $0 }
-        )
-    }
-    
     var body: some View {
         Form {
             Section(header: Text("生理特征指标")) {
-                Stepper("年龄: \(userAge) 岁", value: $userAge, in: 10...100)
-                
                 HStack {
-                    Text("体重")
-                    Spacer()
-                    TextField("体重", value: $userWeight, format: .number)
+                    TextField("年龄", text: $ageDraft)
+                        .keyboardType(.numberPad)
+                    Text("岁")
+                }
+                HStack {
+                    TextField("体重", text: $weightDraft)
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing)
                     Text("kg")
                 }
-                
                 HStack {
-                    Text("身高")
-                    Spacer()
-                    TextField("身高", value: $userHeight, format: .number)
+                    TextField("身高", text: $heightDraft)
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing)
                     Text("cm")
                 }
-                
-                Stepper("最大心率: \(displayedMaxHR) bpm", value: maxHeartRateBinding, in: 100...240)
-
-                Button("使用年龄推断值（\(inferredMaxHR) bpm）") {
-                    userMaxHR = 0
+                HStack {
+                    TextField("最大心率（可选）", text: $maxHeartRateDraft)
+                        .keyboardType(.numberPad)
+                    Text("bpm")
                 }
+
+                Picker("生理性别", selection: $biologicalSex) {
+                    Text("未设置").tag("")
+                    Text("男性").tag("male")
+                    Text("女性").tag("female")
+                    Text("其他").tag("other")
+                }
+
+                if let inferredMaxHR {
+                    Button("使用年龄推断值（\(inferredMaxHR) bpm）") {
+                        maxHeartRateDraft = ""
+                    }
+                } else {
+                    Text("填写年龄后可使用年龄推断的最大心率。")
+                        .font(.footnote)
+                        .foregroundStyle(VelaTheme.mutedText)
+                }
+            }
+
+            Section {
+                Button("应用身体模型") {
+                    applyProfile()
+                }
+                .frame(maxWidth: .infinity)
+                .fontWeight(.semibold)
+            } footer: {
+                Text("已填写的数值优先于缺失字段的 Apple 健康数据；应用后会重新计算训练建议。")
             }
         }
         .navigationTitle("账户与特征基准")
+        .onAppear {
+            ageDraft = (10...100).contains(userAge) ? String(userAge) : ""
+            weightDraft = (25...350).contains(userWeight) ? String(format: "%.1f", userWeight) : ""
+            heightDraft = (100...250).contains(userHeight) ? String(format: "%.0f", userHeight) : ""
+            maxHeartRateDraft = (100...240).contains(userMaxHR) ? String(userMaxHR) : ""
+        }
+        .alert("无法应用身体模型", isPresented: Binding(
+            get: { validationMessage != nil },
+            set: { if !$0 { validationMessage = nil } }
+        )) {
+            Button("好", role: .cancel) { validationMessage = nil }
+        } message: {
+            Text(validationMessage ?? "")
+        }
+    }
+
+    private func applyProfile() {
+        let parsedAge = ageDraft.isEmpty ? nil : Int(ageDraft)
+        let parsedWeight = weightDraft.isEmpty ? nil : Double(weightDraft)
+        let parsedHeight = heightDraft.isEmpty ? nil : Double(heightDraft)
+        let parsedMaxHeartRate = maxHeartRateDraft.isEmpty ? nil : Int(maxHeartRateDraft)
+
+        guard parsedAge.map({ (10...100).contains($0) }) ?? true,
+              parsedWeight.map({ (25...350).contains($0) }) ?? true,
+              parsedHeight.map({ (100...250).contains($0) }) ?? true,
+              parsedMaxHeartRate.map({ (100...240).contains($0) }) ?? true else {
+            validationMessage = "请检查输入范围：年龄 10-100 岁，体重 25-350 kg，身高 100-250 cm，最大心率 100-240 bpm。"
+            return
+        }
+
+        userAge = parsedAge ?? 0
+        userWeight = parsedWeight ?? 0
+        userHeight = parsedHeight ?? 0
+        userMaxHR = parsedMaxHeartRate ?? 0
+        VelaAppState.shared.markLocalDataChanged()
+        Task {
+            await dashboardVM.refresh(modelContext: modelContext, force: true)
+        }
     }
 }
 
@@ -371,6 +435,7 @@ struct ParsedItem: Identifiable, Equatable {
 }
 
 struct UserWikiArchiveView: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \UserWikiDocumentRecord.updatedAt, order: .reverse)
     private var wikiDocs: [UserWikiDocumentRecord]
@@ -387,7 +452,7 @@ struct UserWikiArchiveView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("你的健康画像与个人背景 (Coach 的本地记忆知识库)")
+                Text("你的健康画像与个人背景会作为 Coach 的本地长期记忆，用于改善训练、恢复和营养建议。")
                     .font(.system(size: 14))
                     .foregroundStyle(VelaTheme.muted)
                     .padding(.horizontal, 16)
@@ -453,7 +518,19 @@ struct UserWikiArchiveView: View {
             }
         }
         .background(VelaTheme.systemGroupedBackground)
-        .navigationTitle("用户健康档案 (Wiki)")
+        .navigationTitle("健康档案")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    dismiss()
+                } label: {
+                    Label("返回", systemImage: "chevron.left")
+                        .labelStyle(.titleAndIcon)
+                }
+                .font(.system(size: 15, weight: .semibold))
+            }
+        }
         .task {
             WikiSyncManager.sync(modelContext: modelContext)
         }
@@ -735,21 +812,21 @@ struct AIModelSettingsView: View {
     
     var body: some View {
         Form {
-            Section(header: Text("Coach API 秘钥配置")) {
+            Section(header: Text("模型连接配置")) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("DeepSeek API Key")
+                    Text("DeepSeek 密钥")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(VelaTheme.muted)
-                    SecureField("输入 DeepSeek API 秘钥...", text: $deepseekKey)
+                    SecureField("输入 DeepSeek 密钥...", text: $deepseekKey)
                         .font(.system(size: 14, design: .monospaced))
                 }
                 .padding(.vertical, 4)
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Kimi API Key (视觉模型)")
+                    Text("Kimi 密钥（图片识别）")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(VelaTheme.muted)
-                    SecureField("输入 Kimi API 秘钥...", text: $kimiKey)
+                    SecureField("输入 Kimi 密钥...", text: $kimiKey)
                         .font(.system(size: 14, design: .monospaced))
                 }
                 .padding(.vertical, 4)
@@ -779,7 +856,7 @@ struct AIModelSettingsView: View {
                         if isTesting {
                             ProgressView().padding(.trailing, 8)
                         }
-                        Text(isTesting ? "正在连通性测试..." : "测试 API 连接")
+                        Text(isTesting ? "正在测试连接..." : "测试模型连接")
                             .bold()
                             .foregroundStyle(VelaTheme.accent)
                     }
@@ -808,9 +885,9 @@ struct AIModelSettingsView: View {
         .alert("保存成功", isPresented: $showSaveSuccess) {
             Button("好") {}
         } message: {
-            Text("API 密钥与模型选择已安全写入 Keychain 与 App 存储中。")
+            Text("模型密钥与模型选择已安全写入系统钥匙串和本机设置。")
         }
-        .navigationTitle("AI 智能模型设置")
+        .navigationTitle("AI 模型设置")
     }
     
     private func loadKeysFromKeychain() {
@@ -848,7 +925,7 @@ struct AIModelSettingsView: View {
     private func testConnection() async {
         let key = deepseekKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else {
-            testResultText = "测试失败: 请先填写 DeepSeek API 密钥。"
+            testResultText = "测试失败：请先填写 DeepSeek 密钥。"
             return
         }
 
@@ -1090,31 +1167,43 @@ struct DataSourceSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 // Tier Permissions Request Cards
-                Text("健康数据权限请求")
+                Text("连接 Apple 健康")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
                     .padding(.leading, 16)
                     .padding(.top, 16)
 
+                Text("按用途逐步授权。Vela 只读取你允许的数据，并用于生成恢复、训练负荷和长期趋势参考。")
+                    .font(.system(size: 13))
+                    .foregroundStyle(VelaTheme.muted)
+                    .lineSpacing(3)
+                    .padding(.horizontal, 16)
+
                 VStack(spacing: 12) {
                     tierRequestCard(
                         tier: .core,
-                        title: "1. 核心权限 (Core)",
-                        desc: "睡眠分析、心率变异性(HRV)、静息心率、日常心率、呼吸频率、活动能量、日常训练、步数、体能训练。",
+                        title: "基础健康信号",
+                        desc: "睡眠、HRV、静息心率、日常心率、呼吸、步数和训练记录。",
+                        impact: "用于判断今天是否适合训练，以及恢复分数是否可信。",
+                        action: "授权基础数据",
                         color: Color(hex: "#FF2D55")
                     )
 
                     tierRequestCard(
                         tier: .enhanced,
-                        title: "2. 增强权限 (Enhanced)",
-                        desc: "最大摄氧量(VO2Max)、体重、体脂率、去脂体重、血氧饱和度、腕部温度。",
+                        title: "体能与身体组成",
+                        desc: "最大摄氧量、体重、体脂率、去脂体重、血氧和腕温。",
+                        impact: "用于长期趋势、体能变化和恢复异常解释。",
+                        action: "授权体能数据",
                         color: Color(hex: "#AF52DE")
                     )
 
                     tierRequestCard(
                         tier: .advanced,
-                        title: "3. 高级权限 (Advanced)",
-                        desc: "血糖检测(CGM)、收缩压/舒张压、膳食水分、膳食摄入(能量、蛋白质、碳水、脂肪)、步态与步行稳定性、正念专注时间、睡眠呼吸紊乱(iOS 18+)。",
+                        title: "营养与进阶指标",
+                        desc: "血糖、血压、水分、膳食摄入、步态稳定性、正念和睡眠呼吸事件。",
+                        impact: "用于解释能量、压力、睡眠质量和训练波动来源。",
+                        action: "授权进阶数据",
                         color: Color(hex: "#30A2FF")
                     )
                 }
@@ -1128,7 +1217,7 @@ struct DataSourceSettingsView: View {
                 }
 
                 if let successTier {
-                    Text("成功向系统请求 \(successTier == .core ? "核心" : (successTier == .enhanced ? "增强" : "高级")) 权限！")
+                    Text("已向系统请求\(authorizationTierTitle(successTier))。")
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(Color(hex: "#34C759"))
                         .padding(.horizontal, 16)
@@ -1182,39 +1271,59 @@ struct DataSourceSettingsView: View {
         .navigationTitle("健康数据源")
     }
 
-    private func tierRequestCard(tier: HealthPermissionTier, title: String, desc: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
+    private func tierRequestCard(
+        tier: HealthPermissionTier,
+        title: String,
+        desc: String,
+        impact: String,
+        action: String,
+        color: Color
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "waveform.path.ecg")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(color)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(color.opacity(0.12)))
+
                 Text(title)
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
+
                 Spacer()
-                Button {
-                    Task {
-                        do {
-                            authErrorMessage = nil
-                            successTier = nil
-                            try await HealthAuthorizationService().requestAuthorization(tier: tier)
-                            successTier = tier
-                        } catch {
-                            authErrorMessage = "权限授权失败: \(error.localizedDescription)"
-                        }
-                    }
-                } label: {
-                    Text("请求授权")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(color))
-                }
-                .buttonStyle(.plain)
             }
 
             Text(desc)
                 .font(.system(size: 12))
                 .foregroundStyle(VelaTheme.muted)
                 .lineSpacing(2)
+
+            Text(impact)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(VelaTheme.fg2)
+                .lineSpacing(2)
+
+            Button {
+                Task {
+                    do {
+                        authErrorMessage = nil
+                        successTier = nil
+                        try await HealthAuthorizationService().requestAuthorization(tier: tier)
+                        successTier = tier
+                    } catch {
+                        authErrorMessage = "权限授权失败：\(error.localizedDescription)"
+                    }
+                }
+            } label: {
+                Text(action)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(color))
+            }
+            .buttonStyle(.plain)
         }
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
@@ -1242,6 +1351,17 @@ struct DataSourceSettingsView: View {
             return "未读取到可用健康数据"
         case .preview:
             return "当前为调试模拟数据"
+        }
+    }
+
+    private func authorizationTierTitle(_ tier: HealthPermissionTier) -> String {
+        switch tier {
+        case .core:
+            return "基础健康信号授权"
+        case .enhanced:
+            return "体能与身体组成授权"
+        case .advanced:
+            return "营养与进阶指标授权"
         }
     }
     
@@ -1528,11 +1648,11 @@ struct CGMSettingsView: View {
 struct iCloudSyncSettingsView: View {
     var body: some View {
         Form {
-            Section(header: Text("iCloud云同步")) {
+            Section(header: Text("iCloud 云同步")) {
                 Text("尚未接入")
                     .font(.system(size: 15, weight: .bold))
 
-                Text("当前版本只使用本机 SwiftData 存储，尚未配置 CloudKit 同步。接入并验证跨设备合并策略前，不会展示自动备份开关。")
+                Text("当前版本只使用本机数据库保存资料，尚未开启 iCloud 跨设备同步。完成合并策略验证前，不会展示自动备份开关。")
                     .font(.system(size: 11))
                     .foregroundStyle(VelaTheme.muted)
             }
@@ -1549,16 +1669,16 @@ struct WhatsNewSettingsView: View {
                 Text("Vela v0.1.0 当前能力")
                     .font(.system(size: 22, weight: .bold))
                 
-                Text("当前版本已实现以下 local-first 能力：")
+                Text("当前版本已实现以下本机优先能力：")
                     .font(.system(size: 14))
                     .foregroundStyle(VelaTheme.muted)
                 
                 VStack(alignment: .leading, spacing: 16) {
-                    featureUpdateBlock(title: "弹性滑动 Dock 栏", desc: "基于 MatchedGeometry 的悬浮 Dock 滑块指示器。")
-                    featureUpdateBlock(title: "快捷录入面板", desc: "加号面板提供餐食、活动、Coach 与处方入口。")
-                    featureUpdateBlock(title: "健康日历总览", desc: "点击首页日期查看每日评分历史。")
-                    featureUpdateBlock(title: "天气同步", desc: "基于 GeoIP 与 OpenMeteo 查询温度和城市，不申请精确位置权限。")
-                    featureUpdateBlock(title: "食品条码查询", desc: "扫描包装条码后从 Open Food Facts 获取营养数据，并在保存前确认。")
+                    featureUpdateBlock(title: "今日指挥中心", desc: "把准备度、睡眠、恢复、负荷、营养和数据覆盖合成为一个可执行日计划。")
+                    featureUpdateBlock(title: "自适应训练座舱", desc: "根据今日计划、局部疲劳和训练记录决定保持、减量、替换或休息。")
+                    featureUpdateBlock(title: "Coach 证据边界", desc: "AI 回答会标注数据覆盖状态，缺失健康或训练证据时降低确定性。")
+                    featureUpdateBlock(title: "信任中心与隐私控制", desc: "可查看数据覆盖、导出本地资料，并删除对话、记忆、报告和训练记录。")
+                    featureUpdateBlock(title: "天气同步", desc: "授权后使用约 3 公里精度获取 Open-Meteo 天气，并缓存位置快照 7 天以减少重复请求。")
                 }
                 
                 Spacer()
@@ -1598,7 +1718,7 @@ struct CoachPersonalitySettingsView: View {
 
     var body: some View {
         Form {
-            Section(header: Text("选择教练风格 (Coach Style)")) {
+            Section(header: Text("选择教练风格")) {
                 ForEach(CoachPersonality.allCases) { personality in
                     Button {
                         selectedPersonality = personality
@@ -1654,7 +1774,7 @@ struct AgentAutomationSettingsView: View {
     
     var body: some View {
         Form {
-            Section(header: Text("Agent 技能自动执行")) {
+            Section(header: Text("自动任务执行")) {
                 ForEach(agentConfig.skillList(isChinese: isChinese)) { skill in
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 12) {
@@ -1700,6 +1820,324 @@ struct AgentAutomationSettingsView: View {
 
 // MARK: - ExportDataSettingsView
 
+struct PrivacyDataCategory: Identifiable, Hashable {
+    var id: String
+    var title: String
+    var detail: String
+    var count: Int
+    var isExported: Bool
+}
+
+enum PrivacyDeletionScope: String, Hashable, CaseIterable {
+    case aiHistory
+    case localLogs
+    case allLocalVelaData
+}
+
+struct PrivacyDeleteGroup: Identifiable, Hashable {
+    var id: String
+    var title: String
+    var detail: String
+    var systemImage: String
+    var scope: PrivacyDeletionScope
+    var isDestructive: Bool
+}
+
+struct PrivacyDataInventoryModel: Hashable {
+    var categories: [PrivacyDataCategory]
+    var deleteGroups: [PrivacyDeleteGroup]
+    var localOnlyNotice: String
+    var irreversibleWarning: String
+
+    var exportCategories: [PrivacyDataCategory] {
+        categories.filter(\.isExported)
+    }
+
+    var totalExportedItems: Int {
+        exportCategories.reduce(0) { $0 + $1.count }
+    }
+
+    static func build(counts: [String: Int]) -> PrivacyDataInventoryModel {
+        let categories = [
+            PrivacyDataCategory(
+                id: "daily_summaries",
+                title: "每日健康摘要",
+                detail: "恢复、睡眠、负荷、HRV、静息心率、步数和活动摘要。",
+                count: counts["daily_summaries", default: 0],
+                isExported: true
+            ),
+            PrivacyDataCategory(
+                id: "strength_workouts",
+                title: "力量训练记录",
+                detail: "训练标题、组次、重量、RPE、训练量和本地分析结果。",
+                count: counts["strength_workouts", default: 0],
+                isExported: true
+            ),
+            PrivacyDataCategory(
+                id: "journals",
+                title: "日记与行为信号",
+                detail: "你手动记录的标签、文字备注、数值和单位。",
+                count: counts["journals", default: 0],
+                isExported: true
+            ),
+            PrivacyDataCategory(
+                id: "food_logs",
+                title: "饮食日志",
+                detail: "餐食、营养估算、来源、图片分析摘要和改进建议。",
+                count: counts["food_logs", default: 0],
+                isExported: true
+            ),
+            PrivacyDataCategory(
+                id: "biomarkers",
+                title: "手动化验指标",
+                detail: "你录入的生物标志物、参考范围和来源文件名。",
+                count: counts["biomarkers", default: 0],
+                isExported: true
+            ),
+            PrivacyDataCategory(
+                id: "wiki_documents",
+                title: "本地 Coach 记忆",
+                detail: "Vela 生成或你确认的身体画像、基线和长期偏好。",
+                count: counts["wiki_documents", default: 0],
+                isExported: true
+            ),
+            PrivacyDataCategory(
+                id: "coach_sessions",
+                title: "Coach 对话",
+                detail: "本机保存的聊天会话和消息历史。",
+                count: counts["coach_sessions", default: 0],
+                isExported: false
+            ),
+            PrivacyDataCategory(
+                id: "agent_runs",
+                title: "AI 运行日志",
+                detail: "Morning Brief、Evening Sync、Coach 工具调用和可审计运行记录。",
+                count: counts["agent_runs", default: 0] + counts["agent_artifacts", default: 0],
+                isExported: false
+            )
+        ]
+
+        return PrivacyDataInventoryModel(
+            categories: categories,
+            deleteGroups: [
+                PrivacyDeleteGroup(
+                    id: "ai_history",
+                    title: "删除 Coach 与 AI 历史",
+                    detail: "删除对话、AI 报告、运行日志和 Agent 产物；不会删除健康摘要或训练记录。",
+                    systemImage: "sparkles.rectangle.stack.fill",
+                    scope: .aiHistory,
+                    isDestructive: true
+                ),
+                PrivacyDeleteGroup(
+                    id: "local_logs",
+                    title: "删除手动日志",
+                    detail: "删除日记、饮食、化验指标和力量训练记录；不会删除 Apple Health 原始数据。",
+                    systemImage: "list.bullet.clipboard.fill",
+                    scope: .localLogs,
+                    isDestructive: true
+                ),
+                PrivacyDeleteGroup(
+                    id: "all_local",
+                    title: "清空 Vela 本地数据",
+                    detail: "删除 Vela 本机数据库中的摘要、日志、计划、对话、AI 产物和记忆。",
+                    systemImage: "trash.fill",
+                    scope: .allLocalVelaData,
+                    isDestructive: true
+                )
+            ],
+            localOnlyNotice: "Vela 的本地数据库与 Apple Health 原始数据分离。导出或删除 Vela 数据不会删除 Apple Health 中的原始记录。",
+            irreversibleWarning: "删除后无法从 Vela 内恢复。建议先导出本地备份。"
+        )
+    }
+
+    func category(id: String) -> PrivacyDataCategory? {
+        categories.first { $0.id == id }
+    }
+}
+
+@MainActor
+enum PrivacyDataInventoryBuilder {
+    static func build(modelContext: ModelContext) -> PrivacyDataInventoryModel {
+        PrivacyDataInventoryModel.build(counts: [
+            "daily_summaries": count(DailyHealthSummaryRecord.self, in: modelContext),
+            "strength_workouts": count(StrengthWorkoutRecord.self, in: modelContext),
+            "workout_events": count(WorkoutEventRecord.self, in: modelContext),
+            "journals": count(JournalEntryRecord.self, in: modelContext),
+            "food_logs": count(FoodLogRecord.self, in: modelContext),
+            "biomarkers": count(BiomarkerRecord.self, in: modelContext),
+            "wiki_documents": count(UserWikiDocumentRecord.self, in: modelContext),
+            "coach_sessions": count(CoachSessionRecord.self, in: modelContext),
+            "coach_interactions": count(CoachInteractionRecord.self, in: modelContext),
+            "coach_artifacts": count(CoachArtifactRecord.self, in: modelContext),
+            "ai_reports": count(AIReportRecord.self, in: modelContext),
+            "agent_runs": count(AgentRunRecord.self, in: modelContext),
+            "agent_artifacts": count(AgentArtifactRecord.self, in: modelContext),
+            "training_plans": count(TrainingPlanRecord.self, in: modelContext)
+        ])
+    }
+
+    private static func count<T: PersistentModel>(_ type: T.Type, in modelContext: ModelContext) -> Int {
+        (try? modelContext.fetch(FetchDescriptor<T>()).count) ?? 0
+    }
+}
+
+@MainActor
+enum PrivacyDataDeletionService {
+    static func delete(scope: PrivacyDeletionScope, modelContext: ModelContext) throws -> Int {
+        var deleted = 0
+
+        switch scope {
+        case .aiHistory:
+            deleted += try deleteAll(CoachSessionRecord.self, in: modelContext)
+            deleted += try deleteAll(CoachInteractionRecord.self, in: modelContext)
+            deleted += try deleteAll(CoachArtifactRecord.self, in: modelContext)
+            deleted += try deleteAll(AIReportRecord.self, in: modelContext)
+            deleted += try deleteAll(AgentRunRecord.self, in: modelContext)
+            deleted += try deleteAll(AgentArtifactRecord.self, in: modelContext)
+        case .localLogs:
+            deleted += try deleteAll(JournalEntryRecord.self, in: modelContext)
+            deleted += try deleteAll(FoodLogRecord.self, in: modelContext)
+            deleted += try deleteAll(BiomarkerRecord.self, in: modelContext)
+            deleted += try deleteAll(StrengthWorkoutRecord.self, in: modelContext)
+            deleted += try deleteAll(WorkoutEventRecord.self, in: modelContext)
+            deleted += try deleteAll(TrainingResponseRecord.self, in: modelContext)
+        case .allLocalVelaData:
+            for scope in [PrivacyDeletionScope.aiHistory, .localLogs] {
+                deleted += try delete(scope: scope, modelContext: modelContext)
+            }
+            deleted += try deleteAll(DailyHealthSummaryRecord.self, in: modelContext)
+            deleted += try deleteAll(SleepSummaryRecord.self, in: modelContext)
+            deleted += try deleteAll(UserWikiDocumentRecord.self, in: modelContext)
+            deleted += try deleteAll(DailyOperatingPlanRecord.self, in: modelContext)
+            deleted += try deleteAll(TrainingPlanRecord.self, in: modelContext)
+            deleted += try deleteAll(WorkoutTemplateRecord.self, in: modelContext)
+            deleted += try deleteAll(OnboardingState.self, in: modelContext)
+            deleted += try deleteAll(XunjiDailyCacheRecord.self, in: modelContext)
+            deleted += try deleteAll(XunjiWorkoutMirrorRecord.self, in: modelContext)
+        }
+
+        try modelContext.save()
+        return deleted
+    }
+
+    private static func deleteAll<T: PersistentModel>(_ type: T.Type, in modelContext: ModelContext) throws -> Int {
+        let records = try modelContext.fetch(FetchDescriptor<T>())
+        records.forEach(modelContext.delete)
+        return records.count
+    }
+}
+
+struct PrivacyDataControlsView: View {
+    @Environment(\.modelContext) private var modelContext
+    @State private var inventory = PrivacyDataInventoryModel.build(counts: [:])
+    @State private var pendingDeleteGroup: PrivacyDeleteGroup?
+    @State private var statusMessage = ""
+    @State private var isError = false
+
+    var body: some View {
+        Form {
+            Section("本地优先") {
+                Label(inventory.localOnlyNotice, systemImage: "lock.shield.fill")
+                    .font(.footnote)
+                    .foregroundStyle(VelaTheme.muted)
+            }
+
+            Section("可导出数据") {
+                ForEach(inventory.exportCategories) { category in
+                    privacyCategoryRow(category)
+                }
+
+                NavigationLink(destination: ExportDataSettingsView()) {
+                    Label("导出本地备份", systemImage: "square.and.arrow.up.fill")
+                }
+            }
+
+            Section("本机保存但默认不导出") {
+                ForEach(inventory.categories.filter { !$0.isExported }) { category in
+                    privacyCategoryRow(category)
+                }
+            }
+
+            Section("删除控制") {
+                Text(inventory.irreversibleWarning)
+                    .font(.footnote)
+                    .foregroundStyle(VelaTheme.muted)
+
+                ForEach(inventory.deleteGroups) { group in
+                    Button(role: .destructive) {
+                        pendingDeleteGroup = group
+                    } label: {
+                        Label(group.title, systemImage: group.systemImage)
+                    }
+                }
+
+                if !statusMessage.isEmpty {
+                    Text(statusMessage)
+                        .font(.footnote)
+                        .foregroundStyle(isError ? VelaTheme.strainColor : VelaTheme.recoveryColor)
+                }
+            }
+        }
+        .navigationTitle("隐私与数据控制")
+        .onAppear {
+            reloadInventory()
+        }
+        .confirmationDialog(
+            pendingDeleteGroup?.title ?? "确认删除",
+            isPresented: Binding(
+                get: { pendingDeleteGroup != nil },
+                set: { if !$0 { pendingDeleteGroup = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let group = pendingDeleteGroup {
+                Button(group.title, role: .destructive) {
+                    delete(group)
+                }
+            }
+            Button("取消", role: .cancel) {
+                pendingDeleteGroup = nil
+            }
+        } message: {
+            Text(pendingDeleteGroup?.detail ?? inventory.irreversibleWarning)
+        }
+    }
+
+    private func privacyCategoryRow(_ category: PrivacyDataCategory) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(category.title)
+                Spacer()
+                Text("\(category.count)")
+                    .foregroundStyle(VelaTheme.muted)
+                    .monospacedDigit()
+            }
+            Text(category.detail)
+                .font(.caption)
+                .foregroundStyle(VelaTheme.muted)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func reloadInventory() {
+        inventory = PrivacyDataInventoryBuilder.build(modelContext: modelContext)
+    }
+
+    private func delete(_ group: PrivacyDeleteGroup) {
+        do {
+            let deleted = try PrivacyDataDeletionService.delete(scope: group.scope, modelContext: modelContext)
+            pendingDeleteGroup = nil
+            reloadInventory()
+            statusMessage = "已删除 \(deleted) 条本地记录。"
+            isError = false
+            VelaAppState.shared.markLocalDataChanged()
+        } catch {
+            statusMessage = "删除失败：\(error.localizedDescription)"
+            isError = true
+        }
+    }
+}
+
 struct ExportDataSettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var showExporter = false
@@ -1710,7 +2148,7 @@ struct ExportDataSettingsView: View {
     var body: some View {
         Form {
             Section(header: Text("数据导出与备份")) {
-                Text("Vela 始终秉持 Local-first 理念，你的所有健康数据都保留在设备本地。为了数据迁移或备份，你可以将健康摘要与日志导出为 JSON 文件。数据在导出过程中不会离开你的设备。")
+                Text("Vela 采用本机优先的数据策略，你的健康数据默认保留在设备本地。为了迁移或备份，你可以导出健康摘要与日志；导出过程中数据不会离开你的设备。")
                     .font(.footnote)
                     .foregroundStyle(VelaTheme.muted)
                     .padding(.vertical, 4)
@@ -1724,7 +2162,7 @@ struct ExportDataSettingsView: View {
                         isError = true
                     }
                 } label: {
-                    Label("导出本地健康数据 (JSON)", systemImage: "doc.text.fill")
+                    Label("导出本地健康数据", systemImage: "doc.text.fill")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(Color.white)
                         .frame(maxWidth: .infinity)

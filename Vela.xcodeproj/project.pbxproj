@@ -90,7 +90,6 @@
 		0B10008C000000000000008C /* BiologicalAgeEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B10018C000000000000008C /* BiologicalAgeEngine.swift */; };
 		0B1000900000000000000090 /* VelaQuickActionsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001900000000000000090 /* VelaQuickActionsSheet.swift */; };
 		0B1000910000000000000091 /* WeightLogSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001910000000000000091 /* WeightLogSheetView.swift */; };
-		0B1000930000000000000093 /* PlaceholderInsightCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001930000000000000093 /* PlaceholderInsightCard.swift */; };
 		0B1000990000000000000099 /* HealthKitSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001990000000000000099 /* HealthKitSyncEngine.swift */; };
 		0B1000A100000000000000A1 /* HealthUnitNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001A100000000000000A1 /* HealthUnitNormalizer.swift */; };
 		0B1000A200000000000000A2 /* PipelineDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001A200000000000000A2 /* PipelineDiagnostics.swift */; };
@@ -248,7 +247,6 @@
 		0B10018C000000000000008C /* BiologicalAgeEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/Biology/BiologicalAgeEngine.swift; sourceTree = "<group>"; };
 		0B1001900000000000000090 /* VelaQuickActionsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/SharedComponents/VelaQuickActionsSheet.swift; sourceTree = "<group>"; };
 		0B1001910000000000000091 /* WeightLogSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/SharedComponents/WeightLogSheetView.swift; sourceTree = "<group>"; };
-		0B1001930000000000000093 /* PlaceholderInsightCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/SharedComponents/PlaceholderInsightCard.swift; sourceTree = "<group>"; };
 		0B1001990000000000000099 /* HealthKitSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/Services/HealthKitSyncEngine.swift; sourceTree = "<group>"; };
 		0B1001A100000000000000A1 /* HealthUnitNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/Mapping/HealthUnitNormalizer.swift; sourceTree = "<group>"; };
 		0B1001A200000000000000A2 /* PipelineDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/PipelineDiagnostics.swift; sourceTree = "<group>"; };
@@ -435,7 +433,6 @@
 				0B1001870000000000000087 /* TrainingCalendarView.swift */,
 				0B1001880000000000000088 /* BiologyView.swift */,
 				0B10018A000000000000008A /* CorrelationArtifactView.swift */,
-				0B1001930000000000000093 /* PlaceholderInsightCard.swift */,
 				0B10018B000000000000008B /* CoachPersonality.swift */,
 				0B10018C000000000000008C /* BiologicalAgeEngine.swift */,
 				0B1002000000000000000200 /* VelaOnboardingView.swift */,
@@ -714,7 +711,6 @@
 				0B1000860000000000000086 /* TrainingView.swift in Sources */,
 				0B1000870000000000000087 /* TrainingCalendarView.swift in Sources */,
 				0B1000880000000000000088 /* BiologyView.swift in Sources */,
-				0B1000930000000000000093 /* PlaceholderInsightCard.swift in Sources */,
 				0B10008A000000000000008A /* CorrelationArtifactView.swift in Sources */,
 				0B10008B000000000000008B /* CoachPersonality.swift in Sources */,
 				0B10008C000000000000008C /* BiologicalAgeEngine.swift in Sources */,

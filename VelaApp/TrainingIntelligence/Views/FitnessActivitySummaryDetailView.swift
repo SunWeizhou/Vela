@@ -3,6 +3,7 @@ import SwiftData
 
 struct FitnessActivitySummaryDetailView: View {
     @EnvironmentObject private var dashboardVM: DashboardViewModel
+    @Environment(\.dismiss) private var dismiss
     @Query(sort: \DailyHealthSummaryRecord.date, order: .forward) private var records: [DailyHealthSummaryRecord]
     @Query(sort: \WorkoutEventRecord.startedAt, order: .forward) private var workoutEvents: [WorkoutEventRecord]
 
@@ -94,9 +95,20 @@ struct FitnessActivitySummaryDetailView: View {
         .safeAreaInset(edge: .top) {
             VStack(spacing: 0) {
                 HStack(alignment: .center) {
+                    Button(action: dismiss.callAsFunction) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(VelaTheme.accent)
+                            .frame(width: 38, height: 38)
+                            .background(Circle().fill(VelaTheme.surface))
+                            .overlay(Circle().stroke(VelaTheme.stroke, lineWidth: 0.5))
+                    }
+                    .buttonStyle(.cardPress)
+                    .accessibilityLabel("返回")
+
                     VStack(alignment: .leading, spacing: 2) {
                         Text("活动摘要")
-                            .font(.system(size: 26, weight: .bold, design: .rounded))
+                            .font(.system(size: 21, weight: .bold, design: .rounded))
                             .foregroundStyle(VelaTheme.primaryText)
                         Text("过去 30 天")
                             .font(.system(size: 13, weight: .medium))

@@ -35,14 +35,14 @@ enum CoachArtifactType: String, Codable, Hashable, CaseIterable, Identifiable {
 
     var displayTitle: String {
         switch self {
-        case .morningBrief: "Morning Brief"
-        case .workoutReadiness: "Workout Readiness"
-        case .trainingAdjustment: "Training Adjustment"
-        case .postWorkoutReview: "Post-Workout Review"
-        case .eveningReview: "Evening Review"
-        case .weeklyReview: "Weekly Review"
-        case .wikiUpdateProposal: "Wiki Update"
-        case .askCoachAnswer: "Ask Coach"
+        case .morningBrief: L10n.t("Morning Brief", "今日简报")
+        case .workoutReadiness: L10n.t("Workout Readiness", "训练准备度")
+        case .trainingAdjustment: L10n.t("Training Adjustment", "训练调整")
+        case .postWorkoutReview: L10n.t("Post-Workout Review", "训练后复盘")
+        case .eveningReview: L10n.t("Evening Review", "晚间回顾")
+        case .weeklyReview: L10n.t("Weekly Review", "周度回顾")
+        case .wikiUpdateProposal: L10n.t("Wiki Update", "档案更新")
+        case .askCoachAnswer: L10n.t("Ask Coach", "教练回复")
         }
     }
 }
@@ -166,7 +166,7 @@ struct CoachArtifact: Codable, Hashable, Identifiable {
             reasons: [
                 CoachArtifactReason(signal: "volume", value: "\(volume)kg", explanation: "本次训练总容量用于评估训练刺激。"),
                 CoachArtifactReason(signal: "effective_sets", value: "\(summary.effectiveSets)", explanation: "仅完成且达到有效强度的组计入恢复负荷。"),
-                CoachArtifactReason(signal: "muscle_groups", value: muscleText.isEmpty ? "unknown" : muscleText, explanation: "肌群分布会影响接下来 48 小时的局部疲劳。")
+                CoachArtifactReason(signal: "muscle_groups", value: muscleText.isEmpty ? "未记录" : muscleText, explanation: "肌群分布用于回顾本次训练刺激，并辅助安排下一次训练。")
             ],
             actions: [
                 CoachArtifactAction(type: "open_training_summary", label: "查看训练总结", payload: ["workout_id": workout.id.uuidString]),
@@ -253,14 +253,25 @@ enum CoachArtifactParser {
 }
 
 enum AgentActionParser {
-    private static var actionPattern: NSRegularExpression {
-        try! NSRegularExpression(
-            pattern: "\\[ACTION:(\\w+)\\]\\s*(.*?)\\s*\\[/ACTION\\]",
-            options: [.dotMatchesLineSeparators]
-        )
-    }
+    private static let actionPattern = try? NSRegularExpression(
+        pattern: "\\[ACTION:(\\w+)\\]\\s*(.*?)\\s*\\[/ACTION\\]",
+        options: [.dotMatchesLineSeparators]
+    )
+
+    private static let wikiFilePattern = try? NSRegularExpression(
+        pattern: "^(?:file|File|FILE|文件):\\s*(\\S+)",
+        options: [.anchorsMatchLines]
+    )
 
     static func parse(_ rawResponse: String) -> AgentParsedResponse {
+        guard let actionPattern else {
+            logger.error("Agent action regex unavailable; returning raw response without extracted actions.")
+            return AgentParsedResponse(
+                displayText: rawResponse.trimmingCharacters(in: .whitespacesAndNewlines),
+                actions: []
+            )
+        }
+
         let range = NSRange(rawResponse.startIndex..<rawResponse.endIndex, in: rawResponse)
         let matches = actionPattern.matches(in: rawResponse, options: [], range: range)
 
@@ -285,6 +296,8 @@ enum AgentActionParser {
             }
         }
 
+        actions.reverse()
+
         logger.info("Parsed \(actions.count) actions from response (\(rawResponse.count) chars)")
         for action in actions {
             logger.info("  Action: \(action.type.rawValue) → \(action.target)")
@@ -299,18 +312,19 @@ enum AgentActionParser {
     private static func parseActionBody(_ body: String, type: AgentActionType) -> (target: String, content: String) {
         switch type {
         case .updateWiki:
-            let filePattern = try! NSRegularExpression(
-                pattern: "^(?:file|File|FILE|文件):\\s*(\\S+)",
-                options: [.anchorsMatchLines]
-            )
+            guard let filePattern = wikiFilePattern else {
+                logger.error("Wiki action file regex unavailable; using default notes.md target.")
+                return ("notes.md", body)
+            }
             let fileRange = NSRange(body.startIndex..<body.endIndex, in: body)
             var target = "notes.md"
             var content = body
 
             if let match = filePattern.firstMatch(in: body, options: [], range: fileRange),
-               let capRange = Range(match.range(at: 1), in: body) {
+               let capRange = Range(match.range(at: 1), in: body),
+               let matchRange = Range(match.range, in: body) {
                 target = String(body[capRange])
-                content = body.replacingOccurrences(of: String(body[Range(match.range, in: body)!]), with: "")
+                content = body.replacingOccurrences(of: String(body[matchRange]), with: "")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
             }
             return (target, content)

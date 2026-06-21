@@ -108,11 +108,11 @@ public struct RecoveryScoreEngine: ScoreEngine {
                 
                 if hrvZ > 2.2 && (input.strainScoreYesterday ?? 0) > 75 {
                     hrvComponent = min(hrvComponent, 65.0)
-                    reasons.append("高负荷后 HRV 异常升高（可能存在副交感神经反弹/过度训练）")
+                    reasons.append("高负荷后 HRV 明显高于个人基线，恢复评分已按保守规则下调")
                 } else if hrvZ < -1.5 {
-                    reasons.append("HRV 显著低于自主神经基线")
+                    reasons.append("HRV 明显低于个人基线")
                 } else if hrvZ > 1.0 {
-                    reasons.append("HRV 表现良好，自主神经恢复充沛")
+                    reasons.append("HRV 高于近期个人基线")
                 }
                 
                 components["hrv"] = hrvComponent
@@ -137,9 +137,9 @@ public struct RecoveryScoreEngine: ScoreEngine {
                 let rhrComponent = ScoringMath.clamp(50.0 - 18.0 * rhrZ, min: 0, max: 100)
                 
                 if rhrZ > 1.5 {
-                    reasons.append("静息心率异常偏高 (\(Int(rhrToday)) bpm)，表明身体承受心血管负荷")
+                    reasons.append("静息心率高于近期个人基线（\(Int(rhrToday)) bpm）")
                 } else if rhrZ < -1.0 {
-                    reasons.append("静息心率低于日常基线，心肺系统恢复良好")
+                    reasons.append("静息心率低于近期个人基线")
                 }
                 
                 components["rhr"] = rhrComponent
@@ -155,9 +155,9 @@ public struct RecoveryScoreEngine: ScoreEngine {
             components["sleep"] = sleepScore
             componentWeights["sleep"] = weights["sleep"]
             if sleepScore < 60 {
-                reasons.append("昨晚睡眠质量不佳，限制了系统性修复")
+                reasons.append("昨晚睡眠评分偏低")
             } else if sleepScore >= 80 {
-                reasons.append("高质量睡眠为今日恢复提供了强力保障")
+                reasons.append("昨晚睡眠评分较高")
             }
         } else {
             missingInputs.append("sleepScore")
@@ -171,7 +171,7 @@ public struct RecoveryScoreEngine: ScoreEngine {
             componentWeights["prior_strain"] = weights["prior_strain"]
             
             if priorStrain > 75 {
-                reasons.append("昨日高强度耗力需要更多的恢复代偿")
+                reasons.append("昨日训练负荷评分偏高")
             }
         } else {
             missingInputs.append("priorStrainYesterday")
@@ -193,7 +193,7 @@ public struct RecoveryScoreEngine: ScoreEngine {
         var penalty = 0.0
         if let bodyTempDelta = input.bodyTempDelta, bodyTempDelta >= 0.5 {
             penalty += 8.0
-            reasons.append("体温偏高 (\(String(format: "+%.1f", bodyTempDelta))°C)，检测到轻度全身性生理负荷")
+            reasons.append("体温相对基线偏高 (\(String(format: "+%.1f", bodyTempDelta))°C)，恢复评分已保守下调")
         }
 
         var respiratoryRateZ = 0.0
@@ -206,13 +206,13 @@ public struct RecoveryScoreEngine: ScoreEngine {
             
             if respiratoryRateZ >= 1.5 {
                 penalty += 5.0
-                reasons.append("呼吸频率异常偏快 (\(Int(respToday)) 次/分)，自主神经系统表现紧张")
+                reasons.append("呼吸频率高于近期个人基线 (\(Int(respToday)) 次/分)，恢复评分已保守下调")
             }
         }
 
         if let SpO2 = input.SpO2, SpO2 < 94 {
             penalty += 8.0
-            reasons.append("血氧饱和度偏低 (\(Int(SpO2))%)，系统性氧合能力下降")
+            reasons.append("血氧饱和度读数偏低 (\(Int(SpO2))%)，恢复评分已保守下调；如有不适请寻求专业建议")
         }
 
         if input.hrvToday != nil {
@@ -233,7 +233,7 @@ public struct RecoveryScoreEngine: ScoreEngine {
 
         if rhrZ > 2.0 && hrvZ < -1.0 {
             penalty += 8.0
-            reasons.append("静息心率显著上升且 HRV 受到抑制，发出红色生理疲劳警报")
+            reasons.append("静息心率高于个人基线且 HRV 低于基线，恢复评分已相应下调")
         }
 
         if let val = recoveryValue {

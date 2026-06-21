@@ -532,10 +532,10 @@ struct BodyInterpreterEngine {
             flags.append(RiskFlag(
                 level: .critical,
                 system: "Recovery",
-                message: lang.isChinese ? "过度训练风险" : "Overtraining Risk",
+                message: lang.isChinese ? "高负荷恢复提醒" : "High-Load Recovery Notice",
                 detail: lang.isChinese
-                    ? "多个系统显示明显疲劳。继续高强度训练可能导致受伤、免疫力下降或过度训练综合征。"
-                    : "Multiple systems show significant fatigue. Continuing high-intensity training risks injury, immune suppression, or overtraining syndrome.",
+                    ? "多个可用信号显示疲劳较明显。今天建议暂停高强度训练，并结合主观感受决定是否休息或做温和活动。"
+                    : "Available signals suggest notable fatigue. Pause high-intensity training today and use how you feel to choose rest or gentle movement.",
                 triggeringMetrics: ["recovery_score", "hrv_z_score", "tsb"]
             ))
         }
@@ -545,10 +545,10 @@ struct BodyInterpreterEngine {
             flags.append(RiskFlag(
                 level: .warning,
                 system: "Gait / Mobility",
-                message: lang.isChinese ? "步态不对称异常" : "Gait Asymmetry Alert",
+                message: lang.isChinese ? "步态不对称需关注" : "Gait Asymmetry Notice",
                 detail: lang.isChinese
-                    ? "步行不对称性 \(String(format: "%.1f", asymmetry))%，超过正常范围（< 4%）。可能存在下肢代偿，建议检查。"
-                    : "Walking asymmetry \(String(format: "%.1f", asymmetry))% exceeds normal range (<4%). Possible lower limb compensation.",
+                    ? "步行不对称性为 \(String(format: "%.1f", asymmetry))%。建议结合近期不适、训练变化和连续趋势观察；如有疼痛或持续异常，请咨询专业人士。"
+                    : "Walking asymmetry is \(String(format: "%.1f", asymmetry))%. Interpret it with symptoms, training changes, and repeated trends; seek professional advice for pain or persistent changes.",
                 triggeringMetrics: ["walking_asymmetry"]
             ))
         }
@@ -558,10 +558,10 @@ struct BodyInterpreterEngine {
             flags.append(RiskFlag(
                 level: .warning,
                 system: "Autonomic",
-                message: lang.isChinese ? "HRV 持续下降" : "HRV Declining Trend",
+                message: lang.isChinese ? "HRV 近期下降" : "HRV Recent Decline",
                 detail: lang.isChinese
-                    ? "本周 HRV 较上周持续下降。这是自主神经疲劳的早期信号，建议减载 1-2 天。"
-                    : "HRV has been declining this week vs last week. Early sign of autonomic fatigue. Consider 1-2 day deload.",
+                    ? "本周 HRV 较上周下降。请结合睡眠、压力、训练和个人感受观察，今天可考虑降低训练量。"
+                    : "HRV is lower this week than last week. Review sleep, stress, training, and how you feel; consider a lower-load session today.",
                 triggeringMetrics: ["hrv_weekly_trend"]
             ))
         }

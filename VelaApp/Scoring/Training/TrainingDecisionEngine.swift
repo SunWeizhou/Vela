@@ -113,7 +113,7 @@ enum TrainingDecisionEngine {
             energyScore: dashboard.energy.currentEnergy,
             trainingLoadStatus: hasEnoughHistory ? (dashboard.strain.trainingLoadStatus) : .optimal, // Inhibits training load limiter when history is insufficient
             journalFlags: journalFlags,
-            bodyTempDelta: dashboard.extendedMetrics.bodyTemperature.map { $0 - 36.5 } ?? 0.0,
+            bodyTempDelta: 0.0,
             hrvZ: dashboard.recovery.metrics["hrv_z_score"] ?? 0.0,
             rhrZ: dashboard.recovery.metrics["rhr_z_score"] ?? 0.0
         )
@@ -257,7 +257,7 @@ enum TrainingDecisionEngine {
             readinessGuidance = L10n.t("Prioritize recovery. Recommend rest or light mobility work only.", "今日建议以恢复为主。推荐休息或安排极轻量活动。")
         } else if dashboard.recovery.score > 75 && dashboard.energy.currentEnergy > 60 && (tsb ?? 0.0) > 5.0 {
             readinessLevel = "HIGH"
-            readinessGuidance = L10n.t("Body is primed for intense training. Push hard — this is an optimal biological window for progression.", "身体状态极佳，适合进行高强度训练。今天是个极好的突破窗口。")
+            readinessGuidance = L10n.t("Current signals support the planned session. Keep progression controlled and stop adding load if technique or effort worsens.", "当前信号支持按计划训练；渐进加量保持可控，动作质量或主观用力变差时停止加量。")
         } else {
             readinessLevel = "MODERATE"
             readinessGuidance = L10n.t("Train at controlled intensity. Moderate load or active recovery is appropriate.", "训练请保持适度。中等强度负荷或主动恢复是最佳选择。")

@@ -80,66 +80,83 @@ enum PromptFragments {
         return result
     }
 
-    static func crossDiagnosisPatterns(lang: AppLanguage) -> String {
+    static func evidenceBoundariesBlock(lang: AppLanguage) -> String {
         if lang.isChinese {
             return """
-            当你分析用户数据时，请遵循以下**交叉诊断推理链模式**：
-            - **模式 A：自主神经疲劳 + 步态代偿** (条件: HRV Z-Score < -1.0 且 双支撑比例 > 28% 或 步行不对称性 > 3%)
-            - **模式 B：睡眠碎片化 + 环境暴露** (条件: 睡眠效率 < 85% 且 夜间环境噪音 > 45dB 或 咖啡因 > 100mg 午后摄入)
-            - **模式 C：高恢复 + 最佳训练窗口** (条件: HRV Z-Score > +0.5 且 RHR 低于基线 2+ bpm 且 睡眠得分 > 80)
-            - **模式 D：步速下降 + 累积负荷** (条件: 步行速度低于7日均值 5%+ 且 前 3 天 strain 平均 > 65)
-            - **模式 E：训练类型与恢复匹配分析** (条件: workouts 非空，结合 strain 和 recovery 评分)
+            ## 证据边界与本地决策优先级（上线级硬规则）
+            - 工具返回的实时数据和本地计算结果是事实来源；对话历史、人格风格和通用阈值不能覆盖工具数据。
+            - 训练建议必须优先遵循本地 `TrainingDecisionKernel`、`DailyTrainingDecision` 和 `DailyOperatingPlanPayload`。如果通用训练阈值与本地决策冲突，说明冲突并采用本地决策。
+            - 缺失或不可用的数据不是正常数据。不得把 missing / unavailable / "--" 推断为正常、良好或已恢复；必须降低置信度，并告诉用户哪个信号会提升建议质量。
+            - 只有当所需字段全部存在并来自工具或紧凑快照时，才可以应用交叉诊断模式。不得因为模式看起来合理就补全 HRV、RHR、TSB、步态、睡眠效率、咖啡因或训练负荷等缺失字段。
+            - 不得把可穿戴数据、趋势或通用阈值表述为疾病、损伤、过度训练或因果诊断。出现疼痛、明显症状或持续异常时，建议用户寻求适当的专业意见。
+            - 输出任何健康、训练、恢复或营养建议时，给出来源、置信度和非医疗诊断安全声明。
             """
         }
         return """
-        Follow these **Cross-Diagnosis Reasoning Patterns**:
-        - **Pattern A: Autonomic Fatigue + Gait Compensation** (HRV Z-Score < -1.0 AND double support % > 28% OR walking asymmetry > 3%)
-        - **Pattern B: Sleep Fragmentation + Exposure** (Sleep efficiency < 85% AND night noise > 45dB OR caffeine > 100mg after 2 PM)
-        - **Pattern C: Peak Readiness** (HRV Z-Score > +0.5 AND RHR below baseline by 2+ bpm AND sleep score > 80)
-        - **Pattern D: Gait Speed Decline + Load** (Walking speed < 7-day avg by 5%+ AND past 3-day average strain > 65)
-        - **Pattern E: Workout Type & Recovery Balance** (workouts non-empty, cross-reference with strain and recovery)
+        ## Evidence Boundaries and Local Decision Priority (launch-grade hard rules)
+        - Tool-returned live data and local calculations are the source of truth; conversation history, personality style, and generic thresholds must not override tool data.
+        - Training advice must prioritize the local `TrainingDecisionKernel`, `DailyTrainingDecision`, and `DailyOperatingPlanPayload`. If a generic training threshold conflicts with the local decision, state the conflict and follow the local decision.
+        - Missing or unavailable data is not normal data. Never infer that missing / unavailable / "--" means normal, recovered, or good; lower confidence and tell the user which signal would improve the recommendation.
+        - Do not apply cross-diagnosis patterns unless every required input field is present in tool output or the compact snapshot. Never fill in missing HRV, RHR, TSB, gait, sleep efficiency, caffeine, or training-load fields because a pattern seems plausible.
+        - Never present wearable data, trends, or generic thresholds as a disease, injury, overtraining, or causal diagnosis. For pain, concerning symptoms, or persistent changes, advise appropriate professional support.
+        - Every health, training, recovery, or nutrition recommendation must include source, confidence, and a non-diagnostic safety statement.
+        """
+    }
+
+    static func crossDiagnosisPatterns(lang: AppLanguage) -> String {
+        if lang.isChinese {
+            return """
+            当所需字段均真实可用时，可使用以下**多信号观察模式**，但只描述观察到的关联，不作诊断或因果判断：
+            - **模式 A：HRV 与步态变化共同出现**（需要 HRV 基线、双支撑比例或步行不对称性）。提示今天优先关注主观感受与动作质量。
+            - **模式 B：睡眠与行为记录共同出现**（需要睡眠效率和已记录的噪音或咖啡因）。说明两者可一并回顾，不能推定原因。
+            - **模式 C：恢复信号支持计划训练**（需要个人 HRV、RHR 基线、睡眠与本地训练决策均支持）。只建议按计划、保持可控，不称为峰值状态。
+            - **模式 D：活动趋势与近期负荷共同变化**（需要连续步速和负荷历史）。提示降低增量并观察连续数据。
+            - **模式 E：训练类型与恢复匹配**（需要真实训练记录、负荷和恢复评分）。优先遵循本地训练决策。
+            """
+        }
+        return """
+        When every required field is available, use these **multi-signal observation patterns**. Describe associations only, never diagnoses or causal conclusions:
+        - **Pattern A: HRV and gait changes together** (requires a personal HRV baseline plus double-support or walking-asymmetry data). Focus on how the user feels and movement quality today.
+        - **Pattern B: Sleep and recorded behaviors together** (requires sleep efficiency plus actually recorded noise or caffeine). Review them together without inferring cause.
+        - **Pattern C: Recovery signals support a planned session** (requires personal HRV/RHR baselines, sleep, and a supporting local training decision). Recommend the planned session with control, never a peak-performance claim.
+        - **Pattern D: Activity trend and recent load move together** (requires repeated gait-speed and load history). Suggest slower progression and continued observation.
+        - **Pattern E: Workout type and recovery match** (requires actual workout, strain, and recovery records). Prioritize the local training decision.
         """
     }
 
     static func referenceThresholds(lang: AppLanguage) -> String {
         if lang.isChinese {
             return """
-            **关键指标参考阈值**：
-            - HRV Z-Score: > +1.0 极佳 | +0.3 ~ +1.0 良好 | -0.3 ~ +0.3 基线 | -1.0 ~ -0.3 需关注 | < -1.0 减载
-            - 双支撑比例: 20-25% 正常 | 25-30% 轻度代偿 | > 30% 显著疲劳/损伤风险
-            - 步行不对称性: < 2% 优秀 | 2-4% 正常 | > 4% 侧偏代偿
-            - 睡眠效率: >= 90% 优秀 | 85-90% 良好 | < 85% 需改善
-            - REM / 深睡眠比例: REM (20-25%), Deep (15-20%) 为最佳占比
+            **指标解释规则**：
+            - 优先使用工具返回的个人基线、趋势与本地评分解释；人群参考区间只能作为背景，不能替代个人基线。
+            - 只有在数据源明确提供了 HRV Z 分数、睡眠效率或步态字段时才提及它们；不要从原始读数推断缺失字段。
+            - 不得将单一阈值称为“优秀、最佳、正常”或“受伤风险”；说明它是参考，并建议结合连续变化和主观感受。
             """
         }
         return """
-        **Reference Thresholds**:
-        - HRV Z-Score: > +1.0 Excellent | +0.3 to +1.0 Good | -0.3 to +0.3 Baseline | -1.0 to -0.3 Pay Attention | < -1.0 Deload
-        - Double Support %: 20-25% Normal | 25-30% Mild Compensation | > 30% High Fatigue/Injury Risk
-        - Walking Asymmetry: < 2% Excellent | 2-4% Normal | > 4% High Side-compensation
-        - Sleep Efficiency: >= 90% Excellent | 85-90% Good | < 85% Needs Improvement
-        - REM / Deep Sleep %: REM (20-25%), Deep (15-20%) optimal
+        **Metric interpretation rules**:
+        - Prefer tool-returned personal baselines, trends, and local scores. Population reference ranges are context only and never replace a personal baseline.
+        - Mention HRV Z-scores, sleep efficiency, or gait fields only when the data source explicitly provides them; never derive missing fields from raw values.
+        - Do not call a single threshold excellent, optimal, normal, or an injury risk. Explain that it is a reference and pair it with repeated changes and how the user feels.
         """
     }
 
     static func trainingPrescriptionProtocol(lang: AppLanguage) -> String {
         if lang.isChinese {
             return """
-            当用户询问训练建议、今日训练计划、是否适合训练或是否需要休息时，你**必须**按以下逻辑进行推荐：
-            - Recovery > 75 且 Energy Bank > 60 且 TSB > +5 → 高状态日：推荐高强度训练
-            - Recovery 50-75 → 中等状态：推荐中等强度或主动恢复
-            - Recovery < 50 → 低状态：推荐休息或极轻度活动
-            - TSB < -15 → 无论 Recovery 多高，必须降低训练量至少 30-40%
-            - TSB > +10 且 Recovery 高 → 可适度增加 10-20% 训练量
+            当用户询问训练建议、今日训练计划、是否适合训练或是否需要休息时，必须遵循：
+            - 先读取并遵循本地 `DailyTrainingDecision` 与 `DailyOperatingPlanPayload`；不要用固定分数阈值覆盖它们。
+            - 如果本地决策或关键恢复数据缺失，只给出保守、非处方性的选择，并说明缺什么数据；不要指定强度、容量或加量比例。
+            - 当本地决策支持训练时，建议按计划进行、以动作质量和主观用力调节；不要仅凭恢复分或 TSB 建议高强度或突破。
+            - 当本地决策建议减量、替换或休息时，明确保留该限制；任何疼痛、不适或持续异常优先于训练安排。
             """
         }
         return """
         When users ask about training recommendations:
-        - Recovery > 75 AND Energy Bank > 60 AND TSB > +5 → High Readiness: high-intensity training
-        - Recovery 50-75 → Moderate: moderate intensity or active recovery
-        - Recovery < 50 → Low: rest or very light activity only
-        - TSB < -15 → reduce volume by at least 30-40% regardless of Recovery
-        - TSB > +10 AND Recovery high → moderately increase volume by 10-20%
+        - Read and follow the local `DailyTrainingDecision` and `DailyOperatingPlanPayload` first; never override them with fixed score thresholds.
+        - If the local decision or key recovery data is unavailable, offer conservative non-prescriptive options and identify what data is missing. Do not specify intensity, volume, or progression percentages.
+        - If the local decision supports training, recommend the planned session and regulate with technique and perceived effort. Never prescribe high intensity or a breakthrough solely from recovery or TSB.
+        - If the local decision recommends reduce, swap, or rest, retain that constraint. Pain, concerning symptoms, or persistent changes take priority over training.
         """
     }
 
@@ -242,18 +259,41 @@ enum ResponseLengthPolicy {
 
     static func needsWebSearch(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let researchPatterns = [
-            "研究", "最新", "新研究", "文献", "论文", "指南",
+        let explicitFreshnessPatterns = [
+            "研究", "最新", "新研究", "文献", "论文", "指南", "医学指南",
             "research", "study", "studies", "latest", "recent",
-            "guidelines", "recommendation", "evidence", "science",
-            "nutrition", "diet", "supplement", "vitamin",
-            "medicine", "drug", "treatment", "therapy",
-            "cause", "risk factor", "prevention",
-            "what is", "how does", "benefits of", "side effects",
+            "guidelines", "evidence", "science", "meta-analysis", "systematic review",
         ]
-        for pattern in researchPatterns {
+
+        for pattern in explicitFreshnessPatterns {
             if trimmed.contains(pattern) { return true }
         }
+
+        let localPersonalDataPatterns = [
+            "my ", "myself", "today", "tonight", "this week", "last night",
+            "我", "今天", "今晚", "本周", "昨晚", "最近",
+            "recovery", "readiness", "sleep", "strain", "stress", "hrv", "rhr",
+            "train today", "workout today", "rest today",
+            "恢复", "状态", "睡眠", "压力", "负荷", "心率", "静息心率",
+            "适合训练", "需要休息", "训练吗", "运动吗",
+        ]
+
+        for pattern in localPersonalDataPatterns {
+            if trimmed.contains(pattern) { return false }
+        }
+
+        let externalKnowledgePatterns = [
+            "nutrition", "diet", "supplement", "vitamin",
+            "medicine", "drug", "treatment", "therapy",
+            "risk factor", "prevention",
+            "what is", "how does", "benefits of", "side effects",
+            "营养", "饮食", "补剂", "维生素", "药物", "治疗", "风险因素", "预防",
+            "是什么", "有什么好处", "副作用",
+        ]
+        for pattern in externalKnowledgePatterns {
+            if trimmed.contains(pattern) { return true }
+        }
+
         if trimmed.count > 15 {
             let questionIndicators = ["?", "？", "吗", "啥", "什么", "怎么", "如何", "why", "how", "what", "which"]
             for q in questionIndicators {
@@ -317,6 +357,7 @@ struct CoachPromptComposer {
             - 可以主动询问用户今天想关注什么方面
             - 保持温暖、自然、人性化的语调
             - 如果给出任何健康、训练、恢复或营养建议，必须注明来源、置信度，并附“一般健康建议，不构成医疗诊断”
+            \(PromptFragments.evidenceBoundariesBlock(lang: lang))
             """
         }
         return """
@@ -344,6 +385,7 @@ struct CoachPromptComposer {
         - You may gently ask what they'd like to focus on today
         - Maintain a warm, natural, human tone
         - If you provide any health, training, recovery, or nutrition recommendation, include source, confidence, and a non-diagnostic safety statement
+        \(PromptFragments.evidenceBoundariesBlock(lang: lang))
         """
     }
 
@@ -410,14 +452,16 @@ struct CoachPromptComposer {
             \(contextJSON)
             \(correlationText.isEmpty ? "" : "## 日记标签相关性\n\(correlationText)")
 
+            \(PromptFragments.evidenceBoundariesBlock(lang: lang))
+
             ## 你的核心执导法则
-            1. **多指标深度交叉诊断（Scientific Synthesis）**：
+            1. **多信号证据整合（Scientific Evidence Synthesis）**：
             \(PromptFragments.crossDiagnosisPatterns(lang: lang))
             \(PromptFragments.referenceThresholds(lang: lang))
             2. **极致贴心的个性化实操建议（Elite Pacing Plans）**
             3. **个性化训练计划生成（Training Plan Prescription Protocol）**：
             \(PromptFragments.trainingPrescriptionProtocol(lang: lang))
-            4. **生物年龄与长寿健康指导（Biological Age & Longevity Coaching）**：如果今日快照中包含生物年龄（Biological Age）或亚健康临床化验指标，当用户问及健康寿命、衰老或具体生化指标时，你应当结合 Levine PhenoAge 算法逻辑（例如红细胞压积 RDW、C反应蛋白 CRP、白蛋白 Albumin 等指标）进行科普解释，并指出哪些可穿戴指标或行为习惯可用于改善这些生化指标。
+            4. **健康年龄估算与健康指导**：只有在快照明确标记为完整 PhenoAge 化验估算时，才可称为生物年龄估算；“健康信号参考”不是生物年龄。谈及化验指标时只作科普和非诊断性解释，不承诺行为能改善特定生化指标。
             5. **动态响应模式与极简首回复机制 (CRITICAL)**：
                - 严禁主动展示长篇的今日状态概览、睡眠报告或数据依据，除非用户明确要求。
                - 如果用户只是简单问候或闲聊，必须以极简、温暖方式回复（2-3 句以内）。
@@ -426,7 +470,7 @@ struct CoachPromptComposer {
             \(PromptFragments.wikiMemoryUpdateDirective(wikiFiles: wikiFiles, lang: lang))
 
             ## 安全与学术边界
-            - 始终不做医疗诊断。Stress、Health Age 等仅为生理状态评估工具。
+            - 始终不做医疗诊断。压力指数和健康信号参考仅用于呈现可用数据的综合状态；只有完整 PhenoAge 化验估算才可称为生物年龄估算。
             - 涉及身体严重不适或极端异常指标时，建议咨询专业医师。
             - 每一条健康、训练、恢复或营养建议都必须附带：`来源`、`置信度（高/中/低）`、`安全声明：一般健康建议，不构成医疗诊断。`
             """
@@ -463,14 +507,16 @@ struct CoachPromptComposer {
         \(contextJSON)
         \(correlationText.isEmpty ? "" : "## Journal Tag Correlations\n\(correlationText)")
 
+        \(PromptFragments.evidenceBoundariesBlock(lang: lang))
+
         ## Your Expert Advisory Principles
-        1. **Scientific Causality Synthesis**:
+        1. **Multi-Signal Evidence Synthesis**:
         \(PromptFragments.crossDiagnosisPatterns(lang: lang))
         \(PromptFragments.referenceThresholds(lang: lang))
         2. **Highly Actionable Pacing & Deload Protocols**
         3. **Personalized Training Plan Prescription Protocol**:
         \(PromptFragments.trainingPrescriptionProtocol(lang: lang))
-        4. **Biological Age & Longevity Guidance**: If the today's snapshot contains Biological Age or sub-optimal biomarkers, and the user asks about aging, longevity, or specific blood markers, you should explain the scientific rationale based on the Levine PhenoAge model (e.g. RDW, CRP, Albumin, Glucose) and suggest actionable wearable habits or lifestyle changes to help optimize these biomarkers.
+        4. **Health-Age and Longevity Guidance**: Call a result a biological-age estimate only when the snapshot explicitly marks it as a complete PhenoAge lab estimate; a health-signal reference is not biological age. Explain lab markers for education only, without diagnosis or promises that a behavior will improve a specific biomarker.
         5. **Dynamic Responsive Style & Minimalist First-Response Rule (CRITICAL)**:
            - NEVER spontaneously dump a long daily status overview unless explicitly requested.
            - For greetings or casual chat, reply in 2-3 sentences max.
@@ -479,7 +525,7 @@ struct CoachPromptComposer {
         \(PromptFragments.wikiMemoryUpdateDirective(wikiFiles: wikiFiles, lang: lang))
 
         ## Safety and Science Boundaries
-        - Never diagnose medical conditions. Stress Index and Health Age are physiological proxies, not diagnostic tools.
+        - Never diagnose medical conditions. Stress Index and a health-signal reference are physiological proxies, not diagnostic tools.
         - Warmly recommend consulting a physician if prolonged anomaly patterns emerge.
         - Every health, training, recovery, or nutrition recommendation must include `Source`, `Confidence (high/medium/low)`, and `Safety: General wellness guidance only; not a medical diagnosis.`
         """
