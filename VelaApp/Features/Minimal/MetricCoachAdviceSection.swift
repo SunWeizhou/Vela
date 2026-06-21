@@ -1,0 +1,123 @@
+import SwiftUI
+
+struct CoreMetricCoachContext {
+    var focus: CoachContextFocus
+    var suggestedQuestion: String
+
+    static func make(for metric: VelaMetricDetailView.MetricType) -> CoreMetricCoachContext {
+        switch metric {
+        case .strain:
+            return CoreMetricCoachContext(
+                focus: CoachContextFocus(
+                    title: "耗力",
+                    systemContext: "你的心肺负荷与肌肉压力"
+                ),
+                suggestedQuestion: "今天耗力是否达标？"
+            )
+        case .recovery:
+            return CoreMetricCoachContext(
+                focus: CoachContextFocus(
+                    title: "恢复",
+                    systemContext: "自主神经系统平衡与夜间体征"
+                ),
+                suggestedQuestion: "如何提高明天的恢复值？"
+            )
+        case .sleep:
+            return CoreMetricCoachContext(
+                focus: CoachContextFocus(
+                    title: "睡眠",
+                    systemContext: "睡眠效率与各个睡眠周期配比"
+                ),
+                suggestedQuestion: "怎么优化深度睡眠比例？"
+            )
+        case .stress:
+            return CoreMetricCoachContext(
+                focus: CoachContextFocus(
+                    title: "压力",
+                    systemContext: "全天慢性与急性压力负荷比率"
+                ),
+                suggestedQuestion: "我今天的压力源自何处？"
+            )
+        case .energy:
+            return CoreMetricCoachContext(
+                focus: CoachContextFocus(
+                    title: "能量",
+                    systemContext: "体能储备量 ATL 与 CTL 比例"
+                ),
+                suggestedQuestion: "目前体能水平适合做大重量训练吗？"
+            )
+        case .hrv:
+            return CoreMetricCoachContext(
+                focus: CoachContextFocus(
+                    title: "心率变异性",
+                    systemContext: "HRV 与日常行为的相关性分析"
+                ),
+                suggestedQuestion: "哪些行为最能拉升我的 HRV？"
+            )
+        case .rhr:
+            return CoreMetricCoachContext(
+                focus: CoachContextFocus(
+                    title: "静息心率",
+                    systemContext: "静息心率与心血管系统适应性"
+                ),
+                suggestedQuestion: "静息心率持续下降代表什么？"
+            )
+        case .weight:
+            return CoreMetricCoachContext(
+                focus: CoachContextFocus(
+                    title: "体重",
+                    systemContext: "体重趋势与能量代谢反馈"
+                ),
+                suggestedQuestion: "如何平稳控制体重下降速度？"
+            )
+        case .bodyFat:
+            return CoreMetricCoachContext(
+                focus: CoachContextFocus(
+                    title: "体脂",
+                    systemContext: "身体成份变化与骨骼肌质量"
+                ),
+                suggestedQuestion: "体脂率降到多少能看到腹肌？"
+            )
+        case .respiratoryRate:
+            return CoreMetricCoachContext(
+                focus: CoachContextFocus(
+                    title: "呼吸率",
+                    systemContext: "夜间呼吸频率与免疫系统预警"
+                ),
+                suggestedQuestion: "呼吸率偏高是否代表身体在抵抗病毒？"
+            )
+        case .bloodOxygen:
+            return CoreMetricCoachContext(
+                focus: CoachContextFocus(
+                    title: "血氧",
+                    systemContext: "高原适应性与夜间含氧量"
+                ),
+                suggestedQuestion: "血氧处于什么范围需要注意？"
+            )
+        case .steps:
+            return CoreMetricCoachContext(
+                focus: CoachContextFocus(
+                    title: "今日步数",
+                    systemContext: "非运动消耗 NEAT 对代谢的影响"
+                ),
+                suggestedQuestion: "今天步数是否达到最低活跃标准？"
+            )
+        case .activeCalories:
+            return CoreMetricCoachContext(
+                focus: CoachContextFocus(
+                    title: "活动消耗",
+                    systemContext: "运动总消耗与燃脂区间时长"
+                ),
+                suggestedQuestion: "怎么利用低强度 activity 刷掉更多卡路里？"
+            )
+        case .activeMinutes:
+            return CoreMetricCoachContext(
+                focus: CoachContextFocus(
+                    title: "活跃时长",
+                    systemContext: "高强度中强度身体活跃总时长"
+                ),
+                suggestedQuestion: "每周要累计多少活跃分钟最健康？"
+            )
+        }
+    }
+}

@@ -263,8 +263,41 @@ enum VelaLoc {
     static var memoryInbox: LocalizedStringKey  { "记忆收件箱" }
 }
 
+// MARK: - Design System Namespaces
+
+extension VelaTheme {
+    enum gradient {
+        static let recovery = LinearGradient(colors: [recoveryColor.opacity(0.8), recoveryColor], startPoint: .topLeading, endPoint: .bottomTrailing)
+        static let sleep = LinearGradient(colors: [sleepColor.opacity(0.8), sleepColor], startPoint: .topLeading, endPoint: .bottomTrailing)
+        static let strain = LinearGradient(colors: [strainColor.opacity(0.8), strainColor], startPoint: .topLeading, endPoint: .bottomTrailing)
+        static let stress = LinearGradient(colors: [stressColor.opacity(0.8), stressColor], startPoint: .topLeading, endPoint: .bottomTrailing)
+        static let energy = LinearGradient(colors: [energyColor.opacity(0.8), energyColor], startPoint: .topLeading, endPoint: .bottomTrailing)
+        static let accentGrad = LinearGradient(colors: [accent.opacity(0.8), accent], startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
+    enum icon {
+        static let recovery = "heart.text.square.fill"
+        static let sleep = "bed.double.fill"
+        static let strain = "bolt.fill"
+        static let stress = "waveform.path.ecg"
+        static let energy = "battery.100"
+        static let coach = "brain.head.profile"
+        static let training = "figure.strengthtraining.traditional"
+        static let settings = "gearshape.fill"
+        static let journal = "book.closed.fill"
+        static let vitals = "heart.fill"
+        static let history = "clock.arrow.circlepath"
+        static let add = "plus.circle.fill"
+        static let arrowRight = "chevron.right"
+        static let arrowLeft = "chevron.left"
+        static let info = "info.circle"
+        static let warning = "exclamationmark.triangle.fill"
+    }
+}
+
 // MARK: - Backward Compatibility Aliases
 
+@available(*, deprecated, message: "Backward compatibility aliases will be removed in a future release. Migrate to canonical variables (bg, cardBg, fg, fg2, etc.).")
 extension VelaTheme {
     // Old surface names → new
     static let background = bg
