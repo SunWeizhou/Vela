@@ -35,4 +35,12 @@ final class PromptComposerTests: XCTestCase {
         XCTAssertTrue(prompt.contains("不得把可穿戴数据、趋势或通用阈值表述为疾病"))
         XCTAssertTrue(prompt.contains("缺失或不可用的数据不是正常数据"))
     }
+
+    func testEvidenceBoundariesBlockContainsFreshnessWarning() {
+        let promptZh = PromptFragments.evidenceBoundariesBlock(lang: .simplifiedChinese)
+        XCTAssertTrue(promptZh.contains("当整体数据新鲜度为已过期（stale）或缺失（missing）时"))
+        
+        let promptEn = PromptFragments.evidenceBoundariesBlock(lang: .english)
+        XCTAssertTrue(promptEn.contains("When overall data freshness is stale or missing"))
+    }
 }

@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 /// Generates preview/demo data using real scoring engines with fixed seed inputs.
@@ -114,3 +115,5 @@ enum PreviewDataFactory {
         )
     }
 }
+#endif
+

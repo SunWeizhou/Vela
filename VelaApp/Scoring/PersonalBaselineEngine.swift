@@ -16,6 +16,12 @@ struct PersonalBaselines {
     var activeCaloriesBaseline: Double?
     var calculatedAt: Date
     var daysOfData: Int
+
+    // Personalized recovery & sleep score baselines
+    var recoveryBaselineMean: Double? = nil
+    var recoveryBaselineSD: Double? = nil
+    var sleepScoreBaselineMean: Double? = nil
+    var sleepScoreBaselineSD: Double? = nil
 }
 
 // MARK: - Personal Baseline Engine
@@ -39,6 +45,8 @@ enum PersonalBaselineEngine {
         let strainValues = recent.compactMap(\.strainScore)
         let stepsValues = recent.compactMap(\.steps)
         let caloriesValues = recent.compactMap(\.activeCalories)
+        let recoveryValues = recent.compactMap(\.recoveryScore)
+        let sleepScoreValues = recent.compactMap(\.sleepScore)
 
         return PersonalBaselines(
             hrvBaselineMean: meanOfIfReady(hrvValues),
@@ -53,7 +61,11 @@ enum PersonalBaselineEngine {
             stepsBaseline: meanOfIfReady(stepsValues),
             activeCaloriesBaseline: meanOfIfReady(caloriesValues),
             calculatedAt: Date(),
-            daysOfData: recent.count
+            daysOfData: recent.count,
+            recoveryBaselineMean: meanOfIfReady(recoveryValues),
+            recoveryBaselineSD: standardDeviationIfReady(recoveryValues),
+            sleepScoreBaselineMean: meanOfIfReady(sleepScoreValues),
+            sleepScoreBaselineSD: standardDeviationIfReady(sleepScoreValues)
         )
     }
 
@@ -101,6 +113,16 @@ enum PersonalBaselineEngine {
         }
         if let cal = baselines.activeCaloriesBaseline {
             result["active_calories_baseline"] = String(format: "%.0f kcal", cal)
+        }
+        if let rec = baselines.recoveryBaselineMean {
+            let sd = baselines.recoveryBaselineSD.map { String(format: "%.0f", $0) } ?? "N/A"
+            result["recovery_baseline_mean"] = String(format: "%.0f", rec)
+            result["recovery_baseline_sd"] = "\u{B1}\(sd)"
+        }
+        if let sl = baselines.sleepScoreBaselineMean {
+            let sd = baselines.sleepScoreBaselineSD.map { String(format: "%.0f", $0) } ?? "N/A"
+            result["sleep_score_baseline_mean"] = String(format: "%.0f", sl)
+            result["sleep_score_baseline_sd"] = "\u{B1}\(sd)"
         }
         result["baseline_days_of_data"] = "\(baselines.daysOfData)"
         result["baseline_calculated_at"] = ISO8601DateFormatter().string(from: baselines.calculatedAt)
@@ -154,6 +176,12 @@ enum PersonalBaselineEngine {
         if let cal = th["active_calories_baseline"] {
             lines.append("| Active Calories | \(cal) |")
         }
+        if let rec = th["recovery_baseline_mean"], let sd = th["recovery_baseline_sd"] {
+            lines.append("| Recovery | \(rec) (\(sd)) |")
+        }
+        if let sl = th["sleep_score_baseline_mean"], let sd = th["sleep_score_baseline_sd"] {
+            lines.append("| Sleep Score | \(sl) (\(sd)) |")
+        }
 
         return lines.joined(separator: "\n")
     }
@@ -193,6 +221,12 @@ enum PersonalBaselineEngine {
         }
         if let cal = th["active_calories_baseline"] {
             parts.append("- Active Calories: \(cal)")
+        }
+        if let rec = th["recovery_baseline_mean"], let sd = th["recovery_baseline_sd"] {
+            parts.append("- Recovery: \(rec) (\(sd))")
+        }
+        if let sl = th["sleep_score_baseline_mean"], let sd = th["sleep_score_baseline_sd"] {
+            parts.append("- Sleep Score: \(sl) (\(sd))")
         }
 
         return parts.joined(separator: "\n")
@@ -237,7 +271,11 @@ enum PersonalBaselineEngine {
             stepsBaseline: firstNumber(in: rows["Steps"] ?? ""),
             activeCaloriesBaseline: firstNumber(in: rows["Active Calories"] ?? ""),
             calculatedAt: baselineDoc.updatedAt,
-            daysOfData: daysOfData
+            daysOfData: daysOfData,
+            recoveryBaselineMean: firstNumber(in: rows["Recovery"] ?? ""),
+            recoveryBaselineSD: standardDeviation(in: rows["Recovery"] ?? ""),
+            sleepScoreBaselineMean: firstNumber(in: rows["Sleep Score"] ?? ""),
+            sleepScoreBaselineSD: standardDeviation(in: rows["Sleep Score"] ?? "")
         )
         return (baselines, baselineDoc.updatedAt)
     }
@@ -290,4 +328,46 @@ enum PersonalBaselineEngine {
         let sumSquaredDiff = values.reduce(0.0) { $0 + pow($1 - mean, 2) }
         return sqrt(sumSquaredDiff / Double(values.count - 1))
     }
+
+    static func resolveThresholds() -> PersonalBaselineThresholds {
+        if let loaded = loadBaselinesFromWiki(),
+           loaded.baselines.daysOfData >= 7,
+           let recMean = loaded.baselines.recoveryBaselineMean,
+           let recSD = loaded.baselines.recoveryBaselineSD,
+           let sleepMean = loaded.baselines.sleepScoreBaselineMean,
+           let sleepSD = loaded.baselines.sleepScoreBaselineSD {
+            let recRest = min(50, max(30, recMean - 1.5 * recSD))
+            let recCaution = min(70, max(50, recMean - 0.8 * recSD))
+            let recHigh = min(80, max(60, recMean))
+            let sleepCaution = min(75, max(55, sleepMean - 0.8 * sleepSD))
+            let sleepRest = min(60, max(45, sleepMean - 1.5 * sleepSD))
+            return PersonalBaselineThresholds(
+                recoveryRest: recRest,
+                recoveryCaution: recCaution,
+                recoveryHigh: recHigh,
+                sleepCaution: sleepCaution,
+                sleepRest: sleepRest,
+                source: "using personal baseline"
+            )
+        } else {
+            return PersonalBaselineThresholds(
+                recoveryRest: 40,
+                recoveryCaution: 62,
+                recoveryHigh: 70,
+                sleepCaution: 68,
+                sleepRest: 55,
+                source: "using default conservative threshold"
+            )
+        }
+    }
 }
+
+struct PersonalBaselineThresholds {
+    var recoveryRest: Double
+    var recoveryCaution: Double
+    var recoveryHigh: Double
+    var sleepCaution: Double
+    var sleepRest: Double
+    var source: String
+}
+

@@ -13,9 +13,9 @@ struct SleepContextBuilder: DomainContextBuilder {
     func build(from dashboard: DashboardSummary) -> [String: String] {
         let metrics = dashboard.sleepScore.metrics
         return [
-            "sleep_score": dashboard.sleepScore.score.formatted(.number.precision(.fractionLength(0))),
-            "duration_minutes": "\(dashboard.sleepSummary.totalSleepMinutes)",
-            "band": dashboard.sleepScore.band.rawValue,
+            "sleep_score": (dashboard.sleepScore.hasData ? dashboard.sleepScore.value : nil).map { $0.formatted(.number.precision(.fractionLength(0))) } ?? "N/A",
+            "duration_minutes": dashboard.sleepScore.hasData ? "\(dashboard.sleepSummary.totalSleepMinutes)" : "N/A",
+            "band": dashboard.sleepScore.hasData ? dashboard.sleepScore.band.rawValue : "unavailable",
             "reason": dashboard.sleepScore.reasons.first ?? "",
             "rem_minutes": "\(dashboard.sleepSummary.stageMinutes[.rem] ?? 0)",
             "deep_minutes": "\(dashboard.sleepSummary.stageMinutes[.deep] ?? 0)",
@@ -43,8 +43,8 @@ struct RecoveryContextBuilder: DomainContextBuilder {
         let hrvZ = dashboard.recovery.metrics["hrv_z_score"].map { String(format: "%.2f", $0) } ?? "N/A"
 
         return [
-            "score": dashboard.recovery.score.formatted(.number.precision(.fractionLength(0))),
-            "band": dashboard.recovery.band.rawValue,
+            "score": (dashboard.recovery.hasData ? dashboard.recovery.value : nil).map { $0.formatted(.number.precision(.fractionLength(0))) } ?? "N/A",
+            "band": dashboard.recovery.hasData ? dashboard.recovery.band.rawValue : "unavailable",
             "confidence": dashboard.recovery.confidence.rawValue,
             "reason": dashboard.recovery.reasons.first ?? "",
             "hrv_ms": hrvToday.map { "\(Int($0))" } ?? "N/A",
@@ -63,10 +63,10 @@ struct RecoveryContextBuilder: DomainContextBuilder {
 struct StrainContextBuilder: DomainContextBuilder {
     func build(from dashboard: DashboardSummary) -> [String: String] {
         [
-            "score": dashboard.strain.score.formatted(.number.precision(.fractionLength(0))),
-            "band": dashboard.strain.band.rawValue,
-            "target_status": dashboard.strain.targetStatus.rawValue,
-            "recommended_range": "\(dashboard.strain.recommendedRange.lowerBound)-\(dashboard.strain.recommendedRange.upperBound)",
+            "score": (dashboard.strain.hasData ? dashboard.strain.value : nil).map { $0.formatted(.number.precision(.fractionLength(0))) } ?? "N/A",
+            "band": dashboard.strain.hasData ? dashboard.strain.band.rawValue : "unavailable",
+            "target_status": dashboard.strain.hasData ? dashboard.strain.targetStatus.rawValue : "unavailable",
+            "recommended_range": dashboard.strain.hasData ? "\(dashboard.strain.recommendedRange.lowerBound)-\(dashboard.strain.recommendedRange.upperBound)" : "N/A",
             "steps": dashboard.strain.metrics["steps_raw"].map { "\(Int($0))" } ?? "N/A",
             "active_energy_kcal": dashboard.strain.metrics["active_energy_raw"].map { "\(Int($0))" } ?? "N/A",
             "exercise_minutes": dashboard.strain.metrics["exercise_minutes_raw"].map { "\(Int($0))" } ?? "N/A"
@@ -79,8 +79,8 @@ struct StrainContextBuilder: DomainContextBuilder {
 struct StressContextBuilder: DomainContextBuilder {
     func build(from dashboard: DashboardSummary) -> [String: String] {
         [
-            "stress_index": dashboard.stress.stressIndex.formatted(.number.precision(.fractionLength(0))),
-            "band": dashboard.stress.band.rawValue,
+            "stress_index": (dashboard.stress.hasData ? dashboard.stress.value : nil).map { $0.formatted(.number.precision(.fractionLength(0))) } ?? "N/A",
+            "band": dashboard.stress.hasData ? dashboard.stress.band.rawValue : "unavailable",
             "confidence": dashboard.stress.confidence.rawValue,
             "proxy_notice": "Stress is a physiological proxy, not a medical or mental health diagnosis."
         ]
@@ -92,9 +92,9 @@ struct StressContextBuilder: DomainContextBuilder {
 struct EnergyBankContextBuilder: DomainContextBuilder {
     func build(from dashboard: DashboardSummary) -> [String: String] {
         [
-            "morning_energy": dashboard.energy.morningEnergy.formatted(.number.precision(.fractionLength(0))),
-            "current_energy": dashboard.energy.currentEnergy.formatted(.number.precision(.fractionLength(0))),
-            "status": dashboard.energy.status.rawValue,
+            "morning_energy": dashboard.energy.hasData ? dashboard.energy.morningEnergy.formatted(.number.precision(.fractionLength(0))) : "N/A",
+            "current_energy": (dashboard.energy.hasData ? dashboard.energy.value : nil).map { $0.formatted(.number.precision(.fractionLength(0))) } ?? "N/A",
+            "status": dashboard.energy.hasData ? dashboard.energy.status.rawValue : "unavailable",
             "charge_efficiency": dashboard.energy.metrics["charge_efficiency"].map { String(format: "%.0f%%", $0 * 100) } ?? "N/A",
             "atl_7day": dashboard.energy.metrics["atl"].map { String(format: "%.0f", $0) } ?? "N/A",
             "ctl_42day": dashboard.energy.metrics["ctl"].map { String(format: "%.0f", $0) } ?? "N/A",

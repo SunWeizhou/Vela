@@ -97,8 +97,10 @@ final class DailySummaryUseCase {
     ) async throws -> DashboardSummary {
         let now = date
         
-        // 1. Sync recent HealthKit data first. App foreground refreshes the latest 3 days by default.
-        if let modelContext {
+        // 1. Do not fan out HealthKit reads before the user has seen the initial
+        // authorization request. This keeps an empty first launch responsive.
+        let shouldDeferHealthSync = await HealthAuthorizationService().shouldDeferBackgroundSync()
+        if let modelContext, !shouldDeferHealthSync {
             let syncEngine = HealthKitSyncEngine(queryService: queryService, modelContext: modelContext, calendar: calendar)
             if let syncCoordinator {
                 await syncCoordinator.run(source: .healthKit, force: false) {
@@ -799,12 +801,12 @@ final class DailySummaryUseCase {
 
         return DailyHealthSnapshot(
             date: date,
-            sleepScore: dashboard.sleepScore.score,
-            recoveryScore: dashboard.recovery.score,
-            strainScore: dashboard.strain.score,
-            stressIndex: dashboard.stress.stressIndex,
-            morningEnergy: dashboard.energy.morningEnergy,
-            currentEnergy: dashboard.energy.currentEnergy,
+            sleepScore: dashboard.sleepScore.hasData ? dashboard.sleepScore.value : nil,
+            recoveryScore: dashboard.recovery.hasData ? dashboard.recovery.value : nil,
+            strainScore: dashboard.strain.hasData ? dashboard.strain.value : nil,
+            stressIndex: dashboard.stress.hasData ? dashboard.stress.value : nil,
+            morningEnergy: dashboard.energy.hasData ? dashboard.energy.morningEnergy : nil,
+            currentEnergy: dashboard.energy.hasData ? dashboard.energy.value : nil,
             energyBank: nil,
             healthAge: dashboard.healthAge.trendScore,
             hrvAverage: dashboard.recoveryMetrics.hrvMilliseconds,

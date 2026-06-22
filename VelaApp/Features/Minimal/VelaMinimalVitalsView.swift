@@ -5,12 +5,12 @@ import SwiftData
 // Biological Age dial gauge × Interactive Sparkline Biomarker list
 
 struct VelaVitalsView: View {
-    @Environment(\.colorScheme) private var cs
     @Environment(\.velaScrollDirection) private var scrollDirection
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     @ObservedObject private var appState = VelaAppState.shared
     @State private var biomarkers: [BiomarkerRecord] = []
+    @State private var latestRecord: DailyHealthSummaryRecord?
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
 
@@ -138,7 +138,9 @@ struct VelaVitalsView: View {
     }
 
     private var chronologicalAge: Int? {
-        WikiFileService.getAgeFromWiki() ?? dashboard.extendedMetrics.age
+        dashboard.extendedMetrics.age
+            ?? UserProfileSettings.age()
+            ?? WikiFileService.getAgeFromWiki()
     }
 
     private var selectedDateText: String {
@@ -151,13 +153,7 @@ struct VelaVitalsView: View {
     private var biologicalAgeHero: some View {
         let result = biologicalAgeResult
         let isPhenoAge = result?.isPhenoAge == true
-        let biologicalAge = result?.biologicalAgeEstimate.map { String(format: "%.1f", $0) }
-            ?? result?.healthAgeTrendLabel
-            ?? "--"
         let age = Double(chronologicalAge ?? 0)
-        let minAgeRange = chronologicalAge.map { String(format: "%.0f", Double($0) - 7.0) } ?? "--"
-        let maxAgeRange = chronologicalAge.map { String(format: "%.0f", Double($0) + 3.0) } ?? "--"
-        let gaugeProgress = min(max((result?.overallScore ?? 0) / 100.0, 0), 1)
         let deltaText: String = {
             guard let result, chronologicalAge != nil else {
                 return "连接 Apple Health 后生成"
@@ -186,112 +182,72 @@ struct VelaVitalsView: View {
             if result == nil || chronologicalAge == nil {
                 biologicalAgeUnavailableCard
             } else {
-                VStack(spacing: 8) {
-            // Header
-            HStack {
-                Spacer()
-
-                VStack(spacing: 4) {
-                    Text(isPhenoAge ? "生物年龄估算" : "健康信号参考")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(VelaTheme.fg)
-
-                    Text(selectedDateText)
-                        .font(.system(size: 12))
-                        .foregroundStyle(VelaTheme.muted)
-                }
-
-                Spacer()
-            }
-            .overlay(alignment: .trailing) {
-                Button {
-                    VelaAppState.shared.triggerBloodLog = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(VelaTheme.muted)
-                        .frame(width: 36, height: 36)
-                }
-            }
-            .padding(.top, 8)
-
-            // Circular Dial Gauge
-            ZStack {
-                // Background ticks gauge
-                GaugeScaleArcView(size: 220)
-
-                Circle()
-                    .trim(from: 0.15, to: 0.15 + (0.70 * gaugeProgress))
-                    .stroke(
-                        Color(hex: "#5B8C6F"),
-                        style: StrokeStyle(lineWidth: 5, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(90))
-                    .frame(width: 220, height: 220)
-
-                // Glowing cell dots visual effect
-                scatteredParticles
-                    .frame(width: 140, height: 100)
-                    .offset(y: -10)
-
-                // Center dial text values
-                VStack(spacing: 0) {
-                    Text(biologicalAge)
-                        .font(.system(size: 40, weight: .bold, design: .rounded))
-                        .foregroundStyle(VelaTheme.fg)
-
-                    Text(deltaText)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(deltaColor)
-                        .padding(.top, 4)
-
-                    if isPhenoAge {
-                        Text(minAgeRange)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(VelaTheme.muted)
-                            .offset(x: -78, y: 50)
-
-                        Text(maxAgeRange)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(VelaTheme.muted)
-                            .offset(x: 78, y: 37)
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: isPhenoAge ? "cross.case.fill" : "waveform.path.ecg")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(VelaTheme.accent)
+                            .frame(width: 36, height: 36)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(VelaTheme.accent.opacity(0.12)))
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(isPhenoAge ? "生物年龄估算" : "健康信号参考")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(VelaTheme.fg)
+                            Text(selectedDateText)
+                                .font(.system(size: 11))
+                                .foregroundStyle(VelaTheme.muted)
+                        }
+                        Spacer()
+                        Button {
+                            VelaAppState.shared.triggerBloodLog = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(VelaTheme.accent)
+                                .frame(width: 32, height: 32)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("记录健康指标")
                     }
+
+                    Divider()
+
+                    HStack(alignment: .firstTextBaseline, spacing: 18) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(isPhenoAge ? String(format: "%.1f", result!.biologicalAge) : "\(Int(result!.overallScore.rounded()))")
+                                .font(.system(size: 34, weight: .bold, design: .rounded))
+                                .foregroundStyle(VelaTheme.fg)
+                            Text(isPhenoAge ? "岁（估算）" : "信号评分")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(VelaTheme.muted)
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(deltaText)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(deltaColor)
+                            Text(isPhenoAge
+                                 ? "基于完整生物标志物输入的研究模型估算。"
+                                 : "仅汇总可用的静息心率、睡眠、活动等信号，不等同于生物年龄。")
+                                .font(.system(size: 11))
+                                .foregroundStyle(VelaTheme.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
+                    HStack(spacing: 14) {
+                        Text("可用信号 \(result!.factors.count)")
+                        Text("参考积极 \(result!.optimalCount)")
+                        if result!.suboptimalCount > 0 {
+                            Text("待关注 \(result!.suboptimalCount)")
+                        }
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(VelaTheme.muted)
                 }
-                .accessibilityLabel("记录健康指标")
-                .accessibilityHint("添加化验或健康记录")
-
-                // End Dot indicator at bottom center
-                Circle()
-                    .fill(VelaTheme.muted)
-                    .frame(width: 8, height: 8)
-                    .offset(y: 65)
-            }
-            .frame(width: 220, height: 180)
-            .padding(.top, 16)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            ZStack {
-                VelaTheme.cardBg
-
-                LinearGradient(
-                    colors: [
-                        VelaTheme.accent.opacity(0.12),
-                        VelaTheme.recoveryColor.opacity(0.08),
-                        Color.clear
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .shadow(color: VelaTheme.nativeShadow(cs), radius: 8, y: 2)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
-        )
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(VelaTheme.cardBg))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
             }
         }
     }
@@ -318,33 +274,11 @@ struct VelaVitalsView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(VelaTheme.cardBg))
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
         )
-    }
-
-    // MARK: - Scattered glowing particles in center of age gauge
-    private var scatteredParticles: some View {
-        Canvas { context, size in
-            let points = [
-                CGPoint(x: 0.25, y: 0.3), CGPoint(x: 0.35, y: 0.2), CGPoint(x: 0.45, y: 0.25),
-                CGPoint(x: 0.3, y: 0.45), CGPoint(x: 0.4, y: 0.4), CGPoint(x: 0.38, y: 0.55),
-                CGPoint(x: 0.6, y: 0.35), CGPoint(x: 0.7, y: 0.22), CGPoint(x: 0.65, y: 0.48),
-                CGPoint(x: 0.58, y: 0.52), CGPoint(x: 0.72, y: 0.42), CGPoint(x: 0.68, y: 0.3)
-            ]
-
-            for pt in points {
-                let rect = CGRect(
-                    x: pt.x * size.width - 2.5,
-                    y: pt.y * size.height - 2.5,
-                    width: 5,
-                    height: 5
-                )
-                context.fill(Path(ellipseIn: rect), with: .color(Color.white.opacity(0.85)))
-            }
-        }
     }
 
     // MARK: - Other Biomarkers Section
@@ -378,7 +312,8 @@ struct VelaVitalsView: View {
                         valueText: weightValueText,
                         valueColor: weightEval.color,
                         history: weightHistoryData,
-                        graphColor: weightEval.color
+                        graphColor: weightEval.color,
+                        freshness: freshness(for: rawWeightHistory.last)
                     )
                 }
                 .buttonStyle(.cardPress)
@@ -393,7 +328,8 @@ struct VelaVitalsView: View {
                         valueText: hrvValueText,
                         valueColor: hrvEval.color,
                         history: hrvHistoryData,
-                        graphColor: hrvEval.color
+                        graphColor: hrvEval.color,
+                        freshness: freshness(for: rawHrvHistory.last)
                     )
                 }
                 .buttonStyle(.cardPress)
@@ -408,7 +344,8 @@ struct VelaVitalsView: View {
                         valueText: rhrValueText,
                         valueColor: rhrEval.color,
                         history: rhrHistoryData,
-                        graphColor: rhrEval.color
+                        graphColor: rhrEval.color,
+                        freshness: freshness(for: rawRhrHistory.last)
                     )
                 }
                 .buttonStyle(.cardPress)
@@ -423,7 +360,8 @@ struct VelaVitalsView: View {
                         valueText: respiratoryRateValueText,
                         valueColor: respEval.color,
                         history: respiratoryRateHistoryData,
-                        graphColor: respEval.color
+                        graphColor: respEval.color,
+                        freshness: freshness(for: rawRespiratoryRateHistory.last)
                     )
                 }
                 .buttonStyle(.cardPress)
@@ -438,7 +376,8 @@ struct VelaVitalsView: View {
                         valueText: bloodOxygenValueText,
                         valueColor: o2Eval.color,
                         history: bloodOxygenHistoryData,
-                        graphColor: o2Eval.color
+                        graphColor: o2Eval.color,
+                        freshness: freshness(for: rawBloodOxygenHistory.last)
                     )
                 }
                 .buttonStyle(.cardPress)
@@ -453,7 +392,8 @@ struct VelaVitalsView: View {
                         valueText: fatValueText,
                         valueColor: fatEval.color,
                         history: fatHistoryData,
-                        graphColor: fatEval.color
+                        graphColor: fatEval.color,
+                        freshness: freshness(for: rawFatHistory.last)
                     )
                 }
                 .buttonStyle(.cardPress)
@@ -469,13 +409,18 @@ struct VelaVitalsView: View {
         valueText: String,
         valueColor: Color,
         history: [Double],
-        graphColor: Color
+        graphColor: Color,
+        freshness: DataFreshness
     ) -> some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(VelaTheme.fg)
+                HStack(spacing: 6) {
+                    Text(title)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(VelaTheme.fg)
+                    
+                    DataFreshnessIndicator(freshness: freshness, showText: false)
+                }
 
                 HStack(spacing: 4) {
                     Image(systemName: trendIcon)
@@ -545,6 +490,7 @@ struct VelaVitalsView: View {
 
                 // Update latest values from the newest record
                 if let latest = records.last {
+                    self.latestRecord = latest
                     if let hrv = latest.hrvAverage {
                         hrvValueText = String(format: "%.1f ms", hrv)
                     }
@@ -599,6 +545,7 @@ struct VelaVitalsView: View {
     }
 
     private func usePendingDefaults() {
+        latestRecord = nil
         hrvHistoryData = []
         rhrHistoryData = []
         respiratoryRateHistoryData = []
@@ -619,6 +566,17 @@ struct VelaVitalsView: View {
         bloodOxygenValueText = "--"
         weightValueText = "--"
         fatValueText = "--"
+    }
+
+    private func freshness(for value: Double?) -> DataFreshness {
+        guard value != nil, let latestRecord else { return .missing }
+        let now = Date()
+        let referenceDate = latestRecord.updatedAt
+        let age = now.timeIntervalSince(referenceDate)
+        if age <= 2 * 3_600 { return .live }
+        if Calendar.current.isDate(referenceDate, inSameDayAs: now) { return .today }
+        if age <= 3 * 86_400 { return .recent }
+        return .stale
     }
 
     struct BiomarkerEvaluation {

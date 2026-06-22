@@ -2,7 +2,7 @@ import SwiftUI
 
 struct TodaySignalGrid: View {
     let model: TodayExperienceModel
-    let freshnessText: String
+    let freshness: DataFreshness
     let accentColor: (DailyPlanAccent) -> Color
 
     var body: some View {
@@ -17,9 +17,7 @@ struct TodaySignalGrid: View {
                     .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
                 Spacer()
-                Text(freshnessText)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(VelaTheme.muted)
+                DataFreshnessIndicator(freshness: freshness)
             }
 
             LazyVGrid(columns: columns, spacing: 10) {

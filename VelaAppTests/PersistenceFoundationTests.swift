@@ -183,7 +183,11 @@ final class PersistenceFoundationTests: XCTestCase {
             stepsBaseline: 8_500,
             activeCaloriesBaseline: 520,
             calculatedAt: Date(timeIntervalSince1970: 1_776_000_000),
-            daysOfData: 28
+            daysOfData: 28,
+            recoveryBaselineMean: 72,
+            recoveryBaselineSD: 9,
+            sleepScoreBaselineMean: 78,
+            sleepScoreBaselineSD: 8
         )
 
         PersonalBaselineEngine.saveBaselinesToWiki(baselines)

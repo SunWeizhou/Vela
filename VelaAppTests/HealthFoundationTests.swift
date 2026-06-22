@@ -18,6 +18,46 @@ final class HealthFoundationTests: XCTestCase {
         XCTAssertEqual(store.requestedReadTypes, Set(HealthDataTypeCatalog.readTypes))
     }
 
+    @MainActor
+    func testHealthSyncDefersUntilInitialAuthorizationRequest() async {
+        let store = FakeHealthStore()
+        let service = HealthAuthorizationService(healthStore: store)
+
+        store.requestStatus = .shouldRequest
+        let shouldDefer = await service.shouldDeferBackgroundSync()
+        XCTAssertTrue(shouldDefer)
+
+        store.requestStatus = .unnecessary
+        let shouldSync = await service.shouldDeferBackgroundSync()
+        XCTAssertFalse(shouldSync)
+    }
+
+    @MainActor
+    func testSnapshotOmitsUncomputedScoresInsteadOfPersistingZeroes() {
+        let date = Date()
+        let context = DailyHealthContext(
+            date: date,
+            sleepSummary: nil,
+            recoveryMetrics: RecoveryMetricSummary(),
+            recoveryBaseline: RecoveryMetricSummary(),
+            strainToday: StrainActivitySummary(workouts: []),
+            strainBaselineDaily: StrainActivitySummary(workouts: []),
+            bodyMetrics: BodyMetricsSummary()
+        )
+
+        let snapshot = DailySummaryUseCase().makeSnapshot(
+            from: .empty(date: date),
+            context: context,
+            date: date
+        )
+
+        XCTAssertNil(snapshot.recoveryScore)
+        XCTAssertNil(snapshot.sleepScore)
+        XCTAssertNil(snapshot.strainScore)
+        XCTAssertNil(snapshot.stressIndex)
+        XCTAssertNil(snapshot.currentEnergy)
+    }
+
     func testDataCoverageSummaryBuildsDomainScoresAndTopBlockers() {
         let groups = [
             CoverageGroup(
@@ -94,9 +134,14 @@ final class HealthFoundationTests: XCTestCase {
 private final class FakeHealthStore: HealthStoreProviding {
     var isHealthDataAvailable = true
     var requestedReadTypes = Set<HKObjectType>()
+    var requestStatus: HKAuthorizationRequestStatus = .unnecessary
 
     func requestAuthorization(toShare typesToShare: Set<HKSampleType>, read typesToRead: Set<HKObjectType>) async throws {
         requestedReadTypes = typesToRead
+    }
+
+    func authorizationRequestStatus(toShare typesToShare: Set<HKSampleType>, read typesToRead: Set<HKObjectType>) async throws -> HKAuthorizationRequestStatus {
+        requestStatus
     }
 
     func authorizationStatus(for type: HKObjectType) -> HKAuthorizationStatus {

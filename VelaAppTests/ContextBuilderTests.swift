@@ -227,6 +227,35 @@ final class ContextBuilderTests: XCTestCase {
         XCTAssertTrue(typedStrength.localFatigue.isEmpty)
     }
 
+    func testAIContextMarksUncomputedHealthScoresAsMissing() throws {
+        let dashboard = DashboardSummary.empty(date: makeDate())
+
+        let result = AIContextBuilder().build(
+            dashboard: dashboard,
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:]
+        )
+        let typed = AIContextBuilder().buildTyped(
+            dashboard: dashboard,
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:]
+        )
+
+        XCTAssertEqual(result.envelope.recovery["score"], "N/A")
+        XCTAssertEqual(result.envelope.sleep["sleep_score"], "N/A")
+        XCTAssertEqual(result.envelope.strain["score"], "N/A")
+        XCTAssertEqual(result.envelope.stress["stress_index"], "N/A")
+        XCTAssertEqual(result.envelope.energyBank["current_energy"], "N/A")
+        XCTAssertNil(typed.context.recovery.score.value)
+        XCTAssertEqual(typed.context.recovery.score.freshness, .missing)
+        XCTAssertNil(typed.context.sleep.score.value)
+        XCTAssertNil(typed.context.strain.score.value)
+        XCTAssertNil(typed.context.stress.stressIndex.value)
+        XCTAssertNil(typed.context.energyBank.currentEnergy.value)
+    }
+
     @MainActor
     func testAIContextIncludesOnboardingBodyModel() {
         let generatedAt = makeDate()

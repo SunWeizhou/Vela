@@ -31,7 +31,7 @@ struct AIContextBuilder {
             metadata: AgentContextMetadata(generatedAt: generatedAt, contextWindow: "today"),
             todaySummary: [
                 "date": dashboard.date.formatted(date: .numeric, time: .omitted),
-                "overall_state": dashboard.recovery.band.rawValue.lowercased(),
+                "overall_state": dashboard.recovery.hasData ? dashboard.recovery.band.rawValue.lowercased() : "unavailable",
                 "source": dashboard.source.rawValue,
                 "top_reason": dashboard.recovery.reasons.first ?? dashboard.dailyInsight,
                 "readiness_level": dashboard.trainingDecision.readinessLevel,
@@ -119,58 +119,67 @@ struct AIContextBuilder {
         let hrvMs = dashboard.recoveryMetrics.hrvMilliseconds
         let rhrBpm = dashboard.recoveryMetrics.restingHeartRate
 
+        func healthMetric<T: Codable & Hashable>(
+            _ value: T?,
+            unit: String,
+            note: String
+        ) -> MetricValue<T> {
+            guard let value else { return .missing(unit: unit, note: note) }
+            return .live(value, unit: unit)
+        }
+
         let recovery = RecoveryContext(
-            score: MetricValue.live(dashboard.recovery.score, unit: "pts"),
-            band: dashboard.recovery.band.rawValue,
-            hrv: MetricValue.live(hrvMs ?? 0, unit: "ms", confidence: hrvMs != nil ? .high : .unavailable),
-            restingHeartRate: MetricValue.live(rhrBpm ?? 0, unit: "bpm", confidence: rhrBpm != nil ? .high : .unavailable),
-            respiratoryRate: MetricValue.live(dashboard.recoveryMetrics.respiratoryRate ?? 0, unit: "br/min"),
+            score: healthMetric(dashboard.recovery.hasData ? dashboard.recovery.value : nil, unit: "pts", note: "Recovery score is not computed yet."),
+            band: dashboard.recovery.hasData ? dashboard.recovery.band.rawValue : "unavailable",
+            hrv: healthMetric(hrvMs, unit: "ms", note: "HRV is unavailable."),
+            restingHeartRate: healthMetric(rhrBpm, unit: "bpm", note: "Resting heart rate is unavailable."),
+            respiratoryRate: healthMetric(dashboard.recoveryMetrics.respiratoryRate, unit: "br/min", note: "Respiratory rate is unavailable."),
             topReason: dashboard.recovery.reasons.first
         )
 
         let sleepMetrics = dashboard.sleepScore.metrics
         let sleep = SleepContext(
-            score: MetricValue.live(dashboard.sleepScore.score, unit: "pts"),
-            band: dashboard.sleepScore.band.rawValue,
-            totalMinutes: MetricValue.live(dashboard.sleepSummary.totalSleepMinutes, unit: "min"),
-            efficiency: MetricValue.live(sleepMetrics["sleep_efficiency"] ?? 0, unit: "%"),
-            remPercent: MetricValue.live(sleepMetrics["rem_pct"] ?? 0, unit: "%"),
-            deepPercent: MetricValue.live(sleepMetrics["deep_pct"] ?? 0, unit: "%"),
-            coreMinutes: MetricValue.live(dashboard.sleepSummary.stageMinutes[.core] ?? 0, unit: "min"),
-            remMinutes: MetricValue.live(dashboard.sleepSummary.stageMinutes[.rem] ?? 0, unit: "min"),
-            deepMinutes: MetricValue.live(dashboard.sleepSummary.stageMinutes[.deep] ?? 0, unit: "min"),
-            awakeMinutes: MetricValue.live(dashboard.sleepSummary.stageMinutes[.awake] ?? 0, unit: "min"),
+            score: healthMetric(dashboard.sleepScore.hasData ? dashboard.sleepScore.value : nil, unit: "pts", note: "Sleep score is not computed yet."),
+            band: dashboard.sleepScore.hasData ? dashboard.sleepScore.band.rawValue : "unavailable",
+            totalMinutes: healthMetric(dashboard.sleepScore.hasData ? dashboard.sleepSummary.totalSleepMinutes : nil, unit: "min", note: "Sleep duration is unavailable."),
+            efficiency: healthMetric(sleepMetrics["sleep_efficiency"], unit: "%", note: "Sleep efficiency is unavailable."),
+            remPercent: healthMetric(sleepMetrics["rem_pct"], unit: "%", note: "REM sleep percentage is unavailable."),
+            deepPercent: healthMetric(sleepMetrics["deep_pct"], unit: "%", note: "Deep sleep percentage is unavailable."),
+            coreMinutes: healthMetric(dashboard.sleepSummary.stageMinutes[.core], unit: "min", note: "Core sleep duration is unavailable."),
+            remMinutes: healthMetric(dashboard.sleepSummary.stageMinutes[.rem], unit: "min", note: "REM sleep duration is unavailable."),
+            deepMinutes: healthMetric(dashboard.sleepSummary.stageMinutes[.deep], unit: "min", note: "Deep sleep duration is unavailable."),
+            awakeMinutes: healthMetric(dashboard.sleepSummary.stageMinutes[.awake], unit: "min", note: "Awake duration is unavailable."),
             bedtime: dashboard.sleepSummary.bedtime,
             wakeTime: dashboard.sleepSummary.wakeTime,
             topReason: dashboard.sleepScore.reasons.first
         )
 
         let strain = StrainContext(
-            score: MetricValue.live(dashboard.strain.score, unit: "pts"),
-            band: dashboard.strain.band.rawValue,
-            targetStatus: dashboard.strain.targetStatus.rawValue,
+            score: healthMetric(dashboard.strain.hasData ? dashboard.strain.value : nil, unit: "pts", note: "Strain score is not computed yet."),
+            band: dashboard.strain.hasData ? dashboard.strain.band.rawValue : "unavailable",
+            targetStatus: dashboard.strain.hasData ? dashboard.strain.targetStatus.rawValue : "unavailable",
             recommendedRangeLower: dashboard.strain.recommendedRange.lowerBound,
             recommendedRangeUpper: dashboard.strain.recommendedRange.upperBound,
-            steps: MetricValue.live(Int(dashboard.strain.metrics["steps_raw"] ?? 0), unit: "steps"),
-            activeEnergyKcal: MetricValue.live(Int(dashboard.strain.metrics["active_energy_raw"] ?? 0), unit: "kcal"),
-            exerciseMinutes: MetricValue.live(Int(dashboard.strain.metrics["exercise_minutes_raw"] ?? 0), unit: "min")
+            steps: healthMetric(dashboard.strain.metrics["steps_raw"].map(Int.init), unit: "steps", note: "Step count is unavailable."),
+            activeEnergyKcal: healthMetric(dashboard.strain.metrics["active_energy_raw"].map(Int.init), unit: "kcal", note: "Active energy is unavailable."),
+            exerciseMinutes: healthMetric(dashboard.strain.metrics["exercise_minutes_raw"].map(Int.init), unit: "min", note: "Exercise duration is unavailable.")
         )
 
         let stress = StressContext(
-            stressIndex: MetricValue.live(dashboard.stress.stressIndex, unit: "index"),
-            band: dashboard.stress.band.rawValue,
-            confidence: dashboard.stress.confidence.rawValue == "high" ? .high : .medium,
+            stressIndex: healthMetric(dashboard.stress.hasData ? dashboard.stress.value : nil, unit: "index", note: "Stress index is not computed yet."),
+            band: dashboard.stress.hasData ? dashboard.stress.band.rawValue : "unavailable",
+            confidence: dashboard.stress.hasData ? (dashboard.stress.confidence.rawValue == "high" ? .high : .medium) : .unavailable,
             proxyNote: "Physiological proxy, not a medical or mental health diagnosis."
         )
 
         let energyBank = EnergyBankContext(
-            morningEnergy: MetricValue.live(dashboard.energy.morningEnergy, unit: "pts"),
-            currentEnergy: MetricValue.live(dashboard.energy.currentEnergy, unit: "pts"),
-            status: dashboard.energy.status.rawValue,
-            chargeEfficiency: MetricValue.live(dashboard.energy.metrics["charge_efficiency"] ?? 0, unit: "ratio"),
-            atl7Day: MetricValue.live(dashboard.energy.metrics["atl"] ?? 0, unit: "AU"),
-            ctl42Day: MetricValue.live(dashboard.energy.metrics["ctl"] ?? 0, unit: "AU"),
-            tsbFreshness: MetricValue.live(dashboard.energy.metrics["tsb"] ?? 0, unit: "AU")
+            morningEnergy: healthMetric(dashboard.energy.hasData ? dashboard.energy.morningEnergy : nil, unit: "pts", note: "Morning energy is unavailable."),
+            currentEnergy: healthMetric(dashboard.energy.hasData ? dashboard.energy.value : nil, unit: "pts", note: "Current energy is unavailable."),
+            status: dashboard.energy.hasData ? dashboard.energy.status.rawValue : "unavailable",
+            chargeEfficiency: healthMetric(dashboard.energy.metrics["charge_efficiency"], unit: "ratio", note: "Charge efficiency is unavailable."),
+            atl7Day: healthMetric(dashboard.energy.metrics["atl"], unit: "AU", note: "Acute training load is unavailable."),
+            ctl42Day: healthMetric(dashboard.energy.metrics["ctl"], unit: "AU", note: "Chronic training load is unavailable."),
+            tsbFreshness: healthMetric(dashboard.energy.metrics["tsb"], unit: "AU", note: "Training stress balance is unavailable.")
         )
 
         let workouts = dashboard.workouts

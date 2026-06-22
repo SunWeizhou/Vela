@@ -618,6 +618,7 @@ private struct StaticAgentTool: AgentTool {
 private final class CountingAgentTool: AgentTool, @unchecked Sendable {
     let name: String
     let result: String
+    let riskLevel: ToolRiskLevel
     let description = "Counting test tool."
     let parameters: [String: Value] = ["type": .string("object")]
 
@@ -630,9 +631,10 @@ private final class CountingAgentTool: AgentTool, @unchecked Sendable {
         return count
     }
 
-    init(name: String, result: String) {
+    init(name: String, result: String, riskLevel: ToolRiskLevel = .read) {
         self.name = name
         self.result = result
+        self.riskLevel = riskLevel
     }
 
     func execute(arguments: String) async throws -> String {
@@ -644,5 +646,68 @@ private final class CountingAgentTool: AgentTool, @unchecked Sendable {
         lock.lock()
         count += 1
         lock.unlock()
+    }
+}
+
+// MARK: - Safety and Safeguards Tests
+final class AgentLoopSafetyTests: XCTestCase {
+    func testWriteToolRequiresConfirmationRejected() async throws {
+        let writeTool = CountingAgentTool(
+            name: "create_training_plan",
+            result: #"{"status":"saved"}"#,
+            riskLevel: .write
+        )
+        let base = ScriptedAgentChatProvider(steps: [
+            .success(LLMResponse(
+                content: "",
+                toolCalls: [ToolCall(
+                    id: "call-1",
+                    name: "create_training_plan",
+                    arguments: #"{"title":"4 week plan"}"#
+                )]
+            )),
+            .success(LLMResponse(content: "user rejected it", toolCalls: nil))
+        ])
+        
+        let loop = AgentLoop(
+            provider: base,
+            toolRegistry: ToolRegistry(tools: [writeTool]),
+            maxIterations: 2,
+            onConfirmToolCall: { _ in false }
+        )
+        
+        let result = try await loop.run(messages: [ChatMessage(role: .user, content: "make a plan")])
+        XCTAssertEqual(writeTool.executionCount, 0)
+        XCTAssertTrue(result.finalMessages.contains { $0.role == .tool && $0.content.contains("User rejected") })
+    }
+
+    func testWriteToolRequiresConfirmationAccepted() async throws {
+        let writeTool = CountingAgentTool(
+            name: "create_training_plan",
+            result: #"{"status":"saved"}"#,
+            riskLevel: .write
+        )
+        let base = ScriptedAgentChatProvider(steps: [
+            .success(LLMResponse(
+                content: "",
+                toolCalls: [ToolCall(
+                    id: "call-1",
+                    name: "create_training_plan",
+                    arguments: #"{"title":"4 week plan"}"#
+                )]
+            )),
+            .success(LLMResponse(content: "plan saved", toolCalls: nil))
+        ])
+        
+        let loop = AgentLoop(
+            provider: base,
+            toolRegistry: ToolRegistry(tools: [writeTool]),
+            maxIterations: 2,
+            onConfirmToolCall: { _ in true }
+        )
+        
+        let result = try await loop.run(messages: [ChatMessage(role: .user, content: "make a plan")])
+        XCTAssertEqual(writeTool.executionCount, 1)
+        XCTAssertTrue(result.finalMessages.contains { $0.role == .tool && $0.content.contains("saved") })
     }
 }

@@ -254,6 +254,20 @@ struct BodyInterpreterEngine {
         fatigueSources: [FatigueSource],
         confidence: inout [String: DataConfidence]
     ) -> PrimaryLimiter {
+        guard dashboard.recovery.hasData || dashboard.sleepScore.hasData else {
+            confidence["data_coverage"] = .unavailable
+            return PrimaryLimiter(
+                system: "Data Coverage",
+                metricName: "Data Coverage",
+                currentValue: 0,
+                optimalRange: 1...1,
+                severity: 1,
+                interpretation: AppLanguage.stored.isChinese
+                    ? "健康信号不足，暂不对恢复状态做数值判断。"
+                    : "Health signals are insufficient, so recovery cannot be scored yet."
+            )
+        }
+
         let recoveryScore = dashboard.recovery.score
         let sleepScore = dashboard.sleepScore.score
         let hrvZScore = dashboard.recovery.metrics["hrv_z_score"] ?? 0
@@ -338,7 +352,7 @@ struct BodyInterpreterEngine {
         let sleepScore = dashboard.sleepScore.score
         let strainScore = dashboard.strain.score
 
-        if primary.metricName != "Sleep Score" && sleepScore < 80 {
+        if dashboard.sleepScore.hasData, primary.metricName != "Sleep Score" && sleepScore < 80 {
             limiters.append(PrimaryLimiter(
                 system: "Sleep Recovery",
                 metricName: "Sleep Score",
@@ -349,7 +363,7 @@ struct BodyInterpreterEngine {
             ))
         }
 
-        if primary.metricName != "Strain Score" && strainScore > 65 {
+        if dashboard.strain.hasData, primary.metricName != "Strain Score" && strainScore > 65 {
             limiters.append(PrimaryLimiter(
                 system: "Training Load",
                 metricName: "Strain Score",
@@ -371,6 +385,21 @@ struct BodyInterpreterEngine {
         primaryLimiter: PrimaryLimiter,
         wiki: [String: String]
     ) -> TrainingWindow {
+        guard dashboard.recovery.hasData || dashboard.sleepScore.hasData else {
+            let constraint = AppLanguage.stored.isChinese
+                ? "缺少睡眠与恢复信号，建议仅做轻量活动并根据主观感受调整。"
+                : "Sleep and recovery signals are unavailable; keep activity light and adjust to how you feel."
+            return TrainingWindow(
+                isOpen: true,
+                recommendedIntensity: "low",
+                maxDurationMinutes: 30,
+                targetHRZone: "Zone 1-2",
+                bestTimeOfDay: nil,
+                constraints: [constraint],
+                narrative: constraint
+            )
+        }
+
         let tsb = dashboard.energy.metrics["tsb"] ?? 0
         let sleepScore = dashboard.sleepScore.score
         let lang = AppLanguage.stored
@@ -462,7 +491,7 @@ struct BodyInterpreterEngine {
         let lang = AppLanguage.stored
 
         // Sleep
-        if dashboard.sleepScore.score < 80 {
+        if dashboard.sleepScore.hasData, dashboard.sleepScore.score < 80 {
             tasks.append(RecoveryTask(
                 category: "sleep",
                 title: lang.isChinese ? "优先补足睡眠" : "Prioritize Sleep",
@@ -488,7 +517,7 @@ struct BodyInterpreterEngine {
         }
 
         // Mobility / Active recovery
-        if dashboard.recovery.score < 60 {
+        if dashboard.recovery.hasData, dashboard.recovery.score < 60 {
             tasks.append(RecoveryTask(
                 category: "mobility",
                 title: lang.isChinese ? "泡沫轴放松 + 拉伸" : "Foam Rolling + Stretch",
@@ -501,7 +530,7 @@ struct BodyInterpreterEngine {
         }
 
         // Breathwork for stress
-        if dashboard.stress.stressIndex > 50 {
+        if dashboard.stress.hasData, dashboard.stress.stressIndex > 50 {
             tasks.append(RecoveryTask(
                 category: "breathwork",
                 title: lang.isChinese ? "深呼吸练习" : "Breathwork",
@@ -688,7 +717,7 @@ struct BodyInterpreterEngine {
             ))
         }
 
-        if dashboard.sleepScore.score < 80 {
+        if dashboard.sleepScore.hasData, dashboard.sleepScore.score < 80 {
             alternatives.append(RecommendedAction(
                 type: .sleepTip,
                 title: lang.isChinese ? "附加：优化今晚睡眠" : "Bonus: Optimize Tonight's Sleep",
@@ -761,27 +790,29 @@ struct BodyInterpreterEngine {
         }
 
         // Sleep
-        let sleepScore = dashboard.sleepScore.score
-        items.append(EvidenceChainItem(
-            metricName: "Sleep Score",
-            metricCategory: "sleep",
-            currentValue: sleepScore,
-            currentValueFormatted: "\(Int(sleepScore))",
-            unit: "pts",
-            baselineValue: 85,
-            baselineFormatted: "85",
-            trend: sleepScore < 80 ? .declining : .stable,
-            trendDescription: sleepScore < 80 ? "低于理想值" : "正常",
-            interpretation: sleepScore < 70
-                ? "睡眠质量不足，影响次日恢复和表现"
-                : "睡眠质量可接受",
-            confidence: .high,
-            dataFreshness: .today,
-            source: .healthKit,
-            actionImpact: sleepScore < 70
-                ? "睡眠不足 → 建议降低训练强度，优先补眠"
-                : "睡眠充足 → 支持正常训练"
-        ))
+        if dashboard.sleepScore.hasData {
+            let sleepScore = dashboard.sleepScore.score
+            items.append(EvidenceChainItem(
+                metricName: "Sleep Score",
+                metricCategory: "sleep",
+                currentValue: sleepScore,
+                currentValueFormatted: "\(Int(sleepScore))",
+                unit: "pts",
+                baselineValue: 85,
+                baselineFormatted: "85",
+                trend: sleepScore < 80 ? .declining : .stable,
+                trendDescription: sleepScore < 80 ? "低于理想值" : "正常",
+                interpretation: sleepScore < 70
+                    ? "睡眠质量不足，影响次日恢复和表现"
+                    : "睡眠质量可接受",
+                confidence: .high,
+                dataFreshness: .today,
+                source: .healthKit,
+                actionImpact: sleepScore < 70
+                    ? "睡眠不足 → 建议降低训练强度，优先补眠"
+                    : "睡眠充足 → 支持正常训练"
+            ))
+        }
 
         // TSB
         if let tsb = dashboard.energy.metrics["tsb"] {
@@ -817,6 +848,7 @@ struct BodyInterpreterEngine {
         fatigueLevel: FatigueLevel,
         trainingWindow: TrainingWindow
     ) -> DailyState {
+        guard dashboard.recovery.hasData || dashboard.sleepScore.hasData else { return .unknown }
         switch fatigueLevel {
         case .none: return .great
         case .mild: return .good
@@ -826,6 +858,7 @@ struct BodyInterpreterEngine {
     }
 
     private func computeReadiness(dashboard: DashboardSummary, fatigueLevel: FatigueLevel) -> Double {
+        guard dashboard.recovery.hasData else { return 0 }
         let baseScore: Double
         switch fatigueLevel {
         case .none: baseScore = 90

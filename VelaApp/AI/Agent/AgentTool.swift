@@ -7,10 +7,15 @@ protocol AgentTool: Sendable {
     var name: String { get }
     var description: String { get }
     var parameters: [String: Value] { get }
+    var riskLevel: ToolRiskLevel { get }
     func execute(arguments: String) async throws -> String
 }
 
 extension AgentTool {
+    var riskLevel: ToolRiskLevel {
+        .read
+    }
+
     var definition: [String: Value] {
         [
             "type": .string("function"),
@@ -45,6 +50,10 @@ struct ToolRegistry {
         } catch {
             return "Error executing '\(name)': \(error.localizedDescription)"
         }
+    }
+
+    func risk(for name: String) -> ToolRiskLevel {
+        tools.first(where: { $0.name == name })?.riskLevel ?? .read
     }
 }
 
@@ -153,6 +162,7 @@ struct WebSearchTool: AgentTool {
 struct UpdateWikiTool: AgentTool {
     let name = "update_user_wiki"
     let description = "Propose a durable long-term memory entry for the user's personal Wiki profile. Use only for stable preferences, confirmed facts, constraints, goals, or repeated patterns. Never store a one-day symptom, workout, meal, sleep result, or temporary body state here; those belong in the automatic daily Wiki log. Generates a proposal that the user can review and confirm. Available files: profile.md, goals.md, constraints.md, preferences.md, habits.md, training_history.md, health_context.md, observations.md, strategies.md."
+    let riskLevel: ToolRiskLevel = .propose
 
     let executionContext: ToolExecutionContext
 
@@ -280,12 +290,16 @@ struct TodayHealthTool: AgentTool {
 
             // ── Scores ──
             if include("scores") {
+                func roundedValue(_ value: Double?) -> Any {
+                    value.map { Int($0.rounded()) } ?? NSNull()
+                }
+
                 result["scores"] = [
-                    "recovery": ["value": Int(dashboard.recovery.score.rounded()), "band": dashboard.recovery.band.rawValue, "confidence": dashboard.recovery.confidence.rawValue],
-                    "sleep": ["value": Int(dashboard.sleepScore.score.rounded()), "band": dashboard.sleepScore.band.rawValue, "confidence": dashboard.sleepScore.confidence.rawValue],
-                    "strain": ["value": Int(dashboard.strain.score.rounded()), "band": dashboard.strain.band.rawValue, "target_status": dashboard.strain.targetStatus.rawValue, "confidence": dashboard.strain.confidence.rawValue],
-                    "stress": ["value": Int(dashboard.stress.stressIndex.rounded()), "band": dashboard.stress.band.rawValue, "confidence": dashboard.stress.confidence.rawValue],
-                    "energy": ["current": Int(dashboard.energy.currentEnergy.rounded()), "morning": Int(dashboard.energy.morningEnergy.rounded()), "bank": Int(dashboard.energy.currentEnergy.rounded()), "status": dashboard.energy.status.rawValue, "confidence": dashboard.energy.confidence.rawValue]
+                    "recovery": ["value": roundedValue(dashboard.recovery.hasData ? dashboard.recovery.value : nil), "band": dashboard.recovery.hasData ? dashboard.recovery.band.rawValue : "unavailable", "confidence": dashboard.recovery.confidence.rawValue],
+                    "sleep": ["value": roundedValue(dashboard.sleepScore.hasData ? dashboard.sleepScore.value : nil), "band": dashboard.sleepScore.hasData ? dashboard.sleepScore.band.rawValue : "unavailable", "confidence": dashboard.sleepScore.confidence.rawValue],
+                    "strain": ["value": roundedValue(dashboard.strain.hasData ? dashboard.strain.value : nil), "band": dashboard.strain.hasData ? dashboard.strain.band.rawValue : "unavailable", "target_status": dashboard.strain.hasData ? dashboard.strain.targetStatus.rawValue : "unavailable", "confidence": dashboard.strain.confidence.rawValue],
+                    "stress": ["value": roundedValue(dashboard.stress.hasData ? dashboard.stress.value : nil), "band": dashboard.stress.hasData ? dashboard.stress.band.rawValue : "unavailable", "confidence": dashboard.stress.confidence.rawValue],
+                    "energy": ["current": roundedValue(dashboard.energy.hasData ? dashboard.energy.value : nil), "morning": roundedValue(dashboard.energy.hasData ? dashboard.energy.morningEnergy : nil), "bank": roundedValue(dashboard.energy.hasData ? dashboard.energy.value : nil), "status": dashboard.energy.hasData ? dashboard.energy.status.rawValue : "unavailable", "confidence": dashboard.energy.confidence.rawValue]
                 ]
             }
 
@@ -1162,6 +1176,7 @@ struct TrainingPlanTool: AgentTool {
 struct FoodLogTool: AgentTool {
     let name = "log_food"
     let description = "Log a food or meal entry to the user's journal. Use this after analyzing a meal photo or when the user describes what they ate. The entry will be tagged with 'food' and 'meal' for later correlation analysis."
+    let riskLevel: ToolRiskLevel = .write
 
     let executionContext: ToolExecutionContext
 
@@ -1268,6 +1283,7 @@ struct FoodLogTool: AgentTool {
 struct CreateTrainingPlanTool: AgentTool {
     let name = "create_training_plan"
     let description = "Generate and save a multi-week training program for the user. When the user asks for a workout program, training plan, or structured fitness guidance, you must generate a comprehensive multi-week plan (typically 4 weeks, with specific activities for days 1-7 of each week) and call this tool to persist it. Use this tool only once per complete plan creation."
+    let riskLevel: ToolRiskLevel = .write
 
     let executionContext: ToolExecutionContext
 

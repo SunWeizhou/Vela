@@ -2,6 +2,46 @@ import XCTest
 @testable import Vela
 
 final class ScoringEngineTests: XCTestCase {
+    func testRescheduleAdaptationUsesNextRecoveryDayAfterCurrentSession() {
+        let strengthDay = TrainingDay(
+            weekNumber: 2, dayNumber: 1, title: "Strength", description: "", focus: "strength", durationMinutes: 60, intensity: "high"
+        )
+        let nextTrainingDay = TrainingDay(
+            weekNumber: 2, dayNumber: 2, title: "Cardio", description: "", focus: "cardio", durationMinutes: 30, intensity: "moderate"
+        )
+        let recoveryDay = TrainingDay(
+            weekNumber: 2, dayNumber: 3, title: "Rest", description: "", focus: "rest", durationMinutes: 0, intensity: "low"
+        )
+        let plan = TrainingPlanRecord(title: "Test", goalDescription: "", days: [strengthDay, nextTrainingDay, recoveryDay])
+        let adaptation = TrainingPlanAdaptationRecord(
+            planId: plan.id,
+            dayId: strengthDay.id,
+            adjustment: .reschedule,
+            reason: "test"
+        )
+
+        XCTAssertTrue(AdaptiveTrainingManager().applyAdaptation(adaptation, to: plan))
+        XCTAssertEqual(plan.days[0].focus, "rest")
+        XCTAssertEqual(plan.days[2].focus, "strength")
+        XCTAssertEqual(plan.days[2].dayNumber, recoveryDay.dayNumber)
+    }
+
+    func testRescheduleAdaptationDoesNotApplyWithoutFutureRecoveryDay() {
+        let strengthDay = TrainingDay(
+            weekNumber: 1, dayNumber: 1, title: "Strength", description: "", focus: "strength", durationMinutes: 60, intensity: "high"
+        )
+        let plan = TrainingPlanRecord(title: "Test", goalDescription: "", days: [strengthDay])
+        let adaptation = TrainingPlanAdaptationRecord(
+            planId: plan.id,
+            dayId: strengthDay.id,
+            adjustment: .reschedule,
+            reason: "test"
+        )
+
+        XCTAssertFalse(AdaptiveTrainingManager().applyAdaptation(adaptation, to: plan))
+        XCTAssertEqual(plan.days, [strengthDay])
+    }
+
     func testHealthProfileHydrationOnlyFillsMissingValues() {
         let suiteName = "UserProfileSettingsTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -33,6 +73,30 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertEqual(UserProfileSettings.biologicalSex(defaults: defaults), "male")
     }
 
+    func testPersonalBaselineRequiresSevenValidSamplesPerMetric() {
+        let date = Date()
+        let sixSnapshots = (0..<6).map { offset -> DailyHealthSnapshot in
+            var snapshot = DailyHealthSnapshot(date: date.addingTimeInterval(Double(-offset) * 86_400))
+            snapshot.hrvAverage = 50
+            snapshot.restingHeartRate = 60
+            return snapshot
+        }
+        let sevenSnapshots = (0..<7).map { offset -> DailyHealthSnapshot in
+            var snapshot = DailyHealthSnapshot(date: date.addingTimeInterval(Double(-offset) * 86_400))
+            snapshot.hrvAverage = 50
+            snapshot.restingHeartRate = 60
+            return snapshot
+        }
+
+        let insufficient = PersonalBaselineEngine.computeBaselines(from: sixSnapshots)
+        XCTAssertNil(insufficient.hrvBaselineMean)
+        XCTAssertNil(insufficient.rhrBaselineMean)
+
+        let ready = PersonalBaselineEngine.computeBaselines(from: sevenSnapshots)
+        XCTAssertEqual(ready.hrvBaselineMean, 50)
+        XCTAssertEqual(ready.rhrBaselineMean, 60)
+    }
+
     func testSleepScoreEngineProducesValidRange() {
         let engine = SleepScoreEngine()
         let input = SleepScoreInput(
@@ -62,6 +126,69 @@ final class ScoringEngineTests: XCTestCase {
         )
         let result = engine.calculate(from: input)
         XCTAssertNotNil(result)
+    }
+
+    func testRecoveryScoreDoesNotPublishFromPriorStrainAlone() {
+        let result = RecoveryScoreEngine().calculate(from: RecoveryScoreInput(
+            hrvToday: nil,
+            hrvBaseline: nil,
+            hrvHistory: [],
+            restingHeartRateToday: nil,
+            restingHeartRateBaseline: nil,
+            rhrHistory: [],
+            sleepScoreLastNight: nil,
+            strainScoreYesterday: 0
+        ))
+
+        XCTAssertNil(result.value)
+        XCTAssertFalse(result.hasData)
+        XCTAssertTrue(result.reasons.contains { $0.contains("才会给出恢复评分") })
+    }
+
+    func testWristTemperatureAbovePersonalBaselineReducesRecoveryScore() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let history = (1...7).compactMap { offset -> DailyHealthSnapshot? in
+            guard let date = calendar.date(byAdding: .day, value: -offset, to: today) else { return nil }
+            var snapshot = DailyHealthSnapshot(date: date)
+            snapshot.hrvAverage = 50
+            snapshot.restingHeartRate = 60
+            snapshot.sleepHours = 7.5
+            snapshot.wristTemperature = 36.2
+            return snapshot
+        }
+
+        var neutral = DailyHealthSnapshot(date: today)
+        neutral.hrvAverage = 50
+        neutral.restingHeartRate = 60
+        neutral.sleepHours = 7.5
+        neutral.wristTemperature = 36.2
+
+        var elevated = neutral
+        elevated.wristTemperature = 36.9
+
+        let pipeline = MetricComputationPipeline()
+        let neutralRecovery = pipeline.compute(for: neutral, history: history).recovery
+        let elevatedRecovery = pipeline.compute(for: elevated, history: history).recovery
+
+        XCTAssertNotNil(neutralRecovery.value)
+        XCTAssertNotNil(elevatedRecovery.value)
+        XCTAssertEqual(elevatedRecovery.components["body_temp_delta"] ?? 0, 0.7, accuracy: 0.01)
+        XCTAssertLessThanOrEqual(elevatedRecovery.value ?? .infinity, (neutralRecovery.value ?? 0) - 7.9)
+    }
+
+    func testBodyInterpreterUsesConservativeDataCoverageLimiterWhenSignalsAreMissing() {
+        let interpretation = BodyInterpreterEngine().interpret(
+            dashboard: .empty(date: Date()),
+            wiki: [:],
+            activePlan: nil
+        )
+
+        XCTAssertEqual(interpretation.primaryLimiter.metricName, "Data Coverage")
+        XCTAssertTrue(interpretation.trainingWindow.isOpen)
+        XCTAssertEqual(interpretation.trainingWindow.recommendedIntensity, "low")
+        XCTAssertEqual(interpretation.trainingWindow.maxDurationMinutes, 30)
+        XCTAssertFalse(interpretation.recommendedAction.evidenceChain.contains { $0.metricName == "Sleep Score" })
     }
 
     func testRecoveryReasonsDescribeMeasuredSignalsWithoutPhysiologicalClaims() {
@@ -560,5 +687,74 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertFalse(model.evidenceLine.contains("medical diagnosis"))
         XCTAssertTrue(model.evidenceLine.contains("本地身体状态"))
         XCTAssertEqual(model.confidenceLabel, "置信度 50%")
+    }
+
+    func testPersonalBaselineThresholdResolutionAndFallback() {
+        let baselineURL = WikiFileService.localURL(for: "baselines.md")
+        
+        // Save existing file content if any
+        let originalContent = try? String(contentsOf: baselineURL, encoding: .utf8)
+        defer {
+            // Restore original content or clean up
+            if let originalContent = originalContent {
+                try? originalContent.write(to: baselineURL, atomically: true, encoding: .utf8)
+            } else {
+                try? FileManager.default.removeItem(at: baselineURL)
+            }
+        }
+        
+        // Case 1: No baseline file / insufficient days of data (< 7)
+        try? FileManager.default.removeItem(at: baselineURL)
+        let fallbackThresholds = PersonalBaselineEngine.resolveThresholds()
+        XCTAssertEqual(fallbackThresholds.source, "using default conservative threshold")
+        XCTAssertEqual(fallbackThresholds.recoveryRest, 40)
+        XCTAssertEqual(fallbackThresholds.recoveryCaution, 62)
+        XCTAssertEqual(fallbackThresholds.recoveryHigh, 70)
+        XCTAssertEqual(fallbackThresholds.sleepCaution, 68)
+        XCTAssertEqual(fallbackThresholds.sleepRest, 55)
+        
+        // Case 2: Valid baseline file with >= 7 days of data
+        let baselines = PersonalBaselines(
+            hrvBaselineMean: 50.0,
+            hrvBaselineSD: 5.0,
+            rhrBaselineMean: 60.0,
+            rhrBaselineSD: 4.0,
+            sleepHoursBaseline: 8.0,
+            sleepEfficiencyBaseline: 0.90,
+            deepSleepPercentBaseline: 0.20,
+            remSleepPercentBaseline: 0.20,
+            strainBaselineMean: 10.0,
+            stepsBaseline: 10000,
+            activeCaloriesBaseline: 400.0,
+            calculatedAt: Date(),
+            daysOfData: 10,
+            recoveryBaselineMean: 65.0,
+            recoveryBaselineSD: 8.0,
+            sleepScoreBaselineMean: 70.0,
+            sleepScoreBaselineSD: 6.0
+        )
+        
+        PersonalBaselineEngine.saveBaselinesToWiki(baselines)
+        
+        let resolved = PersonalBaselineEngine.resolveThresholds()
+        XCTAssertEqual(resolved.source, "using personal baseline")
+        XCTAssertEqual(resolved.recoveryRest, 50.0)
+        XCTAssertEqual(resolved.recoveryCaution, 58.6)
+        XCTAssertEqual(resolved.recoveryHigh, 65.0)
+        XCTAssertEqual(resolved.sleepCaution, 65.2)
+        XCTAssertEqual(resolved.sleepRest, 60.0)
+        
+        // Let's test that BodyStateKernel uses the resolved thresholds.
+        var dashboard = DashboardSummary.preview()
+        dashboard.recovery.value = 45.0
+        dashboard.sleepScore.value = 80.0
+        
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(dashboard: dashboard))
+        XCTAssertEqual(bodyState.readiness, .recovering)
+        
+        // Under default thresholds:
+        try? FileManager.default.removeItem(at: baselineURL)
+        let bodyStateFallback = BodyStateKernel().build(input: BodyStateInput(dashboard: dashboard))
+        XCTAssertEqual(bodyStateFallback.readiness, .caution)
     }
 }

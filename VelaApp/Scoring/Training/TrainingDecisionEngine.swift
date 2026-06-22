@@ -142,6 +142,8 @@ enum TrainingDecisionEngine {
         let secondaryActionTitle: String?
         let coachQuestion: String
         
+        let thresholds = PersonalBaselineEngine.resolveThresholds()
+        
         if !journalFlags.isDisjoint(with: ["sick", "injured"]) {
             kind = .rest
             accent = .recovery
@@ -184,7 +186,7 @@ enum TrainingDecisionEngine {
                 "Tell me what health permissions and data I need to enable so Vela can generate a reliable daily plan.",
                 "请告诉我需要开启哪些健康权限和数据，才能让 Vela 生成可靠的今日计划。"
             )
-        } else if dashboard.recovery.score < 40 {
+        } else if dashboard.recovery.score < thresholds.recoveryRest {
             kind = .recovery
             accent = .recovery
             title = L10n.t("Make today a recovery day", "今天按恢复日处理")
@@ -205,7 +207,7 @@ enum TrainingDecisionEngine {
                 dashboard: dashboard,
                 limiter: legacyLimiter
             )
-        } else if dashboard.recovery.score >= 70 && dashboard.strain.score < Double(dashboard.strain.recommendedRange.lowerBound) {
+        } else if dashboard.recovery.score >= thresholds.recoveryHigh && dashboard.strain.score < Double(dashboard.strain.recommendedRange.lowerBound) {
             kind = .train
             accent = .strain
             title = L10n.t("Training window is open", "今天有训练窗口")
@@ -242,7 +244,7 @@ enum TrainingDecisionEngine {
             coachQuestion = Self.coachQuestion(
                 base: L10n.t(
                     "Give me a controlled daily plan based on today's recovery, sleep, strain, stress, and energy. Start with what I should do, then what I should avoid.",
-                    "请基于今天的恢复、睡眠、负荷、压力和能量，给我一个可控的今日计划。先说我应该做什么，再说应该避免什么。"
+                    "请基于今天的恢复、睡眠、负荷、压力 and 能量，给我一个可控的今日计划。先说我应该做什么，再说应该避免什么。"
                 ),
                 dashboard: dashboard,
                 limiter: legacyLimiter
@@ -252,7 +254,7 @@ enum TrainingDecisionEngine {
         // 4. Compute readiness level and guidance (unified from both)
         let readinessLevel: String
         let readinessGuidance: String
-        if !journalFlags.isDisjoint(with: ["sick", "injured", "resting"]) || dashboard.recovery.score < 40 {
+        if !journalFlags.isDisjoint(with: ["sick", "injured", "resting"]) || dashboard.recovery.score < thresholds.recoveryRest {
             readinessLevel = "LOW"
             readinessGuidance = L10n.t("Prioritize recovery. Recommend rest or light mobility work only.", "今日建议以恢复为主。推荐休息或安排极轻量活动。")
         } else if dashboard.recovery.score > 75 && dashboard.energy.currentEnergy > 60 && (tsb ?? 0.0) > 5.0 {
@@ -263,6 +265,11 @@ enum TrainingDecisionEngine {
             readinessGuidance = L10n.t("Train at controlled intensity. Moderate load or active recovery is appropriate.", "训练请保持适度。中等强度负荷或主动恢复是最佳选择。")
         }
         
+        let baseWhy = [limiterResult.whyThis, adaptation.modifiedWorkoutDescription]
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        let whyThisWithBaseline = baseWhy.isEmpty ? "(\(thresholds.source))" : "\(baseWhy) (\(thresholds.source))"
+
         return TrainingDecision(
             kind: kind,
             accent: accent,
@@ -282,9 +289,7 @@ enum TrainingDecisionEngine {
             volumeMultiplier: min(limiterResult.volumeMultiplier, adaptation.volumeMultiplier),
             maxIntensity: stricterIntensity(limiterResult.maxIntensity, adaptation.recommendedIntensity),
             recommendedTrainingType: adaptation.suggestedFocus,
-            whyThis: [limiterResult.whyThis, adaptation.modifiedWorkoutDescription]
-                .filter { !$0.isEmpty }
-                .joined(separator: " ")
+            whyThis: whyThisWithBaseline
         )
     }
 

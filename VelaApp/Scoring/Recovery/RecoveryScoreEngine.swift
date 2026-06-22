@@ -184,9 +184,15 @@ public struct RecoveryScoreEngine: ScoreEngine {
             partial + (item.value * (componentWeights[item.key] ?? 0.0))
         }
 
+        let hasSleepSignal = input.sleepScoreLastNight != nil
+        let hasCardiovascularSignal = input.hrvToday != nil || input.restingHeartRateToday != nil
+        let canPublishRecoveryScore = hasSleepSignal && hasCardiovascularSignal
+
         var recoveryValue: Double? = nil
-        if totalWeight > 0 {
+        if totalWeight > 0 && canPublishRecoveryScore {
             recoveryValue = weightedSum / totalWeight
+        } else if !canPublishRecoveryScore {
+            reasons.append("需要睡眠评分和至少一项心血管恢复信号后，才会给出恢复评分")
         }
 
         // 5. Red Flag Modifiers

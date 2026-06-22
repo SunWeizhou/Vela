@@ -14,6 +14,7 @@ struct TrainingCalendarView: View {
 
     @State private var selectedWeek: Int = 1
     @State private var selectedDayForSheet: TrainingDay? = nil
+    @State private var mutationError: String?
 
     private var activePlan: TrainingPlanRecord? {
         plans.first(where: { $0.isActive })
@@ -52,6 +53,14 @@ struct TrainingCalendarView: View {
                     }
                 })
             }
+        }
+        .alert("无法更新训练计划", isPresented: Binding(
+            get: { mutationError != nil },
+            set: { if !$0 { mutationError = nil } }
+        )) {
+            Button("好", role: .cancel) { mutationError = nil }
+        } message: {
+            Text(mutationError ?? "")
         }
     }
 
@@ -206,21 +215,40 @@ struct TrainingCalendarView: View {
 
     private func acceptAdaptation(_ adaptation: TrainingPlanAdaptationRecord, plan: TrainingPlanRecord) {
         guard adaptation.planId == plan.id else { return }
+        let previousDays = plan.days
+        let previousStatus = adaptation.status
+        let previousAcceptedAt = adaptation.acceptedAt
         do {
             let manager = AdaptiveTrainingManager()
-            try manager.applyAdaptation(adaptation, to: plan, modelContext: modelContext)
+            guard manager.applyAdaptation(adaptation, to: plan) else {
+                mutationError = "当前计划没有可执行的调整位置，原训练计划保持不变。"
+                return
+            }
             adaptation.status = AdaptationStatus.accepted.rawValue
             adaptation.acceptedAt = Date()
             try modelContext.save()
+            VelaAppState.shared.markLocalDataChanged()
         } catch {
-            print("Failed to accept adaptation: \(error)")
+            plan.days = previousDays
+            adaptation.status = previousStatus
+            adaptation.acceptedAt = previousAcceptedAt
+            mutationError = "本次调整未能保存，原训练计划保持不变。"
         }
     }
 
     private func rejectAdaptation(_ adaptation: TrainingPlanAdaptationRecord) {
+        let previousStatus = adaptation.status
+        let previousRejectedAt = adaptation.rejectedAt
         adaptation.status = AdaptationStatus.rejected.rawValue
         adaptation.rejectedAt = Date()
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+            VelaAppState.shared.markLocalDataChanged()
+        } catch {
+            adaptation.status = previousStatus
+            adaptation.rejectedAt = previousRejectedAt
+            mutationError = "未能保留原计划，请稍后重试。"
+        }
     }
 
     private func iconForAdjustment(_ a: String) -> String {
@@ -537,21 +565,24 @@ struct TrainingCalendarView: View {
     private func toggleCompletion(for day: TrainingDay, in plan: TrainingPlanRecord) {
         var updatedDays = plan.days
         if let index = updatedDays.firstIndex(where: { $0.id == day.id }) {
+            let previousDays = plan.days
             let wasCompleted = updatedDays[index].isCompleted
             updatedDays[index].isCompleted.toggle()
             updatedDays[index].completedAt = updatedDays[index].isCompleted ? Date() : nil
             plan.days = updatedDays
-            
-            // Trigger beautiful haptic response
-            if !wasCompleted {
-                let generator = UINotificationFeedbackGenerator()
-                generator.notificationOccurred(.success)
-            } else {
-                let generator = UIImpactFeedbackGenerator(style: .light)
-                generator.impactOccurred()
+
+            do {
+                try modelContext.save()
+                VelaAppState.shared.markLocalDataChanged()
+                if !wasCompleted {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                } else {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                }
+            } catch {
+                plan.days = previousDays
+                mutationError = "训练完成状态未能保存，请稍后重试。"
             }
-            
-            try? modelContext.save()
         }
     }
 
@@ -618,192 +649,3 @@ struct TrainingCalendarView: View {
     }
 }
 
-// MARK: - Workout Detail Sheet Component
-struct WorkoutDetailSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    let day: TrainingDay
-    let plan: TrainingPlanRecord
-    let onToggle: () -> Void
-
-    var body: some View {
-        ZStack {
-            VelaTheme.background.ignoresSafeArea()
-
-            VStack(alignment: .leading, spacing: 0) {
-                // Header Sheet Bar
-                HStack {
-                    Text(L10n.t("Workout Session Details", "计划日程详情"))
-                        .font(.system(.headline, design: .rounded))
-                        .foregroundStyle(VelaTheme.primaryText)
-                    
-                    Spacer()
-                    
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 24))
-                            .foregroundStyle(VelaTheme.mutedText)
-                    }
-                }
-                .padding(.horizontal, 24)
-                .padding(.top, 24)
-                .padding(.bottom, 16)
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        // Title & Day Header
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(L10n.t("Week \(day.weekNumber) Day \(day.dayNumber) • \(dayName(day.dayNumber))", "第 \(day.weekNumber) 周第 \(day.dayNumber) 天 • \(dayName(day.dayNumber))"))
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(VelaTheme.mutedText)
-                            
-                            Text(day.title)
-                                .font(.system(.title2, design: .rounded).weight(.bold))
-                                .foregroundStyle(VelaTheme.primaryText)
-                        }
-
-                        // Badges Row
-                        HStack(spacing: 8) {
-                            badgeView(text: focusName(day.focus), symbol: getFocusSymbol(day.focus), color: getFocusColor(day.focus))
-                            
-                            if day.focus != "rest" {
-                                badgeView(text: "\(day.durationMinutes) \(L10n.t("mins", "分钟"))", symbol: "clock", color: VelaTheme.secondaryText)
-                                badgeView(text: intensityName(day.intensity), symbol: "waveform.path.ecg", color: getIntensityColor(day.intensity))
-                            }
-                        }
-
-                        Divider().background(Color.black.opacity(0.08))
-
-                        // Workout Routine / Description Area
-                        VStack(alignment: .leading, spacing: 12) {
-                            Label(L10n.t("Training Routine", "训练内容及课表细则"), systemImage: "text.alignleft")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(VelaTheme.accent)
-
-                            Text(day.description)
-                                .font(.system(.body, design: .rounded))
-                                .foregroundStyle(VelaTheme.secondaryText)
-                                .lineSpacing(6)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .padding(18)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(VelaTheme.surface)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(Color.black.opacity(0.04), lineWidth: 0.5)
-                        )
-
-                        Spacer().frame(height: 20)
-                    }
-                    .padding(.horizontal, 24)
-                }
-
-                // Check-off Action Bottom Bar
-                VStack(spacing: 12) {
-                    Divider().background(Color.black.opacity(0.08))
-                        .padding(.bottom, 8)
-                    
-                    Button(action: {
-                        onToggle()
-                    }) {
-                        HStack(spacing: 10) {
-                            Image(systemName: day.isCompleted ? "checkmark.circle.fill" : "circle")
-                                .font(.system(size: 16, weight: .bold))
-                            
-                            Text(day.isCompleted ? L10n.t("Workout Completed", "此日训练已打卡") : L10n.t("Mark Workout as Completed", "完成此日训练打卡"))
-                                .font(.system(size: 15, weight: .bold))
-                        }
-                        .foregroundStyle(Color.black)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(day.isCompleted ? VelaTheme.recovery : VelaTheme.accent)
-                        .cornerRadius(14)
-                        .shadow(color: (day.isCompleted ? VelaTheme.recovery : VelaTheme.accent).opacity(0.2), radius: 6)
-                    }
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 24)
-                }
-                .background(VelaTheme.surface.opacity(0.4))
-            }
-        }
-    }
-
-    // MARK: - Badge Helper View
-    private func badgeView(text: String, symbol: String, color: Color) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: symbol)
-                .font(.system(size: 9))
-            Text(text)
-                .font(.system(size: 9, weight: .bold))
-        }
-        .foregroundStyle(color)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Capsule().fill(color.opacity(0.08)))
-        .overlay(Capsule().stroke(color.opacity(0.12), lineWidth: 0.5))
-    }
-
-    // MARK: - Helpers
-    private func dayName(_ dayNumber: Int) -> String {
-        switch dayNumber {
-        case 1: return L10n.t("Monday", "周一")
-        case 2: return L10n.t("Tuesday", "周二")
-        case 3: return L10n.t("Wednesday", "周三")
-        case 4: return L10n.t("Thursday", "周四")
-        case 5: return L10n.t("Friday", "周五")
-        case 6: return L10n.t("Saturday", "周六")
-        case 7: return L10n.t("Sunday", "周日")
-        default: return ""
-        }
-    }
-
-    private func getFocusColor(_ focus: String) -> Color {
-        switch focus.lowercased() {
-        case "cardio": return VelaTheme.strain
-        case "strength": return VelaTheme.energy
-        case "flexibility": return VelaTheme.accent
-        case "rest": return VelaTheme.sleep
-        default: return VelaTheme.accent
-        }
-    }
-
-    private func getFocusSymbol(_ focus: String) -> String {
-        switch focus.lowercased() {
-        case "cardio": return "flame.fill"
-        case "strength": return "dumbbell.fill"
-        case "flexibility": return "figure.cooldown"
-        case "rest": return "moon.zzz.fill"
-        default: return "figure.run"
-        }
-    }
-
-    private func focusName(_ focus: String) -> String {
-        switch focus.lowercased() {
-        case "cardio": return L10n.t("Cardio", "有氧")
-        case "strength": return L10n.t("Strength", "力量")
-        case "flexibility": return L10n.t("Flexibility", "拉伸")
-        case "rest": return L10n.t("Rest", "休息")
-        default: return focus.capitalized
-        }
-    }
-
-    private func intensityName(_ intensity: String) -> String {
-        switch intensity.lowercased() {
-        case "low": return L10n.t("Low", "低强度")
-        case "moderate": return L10n.t("Moderate", "中强度")
-        case "high": return L10n.t("High", "高强度")
-        default: return intensity.capitalized
-        }
-    }
-
-    private func getIntensityColor(_ intensity: String) -> Color {
-        switch intensity.lowercased() {
-        case "low": return VelaTheme.recovery
-        case "moderate": return VelaTheme.energy
-        case "high": return VelaTheme.stress
-        default: return VelaTheme.secondaryText
-        }
-    }
-}

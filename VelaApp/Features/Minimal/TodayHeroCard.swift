@@ -7,16 +7,20 @@ struct TodayHeroCard: View {
     let primaryActionIcon: String
     let onPrimaryAction: () -> Void
 
+    private var hasRecoveryScore: Bool {
+        recoveryScoreText != "--"
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
                     Text("今日训练状态")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(VelaTheme.muted)
 
                     Text(model.hero.decisionTitle)
-                        .font(.system(size: 23, weight: .bold))
+                        .font(.system(size: 21, weight: .bold))
                         .foregroundStyle(VelaTheme.fg)
                         .lineLimit(2)
                         .minimumScaleFactor(0.8)
@@ -30,16 +34,18 @@ struct TodayHeroCard: View {
                     .foregroundStyle(accent)
                 }
 
-                Spacer(minLength: 12)
+                if hasRecoveryScore {
+                    Spacer(minLength: 12)
 
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(recoveryScoreText)
-                        .font(.system(size: 38, weight: .bold, design: .rounded))
-                        .foregroundStyle(VelaTheme.fg)
-                        .monospacedDigit()
-                    Text("恢复评分")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(VelaTheme.muted)
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(recoveryScoreText)
+                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                            .foregroundStyle(VelaTheme.fg)
+                            .monospacedDigit()
+                        Text("恢复评分")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(VelaTheme.muted)
+                    }
                 }
             }
 
@@ -48,21 +54,21 @@ struct TodayHeroCard: View {
                 .frame(height: 1)
 
             Text(model.hero.summary)
-                .font(.system(size: 14, weight: .regular))
+                .font(.system(size: 13, weight: .regular))
                 .foregroundStyle(VelaTheme.fg2)
-                .lineSpacing(3)
-                .lineLimit(3)
+                .lineSpacing(2)
+                .lineLimit(2)
 
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 ForEach(model.evidenceChips.prefix(3), id: \.self) { chip in
-                    Text(localizedReason(chip))
-                        .font(.system(size: 11, weight: .medium))
+                    Label(localizedReason(chip), systemImage: "circle.fill")
+                        .font(.system(size: 10, weight: .medium))
                         .lineLimit(1)
                         .minimumScaleFactor(0.9)
-                        .frame(maxWidth: .infinity, alignment: .leading)
                         .foregroundStyle(VelaTheme.fg2)
                 }
             }
+            .lineLimit(1)
 
             Button {
                 onPrimaryAction()
@@ -73,15 +79,15 @@ struct TodayHeroCard: View {
                     Spacer()
                     Image(systemName: "arrow.right")
                 }
-                .font(.system(size: 16, weight: .bold))
+                .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(.white)
-                .padding(.horizontal, 16)
-                .frame(height: 52)
+                .padding(.horizontal, 14)
+                .frame(height: 46)
                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(accent))
             }
             .buttonStyle(.plain)
         }
-        .padding(18)
+        .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(VelaTheme.cardBg)

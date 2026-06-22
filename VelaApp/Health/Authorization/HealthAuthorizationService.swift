@@ -6,12 +6,28 @@ protocol HealthStoreProviding {
     var isHealthDataAvailable: Bool { get }
 
     func requestAuthorization(toShare typesToShare: Set<HKSampleType>, read typesToRead: Set<HKObjectType>) async throws
+    func authorizationRequestStatus(toShare typesToShare: Set<HKSampleType>, read typesToRead: Set<HKObjectType>) async throws -> HKAuthorizationRequestStatus
     func authorizationStatus(for type: HKObjectType) -> HKAuthorizationStatus
 }
 
 extension HKHealthStore: HealthStoreProviding {
     var isHealthDataAvailable: Bool {
         HKHealthStore.isHealthDataAvailable()
+    }
+
+    func authorizationRequestStatus(
+        toShare typesToShare: Set<HKSampleType>,
+        read typesToRead: Set<HKObjectType>
+    ) async throws -> HKAuthorizationRequestStatus {
+        try await withCheckedThrowingContinuation { continuation in
+            getRequestStatusForAuthorization(toShare: typesToShare, read: typesToRead) { status, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: status)
+                }
+            }
+        }
     }
 }
 
@@ -81,6 +97,19 @@ final class HealthAuthorizationService {
         }
 
         try await healthStore.requestAuthorization(toShare: [], read: readTypes)
+    }
+
+    func shouldDeferBackgroundSync() async -> Bool {
+        guard isHealthDataAvailable else { return true }
+        do {
+            let status = try await healthStore.authorizationRequestStatus(
+                toShare: [],
+                read: Set(HealthDataTypeCatalog.coreTypes)
+            )
+            return status == .shouldRequest
+        } catch {
+            return false
+        }
     }
 
     func permissionSnapshot() -> HealthPermissionSnapshot {

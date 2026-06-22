@@ -23,9 +23,22 @@ struct AccountSettingsView: View {
         storedAge.map { Int(UserProfileSettings.inferredMaxHeartRate(age: $0)) }
     }
 
+    private var hasHealthProfileData: Bool {
+        let dashboard = dashboardVM.dashboard
+        return dashboard.extendedMetrics.age != nil
+            || dashboard.bodyMetrics.weightKilograms != nil
+            || dashboard.extendedMetrics.heightCm != nil
+            || dashboard.extendedMetrics.biologicalSex != nil
+    }
+
     var body: some View {
         Form {
             Section(header: Text("生理特征指标")) {
+                if hasHealthProfileData {
+                    Label("已同步的 Apple 健康资料会自动用于评分与训练建议。", systemImage: "heart.text.square")
+                        .font(.footnote)
+                        .foregroundStyle(VelaTheme.mutedText)
+                }
                 HStack {
                     TextField("年龄", text: $ageDraft)
                         .keyboardType(.numberPad)
@@ -79,10 +92,7 @@ struct AccountSettingsView: View {
         }
         .navigationTitle("账户与特征基准")
         .onAppear {
-            ageDraft = (10...100).contains(userAge) ? String(userAge) : ""
-            weightDraft = (25...350).contains(userWeight) ? String(format: "%.1f", userWeight) : ""
-            heightDraft = (100...250).contains(userHeight) ? String(format: "%.0f", userHeight) : ""
-            maxHeartRateDraft = (100...240).contains(userMaxHR) ? String(userMaxHR) : ""
+            populateProfileDrafts()
         }
         .alert("无法应用身体模型", isPresented: Binding(
             get: { validationMessage != nil },
@@ -91,6 +101,25 @@ struct AccountSettingsView: View {
             Button("好", role: .cancel) { validationMessage = nil }
         } message: {
             Text(validationMessage ?? "")
+        }
+    }
+
+    private func populateProfileDrafts() {
+        let healthProfile = dashboardVM.dashboard
+        ageDraft = (10...100).contains(userAge)
+            ? String(userAge)
+            : healthProfile.extendedMetrics.age.map(String.init) ?? ""
+        weightDraft = (25...350).contains(userWeight)
+            ? String(format: "%.1f", userWeight)
+            : healthProfile.bodyMetrics.weightKilograms.map { String(format: "%.1f", $0) } ?? ""
+        heightDraft = (100...250).contains(userHeight)
+            ? String(format: "%.0f", userHeight)
+            : healthProfile.extendedMetrics.heightCm.map { String(format: "%.0f", $0) } ?? ""
+        maxHeartRateDraft = (100...240).contains(userMaxHR) ? String(userMaxHR) : ""
+        if biologicalSex.isEmpty,
+           let healthSex = healthProfile.extendedMetrics.biologicalSex,
+           ["male", "female", "other"].contains(healthSex) {
+            biologicalSex = healthSex
         }
     }
 

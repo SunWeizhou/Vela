@@ -2,7 +2,6 @@ import SwiftUI
 import SwiftData
 
 struct VelaJournalView: View {
-    @Environment(\.colorScheme) private var cs
     @Environment(\.velaScrollDirection) private var scrollDirection
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var dashboardVM: DashboardViewModel
@@ -34,6 +33,7 @@ struct VelaJournalView: View {
     @State private var showAlcoholLogger = false
     @State private var showBehaviorQuickNote = false
     @State private var entryPendingDeletion: JournalEntryRecord?
+    @State private var entryMutationError: String?
 
     var body: some View {
         ScrollView {
@@ -59,68 +59,60 @@ struct VelaJournalView: View {
                         .textCase(.uppercase)
                         .padding(.leading, 2)
                     
-                    // Checklist Rows
-                    VStack(spacing: 10) {
-                        // Row 1: 低碳水化合物 (Bread icon + segment)
+                    VStack(spacing: 0) {
                         segmentedJournalRow(
                             icon: "fork.knife",
                             title: "低碳水化合物",
                             state: $lowCarbState
                         )
-                        
-                        // Row 2: 咖啡因 (Coffee cup icon + log chevron)
+                        habitRowDivider
                         inputJournalRow(
                             icon: "cup.and.saucer.fill",
                             title: "咖啡因",
                             valuePlaceholder: caffeineValueText,
                             onTap: { showCaffeineLogger = true }
                         )
-                        
-                        // Row 3: 每日心情 (Smiling face icon + log chevron)
+                        habitRowDivider
                         inputJournalRow(
                             icon: "face.smiling.fill",
                             title: "每日心情",
                             valuePlaceholder: moodValueText,
                             onTap: { showMoodLogger = true }
                         )
-                        
-                        // Row 4: 添加糖 (Candy icon + segment)
+                        habitRowDivider
                         segmentedJournalRow(
                             icon: "birthday.cake.fill",
                             title: "添加糖",
                             state: $addedSugarState
                         )
-                        
-                        // Row 5: 生酮饮食 (Avocado/Leaf icon + segment)
+                        habitRowDivider
                         segmentedJournalRow(
                             icon: "leaf.fill",
                             title: "生酮饮食",
                             state: $ketoDietState
                         )
-                        
-                        // Row 6: 补水 (Water drop icon + log chevron)
+                        habitRowDivider
                         inputJournalRow(
                             icon: "drop.fill",
                             title: "补水",
                             valuePlaceholder: hydrationValueText,
                             onTap: { showWaterLogger = true }
                         )
-                        
-                        // Row 7: 酒 (Wine glass icon + log chevron)
+                        habitRowDivider
                         inputJournalRow(
                             icon: "wineglass.fill",
                             title: "酒",
                             valuePlaceholder: alcoholValueText,
                             onTap: { showAlcoholLogger = true }
                         )
-                        
-                        // Row 8: 在床上使用设备 (Phone icon + segment)
+                        habitRowDivider
                         segmentedJournalRow(
                             icon: "iphone",
                             title: "在床上使用设备",
                             state: $bedDeviceState
                         )
                     }
+                    .velaNativeCard(radius: 12)
                 }
                 
                 JournalEntryList(entries: selectedDayEntries) { entry in
@@ -163,6 +155,14 @@ struct VelaJournalView: View {
             }
         } message: { entry in
             Text("将永久删除“\(entry.uiDisplayTitle)”。")
+        }
+        .alert("无法更新手记", isPresented: Binding(
+            get: { entryMutationError != nil },
+            set: { if !$0 { entryMutationError = nil } }
+        )) {
+            Button("好", role: .cancel) { entryMutationError = nil }
+        } message: {
+            Text(entryMutationError ?? "")
         }
         .sheet(isPresented: $showCaffeineLogger) {
             CaffeineLoggerView { amount in
@@ -212,8 +212,14 @@ struct VelaJournalView: View {
 
     private func deleteEntry(_ entry: JournalEntryRecord) {
         modelContext.delete(entry)
-        try? modelContext.save()
-        loadRealJournalData()
+        do {
+            try modelContext.save()
+            VelaAppState.shared.markLocalDataChanged()
+            loadRealJournalData()
+        } catch {
+            modelContext.rollback()
+            entryMutationError = "这条手记未删除。请稍后重试。"
+        }
     }
 
     private func headerDateString(for date: Date) -> String {
@@ -540,7 +546,11 @@ struct VelaJournalView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .velaNativeCard(radius: 16)
+    }
+
+    private var habitRowDivider: some View {
+        Divider()
+            .padding(.leading, 56)
     }
 
     private func segmentButton(title: String, index: Int, state: Binding<Int>) -> some View {
@@ -572,7 +582,6 @@ struct VelaJournalView: View {
                 Group {
                     if isActive {
                         VelaTheme.cardBg
-                            .shadow(color: Color.black.opacity(0.04), radius: 2, y: 1)
                     }
                 }
             )
@@ -612,7 +621,6 @@ struct VelaJournalView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .velaNativeCard(radius: 16)
         }
         .buttonStyle(.plain)
     }
@@ -647,8 +655,14 @@ struct VelaJournalView: View {
                     matched.note = note
                     matched.unit = unit
                     matched.createdAt = targetDate
-                    try? modelContext.save()
-                    loadRealJournalData()
+                    do {
+                        try modelContext.save()
+                        VelaAppState.shared.markLocalDataChanged()
+                        loadRealJournalData()
+                    } catch {
+                        modelContext.rollback()
+                        entryMutationError = "本次记录未保存。请稍后重试。"
+                    }
                     return
                 }
             }
@@ -656,8 +670,14 @@ struct VelaJournalView: View {
         
         let entry = JournalEntryRecord(createdAt: targetDate, tags: tags, note: note, value: value, unit: unit)
         modelContext.insert(entry)
-        try? modelContext.save()
-        loadRealJournalData()
+        do {
+            try modelContext.save()
+            VelaAppState.shared.markLocalDataChanged()
+            loadRealJournalData()
+        } catch {
+            modelContext.rollback()
+            entryMutationError = "本次记录未保存。请稍后重试。"
+        }
     }
 
     private func saveBehaviorQuickNote(_ note: String) {
@@ -678,10 +698,11 @@ struct VelaJournalView: View {
         do {
             try modelContext.save()
             VelaAppState.shared.markLocalDataChanged()
+            loadRealJournalData()
         } catch {
-            print("Failed to save behavior quick note: \(error)")
+            modelContext.rollback()
+            entryMutationError = "随手记未保存。请稍后重试。"
         }
-        loadRealJournalData()
     }
 
     private func selectedDayWithCurrentTime() -> Date {

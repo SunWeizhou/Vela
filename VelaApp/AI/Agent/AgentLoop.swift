@@ -9,6 +9,12 @@ enum ToolRiskLevel: String, Sendable {
     case destructive // Delete or deactivate — require explicit confirmation
 }
 
+struct ToolCallDescription: Sendable {
+    let name: String
+    let arguments: String
+    let riskLevel: ToolRiskLevel
+}
+
 // MARK: - Agent Loop
 
 protocol AgentChatProvider: Sendable {
@@ -140,19 +146,23 @@ struct AgentLoop {
     let maxToolCalls: Int
     /// Timeout per individual tool execution in seconds.
     let toolTimeoutSeconds: Int
+    /// Optional callback to confirm high-risk tool calls.
+    var onConfirmToolCall: (@Sendable (ToolCallDescription) async -> Bool)? = nil
 
     init(
         provider: any AgentChatProvider,
         toolRegistry: ToolRegistry,
         maxIterations: Int = 3,
         maxToolCalls: Int = 15,
-        toolTimeoutSeconds: Int = 20
+        toolTimeoutSeconds: Int = 20,
+        onConfirmToolCall: (@Sendable (ToolCallDescription) async -> Bool)? = nil
     ) {
         self.provider = provider
         self.toolRegistry = toolRegistry
         self.maxIterations = maxIterations
         self.maxToolCalls = maxToolCalls
         self.toolTimeoutSeconds = toolTimeoutSeconds
+        self.onConfirmToolCall = onConfirmToolCall
     }
 
     /// Runs the agentic loop and returns the final response plus tool execution details.
@@ -175,6 +185,7 @@ struct AgentLoop {
         var providerCallCount = 0
         var duplicateToolTracker: Set<String> = []
         var toolCallBudget = maxToolCalls
+        var executedToolCallIds: Set<String> = []
 
         for _ in 0..<maxIterations {
             // ── Inject data-version notice if tools returned fresher data than the snapshot ──
@@ -211,6 +222,16 @@ struct AgentLoop {
                 for tc in toolCalls {
                     toolCallBudget -= 1
 
+                    let toolRisk = toolRegistry.risk(for: tc.name)
+                    if (toolRisk == .write || toolRisk == .destructive) && executedToolCallIds.contains(tc.id) {
+                        agentMessages.append(ChatMessage(
+                            role: .tool,
+                            content: "[ALREADY EXECUTED: Tool \(tc.name) with call ID \(tc.id) was successfully executed. Skipping replay.]",
+                            toolCallId: tc.id
+                        ))
+                        continue
+                    }
+
                     // Duplicate tool call detection (same name + same args within this loop)
                     let callSignature = "\(tc.name):\(tc.arguments)"
                     if !duplicateToolTracker.insert(callSignature).inserted {
@@ -222,12 +243,33 @@ struct AgentLoop {
                         continue
                     }
 
-                    // Execute with timeout
-                    let result: String
-                    if toolTimeoutSeconds > 0 {
-                        result = await executeWithTimeout(name: tc.name, arguments: tc.arguments)
+                    // User confirmation check for write / destructive tools
+                    let userConfirmed: Bool
+                    if toolRisk == .write || toolRisk == .destructive {
+                        if let onConfirm = onConfirmToolCall {
+                            let description = ToolCallDescription(name: tc.name, arguments: tc.arguments, riskLevel: toolRisk)
+                            userConfirmed = await onConfirm(description)
+                        } else {
+                            userConfirmed = true
+                        }
                     } else {
-                        result = await toolRegistry.execute(name: tc.name, arguments: tc.arguments)
+                        userConfirmed = true
+                    }
+
+                    let result: String
+                    if !userConfirmed {
+                        result = "Error: User rejected execution of this tool."
+                    } else {
+                        // Execute with timeout
+                        if toolTimeoutSeconds > 0 {
+                            result = await executeWithTimeout(name: tc.name, arguments: tc.arguments)
+                        } else {
+                            result = await toolRegistry.execute(name: tc.name, arguments: tc.arguments)
+                        }
+                    }
+
+                    if userConfirmed && !result.hasPrefix("Error executing") {
+                        executedToolCallIds.insert(tc.id)
                     }
 
                     agentMessages.append(ChatMessage(

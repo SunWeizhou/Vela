@@ -45,6 +45,7 @@ struct VelaCoachView: View {
     @State private var showHistoryDrawer = false
     @State private var isRenamingSession = false
     @State private var renamingSession: CoachSessionRecord? = nil
+    @State private var sessionPendingDeletion: CoachSessionRecord? = nil
     @State private var renameText = ""
     @State private var showWikiProfile = false
     @State private var showModelSettings = false
@@ -98,7 +99,14 @@ struct VelaCoachView: View {
                     ScrollView {
                         VStack(spacing: 20) {
                             if vm.messages.isEmpty {
-                                intelligenceWorkspace
+                                CoachWelcomeWorkspace(
+                                    vm: vm,
+                                    todayOperatingPlan: todayOperatingPlan,
+                                    pendingMemoryProposals: pendingMemoryProposals,
+                                    agentArtifacts: agentArtifacts,
+                                    showWikiProfile: $showWikiProfile,
+                                    onSendMessage: { sendMessage($0) }
+                                )
                             }
 
                             ForEach(vm.messages.filter { !$0.isStreaming }) { msg in
@@ -197,8 +205,17 @@ struct VelaCoachView: View {
             // Sliding drawer view
             GeometryReader { geo in
                 HStack(spacing: 0) {
-                    historyDrawerView(width: geo.size.width * 0.78)
-                        .offset(x: showHistoryDrawer ? 0 : -geo.size.width * 0.78)
+                    CoachHistoryDrawer(
+                        width: geo.size.width * 0.78,
+                        vm: vm,
+                        modelContext: modelContext,
+                        showHistoryDrawer: $showHistoryDrawer,
+                        renamingSession: $renamingSession,
+                        renameText: $renameText,
+                        isRenamingSession: $isRenamingSession,
+                        sessionPendingDeletion: $sessionPendingDeletion
+                    )
+                    .offset(x: showHistoryDrawer ? 0 : -geo.size.width * 0.78)
                     Spacer()
                 }
             }
@@ -238,6 +255,28 @@ struct VelaCoachView: View {
                 renamingSession = nil
             }
         }
+        .alert("对话未保存", isPresented: Binding(
+            get: { vm.persistenceError != nil },
+            set: { if !$0 { vm.persistenceError = nil } }
+        )) {
+            Button("好", role: .cancel) { vm.persistenceError = nil }
+        } message: {
+            Text(vm.persistenceError ?? "")
+        }
+        .confirmationDialog("删除这段对话？", isPresented: Binding(
+            get: { sessionPendingDeletion != nil },
+            set: { if !$0 { sessionPendingDeletion = nil } }
+        ), titleVisibility: .visible) {
+            Button("删除对话", role: .destructive) {
+                if let sessionPendingDeletion {
+                    vm.deleteSession(sessionPendingDeletion, modelContext: modelContext)
+                }
+                sessionPendingDeletion = nil
+            }
+            Button("取消", role: .cancel) { sessionPendingDeletion = nil }
+        } message: {
+            Text("删除后将无法恢复这段本机保存的对话。")
+        }
         .sheet(isPresented: $showWikiProfile) {
             NavigationStack {
                 WikiProfileView()
@@ -251,165 +290,7 @@ struct VelaCoachView: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 
-    // MARK: - History Drawer View
-    
-    private func historyDrawerView(width: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Drawer Header
-            HStack {
-                Text("历史对话")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(Color(hex: "#1A1917"))
-                Spacer()
-                Button {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        showHistoryDrawer = false
-                    }
-                } label: {
-                    Image(systemName: "sidebar.left")
-                        .font(.system(size: 16))
-                        .foregroundStyle(Color(hex: "#007AFF"))
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 64)
-            .padding(.bottom, 16)
-            
-            // New Chat Button
-            Button {
-                vm.createNewSession(modelContext: modelContext)
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                    showHistoryDrawer = false
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 14, weight: .bold))
-                    Text("新建对话")
-                        .font(.system(size: 14, weight: .bold))
-                }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 44)
-                .background(RoundedRectangle(cornerRadius: 22).fill(Color(hex: "#007AFF")))
-                .shadow(color: Color(hex: "#007AFF").opacity(0.15), radius: 6, y: 3)
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 20)
-            .padding(.bottom, 20)
-            
-            Divider().padding(.horizontal, 20).padding(.bottom, 12)
-            
-            // Sessions Scroll List
-            ScrollView {
-                VStack(spacing: 10) {
-                    ForEach(vm.sessions) { session in
-                        HStack(spacing: 12) {
-                            Image(systemName: "bubble.left.and.bubble.right.fill")
-                                .font(.system(size: 13))
-                                .foregroundStyle(vm.currentSession?.id == session.id ? Color(hex: "#007AFF") : Color(hex: "#8E8A80"))
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(session.title.isEmpty ? "新对话" : session.title)
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundStyle(Color(hex: "#1A1917"))
-                                    .lineLimit(1)
-                                
-                                Text(session.updatedAt.formatted(.dateTime.month().day().hour().minute()))
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(Color(hex: "#BFB9AC"))
-                            }
-                            
-                            Spacer()
-                            
-                            if vm.currentSession?.id == session.id {
-                                Button {
-                                    renamingSession = session
-                                    renameText = session.title
-                                    isRenamingSession = true
-                                } label: {
-                                    Image(systemName: "pencil")
-                                        .font(.system(size: 12))
-                                        .foregroundStyle(Color(hex: "#007AFF"))
-                                        .frame(width: 24, height: 24)
-                                }
-                                .buttonStyle(.plain)
-                                
-                                Button {
-                                    vm.deleteSession(session, modelContext: modelContext)
-                                } label: {
-                                    Image(systemName: "trash")
-                                        .font(.system(size: 12))
-                                        .foregroundStyle(Color(hex: "#FF3B30"))
-                                        .frame(width: 24, height: 24)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(vm.currentSession?.id == session.id ? Color.white : Color.clear)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .stroke(vm.currentSession?.id == session.id ? Color(hex: "#007AFF").opacity(0.3) : Color.clear, lineWidth: 1)
-                                )
-                        )
-                        .padding(.horizontal, 14)
-                        .onTapGesture {
-                            vm.selectSession(session, modelContext: modelContext)
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                showHistoryDrawer = false
-                            }
-                        }
-                    }
-                }
-                .padding(.vertical, 8)
-            }
-            
-            // Drawer Footer
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color(hex: "#007AFF"), Color(hex: "#64D2FF")],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 36, height: 36)
-                    
-                    Image(systemName: "person.fill")
-                        .font(.system(size: 16))
-                        .foregroundStyle(.white)
-                }
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("本机健康资料")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Color(hex: "#1A1917"))
-                    Text("本机优先存储")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Color(hex: "#007AFF"))
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .padding(.bottom, 48)
-            .background(Color.white.opacity(0.4))
-        }
-        .frame(width: width)
-        .frame(maxHeight: .infinity)
-        .background(Color(hex: "#F2F2F7"))
-        .overlay(alignment: .trailing) {
-            Rectangle()
-                .fill(Color(hex: "#E5E5EA"))
-                .frame(width: 0.5)
-        }
-    }
+
 
     // MARK: - Header
 
@@ -494,239 +375,7 @@ struct VelaCoachView: View {
         .padding(.bottom, 12)
     }
 
-    // MARK: - Welcome
 
-    private var welcomeHeader: some View {
-        VStack(spacing: 16) {
-            AppleIntelligenceOrb()
-                .padding(.top, 10)
-
-            Text("Vela 教练")
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundStyle(VelaTheme.fg)
-
-            Text("你的 AI 身体智能代理。你可以与我讨论训练、恢复、睡眠或营养，我将基于你的健康数据为你提供个性化建议。")
-                .font(VelaTheme.subheadline())
-                .foregroundStyle(VelaTheme.muted)
-                .multilineTextAlignment(.center)
-                .lineSpacing(4.5)
-                .padding(.horizontal, 24)
-        }
-        .padding(.vertical, 14)
-    }
-
-    private var workspaceCarousel: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            workspaceSectionTitle(L10n.t("INTELLIGENCE WORKSPACE", "智能决策舱"), L10n.t("Active insights & actionable plans", "主动智能洞察与建议"))
-                .padding(.horizontal, 4)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    if let plan = todayOperatingPlan {
-                        let display = displayModel(for: plan)
-                        carouselCard(
-                            title: display.statusTitle,
-                            detail: display.summary,
-                            icon: "sparkles",
-                            footer: "\(display.confidenceLabel) · 训练建议"
-                        ) {
-                            appState.routeToTab(1)
-                        }
-                    } else {
-                        carouselCard(
-                            title: "今日计划正在生成",
-                            detail: "正在读取恢复、睡眠、训练负荷和近期训练记录；完成后会与训练页保持同一条建议。",
-                            icon: "arrow.triangle.2.circlepath",
-                            footer: "数据同步中",
-                            isAI: true
-                        ) {
-                            sendMessage("请根据当前可用数据生成保守的今日训练建议。")
-                        }
-                    }
-
-                    if !pendingMemoryProposals.isEmpty {
-                        carouselCard(
-                            title: "待确认长期记忆",
-                            detail: "\(pendingMemoryProposals.count) 条候选内容，确认后才会写入你的档案。",
-                            icon: "brain.head.profile",
-                            footer: "点击进行归档确认",
-                            accentColor: Color.orange
-                        ) {
-                            showWikiProfile = true
-                        }
-                    }
-
-                    ForEach(agentArtifacts.prefix(3)) { artifact in
-                        carouselCard(
-                            title: artifact.title,
-                            detail: localizedArtifactType(artifact.type),
-                            icon: artifactIcon(artifact.type),
-                            footer: "置信度 \(Int((artifact.confidence * 100).rounded()))% · 历史产物"
-                        ) {
-                            sendMessage("基于产物 \(artifact.title) 给我下一步行动。")
-                        }
-                    }
-                }
-                .padding(.vertical, 4)
-                .padding(.horizontal, 2)
-            }
-        }
-    }
-
-    private func carouselCard(
-        title: String,
-        detail: String,
-        icon: String,
-        footer: String,
-        accentColor: Color = VelaTheme.accent,
-        isAI: Bool = false,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: icon)
-                        .foregroundStyle(accentColor)
-                        .font(.system(size: 14, weight: .bold))
-                        .frame(width: 30, height: 30)
-                        .background(Circle().fill(accentColor.opacity(0.12)))
-                    
-                    Text(title)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(VelaTheme.fg)
-                        .lineLimit(1)
-                    
-                    Spacer()
-                }
-                
-                Text(detail)
-                    .font(.system(size: 12))
-                    .foregroundStyle(VelaTheme.fg2)
-                    .lineLimit(3)
-                    .frame(height: 54, alignment: .topLeading)
-                    .multilineTextAlignment(.leading)
-                
-                Spacer(minLength: 0)
-                
-                Text(footer)
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(VelaTheme.muted)
-                    .lineLimit(1)
-            }
-            .frame(width: 250, height: 132)
-            .padding(14)
-            .background(RoundedRectangle(cornerRadius: 18).fill(VelaTheme.cardBg))
-            .overlay(
-                RoundedRectangle(cornerRadius: 18)
-                    .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
-            )
-            .appleIntelligenceGlow(isHighlighted: isAI, radius: 18)
-        }
-        .buttonStyle(.cardPress)
-    }
-
-    private var intelligenceWorkspace: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            welcomeHeader
-            
-            workspaceCarousel
-            
-            Button {
-                showWikiProfile = true
-            } label: {
-                HStack {
-                    Label("健康档案与长期记忆", systemImage: "books.vertical.fill")
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(VelaTheme.fg)
-                .padding(14)
-                .background(RoundedRectangle(cornerRadius: 16).fill(VelaTheme.surface))
-                .overlay(RoundedRectangle(cornerRadius: 16).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
-            }
-            .buttonStyle(.plain)
-
-            // Suggestion questions
-            VStack(alignment: .leading, spacing: 10) {
-                Text(L10n.t("QUICK SUGGESTIONS", "快捷提问"))
-                    .font(VelaTheme.caption2().weight(.bold))
-                    .foregroundStyle(VelaTheme.muted)
-                    .tracking(0.5)
-                    .padding(.leading, 4)
-
-                FlexStack(spacing: 8) {
-                    ForEach(vm.quickQuestions, id: \.self) { text in
-                        Button(text) {
-                            sendMessage(text)
-                        }
-                        .font(VelaTheme.subheadline())
-                        .foregroundStyle(VelaTheme.fg)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(VelaTheme.cardBg)
-                                .overlay(
-                                    Capsule(style: .continuous)
-                                        .stroke(VelaTheme.borderSoft, lineWidth: 0.7)
-                                )
-                        )
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-        }
-    }
-
-    private func workspaceSectionTitle(_ title: String, _ subtitle: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(VelaTheme.accent)
-            Text(subtitle)
-                .font(.caption)
-                .foregroundStyle(VelaTheme.muted)
-        }
-    }
-
-    private func displayModel(for plan: DailyOperatingPlanRecord) -> DailyOperatingPlanDisplayModel {
-        let payload: DailyOperatingPlanPayload? = {
-            guard let data = plan.payloadJSON.data(using: .utf8) else { return nil }
-            return try? JSONDecoder().decode(DailyOperatingPlanPayload.self, from: data)
-        }()
-        return DailyOperatingPlanDisplayModel.build(
-            payload: payload,
-            primaryActionType: plan.primaryActionType,
-            source: plan.source,
-            safetyNotice: plan.safetyNotice,
-            confidence: plan.confidence
-        )
-    }
-
-    private func decodedPlanSummary(_ plan: DailyOperatingPlanRecord) -> String {
-        let display = displayModel(for: plan)
-        if AppLanguage.stored.isChinese {
-            return display.summary
-        }
-        guard let data = plan.payloadJSON.data(using: .utf8),
-              let payload = try? JSONDecoder().decode(DailyOperatingPlanPayload.self, from: data) else {
-            return display.summary
-        }
-        return payload.summary
-    }
-
-    private func artifactIcon(_ type: String) -> String {
-        switch type {
-        case "daily_plan": "calendar.badge.checkmark"
-        case "training_adjustment": "slider.horizontal.3"
-        case "weekly_report": "chart.line.uptrend.xyaxis"
-        case "correlation_chart": "point.3.connected.trianglepath.dotted"
-        case "wiki_diff": "doc.badge.gearshape"
-        case "nutrition_feedback": "fork.knife"
-        default: "doc.text.fill"
-        }
-    }
 
     // MARK: - Composer
 
@@ -913,48 +562,4 @@ struct VelaCoachView: View {
 
 }
 
-// MARK: - FlexStack (wrapping HStack for suggestion chips)
 
-struct FlexStack: Layout {
-    var spacing: CGFloat = 8
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let rows = arrange(proposal: proposal, subviews: subviews)
-        let height = rows.map { $0.map { $0.size.height }.max() ?? 0 }.reduce(0, +) + spacing * CGFloat(max(0, rows.count - 1))
-        return CGSize(width: proposal.width ?? 0, height: height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let rows = arrange(proposal: proposal, subviews: subviews)
-        var y = bounds.minY
-        for row in rows {
-            var x = bounds.minX
-            for item in row {
-                subviews[item.index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(item.size))
-                x += item.size.width + spacing
-            }
-            let rowH = row.map { $0.size.height }.max() ?? 0
-            y += rowH + spacing
-        }
-    }
-
-    struct Item { let index: Int; let size: CGSize }
-
-    private func arrange(proposal: ProposedViewSize, subviews: Subviews) -> [[Item]] {
-        let maxW = proposal.width ?? .infinity
-        var rows: [[Item]] = [[]]
-        var currentRowW: CGFloat = 0
-
-        for (i, sub) in subviews.enumerated() {
-            let size = sub.sizeThatFits(.unspecified)
-            let fits = rows.last?.isEmpty == true || currentRowW + size.width <= maxW
-            if !fits {
-                rows.append([])
-                currentRowW = 0
-            }
-            rows[rows.count - 1].append(Item(index: i, size: size))
-            currentRowW += size.width + spacing
-        }
-        return rows
-    }
-}

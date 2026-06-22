@@ -296,7 +296,7 @@ struct VelaTodayView: View {
 
                 TodaySignalGrid(
                     model: todayExperience,
-                    freshnessText: localizedDataFreshness(bodyState.freshness),
+                    freshness: bodyState.freshness,
                     accentColor: { accentColor($0) }
                 )
                 .opacity(isVisible ? 1 : 0)

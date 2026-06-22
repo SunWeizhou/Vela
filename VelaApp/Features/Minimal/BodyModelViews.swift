@@ -5,7 +5,6 @@ struct BodyModelEditView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var dashboardVM: DashboardViewModel
-    @Environment(\.colorScheme) private var cs
     
     @Query(sort: \OnboardingState.updatedAt, order: .reverse)
     private var onboardingStates: [OnboardingState]
@@ -180,6 +179,7 @@ struct BodyModelEditView: View {
             }
             return true
         } catch {
+            modelContext.rollback()
             saveError = "本次修改未能写入本机资料，请重试。"
             return false
         }
@@ -260,7 +260,6 @@ struct BaselineRangeIndicator: View {
 
 struct BodyModelDetailView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.colorScheme) private var cs
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     
     @Query(sort: \OnboardingState.updatedAt, order: .reverse)
@@ -269,10 +268,6 @@ struct BodyModelDetailView: View {
     @State private var dailySummaries: [DailyHealthSummaryRecord] = []
     @State private var strengthWorkouts: [StrengthWorkoutRecord] = []
     @State private var trainingResponses: [TrainingResponseRecord] = []
-    @AppStorage("vela_user_age") private var profileAge = 0
-    @AppStorage("vela_user_weight") private var profileWeight = 0.0
-    @AppStorage("vela_user_height") private var profileHeight = 0.0
-    @AppStorage("vela_user_biological_sex") private var profileSex = ""
     
     private var onboarding: OnboardingState? { onboardingStates.first }
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
@@ -292,10 +287,14 @@ struct BodyModelDetailView: View {
     }
     private var healthProfileSummary: String {
         var values: [String] = []
-        if (10...100).contains(profileAge) { values.append("\(profileAge) 岁") }
-        if (25...350).contains(profileWeight) { values.append(String(format: "%.1f kg", profileWeight)) }
-        if (100...250).contains(profileHeight) { values.append(String(format: "%.0f cm", profileHeight)) }
-        if let sex = ["male": "男性", "female": "女性", "other": "其他"][profileSex] { values.append(sex) }
+        let age = UserProfileSettings.age() ?? dashboard.extendedMetrics.age
+        let weight = UserProfileSettings.weightKilograms() ?? dashboard.bodyMetrics.weightKilograms
+        let height = UserProfileSettings.heightCentimeters() ?? dashboard.extendedMetrics.heightCm
+        let sex = UserProfileSettings.biologicalSex() ?? dashboard.extendedMetrics.biologicalSex
+        if let age, (10...100).contains(age) { values.append("\(age) 岁") }
+        if let weight, (25...350).contains(weight) { values.append(String(format: "%.1f kg", weight)) }
+        if let height, (100...250).contains(height) { values.append(String(format: "%.0f cm", height)) }
+        if let sex = ["male": "男性", "female": "女性", "other": "其他"][sex ?? ""] { values.append(sex) }
         return values.isEmpty ? "等待 Apple 健康或手动填写" : values.joined(separator: " · ")
     }
     private var bodyModelState: BodyModelState {

@@ -142,10 +142,9 @@ struct AdaptiveTrainingManager {
     /// Applies an accepted adaptation to the training plan.
     func applyAdaptation(
         _ record: TrainingPlanAdaptationRecord,
-        to plan: TrainingPlanRecord,
-        modelContext: ModelContext
-    ) throws {
-        guard let dayIndex = plan.days.firstIndex(where: { $0.id == record.dayId }) else { return }
+        to plan: TrainingPlanRecord
+    ) -> Bool {
+        guard let dayIndex = plan.days.firstIndex(where: { $0.id == record.dayId }) else { return false }
 
         switch record.adjustment {
         case "rest":
@@ -182,28 +181,29 @@ struct AdaptiveTrainingManager {
         case "reschedule":
             // Move the training day to the next available rest day
             var moved = plan.days[dayIndex]
-            if let nextRestIndex = plan.days[moved.weekNumber..<plan.days.count]
-                .firstIndex(where: { $0.focus == "rest" || $0.focus == "flexibility" }) {
-                moved = TrainingDay(
-                    id: moved.id, weekNumber: plan.days[nextRestIndex].weekNumber,
-                    dayNumber: plan.days[nextRestIndex].dayNumber,
-                    title: moved.title + (AppLanguage.stored.isChinese ? "（改期）" : " (Rescheduled)"),
-                    description: moved.description, focus: moved.focus,
-                    durationMinutes: moved.durationMinutes, intensity: moved.intensity,
-                    isCompleted: false
-                )
-                // Mark original day as rest
-                plan.days[dayIndex] = TrainingDay(
-                    id: plan.days[dayIndex].id,
-                    weekNumber: plan.days[dayIndex].weekNumber,
-                    dayNumber: plan.days[dayIndex].dayNumber,
-                    title: AppLanguage.stored.isChinese ? "休息日" : "Rest Day",
-                    description: AppLanguage.stored.isChinese ? "训练已改期" : "Training rescheduled",
-                    focus: "rest", durationMinutes: 0, intensity: "low",
-                    isCompleted: false
-                )
-                plan.days[nextRestIndex] = moved
+            guard let nextRestIndex = plan.days.indices
+                .first(where: { $0 > dayIndex && (plan.days[$0].focus == "rest" || plan.days[$0].focus == "flexibility") }) else {
+                return false
             }
+            moved = TrainingDay(
+                id: moved.id, weekNumber: plan.days[nextRestIndex].weekNumber,
+                dayNumber: plan.days[nextRestIndex].dayNumber,
+                title: moved.title + (AppLanguage.stored.isChinese ? "（改期）" : " (Rescheduled)"),
+                description: moved.description, focus: moved.focus,
+                durationMinutes: moved.durationMinutes, intensity: moved.intensity,
+                isCompleted: false
+            )
+            // Mark original day as rest
+            plan.days[dayIndex] = TrainingDay(
+                id: plan.days[dayIndex].id,
+                weekNumber: plan.days[dayIndex].weekNumber,
+                dayNumber: plan.days[dayIndex].dayNumber,
+                title: AppLanguage.stored.isChinese ? "休息日" : "Rest Day",
+                description: AppLanguage.stored.isChinese ? "训练已改期" : "Training rescheduled",
+                focus: "rest", durationMinutes: 0, intensity: "low",
+                isCompleted: false
+            )
+            plan.days[nextRestIndex] = moved
         case "deloadWeek":
             // Convert all remaining days this week to light recovery
             let currentWeek = plan.days[dayIndex].weekNumber
@@ -219,9 +219,9 @@ struct AdaptiveTrainingManager {
                 )
             }
         default:
-            break
+            return false
         }
 
-        try modelContext.save()
+        return true
     }
 }
