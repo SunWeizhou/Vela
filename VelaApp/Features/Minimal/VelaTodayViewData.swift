@@ -6,11 +6,9 @@ import CoreLocation
 extension VelaTodayView {
     
     func persistDailyOperatingPlan() {
-        _ = try? DailyOperatingPlanCoordinator.upsert(
-            bodyState: bodyState,
-            decision: trainingDecision,
-            modelContext: modelContext
-        )
+        Task {
+            await DailyPlanRefreshCoordinator.shared.refreshPlan(for: dashboardVM.selectedDate, modelContext: modelContext)
+        }
     }
 
     func readinessColor(_ decision: ReadinessDecisionKind) -> Color {

@@ -1458,3 +1458,51 @@ struct RenderCorrelationChartTool: AgentTool {
         return "Successfully prepared the correlation chart for '\(metricX)' vs '\(metricY)'. You MUST now include the tag `[ARTIFACT:correlation:\(key)]` in your final text response exactly where you want the visual chart to be rendered."
     }
 }
+
+/// Delete or deactivate an existing training plan.
+struct DeleteTrainingPlanTool: AgentTool {
+    let name = "delete_plan"
+    let description = "Delete or deactivate an existing training plan by its ID. This is a highly destructive action."
+    let riskLevel: ToolRiskLevel = .destructive
+
+    let executionContext: ToolExecutionContext
+
+    var parameters: [String: Value] {
+        [
+            "type": .string("object"),
+            "properties": .object([
+                "plan_id": .object([
+                    "type": .string("string"),
+                    "description": .string("The UUID string of the training plan to delete.")
+                ])
+            ]),
+            "required": .array([.string("plan_id")])
+        ]
+    }
+
+    func execute(arguments: String) async throws -> String {
+        return try await MainActor.run {
+            let modelContext = executionContext.modelContext
+            try PersistenceWriteGate.shared.assertWritable(operation: "DeleteTrainingPlanTool", modelContext: modelContext)
+
+            guard let data = arguments.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let planIdStr = json["plan_id"] as? String,
+                  let planId = UUID(uuidString: planIdStr) else {
+                return "Error: missing or invalid 'plan_id' argument."
+            }
+
+            let descriptor = FetchDescriptor<TrainingPlanRecord>(
+                predicate: #Predicate<TrainingPlanRecord> { $0.id == planId }
+            )
+            if let plan = try modelContext.fetch(descriptor).first {
+                modelContext.delete(plan)
+                try modelContext.save()
+                return "Successfully deleted training plan \(planId)."
+            } else {
+                return "Error: training plan \(planId) not found."
+            }
+        }
+    }
+}
+

@@ -165,6 +165,11 @@ final class HealthKitSyncEngine {
             summary: "Successfully synced and computed metrics for past \(days) days."
         )
         try? syncTrainingIntelligenceInsights(endingAt: endDate)
+        
+        // Trigger DailyPlanRefreshCoordinator
+        Task { @MainActor in
+            await DailyPlanRefreshCoordinator.shared.refreshPlan(for: endDate, modelContext: modelContext)
+        }
     }
 
     private func syncTrainingIntelligenceInsights(endingAt endDate: Date) throws {

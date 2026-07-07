@@ -39,6 +39,7 @@ enum ToolFactory {
             FoodLogTool(executionContext: executionContext),
             TrainingPlanTool(decision: dashboard.trainingDecision),
             CreateTrainingPlanTool(executionContext: executionContext),
+            DeleteTrainingPlanTool(executionContext: executionContext),
             RenderCorrelationChartTool(),
         ]
     }

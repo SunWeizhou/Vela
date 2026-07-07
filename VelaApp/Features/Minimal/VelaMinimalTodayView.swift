@@ -72,7 +72,11 @@ struct VelaTodayView: View {
     }
     
     var trainingDecision: DailyTrainingDecision {
-        TrainingDecisionKernel().decide(input: TrainingDecisionInput(
+        if let persistedPlan = persistedOperatingPlan,
+           let decoded = persistedPlan.trainingDecision {
+            return decoded
+        }
+        return TrainingDecisionKernel().decide(input: TrainingDecisionInput(
             bodyState: bodyState,
             activePlan: activePlan,
             recentStrengthSummary: recentStrengthSummary,
@@ -122,9 +126,6 @@ struct VelaTodayView: View {
     var strainScore: Double { max(0, min(1.0, dashboard.strain.score / 100.0)) }
     var recoveryScore: Double { max(0, min(1.0, dashboard.recovery.score / 100.0)) }
     var sleepScore: Double { max(0, min(1.0, dashboard.sleepScore.score / 100.0)) }
-
-    var hrvValue: Double { dashboard.recoveryMetrics.hrvMilliseconds ?? 0 }
-    var rhrValue: Double { dashboard.recoveryMetrics.restingHeartRate ?? 0 }
 
     // Stress & Energy
     var stressLevel: Double { dashboard.stress.stressIndex }
@@ -285,7 +286,11 @@ struct VelaTodayView: View {
                         if let primary = todayExperience.actions.first(where: \.isPrimary) {
                             performExperienceAction(primary)
                         }
-                    }
+                    },
+                    generatedAt: persistedOperatingPlan?.generatedAt,
+                    safetyNotice: persistedOperatingPlan?.safetyNotice,
+                    isStale: persistedOperatingPlan == nil || persistedOperatingPlan?.bodyStateHash != bodyState.hash,
+                    confidence: persistedOperatingPlan?.confidence ?? trainingDecision.confidence
                 )
                 .opacity(isVisible ? 1 : 0)
                 .offset(y: isVisible ? 0 : 10)
@@ -404,6 +409,12 @@ struct VelaTodayView: View {
             dashboardVM.hydrateFromCache(modelContext: modelContext)
             loadRealNutritionData()
             loadDynamicData()
+        }
+        .onChange(of: activeStatusRaw) { _, _ in
+            let dateToRefresh = dashboardVM.selectedDate
+            Task {
+                await DailyPlanRefreshCoordinator.shared.refreshPlan(for: dateToRefresh, modelContext: modelContext)
+            }
         }
         .onChange(of: locationManager.location) { _, _ in
             fetchLocalWeather()

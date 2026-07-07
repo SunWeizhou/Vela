@@ -224,6 +224,7 @@ struct StrengthWorkoutSummarySheet: View {
                     summaryCard("e1RM", summary.estimatedOneRepMaxByExercise.sorted { $0.key < $1.key }.map { "\($0.key): \(Int($0.value.rounded())) kg" }.joined(separator: "\n"))
                     summaryCard("PR", summary.personalRecords.isEmpty ? "历史数据不足，完成更多训练后会自动识别 PR。" : summary.personalRecords.map(\.summary).joined(separator: "\n"))
                     summaryCard("恢复建议", recoveryRecommendation)
+                    summaryCard("次日恢复观察提示", "由于你今天完成了力量训练，Vela 将在明天特别关注你的睡眠质量、HRV 和静息心率 (RHR)，以评估本次训练对你身体产生的生理恢复代价与适应反馈。")
                     summaryCard("饮食与补水", nutritionRecommendation)
                     summaryCard("下次训练", nextSessionRecommendation)
                     Button {

@@ -50,7 +50,7 @@ private final class CoachResponseBackgroundLease {
     }
 }
 
-// MARK: - Unified ViewModel
+// MARK: - ViewModel
 
 @MainActor
 final class CoachChatVM: ObservableObject {
@@ -96,12 +96,9 @@ final class CoachChatVM: ObservableObject {
     @Published var draft = ""
     @Published var isStreaming = false
     @Published var isReady = false
-    /// Holds the accumulated streaming text without replacing messages[] entries.
-    /// This avoids full view tree rebuilds on each token batch.
     @Published var streamingContent: String = ""
-    /// True while the food photo is being analyzed by the vision LLM.
     @Published var isAnalyzingFood = false
-    @Published private(set) var isAwaitingForegroundRetry = false
+    @Published var isAwaitingForegroundRetry = false
     @Published var persistenceError: String?
 
     let quickQuestions: [String] = [
@@ -111,10 +108,18 @@ final class CoachChatVM: ObservableObject {
         L10n.t("Update my profile", "更新我的档案"),
     ]
 
+    // Delegated stores/helpers
+    private let sessionStore = CoachSessionStore()
+    private let assembler = CoachContextAssembler()
+    private let runner = CoachRequestRunner()
+    private let writer = CoachPersistenceWriter()
+    private let foodWorkflow = FoodPhotoWorkflow()
+
     private let keychain = KeychainService.shared
     private let apiKeyAccount = "deepseek_api_key"
     private let kimiApiKeyAccount = FoodPhotoAnalyzer.keychainAccount
     private let backgroundLease = CoachResponseBackgroundLease()
+    
     private var pendingRequest: PendingRequest?
     private var activeResponseTask: Task<Void, Never>?
     private var isAppActive = true
@@ -127,6 +132,20 @@ final class CoachChatVM: ObservableObject {
         var journalEntries: [JournalEntryRecord]
         var savedReports: [AIReportRecord]
         var focus: CoachContextFocus
+    }
+
+    var sessions: [CoachSessionRecord] {
+        sessionStore.sessions
+    }
+
+    var currentSession: CoachSessionRecord? {
+        sessionStore.currentSession
+    }
+
+    init() {
+        // Wire up persistence error tracking
+        sessionStore.$persistenceError
+            .assign(to: &$persistenceError)
     }
 
     static func historyBeforeCurrentPrompt(from messages: [ChatMsg], limit: Int) -> [ChatMsg] {
@@ -146,8 +165,6 @@ final class CoachChatVM: ObservableObject {
         return "[Sent at \(timestamp) \(calendar.timeZone.identifier)]\n\(message.content)"
     }
 
-    // MARK: - Key State
-
     func refreshKeyState() {
         do {
             isReady = !(try keychain.read(account: apiKeyAccount) ?? "").isEmpty
@@ -156,10 +173,77 @@ final class CoachChatVM: ObservableObject {
         }
     }
 
-    // MARK: - Food Photo Analysis
+    // MARK: - Session Delegation
 
-    /// Captures a food photo, sends it to Kimi vision for nutritional analysis,
-    /// and injects the structured result as a user message context for the coach.
+    func loadSessions(modelContext: ModelContext) {
+        sessionStore.loadSessions(
+            modelContext: modelContext,
+            isStreaming: isStreaming,
+            isAwaitingForegroundRetry: isAwaitingForegroundRetry
+        ) { [weak self] msgs in
+            self?.messages = msgs
+        }
+    }
+
+    func createNewSession(modelContext: ModelContext) {
+        sessionStore.createNewSession(
+            modelContext: modelContext,
+            isStreaming: isStreaming,
+            isAwaitingForegroundRetry: isAwaitingForegroundRetry
+        ) { [weak self] msgs in
+            self?.messages = msgs
+        }
+    }
+
+    func selectSession(_ session: CoachSessionRecord, modelContext: ModelContext) {
+        sessionStore.selectSession(
+            session,
+            modelContext: modelContext,
+            isStreaming: isStreaming,
+            isAwaitingForegroundRetry: isAwaitingForegroundRetry
+        ) { [weak self] msgs in
+            self?.messages = msgs
+        }
+    }
+
+    func deleteSession(_ session: CoachSessionRecord, modelContext: ModelContext) {
+        sessionStore.deleteSession(
+            session,
+            modelContext: modelContext,
+            isStreaming: isStreaming,
+            isAwaitingForegroundRetry: isAwaitingForegroundRetry
+        ) { [weak self] msgs in
+            self?.messages = msgs
+        }
+    }
+
+    func renameSession(_ session: CoachSessionRecord, to newTitle: String, modelContext: ModelContext) {
+        sessionStore.renameSession(
+            session,
+            to: newTitle,
+            modelContext: modelContext,
+            isStreaming: isStreaming,
+            isAwaitingForegroundRetry: isAwaitingForegroundRetry
+        ) { [weak self] msgs in
+            self?.messages = msgs
+        }
+    }
+
+    func persistThread(modelContext: ModelContext) {
+        do {
+            try writer.persistThread(messages: messages, currentSession: currentSession, modelContext: modelContext)
+        } catch {
+            persistenceError = "对话内容未保存。请稍后重试。"
+        }
+    }
+
+    func clearConversation(modelContext: ModelContext) {
+        messages = []
+        persistThread(modelContext: modelContext)
+    }
+
+    // MARK: - Food Photo Workflow Delegation
+
     func analyzeFoodPhoto(
         _ image: UIImage,
         dashboard: DashboardSummary,
@@ -176,240 +260,20 @@ final class CoachChatVM: ObservableObject {
             ))
             return
         }
-
-        isAnalyzingFood = true
-        streamingContent = L10n.t("Analyzing your meal with Kimi Vision...", "正在用 Kimi 视觉模型分析你的餐食...")
-
-        do {
-            let analyzer = FoodPhotoAnalyzer(apiKey: apiKey)
-            let result = try await analyzer.analyzeFoodPhoto(image)
-
-            streamingContent = ""
-            isAnalyzingFood = false
-
-            let formattedResult = result.formattedMarkdown()
-            let summaryText = result.plainTextSummary()
-
-            // Build the user message that includes the food photo analysis context
-            let userMessage = """
-            I just took a photo of my meal. Here's the AI-powered nutritional analysis:
-
-            \(formattedResult)
-
-            Based on this analysis and my current health data, can you provide personalized feedback on this meal? Consider my activity level, recovery state, and health goals from my wiki profile.
-            """
-
-            // Call the normal send flow with the analysis context
-            await send(
-                text: userMessage,
-                dashboard: dashboard,
-                modelContext: modelContext,
-                journalEntries: journalEntries,
-                savedReports: savedReports,
-                focus: focus,
-                services: services
-            )
-
-            // Also auto-log the food entry into structured Nutrition plus Journal context.
-            let foodLog = FoodLogRecord(
-                analysis: result,
-                mealName: Self.defaultMealName(for: Date()),
-                source: .photoAnalysis
-            )
-            modelContext.insert(foodLog)
-
-            let entry = JournalEntryRecord(
-                createdAt: Date(),
-                tags: ["food", "meal"],
-                note: "[Photo Analysis] \(summaryText)",
-                value: Double(result.totalCalories),
-                unit: "kcal"
-            )
-            modelContext.insert(entry)
-            do {
-                try modelContext.save()
-                VelaAppState.shared.markLocalDataChanged()
-            } catch {
-                modelContext.rollback()
-                persistenceError = L10n.t(
-                    "The meal analysis is complete, but its local nutrition log was not saved.",
-                    "餐食分析已经完成，但本地营养记录未保存。"
-                )
-            }
-
-        } catch {
-            streamingContent = ""
-            isAnalyzingFood = false
-            messages.append(ChatMsg(
-                role: .assistant,
-                content: L10n.t(
-                    "Sorry, I couldn't analyze the food photo: \(error.localizedDescription)",
-                    "抱歉，无法分析食物照片：\(error.localizedDescription)"
-                )
-            ))
-        }
-    }
-
-    private static func defaultMealName(for date: Date, calendar: Calendar = .current) -> String {
-        let hour = calendar.component(.hour, from: date)
-        switch hour {
-        case 5..<11:
-            return "Breakfast"
-        case 11..<16:
-            return "Lunch"
-        case 16..<22:
-            return "Dinner"
-        default:
-            return "Snack"
-        }
-    }
-
-    // MARK: - Sessions & Persistence
-
-    @Published var sessions: [CoachSessionRecord] = []
-    @Published var currentSession: CoachSessionRecord?
-
-    func loadSessions(modelContext: ModelContext) {
-        let descriptor = FetchDescriptor<CoachSessionRecord>(
-            predicate: #Predicate { !$0.isArchived },
-            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        await foodWorkflow.analyzeFoodPhoto(
+            image,
+            apiKey: apiKey,
+            dashboard: dashboard,
+            modelContext: modelContext,
+            journalEntries: journalEntries,
+            savedReports: savedReports,
+            focus: focus,
+            services: services,
+            chatVM: self
         )
-        let list = (try? modelContext.fetch(descriptor)) ?? []
-        self.sessions = list
-        
-        if list.isEmpty {
-            let defaultSession = CoachSessionRecord(
-                id: UUID(),
-                title: "新对话",
-                createdAt: Date(),
-                updatedAt: Date(),
-                serializedMessages: "[]"
-            )
-            modelContext.insert(defaultSession)
-            do {
-                try modelContext.save()
-                self.sessions = [defaultSession]
-                self.currentSession = defaultSession
-            } catch {
-                modelContext.rollback()
-                persistenceError = "无法创建本地对话。请稍后重试。"
-            }
-        } else if self.currentSession == nil {
-            self.currentSession = list.first
-        }
-        
-        guard !isStreaming, !isAwaitingForegroundRetry else { return }
-
-        if let currentSession {
-            if let data = currentSession.serializedMessages.data(using: .utf8),
-               let decoded = try? JSONDecoder().decode([ChatMsg].self, from: data) {
-                self.messages = decoded
-            } else {
-                self.messages = []
-            }
-        }
     }
 
-    func createNewSession(modelContext: ModelContext) {
-        let newSession = CoachSessionRecord(
-            id: UUID(),
-            title: "新对话",
-            createdAt: Date(),
-            updatedAt: Date(),
-            serializedMessages: "[]"
-        )
-        modelContext.insert(newSession)
-        do {
-            try modelContext.save()
-            loadSessions(modelContext: modelContext)
-            self.currentSession = newSession
-            self.messages = []
-        } catch {
-            modelContext.rollback()
-            persistenceError = "无法创建新对话。请稍后重试。"
-        }
-    }
-
-    func selectSession(_ session: CoachSessionRecord, modelContext: ModelContext) {
-        self.currentSession = session
-        if let data = session.serializedMessages.data(using: .utf8),
-           let decoded = try? JSONDecoder().decode([ChatMsg].self, from: data) {
-            self.messages = decoded
-        } else {
-            self.messages = []
-        }
-        loadSessions(modelContext: modelContext)
-    }
-
-    func deleteSession(_ session: CoachSessionRecord, modelContext: ModelContext) {
-        modelContext.delete(session)
-        do {
-            try modelContext.save()
-            if currentSession?.id == session.id {
-                currentSession = nil
-            }
-            loadSessions(modelContext: modelContext)
-        } catch {
-            modelContext.rollback()
-            persistenceError = "对话未删除。请稍后重试。"
-        }
-    }
-
-    func renameSession(_ session: CoachSessionRecord, to newTitle: String, modelContext: ModelContext) {
-        let previousTitle = session.title
-        let previousUpdatedAt = session.updatedAt
-        let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        session.title = trimmed.isEmpty ? "新对话" : trimmed
-        session.updatedAt = Date()
-        do {
-            try modelContext.save()
-            loadSessions(modelContext: modelContext)
-        } catch {
-            modelContext.rollback()
-            session.title = previousTitle
-            session.updatedAt = previousUpdatedAt
-            persistenceError = "对话标题未保存。请稍后重试。"
-        }
-    }
-
-    func persistThread(modelContext: ModelContext) {
-        guard let currentSession else { return }
-        let persistable = messages.filter { !$0.isStreaming }
-        guard let data = try? JSONEncoder().encode(persistable),
-              let json = String(data: data, encoding: .utf8) else { return }
-        
-        let previousMessages = currentSession.serializedMessages
-        let previousUpdatedAt = currentSession.updatedAt
-        currentSession.serializedMessages = json
-        currentSession.updatedAt = Date()
-        do {
-            try modelContext.save()
-        } catch {
-            modelContext.rollback()
-            currentSession.serializedMessages = previousMessages
-            currentSession.updatedAt = previousUpdatedAt
-            persistenceError = "对话内容未保存。请稍后重试。"
-            return
-        }
-        
-        // Reload list to keep list in sync
-        let descriptor = FetchDescriptor<CoachSessionRecord>(
-            predicate: #Predicate { !$0.isArchived },
-            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-        )
-        self.sessions = (try? modelContext.fetch(descriptor)) ?? []
-    }
-
-    func restoreHistory(from reports: [AIReportRecord]) {
-        // Legacy compatibility
-    }
-
-    func clearConversation(modelContext: ModelContext) {
-        messages = []
-        persistThread(modelContext: modelContext)
-    }
-
-    // MARK: - Send
+    // MARK: - Send request flow
 
     func submit(
         text: String,
@@ -518,12 +382,11 @@ final class CoachChatVM: ObservableObject {
             messages.append(ChatMsg(role: .user, content: userText))
         }
 
-        // Auto rename title if it was default on the first query
         if appendingUserMessage, let current = currentSession, (current.title == "新对话" || current.title == "New Chat" || current.title == "New Session" || current.title.isEmpty) {
             let cleanQuery = userText.trimmingCharacters(in: .whitespacesAndNewlines)
             let displayTitle = String(cleanQuery.prefix(12)) + (cleanQuery.count > 12 ? "..." : "")
             current.title = displayTitle.isEmpty ? "新对话" : displayTitle
-            _ = save(modelContext, failureMessage: "对话标题未保存。请稍后重试。")
+            try? modelContext.save()
         }
 
         guard let apiKey = try? keychain.read(account: apiKeyAccount), !apiKey.isEmpty else {
@@ -549,76 +412,33 @@ final class CoachChatVM: ObservableObject {
         messages.append(ChatMsg(id: assistantId, role: .assistant, content: "", isStreaming: true))
 
         do {
-            let chatMessages = await buildChatMessages(
+            let chatMessages = await assembler.buildChatMessages(
                 userText: userText,
                 dashboard: dashboard,
                 journalEntries: journalEntries,
                 savedReports: savedReports,
                 focus: focus,
                 modelContext: modelContext,
-                services: services
+                messages: messages
             )
 
-            let baseProvider = services?.deepSeekProvider(apiKey: apiKey) ?? DeepSeekProvider(apiKey: apiKey)
-            let provider = RetryingAgentChatProvider(base: baseProvider)
-            let toolRegistry = ToolFactory.makeRegistry(
-                modelContext: modelContext,
-                dashboard: dashboard
-            )
-
-            let agentMessages = chatMessages
-            var fullResponse = ""
-            var wikiFiles: [String] = []
-            var wikiUpdateSummaries: [String] = []
-            var agentTrace: AgentRunTrace?
-            let agentStartedAt = Date()
             let contextHash = ContentHash.hash(chatMessages.map(\.content).joined(separator: "\n"))
 
-            let lang = AppLanguage.stored
-            let policy = ResponseLengthPolicy.forQuery(userText, lang: lang)
-
-            if policy == .casual {
-                // Direct streaming for casual chat to bypass agentic tool calling
-                let stream = provider.streamChat(messages: agentMessages)
-                for try await delta in stream {
-                    fullResponse += delta
-                    streamingContent = fullResponse
+            let loopResult = try await runner.runRequest(
+                userText: userText,
+                apiKey: apiKey,
+                chatMessages: chatMessages,
+                dashboard: dashboard,
+                modelContext: modelContext,
+                services: services,
+                onStreamDelta: { [weak self] delta in
+                    self?.streamingContent += delta
                 }
-                agentTrace = AgentRunTrace(
-                    id: UUID(),
-                    startedAt: agentStartedAt,
-                    endedAt: Date(),
-                    inputMessages: agentMessages.map {
-                        AgentRunTrace.ChatMessageSnapshot(
-                            role: $0.role.rawValue,
-                            content: $0.content,
-                            toolCalls: $0.toolCalls?.map(\.name)
-                        )
-                    },
-                    executedTools: [],
-                    finalResponse: fullResponse,
-                    contextHash: contextHash,
-                    schemaVersion: "agentTrace.v1",
-                    providerCallCount: 1
-                )
-            } else {
-                let agentLoop = AgentLoop(provider: provider, toolRegistry: toolRegistry)
-                let snapshotVersion = ContentHash.hash("\(dashboard.date.timeIntervalSince1970)-\(dashboard.source.rawValue)")
-                let loopResult = try await agentLoop.run(
-                    messages: agentMessages,
-                    onStreamDelta: { @MainActor [weak self] delta in
-                        guard let self else { return }
-                        self.streamingContent += delta
-                    },
-                    initialDataVersion: snapshotVersion
-                )
-                wikiFiles = loopResult.wikiFiles
-                wikiUpdateSummaries = loopResult.wikiUpdateSummaries
-                fullResponse = loopResult.response
-                var loopTrace = loopResult.trace
-                loopTrace.contextHash = contextHash
-                agentTrace = loopTrace
-            }
+            )
+
+            var wikiFiles = loopResult.wikiFiles
+            var wikiUpdateSummaries = loopResult.wikiUpdateSummaries
+            var fullResponse = loopResult.response
 
             if fullResponse.isEmpty {
                 fullResponse = L10n.t(
@@ -627,7 +447,6 @@ final class CoachChatVM: ObservableObject {
                 )
             }
 
-            // Parse legacy [ACTION:] blocks for backward compatibility
             let parsed = AgentActionParser.parse(fullResponse)
             let ledger = MemoryLedger(modelContext: modelContext)
             for action in parsed.actions where action.type == .updateWiki {
@@ -648,7 +467,6 @@ final class CoachChatVM: ObservableObject {
 
             let finalText = parsed.displayText.isEmpty ? fullResponse : parsed.displayText
             
-            // Finalize message
             if let idx = messages.firstIndex(where: { $0.id == assistantId }) {
                 messages[idx] = ChatMsg(
                     id: assistantId,
@@ -658,20 +476,21 @@ final class CoachChatVM: ObservableObject {
                 )
             }
 
-            // Persist
             persistThread(modelContext: modelContext)
-            persistInteraction(
+            try writer.persistInteraction(
                 userText: userText,
                 assistantText: finalText,
                 focus: focus,
                 contextHash: contextHash,
+                currentSession: currentSession,
                 modelContext: modelContext
             )
-            if var agentTrace {
-                agentTrace.finalResponse = finalText
-                agentTrace.endedAt = Date()
-                persistAgentTrace(agentTrace, modelContext: modelContext)
-            }
+
+            var agentTrace = loopResult.trace
+            agentTrace.finalResponse = finalText
+            agentTrace.endedAt = Date()
+            try writer.persistAgentTrace(agentTrace, modelContext: modelContext)
+
             try? DailyLogService.recordInteraction(
                 dashboard: dashboard,
                 userText: userText,
@@ -707,24 +526,140 @@ final class CoachChatVM: ObservableObject {
         streamingContent = ""
         isStreaming = false
     }
+}
 
-    // MARK: - Prompt Building
+// MARK: - CoachSessionStore
 
-    private func buildChatMessages(
+@MainActor
+final class CoachSessionStore: ObservableObject {
+    @Published var sessions: [CoachSessionRecord] = []
+    @Published var currentSession: CoachSessionRecord?
+    @Published var persistenceError: String?
+
+    init() {}
+
+    func loadSessions(modelContext: ModelContext, isStreaming: Bool, isAwaitingForegroundRetry: Bool, messagesHandler: ([CoachChatVM.ChatMsg]) -> Void) {
+        let descriptor = FetchDescriptor<CoachSessionRecord>(
+            predicate: #Predicate { !$0.isArchived },
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        let list = (try? modelContext.fetch(descriptor)) ?? []
+        self.sessions = list
+        
+        if list.isEmpty {
+            let defaultSession = CoachSessionRecord(
+                id: UUID(),
+                title: "新对话",
+                createdAt: Date(),
+                updatedAt: Date(),
+                serializedMessages: "[]"
+            )
+            modelContext.insert(defaultSession)
+            do {
+                try modelContext.save()
+                self.sessions = [defaultSession]
+                self.currentSession = defaultSession
+            } catch {
+                modelContext.rollback()
+                persistenceError = "无法创建本地对话。请稍后重试。"
+            }
+        } else if self.currentSession == nil {
+            self.currentSession = list.first
+        }
+        
+        guard !isStreaming, !isAwaitingForegroundRetry else { return }
+
+        if let currentSession {
+            if let data = currentSession.serializedMessages.data(using: .utf8),
+               let decoded = try? JSONDecoder().decode([CoachChatVM.ChatMsg].self, from: data) {
+                messagesHandler(decoded)
+            } else {
+                messagesHandler([])
+            }
+        }
+    }
+
+    func createNewSession(modelContext: ModelContext, isStreaming: Bool, isAwaitingForegroundRetry: Bool, messagesHandler: ([CoachChatVM.ChatMsg]) -> Void) {
+        let newSession = CoachSessionRecord(
+            id: UUID(),
+            title: "新对话",
+            createdAt: Date(),
+            updatedAt: Date(),
+            serializedMessages: "[]"
+        )
+        modelContext.insert(newSession)
+        do {
+            try modelContext.save()
+            loadSessions(modelContext: modelContext, isStreaming: isStreaming, isAwaitingForegroundRetry: isAwaitingForegroundRetry, messagesHandler: messagesHandler)
+            self.currentSession = newSession
+            messagesHandler([])
+        } catch {
+            modelContext.rollback()
+            persistenceError = "无法创建新对话。请稍后重试。"
+        }
+    }
+
+    func selectSession(_ session: CoachSessionRecord, modelContext: ModelContext, isStreaming: Bool, isAwaitingForegroundRetry: Bool, messagesHandler: ([CoachChatVM.ChatMsg]) -> Void) {
+        self.currentSession = session
+        if let data = session.serializedMessages.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode([CoachChatVM.ChatMsg].self, from: data) {
+            messagesHandler(decoded)
+        } else {
+            messagesHandler([])
+        }
+        loadSessions(modelContext: modelContext, isStreaming: isStreaming, isAwaitingForegroundRetry: isAwaitingForegroundRetry, messagesHandler: messagesHandler)
+    }
+
+    func deleteSession(_ session: CoachSessionRecord, modelContext: ModelContext, isStreaming: Bool, isAwaitingForegroundRetry: Bool, messagesHandler: ([CoachChatVM.ChatMsg]) -> Void) {
+        modelContext.delete(session)
+        do {
+            try modelContext.save()
+            if currentSession?.id == session.id {
+                currentSession = nil
+            }
+            loadSessions(modelContext: modelContext, isStreaming: isStreaming, isAwaitingForegroundRetry: isAwaitingForegroundRetry, messagesHandler: messagesHandler)
+        } catch {
+            modelContext.rollback()
+            persistenceError = "对话未删除。请稍后重试。"
+        }
+    }
+
+    func renameSession(_ session: CoachSessionRecord, to newTitle: String, modelContext: ModelContext, isStreaming: Bool, isAwaitingForegroundRetry: Bool, messagesHandler: ([CoachChatVM.ChatMsg]) -> Void) {
+        let previousTitle = session.title
+        let previousUpdatedAt = session.updatedAt
+        let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        session.title = trimmed.isEmpty ? "新对话" : trimmed
+        session.updatedAt = Date()
+        do {
+            try modelContext.save()
+            loadSessions(modelContext: modelContext, isStreaming: isStreaming, isAwaitingForegroundRetry: isAwaitingForegroundRetry, messagesHandler: messagesHandler)
+        } catch {
+            modelContext.rollback()
+            session.title = previousTitle
+            session.updatedAt = previousUpdatedAt
+            persistenceError = "对话标题未保存。请稍后重试。"
+        }
+    }
+}
+
+// MARK: - CoachContextAssembler
+
+@MainActor
+struct CoachContextAssembler {
+    func buildChatMessages(
         userText: String,
         dashboard: DashboardSummary,
         journalEntries: [JournalEntryRecord],
         savedReports: [AIReportRecord],
         focus: CoachContextFocus,
         modelContext: ModelContext,
-        services: VelaServices? = nil
+        messages: [CoachChatVM.ChatMsg]
     ) async -> [ChatMessage] {
         let wiki = WikiFileService.loadDictionary()
         let wikiRawText = wiki.map { "### \($0.key)\n\($0.value)" }.joined(separator: "\n\n")
         let wikiText = ContextBudget.trimWiki(wikiRawText, maxChars: 3000)
         let wikiFiles = WikiFileService.loadAllDocuments().map { "\($0.filename) (\($0.title))" }.joined(separator: ", ")
 
-        // Fetch active training plan context
         let activePlanFetch = FetchDescriptor<TrainingPlanRecord>(
             predicate: #Predicate { $0.isActive }
         )
@@ -748,10 +683,9 @@ final class CoachChatVM: ObservableObject {
                 activePlanPrompt += "\n  * 第 \(day.weekNumber) 周第 \(day.dayNumber) 天 [类别: \(day.focus)]: \(day.title) (\(day.durationMinutes)分钟, 强度: \(day.intensity)) \(status) - \(day.description)"
             }
         } else {
-            activePlanPrompt = "\n- 当前处于激活状态的长期训练计划: 无。如果你建议用户制定长期的、多周的训练计划，你必须使用 `create_training_plan` 工具来保存和启用它。"
+            activePlanPrompt = "\n- 当前处于激活状态的长期训练计划: 无。如果你建议用户制定长期的、多周的训练计划，你必须使用 `create_training_plan` 工具来保存并启用它。"
         }
 
-        // Read personal baselines if available
         let baselinePrompt: String
         if let baselineContent = wiki["baselines.md"],
            baselineContent.count > 100,
@@ -773,7 +707,6 @@ final class CoachChatVM: ObservableObject {
         let lang = AppLanguage.stored
         let policy = ResponseLengthPolicy.forQuery(userText, lang: lang)
 
-        // Casual chat — short prompt, no health context JSON
         if policy == .casual {
             let composer = CoachPromptComposer(
                 lang: lang,
@@ -789,20 +722,17 @@ final class CoachChatVM: ObservableObject {
             var result: [ChatMessage] = [
                 ChatMessage(role: .system, content: systemPrompt),
             ]
-            let history = Self.historyBeforeCurrentPrompt(from: messages, limit: 6)
+            let history = CoachChatVM.historyBeforeCurrentPrompt(from: messages, limit: 6)
             for msg in history {
                 result.append(ChatMessage(
                     role: msg.role == .user ? .user : .assistant,
-                    content: Self.timestampedHistoryContent(for: msg)
+                    content: CoachChatVM.timestampedHistoryContent(for: msg)
                 ))
             }
             result.append(ChatMessage(role: .user, content: userText))
             return result
         }
 
-        // Full prompt for health data inquiries
-        // Build a compact context snapshot — the LLM must use tools for detailed data.
-        // This avoids stale/mismatched data between the inline JSON and tool responses.
         let weeklyTrends = (try? HealthSnapshotRepository(modelContext: modelContext).buildWeeklyTrendSummary()) ?? [:]
         let snapshots = (try? HealthSnapshotRepository(modelContext: modelContext).fetchSnapshots(days: 30)) ?? []
         let correlations = JournalCorrelationEngine().correlateTags(
@@ -903,7 +833,6 @@ final class CoachChatVM: ObservableObject {
             """)
         ]
 
-        // Web search: for data-oriented queries that need up-to-date information
         if policy != .casual, ResponseLengthPolicy.needsWebSearch(userText) {
             let webResults = await WebSearchHelper.shared.search(userText)
             if !webResults.isEmpty {
@@ -916,16 +845,14 @@ final class CoachChatVM: ObservableObject {
             }
         }
 
-        // Conversation history (skip streaming, take last 10)
-        let history = Self.historyBeforeCurrentPrompt(from: messages, limit: 10)
+        let history = CoachChatVM.historyBeforeCurrentPrompt(from: messages, limit: 10)
         for msg in history {
             result.append(ChatMessage(
                 role: msg.role == .user ? .user : .assistant,
-                content: Self.timestampedHistoryContent(for: msg)
+                content: CoachChatVM.timestampedHistoryContent(for: msg)
             ))
         }
 
-        // Focused policy: add a reinforcement directive before the user message
         if policy == .focused {
             let reinforcement = lang.isChinese ? """
             [系统强制指令：用户以下提出的问题非常聚焦，请用极简短的篇幅（150字以内，3-4句话）直接且针对性地回答，严禁罗列任何无关的健康指标，严禁展示今日状态概览。]
@@ -939,9 +866,6 @@ final class CoachChatVM: ObservableObject {
         return result
     }
 
-    /// Builds a compact snapshot inline context — scores, bands, key reasons, and data-source pointers.
-    /// The LLM MUST use tools (get_today_health, get_health_history, etc.) for detailed metrics.
-    /// This avoids the stale mismatch between inline JSON and tool-returned data.
     private func buildCompactContextSnapshot(
         dashboard: DashboardSummary,
         wiki: [String: String],
@@ -964,7 +888,6 @@ final class CoachChatVM: ObservableObject {
 
         let lang = AppLanguage.stored
         
-        // Calculate Biological Age
         var bioAgeLine = ""
         if let chronologicalAge = WikiFileService.getAgeFromWiki() ?? dashboard.extendedMetrics.age {
             let restingHR = dashboard.recoveryMetrics.restingHeartRate
@@ -1016,7 +939,6 @@ final class CoachChatVM: ObservableObject {
             }
         }
 
-        // ── Scores at a glance ──
         func freshness(for lastUpdated: Date, hasData: Bool) -> DataFreshness {
             guard hasData else { return .missing }
             let age = Date().timeIntervalSince(lastUpdated)
@@ -1098,7 +1020,6 @@ final class CoachChatVM: ObservableObject {
             lines.append("- Source \(dashboard.source.rawValue) · Date \(dashboard.date.formatted(date: .numeric, time: .shortened))")
         }
 
-        // ── Weekly trends summary (compact, budget-trimmed) ──
         if !weeklyTrends.isEmpty {
             var trendsBlock = ""
             for (key, value) in weeklyTrends where !value.isEmpty {
@@ -1118,7 +1039,6 @@ final class CoachChatVM: ObservableObject {
             }
         }
 
-        // ── Strength recap — only show counts, details moved to tools ──
         if !strengthWorkouts.isEmpty {
             let analytics = TrainingAnalyticsService()
             let recent7d = analytics.buildRecentSummary(workouts: strengthWorkouts, days: 7, endingAt: Date())
@@ -1129,7 +1049,6 @@ final class CoachChatVM: ObservableObject {
             }
         }
 
-        // ── Body model onboarding flags (compact) ──
         if let onboardingState {
             let goal = onboardingState.goalProfile
             if lang.isChinese {
@@ -1142,7 +1061,6 @@ final class CoachChatVM: ObservableObject {
         return lines.joined(separator: "\n")
     }
 
-    /// Trims the snapshot to fit within the context budget, preserving the most critical lines.
     private func budgetCapped(_ text: String, maxChars: Int = 800) -> String {
         guard text.count > maxChars else { return text }
         let lines = text.components(separatedBy: "\n")
@@ -1157,14 +1075,31 @@ final class CoachChatVM: ObservableObject {
             ? "[快照已截断以节省 token。调用 get_today_health 获取完整今日数据。]"
             : "[Snapshot truncated to save tokens. Call get_today_health for complete data.]")
     }
+}
 
-    private func persistInteraction(
+// MARK: - CoachPersistenceWriter
+
+@MainActor
+final class CoachPersistenceWriter {
+    func persistThread(messages: [CoachChatVM.ChatMsg], currentSession: CoachSessionRecord?, modelContext: ModelContext) throws {
+        guard let currentSession else { return }
+        let persistable = messages.filter { !$0.isStreaming }
+        let data = try JSONEncoder().encode(persistable)
+        guard let json = String(data: data, encoding: .utf8) else { return }
+        
+        currentSession.serializedMessages = json
+        currentSession.updatedAt = Date()
+        try modelContext.save()
+    }
+
+    func persistInteraction(
         userText: String,
         assistantText: String,
         focus: CoachContextFocus,
         contextHash: String,
+        currentSession: CoachSessionRecord?,
         modelContext: ModelContext
-    ) {
+    ) throws {
         modelContext.insert(CoachInteractionRecord(
             userText: userText,
             assistantText: assistantText,
@@ -1172,10 +1107,10 @@ final class CoachChatVM: ObservableObject {
             contextHash: contextHash,
             sessionId: currentSession?.id
         ))
-        _ = save(modelContext, failureMessage: "Coach 交互记录未保存。请稍后重试。")
+        try modelContext.save()
     }
 
-    private func persistAgentTrace(_ trace: AgentRunTrace, modelContext: ModelContext) {
+    func persistAgentTrace(_ trace: AgentRunTrace, modelContext: ModelContext) throws {
         let toolCallsJSON: String
         if let data = try? JSONEncoder().encode(trace.executedTools),
            let json = String(data: data, encoding: .utf8) {
@@ -1194,18 +1129,167 @@ final class CoachChatVM: ObservableObject {
             outputSummary: trace.finalResponse,
             toolCallsJSON: toolCallsJSON
         ))
-        _ = save(modelContext, failureMessage: "Coach 运行记录未保存。请稍后重试。")
+        try modelContext.save()
+    }
+}
+
+// MARK: - FoodPhotoWorkflow
+
+@MainActor
+final class FoodPhotoWorkflow {
+    func analyzeFoodPhoto(
+        _ image: UIImage,
+        apiKey: String,
+        dashboard: DashboardSummary,
+        modelContext: ModelContext,
+        journalEntries: [JournalEntryRecord],
+        savedReports: [AIReportRecord],
+        focus: CoachContextFocus = .general,
+        services: VelaServices? = nil,
+        chatVM: CoachChatVM
+    ) async {
+        chatVM.isAnalyzingFood = true
+        chatVM.streamingContent = L10n.t("Analyzing your meal with Kimi Vision...", "正在用 Kimi 视觉模型分析你的餐食...")
+
+        do {
+            let analyzer = FoodPhotoAnalyzer(apiKey: apiKey)
+            let result = try await analyzer.analyzeFoodPhoto(image)
+
+            chatVM.streamingContent = ""
+            chatVM.isAnalyzingFood = false
+
+            let formattedResult = result.formattedMarkdown()
+            let summaryText = result.plainTextSummary()
+
+            let userMessage = """
+            I just took a photo of my meal. Here's the AI-powered nutritional analysis:
+
+            \(formattedResult)
+
+            Based on this analysis and my current health data, can you provide personalized feedback on this meal? Consider my activity level, recovery state, and health goals from my wiki profile.
+            """
+
+            await chatVM.send(
+                text: userMessage,
+                dashboard: dashboard,
+                modelContext: modelContext,
+                journalEntries: journalEntries,
+                savedReports: savedReports,
+                focus: focus,
+                services: services
+            )
+
+            let foodLog = FoodLogRecord(
+                analysis: result,
+                mealName: defaultMealName(for: Date()),
+                source: .photoAnalysis
+            )
+            modelContext.insert(foodLog)
+
+            let entry = JournalEntryRecord(
+                createdAt: Date(),
+                tags: ["food", "meal"],
+                note: "[Photo Analysis] \(summaryText)",
+                value: Double(result.totalCalories),
+                unit: "kcal"
+            )
+            modelContext.insert(entry)
+            
+            try modelContext.save()
+            VelaAppState.shared.markLocalDataChanged()
+        } catch {
+            chatVM.streamingContent = ""
+            chatVM.isAnalyzingFood = false
+            chatVM.messages.append(CoachChatVM.ChatMsg(
+                role: .assistant,
+                content: L10n.t(
+                    "Sorry, I couldn't analyze the food photo: \(error.localizedDescription)",
+                    "抱歉，无法分析食物照片：\(error.localizedDescription)"
+                )
+            ))
+        }
     }
 
-    @discardableResult
-    private func save(_ modelContext: ModelContext, failureMessage: String) -> Bool {
-        do {
-            try modelContext.save()
-            return true
-        } catch {
-            modelContext.rollback()
-            persistenceError = failureMessage
-            return false
+    private func defaultMealName(for date: Date, calendar: Calendar = .current) -> String {
+        let hour = calendar.component(.hour, from: date)
+        switch hour {
+        case 5..<11:
+            return "Breakfast"
+        case 11..<16:
+            return "Lunch"
+        case 16..<22:
+            return "Dinner"
+        default:
+            return "Snack"
+        }
+    }
+}
+
+// MARK: - CoachRequestRunner
+
+@MainActor
+final class CoachRequestRunner {
+    func runRequest(
+        userText: String,
+        apiKey: String,
+        chatMessages: [ChatMessage],
+        dashboard: DashboardSummary,
+        modelContext: ModelContext,
+        services: VelaServices?,
+        onStreamDelta: @MainActor @escaping (String) -> Void
+    ) async throws -> AgentLoopResult {
+        let baseProvider = services?.deepSeekProvider(apiKey: apiKey) ?? DeepSeekProvider(apiKey: apiKey)
+        let provider = RetryingAgentChatProvider(base: baseProvider)
+        let toolRegistry = ToolFactory.makeRegistry(
+            modelContext: modelContext,
+            dashboard: dashboard
+        )
+        
+        let lang = AppLanguage.stored
+        let policy = ResponseLengthPolicy.forQuery(userText, lang: lang)
+        
+        if policy == .casual {
+            var fullResponse = ""
+            let stream = provider.streamChat(messages: chatMessages)
+            for try await delta in stream {
+                fullResponse += delta
+                onStreamDelta(delta)
+            }
+            
+            let trace = AgentRunTrace(
+                id: UUID(),
+                startedAt: Date(),
+                endedAt: Date(),
+                inputMessages: chatMessages.map {
+                    AgentRunTrace.ChatMessageSnapshot(
+                        role: $0.role.rawValue,
+                        content: $0.content,
+                        toolCalls: $0.toolCalls?.map(\.name)
+                    )
+                },
+                executedTools: [],
+                finalResponse: fullResponse,
+                contextHash: ContentHash.hash(chatMessages.map(\.content).joined(separator: "\n")),
+                schemaVersion: "agentTrace.v1",
+                providerCallCount: 1
+            )
+            return AgentLoopResult(
+                response: fullResponse,
+                executedTools: [],
+                finalMessages: chatMessages,
+                wasStreamed: true,
+                trace: trace
+            )
+        } else {
+            let agentLoop = AgentLoop(provider: provider, toolRegistry: toolRegistry)
+            let snapshotVersion = ContentHash.hash("\(dashboard.date.timeIntervalSince1970)-\(dashboard.source.rawValue)")
+            return try await agentLoop.run(
+                messages: chatMessages,
+                onStreamDelta: { delta in
+                    onStreamDelta(delta)
+                },
+                initialDataVersion: snapshotVersion
+            )
         }
     }
 }

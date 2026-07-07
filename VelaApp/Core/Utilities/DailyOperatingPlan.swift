@@ -226,3 +226,26 @@ enum DailyOperatingPlanCoordinator {
         }
     }
 }
+
+extension DailyOperatingPlanRecord {
+    var trainingDecision: DailyTrainingDecision? {
+        guard let payloadData = payloadJSON.data(using: .utf8),
+              let payload = try? JSONDecoder().decode(DailyOperatingPlanPayload.self, from: payloadData) else {
+            return nil
+        }
+        let reasonsData = reasonsJSON.data(using: .utf8)
+        let reasons = (try? JSONDecoder().decode([String].self, from: reasonsData ?? Data())) ?? []
+        return DailyTrainingDecision(
+            decision: payload.decision,
+            targetSessionTitle: payload.targetSessionTitle,
+            volumeMultiplier: payload.volumeMultiplier,
+            intensityCap: payload.intensityCap,
+            reasons: reasons,
+            userFacingSummary: payload.summary,
+            confidence: confidence,
+            source: source ?? "BodyStateKernel + TrainingDecisionKernel",
+            safetyNotice: safetyNotice ?? "General wellness guidance only; not a medical diagnosis."
+        )
+    }
+}
+

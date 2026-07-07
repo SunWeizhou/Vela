@@ -6,6 +6,11 @@ struct TodayHeroCard: View {
     let accent: Color
     let primaryActionIcon: String
     let onPrimaryAction: () -> Void
+    
+    let generatedAt: Date?
+    let safetyNotice: String?
+    let isStale: Bool
+    let confidence: Double
 
     private var hasRecoveryScore: Bool {
         recoveryScoreText != "--"
@@ -13,6 +18,40 @@ struct TodayHeroCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            // Status and Time Header
+            HStack {
+                if isStale {
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.red).frame(width: 6, height: 6)
+                        Text("已失效，下拉刷新")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(Color.red)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(Color.red.opacity(0.08)))
+                } else {
+                    HStack(spacing: 4) {
+                        Circle().fill(VelaTheme.success).frame(width: 6, height: 6)
+                        Text("已更新")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(VelaTheme.success)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(VelaTheme.success.opacity(0.08)))
+                }
+                
+                Spacer()
+                
+                if let generatedAt {
+                    Text("计划生成时间: \(formattedTime(generatedAt))")
+                        .font(.system(size: 10))
+                        .foregroundStyle(VelaTheme.muted)
+                }
+            }
+            .padding(.bottom, 2)
+
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("今日训练状态")
@@ -28,7 +67,7 @@ struct TodayHeroCard: View {
                     HStack(spacing: 5) {
                         Image(systemName: "checkmark.seal.fill")
                             .font(.system(size: 11, weight: .semibold))
-                        Text(model.hero.confidenceLabel)
+                        Text("置信度 \(Int((confidence * 100).rounded()))%")
                             .font(.system(size: 12, weight: .semibold))
                     }
                     .foregroundStyle(accent)
@@ -86,6 +125,15 @@ struct TodayHeroCard: View {
                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(accent))
             }
             .buttonStyle(.plain)
+            
+            if let safetyNotice, !safetyNotice.isEmpty {
+                Text(safetyNotice)
+                    .font(.system(size: 9))
+                    .foregroundStyle(VelaTheme.muted)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 4)
+            }
         }
         .padding(14)
         .background(
@@ -96,5 +144,11 @@ struct TodayHeroCard: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(accent.opacity(0.22), lineWidth: 0.8)
         )
+    }
+    
+    private func formattedTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
     }
 }

@@ -245,20 +245,25 @@ struct AgentLoop {
 
                     // User confirmation check for write / destructive tools
                     let userConfirmed: Bool
+                    let refusalResult: String?
+                    
                     if toolRisk == .write || toolRisk == .destructive {
                         if let onConfirm = onConfirmToolCall {
                             let description = ToolCallDescription(name: tc.name, arguments: tc.arguments, riskLevel: toolRisk)
                             userConfirmed = await onConfirm(description)
+                            refusalResult = userConfirmed ? nil : "Error: User rejected execution of this tool."
                         } else {
-                            userConfirmed = true
+                            userConfirmed = false
+                            refusalResult = "Error: Write or destructive action refused because no user confirmation callback was supplied."
                         }
                     } else {
                         userConfirmed = true
+                        refusalResult = nil
                     }
 
                     let result: String
                     if !userConfirmed {
-                        result = "Error: User rejected execution of this tool."
+                        result = refusalResult ?? "Error: User rejected execution of this tool."
                     } else {
                         // Execute with timeout
                         if toolTimeoutSeconds > 0 {

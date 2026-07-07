@@ -265,7 +265,7 @@ struct StrengthWorkoutLogSheetView: View {
                     Text("RPE")
                         .frame(width: 44, alignment: .center)
                     Text("状态")
-                        .frame(width: 32, alignment: .trailing)
+                        .frame(width: 44, alignment: .trailing)
                 }
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(VelaTheme.muted)
@@ -408,9 +408,11 @@ struct StrengthWorkoutLogSheetView: View {
                 Image(systemName: (set.wrappedValue.isCompleted ?? false) ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle((set.wrappedValue.isCompleted ?? false) ? VelaTheme.success : VelaTheme.accent)
                     .font(.system(size: 22))
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.cardPress)
-            .frame(width: 32, alignment: .trailing)
+            .frame(width: 44, alignment: .trailing)
         }
         .padding(.vertical, 4)
         .contextMenu {
@@ -693,8 +695,21 @@ struct StrengthWorkoutLogSheetView: View {
         sessionViewModel.saveImmediately { saveDraft() }
         guard set.wrappedValue.isCompleted ?? false,
               let index = exercise.wrappedValue.sets.firstIndex(where: { $0.id == set.wrappedValue.id }) else { return }
-        restTimer = RestTimerState(endsAt: Date().addingTimeInterval(90), exerciseName: exercise.wrappedValue.name, setNumber: index + 1)
-        restSecondsRemaining = 90
+        
+        var restDuration = 90
+        if let plan = try? modelContext.fetch(FetchDescriptor<TrainingPlanRecord>(predicate: #Predicate { $0.isActive })).first {
+            let todayWeekday = Calendar.current.component(.weekday, from: Date())
+            let dayNum = todayWeekday == 1 ? 7 : todayWeekday - 1
+            if let day = plan.days.first(where: { $0.dayNumber == dayNum }),
+               let data = day.plannedExercisesJSON.data(using: .utf8),
+               let planned = try? JSONDecoder().decode([WorkoutTemplateExercise].self, from: data),
+               let match = planned.first(where: { $0.name.caseInsensitiveCompare(exercise.wrappedValue.name) == .orderedSame }) {
+                restDuration = match.restSeconds
+            }
+        }
+        
+        restTimer = RestTimerState(endsAt: Date().addingTimeInterval(TimeInterval(restDuration)), exerciseName: exercise.wrappedValue.name, setNumber: index + 1)
+        restSecondsRemaining = restDuration
     }
 
     private func quickAdjust(_ label: String, action: @escaping () -> Void) -> some View {

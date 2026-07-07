@@ -395,17 +395,36 @@ final class DailySummaryUseCase {
             activeStatus: activeStatus,
             generatedAt: now
         ))
-        let recentStrengthSummary = TrainingAnalyticsService().buildRecentSummary(
-            workouts: recentStrengthWorkouts,
-            days: 28,
-            endingAt: now
-        )
-        let dailyTrainingDecision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
-            bodyState: bodyState,
-            activePlan: activePlan,
-            recentStrengthSummary: recentStrengthSummary,
-            trainingResponses: recentTrainingResponses
-        ))
+        
+        let dayId = DailyHealthSummaryRecord.dayIdentifier(for: now, calendar: calendar)
+        var matchedExistingDecision: DailyTrainingDecision? = nil
+        if let modelContext {
+            let opPlanDescriptor = FetchDescriptor<DailyOperatingPlanRecord>(
+                predicate: #Predicate<DailyOperatingPlanRecord> { $0.dayIdentifier == dayId }
+            )
+            if let existingPlan = (try? modelContext.fetch(opPlanDescriptor))?.first,
+               existingPlan.bodyStateHash == bodyState.hash {
+                matchedExistingDecision = existingPlan.trainingDecision
+            }
+        }
+        
+        let dailyTrainingDecision: DailyTrainingDecision
+        if let matched = matchedExistingDecision {
+            dailyTrainingDecision = matched
+        } else {
+            let recentStrengthSummary = TrainingAnalyticsService().buildRecentSummary(
+                workouts: recentStrengthWorkouts,
+                days: 28,
+                endingAt: now
+            )
+            dailyTrainingDecision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
+                bodyState: bodyState,
+                activePlan: activePlan,
+                recentStrengthSummary: recentStrengthSummary,
+                trainingResponses: recentTrainingResponses
+            ))
+        }
+        
         dashboard.bodyState = bodyState
         dashboard.trainingDecision = TrainingDecision.compatibilityView(
             of: dailyTrainingDecision,
@@ -423,12 +442,16 @@ final class DailySummaryUseCase {
                     calendar: calendar
                 )
                 try modelContext.save()
-                try DailyOperatingPlanCoordinator.upsert(
-                    bodyState: bodyState,
-                    decision: dailyTrainingDecision,
-                    modelContext: modelContext,
-                    calendar: calendar
-                )
+                
+                // Only upsert plan if it was recalculated
+                if matchedExistingDecision == nil {
+                    try DailyOperatingPlanCoordinator.upsert(
+                        bodyState: bodyState,
+                        decision: dailyTrainingDecision,
+                        modelContext: modelContext,
+                        calendar: calendar
+                    )
+                }
             } catch {
                 PipelineDiagnosticsLogger.log(
                     modelContext: modelContext,
@@ -1134,5 +1157,18 @@ final class DailySummaryUseCase {
             reasons: [L10n.t("Loaded from the latest saved trend snapshot.", "已读取最近一次保存的趋势快照。")],
             metrics: ["trend_score": score]
         )
+    }
+}
+
+@MainActor
+final class DailyPlanRefreshCoordinator {
+    static let shared = DailyPlanRefreshCoordinator()
+    
+    private init() {}
+    
+    func refreshPlan(for date: Date = Date(), modelContext: ModelContext) async {
+        let useCase = DailySummaryUseCase()
+        _ = try? await useCase.loadDashboard(for: date, modelContext: modelContext)
+        VelaAppState.shared.markLocalDataChanged()
     }
 }

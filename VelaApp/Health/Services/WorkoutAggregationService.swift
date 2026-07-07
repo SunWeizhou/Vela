@@ -683,6 +683,12 @@ public final class WorkoutAggregationService {
         // 4. Recalculate summary and aggregation for the affected day
         try aggregateDay(date: workoutDate, modelContext: modelContext, calendar: calendar)
         try modelContext.save()
+        
+        // Trigger DailyPlanRefreshCoordinator
+        let dateToRefresh = workoutDate
+        Task { @MainActor in
+            await DailyPlanRefreshCoordinator.shared.refreshPlan(for: dateToRefresh, modelContext: modelContext)
+        }
     }
 }
 
@@ -764,6 +770,12 @@ struct WorkoutSaveCoordinator {
 
             try failureInjector(.save)
             try modelContext.save()
+            
+            let dateToRefresh = workout.startedAt
+            Task { @MainActor in
+                await DailyPlanRefreshCoordinator.shared.refreshPlan(for: dateToRefresh, modelContext: modelContext)
+            }
+            
             return CommitResult(workout: workout, event: event)
         } catch {
             modelContext.rollback()
@@ -807,6 +819,16 @@ struct WorkoutSaveCoordinator {
 
             try failureInjector(.save)
             try modelContext.save()
+            
+            let dateToRefresh = workout.startedAt
+            let prevDate = previousStartDate
+            Task { @MainActor in
+                await DailyPlanRefreshCoordinator.shared.refreshPlan(for: dateToRefresh, modelContext: modelContext)
+                if !Calendar.current.isDate(prevDate, inSameDayAs: dateToRefresh) {
+                    await DailyPlanRefreshCoordinator.shared.refreshPlan(for: prevDate, modelContext: modelContext)
+                }
+            }
+            
             return CommitResult(workout: workout, event: event)
         } catch {
             modelContext.rollback()
