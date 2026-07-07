@@ -110,14 +110,6 @@ struct VelaMetricDetailView: View {
                 metricNavigationBar(isSleep: isSleep)
                     .padding(.horizontal, VelaTheme.pagePadding)
                     .padding(.vertical, 8)
-                    .background(isSleep ? Color.clear : VelaTheme.systemGroupedBackground.opacity(0.92))
-                    .overlay(alignment: .bottom) {
-                        if !isSleep {
-                            Rectangle()
-                                .fill(VelaTheme.separatorSoft)
-                                .frame(height: 0.5)
-                        }
-                    }
 
                 ScrollView {
                     VStack(spacing: VelaTheme.cardGap) {

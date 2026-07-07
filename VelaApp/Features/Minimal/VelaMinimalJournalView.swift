@@ -518,7 +518,6 @@ struct VelaMeView: View {
                 hubActionCell(title: "生物资料", sub: bioSub, icon: "person.text.rectangle.fill", color: Color(hex: "#00A896"), destination: BiologyView())
                 hubActionCell(title: "AI 模型", sub: aiModelSub, icon: "cpu.fill", color: Color(hex: "#AF52DE"), destination: AIModelSettingsView())
                 hubActionCell(title: "数据信号", sub: signalSub, icon: "waveform.path.ecg.rectangle.fill", color: Color(hex: "#30A2FF"), destination: DataCoverageView())
-                hubActionCell(title: "信任中心", sub: trustSub, icon: "checkmark.shield.fill", color: VelaTheme.success, destination: TrustCenterView())
                 hubActionCell(title: "系统设置", sub: settingsSub, icon: "gearshape.fill", color: Color(hex: "#5C6BC0"), destination: VelaSettingsView())
             }
         }

@@ -74,9 +74,8 @@ struct VelaShell: View {
     enum VelaTab: Int, CaseIterable, Hashable {
         case today = 0
         case training = 1
-        case insights = 2
-        case coach = 3
-        case me = 4
+        case coach = 2
+        case me = 3
     }
 
     // MARK: - Body
@@ -127,18 +126,6 @@ struct VelaShell: View {
         }
         .sheet(isPresented: $appState.triggerWorkoutLog, onDismiss: appState.markLocalDataChanged) {
             WorkoutLogSheetView()
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(VelaTheme.systemGroupedBackground)
-        }
-        .sheet(isPresented: $appState.triggerFoodSearch, onDismiss: appState.markLocalDataChanged) {
-            FoodSearchSheetView()
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(VelaTheme.systemGroupedBackground)
-        }
-        .sheet(isPresented: $appState.triggerFoodScanner, onDismiss: appState.markLocalDataChanged) {
-            FoodScannerView(type: appState.scannerType)
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(VelaTheme.systemGroupedBackground)
@@ -207,21 +194,13 @@ struct VelaShell: View {
             }
             .tag(1)
 
-            nativeTabSurface(.insights) {
-                VelaVitalsView()
-            }
-            .tabItem {
-                Label(label(for: .insights), systemImage: iconName(for: .insights))
-            }
-            .tag(2)
-
             nativeTabSurface(.coach) {
                 VelaCoachView(presentation: .embedded, vm: services.coachChat)
             }
             .tabItem {
                 Label(label(for: .coach), systemImage: iconName(for: .coach))
             }
-            .tag(3)
+            .tag(2)
 
             nativeTabSurface(.me) {
                 NavigationStack {
@@ -231,7 +210,7 @@ struct VelaShell: View {
             .tabItem {
                 Label(label(for: .me), systemImage: iconName(for: .me))
             }
-            .tag(4)
+            .tag(3)
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .toolbar(keyboardVisible ? .hidden : .visible, for: .tabBar)
@@ -249,9 +228,6 @@ struct VelaShell: View {
                 }
                 tabSurface(.training) {
                     VelaTrainingView()
-                }
-                tabSurface(.insights) {
-                    VelaVitalsView()
                 }
                 tabSurface(.coach) {
                     VelaCoachView(
@@ -356,7 +332,6 @@ struct VelaShell: View {
         switch tab {
         case .today:    "sun.max"
         case .training: "figure.run"
-        case .insights: "chart.xyaxis.line"
         case .coach:    "sparkles"
         case .me:       "person.crop.circle"
         }
@@ -366,7 +341,6 @@ struct VelaShell: View {
         switch tab {
         case .today:    L10n.t("Today", "今日")
         case .training: L10n.t("Training", "训练")
-        case .insights: L10n.t("Insights", "趋势")
         case .coach:    L10n.t("Coach", "教练")
         case .me:       L10n.t("Me", "个人")
         }
@@ -389,7 +363,7 @@ enum VelaTabSelection {
         var shouldPresentQuickActions: Bool
     }
 
-    static let contentTabs: [VelaShell.VelaTab] = [.today, .training, .insights, .coach, .me]
+    static let contentTabs: [VelaShell.VelaTab] = [.today, .training, .coach, .me]
 
     static func resolve(
         candidate: VelaShell.VelaTab,

@@ -1,0 +1,65 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project Vela.xcodeproj -scheme Vela -destination id=00008140-00164DE022C3801C -configuration Debug build
+
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (1 target)
+    Target 'Vela' in project 'Vela' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.5.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --print-asset-tag-combinations --output-format xml1 /Users/sunweizhou/Desktop/AI Project/Vela/VelaApp/Resources/Assets.xcassets
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --version --output-format xml1
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
+
+Build description signature: 696a29c93cccc78ec8eee0779bd6683d
+Build description path: /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Intermediates.noindex/XCBuildData/696a29c93cccc78ec8eee0779bd6683d.xcbuilddata
+ClangStatCache /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.5.sdk /Users/sunweizhou/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphoneos26.5-23F73-32daed1954a7d5dd0789fcaf2a9bb78b.sdkstatcache
+    cd /Users/sunweizhou/Desktop/AI\ Project/Vela/Vela.xcodeproj
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.5.sdk -o /Users/sunweizhou/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphoneos26.5-23F73-32daed1954a7d5dd0789fcaf2a9bb78b.sdkstatcache
+
+CompileAssetCatalogVariant thinned /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Products/Debug-iphoneos/Vela.app /Users/sunweizhou/Desktop/AI\ Project/Vela/VelaApp/Resources/Assets.xcassets (in target 'Vela' from project 'Vela')
+    cd /Users/sunweizhou/Desktop/AI\ Project/Vela
+    /Applications/Xcode.app/Contents/Developer/usr/bin/actool /Users/sunweizhou/Desktop/AI\ Project/Vela/VelaApp/Resources/Assets.xcassets --compile /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Intermediates.noindex/Vela.build/Debug-iphoneos/Vela.build/assetcatalog_output/thinned --output-format human-readable-text --notices --warnings --export-dependency-info /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Intermediates.noindex/Vela.build/Debug-iphoneos/Vela.build/assetcatalog_dependencies_thinned --output-partial-info-plist /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Intermediates.noindex/Vela.build/Debug-iphoneos/Vela.build/assetcatalog_generated_info.plist_thinned --app-icon AppIcon --accent-color AccentColor --compress-pngs --enable-on-demand-resources YES --filter-for-thinning-device-configuration iPhone17,1 --filter-for-device-os-version 26.5 --development-region en --target-device iphone --minimum-deployment-target 17.0 --platform iphoneos
+/* com.apple.actool.compilation-results */
+/Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Intermediates.noindex/Vela.build/Debug-iphoneos/Vela.build/assetcatalog_generated_info.plist_thinned
+/Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Intermediates.noindex/Vela.build/Debug-iphoneos/Vela.build/assetcatalog_output/thinned/AppIcon60x60@2x.png
+/Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Intermediates.noindex/Vela.build/Debug-iphoneos/Vela.build/assetcatalog_output/thinned/AppIcon76x76@2x~ipad.png
+/Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Intermediates.noindex/Vela.build/Debug-iphoneos/Vela.build/assetcatalog_output/thinned/Assets.car
+
+
+LinkAssetCatalog /Users/sunweizhou/Desktop/AI\ Project/Vela/VelaApp/Resources/Assets.xcassets (in target 'Vela' from project 'Vela')
+    cd /Users/sunweizhou/Desktop/AI\ Project/Vela
+    builtin-linkAssetCatalog --thinned /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Intermediates.noindex/Vela.build/Debug-iphoneos/Vela.build/assetcatalog_output/thinned --thinned-dependencies /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Intermediates.noindex/Vela.build/Debug-iphoneos/Vela.build/assetcatalog_dependencies_thinned --thinned-info-plist-content /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Intermediates.noindex/Vela.build/Debug-iphoneos/Vela.build/assetcatalog_generated_info.plist_thinned --unthinned /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Intermediates.noindex/Vela.build/Debug-iphoneos/Vela.build/assetcatalog_output/unthinned --unthinned-dependencies /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Intermediates.noindex/Vela.build/Debug-iphoneos/Vela.build/assetcatalog_dependencies_unthinned --unthinned-info-plist-content /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Intermediates.noindex/Vela.build/Debug-iphoneos/Vela.build/assetcatalog_generated_info.plist_unthinned --output /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Products/Debug-iphoneos/Vela.app --plist-output /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Intermediates.noindex/Vela.build/Debug-iphoneos/Vela.build/assetcatalog_generated_info.plist
+note: Emplaced /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Products/Debug-iphoneos/Vela.app/AppIcon60x60@2x.png (in target 'Vela' from project 'Vela')
+note: Emplaced /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Products/Debug-iphoneos/Vela.app/Assets.car (in target 'Vela' from project 'Vela')
+note: Emplaced /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Products/Debug-iphoneos/Vela.app/AppIcon76x76@2x~ipad.png (in target 'Vela' from project 'Vela')
+
+ProcessInfoPlistFile /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Products/Debug-iphoneos/Vela.app/Info.plist /Users/sunweizhou/Desktop/AI\ Project/Vela/VelaApp/Vela-Info.plist (in target 'Vela' from project 'Vela')
+    cd /Users/sunweizhou/Desktop/AI\ Project/Vela
+    builtin-infoPlistUtility /Users/sunweizhou/Desktop/AI\ Project/Vela/VelaApp/Vela-Info.plist -producttype com.apple.product-type.application -genpkginfo /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Products/Debug-iphoneos/Vela.app/PkgInfo -expandbuildsettings -format binary -platform iphoneos -additionalcontentfile /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Intermediates.noindex/Vela.build/Debug-iphoneos/Vela.build/assetcatalog_generated_info.plist -requiredArchitecture arm64 -o /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Products/Debug-iphoneos/Vela.app/Info.plist
+
+CopySwiftLibs /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Products/Debug-iphoneos/Vela.app (in target 'Vela' from project 'Vela')
+    cd /Users/sunweizhou/Desktop/AI\ Project/Vela
+    builtin-swiftStdLibTool --copy --verbose --sign 2CF9C648B24B50193741EB6FD5AD930ED470023F --scan-executable /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Products/Debug-iphoneos/Vela.app/Vela.debug.dylib --scan-folder /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Products/Debug-iphoneos/Vela.app/Frameworks --scan-folder /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Products/Debug-iphoneos/Vela.app/PlugIns --scan-folder /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Products/Debug-iphoneos/Vela.app/SystemExtensions --scan-folder /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Products/Debug-iphoneos/Vela.app/Extensions --platform iphoneos --toolchain /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Products/Debug-iphoneos/Vela.app/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Intermediates.noindex/Vela.build/Debug-iphoneos/Vela.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+
+** BUILD SUCCEEDED **
+

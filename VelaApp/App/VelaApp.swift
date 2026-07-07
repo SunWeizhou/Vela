@@ -5,7 +5,11 @@ import AppIntents
 
 @MainActor
 final class VelaAppState: ObservableObject {
-    static let coachTabIndex = 3
+    static let todayTabIndex = 0
+    static let journalTabIndex = 1
+    static let coachTabIndex = 2
+    static let trainingTabIndex = 3
+    static let vitalsTabIndex = 4
 
     enum CoachRouteDestination {
         case embedded
@@ -22,7 +26,7 @@ final class VelaAppState: ObservableObject {
 
     @Published var isFallbackStore = false
     @Published var isReadOnlySafetyMode = false
-    @Published var selectedTab = 0
+    @Published var selectedTab = VelaAppState.todayTabIndex
     @Published var showCoachHub = false
     @Published var showSettings = false
     @Published var prefilledCoachQuestion: String? = nil
@@ -116,7 +120,7 @@ final class VelaAppState: ObservableObject {
 
     func routeToRecoveryDetail() {
         resetQuickActionSheetTriggers()
-        selectedTab = 2
+        selectedTab = Self.vitalsTabIndex
         triggerRecoveryDetail = true
     }
 
@@ -179,7 +183,7 @@ struct OpenVelaTodayIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        VelaAppState.shared.routeToTab(0)
+        VelaAppState.shared.routeToTab(VelaAppState.todayTabIndex)
         return .result()
     }
 }

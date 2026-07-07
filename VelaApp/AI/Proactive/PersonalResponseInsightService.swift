@@ -175,8 +175,16 @@ struct TrainingResponseInsightService {
         let weekResponses = trainingResponses.filter { $0.nextDayDate >= start && $0.nextDayDate < end }
         let weekFoodLogs = foodLogs.filter { $0.createdAt >= start && $0.createdAt < end }
         let weekJournalEntries = journalEntries.filter { $0.createdAt >= start && $0.createdAt < end }
-        let recoveryAverage = average(weekSnapshots.compactMap(\.recoveryScore))
-        let sleepAverage = average(weekSnapshots.compactMap(\.sleepScore))
+        let recoveryAverage = average(
+            weekSnapshots
+                .filter(hasRecoverySourceData)
+                .compactMap(\.recoveryScore)
+        )
+        let sleepAverage = average(
+            weekSnapshots
+                .filter(hasSleepSourceData)
+                .compactMap(\.sleepScore)
+        )
         
         let responseSummary = weekResponses.isEmpty
             ? "暂无足够的训练后次日数据。"
@@ -451,6 +459,18 @@ struct TrainingResponseInsightService {
     private func average(_ values: [Double]) -> Double? {
         guard !values.isEmpty else { return nil }
         return values.reduce(0, +) / Double(values.count)
+    }
+
+    private func hasRecoverySourceData(_ snapshot: DailyHealthSnapshot) -> Bool {
+        snapshot.hrvAverage != nil
+            || snapshot.restingHeartRate != nil
+            || hasSleepSourceData(snapshot)
+    }
+
+    private func hasSleepSourceData(_ snapshot: DailyHealthSnapshot) -> Bool {
+        (snapshot.sleepHours ?? 0) > 0
+            || (snapshot.deepSleepMinutes ?? 0) > 0
+            || (snapshot.remSleepMinutes ?? 0) > 0
     }
 
     private func delta(_ lhs: Double?, _ rhs: Double?) -> Double? {

@@ -26,6 +26,8 @@ struct VelaTodayView: View {
     @State var operatingPlans: [DailyOperatingPlanRecord] = []
 
     var dashboard: DashboardSummary { dashboardVM.dashboard }
+    private var hrvValue: Double { dashboard.recoveryMetrics.hrvMilliseconds ?? 0 }
+    private var rhrValue: Double { dashboard.recoveryMetrics.restingHeartRate ?? 0 }
 
     /// Lookback window for health-related queries (42 days matches recovery engine baseline)
     static let healthLookbackDays = 42
@@ -313,13 +315,20 @@ struct VelaTodayView: View {
                 .offset(y: isVisible ? 0 : 12)
                 .animation(VelaTheme.snappy.delay(0.11), value: isVisible)
 
-                TodayNutritionStrip(
-                    nutrition: todayExperience.nutrition,
-                    onAddClick: { VelaAppState.shared.triggerFoodSearch = true }
-                )
-                .opacity(isVisible ? 1 : 0)
-                .offset(y: isVisible ? 0 : 12)
-                .animation(VelaTheme.snappy.delay(0.14), value: isVisible)
+                vitalsPortalCard
+                    .opacity(isVisible ? 1 : 0)
+                    .offset(y: isVisible ? 0 : 12)
+                    .animation(VelaTheme.snappy.delay(0.12), value: isVisible)
+
+                if todayExperience.nutrition.calories > 0 {
+                    TodayNutritionStrip(
+                        nutrition: todayExperience.nutrition,
+                        onAddClick: { VelaAppState.shared.triggerFoodSearch = true }
+                    )
+                    .opacity(isVisible ? 1 : 0)
+                    .offset(y: isVisible ? 0 : 12)
+                    .animation(VelaTheme.snappy.delay(0.14), value: isVisible)
+                }
 
                 TodayCoachPreview(
                     model: todayExperience,
@@ -657,6 +666,45 @@ struct VelaTodayView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Core Health Vitals Portal
+    private var vitalsPortalCard: some View {
+        NavigationLink(destination: VelaVitalsView()) {
+            HStack(spacing: 12) {
+                Circle()
+                    .fill(VelaTheme.accent.opacity(0.12))
+                    .frame(width: 40, height: 40)
+                    .overlay(
+                        Image(systemName: "heart.text.square.fill")
+                            .font(.system(size: 18))
+                            .foregroundStyle(VelaTheme.accent)
+                    )
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("核心健康体征")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(VelaTheme.fg)
+                    
+                    let hrvText = hrvValue > 0 ? "\(Int(hrvValue)) ms" : "--"
+                    let rhrText = rhrValue > 0 ? "\(Int(rhrValue)) bpm" : "--"
+                    Text("HRV: \(hrvText)  |  静息心率: \(rhrText)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(VelaTheme.muted)
+                }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(VelaTheme.muted)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(RoundedRectangle(cornerRadius: 18).fill(VelaTheme.cardBg))
+            .overlay(RoundedRectangle(cornerRadius: 18).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+        }
+        .buttonStyle(.cardPress)
     }
 }
 

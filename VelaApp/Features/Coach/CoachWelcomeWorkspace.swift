@@ -34,6 +34,20 @@ struct CoachWelcomeWorkspace: View {
             }
             .buttonStyle(.plain)
 
+            NavigationLink(destination: VelaReportsView()) {
+                HStack {
+                    Label("历史报告与自动分析", systemImage: "doc.text.fill")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(VelaTheme.fg)
+                .padding(14)
+                .background(RoundedRectangle(cornerRadius: 16).fill(VelaTheme.surface))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+            }
+            .buttonStyle(.plain)
+
             // Suggestion questions
             VStack(alignment: .leading, spacing: 10) {
                 Text(L10n.t("QUICK SUGGESTIONS", "快捷提问"))
