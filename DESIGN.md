@@ -1,12 +1,12 @@
 ---
-name: Vela iOS 26 Liquid Glass
-description: A local-first iOS body intelligence agent for Apple Watch users. iOS 26 Liquid Glass material language × Bevel 3.0 information architecture. Calm, trustworthy, precise, warm, intelligent. Target device: iPhone 16 Pro (390×844pt), iOS 26. Chinese + English bilingual, Light + Dark adaptive.
+name: Vela Signal Intelligence
+description: A local-first iOS body intelligence agent for Apple Watch users. Native iOS clarity, a focused daily health story, restrained signal color, and Liquid Glass navigation. Target device: iPhone 16 Pro (390×844pt), iOS 26. Chinese + English bilingual, Light + Dark adaptive.
 colors:
-  # Light Mode — Warm Canvas Base
-  background: '#F5F3F0'
+  # Light Mode — Cool Neutral Canvas
+  background: '#F4F6FA'
   on-background: '#1A1917'
   surface-dim: '#F0EDE8'
-  surface: '#F5F3F0'
+  surface: '#F4F6FA'
   surface-bright: '#FAF9F6'
   surface-container-lowest: '#FFFFFF'
   surface-container-low: '#F8F7F4'
@@ -19,9 +19,9 @@ colors:
   inverse-on-surface: '#F2EFE8'
   outline: '#E8E4DD'
   outline-variant: '#D5D0C8'
-  surface-tint: '#C56B4A'
-  # Primary — Clay (Brand, CTAs, Active States)
-  primary: '#C56B4A'
+  surface-tint: '#5664E8'
+  # Primary — Signal Blue (Brand, CTAs, Active States)
+  primary: '#5664E8'
   on-primary: '#FFFFFF'
   primary-container: '#F5E8E0'
   on-primary-container: '#7A3D2A'
@@ -67,11 +67,11 @@ colors:
   on-error: '#FFFFFF'
   error-container: '#FFDAD6'
   on-error-container: '#410002'
-  # Dark Mode — Deep Warm Base
-  dark-background: '#100F0D'
+  # Dark Mode — Deep Ink Base
+  dark-background: '#080A0F'
   dark-on-background: '#F2EFE8'
-  dark-surface-dim: '#100F0D'
-  dark-surface: '#100F0D'
+  dark-surface-dim: '#080A0F'
+  dark-surface: '#080A0F'
   dark-surface-bright: '#1C1B18'
   dark-surface-container-lowest: '#0A0908'
   dark-surface-container-low: '#161512'
@@ -84,8 +84,8 @@ colors:
   dark-inverse-on-surface: '#1C1B18'
   dark-outline: '#2E2B25'
   dark-outline-variant: '#444038'
-  dark-surface-tint: '#D48463'
-  dark-primary: '#D48463'
+  dark-surface-tint: '#7F8CFF'
+  dark-primary: '#7F8CFF'
   dark-on-primary: '#3D1F0F'
   dark-primary-container: '#5A3020'
   dark-on-primary-container: '#F5E8E0'
@@ -213,11 +213,11 @@ Vela is a local-first iOS body intelligence agent for Apple Watch users. It read
 
 Raw health data stays on-device. Only structured summaries reach the AI.
 
-**Creative North Star: "Calm Glass Intelligence"**
+**Creative North Star: "Signal Intelligence"**
 
 The design fuses iOS 26 Liquid Glass material language with Bevel 3.0's disciplined information architecture. Every surface feels like precision-cut glass floating over a deep, calm background. The app breathes — generous whitespace, one clear story per screen, no clutter.
 
-**Mood**: calm, trustworthy, precise, warm, intelligent, effortless
+**Mood**: calm, trustworthy, precise, modern, focused, intelligent
 
 **Density**: 4/10 — Content is selectively presented. One primary message per card. Negative space is intentional, not wasted. Cards are separated by 16-24pt gaps. Text lines per card are capped at 3-4 for headline+body combos.
 
@@ -237,15 +237,15 @@ The design fuses iOS 26 Liquid Glass material language with Bevel 3.0's discipli
 
 ### Philosophy
 
-Colors are semantically anchored. Six accent families (Clay, Sage, Indigo, Amber, Rose, Gold) each map to exactly one health domain. This creates a subconscious mental model: the user learns that green = recovery, indigo = sleep, amber = strain, and the association is never violated.
+Color is semantically anchored. Signal Blue belongs to navigation, product identity, and primary actions. Recovery, sleep, strain, stress, and energy each keep a distinct state color; those colors never become generic decoration.
 
-The foundation is a warm off-white (`#F5F3F0`) in light mode and a deep warm black (`#100F0D`) in dark mode. These are intentionally non-neutral — they carry a whisper of warmth that prevents the clinical sterility of pure white or pure black.
+The foundation is a cool neutral (`#F4F6FA`) in light mode and deep ink (`#080A0F`) in dark mode. White cards carry content, while the Daily Focus card uses a controlled ink gradient to create one unmistakable focal point.
 
 ### Light Mode Palette
 
 **Canvas Base (Background)**
-- `background` (#F5F3F0): Screen background. Warm off-white, never pure white. Creates the warm glass canvas.
-- `surface-dim` (#F0EDE8): Grouped section backgrounds. Slightly darker than the main background for visual grouping without borders.
+- `background` (#F4F6FA): Screen background. Cool, quiet, and optimized for white data cards.
+- `surface-dim` (#E9EDF5): Grouped section backgrounds and inactive controls.
 
 **Content Surfaces**
 - `surface-container-lowest` (#FFFFFF): Content cards at 92% opacity. Clean but not stark.
@@ -263,8 +263,8 @@ The foundation is a warm off-white (`#F5F3F0`) in light mode and a deep warm bla
 - `outline` (#E8E4DD): Card hairline borders. 0.5pt weight. Present but quiet — just enough to define card edges against the background.
 - `outline-variant` (#D5D0C8): Stronger borders for focused states, input fields.
 
-**Primary Brand — Clay**
-- `primary` (#C56B4A): Primary CTAs, active navigation, Vela brand identity. Warm terracotta clay. Used for the center Coach button, prominent actions, selected tab indicator.
+**Primary Brand — Signal Blue**
+- `primary` (#5664E8): Primary CTAs, active navigation, Vela brand identity, and interactive focus.
 - `primary-container` (#F5E8E0): Tinted background for primary-associated surfaces.
 - `on-primary` (#FFFFFF): Text on primary backgrounds.
 - `on-primary-container` (#7A3D2A): Text on primary container backgrounds.
@@ -295,16 +295,16 @@ The foundation is a warm off-white (`#F5F3F0`) in light mode and a deep warm bla
 
 ### Dark Mode Palette
 
-Dark mode inverts the light palette while preserving semantic identity. All colors are desaturated by 5-10% to reduce eye strain on OLED displays. The warm undertone is maintained — backgrounds use `#100F0D` (warm black) rather than pure black.
+Dark mode preserves semantic identity while using an ink base designed for OLED displays.
 
-- `dark-background` (#100F0D): Deep warm black screen background.
+- `dark-background` (#080A0F): Deep ink screen background.
 - `dark-surface-container-lowest` (#0A0908): Darkest surface for deepest cards.
 - `dark-surface-container` (#1C1B18): Primary card surface in dark mode.
 - `dark-on-surface` (#F2EFE8): Primary text — warm parchment instead of pure white.
 - `dark-outline` (#2E2B25): Card borders in dark mode.
 
 All six accent colors have dark-mode equivalents that are 15-20% brighter to maintain contrast against dark backgrounds:
-- `dark-primary` (#D48463), `dark-secondary` (#73A385), `dark-tertiary` (#8588B8)
+- `dark-primary` (#7F8CFF), `dark-secondary` (#4DD0AA), `dark-tertiary` (#A99DFF)
 - `dark-quaternary` (#D0A050), `dark-quinary` (#C4707A), `dark-senary` (#DCB048)
 
 ### Glass Effect Tokens
@@ -841,16 +841,16 @@ The following are PROHIBITED in this design system:
 When generating screens from this DESIGN.md, use prompts that reference the specific token values defined above.
 
 ### Color Quick Reference
-- Background: `#F5F3F0` (light) / `#100F0D` (dark)
+- Background: `#F4F6FA` (light) / `#080A0F` (dark)
 - Card: `#FFFFFF` at 92% (light) / `#1C1B18` at 92% (dark)
 - Primary text: `#1A1917` (light) / `#F2EFE8` (dark)
-- Primary CTA: `#C56B4A` (light) / `#D48463` (dark)
-- Recovery: `#5B8C6F` / Sleep: `#6B6FA0` / Strain: `#B8843E` / Stress: `#A85260` / Energy: `#C4952E`
+- Primary CTA: `#5664E8` (light) / `#7F8CFF` (dark)
+- Recovery: `#168B70` / Sleep: `#685BC7` / Strain: `#E56B32` / Stress: `#C94E70` / Energy: `#B47C18`
 
 ### Example Screen Generation Prompts
 
 **Today Tab**:
-"Design an iOS 26 mobile screen (390×844pt) for a health dashboard called 'Today'. Use a warm off-white background (#F5F3F0). The hero card at top uses iOS 26 .glassEffect() with 24pt corner radius, contains a 120pt diameter ring chart in sage green (#5B8C6F) showing 85% progress, the text 'Your body is ready for a challenging day ahead' below it, and three smaller 60pt rings for Sleep (7.5h, indigo #6B6FA0), Strain (62%, amber #B8843E), and Recovery (88%, sage #5B8C6F). Below the hero: two side-by-side cards for Stress (horizontal bar in rose #A85260, value 23/100) and Energy Bank (horizontal bar in gold #C4952E, value 72%). Below that: a Coach Insight card with sparkles icon and a sentence of AI-generated health insight. Below that: a Data Coverage card with 5-dot confidence indicator. At bottom: a floating glass Tab Bar with 4 items (Today, Journal, Fitness, Vitals) plus a center sparkles button. All text in SF Pro. Light mode."
+"Design an iOS 26 Today screen for Vela on a cool neutral #F4F6FA canvas. Use one deep-ink Daily Focus card with a subtle blue/teal signal glow. It must show one decision, one short explanation, at most two supporting metrics, and one white primary action above the fold. Put secondary timelines, feedback, Coach, and data coverage in quiet white cards below. Use SF Pro, semantic colors, Dynamic Type, and native Liquid Glass navigation."
 
 **Vitals Tab**:
 "Design an iOS 26 mobile screen (390×844pt) for a health vitals dashboard. Top card: Biological Age display showing '28.5 years' in large monospaced SF Pro bold, with '-2.3 yrs vs chronological' in sage green below, and confidence/freshness badges. Second card: Sleep timeline chart for last night with 4 horizontal lanes (Awake, REM, Deep, Core) in indigo spectrum (#6B6FA0), time axis below, total '7h 32m' + efficiency '92%'. Third card: Recovery breakdown rows for HRV (48ms, ▲12%), Resting HR (56bpm, ▼8%), Temperature (+0.2°), SpO2 (98%). Fourth card: 2×3 grid of body metrics (Blood Pressure, Weight, Blood Glucose, BMI, Respiratory Rate, VO2max). Bottom: floating glass Tab Bar. All cards have 20pt radius, 0.5pt hairline borders, 20pt padding. Warm off-white background (#F5F3F0). SF Pro throughout. Light mode."

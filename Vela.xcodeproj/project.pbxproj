@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0B4A00010000000000000001 /* VelaWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B4A10010000000000000001 /* VelaWatchApp.swift */; };
+		0B4A00020000000000000002 /* WristSnapshotBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B4A10020000000000000002 /* WristSnapshotBridge.swift */; };
+		0B4A00030000000000000003 /* VelaWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 0B4A10030000000000000003 /* VelaWatch.app */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		0B4A00150000000000000015 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0B1001580000000000000058 /* Assets.xcassets */; };
 		030D51E11F504938A9EED418 /* ArcProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32407F306A454D93A254BB24 /* ArcProgressView.swift */; };
 		0B25D0740000000000000074 /* DataFreshnessIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1740000000000000074 /* DataFreshnessIndicator.swift */; };
 		0B1009010000000000000901 /* TrainingIntelligenceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1009020000000000000902 /* TrainingIntelligenceModels.swift */; };
@@ -208,6 +212,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		0B4A00040000000000000004 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0B0000040000000000000004 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0B4A00050000000000000005;
+			remoteInfo = VelaWatch;
+		};
 		0B0000030000000000000003 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 0B0000040000000000000004 /* Project object */;
@@ -217,7 +228,24 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		0B4A00060000000000000006 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				0B4A00030000000000000003 /* VelaWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		0B4A10010000000000000001 /* VelaWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaWatchApp.swift; sourceTree = "<group>"; };
+		0B4A10020000000000000002 /* WristSnapshotBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Services/WristSnapshotBridge.swift; sourceTree = "<group>"; };
+		0B4A10030000000000000003 /* VelaWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VelaWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		06E296850D824F5484621DB7 /* PromptComposerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptComposerTests.swift; sourceTree = "<group>"; };
 		087BEB3E31344B8EA6E94717 /* AgentSkillsConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Proactive/AgentSkillsConfig.swift; sourceTree = "<group>"; };
 		0B0000020000000000000002 /* VelaThemeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VelaThemeTests.swift; sourceTree = "<group>"; };
@@ -423,6 +451,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		0B4A00070000000000000007 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		0B0000080000000000000008 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -444,6 +479,7 @@
 			isa = PBXGroup;
 			children = (
 				0B0000110000000000000011 /* VelaApp */,
+				0B4A00080000000000000008 /* VelaWatch */,
 				0B0000120000000000000012 /* VelaAppTests */,
 				0B0000130000000000000013 /* Products */,
 				133A4EB88D8CAFC310065B46 /* DailyPlanLimiterEngine.swift */,
@@ -453,6 +489,7 @@
 		0B0000110000000000000011 /* VelaApp */ = {
 			isa = PBXGroup;
 			children = (
+				0B4A10020000000000000002 /* WristSnapshotBridge.swift */,
 				0B1001900000000000000090 /* VelaQuickActionsSheet.swift */,
 				0B1009020000000000000902 /* TrainingIntelligenceModels.swift */,
 				0B1009040000000000000904 /* ExerciseLibraryService.swift */,
@@ -666,9 +703,18 @@
 			isa = PBXGroup;
 			children = (
 				0B0000060000000000000006 /* Vela.app */,
+				0B4A10030000000000000003 /* VelaWatch.app */,
 				0B0000070000000000000007 /* VelaTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		0B4A00080000000000000008 /* VelaWatch */ = {
+			isa = PBXGroup;
+			children = (
+				0B4A10010000000000000001 /* VelaWatchApp.swift */,
+			);
+			path = VelaWatch;
 			sourceTree = "<group>";
 		};
 		5458E0C4362B49350165581D /* Coverage */ = {
@@ -709,14 +755,33 @@
 				0B0000150000000000000015 /* Sources */,
 				0B0000080000000000000008 /* Frameworks */,
 				0B0000160000000000000016 /* Resources */,
+				0B4A00060000000000000006 /* Embed Watch Content */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				0B4A00090000000000000009 /* PBXTargetDependency */,
+			);
+			name = Vela;
+			productName = Vela;
+			productReference = 0B0000060000000000000006 /* Vela.app */;
+			productType = "com.apple.product-type.application";
+		};
+		0B4A00050000000000000005 /* VelaWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0B4A00100000000000000010 /* Build configuration list for PBXNativeTarget "VelaWatch" */;
+			buildPhases = (
+				0B4A00110000000000000011 /* Sources */,
+				0B4A00070000000000000007 /* Frameworks */,
+				0B4A00120000000000000012 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
-			name = Vela;
-			productName = Vela;
-			productReference = 0B0000060000000000000006 /* Vela.app */;
+			name = VelaWatch;
+			productName = VelaWatch;
+			productReference = 0B4A10030000000000000003 /* VelaWatch.app */;
 			productType = "com.apple.product-type.application";
 		};
 		0B0000170000000000000017 /* VelaTests */ = {
@@ -754,6 +819,9 @@
 						CreatedOnToolsVersion = 26.4;
 						TestTargetID = 0B0000050000000000000005;
 					};
+					0B4A00050000000000000005 = {
+						CreatedOnToolsVersion = 26.5;
+					};
 				};
 			};
 			buildConfigurationList = 0B0000220000000000000022 /* Build configuration list for PBXProject "Vela" */;
@@ -770,12 +838,21 @@
 			projectRoot = "";
 			targets = (
 				0B0000050000000000000005 /* Vela */,
+				0B4A00050000000000000005 /* VelaWatch */,
 				0B0000170000000000000017 /* VelaTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		0B4A00120000000000000012 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0B4A00150000000000000015 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		0B0000160000000000000016 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -795,10 +872,19 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		0B4A00110000000000000011 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0B4A00010000000000000001 /* VelaWatchApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		0B0000150000000000000015 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0B4A00020000000000000002 /* WristSnapshotBridge.swift in Sources */,
 				0B1000900000000000000090 /* VelaQuickActionsSheet.swift in Sources */,
 				0B1009010000000000000901 /* TrainingIntelligenceModels.swift in Sources */,
 				0B1009030000000000000903 /* ExerciseLibraryService.swift in Sources */,
@@ -1008,6 +1094,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		0B4A00090000000000000009 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0B4A00050000000000000005 /* VelaWatch */;
+			targetProxy = 0B4A00040000000000000004 /* PBXContainerItemProxy */;
+		};
 		0B0000210000000000000021 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 0B0000050000000000000005 /* Vela */;
@@ -1016,6 +1107,66 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		0B4A00130000000000000013 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = UHS4N7454X;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Vela;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.sunweizhou.Vela4;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 4.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sunweizhou.Vela4.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		0B4A00140000000000000014 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = UHS4N7454X;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Vela;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.sunweizhou.Vela4;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 4.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sunweizhou.Vela4.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
 		0B0000230000000000000023 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1242,6 +1393,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		0B4A00100000000000000010 /* Build configuration list for PBXNativeTarget "VelaWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0B4A00130000000000000013 /* Debug */,
+				0B4A00140000000000000014 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		0B0000140000000000000014 /* Build configuration list for PBXNativeTarget "Vela" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

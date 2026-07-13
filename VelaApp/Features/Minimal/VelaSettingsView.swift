@@ -97,7 +97,7 @@ struct VelaSettingsView: View {
                         }
                         settingsDivider
                         NavigationLink(destination: DataCoverageView()) {
-                            settingsRow(icon: "waveform.path.ecg.rectangle", iconBg: VelaTheme.accent, title: "数据可信度", value: "信号质量")
+                            settingsRow(icon: "waveform.path.ecg.rectangle", iconBg: VelaTheme.accent, title: "数据覆盖", value: "信号完整度")
                         }
                         settingsDivider
                         NavigationLink(destination: HealthDataResyncSettingsView()) {
@@ -106,6 +106,10 @@ struct VelaSettingsView: View {
                         settingsDivider
                         NavigationLink(destination: TrustCenterView()) {
                             settingsRow(icon: "checkmark.shield.fill", iconBg: VelaTheme.recoveryColor, title: "信任中心", value: "权限与运行日志")
+                        }
+                        settingsDivider
+                        NavigationLink(destination: ProductQualityDiagnosticsView()) {
+                            settingsRow(icon: "chart.line.uptrend.xyaxis", iconBg: Color(hex: "#7A5AF8"), title: "产品质量诊断", value: "本机闭环")
                         }
                         settingsDivider
                         NavigationLink(destination: PrivacyDataControlsView()) {
@@ -235,6 +239,89 @@ struct VelaSettingsView: View {
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
         .padding(.horizontal, 16)
+    }
+}
+
+struct ProductQualityDiagnosticsView: View {
+    @Environment(\.modelContext) private var modelContext
+    @State private var snapshot = ProductQualitySnapshot(
+        periodDays: 28,
+        generatedPlans: 0,
+        viewedDecisions: 0,
+        startedActions: 0,
+        completedFeedback: 0,
+        adoptedDecisions: 0,
+        accurateDecisions: 0,
+        workoutLogs: 0,
+        syncSuccesses: 0,
+        syncFailures: 0
+    )
+
+    var body: some View {
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 7) {
+                    Label("仅在本机计算", systemImage: "lock.fill")
+                        .font(.headline)
+                        .foregroundStyle(VelaTheme.accent)
+                    Text("用于判断 Vela 是否真正帮助你完成“看见建议 → 开始行动 → 反馈结果 → 校准建议”的闭环，不会上传行为分析数据。")
+                        .font(.footnote)
+                        .foregroundStyle(VelaTheme.muted)
+                }
+                .padding(.vertical, 4)
+            }
+
+            Section("近 \(snapshot.periodDays) 天核心闭环") {
+                qualityMetricRow("建议生成", count: snapshot.generatedPlans, rate: nil)
+                qualityMetricRow("建议已查看", count: snapshot.viewedDecisions, rate: snapshot.viewRate)
+                qualityMetricRow("行动已开始", count: snapshot.startedActions, rate: snapshot.actionRate)
+                qualityMetricRow("反馈已完成", count: snapshot.completedFeedback, rate: snapshot.feedbackRate)
+                qualityMetricRow("采纳或调整后采纳", count: snapshot.adoptedDecisions, rate: snapshot.adoptionRate)
+                qualityMetricRow("准确或部分准确", count: snapshot.accurateDecisions, rate: snapshot.accuracyRate)
+            }
+
+            Section("可靠性") {
+                qualityMetricRow("健康同步成功", count: snapshot.syncSuccesses, rate: snapshot.syncSuccessRate)
+                qualityMetricRow("健康同步失败", count: snapshot.syncFailures, rate: nil)
+                qualityMetricRow("训练记录完成", count: snapshot.workoutLogs, rate: nil)
+                if snapshot.syncFailures > 0 && snapshot.syncSuccessRate < 0.9 {
+                    Label("同步成功率偏低。建议前往“健康数据重同步”检查权限与数据源。", systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(VelaTheme.warn)
+                }
+            }
+
+            Section("如何解读") {
+                Text("样本少于 7 天时只用于排查流程，不评价产品效果。建议至少连续使用 28 天，再观察采纳率、准确率与次日恢复是否共同改善。")
+                    .font(.footnote)
+                    .foregroundStyle(VelaTheme.muted)
+            }
+        }
+        .navigationTitle("产品质量诊断")
+        .task { reload() }
+        .refreshable { reload() }
+    }
+
+    @ViewBuilder
+    private func qualityMetricRow(_ title: String, count: Int, rate: Double?) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Text("\(count)")
+                .foregroundStyle(VelaTheme.muted)
+                .monospacedDigit()
+            if let rate {
+                Text(rate.formatted(.percent.precision(.fractionLength(0))))
+                    .fontWeight(.semibold)
+                    .foregroundStyle(rate >= 0.7 ? VelaTheme.success : (rate >= 0.4 ? VelaTheme.warn : VelaTheme.muted))
+                    .monospacedDigit()
+                    .frame(width: 48, alignment: .trailing)
+            }
+        }
+    }
+
+    private func reload() {
+        snapshot = DailyDecisionFeedbackService().qualitySnapshot(modelContext: modelContext)
     }
 }
 

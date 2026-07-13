@@ -984,6 +984,94 @@ enum TrainingScheduleResolver {
     }
 }
 
+struct TrainingPlanReview: Equatable, Sendable {
+    var scheduledSessions: Int
+    var completedSessions: Int
+    var completionRate: Double
+    var averageAdherence: Double?
+    var measuredResponses: Int
+    var averageRecoveryDelta: Double?
+    var statusTitle: String
+    var recommendation: String
+}
+
+enum TrainingPlanReviewService {
+    static func review(
+        plan: TrainingPlanRecord,
+        events: [WorkoutEventRecord],
+        responses: [TrainingResponseRecord],
+        through date: Date = Date(),
+        calendar: Calendar = .current
+    ) -> TrainingPlanReview {
+        let endOfDay = calendar.date(
+            byAdding: .day,
+            value: 1,
+            to: calendar.startOfDay(for: date)
+        ) ?? date
+        let completedEventDayIDs = Set(
+            events
+                .filter { $0.startedAt < endOfDay }
+                .compactMap(\.linkedTrainingPlanDayId)
+        )
+        let scheduled = plan.days.filter { day in
+            guard day.focus != "rest",
+                  let scheduledDate = TrainingScheduleResolver.scheduledDate(
+                    for: day,
+                    planStart: plan.startDate,
+                    calendar: calendar
+                  ) else { return false }
+            return scheduledDate < endOfDay
+        }
+        let completed = scheduled.filter {
+            $0.isCompleted || completedEventDayIDs.contains($0.id)
+        }
+        let adherenceValues = completed.compactMap(\.adherenceScore)
+        let linkedWorkoutIDs = Set(completed.flatMap(\.linkedWorkoutEventIds))
+        let measured = responses.filter { linkedWorkoutIDs.contains($0.workoutId) }
+        let recoveryDeltas = measured.compactMap(\.nextDayRecoveryDelta)
+
+        let completionRate = scheduled.isEmpty
+            ? 0
+            : Double(completed.count) / Double(scheduled.count)
+        let averageAdherence = adherenceValues.isEmpty
+            ? nil
+            : adherenceValues.reduce(0, +) / Double(adherenceValues.count)
+        let averageRecoveryDelta = recoveryDeltas.isEmpty
+            ? nil
+            : recoveryDeltas.reduce(0, +) / Double(recoveryDeltas.count)
+
+        let statusTitle: String
+        let recommendation: String
+        if scheduled.count < 3 {
+            statusTitle = "正在建立计划基线"
+            recommendation = "至少完成 3 节计划训练并记录 RPE 后，Vela 才会给出周期调整判断。"
+        } else if measured.count >= 3, (averageRecoveryDelta ?? 0) <= -8 {
+            statusTitle = "近期恢复成本偏高"
+            recommendation = "下周总容量建议降低 10–20%，优先保留动作质量，并观察连续 3 次训练后的恢复变化。"
+        } else if completionRate < 0.60 {
+            statusTitle = "计划与实际节奏不匹配"
+            recommendation = "减少每周训练频次或缩短单次时长；比补做逾期训练更重要的是恢复可持续节奏。"
+        } else if completionRate >= 0.85, (averageAdherence ?? 0.8) >= 0.80 {
+            statusTitle = "计划节奏稳定"
+            recommendation = "继续当前安排；只有在恢复稳定且主观用力未持续升高时，才小幅增加容量。"
+        } else {
+            statusTitle = "计划执行基本稳定"
+            recommendation = "继续记录实际训练和次日状态，积累足够响应数据后再判断是否进阶。"
+        }
+
+        return TrainingPlanReview(
+            scheduledSessions: scheduled.count,
+            completedSessions: completed.count,
+            completionRate: completionRate,
+            averageAdherence: averageAdherence,
+            measuredResponses: measured.count,
+            averageRecoveryDelta: averageRecoveryDelta,
+            statusTitle: statusTitle,
+            recommendation: recommendation
+        )
+    }
+}
+
 struct TrainingSessionDraft: Equatable {
     enum Action: String, Equatable {
         case strength

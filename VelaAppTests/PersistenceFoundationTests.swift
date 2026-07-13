@@ -569,6 +569,158 @@ final class PersistenceFoundationTests: XCTestCase {
         )
     }
 
+    func testWristSnapshotRoundTripsWithoutLosingDecisionOrPlanContext() throws {
+        let snapshot = WristSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 1_783_929_600),
+            bodyStateTitle: "恢复稳定",
+            summary: "今天适合按计划训练，并保留一组余力。",
+            decision: "按计划训练",
+            decisionConfidence: 0.86,
+            recoveryScore: 82,
+            sleepScore: 79,
+            strainScore: 31,
+            hrvMilliseconds: 48,
+            restingHeartRate: 58,
+            primaryAction: "开始上肢训练",
+            planTitle: "四周力量计划",
+            sessionTitle: "上肢推",
+            sessionDetail: "45 分钟 · 中强度",
+            planProgress: "3/12 已完成"
+        )
+
+        let encoded = try JSONEncoder().encode(snapshot)
+        let decoded = try JSONDecoder().decode(WristSnapshot.self, from: encoded)
+
+        XCTAssertEqual(decoded, snapshot)
+    }
+
+    @MainActor
+    func testDailyAdaptiveProposalIsIdempotentAndDoesNotMutatePlan() throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let date = try XCTUnwrap(calendar.date(from: DateComponents(
+            year: 2026,
+            month: 7,
+            day: 13,
+            hour: 9
+        )))
+        let day = TrainingDay(
+            weekNumber: 1,
+            dayNumber: 1,
+            title: "Heavy Lower",
+            description: "Planned strength session",
+            focus: "strength",
+            durationMinutes: 60,
+            intensity: "high"
+        )
+        let plan = TrainingPlanRecord(
+            title: "Adaptive Plan",
+            goalDescription: "Build strength safely",
+            startDate: date,
+            weeksCount: 1,
+            days: [day]
+        )
+        var dashboard = DashboardSummary.preview(date: date)
+        dashboard.recovery.value = 28
+        dashboard.recovery.components["hrv_z_score"] = -1.5
+        dashboard.recoveryMetrics = RecoveryMetricSummary(
+            hrvMilliseconds: 28,
+            restingHeartRate: 72,
+            sleepHeartRate: 68,
+            respiratoryRate: 17
+        )
+        dashboard.sleepScore.value = 45
+        dashboard.sleepScore.components["sleep_efficiency"] = 0.68
+        dashboard.strain.value = 88
+        dashboard.stress.value = 82
+
+        let first = try XCTUnwrap(AdaptiveTrainingManager().refreshDailyProposal(
+            plan: plan,
+            dashboard: dashboard,
+            events: [],
+            foodLogs: [],
+            journalEntries: [],
+            modelContext: context,
+            date: date,
+            calendar: calendar
+        ))
+        let second = try XCTUnwrap(AdaptiveTrainingManager().refreshDailyProposal(
+            plan: plan,
+            dashboard: dashboard,
+            events: [],
+            foodLogs: [],
+            journalEntries: [],
+            modelContext: context,
+            date: date,
+            calendar: calendar
+        ))
+
+        let stored = try context.fetch(FetchDescriptor<TrainingPlanAdaptationRecord>())
+        XCTAssertEqual(first.id, second.id)
+        XCTAssertEqual(stored.count, 1)
+        XCTAssertEqual(stored.first?.status, AdaptationStatus.proposed.rawValue)
+        XCTAssertNotEqual(stored.first?.adjustment, AdaptiveTrainingEngine.Adjustment.keep.rawValue)
+        XCTAssertEqual(plan.days.first?.title, "Heavy Lower")
+        XCTAssertEqual(plan.days.first?.durationMinutes, 60)
+    }
+
+    func testTrainingPlanReviewCombinesExecutionAdherenceAndRecoveryCost() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let start = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 7, day: 6)))
+        let workoutIDs = [UUID(), UUID(), UUID()]
+        let days = (0..<3).map { index in
+            TrainingDay(
+                weekNumber: 1,
+                dayNumber: index + 1,
+                title: "Session \(index + 1)",
+                description: "",
+                focus: "strength",
+                durationMinutes: 45,
+                intensity: "moderate",
+                isCompleted: true,
+                linkedWorkoutEventIds: [workoutIDs[index]],
+                adherenceScore: 0.9
+            )
+        }
+        let plan = TrainingPlanRecord(
+            title: "Review Plan",
+            goalDescription: "",
+            startDate: start,
+            weeksCount: 1,
+            days: days
+        )
+        let responses = workoutIDs.enumerated().map { index, workoutID in
+            TrainingResponseRecord(
+                workoutId: workoutID,
+                date: start.addingTimeInterval(Double(index) * 86_400),
+                nextDayDate: start.addingTimeInterval(Double(index + 1) * 86_400),
+                primaryMuscleGroups: ["legs"],
+                totalEffectiveSets: 10,
+                totalVolumeKg: 4_000,
+                nextDayRecoveryDelta: -10
+            )
+        }
+
+        let review = TrainingPlanReviewService.review(
+            plan: plan,
+            events: [],
+            responses: responses,
+            through: start.addingTimeInterval(3 * 86_400),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(review.scheduledSessions, 3)
+        XCTAssertEqual(review.completedSessions, 3)
+        XCTAssertEqual(review.completionRate, 1, accuracy: 0.001)
+        XCTAssertEqual(review.averageAdherence ?? 0, 0.9, accuracy: 0.001)
+        XCTAssertEqual(review.measuredResponses, 3)
+        XCTAssertEqual(review.averageRecoveryDelta ?? 0, -10, accuracy: 0.001)
+        XCTAssertEqual(review.statusTitle, "近期恢复成本偏高")
+    }
+
     func testTrainingSessionDraftBuilderAppliesDecisionWithoutReplacingPlanTargets() throws {
         let exercises = [
             WorkoutTemplateExercise(
@@ -662,6 +814,156 @@ final class PersistenceFoundationTests: XCTestCase {
             executionCount.value += 1
         }
         XCTAssertEqual(executionCount.value, 2)
+    }
+
+    @MainActor
+    func testReportingSyncFailureRemainsRetryableAndExposesHealth() async {
+        enum ExpectedFailure: Error { case failed }
+        let coordinator = AppSyncCoordinator(minimumInterval: 60)
+        let executionCount = SyncExecutionCounter()
+
+        let failed = await coordinator.runReporting(source: .healthKit) {
+            executionCount.value += 1
+            throw ExpectedFailure.failed
+        }
+        let recovered = await coordinator.runReporting(source: .healthKit) {
+            executionCount.value += 1
+        }
+
+        XCTAssertFalse(failed)
+        XCTAssertTrue(recovered)
+        XCTAssertEqual(executionCount.value, 2)
+        XCTAssertTrue(coordinator.sourceStatuses[.healthKit]?.isHealthy == true)
+        XCTAssertEqual(coordinator.sourceStatuses[.healthKit]?.consecutiveFailures, 0)
+    }
+
+    @MainActor
+    func testDailyDecisionFeedbackBuildsLocalProductLoop() throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let now = Date(timeIntervalSince1970: 1_783_900_800)
+        let plan = DailyOperatingPlanRecord(
+            dayIdentifier: "2026-07-13",
+            bodyStateHash: "body-hash",
+            generatedAt: now,
+            primaryActionType: "strength",
+            title: "完成中等强度力量训练",
+            payloadJSON: "{}",
+            reasonsJSON: "[]",
+            confidence: 0.8
+        )
+        context.insert(plan)
+        let service = DailyDecisionFeedbackService()
+
+        let first = try service.recordViewed(
+            modelContext: context,
+            dayIdentifier: plan.dayIdentifier,
+            plan: plan,
+            bodyStateHash: plan.bodyStateHash,
+            decisionType: plan.primaryActionType,
+            decisionTitle: plan.title,
+            now: now
+        )
+        _ = try service.recordViewed(
+            modelContext: context,
+            dayIdentifier: plan.dayIdentifier,
+            plan: plan,
+            bodyStateHash: plan.bodyStateHash,
+            decisionType: plan.primaryActionType,
+            decisionTitle: plan.title,
+            now: now.addingTimeInterval(60)
+        )
+        _ = try service.recordActionStarted(
+            modelContext: context,
+            dayIdentifier: plan.dayIdentifier,
+            plan: plan,
+            bodyStateHash: plan.bodyStateHash,
+            decisionType: plan.primaryActionType,
+            decisionTitle: plan.title,
+            destination: "training",
+            now: now.addingTimeInterval(120)
+        )
+        try service.saveFeedback(
+            modelContext: context,
+            record: first,
+            adoptionStatus: "modified",
+            accuracyRating: "accurate",
+            actualAction: "lighter",
+            energyRating: 4,
+            fatigueRating: 2,
+            painRating: 1,
+            satisfactionRating: 5,
+            note: "Reduced one set",
+            now: now.addingTimeInterval(180)
+        )
+
+        let records = try context.fetch(FetchDescriptor<DailyDecisionFeedbackRecord>())
+        let events = try context.fetch(FetchDescriptor<VelaEventRecord>())
+        let quality = service.qualitySnapshot(
+            modelContext: context,
+            periodDays: 28,
+            now: now.addingTimeInterval(240)
+        )
+
+        XCTAssertEqual(records.count, 1)
+        XCTAssertTrue(first.isCompleted)
+        XCTAssertEqual(events.filter { $0.eventType == VelaProductEventType.dailyDecisionViewed }.count, 1)
+        XCTAssertEqual(quality.generatedPlans, 1)
+        XCTAssertEqual(quality.startedActions, 1)
+        XCTAssertEqual(quality.completedFeedback, 1)
+        XCTAssertEqual(quality.adoptionRate, 1)
+        XCTAssertEqual(quality.accuracyRate, 1)
+    }
+
+    @MainActor
+    func testPersonalExperimentComparesBaselineAndExperimentWithoutClaimingEarlyEvidence() throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let calendar = Calendar(identifier: .gregorian)
+        let start = calendar.startOfDay(for: Date(timeIntervalSince1970: 1_783_900_800))
+        let template = try XCTUnwrap(PersonalExperimentService.templates.first)
+        let experiment = try PersonalExperimentService().start(
+            template: template,
+            modelContext: context,
+            now: start,
+            calendar: calendar
+        )
+
+        var summaries: [DailyHealthSummaryRecord] = []
+        for offset in -7..<5 {
+            let date = calendar.date(byAdding: .day, value: offset, to: start)!
+            let record = DailyHealthSummaryRecord(
+                dayIdentifier: DailyHealthSummaryRecord.dayIdentifier(for: date, calendar: calendar),
+                date: date,
+                sleepScore: offset < 0 ? 70 : 80
+            )
+            context.insert(record)
+            summaries.append(record)
+        }
+        for offset in 0..<5 {
+            let date = calendar.date(byAdding: .day, value: offset, to: start)!
+            try PersonalExperimentService().checkIn(
+                experiment: experiment,
+                followed: offset != 2,
+                modelContext: context,
+                date: date,
+                calendar: calendar
+            )
+        }
+        let checkIns = try context.fetch(FetchDescriptor<ExperimentCheckInRecord>())
+        let outcome = PersonalExperimentService().outcome(
+            experiment: experiment,
+            summaries: summaries,
+            checkIns: checkIns,
+            now: calendar.date(byAdding: .day, value: 5, to: start)!,
+            calendar: calendar
+        )
+
+        XCTAssertTrue(outcome.hasEnoughEvidence)
+        XCTAssertEqual(outcome.baselineSampleCount, 7)
+        XCTAssertEqual(outcome.experimentSampleCount, 5)
+        XCTAssertEqual(outcome.delta, 10)
+        XCTAssertEqual(outcome.adherenceRate, 0.8, accuracy: 0.001)
     }
 
     func testExerciseLoadDefaultsDoNotInventExternalWeight() {

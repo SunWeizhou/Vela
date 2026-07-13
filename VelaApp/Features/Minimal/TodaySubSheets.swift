@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
 import CoreLocation
-import AVFoundation
+@preconcurrency import AVFoundation
 
 // MARK: - ProactiveInsightDetailSheet
 struct ProactiveInsightDetailSheet: View {

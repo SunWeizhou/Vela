@@ -197,8 +197,8 @@ struct TrainingResponseInsightService {
         let journalTags = Set(weekJournalEntries.flatMap(\.tags)).sorted().joined(separator: "、")
         
         // --- 1. 睡眠-训练表现分析 (Sleep vs Performance) ---
-        var sleepPerformanceAnalysis = "样本不足（需要至少 4 次带前一晚睡眠分的力量训练，且高、低睡眠组各至少 2 次）"
-        if weekWorkouts.count >= 4 {
+        var sleepPerformanceAnalysis = "样本不足（需要至少 6 次带前一晚睡眠分的力量训练，且高、低睡眠组各至少 3 次）"
+        if weekWorkouts.count >= 6 {
             var sleepScoresWithRPE: [(sleep: Double, rpe: Double)] = []
             for workout in weekWorkouts {
                 let workoutDay = calendar.startOfDay(for: workout.startedAt)
@@ -213,11 +213,11 @@ struct TrainingResponseInsightService {
                 }
             }
             
-            if sleepScoresWithRPE.count >= 4 {
+            if sleepScoresWithRPE.count >= 6 {
                 let highSleep = sleepScoresWithRPE.filter { $0.sleep >= 75 }
                 let lowSleep = sleepScoresWithRPE.filter { $0.sleep < 75 }
                 
-                if highSleep.count >= 2 && lowSleep.count >= 2 {
+                if highSleep.count >= 3 && lowSleep.count >= 3 {
                     let avgRPEHigh = highSleep.map(\.rpe).reduce(0, +) / Double(highSleep.count)
                     let avgRPELow = lowSleep.map(\.rpe).reduce(0, +) / Double(lowSleep.count)
                     let diff = avgRPELow - avgRPEHigh
@@ -428,8 +428,10 @@ struct TrainingResponseInsightService {
 
         for (muscle, pairs) in grouped {
             let records = pairs.map(\.1)
-            guard records.count >= 3,
-                  let recoveryDelta = average(records.compactMap(\.nextDayRecoveryDelta)),
+            let recoveryDeltas = records.compactMap(\.nextDayRecoveryDelta)
+            guard records.count >= 8,
+                  recoveryDeltas.count >= 6,
+                  let recoveryDelta = average(recoveryDeltas),
                   abs(recoveryDelta) >= 5,
                   !existing.contains(where: { $0.content.contains("**肌群**: \(muscle)") || $0.content.contains("**Muscle group**: \(muscle)") }) else {
                 continue
@@ -448,7 +450,7 @@ struct TrainingResponseInsightService {
                 memoryType: .observation,
                 content: content,
                 evidence: "\(records.count) 次训练后次日恢复记录",
-                confidence: min(0.9, 0.55 + Double(records.count) * 0.05),
+                confidence: min(0.9, 0.50 + Double(recoveryDeltas.count) * 0.035),
                 source: "training_response_model"
             )
             created += 1

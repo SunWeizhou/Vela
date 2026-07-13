@@ -179,7 +179,9 @@ final class BodyStateKernelTests: XCTestCase {
         let state = kernel.build(input: input)
         XCTAssertEqual(state.activeStatus, "active")
         XCTAssertEqual(state.readiness, .unknown)
-        XCTAssertTrue(state.drivers.isEmpty)
+        XCTAssertEqual(state.drivers.count, 1)
+        XCTAssertEqual(state.drivers.first?.kind, .dataCoverage)
+        XCTAssertTrue(state.drivers.first?.detail.contains("保守训练窗口") == true)
     }
 
     func testBodyStateKernelSickStatusAddsDriver() {
@@ -206,9 +208,9 @@ final class BodyStateKernelTests: XCTestCase {
             carbsGrams: 10,
             fatGrams: 20,
             fiberGrams: 5,
-            healthScore: 85,
-            suggestions: "Good protein source.",
-            source: .textDescription,
+            healthScore: "85",
+            suggestions: ["Good protein source."],
+            source: .manual,
             rawAnalysis: "",
             createdAt: Date()
         )

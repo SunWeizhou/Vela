@@ -57,6 +57,69 @@ enum AdaptationStatus: String, Codable, Hashable, CaseIterable {
 
 struct AdaptiveTrainingManager {
 
+    /// Creates at most one state-driven proposal for the executable plan day each calendar day.
+    /// The user remains the decision maker: this method never mutates the plan itself.
+    @MainActor
+    func refreshDailyProposal(
+        plan: TrainingPlanRecord,
+        dashboard: DashboardSummary,
+        events: [WorkoutEventRecord],
+        foodLogs: [FoodLogRecord],
+        journalEntries: [JournalEntryRecord],
+        modelContext: ModelContext,
+        date: Date = Date(),
+        calendar: Calendar = .current
+    ) throws -> TrainingPlanAdaptationRecord? {
+        guard dashboard.source != .empty,
+              dashboard.recovery.hasData,
+              let day = TrainingScheduleResolver.resolve(
+                plan: plan,
+                on: date,
+                events: events,
+                calendar: calendar
+              ),
+              day.focus != "rest" else {
+            return nil
+        }
+
+        let dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: date, calendar: calendar)
+        let runID = "daily-plan-review:\(plan.id.uuidString):\(day.id.uuidString):\(dayIdentifier)"
+        var descriptor = FetchDescriptor<TrainingPlanAdaptationRecord>(
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 100
+        if let existing = try modelContext.fetch(descriptor).first(where: { $0.agentRunId == runID }) {
+            return existing.status == AdaptationStatus.proposed.rawValue ? existing : nil
+        }
+
+        let interpretation = BodyInterpreterEngine().interpret(
+            dashboard: dashboard,
+            wiki: [:],
+            activePlan: plan,
+            foodLogs: foodLogs,
+            journalEntries: journalEntries
+        )
+        guard interpretation.overallConfidence != .unavailable,
+              let adjusted = AdaptiveTrainingEngine.adjust(day: day, interpretation: interpretation),
+              adjusted.adjustment != .keep else {
+            return nil
+        }
+
+        let proposal = TrainingPlanAdaptationRecord(
+            planId: plan.id,
+            dayId: day.id,
+            adjustment: adjusted.adjustment,
+            reason: adjusted.reason,
+            suggestedAlternative: adjusted.suggestedAlternative,
+            status: .proposed,
+            originalDayTitle: day.title,
+            agentRunId: runID
+        )
+        modelContext.insert(proposal)
+        try modelContext.save()
+        return proposal
+    }
+
     /// Vela 2.0 Beta: Per-day adjustments using BodyInterpretation.
     /// Each future day is evaluated against the body's current state.
     func generateWeekAdjustments(

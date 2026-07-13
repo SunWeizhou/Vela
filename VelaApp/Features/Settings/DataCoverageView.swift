@@ -41,7 +41,7 @@ struct DataCoverageView: View {
                 HStack {
                     VelaDetailBackButton(label: AppLanguage.stored.isChinese ? "返回设置" : "Back to Settings")
 
-                    Text(AppLanguage.stored.isChinese ? "数据可信度" : "Data Confidence")
+                    Text(AppLanguage.stored.isChinese ? "数据覆盖" : "Data Coverage")
                         .font(VelaTheme.title2())
                         .foregroundStyle(VelaTheme.fg)
                     Spacer()
@@ -320,16 +320,16 @@ struct DataCoverageSummaryModel: Hashable, Sendable {
         let statusLabel: String
         switch status {
         case .high:
-            statusLabel = AppLanguage.stored.isChinese ? "高" : "High"
+            statusLabel = AppLanguage.stored.isChinese ? "充分" : "Ready"
         case .moderate:
-            statusLabel = AppLanguage.stored.isChinese ? "中等" : "Moderate"
+            statusLabel = AppLanguage.stored.isChinese ? "部分" : "Partial"
         case .low:
-            statusLabel = AppLanguage.stored.isChinese ? "低" : "Low"
+            statusLabel = AppLanguage.stored.isChinese ? "不足" : "Limited"
         case .unknown:
             statusLabel = ""
         }
 
-        let base = AppLanguage.stored.isChinese ? "数据可信度" : "Data confidence"
+        let base = AppLanguage.stored.isChinese ? "数据覆盖" : "Data coverage"
         return "\(base) · \(statusLabel) · \(scorePercent)%"
     }
 
@@ -337,7 +337,7 @@ struct DataCoverageSummaryModel: Hashable, Sendable {
         DataCoverageSummaryModel(
             scorePercent: 0,
             status: .unknown,
-            title: AppLanguage.stored.isChinese ? "正在检查数据可信度" : "Checking data confidence",
+            title: AppLanguage.stored.isChinese ? "正在检查数据覆盖" : "Checking data coverage",
             subtitle: AppLanguage.stored.isChinese
                 ? "Vela 正在确认关键健康信号是否新鲜、完整、可用于判断。"
                 : "Vela is checking whether key health signals are fresh and usable.",
@@ -378,20 +378,20 @@ struct DataCoverageSummaryModel: Hashable, Sendable {
         let subtitle: String
         switch status {
         case .high:
-            title = AppLanguage.stored.isChinese ? "数据可信度高" : "High data confidence"
+            title = AppLanguage.stored.isChinese ? "关键数据已就绪" : "Key data is ready"
             subtitle = AppLanguage.stored.isChinese
                 ? "关键健康信号足够新鲜，今日建议有较完整依据。"
                 : "Key health signals are fresh enough to support today's recommendations."
         case .moderate:
-            title = AppLanguage.stored.isChinese ? "数据可信度中等" : "Moderate data confidence"
+            title = AppLanguage.stored.isChinese ? "部分数据待补充" : "Some data is still needed"
             subtitle = AppLanguage.stored.isChinese
                 ? "建议具备部分依据；缺失信号会让训练和恢复判断更保守。"
                 : "Recommendations have partial support; missing signals make training and recovery judgments more conservative."
         case .low:
-            title = AppLanguage.stored.isChinese ? "数据可信度低" : "Low data confidence"
+            title = AppLanguage.stored.isChinese ? "正在建立身体基线" : "Building your body baseline"
             subtitle = AppLanguage.stored.isChinese
                 ? "Vela 会保守处理今日建议，避免把缺失数据解读成确定结论。"
-                : "Vela will stay 保守 / conservative and avoid treating missing data as certainty."
+                : "Vela will stay conservative and avoid treating missing data as certainty."
         case .unknown:
             title = Self.unknown.title
             subtitle = Self.unknown.subtitle

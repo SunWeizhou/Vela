@@ -122,6 +122,8 @@ struct VelaTodayView: View {
     @State var animatedEnergyScore: Double = 0.0
     @State var experienceFeedbackTick = 0
     @State var dataCoverageSummary = DataCoverageSummaryModel.unknown
+    @State var dailyDecisionFeedback: DailyDecisionFeedbackRecord?
+    @State var showDailyDecisionFeedback = false
 
     var decisionDataCoverageSummary: DataCoverageSummaryModel {
         guard dataCoverageSummary.status != .unknown,
@@ -233,10 +235,12 @@ struct VelaTodayView: View {
                     isStale: isStalePlan
                 )
 
-                DataCoverageCompactCard(
-                    model: decisionDataCoverageSummary,
-                    showSettings: $showSettings
-                )
+                if decisionDataCoverageSummary.status != .high {
+                    DataCoverageCompactCard(
+                        model: decisionDataCoverageSummary,
+                        showSettings: $showSettings
+                    )
+                }
 
                 TodayActionTimeline(
                     model: todayExperience,
@@ -244,6 +248,20 @@ struct VelaTodayView: View {
                     onAction: { performExperienceAction($0) },
                     onEvidenceClick: { showTodayEvidence = true }
                 )
+
+                if persistedOperatingPlan != nil {
+                    DailyDecisionFeedbackCard(
+                        record: dailyDecisionFeedback,
+                        onTap: { showDailyDecisionFeedback = true }
+                    )
+                }
+
+                if decisionDataCoverageSummary.status == .high {
+                    DataCoverageCompactCard(
+                        model: decisionDataCoverageSummary,
+                        showSettings: $showSettings
+                    )
+                }
 
                 TodayCoachPreview(
                     model: todayExperience,
@@ -287,6 +305,7 @@ struct VelaTodayView: View {
             locationManager.startUpdating()
             await refreshDashboard()
             await loadDataCoverageSummary()
+            trackDailyDecisionViewed()
             withAnimation(VelaTheme.smooth) {
                 animatedEnergyScore = energyScore
             }
@@ -364,6 +383,16 @@ struct VelaTodayView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $showDailyDecisionFeedback) {
+            if let dailyDecisionFeedback {
+                DailyDecisionFeedbackSheet(record: dailyDecisionFeedback) { values in
+                    saveDailyDecisionFeedback(values)
+                }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(VelaTheme.systemGroupedBackground)
+            }
+        }
         .toolbar(.hidden, for: .navigationBar)
     }
 
@@ -381,6 +410,7 @@ struct VelaTodayView: View {
 
     func performExperienceAction(_ action: TodayExperienceAction) {
         experienceFeedbackTick += 1
+        trackDailyDecisionAction(destination: action.destination)
         switch action.destination {
         case "training":
             appState.routeToAdaptiveTrainingStart()
@@ -392,6 +422,73 @@ struct VelaTodayView: View {
             showTodayEvidence = true
         default:
             showTodayEvidence = true
+        }
+    }
+
+    func trackDailyDecisionViewed() {
+        guard Calendar.current.isDateInToday(dashboardVM.selectedDate),
+              let plan = persistedOperatingPlan else {
+            loadDailyDecisionFeedback()
+            return
+        }
+        do {
+            dailyDecisionFeedback = try DailyDecisionFeedbackService().recordViewed(
+                modelContext: modelContext,
+                dayIdentifier: plan.dayIdentifier,
+                plan: plan,
+                bodyStateHash: bodyState.hash,
+                decisionType: plan.primaryActionType,
+                decisionTitle: plan.title
+            )
+        } catch {
+            loadDailyDecisionFeedback()
+        }
+    }
+
+    func trackDailyDecisionAction(destination: String) {
+        guard let plan = persistedOperatingPlan else { return }
+        do {
+            dailyDecisionFeedback = try DailyDecisionFeedbackService().recordActionStarted(
+                modelContext: modelContext,
+                dayIdentifier: plan.dayIdentifier,
+                plan: plan,
+                bodyStateHash: bodyState.hash,
+                decisionType: plan.primaryActionType,
+                decisionTitle: plan.title,
+                destination: destination
+            )
+        } catch {
+            // The user action must never be blocked by local analytics.
+        }
+    }
+
+    func loadDailyDecisionFeedback() {
+        let dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: dashboardVM.selectedDate)
+        let descriptor = FetchDescriptor<DailyDecisionFeedbackRecord>(
+            predicate: #Predicate { $0.dayIdentifier == dayIdentifier }
+        )
+        dailyDecisionFeedback = try? modelContext.fetch(descriptor).first
+    }
+
+    func saveDailyDecisionFeedback(_ values: DailyDecisionFeedbackValues) {
+        guard let record = dailyDecisionFeedback else { return }
+        do {
+            try DailyDecisionFeedbackService().saveFeedback(
+                modelContext: modelContext,
+                record: record,
+                adoptionStatus: values.adoptionStatus,
+                accuracyRating: values.accuracyRating,
+                actualAction: values.actualAction,
+                energyRating: values.energyRating,
+                fatigueRating: values.fatigueRating,
+                painRating: values.painRating,
+                satisfactionRating: values.satisfactionRating,
+                note: values.note
+            )
+            showDailyDecisionFeedback = false
+            VelaAppState.shared.markLocalDataChanged()
+        } catch {
+            // Keep the sheet open so the user can retry without losing input.
         }
     }
 
@@ -574,53 +671,98 @@ struct TodayDateAndStatusHeader: View {
 struct DataCoverageCompactCard: View {
     let model: DataCoverageSummaryModel
     @Binding var showSettings: Bool
+
+    private var needsCalibrationGuidance: Bool {
+        model.status == .low || model.status == .unknown
+    }
     
     var body: some View {
         let accent = dataCoverageColor(model.status)
         return Button {
             showSettings = true
         } label: {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: needsCalibrationGuidance ? 12 : 8) {
                 HStack(spacing: 8) {
                     Image(systemName: model.actionSystemImage)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(VelaTheme.caption1().weight(.semibold))
                         .foregroundStyle(accent)
                     Text(model.title)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(VelaTheme.subheadline().weight(.semibold))
                         .foregroundStyle(VelaTheme.fg)
                     Spacer()
                     Text(model.status == .unknown ? "--" : "\(model.scorePercent)%")
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .font(VelaTheme.subheadline().weight(.bold).monospacedDigit())
                         .foregroundStyle(accent)
-                        .monospacedDigit()
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(VelaTheme.caption2().weight(.semibold))
                         .foregroundStyle(VelaTheme.muted)
                 }
 
-                HStack(spacing: 8) {
-                    ForEach(model.domainSummaries.prefix(3)) { domain in
-                        Text("\(domain.title) \(domain.usableCount)/\(domain.totalCount)")
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
-                            .foregroundStyle(dataCoveragePercentColor(domain.scorePercent))
-                            .lineLimit(1)
+                if needsCalibrationGuidance {
+                    Text(model.subtitle)
+                        .font(VelaTheme.footnote())
+                        .foregroundStyle(VelaTheme.fg2)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    ProgressView(value: Double(model.scorePercent), total: 100)
+                        .tint(accent)
+
+                    if !model.topBlockers.isEmpty {
+                        Label {
+                            Text("下一步：补充 \(model.topBlockers.prefix(2).joined(separator: "、"))")
+                                .fixedSize(horizontal: false, vertical: true)
+                        } icon: {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                        }
+                        .font(VelaTheme.caption1().weight(.semibold))
+                        .foregroundStyle(accent)
                     }
                 }
+
+                coverageDomains
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 11)
+            .padding(needsCalibrationGuidance ? 16 : 12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
                     .fill(VelaTheme.cardBg)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
                     .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(L10n.t("Data credibility", "数据可信度")) \(model.scorePercent)%")
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(L10n.t("Data coverage", "数据覆盖")) \(model.scorePercent)%。\(model.subtitle)")
+        .accessibilityHint(model.actionTitle)
+    }
+
+    @ViewBuilder
+    private var coverageDomains: some View {
+        let domains = Array(model.domainSummaries.prefix(3))
+        if !domains.isEmpty {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    ForEach(domains) { domain in
+                        domainLabel(domain)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(domains) { domain in
+                        domainLabel(domain)
+                    }
+                }
+            }
+        }
+    }
+
+    private func domainLabel(_ domain: DataCoverageDomainSummary) -> some View {
+        Label("\(domain.title) \(domain.usableCount)/\(domain.totalCount)", systemImage: domain.icon)
+            .font(VelaTheme.caption2().weight(.medium))
+            .foregroundStyle(dataCoveragePercentColor(domain.scorePercent))
+            .lineLimit(1)
     }
     
     private func dataCoverageColor(_ status: DataCoverageSummaryModel.Status) -> Color {

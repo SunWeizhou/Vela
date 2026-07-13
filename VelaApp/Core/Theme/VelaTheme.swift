@@ -1,8 +1,9 @@
 import SwiftUI
 import UIKit
 
-// MARK: - VelaTheme — Calm Intelligence Design Tokens
-// Native iOS ergonomics, quiet AI surfaces, and health-specific semantic color.
+// MARK: - VelaTheme — Signal Intelligence Design Tokens
+// Cool neutral surfaces, one recognizable brand accent, and restrained
+// health-state color. The UI should feel analytical without becoming clinical.
 
 enum VelaTheme {
 
@@ -31,24 +32,24 @@ enum VelaTheme {
 
     // MARK: - Surface
 
-    static let backgroundUIColor = adaptiveUIColor("#F7F7F5", "#0C0D0D")
+    static let backgroundUIColor = adaptiveUIColor("#F4F6FA", "#080A0F")
     static let bg            = Color(backgroundUIColor)
     static let systemGroupedBackground = bg
-    static let secondaryGroupedBackground = adaptive("#EFEFEB", "#171918")
-    static let tertiaryGroupedBackground = adaptive("#E7E8E3", "#222524")
-    static let surface       = adaptive("#F7F7F5", "#0C0D0D")
-    static let cardBg        = adaptive("#FFFFFF", "#171918")
-    static let elevatedBg    = adaptive("#EFEFEB", "#222524")
+    static let secondaryGroupedBackground = adaptive("#E9EDF5", "#121620")
+    static let tertiaryGroupedBackground = adaptive("#DEE4EE", "#1B2230")
+    static let surface       = adaptive("#F4F6FA", "#080A0F")
+    static let cardBg        = adaptive("#FFFFFF", "#121620")
+    static let elevatedBg    = adaptive("#E9EDF5", "#1B2230")
     static let groupedBg     = bg
 
     // MARK: - iOS 26 Glassmorphic Tokens
-    static let glassCardBgAdaptive   = adaptive("#FFFFFF", "#121214")
+    static let glassCardBgAdaptive   = adaptive("#FFFFFF", "#121620")
     static let glassCardStrokeColor  = adaptive("#FFFFFF", "#FFFFFF")
-    static let glassAccentGlow       = adaptive("#0058bc", "#adc6ff").opacity(0.18)
-    static let glassRecoveryGlow     = adaptive("#006e28", "#53e16f").opacity(0.16)
-    static let glassSleepGlow        = adaptive("#332eb2", "#c2c1ff").opacity(0.16)
-    static let glassStressGlow       = adaptive("#ba1a1a", "#ffdad6").opacity(0.16)
-    static let glassEnergyGlow       = adaptive("#C4952E", "#DCB048").opacity(0.16)
+    static let glassAccentGlow       = adaptive("#5664E8", "#7F8CFF").opacity(0.18)
+    static let glassRecoveryGlow     = adaptive("#159A7B", "#4DD6AD").opacity(0.16)
+    static let glassSleepGlow        = adaptive("#6B5EDB", "#A99DFF").opacity(0.16)
+    static let glassStressGlow       = adaptive("#D64D72", "#FF7C9B").opacity(0.16)
+    static let glassEnergyGlow       = adaptive("#C88A18", "#F2BC4D").opacity(0.16)
 
 
     // MARK: - Foreground
@@ -60,11 +61,11 @@ enum VelaTheme {
 
     // MARK: - Accent
 
-    /// Vela teal: calm enough for health information, distinctive from system blue.
-    static let accent        = adaptive("#0F766E", "#5EEAD4")
+    /// Vela Signal Blue: recognizable, calm, and separate from health states.
+    static let accent        = adaptive("#5664E8", "#7F8CFF")
     static let accentOn      = adaptive("#FFFFFF", "#FFFFFF")
-    static let accentHover   = adaptive("#0B625C", "#7AF4DF")
-    static let accentActive  = adaptive("#084C47", "#42CDBA")
+    static let accentHover   = adaptive("#4654D7", "#96A0FF")
+    static let accentActive  = adaptive("#3543C1", "#6573ED")
 
     // MARK: - Borders
 
@@ -80,15 +81,15 @@ enum VelaTheme {
     static let danger        = Color(uiColor: .systemRed)
 
     /// 负荷 Strain — amber/blue accent
-    static let strainColor   = adaptive("#B86A16", "#F2B35D")
+    static let strainColor   = adaptive("#E56B32", "#FF9565")
     /// 恢复 Recovery — sage/green
-    static let recoveryColor = adaptive("#2E7D5B", "#65C795")
+    static let recoveryColor = adaptive("#168B70", "#4DD0AA")
     /// 睡眠 Sleep — indigo
-    static let sleepColor    = adaptive("#6258A8", "#A89FE8")
+    static let sleepColor    = adaptive("#685BC7", "#A99DFF")
     /// 压力 Stress — rose/red
-    static let stressColor   = adaptive("#A9516B", "#E58AA4")
+    static let stressColor   = adaptive("#C94E70", "#FF7C9B")
     /// 能量 Energy — gold
-    static let energyColor   = accent
+    static let energyColor   = adaptive("#B47C18", "#F2BC4D")
 
     // MARK: - Typography
 
@@ -129,23 +130,23 @@ enum VelaTheme {
     static let radiusSm: CGFloat   = 8
     static let radiusMd: CGFloat   = 12
     static let radiusLg: CGFloat   = 14
-    static let radiusCardLarge: CGFloat = 20
-    static let radiusFeature: CGFloat = 24
-    static let radiusXl: CGFloat   = 24
+    static let radiusCardLarge: CGFloat = 22
+    static let radiusFeature: CGFloat = 28
+    static let radiusXl: CGFloat   = 28
     static let radiusPill: CGFloat = 980
 
-    static let fillSoft = adaptive("#0F000000", "#1FFFFFFF")
+    static let fillSoft = adaptive("#5664E81A", "#FFFFFF16")
 
     static func captionLarge() -> Font { .system(size: 14, weight: .regular, design: .default) }
 
     // MARK: - Shadow
 
     static func cardShadow(_ cs: ColorScheme) -> Color {
-        cs == .dark ? Color.black.opacity(0.3) : Color.black.opacity(0.04)
+        cs == .dark ? Color.black.opacity(0.34) : Color(hex: "#25304F").opacity(0.07)
     }
 
     static func nativeShadow(_ cs: ColorScheme) -> Color {
-        cs == .dark ? Color.clear : Color.black.opacity(0.012)
+        cs == .dark ? Color.clear : Color(hex: "#25304F").opacity(0.025)
     }
 
     // MARK: - Animation

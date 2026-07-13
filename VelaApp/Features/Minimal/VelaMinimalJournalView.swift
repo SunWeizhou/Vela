@@ -182,11 +182,13 @@ struct VelaMeView: View {
             Text(value)
                 .font(VelaTheme.headline())
                 .foregroundStyle(VelaTheme.fg)
-                .lineLimit(1)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
             Text(detail)
                 .font(VelaTheme.caption1())
                 .foregroundStyle(VelaTheme.muted)
-                .lineLimit(1)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -540,15 +542,14 @@ struct VelaMeView: View {
                     .font(VelaTheme.title2())
                     .foregroundStyle(VelaTheme.fg)
                 
-                HStack(spacing: 6) {
-                    Text(bodyModelMaturityTitle(bodyModelState.maturity.overall))
-                        .font(VelaTheme.caption2().weight(.semibold))
-                        .foregroundStyle(bodyModelMaturityColor(bodyModelState.maturity.overall))
-                    
-                    Text("\(bodyModelState.maturity.behaviorPairs) 信号 · \(bodyModelState.maturity.trainingSessions) 训练事实")
-                        .font(VelaTheme.caption1())
-                        .foregroundStyle(VelaTheme.muted)
-                }
+                Text(bodyModelMaturityTitle(bodyModelState.maturity.overall))
+                    .font(VelaTheme.caption2().weight(.semibold))
+                    .foregroundStyle(bodyModelMaturityColor(bodyModelState.maturity.overall))
+
+                Text("\(bodyModelState.maturity.behaviorPairs) 个行为信号 · \(bodyModelState.maturity.trainingSessions) 次训练事实")
+                    .font(VelaTheme.caption1())
+                    .foregroundStyle(VelaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
         }
@@ -569,7 +570,7 @@ struct VelaMeView: View {
         
         let aiModelSub = textModel
         
-        let signalSub = "同步质量: \(displayConfidence(onboarding?.initialBodySnapshot.dataConfidence.rawValue.uppercased() ?? dashboard.recovery.confidence.rawValue.uppercased()).prefix(1))"
+        let signalSub = dashboard.recovery.hasData ? "恢复信号已纳入今日判断" : "正在建立恢复基线"
         
         let settingsSub = "\(dailyCalorieTarget) kcal 目标"
 
@@ -587,7 +588,7 @@ struct VelaMeView: View {
                 Divider().padding(.leading, 58)
                 hubActionCell(title: "生物资料", sub: bioSub, icon: "person.text.rectangle.fill", color: Color(hex: "#00A896"), destination: BiologyView())
                 Divider().padding(.leading, 58)
-                hubActionCell(title: "AI 模型", sub: aiModelSub, icon: "cpu.fill", color: Color(hex: "#AF52DE"), destination: AIModelSettingsView())
+                hubActionCell(title: "AI 增强", sub: aiModelSub, icon: "sparkles", color: VelaTheme.accent, destination: AIModelSettingsView())
                 Divider().padding(.leading, 58)
                 hubActionCell(title: "数据信号", sub: signalSub, icon: "waveform.path.ecg.rectangle.fill", color: Color(hex: "#30A2FF"), destination: DataCoverageView())
                 Divider().padding(.leading, 58)
@@ -609,7 +610,7 @@ struct VelaMeView: View {
         destination: Destination
     ) -> some View {
         NavigationLink(destination: destination) {
-            HStack(spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
                 Image(systemName: icon)
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(.white)
@@ -618,11 +619,13 @@ struct VelaMeView: View {
                 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 13, weight: .bold))
+                        .font(VelaTheme.subheadline().weight(.semibold))
                         .foregroundStyle(VelaTheme.fg)
                     Text(sub)
-                        .font(.system(size: 10))
+                        .font(VelaTheme.caption2())
                         .foregroundStyle(VelaTheme.muted)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 
                 Spacer()

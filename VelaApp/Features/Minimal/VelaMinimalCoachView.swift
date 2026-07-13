@@ -160,6 +160,20 @@ struct PrivacyDataInventoryModel: Hashable {
                 detail: "Morning Brief、Evening Sync、Coach 工具调用和可审计运行记录。",
                 count: counts["agent_runs", default: 0] + counts["agent_artifacts", default: 0],
                 isExported: false
+            ),
+            PrivacyDataCategory(
+                id: "decision_feedback",
+                title: "建议反馈与产品诊断",
+                detail: "建议查看、采纳、准确度、实际行动和本地使用质量事件；仅用于本机个性化与诊断。",
+                count: counts["decision_feedback", default: 0] + counts["product_events", default: 0],
+                isExported: false
+            ),
+            PrivacyDataCategory(
+                id: "personal_experiments",
+                title: "个人实验",
+                detail: "睡眠与行为实验方案、每日执行情况和本机结果比较。",
+                count: counts["personal_experiments", default: 0] + counts["experiment_checkins", default: 0],
+                isExported: false
             )
         ]
 
@@ -221,7 +235,11 @@ enum PrivacyDataInventoryBuilder {
             "ai_reports": count(AIReportRecord.self, in: modelContext),
             "agent_runs": count(AgentRunRecord.self, in: modelContext),
             "agent_artifacts": count(AgentArtifactRecord.self, in: modelContext),
-            "training_plans": count(TrainingPlanRecord.self, in: modelContext)
+            "training_plans": count(TrainingPlanRecord.self, in: modelContext),
+            "decision_feedback": count(DailyDecisionFeedbackRecord.self, in: modelContext),
+            "product_events": count(VelaEventRecord.self, in: modelContext),
+            "personal_experiments": count(PersonalExperimentRecord.self, in: modelContext),
+            "experiment_checkins": count(ExperimentCheckInRecord.self, in: modelContext)
         ])
     }
 
@@ -254,6 +272,9 @@ enum PrivacyDataDeletionService {
             deleted += try deleteAll(StrengthWorkoutRecord.self, in: modelContext)
             deleted += try deleteAll(WorkoutEventRecord.self, in: modelContext)
             deleted += try deleteAll(TrainingResponseRecord.self, in: modelContext)
+            deleted += try deleteAll(DailyDecisionFeedbackRecord.self, in: modelContext)
+            deleted += try deleteAll(PersonalExperimentRecord.self, in: modelContext)
+            deleted += try deleteAll(ExperimentCheckInRecord.self, in: modelContext)
         case .allLocalVelaData:
             for scope in [PrivacyDeletionScope.aiHistory, .localLogs] {
                 deleted += try delete(
@@ -276,7 +297,9 @@ enum PrivacyDataDeletionService {
             deleted += try deleteAll(OnboardingState.self, in: modelContext)
             deleted += try deleteAll(XunjiDailyCacheRecord.self, in: modelContext)
             deleted += try deleteAll(XunjiWorkoutMirrorRecord.self, in: modelContext)
+            deleted += try deleteAll(VelaEventRecord.self, in: modelContext)
             deleted += try WikiFileService.deleteLocalDocuments(at: wikiDirectoryURL)
+            WristSnapshotBridge.shared.clearCachedSnapshot()
         }
 
         try modelContext.save()

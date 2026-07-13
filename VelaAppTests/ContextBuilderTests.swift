@@ -861,4 +861,54 @@ final class ContextBuilderTests: XCTestCase {
 
         XCTAssertTrue(correlations.isEmpty)
     }
+
+    func testJournalCorrelationRejectsUnbalancedSmallExposureEvenWithLargeEffect() {
+        let base = makeDate()
+        let entries = (0..<6).map { offset in
+            JournalEntryRecord(
+                createdAt: base.addingTimeInterval(Double(-offset) * 86_400),
+                tags: ["late_meal"],
+                note: "late"
+            )
+        }
+        let snapshots = (0..<40).map { offset in
+            DailyHealthSnapshot(
+                date: base.addingTimeInterval(Double(-offset) * 86_400),
+                recoveryScore: offset < 6 ? 20 : 90
+            )
+        }
+
+        let insights = JournalCorrelationEngine().calculateInsights(
+            journalEntries: entries,
+            snapshots: snapshots
+        )
+
+        XCTAssertTrue(insights.isEmpty)
+    }
+
+    func testJournalCorrelationKeepsBalancedEffectAfterFalseDiscoveryScreening() {
+        let base = makeDate()
+        let entries = (0..<20).map { offset in
+            JournalEntryRecord(
+                createdAt: base.addingTimeInterval(Double(-offset * 2) * 86_400),
+                tags: ["alcohol"],
+                note: "exposure"
+            )
+        }
+        let taggedDays = Set(entries.map { Calendar.current.startOfDay(for: $0.createdAt) })
+        let snapshots = (0..<40).map { offset -> DailyHealthSnapshot in
+            let date = base.addingTimeInterval(Double(-offset) * 86_400)
+            let tagged = taggedDays.contains(Calendar.current.startOfDay(for: date))
+            return DailyHealthSnapshot(date: date, recoveryScore: tagged ? 45 : 82)
+        }
+
+        let insights = JournalCorrelationEngine().calculateInsights(
+            journalEntries: entries,
+            snapshots: snapshots
+        )
+
+        XCTAssertTrue(insights.contains {
+            $0.habit == "alcohol" && $0.outcome == "Recovery Score" && $0.correlation < -0.7
+        })
+    }
 }

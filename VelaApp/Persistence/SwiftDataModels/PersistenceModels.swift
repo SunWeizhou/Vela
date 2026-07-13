@@ -854,6 +854,143 @@ final class DailyOperatingPlanRecord {
     }
 }
 
+/// User-observed outcome of a daily operating plan. Kept separate from the
+/// generated plan so recommendations remain auditable while feedback evolves.
+@Model
+final class DailyDecisionFeedbackRecord {
+    @Attribute(.unique) var dayIdentifier: String
+    var planGeneratedAt: Date?
+    var bodyStateHash: String
+    var decisionType: String
+    var decisionTitle: String
+    var viewedAt: Date?
+    var actionStartedAt: Date?
+    var actionDestination: String?
+    var adoptionStatus: String?
+    var accuracyRating: String?
+    var actualAction: String?
+    var energyRating: Int?
+    var fatigueRating: Int?
+    var painRating: Int?
+    var satisfactionRating: Int?
+    var note: String
+    var linkedWorkoutId: UUID?
+    var createdAt: Date
+    var updatedAt: Date
+
+    init(
+        dayIdentifier: String,
+        planGeneratedAt: Date? = nil,
+        bodyStateHash: String,
+        decisionType: String,
+        decisionTitle: String,
+        viewedAt: Date? = nil,
+        actionStartedAt: Date? = nil,
+        actionDestination: String? = nil,
+        adoptionStatus: String? = nil,
+        accuracyRating: String? = nil,
+        actualAction: String? = nil,
+        energyRating: Int? = nil,
+        fatigueRating: Int? = nil,
+        painRating: Int? = nil,
+        satisfactionRating: Int? = nil,
+        note: String = "",
+        linkedWorkoutId: UUID? = nil,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.dayIdentifier = dayIdentifier
+        self.planGeneratedAt = planGeneratedAt
+        self.bodyStateHash = bodyStateHash
+        self.decisionType = decisionType
+        self.decisionTitle = decisionTitle
+        self.viewedAt = viewedAt
+        self.actionStartedAt = actionStartedAt
+        self.actionDestination = actionDestination
+        self.adoptionStatus = adoptionStatus
+        self.accuracyRating = accuracyRating
+        self.actualAction = actualAction
+        self.energyRating = energyRating
+        self.fatigueRating = fatigueRating
+        self.painRating = painRating
+        self.satisfactionRating = satisfactionRating
+        self.note = note
+        self.linkedWorkoutId = linkedWorkoutId
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    var isCompleted: Bool {
+        adoptionStatus != nil && accuracyRating != nil && actualAction != nil
+    }
+}
+
+@Model
+final class PersonalExperimentRecord {
+    @Attribute(.unique) var id: UUID
+    var templateID: String
+    var title: String
+    var hypothesis: String
+    var protocolText: String
+    var targetBehaviorTag: String
+    var primaryOutcome: String
+    var startDate: Date
+    var endDate: Date
+    var baselineDays: Int
+    var status: String
+    var createdAt: Date
+    var updatedAt: Date
+
+    init(
+        id: UUID = UUID(), templateID: String, title: String,
+        hypothesis: String, protocolText: String, targetBehaviorTag: String,
+        primaryOutcome: String = "sleep_score", startDate: Date, endDate: Date,
+        baselineDays: Int = 7, status: String = "active",
+        createdAt: Date = Date(), updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.templateID = templateID
+        self.title = title
+        self.hypothesis = hypothesis
+        self.protocolText = protocolText
+        self.targetBehaviorTag = targetBehaviorTag
+        self.primaryOutcome = primaryOutcome
+        self.startDate = startDate
+        self.endDate = endDate
+        self.baselineDays = baselineDays
+        self.status = status
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+@Model
+final class ExperimentCheckInRecord {
+    @Attribute(.unique) var id: String
+    var experimentID: UUID
+    var dayIdentifier: String
+    var date: Date
+    var followedProtocol: Bool
+    var note: String
+    var createdAt: Date
+    var updatedAt: Date
+
+    init(
+        experimentID: UUID, dayIdentifier: String, date: Date,
+        followedProtocol: Bool, note: String = "",
+        createdAt: Date = Date(), updatedAt: Date = Date()
+    ) {
+        self.id = "\(experimentID.uuidString):\(dayIdentifier)"
+        self.experimentID = experimentID
+        self.dayIdentifier = dayIdentifier
+        self.date = date
+        self.followedProtocol = followedProtocol
+        self.note = note
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
 @Model
 final class AgentArtifactRecord {
     @Attribute(.unique) var id: UUID

@@ -5,6 +5,10 @@ struct TrainingCalendarView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \TrainingPlanRecord.createdAt, order: .reverse)
     private var plans: [TrainingPlanRecord]
+    @Query(sort: \WorkoutEventRecord.startedAt, order: .reverse)
+    private var workoutEvents: [WorkoutEventRecord]
+    @Query(sort: \TrainingResponseRecord.date, order: .reverse)
+    private var trainingResponses: [TrainingResponseRecord]
     @Query(
         filter: #Predicate<TrainingPlanAdaptationRecord> { $0.status == "proposed" },
         sort: \TrainingPlanAdaptationRecord.createdAt,
@@ -343,6 +347,8 @@ struct TrainingCalendarView: View {
             .padding(16)
             .velaNativeCard(radius: 20)
 
+            planReviewCard(plan)
+
             // Week Selector Horizontal Pills
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -381,6 +387,61 @@ struct TrainingCalendarView: View {
                 }
             }
         }
+    }
+
+    private func planReviewCard(_ plan: TrainingPlanRecord) -> some View {
+        let review = TrainingPlanReviewService.review(
+            plan: plan,
+            events: workoutEvents,
+            responses: trainingResponses
+        )
+        return VelaHeroSurface(tint: VelaTheme.recoveryColor) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label("周期复盘", systemImage: "chart.line.uptrend.xyaxis")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(VelaTheme.fg)
+                    Spacer()
+                    Text("\(review.completedSessions)/\(review.scheduledSessions)")
+                        .font(.caption.weight(.bold).monospacedDigit())
+                        .foregroundStyle(VelaTheme.recoveryColor)
+                }
+
+                Text(review.statusTitle)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(VelaTheme.fg)
+                Text(review.recommendation)
+                    .font(.subheadline)
+                    .foregroundStyle(VelaTheme.fg2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 8) {
+                    reviewMetric("执行率", "\(Int((review.completionRate * 100).rounded()))%")
+                    reviewMetric("有效反馈", "\(review.measuredResponses) 次")
+                    reviewMetric(
+                        "恢复变化",
+                        review.averageRecoveryDelta.map { String(format: "%+.1f", $0) } ?? "待积累"
+                    )
+                }
+                Text("基于计划执行、训练记录和次日反馈的观察性总结，不代表因果关系。")
+                    .font(.caption2)
+                    .foregroundStyle(VelaTheme.muted)
+            }
+        }
+    }
+
+    private func reviewMetric(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(VelaTheme.muted)
+            Text(value)
+                .font(.caption.weight(.bold).monospacedDigit())
+                .foregroundStyle(VelaTheme.fg)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .background(VelaTheme.elevatedBg, in: RoundedRectangle(cornerRadius: 10))
     }
 
     // MARK: - Workout Card
@@ -648,4 +709,3 @@ struct TrainingCalendarView: View {
         }
     }
 }
-

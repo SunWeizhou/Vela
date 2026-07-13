@@ -269,6 +269,9 @@ struct VelaApp: App {
         // Register notification categories
         NotificationService.shared.registerNotificationCategories()
 
+        // Keep the paired Apple Watch session warm so the latest decision can be delivered in the background.
+        WristSnapshotBridge.shared.activate()
+
     }
 
     var body: some Scene {

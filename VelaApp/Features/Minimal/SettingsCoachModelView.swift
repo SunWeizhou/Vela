@@ -449,16 +449,17 @@ struct HealthDataResyncSettingsView: View {
         isSyncing = true
         statusMessage = "正在重新同步..."
         Task { @MainActor in
-            await services.syncCoordinator.run(source: .healthKit, force: true) {
-                do {
-                    try await HealthKitSyncEngine(
-                        queryService: services.queryService,
-                        modelContext: modelContext
-                    ).syncPastDays(90, forceRefreshRecentDays: 90)
-                    statusMessage = "最近 90 天健康数据已重新同步。"
-                } catch {
-                    statusMessage = "重新同步失败：\(error.localizedDescription)"
-                }
+            let succeeded = await services.syncCoordinator.runReporting(source: .healthKit, force: true) {
+                try await HealthKitSyncEngine(
+                    queryService: services.queryService,
+                    modelContext: modelContext
+                ).syncPastDays(90, forceRefreshRecentDays: 90)
+            }
+            if succeeded {
+                statusMessage = "最近 90 天健康数据已重新同步。"
+            } else {
+                let detail = services.syncCoordinator.sourceStatuses[.healthKit]?.lastErrorDescription ?? "未知错误"
+                statusMessage = "重新同步失败：\(detail)"
             }
             isSyncing = false
         }

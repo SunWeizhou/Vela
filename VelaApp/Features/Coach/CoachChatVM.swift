@@ -242,6 +242,25 @@ final class CoachChatVM: ObservableObject {
         persistThread(modelContext: modelContext)
     }
 
+    func appendLocalExchange(
+        userText: String,
+        response: String,
+        modelContext: ModelContext
+    ) {
+        let cleanText = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanText.isEmpty else { return }
+        messages.removeAll { $0.isStreaming }
+        messages.append(ChatMsg(role: .user, content: cleanText))
+        messages.append(ChatMsg(role: .assistant, content: response))
+
+        if let current = currentSession,
+           current.title == "新对话" || current.title == "New Chat" || current.title == "New Session" || current.title.isEmpty {
+            current.title = String(cleanText.prefix(12)) + (cleanText.count > 12 ? "..." : "")
+            try? modelContext.save()
+        }
+        persistThread(modelContext: modelContext)
+    }
+
     // MARK: - Food Photo Workflow Delegation
 
     func analyzeFoodPhoto(

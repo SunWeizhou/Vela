@@ -99,9 +99,9 @@ final class VelaThemeTests: XCTestCase {
         var model = DataCoverageSummaryModel.unknown
         model.status = .low
         model.scorePercent = 0
-        model.title = "数据可信度低"
+        model.title = "正在建立身体基线"
 
-        XCTAssertEqual(model.compactDisplayTitle, "数据可信度 · 低 · 0%")
+        XCTAssertEqual(model.compactDisplayTitle, "数据覆盖 · 不足 · 0%")
     }
 
     func testDebugInitialTabLaunchArgumentDefaultsToTodayAndClampsInvalidValues() {
@@ -262,5 +262,17 @@ final class VelaThemeTests: XCTestCase {
         XCTAssertNil(report.averageSleepScore)
         XCTAssertTrue(report.markdown.contains("平均恢复分：暂无"))
         XCTAssertTrue(report.markdown.contains("平均睡眠分：暂无"))
+    }
+
+    func testLocalCoachRemainsUsefulWithoutAIOrHealthCoverage() {
+        let response = LocalCoachGuidanceBuilder.response(
+            dashboard: .empty(),
+            operatingPlan: nil,
+            isChinese: true
+        )
+
+        XCTAssertTrue(response.contains("同步 Apple 健康"))
+        XCTAssertTrue(response.contains("建立身体基线"))
+        XCTAssertTrue(response.contains("不构成医疗诊断"))
     }
 }

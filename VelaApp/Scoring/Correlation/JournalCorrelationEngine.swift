@@ -112,7 +112,17 @@ struct JournalCorrelationEngine {
         let allTags = Set(journalEntries.flatMap { $0.tags })
         let allDaysSortedKeys = snapshotByDay.keys.sorted()
         
-        var insights: [HabitCorrelationInsight] = []
+        struct Candidate {
+            var habit: String
+            var outcome: String
+            var lag: Int
+            var correlation: Double
+            var sampleSize: Int
+            var exposedCount: Int
+            var controlCount: Int
+            var pValue: Double
+        }
+        var candidates: [Candidate] = []
 
         // Outcome key paths or mappings
         let outcomes = [
@@ -142,20 +152,52 @@ struct JournalCorrelationEngine {
                         }
                     }
 
-                    // Sample size requirements (N >= 14)
                     let n = tagSeries.count
-                    guard n >= 14 else { continue }
+                    let exposedCount = tagSeries.filter { $0 == 1 }.count
+                    let controlCount = n - exposedCount
+                    guard n >= 28, exposedCount >= 8, controlCount >= 8 else { continue }
 
                     // Compute Point-Biserial Correlation (which is standard Pearson correlation between binary and continuous)
                     let r = pearsonCorrelation(tagSeries, outcomeSeries)
                     
-                    // Filter weak correlations (abs(r) < 0.20)
-                    guard abs(r) >= 0.20 else { continue }
+                    guard abs(r) >= 0.25 else { continue }
+                    let pValue = correlationPValue(r: r, sampleSize: n)
+                    candidates.append(Candidate(
+                        habit: tag,
+                        outcome: outcome.0,
+                        lag: lag,
+                        correlation: r,
+                        sampleSize: n,
+                        exposedCount: exposedCount,
+                        controlCount: controlCount,
+                        pValue: pValue
+                    ))
+                }
+            }
+        }
+
+        // Benjamini-Hochberg false-discovery control across every tag/outcome/lag
+        // comparison. This prevents a large tag library from manufacturing a
+        // seemingly meaningful result by chance.
+        let sortedCandidates = candidates.sorted { $0.pValue < $1.pValue }
+        let testCount = sortedCandidates.count
+        var acceptedPValue = -1.0
+        for (index, candidate) in sortedCandidates.enumerated() {
+            let threshold = 0.05 * Double(index + 1) / Double(max(testCount, 1))
+            if candidate.pValue <= threshold {
+                acceptedPValue = candidate.pValue
+            }
+        }
+
+        var insights: [HabitCorrelationInsight] = []
+        for candidate in sortedCandidates where candidate.pValue <= acceptedPValue {
+                    let n = candidate.sampleSize
+                    let r = candidate.correlation
 
                     let confidence: MetricConfidence
-                    if n >= 60 {
+                    if n >= 90 && min(candidate.exposedCount, candidate.controlCount) >= 20 {
                         confidence = .high
-                    } else if n >= 28 {
+                    } else if n >= 60 && min(candidate.exposedCount, candidate.controlCount) >= 14 {
                         confidence = .medium
                     } else {
                         confidence = .low
@@ -173,24 +215,22 @@ struct JournalCorrelationEngine {
                     let dir = r > 0 ? "positive" : "negative"
                     let dirText = r > 0 ? L10n.t("positive correlation", "正相关") : L10n.t("negative correlation", "负相关")
                     
-                    let lagText = lag == 0 ? L10n.t("same-day", "当天") : L10n.t("next-day", "次日")
+                    let lagText = candidate.lag == 0 ? L10n.t("same-day", "当天") : L10n.t("next-day", "次日")
                     let explanation = L10n.t(
-                        "Over the last \(n) days, logging '\(tag)' has a \(strength) \(dirText) with \(lagText) \(outcome.0). This represents correlation only, not clinical causation.",
-                        "在过去 \(n) 天的数据分析中，记录习惯标签「\(tag)」与\(lagText)\(outcome.0)表现出\(strength)的\(dirText)。本提示仅代表关联度，并不代表因果关系。"
+                        "Across \(n) days (\(candidate.exposedCount) exposed / \(candidate.controlCount) control), logging '\(candidate.habit)' has a \(strength) \(dirText) with \(lagText) \(candidate.outcome) after false-discovery screening. This is correlation, not clinical causation.",
+                        "在 \(n) 天数据中（记录 \(candidate.exposedCount) 天 / 对照 \(candidate.controlCount) 天），习惯标签「\(candidate.habit)」与\(lagText)\(candidate.outcome)在多重比较校正后表现出\(strength)的\(dirText)。本提示仅代表关联，不代表因果关系。"
                     )
 
                     insights.append(HabitCorrelationInsight(
-                        habit: tag,
-                        outcome: outcome.0,
-                        lagDays: lag,
+                        habit: candidate.habit,
+                        outcome: candidate.outcome,
+                        lagDays: candidate.lag,
                         correlation: r,
                         sampleSize: n,
                         confidence: confidence,
                         direction: dir,
                         explanation: explanation
                     ))
-                }
-            }
         }
 
         return insights.sorted { abs($0.correlation) > abs($1.correlation) }
@@ -232,7 +272,7 @@ struct JournalCorrelationEngine {
             let daysWith = daysWithTag.intersection(allDays)
             let daysWithout = allDays.subtracting(daysWith)
 
-            guard allDays.count >= 14, daysWith.count >= 6 else { continue }
+            guard allDays.count >= 28, daysWith.count >= 8, daysWithout.count >= 8 else { continue }
 
             let withSleep = daysWith.compactMap { snapshotByDay[$0]?.sleepScore }
             let withRecovery = daysWith.compactMap { snapshotByDay[$0]?.recoveryScore }
@@ -269,6 +309,13 @@ struct JournalCorrelationEngine {
     private func averageOf(_ values: [Double]) -> Double {
         guard !values.isEmpty else { return 0 }
         return values.reduce(0, +) / Double(values.count)
+    }
+
+    private func correlationPValue(r: Double, sampleSize: Int) -> Double {
+        guard sampleSize > 3 else { return 1 }
+        let bounded = min(0.999_999, max(-0.999_999, r))
+        let fisherZ = abs(atanh(bounded)) * sqrt(Double(sampleSize - 3))
+        return erfc(fisherZ / sqrt(2))
     }
 
     private func isCoachConversation(_ entry: JournalEntryRecord) -> Bool {

@@ -5,6 +5,9 @@ struct VelaJournalView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     @ObservedObject private var appState = VelaAppState.shared
+    @Query(sort: \PersonalExperimentRecord.createdAt, order: .reverse) private var personalExperiments: [PersonalExperimentRecord]
+    @Query(sort: \ExperimentCheckInRecord.date, order: .reverse) private var experimentCheckIns: [ExperimentCheckInRecord]
+    @Query(sort: \DailyHealthSummaryRecord.date, order: .reverse) private var experimentHealthSummaries: [DailyHealthSummaryRecord]
 
     private static let lookbackDays = 42
     private var lookbackStart: Date {
@@ -31,6 +34,7 @@ struct VelaJournalView: View {
     @State private var showWaterLogger = false
     @State private var showAlcoholLogger = false
     @State private var showBehaviorQuickNote = false
+    @State private var showPersonalExperiment = false
     @State private var entryPendingDeletion: JournalEntryRecord?
     @State private var entryMutationError: String?
 
@@ -44,6 +48,12 @@ struct VelaJournalView: View {
                 weeklyChecksStrip
 
                 behaviorQuickNoteCard
+
+                PersonalExperimentCard(
+                    experiment: activePersonalExperiment,
+                    checkIns: experimentCheckIns,
+                    onTap: { showPersonalExperiment = true }
+                )
                 
                 // 3. Category daytime title
                 VStack(alignment: .leading, spacing: 12) {
@@ -198,6 +208,24 @@ struct VelaJournalView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
             .presentationBackground(VelaTheme.systemGroupedBackground)
+        }
+        .sheet(isPresented: $showPersonalExperiment) {
+            PersonalExperimentHubSheet(
+                activeExperiment: activePersonalExperiment,
+                latestExperiment: personalExperiments.first,
+                checkIns: experimentCheckIns,
+                healthSummaries: experimentHealthSummaries
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+            .presentationBackground(VelaTheme.systemGroupedBackground)
+        }
+    }
+
+    private var activePersonalExperiment: PersonalExperimentRecord? {
+        let today = Calendar.current.startOfDay(for: Date())
+        return personalExperiments.first {
+            $0.status == "active" && $0.endDate >= today
         }
     }
 

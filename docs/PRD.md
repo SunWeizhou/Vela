@@ -1,15 +1,15 @@
 # PRD.md
 # Project Vela — Local-first AI Health Coach for Apple Health
 
-> Updated: 2026-06-09
+> Updated: 2026-07-13
 > Current product target: Vela 4.0 Active Coach OS, a closed-loop local-first body intelligence and training execution system.
 
 ## 0. 当前构建状态
 
-截至 2026-06-09，Vela 已升级为本地优先 Active Coach OS：
+截至 2026-07-13，Vela 已升级为本地优先 Active Coach OS：
 
 - iOS SwiftUI + SwiftData + HealthKit 主工程可编译通过，全部测试通过（100% pass rate）；
-- 已有 Home / Journal / Fitness / Vitals / `+` Intelligence 五个主 Tab；
+- 已收敛为 Today / Training / Coach / Me 四个主 Tab，优先支持每日判断—行动—反馈闭环；
 - 已实现 Sleep、Recovery、Strain、Stress、Energy Bank、Health Age、Biological Age 等 10+ 评分引擎；
 - 已实现 HealthKit 多维数据读取、日摘要缓存、AI 报告、Journal、Coach session、训练计划、生物标志物记录；
 - 当前 iOS 运行时直连用户配置的 DeepSeek Provider，并使用 Kimi Vision Food Photo Analyzer；VelaBackend 仅保留为未启用的可选实验组件；
@@ -17,9 +17,11 @@
 - 已实现 user Wiki、夜间 Wiki 同步 Agent、晨间简报、主动洞察、通知配置；
 - Home 由 `BodyStateKernel`、`TrainingDecisionKernel` 和持久化 `DailyOperatingPlanRecord` 驱动；
 - Coach、Morning Brief、Training 与 Intelligence Workspace 共享同一个 BodyState 和可审计 Agent artifact；
+- Coach 在未配置云端模型时仍提供基于 Daily Operating Plan 的本机建议，云端 AI 是增强项而非产品可用性的前提；
+- 用户界面将 Data Coverage（采集完整度）与判断依据强弱分开表达，不再把内部权重伪装成概率式“置信度”；
 - 原始 HealthKit 数据永不离开设备；仅向用户选择的模型服务发送经过裁剪的结构化摘要；
 - **Training Intelligence v3** 模块已落地：TrainingAnalyticsService、RecoveryTrainingAdapter、ExerciseLibraryService、TrainingPlanLinkingService、力量训练视图；
-- 真机 UI 采用暖白 `#F5F3F0` 画布 + 白卡驾驶舱 + 毛玻璃胶囊底栏的 Bevel Parity 视觉标准；
+- 真机 UI 采用冷中性 `#F4F6FA` 画布、Signal Blue 品牌色、深色 Daily Focus 卡和原生 Liquid Glass 导航；
 - 键盘交互已优化为微信式体验：点空白区/下滑收起键盘，键盘弹出时聊天区整体上移。
 
 本 PRD 已从”从零开发”阶段过渡到”持续打磨完整产品”阶段。未来的产品边界和优先级以 `docs/VELA_FULL_STRENGTH_PRODUCT_BLUEPRINT.md` 和 `docs/VELA_TRAINING_INTELLIGENCE_V3.md` 为准。

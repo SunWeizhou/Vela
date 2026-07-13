@@ -46,7 +46,7 @@ xcrun devicectl device install app --device "$DEVICE" \
 xcodebuild -project Vela.xcodeproj -scheme Vela -sdk iphoneos -configuration Debug build
 ```
 
-## 前端架构：Apple Design System + Bevel Parity（2026-06-02 更新）
+## 前端架构：Apple Design System + Signal Intelligence（2026-07-13 更新）
 
 所有视图使用统一的 VelaTheme 和 VelaDesignSystem 组件。
 
@@ -55,7 +55,7 @@ xcodebuild -project Vela.xcodeproj -scheme Vela -sdk iphoneos -configuration Deb
 **VelaTheme** (`VelaApp/Core/Theme/VelaTheme.swift`) — 设计 Token 唯一入口：
 - Surface: `bg`, `surface`, `cardBg`, `elevatedBg`, `groupedBg`
 - Text: `fg`, `fg2`, `muted`, `meta`
-- Accent: `accent` (#0071E3/#2997FF)
+- Accent: `accent` (Signal Blue `#5664E8` / dark `#7F8CFF`)
 - Semantic: `strainColor`, `recoveryColor`, `sleepColor`, `stressColor`, `energyColor`
 - Typography: `largeTitle()`, `title1()`-`title3()`, `headline()`, `body()`, `callout()`, `subheadline()`, `footnote()`, `caption1()`-`caption2()`
 - Spacing: `space1`-`space12` (4-48px, 8px grid), `pagePadding` (20px), `cardGap` (14px)
@@ -70,20 +70,19 @@ xcodebuild -project Vela.xcodeproj -scheme Vela -sdk iphoneos -configuration Deb
 
 **VelaLoc** (`VelaTheme.swift` 内) — 中文默认本地化枚举，所有属性为 computed 以避免 Sendable 警告。
 
-### Shell 与页面（5-Tab）
+### Shell 与页面（4-Tab）
 
 **VelaShell** (`VelaApp/Features/Minimal/VelaMinimalShell.swift`) — 根导航：
-- 5 tabs: 今日 / 手记 / 训练 / 体征 / [+]
-- `GlassTabBar` 底部导航，`+` 在最右侧
-- 头像按钮 → Settings sheet，Coach 通过 Today 页按钮触发 sheet
+- 4 tabs: 今日 / 训练 / 教练 / 我的
+- iOS 26 使用系统 Liquid Glass Tab Bar，早期系统使用自定义浮动玻璃导航
+- 快速记录与设置由页面内入口和全局 AppState sheet 触发
 
 | Tab | 页面 | 文件 | 数据源 |
 |-----|------|------|--------|
 | Tab 0 | TodayView | `VelaMinimalTodayView.swift` | `@EnvironmentObject dashboardVM` |
 | Tab 1 | TrainingView | `VelaMinimalFitnessView.swift` | `@EnvironmentObject dashboardVM` + TrainingIntelligence |
-| Tab 2 | VitalsView | `VelaMinimalVitalsView.swift` | `@EnvironmentObject dashboardVM` |
-| Tab 3 | CoachView | `CoachView.swift` | `@StateObject vm: CoachChatVM`（streaming） |
-| Tab 4 | MeView | `VelaMinimalJournalView.swift` | `@AppStorage` + `@Query coachArtifacts` |
+| Tab 2 | CoachView | `CoachView.swift` | `@StateObject vm: CoachChatVM`（本机建议 + 可选 streaming） |
+| Tab 3 | MeView | `VelaMinimalJournalView.swift` | `@AppStorage` + `@Query coachArtifacts` |
 | — | SettingsView | `VelaMinimalCoachView.swift` | 手记/Journal 页面 |
 | — | MetricDetailView | `VelaMinimalComponents.swift` | 各页面 onTap 导航进入 |
 | — | PlusActionSheet | `VelaQuickActionsSheet.swift` | 快速添加动作面板 |
@@ -279,7 +278,7 @@ iOS 端只发摘要 `HealthContext`，原始 HealthKit 数据永不离设备。�
 
 ## 注意事项
 
-- **🔥 [CRITICAL] 永久前端视觉标准 (Bevel Parity)**: 2026-05-30 实现的 Bevel 视觉体系（暖白色 `#F5F3F0` 画布、白卡驾驶舱、并排三环仪表、压力虚线仪、格栅电池条、生物年龄大刻度盘、Biomarker Sparkline 平滑小趋势图及悬浮毛玻璃胶囊底栏）是项目的**最终前端标准**。未来的开发和智能代理只能**往里增加内容**（如完善按钮动作、接入详情页、丰富数据字段），**绝不能大改其整体视觉风格与结构**。
+- **🔥 [CRITICAL] 前端视觉标准 (Signal Intelligence)**: 2026-07-13 起采用冷中性画布 `#F4F6FA`、Signal Blue 品牌色、深色 Daily Focus 卡、克制的健康语义色和原生 Liquid Glass 导航。页面必须优先呈现“一个今日重点 → 判断依据 → 下一步行动”，避免暖纸张、陶土色、装饰性仪表堆叠和无意义渐变。允许持续优化结构，但必须保持语义 Token、动态字体和可访问性。
 - **📁 [Minimal Shell 文件映射说明]**: 为了在不损坏 Xcode `.pbxproj` 索引引用的前提下实现最清晰的文件逻辑，前端文件内容与 Tab 映射如下：
     - `VelaMinimalShell.swift` ➡️ 底栏 Tab 胶囊容器 `VelaShell`
     - `VelaMinimalTodayView.swift` ➡️ Tab 1 今日主页 `VelaTodayView`

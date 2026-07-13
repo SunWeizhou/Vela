@@ -42,7 +42,14 @@ struct DailyOperatingPlanDisplayModel: Codable, Hashable {
             safetyNotice: safetyNotice,
             isChinese: isChinese
         )
-        let roundedConfidence = Int((min(max(confidence, 0), 1) * 100).rounded())
+        let evidenceLabel: String
+        if confidence >= 0.8 {
+            evidenceLabel = isChinese ? "判断依据充分" : "Strong supporting evidence"
+        } else if confidence >= 0.55 {
+            evidenceLabel = isChinese ? "判断依据部分" : "Partial supporting evidence"
+        } else {
+            evidenceLabel = isChinese ? "判断依据有限" : "Limited supporting evidence"
+        }
 
         return DailyOperatingPlanDisplayModel(
             decision: decision,
@@ -50,7 +57,7 @@ struct DailyOperatingPlanDisplayModel: Codable, Hashable {
             statusTitle: statusTitle(for: decision, intensityCap: intensityCap, isChinese: isChinese),
             summary: summary,
             evidenceLine: evidence,
-            confidenceLabel: isChinese ? "置信度 \(roundedConfidence)%" : "Confidence \(roundedConfidence)%"
+            confidenceLabel: evidenceLabel
         )
     }
 

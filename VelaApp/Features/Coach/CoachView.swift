@@ -224,6 +224,7 @@ struct VelaCoachView: View {
         }
         .task(id: isActiveSurface) {
             guard isActiveSurface else { return }
+            vm.refreshKeyState()
             vm.loadSessions(modelContext: modelContext)
             consumePendingRouteIfVisible()
             try? DailyLogService.refresh(dashboard: dashboard)
@@ -314,16 +315,17 @@ struct VelaCoachView: View {
             .accessibilityHint("打开历史对话列表")
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(vm.currentSession?.title.isEmpty != false ? "Coach" : vm.currentSession!.title)
-                    .font(.system(size: 17, weight: .semibold))
+                Text(vm.currentSession?.title.isEmpty != false ? "Vela 教练" : vm.currentSession!.title)
+                    .font(VelaTheme.headline())
                     .foregroundStyle(VelaTheme.fg)
                     .lineLimit(1)
 
                 HStack(spacing: 4) {
-                    Circle().fill(vm.isReady ? VelaTheme.success : VelaTheme.muted).frame(width: 6, height: 6)
-                    Text("\(vm.isReady ? "在线" : "未连接") · \(DeepSeekTextModel.stored.rawValue)")
+                    Circle().fill(vm.isReady ? VelaTheme.success : VelaTheme.accent).frame(width: 6, height: 6)
+                    Text(vm.isReady ? "AI 增强已开启" : "本机建议可用")
                         .font(VelaTheme.caption2())
-                        .foregroundStyle(vm.isReady ? VelaTheme.success : VelaTheme.muted)
+                        .foregroundStyle(vm.isReady ? VelaTheme.success : VelaTheme.accent)
+                        .lineLimit(1)
                 }
             }
 
@@ -389,7 +391,7 @@ struct VelaCoachView: View {
             }
 
             HStack(alignment: .bottom, spacing: 8) {
-                TextField("输入消息…", text: $inputText, axis: .vertical)
+                TextField(vm.isReady ? "询问你的健康与训练…" : "询问今日状态（本机分析）…", text: $inputText, axis: .vertical)
                     .font(VelaTheme.callout())
                     .lineLimit(1...5)
                     .focused($isFocused)
@@ -526,6 +528,18 @@ struct VelaCoachView: View {
         guard !trimmed.isEmpty, !vm.isStreaming else { return }
         inputText = ""
 
+        if !vm.isReady {
+            vm.appendLocalExchange(
+                userText: trimmed,
+                response: LocalCoachGuidanceBuilder.response(
+                    dashboard: dashboard,
+                    operatingPlan: todayOperatingPlan
+                ),
+                modelContext: modelContext
+            )
+            return
+        }
+
         vm.submit(
             text: trimmed,
             dashboard: dashboard,
@@ -564,4 +578,57 @@ struct VelaCoachView: View {
         }
     }
 
+}
+
+enum LocalCoachGuidanceBuilder {
+    static func response(
+        dashboard: DashboardSummary,
+        operatingPlan: DailyOperatingPlanRecord?,
+        isChinese: Bool = AppLanguage.stored.isChinese
+    ) -> String {
+        if let operatingPlan {
+            let display = DailyOperatingPlanDisplayModel.build(
+                payload: operatingPlan.operatingPlanPayload,
+                primaryActionType: operatingPlan.primaryActionType,
+                source: operatingPlan.source,
+                safetyNotice: operatingPlan.safetyNotice,
+                confidence: operatingPlan.confidence,
+                isChinese: isChinese
+            )
+            if isChinese {
+                return """
+                **\(display.statusTitle)**
+
+                \(display.summary)
+
+                - \(display.confidenceLabel)
+                - \(display.evidenceLine)
+                - 下一步：前往训练页执行或调整计划，完成后记录体感，Vela 会用于后续校准。
+
+                当前回答由本机规则与已同步数据生成；连接 AI 后可继续追问更细的解释。
+                """
+            }
+            return """
+            **\(display.statusTitle)**
+
+            \(display.summary)
+
+            - \(display.confidenceLabel)
+            - \(display.evidenceLine)
+            - Next: open Training to follow or adjust the plan, then log how it felt so Vela can calibrate future guidance.
+
+            This answer was generated locally from synced data and deterministic rules. Connect AI for deeper follow-up questions.
+            """
+        }
+
+        let hasRecovery = dashboard.recovery.hasData
+        if isChinese {
+            return hasRecovery
+                ? "本机已经读取到部分身体信号，但今日计划仍在生成。请先刷新今日页；在计划完成前，不建议仅凭单项分数提高训练量。一般健康建议，不构成医疗诊断。"
+                : "当前还没有足够的恢复与睡眠信号。请先在今日页同步 Apple 健康并建立身体基线；在此之前，保持原有节奏或适度减量，不要根据缺失数据临时加练。一般健康建议，不构成医疗诊断。"
+        }
+        return hasRecovery
+            ? "Some body signals are available, but today's plan is still being generated. Refresh Today first, and do not increase training from a single metric alone. General guidance only; not a medical diagnosis."
+            : "Recovery and sleep coverage is still limited. Sync Apple Health from Today and build your baseline first; until then, keep your normal routine or reduce load conservatively. General guidance only; not a medical diagnosis."
+    }
 }

@@ -96,7 +96,6 @@ struct TodayExperienceModel: Codable, Hashable {
         nutrition: TodayExperienceNutrition = .empty
     ) -> TodayExperienceModel {
         let hasReadinessData = dashboard.recovery.hasData
-        let displayConfidence = hasReadinessData ? trainingDecision.confidence : 0.0
         let confidenceDetail = hasReadinessData ? label(for: bodyState.confidence) : "数据不足"
         let hero = TodayExperienceHero(
             scoreTitle: scoreTitle(dashboard),
@@ -110,9 +109,7 @@ struct TodayExperienceModel: Codable, Hashable {
                 decision: trainingDecision,
                 hasReadinessData: hasReadinessData
             ),
-            confidenceLabel: hasReadinessData
-                ? "置信度 \(Int((displayConfidence * 100).rounded()))% · \(confidenceDetail)"
-                : confidenceDetail,
+            confidenceLabel: confidenceDetail,
             primaryActionTitle: primaryActionTitle(
                 trainingDecision,
                 hasReadinessData: hasReadinessData
@@ -176,7 +173,6 @@ struct TodayExperienceModel: Codable, Hashable {
                 dashboard: dashboard,
                 bodyState: bodyState,
                 decision: trainingDecision,
-                confidence: displayConfidence,
                 hasReadinessData: hasReadinessData
             )
         )
@@ -190,7 +186,7 @@ struct TodayExperienceModel: Codable, Hashable {
         _ decision: DailyTrainingDecision,
         hasReadinessData: Bool
     ) -> String {
-        guard hasReadinessData else { return "先保守减量" }
+        guard hasReadinessData else { return "先建立身体基线" }
         switch decision.decision {
         case .keep: return "按计划训练"
         case .reduce: return "控制训练量"
@@ -310,15 +306,14 @@ struct TodayExperienceModel: Codable, Hashable {
         dashboard: DashboardSummary,
         bodyState: BodyState,
         decision: DailyTrainingDecision,
-        confidence: Double,
         hasReadinessData: Bool
     ) -> String {
         guard hasReadinessData else {
-            return "AI 教练：当前置信度 \(Int((confidence * 100).rounded()))%，先同步 HealthKit 并采用保守建议。"
+            return "本机教练：当前判断依据有限；先同步 Apple 健康，同时采用保守建议。"
         }
         let freshness = label(for: bodyState.freshness)
         let recovery = Int(dashboard.recovery.score.rounded())
-        return "AI 教练：恢复 \(recovery)，\(displayDecisionSummary(decision)) 置信度 \(Int((confidence * 100).rounded()))%，数据新鲜度：\(freshness)。"
+        return "本机教练：恢复 \(recovery)，\(displayDecisionSummary(decision)) \(label(for: bodyState.confidence))，数据新鲜度：\(freshness)。"
     }
 
     private static func displayDecisionSummary(_ decision: DailyTrainingDecision) -> String {
@@ -395,9 +390,9 @@ struct TodayExperienceModel: Codable, Hashable {
 
     private static func label(for confidence: DataConfidence) -> String {
         switch confidence {
-        case .high: return "高可信"
-        case .medium: return "中等可信"
-        case .low: return "低可信"
+        case .high: return "判断依据充分"
+        case .medium: return "判断依据部分"
+        case .low: return "判断依据有限"
         case .unavailable: return "数据不足"
         }
     }

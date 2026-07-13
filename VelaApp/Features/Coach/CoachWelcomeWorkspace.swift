@@ -19,6 +19,10 @@ struct CoachWelcomeWorkspace: View {
 
             workspaceCarousel
 
+            if !vm.isReady {
+                localModeCard
+            }
+
             VStack(alignment: .leading, spacing: 8) {
                 Text("你可以这样问")
                     .font(VelaTheme.caption1().weight(.semibold))
@@ -97,6 +101,34 @@ struct CoachWelcomeWorkspace: View {
         .padding(.top, 8)
     }
 
+    private var localModeCard: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "iphone.gen3.radiowaves.left.and.right")
+                .font(VelaTheme.headline())
+                .foregroundStyle(VelaTheme.accent)
+                .frame(width: 36, height: 36)
+                .background(VelaTheme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("本机建议已经可用")
+                    .font(VelaTheme.subheadline().weight(.semibold))
+                    .foregroundStyle(VelaTheme.fg)
+                Text("即使不连接 AI，Vela 仍会根据已同步信号解释今日计划。连接 AI 只用于更深入的追问。")
+                    .font(VelaTheme.footnote())
+                    .foregroundStyle(VelaTheme.fg2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(VelaTheme.accent.opacity(0.06), in: RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
+                .stroke(VelaTheme.accent.opacity(0.18), lineWidth: 0.5)
+        )
+        .accessibilityElement(children: .combine)
+    }
+
     private func shortcutCard(title: String, subtitle: String, icon: String) -> some View {
         HStack(spacing: 10) {
             Image(systemName: icon)
@@ -170,7 +202,7 @@ struct CoachWelcomeWorkspace: View {
                             title: artifact.title,
                             detail: localizedArtifactType(artifact.type),
                             icon: artifactIcon(artifact.type),
-                            footer: "置信度 \(Int((artifact.confidence * 100).rounded()))% · 历史产物"
+                            footer: "\(evidenceLabel(artifact.confidence)) · 历史产物"
                         ) {
                             onSendMessage("基于产物 \(artifact.title) 给我下一步行动。")
                         }
@@ -267,6 +299,12 @@ struct CoachWelcomeWorkspace: View {
         case "nutrition_feedback": return "营养饮食反馈"
         default: return "决策分析报告"
         }
+    }
+
+    private func evidenceLabel(_ confidence: Double) -> String {
+        if confidence >= 0.8 { return "判断依据充分" }
+        if confidence >= 0.55 { return "判断依据部分" }
+        return "判断依据有限"
     }
 
     private func artifactIcon(_ type: String) -> String {

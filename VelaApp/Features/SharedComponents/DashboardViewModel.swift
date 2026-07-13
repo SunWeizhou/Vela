@@ -570,11 +570,41 @@ final class DashboardViewModel: ObservableObject {
             }
             
         // 7. Build TodayCommandState
-        self.todayCommandState = TodayCommandBuilder.build(
+        let commandState = TodayCommandBuilder.build(
             from: updatedDashboard,
             recentStrengthSummary: recentStrengthSummary,
             coachArtifact: latestTodayArtifact,
             generatedAt: Date()
         )
+        self.todayCommandState = commandState
+
+        let scheduledDay = activePlan.flatMap {
+            TrainingScheduleResolver.resolve(
+                plan: $0,
+                on: refDate,
+                events: workoutEvents,
+                calendar: calendar
+            )
+        }
+        if calendar.isDateInToday(refDate), let activePlan {
+            _ = try? AdaptiveTrainingManager().refreshDailyProposal(
+                plan: activePlan,
+                dashboard: updatedDashboard,
+                events: workoutEvents,
+                foodLogs: foodLogs,
+                journalEntries: journalEntries,
+                modelContext: modelContext,
+                date: refDate,
+                calendar: calendar
+            )
+        }
+        if calendar.isDateInToday(refDate) {
+            WristSnapshotBridge.shared.publish(
+                dashboard: updatedDashboard,
+                command: commandState,
+                plan: activePlan,
+                scheduledDay: scheduledDay
+            )
+        }
     }
 }

@@ -558,7 +558,7 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertTrue(model.signalCards.allSatisfy { $0.trend.isEmpty })
         XCTAssertEqual(model.actions.count, 3)
         XCTAssertTrue(model.actions[0].title.contains("训练"))
-        XCTAssertTrue(model.coachPreview.contains("置信度"))
+        XCTAssertTrue(model.coachPreview.contains("判断依据"))
         XCTAssertEqual(model.nutrition.calorieProgress, 0.676, accuracy: 0.001)
     }
 
@@ -581,7 +581,7 @@ final class ScoringEngineTests: XCTestCase {
         )
 
         XCTAssertEqual(model.hero.scoreTitle, "恢复 --")
-        XCTAssertEqual(model.hero.decisionTitle, "先保守减量")
+        XCTAssertEqual(model.hero.decisionTitle, "先建立身体基线")
         XCTAssertEqual(model.hero.confidenceLabel, "数据不足")
         XCTAssertTrue(model.evidenceChips.contains("等待 HealthKit"))
         XCTAssertEqual(model.actions.first?.title, "同步健康数据")
@@ -746,7 +746,7 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertFalse(model.evidenceLine.contains("BodyStateKernel"))
         XCTAssertFalse(model.evidenceLine.contains("medical diagnosis"))
         XCTAssertTrue(model.evidenceLine.contains("本地身体状态"))
-        XCTAssertEqual(model.confidenceLabel, "置信度 50%")
+        XCTAssertEqual(model.confidenceLabel, "判断依据有限")
     }
 
     func testPersonalBaselineThresholdResolutionAndFallback() {

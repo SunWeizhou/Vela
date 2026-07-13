@@ -597,7 +597,7 @@ struct AmbientGlowModifier: ViewModifier {
 struct VelaThemeBackground: View {
     var body: some View {
         LinearGradient(
-            colors: [VelaTheme.elevatedBg.opacity(0.42), VelaTheme.bg, VelaTheme.bg],
+            colors: [VelaTheme.accent.opacity(0.055), VelaTheme.bg, VelaTheme.bg],
             startPoint: .top,
             endPoint: .bottom
         )
@@ -615,9 +615,9 @@ struct VelaNativeCardModifier: ViewModifier {
             .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(VelaTheme.borderSoft.opacity(0.55), lineWidth: 0.5)
+                    .stroke(VelaTheme.borderSoft.opacity(0.42), lineWidth: 0.5)
             )
-            .shadow(color: VelaTheme.cardShadow(colorScheme).opacity(0.55), radius: 3, y: 1)
+            .shadow(color: VelaTheme.cardShadow(colorScheme), radius: 12, y: 5)
     }
 }
 

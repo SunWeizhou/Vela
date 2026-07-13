@@ -109,22 +109,41 @@ final class DailySummaryUseCase {
         if shouldSyncHealthData, let modelContext, !shouldDeferHealthSync {
             let syncEngine = HealthKitSyncEngine(queryService: queryService, modelContext: modelContext, calendar: calendar)
             if let syncCoordinator {
-                await syncCoordinator.run(source: .healthKit, force: false) {
-                    do {
-                        try await syncEngine.syncPastDays(syncDays, endingAt: now, forceRefreshRecentDays: syncDays)
-                    } catch {
-                        PipelineDiagnosticsLogger.log(
-                            modelContext: modelContext,
-                            stage: "DailySummaryUseCase.loadDashboard.syncPastDays",
-                            isSuccess: false,
-                            summary: "HealthKit background sync failed.",
-                            error: error
-                        )
-                    }
+                let succeeded = await syncCoordinator.runReporting(source: .healthKit, force: false) {
+                    try await syncEngine.syncPastDays(syncDays, endingAt: now, forceRefreshRecentDays: syncDays)
+                }
+                if succeeded {
+                    VelaEventService.shared.log(
+                        modelContext: modelContext,
+                        type: VelaProductEventType.healthSyncSucceeded,
+                        title: "Health data sync succeeded",
+                        metadata: ["days": syncDays]
+                    )
+                } else {
+                    let description = syncCoordinator.sourceStatuses[.healthKit]?.lastErrorDescription ?? "Unknown error"
+                    PipelineDiagnosticsLogger.log(
+                        modelContext: modelContext,
+                        stage: "DailySummaryUseCase.loadDashboard.syncPastDays",
+                        isSuccess: false,
+                        summary: "HealthKit background sync failed: \(description)"
+                    )
+                    VelaEventService.shared.log(
+                        modelContext: modelContext,
+                        type: VelaProductEventType.healthSyncFailed,
+                        title: "Health data sync failed",
+                        detail: description,
+                        metadata: ["days": syncDays]
+                    )
                 }
             } else {
                 do {
                     try await syncEngine.syncPastDays(syncDays, endingAt: now, forceRefreshRecentDays: syncDays)
+                    VelaEventService.shared.log(
+                        modelContext: modelContext,
+                        type: VelaProductEventType.healthSyncSucceeded,
+                        title: "Health data sync succeeded",
+                        metadata: ["days": syncDays]
+                    )
                 } catch {
                     PipelineDiagnosticsLogger.log(
                         modelContext: modelContext,
@@ -132,6 +151,13 @@ final class DailySummaryUseCase {
                         isSuccess: false,
                         summary: "HealthKit background sync failed.",
                         error: error
+                    )
+                    VelaEventService.shared.log(
+                        modelContext: modelContext,
+                        type: VelaProductEventType.healthSyncFailed,
+                        title: "Health data sync failed",
+                        detail: error.localizedDescription,
+                        metadata: ["days": syncDays]
                     )
                 }
             }

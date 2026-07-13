@@ -9,7 +9,20 @@ final class AppSyncCoordinator: ObservableObject {
         case xunji
     }
 
+    struct SourceStatus: Equatable {
+        var lastAttemptAt: Date?
+        var lastSuccessAt: Date?
+        var lastFailureAt: Date?
+        var lastErrorDescription: String?
+        var consecutiveFailures = 0
+
+        var isHealthy: Bool {
+            lastFailureAt == nil || (lastSuccessAt ?? .distantPast) > (lastFailureAt ?? .distantPast)
+        }
+    }
+
     @Published private(set) var activeSources: Set<Source> = []
+    @Published private(set) var sourceStatuses: [Source: SourceStatus] = [:]
 
     private let minimumInterval: TimeInterval
     private var inFlight: [Source: Task<Void, Never>] = [:]
@@ -43,6 +56,53 @@ final class AppSyncCoordinator: ObservableObject {
         inFlight[source] = nil
         lastCompletedAt[source] = Date()
         activeSources.remove(source)
+    }
+
+    /// Runs a sync operation that can fail and only applies throttling after a
+    /// successful completion. Callers can surface the latest failure without
+    /// allowing a failed attempt to suppress the next retry.
+    @discardableResult
+    func runReporting(
+        source: Source,
+        force: Bool = false,
+        operation: @escaping @MainActor () async throws -> Void
+    ) async -> Bool {
+        if let running = inFlight[source] {
+            await running.value
+            return sourceStatuses[source]?.isHealthy ?? true
+        }
+        if !force,
+           let lastCompletedAt = lastCompletedAt[source],
+           Date().timeIntervalSince(lastCompletedAt) < minimumInterval {
+            return true
+        }
+
+        activeSources.insert(source)
+        var succeeded = false
+        let task = Task { @MainActor in
+            var status = sourceStatuses[source] ?? SourceStatus()
+            status.lastAttemptAt = Date()
+            do {
+                try await operation()
+                succeeded = true
+                status.lastSuccessAt = Date()
+                status.lastErrorDescription = nil
+                status.consecutiveFailures = 0
+            } catch {
+                status.lastFailureAt = Date()
+                status.lastErrorDescription = error.localizedDescription
+                status.consecutiveFailures += 1
+            }
+            sourceStatuses[source] = status
+        }
+        inFlight[source] = task
+        await task.value
+        inFlight[source] = nil
+        if succeeded {
+            lastCompletedAt[source] = Date()
+        }
+        activeSources.remove(source)
+        return succeeded
     }
 }
 
@@ -185,5 +245,363 @@ final class VelaEventService {
             sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
         )
         return (try? modelContext.fetch(descriptor)) ?? []
+    }
+}
+
+enum VelaProductEventType {
+    static let dailyDecisionViewed = "daily_decision_viewed"
+    static let dailyDecisionActionStarted = "daily_decision_action_started"
+    static let dailyDecisionFeedbackSaved = "daily_decision_feedback_saved"
+    static let healthSyncSucceeded = "health_sync_succeeded"
+    static let healthSyncFailed = "health_sync_failed"
+}
+
+struct ProductQualitySnapshot: Equatable {
+    var periodDays: Int
+    var generatedPlans: Int
+    var viewedDecisions: Int
+    var startedActions: Int
+    var completedFeedback: Int
+    var adoptedDecisions: Int
+    var accurateDecisions: Int
+    var workoutLogs: Int
+    var syncSuccesses: Int
+    var syncFailures: Int
+
+    var viewRate: Double { ratio(viewedDecisions, generatedPlans) }
+    var actionRate: Double { ratio(startedActions, viewedDecisions) }
+    var feedbackRate: Double { ratio(completedFeedback, startedActions) }
+    var adoptionRate: Double { ratio(adoptedDecisions, completedFeedback) }
+    var accuracyRate: Double { ratio(accurateDecisions, completedFeedback) }
+    var syncSuccessRate: Double { ratio(syncSuccesses, syncSuccesses + syncFailures) }
+
+    private func ratio(_ numerator: Int, _ denominator: Int) -> Double {
+        guard denominator > 0 else { return 0 }
+        return Double(numerator) / Double(denominator)
+    }
+}
+
+@MainActor
+struct DailyDecisionFeedbackService {
+    @discardableResult
+    func recordViewed(
+        modelContext: ModelContext,
+        dayIdentifier: String,
+        plan: DailyOperatingPlanRecord?,
+        bodyStateHash: String,
+        decisionType: String,
+        decisionTitle: String,
+        now: Date = Date()
+    ) throws -> DailyDecisionFeedbackRecord {
+        let record = try upsert(
+            modelContext: modelContext,
+            dayIdentifier: dayIdentifier,
+            plan: plan,
+            bodyStateHash: bodyStateHash,
+            decisionType: decisionType,
+            decisionTitle: decisionTitle,
+            now: now
+        )
+        guard record.viewedAt == nil else { return record }
+        record.viewedAt = now
+        record.updatedAt = now
+        VelaEventService.shared.log(
+            modelContext: modelContext,
+            type: VelaProductEventType.dailyDecisionViewed,
+            title: "Viewed daily decision",
+            metadata: ["day": dayIdentifier, "decision_type": decisionType]
+        )
+        return record
+    }
+
+    @discardableResult
+    func recordActionStarted(
+        modelContext: ModelContext,
+        dayIdentifier: String,
+        plan: DailyOperatingPlanRecord?,
+        bodyStateHash: String,
+        decisionType: String,
+        decisionTitle: String,
+        destination: String,
+        now: Date = Date()
+    ) throws -> DailyDecisionFeedbackRecord {
+        let record = try recordViewed(
+            modelContext: modelContext,
+            dayIdentifier: dayIdentifier,
+            plan: plan,
+            bodyStateHash: bodyStateHash,
+            decisionType: decisionType,
+            decisionTitle: decisionTitle,
+            now: now
+        )
+        guard record.actionStartedAt == nil else { return record }
+        record.actionStartedAt = now
+        record.actionDestination = destination
+        record.updatedAt = now
+        VelaEventService.shared.log(
+            modelContext: modelContext,
+            type: VelaProductEventType.dailyDecisionActionStarted,
+            title: "Started daily action",
+            metadata: ["day": dayIdentifier, "destination": destination]
+        )
+        return record
+    }
+
+    func saveFeedback(
+        modelContext: ModelContext,
+        record: DailyDecisionFeedbackRecord,
+        adoptionStatus: String,
+        accuracyRating: String,
+        actualAction: String,
+        energyRating: Int?,
+        fatigueRating: Int?,
+        painRating: Int?,
+        satisfactionRating: Int?,
+        note: String,
+        now: Date = Date()
+    ) throws {
+        record.adoptionStatus = adoptionStatus
+        record.accuracyRating = accuracyRating
+        record.actualAction = actualAction
+        record.energyRating = energyRating
+        record.fatigueRating = fatigueRating
+        record.painRating = painRating
+        record.satisfactionRating = satisfactionRating
+        record.note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        record.updatedAt = now
+        VelaEventService.shared.log(
+            modelContext: modelContext,
+            type: VelaProductEventType.dailyDecisionFeedbackSaved,
+            title: "Saved daily decision feedback",
+            metadata: [
+                "day": record.dayIdentifier,
+                "adoption": adoptionStatus,
+                "accuracy": accuracyRating,
+                "actual_action": actualAction
+            ]
+        )
+    }
+
+    func qualitySnapshot(
+        modelContext: ModelContext,
+        periodDays: Int = 28,
+        now: Date = Date()
+    ) -> ProductQualitySnapshot {
+        let cutoff = now.addingTimeInterval(-Double(periodDays) * 86_400)
+        let plans = (try? modelContext.fetch(FetchDescriptor<DailyOperatingPlanRecord>(
+            predicate: #Predicate { $0.generatedAt >= cutoff }
+        ))) ?? []
+        let feedback = (try? modelContext.fetch(FetchDescriptor<DailyDecisionFeedbackRecord>(
+            predicate: #Predicate { $0.updatedAt >= cutoff }
+        ))) ?? []
+        let events = VelaEventService.shared.fetchEvents(modelContext: modelContext, start: cutoff, end: now)
+        let completed = feedback.filter(\.isCompleted)
+        return ProductQualitySnapshot(
+            periodDays: periodDays,
+            generatedPlans: plans.count,
+            viewedDecisions: feedback.filter { $0.viewedAt != nil }.count,
+            startedActions: feedback.filter { $0.actionStartedAt != nil }.count,
+            completedFeedback: completed.count,
+            adoptedDecisions: completed.filter { $0.adoptionStatus == "followed" || $0.adoptionStatus == "modified" }.count,
+            accurateDecisions: completed.filter { $0.accuracyRating == "accurate" || $0.accuracyRating == "partly" }.count,
+            workoutLogs: events.filter { $0.eventType == "workout_log" }.count,
+            syncSuccesses: events.filter { $0.eventType == VelaProductEventType.healthSyncSucceeded }.count,
+            syncFailures: events.filter { $0.eventType == VelaProductEventType.healthSyncFailed }.count
+        )
+    }
+
+    private func upsert(
+        modelContext: ModelContext,
+        dayIdentifier: String,
+        plan: DailyOperatingPlanRecord?,
+        bodyStateHash: String,
+        decisionType: String,
+        decisionTitle: String,
+        now: Date
+    ) throws -> DailyDecisionFeedbackRecord {
+        let descriptor = FetchDescriptor<DailyDecisionFeedbackRecord>(
+            predicate: #Predicate { $0.dayIdentifier == dayIdentifier }
+        )
+        if let existing = try modelContext.fetch(descriptor).first {
+            existing.planGeneratedAt = plan?.generatedAt
+            existing.bodyStateHash = bodyStateHash
+            existing.decisionType = decisionType
+            existing.decisionTitle = decisionTitle
+            existing.updatedAt = now
+            return existing
+        }
+        let record = DailyDecisionFeedbackRecord(
+            dayIdentifier: dayIdentifier,
+            planGeneratedAt: plan?.generatedAt,
+            bodyStateHash: bodyStateHash,
+            decisionType: decisionType,
+            decisionTitle: decisionTitle,
+            createdAt: now,
+            updatedAt: now
+        )
+        modelContext.insert(record)
+        return record
+    }
+}
+
+struct PersonalExperimentTemplate: Identifiable, Hashable {
+    var id: String
+    var title: String
+    var hypothesis: String
+    var protocolText: String
+    var targetBehaviorTag: String
+    var durationDays: Int
+}
+
+struct PersonalExperimentOutcome: Equatable {
+    var baselineAverage: Double?
+    var experimentAverage: Double?
+    var baselineSampleCount: Int
+    var experimentSampleCount: Int
+    var adherenceRate: Double
+
+    var delta: Double? {
+        guard let baselineAverage, let experimentAverage else { return nil }
+        return experimentAverage - baselineAverage
+    }
+
+    var hasEnoughEvidence: Bool {
+        baselineSampleCount >= 3 && experimentSampleCount >= 5
+    }
+}
+
+@MainActor
+struct PersonalExperimentService {
+    static let templates: [PersonalExperimentTemplate] = [
+        PersonalExperimentTemplate(
+            id: "caffeine_cutoff",
+            title: "下午 2 点后不喝咖啡因",
+            hypothesis: "减少晚间咖啡因暴露，可能改善入睡与睡眠评分。",
+            protocolText: "连续 14 天，14:00 后不摄入咖啡、茶、能量饮料或含咖啡因补剂。",
+            targetBehaviorTag: "caffeine_cutoff",
+            durationDays: 14
+        ),
+        PersonalExperimentTemplate(
+            id: "consistent_bedtime",
+            title: "固定睡眠窗口",
+            hypothesis: "更稳定的上床时间，可能改善睡眠连续性与次日恢复。",
+            protocolText: "连续 14 天，在设置的目标上床时间前后 30 分钟内上床。",
+            targetBehaviorTag: "consistent_bedtime",
+            durationDays: 14
+        ),
+        PersonalExperimentTemplate(
+            id: "alcohol_free",
+            title: "无酒精睡眠实验",
+            hypothesis: "避免酒精，可能改善 HRV、静息心率和睡眠结构。",
+            protocolText: "连续 14 天不饮酒；如未做到，请如实记录，不需要中断实验。",
+            targetBehaviorTag: "alcohol_free",
+            durationDays: 14
+        ),
+        PersonalExperimentTemplate(
+            id: "early_dinner",
+            title: "睡前 3 小时结束晚餐",
+            hypothesis: "减少临睡前进食，可能改善夜间恢复与睡眠质量。",
+            protocolText: "连续 14 天，在计划上床前至少 3 小时结束正餐与高热量加餐。",
+            targetBehaviorTag: "early_dinner",
+            durationDays: 14
+        )
+    ]
+
+    func start(
+        template: PersonalExperimentTemplate,
+        modelContext: ModelContext,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) throws -> PersonalExperimentRecord {
+        let active = try modelContext.fetch(FetchDescriptor<PersonalExperimentRecord>(
+            predicate: #Predicate { $0.status == "active" }
+        ))
+        active.forEach { existing in
+            existing.status = "cancelled"
+            existing.updatedAt = now
+        }
+        let start = calendar.startOfDay(for: now)
+        let end = calendar.date(byAdding: .day, value: template.durationDays, to: start) ?? now
+        let record = PersonalExperimentRecord(
+            templateID: template.id,
+            title: template.title,
+            hypothesis: template.hypothesis,
+            protocolText: template.protocolText,
+            targetBehaviorTag: template.targetBehaviorTag,
+            startDate: start,
+            endDate: end,
+            createdAt: now,
+            updatedAt: now
+        )
+        modelContext.insert(record)
+        try modelContext.save()
+        VelaAppState.shared.markLocalDataChanged()
+        return record
+    }
+
+    func checkIn(
+        experiment: PersonalExperimentRecord,
+        followed: Bool,
+        note: String = "",
+        modelContext: ModelContext,
+        date: Date = Date(),
+        calendar: Calendar = .current
+    ) throws {
+        let day = calendar.startOfDay(for: date)
+        let dayID = DailyHealthSummaryRecord.dayIdentifier(for: day, calendar: calendar)
+        let recordID = "\(experiment.id.uuidString):\(dayID)"
+        let descriptor = FetchDescriptor<ExperimentCheckInRecord>(
+            predicate: #Predicate { $0.id == recordID }
+        )
+        if let existing = try modelContext.fetch(descriptor).first {
+            existing.followedProtocol = followed
+            existing.note = note
+            existing.updatedAt = date
+        } else {
+            modelContext.insert(ExperimentCheckInRecord(
+                experimentID: experiment.id,
+                dayIdentifier: dayID,
+                date: day,
+                followedProtocol: followed,
+                note: note,
+                createdAt: date,
+                updatedAt: date
+            ))
+        }
+        if day >= experiment.endDate {
+            experiment.status = "completed"
+            experiment.updatedAt = date
+        }
+        try modelContext.save()
+        VelaAppState.shared.markLocalDataChanged()
+    }
+
+    func outcome(
+        experiment: PersonalExperimentRecord,
+        summaries: [DailyHealthSummaryRecord],
+        checkIns: [ExperimentCheckInRecord],
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> PersonalExperimentOutcome {
+        let baselineStart = calendar.date(byAdding: .day, value: -experiment.baselineDays, to: experiment.startDate) ?? experiment.startDate
+        let observationEnd = min(now, experiment.endDate)
+        let baseline = summaries.filter { $0.date >= baselineStart && $0.date < experiment.startDate }.compactMap(\.sleepScore)
+        let experimentValues = summaries.filter { $0.date >= experiment.startDate && $0.date <= observationEnd }.compactMap(\.sleepScore)
+        let relevantCheckIns = checkIns.filter { $0.experimentID == experiment.id }
+        let adherence = relevantCheckIns.isEmpty
+            ? 0
+            : Double(relevantCheckIns.filter(\.followedProtocol).count) / Double(relevantCheckIns.count)
+        return PersonalExperimentOutcome(
+            baselineAverage: average(baseline),
+            experimentAverage: average(experimentValues),
+            baselineSampleCount: baseline.count,
+            experimentSampleCount: experimentValues.count,
+            adherenceRate: adherence
+        )
+    }
+
+    private func average(_ values: [Double]) -> Double? {
+        guard !values.isEmpty else { return nil }
+        return values.reduce(0, +) / Double(values.count)
     }
 }
