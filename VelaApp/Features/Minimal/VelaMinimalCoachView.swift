@@ -22,7 +22,7 @@ struct WhatsNewSettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text("Vela v0.1.0 当前能力")
+                Text("Vela \(VelaAppMetadata.marketingVersion) 当前能力")
                     .font(.system(size: 22, weight: .bold))
                 
                 Text("当前版本已实现以下本机优先能力：")
@@ -211,7 +211,10 @@ enum PrivacyDataInventoryBuilder {
             "journals": count(JournalEntryRecord.self, in: modelContext),
             "food_logs": count(FoodLogRecord.self, in: modelContext),
             "biomarkers": count(BiomarkerRecord.self, in: modelContext),
-            "wiki_documents": count(UserWikiDocumentRecord.self, in: modelContext),
+            "wiki_documents": max(
+                count(UserWikiDocumentRecord.self, in: modelContext),
+                WikiFileService.localDocumentCount()
+            ),
             "coach_sessions": count(CoachSessionRecord.self, in: modelContext),
             "coach_interactions": count(CoachInteractionRecord.self, in: modelContext),
             "coach_artifacts": count(CoachArtifactRecord.self, in: modelContext),
@@ -229,7 +232,11 @@ enum PrivacyDataInventoryBuilder {
 
 @MainActor
 enum PrivacyDataDeletionService {
-    static func delete(scope: PrivacyDeletionScope, modelContext: ModelContext) throws -> Int {
+    static func delete(
+        scope: PrivacyDeletionScope,
+        modelContext: ModelContext,
+        wikiDirectoryURL: URL? = nil
+    ) throws -> Int {
         var deleted = 0
 
         switch scope {
@@ -249,7 +256,11 @@ enum PrivacyDataDeletionService {
             deleted += try deleteAll(TrainingResponseRecord.self, in: modelContext)
         case .allLocalVelaData:
             for scope in [PrivacyDeletionScope.aiHistory, .localLogs] {
-                deleted += try delete(scope: scope, modelContext: modelContext)
+                deleted += try delete(
+                    scope: scope,
+                    modelContext: modelContext,
+                    wikiDirectoryURL: wikiDirectoryURL
+                )
             }
             deleted += try deleteAll(DailyHealthSummaryRecord.self, in: modelContext)
             deleted += try deleteAll(SleepSummaryRecord.self, in: modelContext)
@@ -257,9 +268,15 @@ enum PrivacyDataDeletionService {
             deleted += try deleteAll(DailyOperatingPlanRecord.self, in: modelContext)
             deleted += try deleteAll(TrainingPlanRecord.self, in: modelContext)
             deleted += try deleteAll(WorkoutTemplateRecord.self, in: modelContext)
+            deleted += try deleteAll(ActiveWorkoutDraftRecord.self, in: modelContext)
+            deleted += try deleteAll(ExerciseDefinitionRecord.self, in: modelContext)
+            deleted += try deleteAll(TrainingPlanAdaptationRecord.self, in: modelContext)
+            deleted += try deleteAll(MemoryEventRecord.self, in: modelContext)
+            deleted += try deleteAll(DeletedWorkoutRecord.self, in: modelContext)
             deleted += try deleteAll(OnboardingState.self, in: modelContext)
             deleted += try deleteAll(XunjiDailyCacheRecord.self, in: modelContext)
             deleted += try deleteAll(XunjiWorkoutMirrorRecord.self, in: modelContext)
+            deleted += try WikiFileService.deleteLocalDocuments(at: wikiDirectoryURL)
         }
 
         try modelContext.save()
@@ -287,6 +304,12 @@ struct PrivacyDataControlsView: View {
                     .font(.footnote)
                     .foregroundStyle(VelaTheme.muted)
             }
+
+            Section("联网 AI") {
+                Label("手动发送 Coach 消息时，消息和完成回答所需的健康、训练上下文会发送给你配置的 DeepSeek 服务。", systemImage: "network")
+                Label("餐食照片只会在确认分析后发送给 Kimi；后台自动分析默认关闭，需要单独授权。", systemImage: "hand.raised.fill")
+            }
+            .font(.footnote)
 
             Section("可导出数据") {
                 ForEach(inventory.exportCategories) { category in
@@ -557,14 +580,12 @@ struct ExportDataSettingsView: View {
             return dict
         }
 
-        let wikiDesc = FetchDescriptor<UserWikiDocumentRecord>(sortBy: [SortDescriptor(\.filename, order: .forward)])
-        let wikiDocs = (try? modelContext.fetch(wikiDesc)) ?? []
-        let exportWikiDocs: [[String: Any]] = wikiDocs.map { record in
+        let exportWikiDocs: [[String: Any]] = WikiFileService.loadAllDocuments().map { document in
             [
-                "filename": record.filename,
-                "title": record.title,
-                "markdownContent": record.markdownContent,
-                "updatedAt": record.updatedAt.formatted(.iso8601)
+                "filename": document.filename,
+                "title": document.title,
+                "markdownContent": document.content,
+                "updatedAt": document.updatedAt.formatted(.iso8601)
             ]
         }
 

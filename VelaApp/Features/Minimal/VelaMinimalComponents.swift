@@ -61,15 +61,14 @@ struct VelaDetailBackButton: View {
                 .foregroundStyle(tint)
                 .frame(width: 38, height: 38)
                 .background(Circle().fill(VelaTheme.surface))
-                .overlay(Circle().stroke(VelaTheme.stroke, lineWidth: 0.5))
+                .overlay(Circle().stroke(VelaTheme.borderSoft, lineWidth: 0.5))
         }
         .buttonStyle(.cardPress)
         .accessibilityLabel(label)
     }
 }
 
-// MARK: - VelaMetricDetailView — 指标详情 (Bevel iOS 26 Parity Rebuild)
-// 100% Visual Parity with Bevel App: Warm-White Canvas, White cockpit cards, Custom Circular dials, Spline Stress Charts & Starry Sleep Dark Mode
+// MARK: - VelaMetricDetailView — calm, evidence-first metric detail
 
 
 
@@ -99,12 +98,12 @@ struct VelaMetricDetailView: View {
     }
 
     var body: some View {
-        let isSleep = metric == .sleep
+        // Every metric follows the user's system appearance. Sleep keeps its
+        // semantic indigo accent without forcing an unrelated dark sub-theme.
+        let isSleep = false
         
         ZStack {
-            // Background Canvas (forced dark for sleep, native grouped background for others)
-            (isSleep ? Color(hex: "#0A0908") : VelaTheme.systemGroupedBackground)
-                .ignoresSafeArea()
+            VelaTheme.systemGroupedBackground.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 metricNavigationBar(isSleep: isSleep)
@@ -112,7 +111,7 @@ struct VelaMetricDetailView: View {
                     .padding(.vertical, 8)
 
                 ScrollView {
-                    VStack(spacing: VelaTheme.cardGap) {
+                    VStack(spacing: 16) {
                         // 1. Procedural Chart Header Card (Apple Style)
                         chartHeaderSection(isSleep: isSleep)
                             .padding(.top, 8)
@@ -136,7 +135,7 @@ struct VelaMetricDetailView: View {
                         coreMetricCoachCard
                     }
                     .padding(.horizontal, VelaTheme.pagePadding)
-                    .padding(.bottom, 100) // Clear floating tab bars
+                    .padding(.bottom, 56)
                 }
                 .scrollIndicators(.hidden)
             }
@@ -650,4 +649,3 @@ enum DailyActivityDetailCatalog {
         .activeMinutes
     ]
 }
-

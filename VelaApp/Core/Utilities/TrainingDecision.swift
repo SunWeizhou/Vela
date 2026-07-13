@@ -20,6 +20,22 @@ struct DailyTrainingDecision: Codable, Hashable, Sendable {
     var safetyNotice: String
 }
 
+enum TrainingDecisionFallback {
+    static func conservative(targetSessionTitle: String?) -> DailyTrainingDecision {
+        DailyTrainingDecision(
+            decision: .reduce,
+            targetSessionTitle: targetSessionTitle,
+            volumeMultiplier: 0.60,
+            intensityCap: 7,
+            reasons: ["数据状态：今日身体信号尚未完成同步，使用保守训练窗口。"],
+            userFacingSummary: "今日数据尚未完成同步；先按约 60% 容量训练，RPE 不超过 7，并在动作质量下降时停止加量。",
+            confidence: 0.25,
+            source: "TrainingDecisionFallback",
+            safetyNotice: "一般健康与训练建议，不构成医疗诊断。"
+        )
+    }
+}
+
 struct TrainingDecisionInput {
     var bodyState: BodyState
     var activePlan: TrainingPlanRecord?

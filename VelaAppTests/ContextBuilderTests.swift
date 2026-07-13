@@ -181,7 +181,7 @@ final class ContextBuilderTests: XCTestCase {
         let workout = makeWorkout(start: generatedAt.addingTimeInterval(-6 * 3600))
         let dashboard = DashboardSummary.preview(date: generatedAt)
 
-        let typed = AIContextBuilder().buildTyped(
+        let typed = AIContextBuilder().buildFacts(
             dashboard: dashboard,
             journalEntries: [],
             historicalReports: [],
@@ -190,7 +190,7 @@ final class ContextBuilderTests: XCTestCase {
             generatedAt: generatedAt
         )
 
-        let strength = try XCTUnwrap(typed.context.strengthTraining)
+        let strength = try XCTUnwrap(typed.snapshot.strengthTraining)
         let fatigue = strength.localFatigue["chest"]
         XCTAssertEqual(fatigue?.setsLast48h, 2)
         XCTAssertEqual(fatigue?.setsLast7d, 2)
@@ -209,7 +209,7 @@ final class ContextBuilderTests: XCTestCase {
             strengthWorkouts: [],
             generatedAt: generatedAt
         )
-        let typed = AIContextBuilder().buildTyped(
+        let typed = AIContextBuilder().buildFacts(
             dashboard: dashboard,
             journalEntries: [],
             historicalReports: [],
@@ -222,7 +222,7 @@ final class ContextBuilderTests: XCTestCase {
         XCTAssertEqual(strength["confidence"], "unavailable")
         XCTAssertEqual(strength["sessions_7d"], "0")
         XCTAssertTrue((strength["note"] ?? "").contains("No strength training data"))
-        let typedStrength = try XCTUnwrap(typed.context.strengthTraining)
+        let typedStrength = try XCTUnwrap(typed.snapshot.strengthTraining)
         XCTAssertEqual(typedStrength.sessions7d, 0)
         XCTAssertTrue(typedStrength.localFatigue.isEmpty)
     }
@@ -236,7 +236,7 @@ final class ContextBuilderTests: XCTestCase {
             historicalReports: [],
             userWiki: [:]
         )
-        let typed = AIContextBuilder().buildTyped(
+        let typed = AIContextBuilder().buildFacts(
             dashboard: dashboard,
             journalEntries: [],
             historicalReports: [],
@@ -248,12 +248,225 @@ final class ContextBuilderTests: XCTestCase {
         XCTAssertEqual(result.envelope.strain["score"], "N/A")
         XCTAssertEqual(result.envelope.stress["stress_index"], "N/A")
         XCTAssertEqual(result.envelope.energyBank["current_energy"], "N/A")
-        XCTAssertNil(typed.context.recovery.score.value)
-        XCTAssertEqual(typed.context.recovery.score.freshness, .missing)
-        XCTAssertNil(typed.context.sleep.score.value)
-        XCTAssertNil(typed.context.strain.score.value)
-        XCTAssertNil(typed.context.stress.stressIndex.value)
-        XCTAssertNil(typed.context.energyBank.currentEnergy.value)
+        XCTAssertNil(typed.snapshot.recovery.score.value)
+        XCTAssertEqual(typed.snapshot.recovery.score.freshness, .missing)
+        XCTAssertNil(typed.snapshot.sleep.score.value)
+        XCTAssertNil(typed.snapshot.strain.score.value)
+        XCTAssertNil(typed.snapshot.stress.stressIndex.value)
+        XCTAssertNil(typed.snapshot.energyBank.currentEnergy.value)
+    }
+
+    func testLegacyReportContextPreservesV1NoDataContract() {
+        let generatedAt = makeDate()
+        let result = AIContextBuilder().build(
+            dashboard: .empty(date: generatedAt),
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:],
+            generatedAt: generatedAt
+        )
+
+        XCTAssertEqual(result.metadata.schemaVersion, "v1.0")
+        XCTAssertEqual(Set(result.envelope.todaySummary.keys), [
+            "date", "overall_state", "source", "top_reason",
+            "readiness_level", "readiness_guidance"
+        ])
+        XCTAssertEqual(Set(result.envelope.sleep.keys), [
+            "sleep_score", "duration_minutes", "band", "reason",
+            "rem_minutes", "deep_minutes", "core_minutes", "awake_minutes",
+            "sleep_efficiency_pct", "rem_pct", "deep_pct"
+        ])
+        XCTAssertEqual(Set(result.envelope.recovery.keys), [
+            "score", "band", "confidence", "reason", "hrv_ms", "rhr_bpm",
+            "respiratory_rate", "hrv_z_score", "hrv_vs_baseline_pct",
+            "hrv_baseline_ms", "rhr_baseline_bpm"
+        ])
+        XCTAssertEqual(Set(result.envelope.strain.keys), [
+            "score", "band", "target_status", "recommended_range",
+            "steps", "active_energy_kcal", "exercise_minutes"
+        ])
+        XCTAssertEqual(Set(result.envelope.energyBank.keys), [
+            "morning_energy", "current_energy", "status", "charge_efficiency",
+            "atl_7day", "ctl_42day", "tsb_freshness", "acwr_ratio"
+        ])
+        XCTAssertEqual(result.envelope.todaySummary["overall_state"], "unavailable")
+        XCTAssertEqual(result.envelope.sleep["sleep_score"], "N/A")
+        XCTAssertEqual(result.envelope.recovery["score"], "N/A")
+        XCTAssertEqual(result.envelope.strain["score"], "N/A")
+        XCTAssertEqual(result.envelope.energyBank["current_energy"], "N/A")
+    }
+
+    func testLegacyReportHashIgnoresCreationTimeAndDictionaryOrder() {
+        let generatedAt = makeDate()
+        let dashboard = DashboardSummary.preview(date: generatedAt)
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: dashboard,
+            generatedAt: generatedAt
+        ))
+        let first = AIContextBuilder().build(
+            dashboard: dashboard,
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: Dictionary(uniqueKeysWithValues: [("z", "last"), ("a", "first")]),
+            weeklyTrends: ["sleep": "stable", "recovery": "up"],
+            bodyState: bodyState,
+            generatedAt: generatedAt
+        )
+        let second = AIContextBuilder().build(
+            dashboard: dashboard,
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: Dictionary(uniqueKeysWithValues: [("a", "first"), ("z", "last")]),
+            weeklyTrends: ["recovery": "up", "sleep": "stable"],
+            bodyState: bodyState,
+            generatedAt: generatedAt.addingTimeInterval(60)
+        )
+
+        XCTAssertEqual(first.metadata.hash, second.metadata.hash)
+    }
+
+    func testCanonicalContentHashIgnoresSnapshotCreationTimeAndDictionaryOrder() {
+        let generatedAt = makeDate()
+        let dashboard = DashboardSummary.preview(date: generatedAt)
+        let firstWiki = Dictionary(uniqueKeysWithValues: [("z", "last"), ("a", "first")])
+        let secondWiki = Dictionary(uniqueKeysWithValues: [("a", "first"), ("z", "last")])
+
+        let first = AIContextBuilder().buildFacts(
+            dashboard: dashboard,
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: firstWiki,
+            weeklyTrends: ["sleep": "stable", "recovery": "up"],
+            generatedAt: generatedAt
+        )
+        let second = AIContextBuilder().buildFacts(
+            dashboard: dashboard,
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: secondWiki,
+            weeklyTrends: ["recovery": "up", "sleep": "stable"],
+            generatedAt: generatedAt.addingTimeInterval(60)
+        )
+
+        XCTAssertEqual(first.snapshot.schemaVersion, "v2.0")
+        XCTAssertEqual(first.metadata.schemaVersion, first.snapshot.schemaVersion)
+        XCTAssertEqual(first.snapshot.contextHash, second.snapshot.contextHash)
+        XCTAssertEqual(first.metadata.hash, second.metadata.hash)
+    }
+
+    func testCanonicalContentHashChangesWhenAHealthSignalChanges() {
+        let generatedAt = makeDate()
+        let dashboard = DashboardSummary.preview(date: generatedAt)
+        var changed = dashboard
+        changed.recovery.value = (dashboard.recovery.value ?? 0) + 1
+
+        let original = AIContextBuilder().buildFacts(
+            dashboard: dashboard,
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:],
+            generatedAt: generatedAt
+        )
+        let modified = AIContextBuilder().buildFacts(
+            dashboard: changed,
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:],
+            generatedAt: generatedAt
+        )
+
+        XCTAssertNotEqual(original.snapshot.contextHash, modified.snapshot.contextHash)
+    }
+
+    func testCanonicalMetricsPreserveMeasurementSemanticsAndCoverage() {
+        let generatedAt = makeDate()
+        let dashboard = DashboardSummary.preview(date: generatedAt)
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: dashboard,
+            generatedAt: generatedAt
+        ))
+        let result = AIContextBuilder().buildFacts(
+            dashboard: dashboard,
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:],
+            bodyState: bodyState,
+            generatedAt: generatedAt
+        )
+
+        XCTAssertEqual(result.snapshot.recovery.score.unit, "pts")
+        XCTAssertEqual(result.snapshot.recovery.score.source, .computed)
+        XCTAssertEqual(result.snapshot.recovery.score.measuredAt, dashboard.recovery.lastUpdated)
+        XCTAssertNotEqual(result.snapshot.recovery.score.freshness, .missing)
+        XCTAssertEqual(result.snapshot.bodyState.contextHash, bodyState.hash)
+        XCTAssertEqual(result.snapshot.trainingDecision.readinessLevel, dashboard.trainingDecision.readinessLevel)
+        XCTAssertEqual(result.snapshot.dataCoverage.totalSections, 5)
+        XCTAssertTrue(result.snapshot.dataCoverage.missingSections.isEmpty)
+    }
+
+    func testCanonicalProfileAgeUsesExplicitInputInsteadOfWikiGlobalState() {
+        let generatedAt = makeDate()
+        var dashboard = DashboardSummary.preview(date: generatedAt)
+        dashboard.extendedMetrics.age = 31
+
+        let result = AIContextBuilder().buildFacts(
+            dashboard: dashboard,
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:],
+            profileAge: 42,
+            generatedAt: generatedAt
+        )
+
+        XCTAssertEqual(result.snapshot.extendedMetrics.age, 42)
+    }
+
+    func testCoachCompactAdapterUsesCanonicalFactsAndStableTrendOrder() {
+        let generatedAt = makeDate()
+        let dashboard = DashboardSummary.preview(date: generatedAt)
+        let canonical = AIContextBuilder().buildFacts(
+            dashboard: dashboard,
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:],
+            weeklyTrends: ["z-last": "2", "a-first": "1"],
+            generatedAt: generatedAt
+        ).snapshot
+
+        let rendered = CoachCompactContextAdapter().render(
+            snapshot: canonical,
+            language: .simplifiedChinese,
+            maxCharacters: 2_000
+        )
+
+        XCTAssertTrue(rendered.contains("恢复 \(Int((canonical.recovery.score.value ?? 0).rounded()))"))
+        XCTAssertTrue(rendered.contains(canonical.trainingDecision.readinessLevel))
+        XCTAssertTrue(rendered.contains("content_hash: \(canonical.contextHash)"))
+        XCTAssertTrue(rendered.contains("一般健康建议，不构成医疗诊断"))
+        XCTAssertLessThan(try! XCTUnwrap(rendered.range(of: "a-first")).lowerBound,
+                          try! XCTUnwrap(rendered.range(of: "z-last")).lowerBound)
+    }
+
+    func testCoachCompactAdapterHonorsBudgetWithoutDroppingSafetyOrHash() {
+        let generatedAt = makeDate()
+        let canonical = AIContextBuilder().buildFacts(
+            dashboard: .preview(date: generatedAt),
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:],
+            weeklyTrends: Dictionary(uniqueKeysWithValues: (0..<20).map { ("trend-\($0)", String(repeating: "x", count: 120)) }),
+            generatedAt: generatedAt
+        ).snapshot
+
+        let rendered = CoachCompactContextAdapter().render(
+            snapshot: canonical,
+            language: .simplifiedChinese,
+            maxCharacters: 800
+        )
+
+        XCTAssertLessThanOrEqual(rendered.count, 800)
+        XCTAssertTrue(rendered.contains("一般健康建议，不构成医疗诊断"))
+        XCTAssertTrue(rendered.contains("content_hash: \(canonical.contextHash)"))
     }
 
     @MainActor
@@ -294,7 +507,7 @@ final class ContextBuilderTests: XCTestCase {
             onboardingState: onboarding,
             generatedAt: generatedAt
         )
-        let typed = AIContextBuilder().buildTyped(
+        let typed = AIContextBuilder().buildFacts(
             dashboard: dashboard,
             journalEntries: [],
             historicalReports: [],
@@ -306,7 +519,7 @@ final class ContextBuilderTests: XCTestCase {
         XCTAssertEqual(result.envelope.userWiki["existing"], "keep")
         XCTAssertEqual(result.envelope.userWiki["body_model.primary_goal"], "muscle_gain")
         XCTAssertEqual(result.envelope.userWiki["body_model.weekly_training_days"], "4")
-        XCTAssertEqual(typed.context.userWiki["body_model.training_style"], "strength")
+        XCTAssertEqual(typed.snapshot.userWiki["body_model.training_style"], "strength")
         XCTAssertTrue(result.metadata.includedSections.contains("body_model_profile"))
         XCTAssertTrue(typed.metadata.includedSections.contains("body_model_profile"))
     }
@@ -440,7 +653,7 @@ final class ContextBuilderTests: XCTestCase {
         XCTAssertTrue(NotificationService.shouldSendAbnormalAlert(previousSeverity: "medium", newSeverity: "high"))
     }
 
-    func testMetricPipelineConsistencyBetweenSyncAndDashboard() {
+    func testDailyHealthComputationIsDeterministicAcrossEntryAdapters() {
         let date = makeDate()
         var snapshot = DailyHealthSnapshot(date: date)
         snapshot.sleepHours = 7.5
@@ -474,15 +687,36 @@ final class ContextBuilderTests: XCTestCase {
             return day
         }
 
-        let pipeline = MetricComputationPipeline()
-        let syncMetrics = pipeline.compute(for: snapshot, history: history)
-        let dashboardMetrics = pipeline.compute(for: snapshot, history: history)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let profile = DailyHealthComputationProfile(
+            sleepTargetMinutes: 450,
+            maxHeartRate: 190,
+            biologicalSex: "other"
+        )
+        let syncMetrics = DailyHealthComputation(
+            calendar: calendar,
+            now: date,
+            profile: profile
+        ).compute(for: snapshot, history: history)
+        let dashboardMetrics = DailyHealthComputation(
+            calendar: calendar,
+            now: date,
+            profile: profile
+        ).compute(for: snapshot, history: history)
 
         XCTAssertEqual(syncMetrics.sleepScore.score, dashboardMetrics.sleepScore.score, accuracy: 0.001)
         XCTAssertEqual(syncMetrics.recovery.score, dashboardMetrics.recovery.score, accuracy: 0.001)
         XCTAssertEqual(syncMetrics.strain.score, dashboardMetrics.strain.score, accuracy: 0.001)
         XCTAssertEqual(syncMetrics.stress.stressIndex, dashboardMetrics.stress.stressIndex, accuracy: 0.001)
         XCTAssertEqual(syncMetrics.energy.currentEnergy, dashboardMetrics.energy.currentEnergy, accuracy: 0.001)
+
+        let scoredSnapshot = syncMetrics.applying(to: snapshot)
+        XCTAssertEqual(scoredSnapshot.sleepScore, syncMetrics.sleepScore.value)
+        XCTAssertEqual(scoredSnapshot.recoveryScore, syncMetrics.recovery.value)
+        XCTAssertEqual(scoredSnapshot.strainScore, syncMetrics.strain.value)
+        XCTAssertEqual(scoredSnapshot.stressIndex, syncMetrics.stress.value)
+        XCTAssertEqual(scoredSnapshot.energyBank, syncMetrics.energy.value)
     }
 
     func testTodayCommandStateRecoversWhenRecoveryIsLow() {

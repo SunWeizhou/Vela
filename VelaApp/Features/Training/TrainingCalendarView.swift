@@ -79,30 +79,30 @@ struct TrainingCalendarView: View {
     private func pendingAdaptationsBanner(plan: TrainingPlanRecord) -> some View {
         let filtered = adaptationsForPlan(plan)
         guard !filtered.isEmpty else { return AnyView(EmptyView()) }
-        return AnyView(VelaHeroSurface(tint: VelaTheme.energy) {
+        return AnyView(VelaHeroSurface(tint: VelaTheme.energyColor) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: "sparkles")
                         .font(.title3.weight(.semibold))
-                        .foregroundStyle(VelaTheme.energy)
+                        .foregroundStyle(VelaTheme.energyColor)
                         .frame(width: 38, height: 38)
-                        .background(Circle().fill(VelaTheme.energy.opacity(0.12)))
+                        .background(Circle().fill(VelaTheme.energyColor.opacity(0.12)))
                     VStack(alignment: .leading, spacing: 4) {
                         Text(AppLanguage.stored.isChinese
                              ? "Vela 建议调整你的计划"
                              : "Vela suggests adjusting your plan"
                         )
                         .font(.headline.weight(.semibold))
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
                         Text(AppLanguage.stored.isChinese
                              ? "\(filtered.count) 项训练与今天的身体状态不完全匹配。"
                              : "\(filtered.count) sessions do not fully match today's body state."
                         )
                         .font(.subheadline)
-                        .foregroundStyle(VelaTheme.secondaryText)
+                        .foregroundStyle(VelaTheme.fg2)
                     }
                     Spacer()
-                    VelaStatusBadge(label: AppLanguage.stored.isChinese ? "待确认" : "Pending", systemImage: "clock.fill", tint: VelaTheme.energy)
+                    VelaStatusBadge(label: AppLanguage.stored.isChinese ? "待确认" : "Pending", systemImage: "clock.fill", tint: VelaTheme.energyColor)
                 }
 
                 ForEach(filtered.prefix(3)) { adaptation in
@@ -115,7 +115,7 @@ struct TrainingCalendarView: View {
                          : "\(filtered.count - 3) more adjustments..."
                     )
                     .font(.caption)
-                    .foregroundStyle(VelaTheme.mutedText)
+                    .foregroundStyle(VelaTheme.muted)
                 }
             }
         }.appleIntelligenceGlow(isHighlighted: true, radius: 24))
@@ -126,17 +126,17 @@ struct TrainingCalendarView: View {
             HStack(spacing: 10) {
                 Image(systemName: iconForAdjustment(adaptation.adjustment))
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(VelaTheme.energy)
+                    .foregroundStyle(VelaTheme.energyColor)
                     .frame(width: 28, height: 28)
-                    .background(Circle().fill(VelaTheme.energy.opacity(0.12)))
+                    .background(Circle().fill(VelaTheme.energyColor.opacity(0.12)))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(adaptation.originalDayTitle)
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
                     Text(labelForAdjustment(adaptation.adjustment))
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(VelaTheme.energy)
+                        .foregroundStyle(VelaTheme.energyColor)
                 }
 
                 Spacer()
@@ -174,10 +174,10 @@ struct TrainingCalendarView: View {
                 } label: {
                     Label(AppLanguage.stored.isChinese ? "保留原计划" : "Keep original", systemImage: "xmark.circle")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
                         .frame(maxWidth: .infinity, minHeight: 34)
-                        .background(Capsule().fill(VelaTheme.elevatedSurface))
-                        .overlay(Capsule().stroke(VelaTheme.stroke, lineWidth: 0.7))
+                        .background(Capsule().fill(VelaTheme.elevatedBg))
+                        .overlay(Capsule().stroke(VelaTheme.borderSoft, lineWidth: 0.7))
                 }
                 .buttonStyle(.cardPress)
             }
@@ -189,25 +189,25 @@ struct TrainingCalendarView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(VelaTheme.energy.opacity(0.35), lineWidth: 1.0)
+                .stroke(VelaTheme.energyColor.opacity(0.35), lineWidth: 1.0)
         )
-        .shadow(color: VelaTheme.energy.opacity(0.08), radius: 6, y: 2)
+        .shadow(color: VelaTheme.energyColor.opacity(0.08), radius: 6, y: 2)
     }
 
     private func trainingAdaptationDetail(title: String, value: String, icon: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: icon)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(VelaTheme.energy)
+                .foregroundStyle(VelaTheme.energyColor)
                 .frame(width: 18)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.caption2.weight(.bold))
-                    .foregroundStyle(VelaTheme.mutedText)
+                    .foregroundStyle(VelaTheme.muted)
                 Text(value)
                     .font(.caption)
-                    .foregroundStyle(VelaTheme.secondaryText)
+                    .foregroundStyle(VelaTheme.fg2)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -293,11 +293,11 @@ struct TrainingCalendarView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(plan.title)
                             .font(.system(.title3, design: .rounded).weight(.bold))
-                            .foregroundStyle(VelaTheme.primaryText)
+                            .foregroundStyle(VelaTheme.fg)
                         
                         Text(plan.goalDescription)
                             .font(.subheadline)
-                            .foregroundStyle(VelaTheme.secondaryText)
+                            .foregroundStyle(VelaTheme.fg2)
                             .lineLimit(2)
                     }
                     Spacer()
@@ -310,13 +310,13 @@ struct TrainingCalendarView: View {
                     HStack {
                         Text(L10n.t("Overall Plan Progress", "课表总进度"))
                             .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(VelaTheme.mutedText)
+                            .foregroundStyle(VelaTheme.muted)
                         
                         Spacer()
                         
                         Text("\(completedCount) / \(totalCount) \(L10n.t("Completed", "已完成")) (\(percent)%)")
                             .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundStyle(VelaTheme.recovery)
+                            .foregroundStyle(VelaTheme.recoveryColor)
                     }
 
                     GeometryReader { geo in
@@ -328,13 +328,13 @@ struct TrainingCalendarView: View {
                             Capsule()
                                 .fill(
                                     LinearGradient(
-                                        colors: [VelaTheme.accent, VelaTheme.recovery],
+                                        colors: [VelaTheme.accent, VelaTheme.recoveryColor],
                                         startPoint: .leading,
                                         endPoint: .trailing
                                     )
                                 )
                                 .frame(width: geo.size.width * CGFloat(progressRatio), height: 6)
-                                .shadow(color: VelaTheme.recovery.opacity(0.3), radius: 3)
+                                .shadow(color: VelaTheme.recoveryColor.opacity(0.3), radius: 3)
                         }
                     }
                     .frame(height: 6)
@@ -354,7 +354,7 @@ struct TrainingCalendarView: View {
                         }) {
                             Text(L10n.t("Week \(week)", "第 \(week) 周"))
                                 .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(selectedWeek == week ? Color.black : VelaTheme.secondaryText)
+                                .foregroundStyle(selectedWeek == week ? Color.black : VelaTheme.fg2)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 8)
                                 .background(
@@ -396,7 +396,7 @@ struct TrainingCalendarView: View {
                 HStack(spacing: 14) {
                     // Left color-gated bar
                     Rectangle()
-                        .fill(day.isCompleted ? VelaTheme.recovery : focusColor)
+                        .fill(day.isCompleted ? VelaTheme.recoveryColor : focusColor)
                         .frame(width: 4)
                         .cornerRadius(2)
 
@@ -406,7 +406,7 @@ struct TrainingCalendarView: View {
                             // Day and Focus Label
                             Text(L10n.t("Day \(day.dayNumber) • \(dayName(day.dayNumber))", "第 \(day.dayNumber) 天 • \(dayName(day.dayNumber))"))
                                 .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(VelaTheme.mutedText)
+                                .foregroundStyle(VelaTheme.muted)
 
                             Spacer()
 
@@ -427,21 +427,21 @@ struct TrainingCalendarView: View {
                             VelaStatusBadge(
                                 label: AppLanguage.stored.isChinese ? "Vela 建议调整" : "Suggested",
                                 systemImage: "sparkles",
-                                tint: VelaTheme.energy
+                                tint: VelaTheme.energyColor
                             )
                         }
 
                         // Session Title
                         Text(day.title)
                             .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                            .foregroundStyle(day.isCompleted ? VelaTheme.mutedText : VelaTheme.primaryText)
-                            .strikethrough(day.isCompleted, color: VelaTheme.mutedText)
+                            .foregroundStyle(day.isCompleted ? VelaTheme.muted : VelaTheme.fg)
+                            .strikethrough(day.isCompleted, color: VelaTheme.muted)
 
                         // Subtitle / Timing
                         if day.focus == "rest" {
                             Text(L10n.t("Rest & Restore Energy", "休息以恢复能量储蓄"))
                                 .font(.caption2)
-                                .foregroundStyle(VelaTheme.mutedText)
+                                .foregroundStyle(VelaTheme.muted)
                         } else {
                             HStack(spacing: 8) {
                                 HStack(spacing: 4) {
@@ -459,7 +459,7 @@ struct TrainingCalendarView: View {
                                     .foregroundStyle(getIntensityColor(day.intensity))
                             }
                             .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(VelaTheme.secondaryText)
+                            .foregroundStyle(VelaTheme.fg2)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -473,12 +473,12 @@ struct TrainingCalendarView: View {
             }) {
                 ZStack {
                     Circle()
-                        .stroke(day.isCompleted ? VelaTheme.recovery : Color.black.opacity(0.15), lineWidth: 1.5)
+                        .stroke(day.isCompleted ? VelaTheme.recoveryColor : Color.black.opacity(0.15), lineWidth: 1.5)
                         .frame(width: 24, height: 24)
                     
                     if day.isCompleted {
                         Circle()
-                            .fill(VelaTheme.recovery)
+                            .fill(VelaTheme.recoveryColor)
                             .frame(width: 24, height: 24)
                         
                         Image(systemName: "checkmark")
@@ -493,14 +493,14 @@ struct TrainingCalendarView: View {
         .padding(.vertical, 14)
         .padding(.horizontal, 16)
         .background(
-            RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard, style: .continuous)
+            RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
                 .fill(day.isCompleted ? VelaTheme.surface.opacity(0.4) : VelaTheme.surface)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard, style: .continuous)
-                .stroke(day.isCompleted ? VelaTheme.recovery.opacity(0.12) : Color.black.opacity(0.04), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
+                .stroke(day.isCompleted ? VelaTheme.recoveryColor.opacity(0.12) : Color.black.opacity(0.04), lineWidth: 0.5)
         )
-        .appleIntelligenceGlow(isHighlighted: hasPendingAdaptation, radius: VelaTheme.cornerRadiusCard)
+        .appleIntelligenceGlow(isHighlighted: hasPendingAdaptation, radius: VelaTheme.radiusCardLarge)
     }
 
     // MARK: - Empty Plan View (Bevel CTA Style)
@@ -523,11 +523,11 @@ struct TrainingCalendarView: View {
                 VStack(spacing: 16) {
                     Text(L10n.t("Your Training Schedule", "你的智能课表"))
                         .font(.system(.title3, design: .rounded).weight(.bold))
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
                     
                     Text(L10n.t("No active training plan. Ask your Coach Agent to generate a multi-week athletic progression program tailored to your recovery, sleep, and fitness goals.", "当前没有激活的训练课表。让你的 AI 教练根据你的恢复、睡眠以及运动目标，为你定制一份长期的多周智能训练计划吧！"))
                         .font(.subheadline)
-                        .foregroundStyle(VelaTheme.secondaryText)
+                        .foregroundStyle(VelaTheme.fg2)
                         .multilineTextAlignment(.center)
                         .lineSpacing(4)
                 }
@@ -602,10 +602,10 @@ struct TrainingCalendarView: View {
 
     private func getFocusColor(_ focus: String) -> Color {
         switch focus.lowercased() {
-        case "cardio": return VelaTheme.strain
-        case "strength": return VelaTheme.energy
+        case "cardio": return VelaTheme.strainColor
+        case "strength": return VelaTheme.energyColor
         case "flexibility": return VelaTheme.accent
-        case "rest": return VelaTheme.sleep
+        case "rest": return VelaTheme.sleepColor
         default: return VelaTheme.accent
         }
     }
@@ -641,10 +641,10 @@ struct TrainingCalendarView: View {
 
     private func getIntensityColor(_ intensity: String) -> Color {
         switch intensity.lowercased() {
-        case "low": return VelaTheme.recovery
-        case "moderate": return VelaTheme.energy
-        case "high": return VelaTheme.stress
-        default: return VelaTheme.secondaryText
+        case "low": return VelaTheme.recoveryColor
+        case "moderate": return VelaTheme.energyColor
+        case "high": return VelaTheme.stressColor
+        default: return VelaTheme.fg2
         }
     }
 }

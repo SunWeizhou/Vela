@@ -114,29 +114,13 @@ final class HealthKitSyncEngine {
             let historicalSnapshots = pastSnapshots.filter { !calendar.isDate($0.date, inSameDayAs: dayStart) }
             
             // Run computation pipeline
-            let pipeline = MetricComputationPipeline()
+            let pipeline = DailyHealthComputation(calendar: calendar, now: endDate)
             let metrics = pipeline.compute(
                 for: snapshot,
                 history: historicalSnapshots
             )
 
-            // Update the snapshot with computed score values
-            snapshot.sleepScore = metrics.sleepScore.value
-            snapshot.recoveryScore = metrics.recovery.value
-            snapshot.strainScore = metrics.strain.value
-            snapshot.stressIndex = metrics.stress.value
-            snapshot.morningEnergy = metrics.energy.components["morningEnergy"]
-            snapshot.currentEnergy = metrics.energy.value
-            snapshot.energyBank = metrics.energy.value
-
-            snapshot.dailyLoad = metrics.strain.components["daily_load"]
-            snapshot.workoutLoad = metrics.strain.components["workout_load"]
-            snapshot.activityLoad = metrics.strain.components["activity_load"]
-            snapshot.trainingLoadRatio = metrics.strain.components["training_load_ratio"]
-            snapshot.atl = metrics.energy.components["atl"]
-            snapshot.ctl = metrics.energy.components["ctl"]
-            snapshot.tsb = metrics.energy.components["tsb"]
-            snapshot.acwr = metrics.energy.components["acwr"]
+            snapshot = metrics.applying(to: snapshot)
 
             do {
                 try snapshotRepo.saveDailySnapshot(snapshot)
@@ -165,11 +149,10 @@ final class HealthKitSyncEngine {
             summary: "Successfully synced and computed metrics for past \(days) days."
         )
         try? syncTrainingIntelligenceInsights(endingAt: endDate)
-        
-        // Trigger DailyPlanRefreshCoordinator
-        Task { @MainActor in
-            await DailyPlanRefreshCoordinator.shared.refreshPlan(for: endDate, modelContext: modelContext)
-        }
+
+        // DailySummaryUseCase owns plan derivation after this method returns.
+        // Calling DailyPlanRefreshCoordinator here would re-enter health sync and
+        // create a sync -> plan -> sync feedback loop with continuous database writes.
     }
 
     private func syncTrainingIntelligenceInsights(endingAt endDate: Date) throws {
@@ -314,10 +297,59 @@ struct ScoredMetricsPipelineResult {
     var strain: MetricResult
     var stress: MetricResult
     var energy: MetricResult
+
+    func applying(to snapshot: DailyHealthSnapshot) -> DailyHealthSnapshot {
+        var result = snapshot
+        result.sleepScore = sleepScore.value
+        result.recoveryScore = recovery.value
+        result.strainScore = strain.value
+        result.stressIndex = stress.value
+        result.morningEnergy = energy.components["morningEnergy"]
+        result.currentEnergy = energy.value
+        result.energyBank = energy.value
+        result.dailyLoad = strain.components["daily_load"]
+        result.workoutLoad = strain.components["workout_load"]
+        result.activityLoad = strain.components["activity_load"]
+        result.trainingLoadRatio = strain.components["training_load_ratio"]
+        result.atl = energy.components["atl"]
+        result.ctl = energy.components["ctl"]
+        result.tsb = energy.components["tsb"]
+        result.acwr = energy.components["acwr"]
+        return result
+    }
 }
 
-final class MetricComputationPipeline {
-    init() {}
+struct DailyHealthComputationProfile: Sendable {
+    let sleepTargetMinutes: Double
+    let maxHeartRate: Double?
+    let biologicalSex: String?
+
+    static func current() -> DailyHealthComputationProfile {
+        let age = UserProfileSettings.age() ?? WikiFileService.getAgeFromWiki()
+        return DailyHealthComputationProfile(
+            sleepTargetMinutes: SleepTargetSettings.targetMinutes(),
+            maxHeartRate: UserProfileSettings.maxHeartRate()
+                ?? WikiFileService.getMaxHeartRateFromWiki()
+                ?? age.map(UserProfileSettings.inferredMaxHeartRate),
+            biologicalSex: UserProfileSettings.biologicalSex()
+        )
+    }
+}
+
+final class DailyHealthComputation {
+    private let calendar: Calendar
+    private let now: Date
+    private let profile: DailyHealthComputationProfile
+
+    init(
+        calendar: Calendar = .current,
+        now: Date = Date(),
+        profile: DailyHealthComputationProfile = .current()
+    ) {
+        self.calendar = calendar
+        self.now = now
+        self.profile = profile
+    }
 
     private func calculateMedian(_ values: [Double]) -> Double? {
         guard !values.isEmpty else { return nil }
@@ -352,15 +384,15 @@ final class MetricComputationPipeline {
         for snapshot: DailyHealthSnapshot,
         history: [DailyHealthSnapshot]
     ) -> ScoredMetricsPipelineResult {
-        let calendar = Calendar.current
-        
         // 1. Sleep Scoring Engine
         let pastBedtimes = history.compactMap(\.bedtime)
-        let todayBedtime = snapshot.bedtime ?? calendar.date(bySettingHour: 23, minute: 30, second: 0, of: snapshot.date.addingTimeInterval(-86400))
+        let previousDay = calendar.date(byAdding: .day, value: -1, to: snapshot.date) ?? snapshot.date
+        let todayBedtime = snapshot.bedtime
+            ?? calendar.date(bySettingHour: 23, minute: 30, second: 0, of: previousDay)
         
         let sleepInput = SleepScoreInput(
             totalSleepMinutes: snapshot.sleepHours.map { $0 * 60.0 },
-            sleepTargetMinutes: SleepTargetSettings.targetMinutes(),
+            sleepTargetMinutes: profile.sleepTargetMinutes,
             todayBedtime: todayBedtime,
             recentBedtimes: pastBedtimes,
             awakeMinutes: snapshot.awakeMinutes,
@@ -408,20 +440,14 @@ final class MetricComputationPipeline {
             ))
         }
 
-        let age = UserProfileSettings.age() ?? WikiFileService.getAgeFromWiki()
-        let maxHeartRate = UserProfileSettings.maxHeartRate()
-            ?? WikiFileService.getMaxHeartRateFromWiki()
-            ?? age.map(UserProfileSettings.inferredMaxHeartRate)
-            ?? 0
-
         let strainInput = StrainScoreInput(
             workouts: workouts,
             activeEnergyToday: snapshot.activeCalories,
             exerciseMinutesToday: snapshot.activeMinutes ?? snapshot.workoutDuration,
             stepCount: snapshot.steps,
             restingHR: snapshot.restingHeartRate ?? 0,
-            maxHR: maxHeartRate,
-            biologicalSex: UserProfileSettings.biologicalSex(),
+            maxHR: profile.maxHeartRate ?? 0,
+            biologicalSex: profile.biologicalSex,
             last28DaysDailyLoads: dailyLoadsHistory,
             recoveryScore: recoveryScore.value
         )
@@ -450,7 +476,6 @@ final class MetricComputationPipeline {
         let stressScore = StressIndexEngine().calculate(from: stressInput)
 
         // 5. Energy Bank Scoring Engine
-        let now = Date()
         let isToday = calendar.isDate(snapshot.date, inSameDayAs: now)
         let wake = snapshot.wakeTime ?? calendar.date(bySettingHour: 7, minute: 30, second: 0, of: snapshot.date) ?? snapshot.date
         let hoursSinceWake: Double

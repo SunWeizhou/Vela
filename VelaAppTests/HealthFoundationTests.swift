@@ -117,6 +117,22 @@ final class HealthFoundationTests: XCTestCase {
         XCTAssertTrue(summary.actionTitle.contains("数据"))
     }
 
+    func testCoverageDoesNotClaimAvailabilityWithoutReadableSamples() {
+        let coverage = HealthSignalCoverage(
+            signal: .hrvSDNN,
+            authorizationState: .authorizedButNoSamples,
+            sampleCount7d: 0,
+            sampleCount30d: 0,
+            latestSampleAt: nil,
+            freshness: .missing,
+            quality: .insufficient
+        )
+
+        XCTAssertFalse(coverage.isAvailable)
+        XCTAssertFalse(coverage.analyticallyUsable)
+        XCTAssertTrue(coverage.confidenceImpact.contains("Apple Health"))
+    }
+
     private func coverage(_ signal: HealthSignal, usable: Bool) -> HealthSignalCoverage {
         HealthSignalCoverage(
             signal: signal,
@@ -146,5 +162,86 @@ private final class FakeHealthStore: HealthStoreProviding {
 
     func authorizationStatus(for type: HKObjectType) -> HKAuthorizationStatus {
         .notDetermined
+    }
+}
+
+// MARK: - BodyStateKernel & TrainingDecisionKernel Tests
+
+final class BodyStateKernelTests: XCTestCase {
+    func testBodyStateKernelBuildBasic() {
+        let kernel = BodyStateKernel()
+        let input = BodyStateInput(
+            dashboard: .empty(date: Date()),
+            activeStatus: "active",
+            generatedAt: Date()
+        )
+        
+        let state = kernel.build(input: input)
+        XCTAssertEqual(state.activeStatus, "active")
+        XCTAssertEqual(state.readiness, .unknown)
+        XCTAssertTrue(state.drivers.isEmpty)
+    }
+
+    func testBodyStateKernelSickStatusAddsDriver() {
+        let kernel = BodyStateKernel()
+        let input = BodyStateInput(
+            dashboard: .empty(date: Date()),
+            activeStatus: "sick",
+            generatedAt: Date()
+        )
+        
+        let state = kernel.build(input: input)
+        XCTAssertEqual(state.activeStatus, "sick")
+        XCTAssertFalse(state.drivers.isEmpty)
+        XCTAssertTrue(state.drivers.contains(where: { $0.kind == .activeStatus }))
+    }
+
+    func testBodyStateKernelNutritionAddsDriver() {
+        let kernel = BodyStateKernel()
+        let food = FoodLogRecord(
+            mealName: "Lunch",
+            foods: [FoodLogItem(name: "Chicken Salad", portion: "1 bowl", calories: 350)],
+            totalCalories: 350,
+            proteinGrams: 30,
+            carbsGrams: 10,
+            fatGrams: 20,
+            fiberGrams: 5,
+            healthScore: 85,
+            suggestions: "Good protein source.",
+            source: .textDescription,
+            rawAnalysis: "",
+            createdAt: Date()
+        )
+        let input = BodyStateInput(
+            dashboard: .empty(date: Date()),
+            foodLogs: [food],
+            generatedAt: Date()
+        )
+        
+        let state = kernel.build(input: input)
+        XCTAssertTrue(state.drivers.contains(where: { $0.kind == .nutrition }))
+    }
+}
+
+final class TrainingDecisionKernelTests: XCTestCase {
+    func testTrainingDecisionKernelSickStatusForcesRest() {
+        let kernel = TrainingDecisionKernel()
+        let dashboard = DashboardSummary.empty(date: Date())
+        
+        // Mock bodyState with sick activeStatus
+        var state = dashboard.bodyState
+        state.activeStatus = "sick"
+        state.readiness = .recovering
+        
+        let input = TrainingDecisionInput(
+            bodyState: state,
+            activePlan: nil,
+            recentStrengthSummary: nil,
+            trainingResponses: []
+        )
+        
+        let decision = kernel.decide(input: input)
+        XCTAssertEqual(decision.decision, .rest)
+        XCTAssertEqual(decision.volumeMultiplier, 0.0)
     }
 }

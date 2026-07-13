@@ -307,7 +307,7 @@ enum TrainingDecisionEngine {
                 kind: .hrv,
                 accent: .recovery,
                 title: L10n.t("HRV is the limiter", "HRV 是主要限制因素"),
-                detail: z.map { L10n.t("HRV z-score \($0)", "HRV z 值 \($0)") } ?? L10n.t("Autonomic recovery is below baseline", "自主神经恢复低于基线"),
+                detail: z.map { L10n.t("HRV z-score \($0)", "HRV z 值 \($0)") } ?? L10n.t("HRV recovery signal is below baseline", "HRV 恢复信号低于基线"),
                 severity: 100 - hrvScore
             ))
         }

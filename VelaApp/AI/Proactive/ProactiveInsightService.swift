@@ -49,12 +49,12 @@ struct ProactiveInsight: Identifiable, Hashable {
         var color: Color {
             switch self {
             case .readiness: return VelaTheme.accent
-            case .recovery: return VelaTheme.recovery
+            case .recovery: return VelaTheme.recoveryColor
             case .sleep: return Color(hex: "#5C6BC0")
             case .training: return Color(hex: "#FF8A3D")
-            case .energy: return VelaTheme.energy
+            case .energy: return VelaTheme.energyColor
             case .movement: return Color(hex: "#34C759")
-            case .stress: return VelaTheme.stress
+            case .stress: return VelaTheme.stressColor
             }
         }
     }
@@ -74,9 +74,9 @@ struct ProactiveInsight: Identifiable, Hashable {
         
         var color: Color {
             switch self {
-            case .info: return VelaTheme.recovery
-            case .warning: return VelaTheme.energy
-            case .alert: return VelaTheme.stress
+            case .info: return VelaTheme.recoveryColor
+            case .warning: return VelaTheme.energyColor
+            case .alert: return VelaTheme.stressColor
             }
         }
     }

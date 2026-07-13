@@ -13,21 +13,21 @@ struct WeightLogSheetView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                VelaTheme.background.ignoresSafeArea()
+                VelaTheme.bg.ignoresSafeArea()
 
                 ScrollView {
                     VStack(spacing: 20) {
                         if let errorMsg = errorMsg {
                             HStack {
                                 Image(systemName: "exclamationmark.octagon.fill")
-                                    .foregroundStyle(VelaTheme.stress)
+                                    .foregroundStyle(VelaTheme.stressColor)
                                 Text(errorMsg)
                                     .font(.caption)
-                                    .foregroundStyle(VelaTheme.primaryText)
+                                    .foregroundStyle(VelaTheme.fg)
                             }
                             .padding()
                             .frame(maxWidth: .infinity)
-                            .background(VelaTheme.stress.opacity(0.12))
+                            .background(VelaTheme.stressColor.opacity(0.12))
                             .cornerRadius(10)
                         }
 
@@ -53,11 +53,11 @@ struct WeightLogSheetView: View {
                             )
                             .tint(VelaTheme.accent)
                             .font(.subheadline.bold())
-                            .foregroundStyle(VelaTheme.primaryText)
+                            .foregroundStyle(VelaTheme.fg)
                             .padding(14)
                             .background(
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(VelaTheme.cardBackground.opacity(0.6))
+                                    .fill(VelaTheme.cardBg.opacity(0.6))
                             )
                         }
 
@@ -67,15 +67,14 @@ struct WeightLogSheetView: View {
                             saveWeight()
                         } label: {
                             Text(AppLanguage.stored.isChinese ? "保存记录" : "Save Record")
-                                .font(.system(.body, design: .rounded).bold())
-                                .foregroundStyle(VelaTheme.background)
+                                .font(VelaTheme.headline())
+                                .foregroundStyle(.white)
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(VelaTheme.accent)
-                                .cornerRadius(99)
+                                .frame(height: 50)
+                                .background(VelaTheme.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                         }
                     }
-                    .padding(VelaTheme.screenPadding)
+                    .padding(VelaTheme.pagePadding)
                 }
             }
             .navigationTitle(AppLanguage.stored.isChinese ? "记录体重体脂" : "Log Weight & Body Fat")
@@ -85,7 +84,7 @@ struct WeightLogSheetView: View {
                     Button(AppLanguage.stored.isChinese ? "取消" : "Cancel") {
                         dismiss()
                     }
-                    .foregroundStyle(VelaTheme.secondaryText)
+                    .foregroundStyle(VelaTheme.fg2)
                 }
             }
         }
@@ -134,6 +133,17 @@ struct WeightLogSheetView: View {
             )
             modelContext.insert(fatRecord)
         }
+
+        // Log weight event
+        VelaEventService.shared.log(
+            modelContext: modelContext,
+            type: "weight_log",
+            title: AppLanguage.stored.isChinese ? "记录体重" : "Log Weight",
+            detail: AppLanguage.stored.isChinese 
+                ? "体重: \(weightVal) kg" + (bodyFatValue != nil ? ", 体脂率: \(bodyFatValue!)%" : "")
+                : "Weight: \(weightVal) kg" + (bodyFatValue != nil ? ", Body Fat: \(bodyFatValue!)%" : ""),
+            metadata: ["weight": weightVal, "body_fat": bodyFatValue ?? 0.0]
+        )
 
         // Try to update daily summary record if exists
         let calendar = Calendar.current

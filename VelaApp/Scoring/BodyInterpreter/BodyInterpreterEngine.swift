@@ -283,8 +283,8 @@ struct BodyInterpreterEngine {
                 optimalRange: -0.3...1.0,
                 severity: min(abs(hrvZScore) / 3.0, 1.0),
                 interpretation: AppLanguage.stored.isChinese
-                    ? "自主神经系统处于疲劳状态，HRV 显著低于基线，副交感恢复不足。"
-                    : "Autonomic nervous system is fatigued. HRV is significantly below baseline, indicating insufficient parasympathetic recovery."
+                    ? "HRV 低于个人基线，是今天需要保守安排恢复与训练的一个信号；单一指标不用于判断自主神经功能。"
+                    : "HRV is below your personal baseline, one signal to plan recovery and training conservatively today; it does not diagnose autonomic function."
             )
         }
 
@@ -297,8 +297,8 @@ struct BodyInterpreterEngine {
                 optimalRange: -5...15,
                 severity: min(abs(tsb) / 30.0, 1.0),
                 interpretation: AppLanguage.stored.isChinese
-                    ? "训练负荷累积过高，TSB 深度为负，身体未充分恢复。"
-                    : "Training load accumulation is high. TSB is deeply negative, body is under-recovered."
+                    ? "近期训练负荷高于长期负荷趋势，TSB 明显为负，今天宜保守安排训练量。"
+                    : "Recent training load is above the longer-term trend and TSB is notably negative, so today's volume should be conservative."
             )
         }
 
@@ -311,22 +311,22 @@ struct BodyInterpreterEngine {
                 optimalRange: 80...100,
                 severity: (80 - sleepScore) / 80,
                 interpretation: AppLanguage.stored.isChinese
-                    ? "睡眠质量不足，限制了身体修复和次日表现。"
-                    : "Sleep quality is insufficient, limiting overnight repair and next-day performance."
+                    ? "睡眠评分低于目标范围，今天的训练强度和容量建议会相应保守。"
+                    : "Sleep score is below the target range, so today's intensity and volume guidance is more conservative."
             )
         }
 
         // Check stress
         if stressIndex > 60 {
             return PrimaryLimiter(
-                system: "Mental Stress Load",
+                system: "Physiological Stress Proxy",
                 metricName: "Stress Index",
                 currentValue: stressIndex,
                 optimalRange: 0...30,
                 severity: stressIndex / 100,
                 interpretation: AppLanguage.stored.isChinese
-                    ? "精神压力指数偏高，影响自主神经平衡和恢复效率。"
-                    : "Mental stress is elevated, affecting autonomic balance and recovery efficiency."
+                    ? "生理压力代理值偏高，今天建议保守安排训练，并结合主观感受判断。"
+                    : "The physiological stress proxy is elevated; plan training conservatively today and consider how you feel."
             )
         }
 
@@ -754,14 +754,14 @@ struct BodyInterpreterEngine {
                 trend: zScore < -0.3 ? .declining : .stable,
                 trendDescription: "Z-score: \(String(format: "%.2f", zScore))",
                 interpretation: zScore < -1.0
-                    ? "HRV 显著低于基线，自主神经恢复不足"
-                    : "HRV 在正常范围内",
+                    ? "HRV 显著低于个人基线"
+                    : "HRV 接近个人基线范围",
                 confidence: .high,
                 dataFreshness: .today,
                 source: .healthKit,
                 actionImpact: zScore < -1.0
-                    ? "HRV 受抑制 → 建议降低训练强度以避免过度疲劳"
-                    : "HRV 正常 → 可承受常规训练负荷"
+                    ? "HRV 偏低 → 建议结合睡眠和主观状态降低训练强度"
+                    : "HRV 接近基线 → 仍需结合其他信号安排训练"
             ))
         }
 

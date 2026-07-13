@@ -54,11 +54,11 @@ enum VitalsMetricDetailKind {
     var tint: Color {
         switch self {
         case .hrv, .bloodOxygen, .steps: return VelaTheme.accent
-        case .restingHeartRate, .activeMinutes: return VelaTheme.sleep
-        case .sleepHeartRate: return VelaTheme.energy
-        case .respiratoryRate: return VelaTheme.recovery
-        case .weight: return VelaTheme.secondaryText
-        case .activeCalories: return VelaTheme.strain
+        case .restingHeartRate, .activeMinutes: return VelaTheme.sleepColor
+        case .sleepHeartRate: return VelaTheme.energyColor
+        case .respiratoryRate: return VelaTheme.recoveryColor
+        case .weight: return VelaTheme.fg2
+        case .activeCalories: return VelaTheme.strainColor
         }
     }
 
@@ -322,7 +322,7 @@ struct DateNavigationBar: View {
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
                         .frame(width: 36, height: 36)
                         .contentShape(Rectangle())
                 }
@@ -336,7 +336,7 @@ struct DateNavigationBar: View {
                     HStack(spacing: 6) {
                         Text(formattedDate)
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(VelaTheme.primaryText)
+                            .foregroundStyle(VelaTheme.fg)
                         if viewModel.isToday {
                             Text(L10n.t("Today", "今日"))
                                 .font(.system(size: 10, weight: .semibold))
@@ -362,7 +362,7 @@ struct DateNavigationBar: View {
                 } label: {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(viewModel.isToday ? VelaTheme.mutedText : VelaTheme.primaryText)
+                        .foregroundStyle(viewModel.isToday ? VelaTheme.muted : VelaTheme.fg)
                         .frame(width: 36, height: 36)
                         .contentShape(Rectangle())
                 }
@@ -486,16 +486,16 @@ struct VelaRangeBar: View {
             HStack {
                 Text(label)
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(VelaTheme.mutedText)
+                    .foregroundStyle(VelaTheme.muted)
                 Spacer()
                 if let today = todayValue {
                     Text("\(Int(today))\(unit)")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
                 } else {
                     Text("--")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .foregroundStyle(VelaTheme.mutedText)
+                        .foregroundStyle(VelaTheme.muted)
                 }
             }
 
@@ -521,13 +521,13 @@ struct VelaRangeBar: View {
                             .offset(x: normalMinRatio * geo.size.width)
 
                         Rectangle()
-                            .fill(VelaTheme.mutedText.opacity(0.3))
+                            .fill(VelaTheme.muted.opacity(0.3))
                             .frame(width: 1, height: 6)
                             .offset(x: 0.5 * geo.size.width)
 
                         let deviationPercent = ((today - baseline) / baseline) * 100
                         let isPositiveDeviation = isLowerBetter ? (today <= baseline) : (today >= baseline)
-                        let dotColor = isPositiveDeviation ? VelaTheme.recovery : (abs(deviationPercent) > 15 ? VelaTheme.stress : VelaTheme.energy)
+                        let dotColor = isPositiveDeviation ? VelaTheme.recoveryColor : (abs(deviationPercent) > 15 ? VelaTheme.stressColor : VelaTheme.energyColor)
 
                         Circle()
                             .fill(dotColor)

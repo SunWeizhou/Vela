@@ -84,15 +84,15 @@ public final class DailyPlanLimiterEngine {
             limiters.append(PlanLimiter(
                 id: "low_recovery",
                 severity: 3,
-                reason: L10n.t("Autonomic recovery is significantly suppressed", "自主神经系统恢复偏低"),
-                recommendation: L10n.t("Focus strictly on passive recovery and hydration", "全力进行静养和水分补充，不建议运动")
+                reason: L10n.t("Recovery signals are significantly below target", "恢复信号明显低于目标范围"),
+                recommendation: L10n.t("Prioritize rest and hydration; avoid strenuous exercise", "优先休息和补水，避免剧烈运动")
             ))
         } else if input.recoveryScore < 60 {
             limiters.append(PlanLimiter(
                 id: "low_recovery",
                 severity: 2,
-                reason: L10n.t("Recovery is moderate", "自主神经系统恢复一般"),
-                recommendation: L10n.t("Moderate volume and focus on cardiovascular baseline", "控制运动强度，建议以有氧基线训练为主")
+                reason: L10n.t("Recovery signals are moderate", "恢复信号处于中等水平"),
+                recommendation: L10n.t("Keep volume moderate and favor easy aerobic work", "控制运动强度，优先轻松有氧训练")
             ))
         }
 

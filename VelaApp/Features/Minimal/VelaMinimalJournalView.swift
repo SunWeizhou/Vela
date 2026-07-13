@@ -2,8 +2,8 @@ import SwiftUI
 import SwiftData
 
 struct VelaMeView: View {
+    @Environment(\.velaSurfaceIsActive) private var isActiveSurface
     @Environment(\.colorScheme) private var cs
-    @Environment(\.velaScrollDirection) private var scrollDirection
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     @ObservedObject private var appState = VelaAppState.shared
@@ -20,6 +20,7 @@ struct VelaMeView: View {
     @State private var dailySummaries: [DailyHealthSummaryRecord] = []
     @State private var strengthWorkouts: [StrengthWorkoutRecord] = []
     @State private var trainingResponses: [TrainingResponseRecord] = []
+    @State private var cachedBodyModelState: BodyModelState?
 
     @State private var selectedWorkoutForDetail: WorkoutSummary?
     @AppStorage("vela_coach_text_model") private var textModel = "DeepSeek V4 Pro"
@@ -53,6 +54,10 @@ struct VelaMeView: View {
         return "\(onboarding?.trainingPreference.sessionDurationMinutes ?? 0) 分钟 / 次"
     }
     private var bodyModelState: BodyModelState {
+        cachedBodyModelState ?? buildBodyModelState()
+    }
+
+    private func buildBodyModelState() -> BodyModelState {
         BodyModelBuilder().build(
             onboarding: onboarding,
             dailySummaries: Array(dailySummaries.prefix(35)),
@@ -65,9 +70,9 @@ struct VelaMeView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            LazyVStack(alignment: .leading, spacing: 16) {
                 profileHeader
-                bodyModelUnifiedCard
+                bodyModelOverviewCard
                 coachMemoryCard
                 actionSettingsHub
             }
@@ -76,7 +81,6 @@ struct VelaMeView: View {
             .padding(.bottom, VelaFloatingNavigationMetrics.contentBottomPadding)
         }
         .scrollIndicators(.hidden)
-        .velaTrackScroll(direction: scrollDirection)
         .background(VelaTheme.systemGroupedBackground)
         .navigationTitle(L10n.t("Me", "个人中心"))
         .navigationBarTitleDisplayMode(.inline)
@@ -85,15 +89,106 @@ struct VelaMeView: View {
                 WorkoutDetailView(workout: summary)
             }
         }
-        .onAppear {
+        .task(id: isActiveSurface) {
+            guard isActiveSurface else { return }
             loadMeData()
         }
         .onChange(of: dashboardVM.selectedDate) { _, _ in
+            guard isActiveSurface else { return }
             loadMeData()
         }
         .onChange(of: appState.localDataRevision) { _, _ in
+            guard isActiveSurface else { return }
             loadMeData()
         }
+    }
+
+    private var bodyModelOverviewCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("身体数据模型")
+                    .font(VelaTheme.caption1().weight(.semibold))
+                    .foregroundStyle(VelaTheme.muted)
+
+                Spacer()
+
+                NavigationLink(destination: BodyModelDetailView()) {
+                    HStack(spacing: 4) {
+                        Text("分析与校准")
+                        Image(systemName: "chevron.right")
+                    }
+                        .font(VelaTheme.caption1().weight(.semibold))
+                        .foregroundStyle(VelaTheme.accent)
+                }
+                .buttonStyle(.plain)
+            }
+
+            VStack(alignment: .leading, spacing: 14) {
+                Text(profileSummary)
+                    .font(VelaTheme.subheadline())
+                    .foregroundStyle(VelaTheme.fg2)
+                    .lineSpacing(3)
+                    .lineLimit(3)
+
+                Divider()
+
+                HStack(spacing: 0) {
+                    modelFact(title: "训练目标", value: profileGoalText, detail: profileExperienceText)
+                    Divider().frame(height: 48).padding(.horizontal, 14)
+                    modelFact(title: "训练节奏", value: profileFrequencyText, detail: profileDurationText)
+                }
+
+                Divider()
+
+                HStack(spacing: 12) {
+                    Image(systemName: "brain.head.profile")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(VelaTheme.accent)
+                        .frame(width: 36, height: 36)
+                        .background(VelaTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("模型成熟度 · \(bodyModelMaturityTitle(bodyModelState.maturity.overall))")
+                            .font(VelaTheme.subheadline().weight(.semibold))
+                            .foregroundStyle(VelaTheme.fg)
+                        Text("\(bodyModelState.maturity.behaviorPairs) 个行为信号 · \(bodyModelState.maturity.trainingSessions) 次训练事实")
+                            .font(VelaTheme.caption1())
+                            .foregroundStyle(VelaTheme.muted)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+
+                if let missing = onboarding?.missingData, !missing.isEmpty {
+                    Label("还有 \(missing.count) 项资料可补充", systemImage: "info.circle")
+                        .font(VelaTheme.caption1())
+                        .foregroundStyle(VelaTheme.warn)
+                }
+            }
+            .padding(16)
+            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
+            )
+        }
+    }
+
+    private func modelFact(title: String, value: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(VelaTheme.caption2())
+                .foregroundStyle(VelaTheme.muted)
+            Text(value)
+                .font(VelaTheme.headline())
+                .foregroundStyle(VelaTheme.fg)
+                .lineLimit(1)
+            Text(detail)
+                .font(VelaTheme.caption1())
+                .foregroundStyle(VelaTheme.muted)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var bodyModelUnifiedCard: some View {
@@ -197,20 +292,6 @@ struct VelaMeView: View {
                         value: equipmentText,
                         icon: "dumbbell.fill",
                         color: Color(hex: "#30A2FF")
-                    )
-                    profileGridItem(
-                        title: "教练风格",
-                        value: hasCompletedOnboardingProfile
-                            ? displayCoachingStyle(onboarding?.coachingPreference.style ?? "unknown")
-                            : "待设置",
-                        icon: "brain.head.profile",
-                        color: Color(hex: "#AF52DE")
-                    )
-                    profileGridItem(
-                        title: "数据可信度",
-                        value: displayConfidence(onboarding?.initialBodySnapshot.dataConfidence.rawValue.uppercased() ?? dashboard.recovery.confidence.rawValue.uppercased()),
-                        icon: "checkmark.seal.fill",
-                        color: VelaTheme.success
                     )
                 }
                 .padding(.vertical, 6)
@@ -387,7 +468,7 @@ struct VelaMeView: View {
             VelaAppState.shared.routeToRecoveryDetail()
         } else if action.type.contains("training") || action.type.contains("workout") || action.type.contains("summary") {
             VelaAppState.shared.logDebug("[VelaMeView] Routing to training (tab 1)")
-            VelaAppState.shared.routeToTab(1)
+            VelaAppState.shared.routeToTraining()
         } else if action.type.contains("check") || action.type.contains("journal") {
             VelaAppState.shared.logDebug("[VelaMeView] Triggering journal")
             VelaAppState.shared.triggerJournal = true
@@ -422,8 +503,8 @@ struct VelaMeView: View {
 
     private func artifactColor(for type: CoachArtifactType) -> Color {
         switch type {
-        case .postWorkoutReview, .trainingAdjustment, .workoutReadiness: return VelaTheme.strain
-        case .eveningReview: return VelaTheme.sleep
+        case .postWorkoutReview, .trainingAdjustment, .workoutReadiness: return VelaTheme.strainColor
+        case .eveningReview: return VelaTheme.sleepColor
         case .wikiUpdateProposal: return Color(hex: "#FF9F0A")
         default: return VelaTheme.accent
         }
@@ -446,36 +527,26 @@ struct VelaMeView: View {
         HStack(spacing: 16) {
             ZStack {
                 Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color(hex: "#007AFF"), Color(hex: "#00C6FF"), Color(hex: "#AF52DE")],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 58, height: 58)
+                    .fill(VelaTheme.accent.opacity(0.12))
+                    .frame(width: 56, height: 56)
                 
                 Image(systemName: "person.fill")
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(VelaTheme.accent)
             }
-            .shadow(color: Color(hex: "#007AFF").opacity(0.3), radius: 8, y: 3)
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(L10n.t("\(timeGreeting), Weizhou", "\(timeGreeting)，Weizhou"))
-                    .font(.system(size: 20, weight: .bold))
+                    .font(VelaTheme.title2())
                     .foregroundStyle(VelaTheme.fg)
                 
                 HStack(spacing: 6) {
                     Text(bodyModelMaturityTitle(bodyModelState.maturity.overall))
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(Capsule().fill(bodyModelMaturityColor(bodyModelState.maturity.overall)))
+                        .font(VelaTheme.caption2().weight(.semibold))
+                        .foregroundStyle(bodyModelMaturityColor(bodyModelState.maturity.overall))
                     
                     Text("\(bodyModelState.maturity.behaviorPairs) 信号 · \(bodyModelState.maturity.trainingSessions) 训练事实")
-                        .font(.system(size: 11))
+                        .font(VelaTheme.caption1())
                         .foregroundStyle(VelaTheme.muted)
                 }
             }
@@ -500,26 +571,33 @@ struct VelaMeView: View {
         
         let signalSub = "同步质量: \(displayConfidence(onboarding?.initialBodySnapshot.dataConfidence.rawValue.uppercased() ?? dashboard.recovery.confidence.rawValue.uppercased()).prefix(1))"
         
-        let trustSub = "已确认 \(coachArtifacts.count) 个建议"
-        
         let settingsSub = "\(dailyCalorieTarget) kcal 目标"
 
         return VStack(alignment: .leading, spacing: 10) {
-            Text(L10n.t("Action & Settings Hub", "功能与设置中心"))
+            Text(L10n.t("Tools & Settings", "工具与设置"))
                 .font(VelaTheme.caption1())
-                .fontWeight(.bold)
+                .fontWeight(.semibold)
                 .foregroundStyle(VelaTheme.muted)
-                .textCase(.uppercase)
                 .padding(.leading, 2)
             
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            VStack(spacing: 0) {
                 hubActionCell(title: "健康手记", sub: journalSub, icon: "book.pages.fill", color: Color(hex: "#FF9F0A"), destination: VelaJournalView())
+                Divider().padding(.leading, 58)
                 hubActionCell(title: "健康档案", sub: wikiSub, icon: "doc.text.fill", color: VelaTheme.muted, destination: UserWikiArchiveView())
+                Divider().padding(.leading, 58)
                 hubActionCell(title: "生物资料", sub: bioSub, icon: "person.text.rectangle.fill", color: Color(hex: "#00A896"), destination: BiologyView())
+                Divider().padding(.leading, 58)
                 hubActionCell(title: "AI 模型", sub: aiModelSub, icon: "cpu.fill", color: Color(hex: "#AF52DE"), destination: AIModelSettingsView())
+                Divider().padding(.leading, 58)
                 hubActionCell(title: "数据信号", sub: signalSub, icon: "waveform.path.ecg.rectangle.fill", color: Color(hex: "#30A2FF"), destination: DataCoverageView())
+                Divider().padding(.leading, 58)
                 hubActionCell(title: "系统设置", sub: settingsSub, icon: "gearshape.fill", color: Color(hex: "#5C6BC0"), destination: VelaSettingsView())
             }
+            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
+            )
         }
     }
 
@@ -553,9 +631,9 @@ struct VelaMeView: View {
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(VelaTheme.meta)
             }
-            .padding(12)
-            .background(RoundedRectangle(cornerRadius: 14).fill(VelaTheme.cardBg))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.cardPress)
     }
@@ -766,5 +844,6 @@ struct VelaMeView: View {
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
         self.trainingResponses = (try? modelContext.fetch(responsesDesc)) ?? []
+        self.cachedBodyModelState = buildBodyModelState()
     }
 }

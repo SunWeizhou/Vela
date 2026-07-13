@@ -220,6 +220,15 @@ struct BodyModelState: Codable, Hashable {
 }
 
 struct BodyModelBuilder {
+    static func profileSeedSummary(primaryGoal: String, trainingStyle: String, weeklyTrainingDays: Int) -> String {
+        let goal = localizedOnboardingGoal(primaryGoal)
+        let style = localizedOnboardingTrainingStyle(trainingStyle)
+        return L10n.t(
+            "Goal \(goal), training style \(style), \(weeklyTrainingDays) times per week.",
+            "目标 \(goal)，训练风格 \(style)，每周 \(weeklyTrainingDays) 次。"
+        )
+    }
+
     func build(
         onboarding: OnboardingState?,
         dailySummaries: [DailyHealthSummaryRecord],
@@ -245,7 +254,11 @@ struct BodyModelBuilder {
             claims.append(BodyModelClaim(
                 id: "profile_seed",
                 title: "目标与训练偏好已建立",
-                summary: "目标 \(onboarding.goalProfile.primaryGoal)，训练风格 \(onboarding.trainingPreference.trainingStyle)，每周 \(onboarding.trainingPreference.weeklyTrainingDays) 次。",
+                summary: Self.profileSeedSummary(
+                    primaryGoal: onboarding.goalProfile.primaryGoal,
+                    trainingStyle: onboarding.trainingPreference.trainingStyle,
+                    weeklyTrainingDays: onboarding.trainingPreference.weeklyTrainingDays
+                ),
                 confidence: onboarding.isCompleted ? .medium : .low,
                 evidenceCount: 1
             ))

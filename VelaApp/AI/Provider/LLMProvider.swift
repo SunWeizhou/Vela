@@ -1,5 +1,17 @@
 import Foundation
 
+enum PrivateAIURLSession {
+    static let shared: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.urlCache = nil
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.urlCredentialStorage = nil
+        return URLSession(configuration: configuration)
+    }()
+}
+
 struct LLMRequest: Hashable, Sendable {
     var systemPrompt: String
     var userPrompt: String

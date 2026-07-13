@@ -24,9 +24,9 @@ struct TagCorrelationStat {
     }
 
     var impactColor: Color {
-        overallImpact > 2 ? VelaTheme.recovery :
-        overallImpact < -2 ? VelaTheme.stress :
-        VelaTheme.secondaryText
+        overallImpact > 2 ? VelaTheme.recoveryColor :
+        overallImpact < -2 ? VelaTheme.stressColor :
+        VelaTheme.fg2
     }
 }
 
@@ -47,11 +47,11 @@ struct JournalView: View {
     private let quickTags = ["recovery", "sleep", "training", "stress", "travel", "sick", "mood", "caffeine", "alcohol", "supplement", "late_meal", "sunlight", "mindfulness"]
     private let doseUnits = ["mg", "mL", "min", "hrs", "drinks", "cups", "score"]
     private let dailyHabits: [JournalHabitDefinition] = [
-        .init(tag: "low_carb", icon: "🥖", title: L10n.t("Low carbohydrate", "低碳水化合物"), unit: "g", tint: VelaTheme.energy),
-        .init(tag: "caffeine", icon: "☕️", title: L10n.t("Caffeine", "咖啡因"), unit: "mg", tint: VelaTheme.secondaryText),
-        .init(tag: "mood", icon: "🙂", title: L10n.t("Daily mood", "每日心情"), unit: nil, tint: VelaTheme.recovery),
-        .init(tag: "added_sugar", icon: "🍬", title: L10n.t("Added sugar", "添加糖"), unit: "g", tint: VelaTheme.sleep),
-        .init(tag: "raw_food", icon: "🥑", title: L10n.t("Raw food", "生酮饮食"), unit: nil, tint: VelaTheme.recovery),
+        .init(tag: "low_carb", icon: "🥖", title: L10n.t("Low carbohydrate", "低碳水化合物"), unit: "g", tint: VelaTheme.energyColor),
+        .init(tag: "caffeine", icon: "☕️", title: L10n.t("Caffeine", "咖啡因"), unit: "mg", tint: VelaTheme.fg2),
+        .init(tag: "mood", icon: "🙂", title: L10n.t("Daily mood", "每日心情"), unit: nil, tint: VelaTheme.recoveryColor),
+        .init(tag: "added_sugar", icon: "🍬", title: L10n.t("Added sugar", "添加糖"), unit: "g", tint: VelaTheme.sleepColor),
+        .init(tag: "raw_food", icon: "🥑", title: L10n.t("Raw food", "生酮饮食"), unit: nil, tint: VelaTheme.recoveryColor),
         .init(tag: "hydration", icon: "💧", title: L10n.t("Hydration", "补水"), unit: "mL", tint: VelaTheme.accent)
     ]
 
@@ -69,7 +69,7 @@ struct JournalView: View {
                             VStack(alignment: .leading, spacing: 12) {
                                 Label(L10n.t("Nutrition", "营养记录"), systemImage: "fork.knife.circle.fill")
                                     .font(.headline)
-                                    .foregroundStyle(VelaTheme.primaryText)
+                                    .foregroundStyle(VelaTheme.fg)
 
                                 ForEach(Array(foodLogs.prefix(5))) { log in
                                     nutritionLogCard(log)
@@ -82,7 +82,7 @@ struct JournalView: View {
                         VStack(alignment: .leading, spacing: 14) {
                             Label(L10n.t("Quick Tags", "快速标签"), systemImage: "tag.fill")
                                 .font(.headline)
-                                .foregroundStyle(VelaTheme.primaryText)
+                                .foregroundStyle(VelaTheme.fg)
 
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 8)], alignment: .leading, spacing: 8) {
                                 ForEach(quickTags, id: \.self) { tag in
@@ -96,13 +96,13 @@ struct JournalView: View {
                                             .padding(.vertical, 8)
                                             .background(
                                                 Capsule()
-                                                    .fill(selectedTags.contains(tag) ? VelaTheme.accent.opacity(0.22) : VelaTheme.elevatedSurface)
+                                                    .fill(selectedTags.contains(tag) ? VelaTheme.accent.opacity(0.22) : VelaTheme.elevatedBg)
                                             )
                                             .overlay(
                                                 Capsule()
                                                     .stroke(selectedTags.contains(tag) ? VelaTheme.accent.opacity(0.14) : Color.black.opacity(0.04), lineWidth: 0.5)
                                             )
-                                            .foregroundStyle(selectedTags.contains(tag) ? VelaTheme.accent : VelaTheme.secondaryText)
+                                            .foregroundStyle(selectedTags.contains(tag) ? VelaTheme.accent : VelaTheme.fg2)
                                     }
                                     .buttonStyle(.cardPress)
                                 }
@@ -112,14 +112,14 @@ struct JournalView: View {
                             .lineLimit(3...6)
                             .padding(14)
                             .background(
-                                RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusTile, style: .continuous)
-                                    .fill(VelaTheme.elevatedSurface)
+                                RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
+                                    .fill(VelaTheme.elevatedBg)
                             )
                             .overlay(
-                                RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusTile, style: .continuous)
+                                RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
                                     .stroke(Color.black.opacity(0.06), lineWidth: 0.5)
                             )
-                            .foregroundStyle(VelaTheme.primaryText)
+                            .foregroundStyle(VelaTheme.fg)
 
                         // Dose tracking
                         HStack(spacing: 8) {
@@ -129,13 +129,13 @@ struct JournalView: View {
                                 .padding(10)
                                 .background(
                                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(VelaTheme.elevatedSurface)
+                                        .fill(VelaTheme.elevatedBg)
                                 )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                                         .stroke(Color.black.opacity(0.06), lineWidth: 0.5)
                                 )
-                                .foregroundStyle(VelaTheme.primaryText)
+                                .foregroundStyle(VelaTheme.fg)
 
                             Picker("", selection: $doseUnit) {
                                 Text("--").tag("")
@@ -157,13 +157,13 @@ struct JournalView: View {
                                 .padding(10)
                                 .background(
                                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(VelaTheme.elevatedSurface)
+                                        .fill(VelaTheme.elevatedBg)
                                 )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                                         .stroke(Color.black.opacity(0.06), lineWidth: 0.5)
                                 )
-                                .foregroundStyle(VelaTheme.primaryText)
+                                .foregroundStyle(VelaTheme.fg)
 
                             if !customTag.trimmingCharacters(in: .whitespaces).isEmpty {
                                 Button {
@@ -193,7 +193,7 @@ struct JournalView: View {
                             if !statusMessage.isEmpty {
                                 Text(statusMessage)
                                     .font(.footnote)
-                                    .foregroundStyle(VelaTheme.secondaryText)
+                                    .foregroundStyle(VelaTheme.fg2)
                             }
                         }
                     }
@@ -202,7 +202,7 @@ struct JournalView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             Label(L10n.t("Recent Entries", "最近记录"), systemImage: "clock.fill")
                                 .font(.headline)
-                                .foregroundStyle(VelaTheme.primaryText)
+                                .foregroundStyle(VelaTheme.fg)
 
                             // Tag correlation insights
                             if !tagCorrelations.isEmpty {
@@ -223,14 +223,14 @@ struct JournalView: View {
                                                 // Tag label
                                                 Text(stat.tag.capitalized)
                                                     .font(.caption.weight(.semibold))
-                                                    .foregroundStyle(VelaTheme.primaryText)
+                                                    .foregroundStyle(VelaTheme.fg)
 
                                                 Spacer()
 
                                                 // Count badge
                                                 Text("\(stat.count)d")
                                                     .font(.caption2.weight(.medium))
-                                                    .foregroundStyle(VelaTheme.secondaryText)
+                                                    .foregroundStyle(VelaTheme.fg2)
                                             }
 
                                             // Score bars
@@ -239,20 +239,20 @@ struct JournalView: View {
                                                     label: L10n.t("Sleep", "睡眠"),
                                                     value: stat.avgSleep,
                                                     baseline: stat.withoutAvgSleep,
-                                                    color: VelaTheme.sleep
+                                                    color: VelaTheme.sleepColor
                                                 )
                                                 scoreMeter(
                                                     label: L10n.t("Recovery", "恢复"),
                                                     value: stat.avgRecovery,
                                                     baseline: stat.withoutAvgRecovery,
-                                                    color: VelaTheme.recovery
+                                                    color: VelaTheme.recoveryColor
                                                 )
                                             }
                                         }
                                         .padding(10)
                                         .background(
                                             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                                .fill(VelaTheme.elevatedSurface)
+                                                .fill(VelaTheme.elevatedBg)
                                         )
                                     }
                                 }
@@ -265,21 +265,21 @@ struct JournalView: View {
                         if journalDaySummaries.isEmpty {
                             Text(L10n.t("No journal entries yet.", "还没有日记记录。"))
                                 .font(.subheadline)
-                                .foregroundStyle(VelaTheme.secondaryText)
+                                .foregroundStyle(VelaTheme.fg2)
                         } else {
                             ForEach(journalDaySummaries.prefix(10)) { summary in
                                 VStack(alignment: .leading, spacing: 6) {
                                     HStack {
                                         Text(summary.date, style: .date)
                                             .font(.caption.weight(.semibold))
-                                            .foregroundStyle(VelaTheme.secondaryText)
+                                            .foregroundStyle(VelaTheme.fg2)
                                         Spacer()
                                         Text(L10n.t("\(summary.count) entries", "\(summary.count) 条"))
                                             .font(.caption2.weight(.bold))
-                                            .foregroundStyle(VelaTheme.primaryText)
+                                            .foregroundStyle(VelaTheme.fg)
                                             .padding(.horizontal, 8)
                                             .padding(.vertical, 3)
-                                            .background(Capsule(style: .continuous).fill(VelaTheme.subtleFill))
+                                            .background(Capsule(style: .continuous).fill(VelaTheme.fillSoft))
                                     }
 
                                     if !summary.tags.isEmpty {
@@ -290,14 +290,14 @@ struct JournalView: View {
 
                                     Text(summary.body)
                                         .font(.subheadline)
-                                        .foregroundStyle(VelaTheme.primaryText)
+                                        .foregroundStyle(VelaTheme.fg)
                                         .lineLimit(3)
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(12)
                                 .background(
-                                    RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusTile, style: .continuous)
-                                        .fill(VelaTheme.elevatedSurface)
+                                    RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
+                                        .fill(VelaTheme.elevatedBg)
                                 )
                             }
                         }
@@ -424,10 +424,10 @@ struct JournalView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(L10n.t("Log", "手记"))
                     .font(.system(size: 30, weight: .bold, design: .rounded))
-                    .foregroundStyle(VelaTheme.primaryText)
+                    .foregroundStyle(VelaTheme.fg)
                 Text(L10n.t("Capture context for Vela.", "记录给 Vela 理解你的上下文。"))
                     .font(.subheadline)
-                    .foregroundStyle(VelaTheme.mutedText)
+                    .foregroundStyle(VelaTheme.muted)
             }
 
             Spacer()
@@ -440,7 +440,7 @@ struct JournalView: View {
             } label: {
                 Label(L10n.t("Analyze", "分析"), systemImage: "sparkles")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(VelaTheme.primaryText)
+                    .foregroundStyle(VelaTheme.fg)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 9)
                     .background(Capsule(style: .continuous).fill(Color.white.opacity(0.80)))
@@ -460,7 +460,7 @@ struct JournalView: View {
         return VStack(alignment: .leading, spacing: 10) {
             Text(selectedJournalDate.formatted(.dateTime.year().month(.wide)))
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(VelaTheme.mutedText)
+                .foregroundStyle(VelaTheme.muted)
 
             HStack(spacing: 8) {
                 ForEach(dates, id: \.self) { date in
@@ -473,14 +473,14 @@ struct JournalView: View {
                         VStack(spacing: 7) {
                             Text(weekdayLabel(for: date))
                                 .font(.caption2.weight(.semibold))
-                                .foregroundStyle(isSelected ? VelaTheme.primaryText : VelaTheme.mutedText)
+                                .foregroundStyle(isSelected ? VelaTheme.fg : VelaTheme.muted)
                             Text("\(calendar.component(.day, from: date))")
                                 .font(.caption.weight(.bold))
-                                .foregroundStyle(isSelected ? VelaTheme.primaryText : VelaTheme.secondaryText)
+                                .foregroundStyle(isSelected ? VelaTheme.fg : VelaTheme.fg2)
                                 .frame(width: 30, height: 30)
                                 .background(
                                     Circle()
-                                        .fill(isSelected ? VelaTheme.energy.opacity(0.28) : Color.white.opacity(0.72))
+                                        .fill(isSelected ? VelaTheme.energyColor.opacity(0.28) : Color.white.opacity(0.72))
                                 )
                                 .overlay(
                                     Circle()
@@ -501,13 +501,13 @@ struct JournalView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(L10n.t("Today's entries", "今天的条目"))
                         .font(.headline.weight(.semibold))
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
                     Text(L10n.t(
                         "These entries will be used for tomorrow's analysis and Wiki memory.",
                         "这些条目会用于明天的分析和 Wiki 记忆。"
                     ))
                     .font(.caption)
-                    .foregroundStyle(VelaTheme.secondaryText)
+                    .foregroundStyle(VelaTheme.fg2)
                 }
 
                 VStack(spacing: 9) {
@@ -532,7 +532,7 @@ struct JournalView: View {
 
                 Text(habit.title)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(VelaTheme.primaryText)
+                    .foregroundStyle(VelaTheme.fg)
                     .lineLimit(1)
 
                 Spacer()
@@ -540,12 +540,12 @@ struct JournalView: View {
                 if let unit = habit.unit {
                     Text(isSelected ? L10n.t("logged", "已记录") : "- \(unit)")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(isSelected ? habit.tint : VelaTheme.mutedText)
+                        .foregroundStyle(isSelected ? habit.tint : VelaTheme.muted)
                 }
 
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "arrow.right.circle")
                     .font(.title3)
-                    .foregroundStyle(isSelected ? habit.tint : VelaTheme.mutedText.opacity(0.7))
+                    .foregroundStyle(isSelected ? habit.tint : VelaTheme.muted.opacity(0.7))
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 11)
@@ -578,7 +578,7 @@ struct JournalView: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text(L10n.t("Daily context", "今日上下文"))
                         .font(.headline.weight(.semibold))
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
                     Spacer()
                     Text(L10n.t("Agent memory", "Agent 记忆"))
                         .font(.caption.weight(.bold))
@@ -593,13 +593,13 @@ struct JournalView: View {
                     "简短记录会帮助 Coach 关联症状、训练、旅行、睡眠和日常习惯，减少重复询问。"
                 ))
                 .font(.subheadline)
-                .foregroundStyle(VelaTheme.secondaryText)
+                .foregroundStyle(VelaTheme.fg2)
                 .lineSpacing(3)
 
                 HStack(spacing: 8) {
                     journalStatPill(title: L10n.t("Today", "今日"), value: "\(todayEntries)", tint: VelaTheme.accent)
-                    journalStatPill(title: L10n.t("Top tag", "高频标签"), value: topTag, tint: VelaTheme.sleep)
-                    journalStatPill(title: L10n.t("Meals", "餐食"), value: "\(foodCount)", tint: VelaTheme.energy)
+                    journalStatPill(title: L10n.t("Top tag", "高频标签"), value: topTag, tint: VelaTheme.sleepColor)
+                    journalStatPill(title: L10n.t("Meals", "餐食"), value: "\(foodCount)", tint: VelaTheme.energyColor)
                 }
             }
         }
@@ -609,11 +609,11 @@ struct JournalView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(VelaTheme.mutedText)
+                .foregroundStyle(VelaTheme.muted)
                 .textCase(.uppercase)
             Text(value)
                 .font(.system(.subheadline, design: .rounded).weight(.bold))
-                .foregroundStyle(VelaTheme.primaryText)
+                .foregroundStyle(VelaTheme.fg)
                 .lineLimit(1)
                 .minimumScaleFactor(0.68)
         }
@@ -703,46 +703,46 @@ struct JournalView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(log.mealName)
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
 
                     Text(log.createdAt, style: .time)
                         .font(.caption)
-                        .foregroundStyle(VelaTheme.secondaryText)
+                        .foregroundStyle(VelaTheme.fg2)
                 }
 
                 Spacer()
 
                 Text("\(log.totalCalories) kcal")
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(VelaTheme.energy)
+                    .foregroundStyle(VelaTheme.energyColor)
             }
 
             if !log.foods.isEmpty {
                 Text(log.foods.map { "\($0.name) (\($0.portion))" }.joined(separator: " · "))
                     .font(.footnote)
-                    .foregroundStyle(VelaTheme.primaryText)
+                    .foregroundStyle(VelaTheme.fg)
                     .lineLimit(2)
             }
 
             HStack(spacing: 8) {
-                nutritionChip(label: "P", value: log.proteinGrams, color: VelaTheme.recovery)
-                nutritionChip(label: "C", value: log.carbsGrams, color: VelaTheme.sleep)
-                nutritionChip(label: "F", value: log.fatGrams, color: VelaTheme.strain)
+                nutritionChip(label: "P", value: log.proteinGrams, color: VelaTheme.recoveryColor)
+                nutritionChip(label: "C", value: log.carbsGrams, color: VelaTheme.sleepColor)
+                nutritionChip(label: "F", value: log.fatGrams, color: VelaTheme.strainColor)
                 nutritionChip(label: "Fiber", value: log.fiberGrams, color: VelaTheme.accent)
             }
 
             if !log.suggestions.isEmpty {
                 Text(log.suggestions.prefix(2).joined(separator: " "))
                     .font(.caption)
-                    .foregroundStyle(VelaTheme.secondaryText)
+                    .foregroundStyle(VelaTheme.fg2)
                     .lineLimit(2)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusTile, style: .continuous)
-                .fill(VelaTheme.elevatedSurface)
+            RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
+                .fill(VelaTheme.elevatedBg)
         )
     }
 
@@ -765,7 +765,7 @@ struct JournalView: View {
             HStack(spacing: 4) {
                 Text(label)
                     .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(VelaTheme.mutedText)
+                    .foregroundStyle(VelaTheme.muted)
                 Text(String(format: "%.0f", value))
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(color)
@@ -774,7 +774,7 @@ struct JournalView: View {
                     if abs(delta) >= 1 {
                         Text(delta > 0 ? "+\(Int(delta))" : "\(Int(delta))")
                             .font(.system(size: 8, weight: .medium))
-                            .foregroundStyle(delta > 0 ? VelaTheme.recovery : VelaTheme.stress)
+                            .foregroundStyle(delta > 0 ? VelaTheme.recoveryColor : VelaTheme.stressColor)
                     }
                 }
             }

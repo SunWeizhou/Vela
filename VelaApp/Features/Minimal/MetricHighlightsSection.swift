@@ -14,15 +14,14 @@ struct MetricHighlightsSection: View {
     let guidanceText: String
 
     var body: some View {
-        VStack(spacing: VelaTheme.cardGap) {
-            HStack(spacing: VelaTheme.cardGap) {
-                // Left Card
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .center) {
                         Text(leftTitle)
                             .font(VelaTheme.caption1())
                             .fontWeight(.bold)
-                            .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                            .foregroundStyle(VelaTheme.muted)
                         Spacer()
                         Image(systemName: leftIcon)
                             .font(.system(size: 13, weight: .semibold))
@@ -32,38 +31,30 @@ struct MetricHighlightsSection: View {
                     Text(leftValue)
                         .font(.system(size: 24, weight: .bold, design: .rounded))
                         .monospacedDigit()
-                        .foregroundStyle(isSleep ? Color(hex: "#F2EFE8") : VelaTheme.fg)
+                        .foregroundStyle(VelaTheme.fg)
                         .minimumScaleFactor(0.7)
                         .lineLimit(1)
                         .padding(.vertical, 2)
                     
                     if let leftSub = leftSubtitle {
                         Text(leftSub)
-                            .font(.system(size: 10))
-                            .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                            .font(VelaTheme.caption2())
+                            .foregroundStyle(VelaTheme.muted)
                             .lineLimit(1)
                     } else {
                         Spacer().frame(height: 10)
                     }
                 }
-                .padding(14)
-                .background(
-                    RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .fill(isSleep ? Color(hex: "#161512") : Color.white)
-                        .shadow(color: Color.black.opacity(isSleep ? 0.0 : 0.01), radius: 8, y: 2)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .stroke(isSleep ? Color.white.opacity(0.08) : Color(hex: "#E5E5EA"), lineWidth: 0.5)
-                )
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                // Right Card
+                Divider().frame(height: 68).padding(.horizontal, 14)
+
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .center) {
                         Text(rightTitle)
                             .font(VelaTheme.caption1())
                             .fontWeight(.bold)
-                            .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                            .foregroundStyle(VelaTheme.muted)
                         Spacer()
                         Image(systemName: rightIcon)
                             .font(.system(size: 13, weight: .semibold))
@@ -73,33 +64,25 @@ struct MetricHighlightsSection: View {
                     Text(rightValue)
                         .font(.system(size: 24, weight: .bold, design: .rounded))
                         .monospacedDigit()
-                        .foregroundStyle(isSleep ? Color(hex: "#F2EFE8") : VelaTheme.fg)
+                        .foregroundStyle(VelaTheme.fg)
                         .minimumScaleFactor(0.7)
                         .lineLimit(1)
                         .padding(.vertical, 2)
                     
                     if let rightSub = rightSubtitle {
                         Text(rightSub)
-                            .font(.system(size: 10))
-                            .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                            .font(VelaTheme.caption2())
+                            .foregroundStyle(VelaTheme.muted)
                             .lineLimit(1)
                     } else {
                         Spacer().frame(height: 10)
                     }
                 }
-                .padding(14)
-                .background(
-                    RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .fill(isSleep ? Color(hex: "#161512") : Color.white)
-                        .shadow(color: Color.black.opacity(isSleep ? 0.0 : 0.01), radius: 8, y: 2)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .stroke(isSleep ? Color.white.opacity(0.08) : Color(hex: "#E5E5EA"), lineWidth: 0.5)
-                )
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            // Guidance Card
+            Divider()
+
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 6) {
                     Image(systemName: "sparkles")
@@ -107,29 +90,22 @@ struct MetricHighlightsSection: View {
                         .foregroundStyle(metricColor)
                     
                     Text("指导")
-                        .font(VelaTheme.caption2())
-                        .fontWeight(.bold)
-                        .textCase(.uppercase)
-                        .kerning(0.06)
-                        .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                        .font(VelaTheme.caption1().weight(.semibold))
+                        .foregroundStyle(VelaTheme.muted)
                 }
                 
                 Text(guidanceText)
                     .font(VelaTheme.subheadline())
-                    .foregroundStyle(isSleep ? Color(hex: "#BFB9AC") : VelaTheme.fg2)
+                    .foregroundStyle(VelaTheme.fg2)
                     .lineSpacing(4)
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                    .fill(isSleep ? Color(hex: "#161512") : Color.white)
-                    .shadow(color: Color.black.opacity(isSleep ? 0.0 : 0.01), radius: 8, y: 2)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                    .stroke(isSleep ? Color.white.opacity(0.08) : Color(hex: "#E5E5EA"), lineWidth: 0.5)
-            )
         }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
+        )
     }
 }

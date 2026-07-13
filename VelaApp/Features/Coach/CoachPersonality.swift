@@ -19,10 +19,10 @@ public enum CoachPersonality: String, Codable, CaseIterable, Identifiable {
 
     public var tint: Color {
         switch self {
-        case .dataNerd: return VelaTheme.sleep
-        case .guardian: return VelaTheme.recovery
-        case .friend: return VelaTheme.energy
-        case .commander: return VelaTheme.strain
+        case .dataNerd: return VelaTheme.sleepColor
+        case .guardian: return VelaTheme.recoveryColor
+        case .friend: return VelaTheme.energyColor
+        case .commander: return VelaTheme.strainColor
         }
     }
 

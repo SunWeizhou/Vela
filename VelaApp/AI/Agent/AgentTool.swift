@@ -118,7 +118,10 @@ struct WebSearchTool: AgentTool {
         let results = await WebSearchHelper.shared.search(enrichedQuery, maxResults: 3)
         let citationSuffix = "\n\n[Source Policy: \(policy.rawValue.uppercased()) - Search query biased toward authoritative sources when possible. Verify linked sources before applying medical, supplement, or training advice.]"
 
-        return results.isEmpty ? "No search results found for '\(query)'." : (results + citationSuffix)
+        guard !results.isEmpty else {
+            return "No search results found for '\(query)'."
+        }
+        return WebSearchHelper.untrustedContext(results) + citationSuffix
     }
 
     static func detectPolicy(for query: String) -> SearchSourcePolicy {
@@ -1505,4 +1508,3 @@ struct DeleteTrainingPlanTool: AgentTool {
         }
     }
 }
-

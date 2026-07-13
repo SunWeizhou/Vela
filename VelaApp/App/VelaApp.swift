@@ -6,10 +6,10 @@ import AppIntents
 @MainActor
 final class VelaAppState: ObservableObject {
     static let todayTabIndex = 0
-    static let journalTabIndex = 1
+    static let trainingTabIndex = 1
     static let coachTabIndex = 2
-    static let trainingTabIndex = 3
-    static let vitalsTabIndex = 4
+    static let meTabIndex = 3
+    nonisolated private static let validTabIndices = 0...3
 
     enum CoachRouteDestination {
         case embedded
@@ -66,7 +66,7 @@ final class VelaAppState: ObservableObject {
         guard let flagIndex = arguments.firstIndex(of: "-velaInitialTab"),
               arguments.indices.contains(arguments.index(after: flagIndex)),
               let tab = Int(arguments[arguments.index(after: flagIndex)]),
-              0...4 ~= tab else {
+              validTabIndices.contains(tab) else {
             return 0
         }
         return tab
@@ -102,13 +102,24 @@ final class VelaAppState: ObservableObject {
     }
 
     func routeToTab(_ tab: Int) {
-        logDebug("[VelaAppState] routeToTab called with tab=\(tab)")
+        guard Self.validTabIndices.contains(tab) else {
+            logDebug("[VelaAppState] ignored invalid tab route \(tab)")
+            return
+        }
         selectedTab = tab
+    }
+
+    func routeToTraining() {
+        routeToTab(Self.trainingTabIndex)
+    }
+
+    func routeToMe() {
+        routeToTab(Self.meTabIndex)
     }
 
     func routeToAdaptiveTrainingStart() {
         resetQuickActionSheetTriggers()
-        selectedTab = 1
+        selectedTab = Self.trainingTabIndex
         adaptiveTrainingStartRequest += 1
     }
 
@@ -120,7 +131,6 @@ final class VelaAppState: ObservableObject {
 
     func routeToRecoveryDetail() {
         resetQuickActionSheetTriggers()
-        selectedTab = Self.vitalsTabIndex
         triggerRecoveryDetail = true
     }
 
@@ -258,6 +268,7 @@ struct VelaApp: App {
 
         // Register notification categories
         NotificationService.shared.registerNotificationCategories()
+
     }
 
     var body: some Scene {

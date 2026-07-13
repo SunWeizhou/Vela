@@ -26,44 +26,39 @@ struct MetricEvidenceSection: View {
                     .padding(.leading, 4)
             }
 
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: 10),
-                    GridItem(.flexible(), spacing: 10)
-                ],
-                spacing: 10
-            ) {
-                ForEach(items) { item in
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(item.title)
-                            .font(VelaTheme.caption2())
-                            .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+            VStack(spacing: 0) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                    HStack(alignment: .center, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(item.title)
+                                .font(VelaTheme.subheadline().weight(.semibold))
+                                .foregroundStyle(VelaTheme.fg)
+                            Text(item.detail)
+                                .font(VelaTheme.caption1())
+                                .foregroundStyle(VelaTheme.muted)
+                                .lineLimit(2)
+                        }
+
+                        Spacer(minLength: 8)
 
                         Text(item.value)
-                            .font(.system(size: 17, weight: .bold, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundStyle(isSleep ? Color(hex: "#F2EFE8") : VelaTheme.fg)
+                            .font(VelaTheme.headline().monospacedDigit())
+                            .foregroundStyle(VelaTheme.fg)
                             .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-
-                        Text(item.detail)
-                            .font(.system(size: 10))
-                            .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
-                            .lineLimit(2)
                     }
-                    .padding(12)
-                    .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(isSleep ? Color.black.opacity(0.22) : Color.white)
-                            .shadow(color: Color.black.opacity(isSleep ? 0.0 : 0.012), radius: 6, y: 2)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(isSleep ? Color.white.opacity(0.06) : Color(hex: "#E5E5EA"), lineWidth: 0.5)
-                    )
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+
+                    if index < items.count - 1 {
+                        Divider().padding(.leading, 14)
+                    }
                 }
             }
+            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
+            )
         }
     }
 }

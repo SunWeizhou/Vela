@@ -31,7 +31,8 @@ enum VelaModelContainer {
         WorkoutEventRecord.self,
         XunjiDailyCacheRecord.self,
         XunjiWorkoutMirrorRecord.self,
-        DeletedWorkoutRecord.self
+        DeletedWorkoutRecord.self,
+        VelaEventRecord.self
     ]
     static let schema = Schema(modelTypes)
 

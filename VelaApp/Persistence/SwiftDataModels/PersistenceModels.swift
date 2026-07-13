@@ -1728,3 +1728,29 @@ extension String {
             .filter { $0.isLetter || $0.isNumber || $0 == "_" }
     }
 }
+
+@Model
+final class VelaEventRecord {
+    @Attribute(.unique) var id: UUID
+    var eventType: String
+    var timestamp: Date
+    var title: String
+    var detail: String
+    var metadataJSON: String
+
+    init(
+        id: UUID = UUID(),
+        eventType: String,
+        timestamp: Date = Date(),
+        title: String,
+        detail: String = "",
+        metadataJSON: String = "{}"
+    ) {
+        self.id = id
+        self.eventType = eventType
+        self.timestamp = timestamp
+        self.title = title
+        self.detail = detail
+        self.metadataJSON = metadataJSON
+    }
+}

@@ -9,21 +9,21 @@ struct WorkoutDetailSheet: View {
 
     var body: some View {
         ZStack {
-            VelaTheme.background.ignoresSafeArea()
+            VelaTheme.bg.ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: 0) {
                 // Header Sheet Bar
                 HStack {
                     Text(L10n.t("Workout Session Details", "计划日程详情"))
                         .font(.system(.headline, design: .rounded))
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
                     
                     Spacer()
                     
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 24))
-                            .foregroundStyle(VelaTheme.mutedText)
+                            .foregroundStyle(VelaTheme.muted)
                     }
                 }
                 .padding(.horizontal, 24)
@@ -36,11 +36,11 @@ struct WorkoutDetailSheet: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(L10n.t("Week \(day.weekNumber) Day \(day.dayNumber) • \(dayName(day.dayNumber))", "第 \(day.weekNumber) 周第 \(day.dayNumber) 天 • \(dayName(day.dayNumber))"))
                                 .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(VelaTheme.mutedText)
+                                .foregroundStyle(VelaTheme.muted)
                             
                             Text(day.title)
                                 .font(.system(.title2, design: .rounded).weight(.bold))
-                                .foregroundStyle(VelaTheme.primaryText)
+                                .foregroundStyle(VelaTheme.fg)
                         }
 
                         // Badges Row
@@ -48,7 +48,7 @@ struct WorkoutDetailSheet: View {
                             badgeView(text: focusName(day.focus), symbol: getFocusSymbol(day.focus), color: getFocusColor(day.focus))
                             
                             if day.focus != "rest" {
-                                badgeView(text: "\(day.durationMinutes) \(L10n.t("mins", "分钟"))", symbol: "clock", color: VelaTheme.secondaryText)
+                                badgeView(text: "\(day.durationMinutes) \(L10n.t("mins", "分钟"))", symbol: "clock", color: VelaTheme.fg2)
                                 badgeView(text: intensityName(day.intensity), symbol: "waveform.path.ecg", color: getIntensityColor(day.intensity))
                             }
                         }
@@ -63,7 +63,7 @@ struct WorkoutDetailSheet: View {
 
                             Text(day.description)
                                 .font(.system(.body, design: .rounded))
-                                .foregroundStyle(VelaTheme.secondaryText)
+                                .foregroundStyle(VelaTheme.fg2)
                                 .lineSpacing(6)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -100,9 +100,9 @@ struct WorkoutDetailSheet: View {
                         .foregroundStyle(Color.black)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(day.isCompleted ? VelaTheme.recovery : VelaTheme.accent)
+                        .background(day.isCompleted ? VelaTheme.recoveryColor : VelaTheme.accent)
                         .cornerRadius(14)
-                        .shadow(color: (day.isCompleted ? VelaTheme.recovery : VelaTheme.accent).opacity(0.2), radius: 6)
+                        .shadow(color: (day.isCompleted ? VelaTheme.recoveryColor : VelaTheme.accent).opacity(0.2), radius: 6)
                     }
                     .padding(.horizontal, 24)
                     .padding(.bottom, 24)
@@ -143,10 +143,10 @@ struct WorkoutDetailSheet: View {
 
     private func getFocusColor(_ focus: String) -> Color {
         switch focus.lowercased() {
-        case "cardio": return VelaTheme.strain
-        case "strength": return VelaTheme.energy
+        case "cardio": return VelaTheme.strainColor
+        case "strength": return VelaTheme.energyColor
         case "flexibility": return VelaTheme.accent
-        case "rest": return VelaTheme.sleep
+        case "rest": return VelaTheme.sleepColor
         default: return VelaTheme.accent
         }
     }
@@ -182,10 +182,10 @@ struct WorkoutDetailSheet: View {
 
     private func getIntensityColor(_ intensity: String) -> Color {
         switch intensity.lowercased() {
-        case "low": return VelaTheme.recovery
-        case "moderate": return VelaTheme.energy
-        case "high": return VelaTheme.stress
-        default: return VelaTheme.secondaryText
+        case "low": return VelaTheme.recoveryColor
+        case "moderate": return VelaTheme.energyColor
+        case "high": return VelaTheme.stressColor
+        default: return VelaTheme.fg2
         }
     }
 }

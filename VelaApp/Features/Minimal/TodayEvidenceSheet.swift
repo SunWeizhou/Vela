@@ -117,7 +117,7 @@ struct TodayEvidenceSheet: View {
         case .keep: return VelaTheme.success
         case .reduce: return Color(hex: "#FF9F0A")
         case .swap: return Color(hex: "#5C6BC0")
-        case .recover: return VelaTheme.sleep
+        case .recover: return VelaTheme.sleepColor
         }
     }
 }

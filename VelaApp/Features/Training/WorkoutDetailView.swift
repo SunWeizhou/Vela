@@ -65,7 +65,7 @@ struct WorkoutDetailView: View {
                             .foregroundStyle(VelaTheme.accent)
                             .frame(width: 38, height: 38)
                             .background(Circle().fill(VelaTheme.surface))
-                            .overlay(Circle().stroke(VelaTheme.stroke, lineWidth: 0.5))
+                            .overlay(Circle().stroke(VelaTheme.borderSoft, lineWidth: 0.5))
                     }
                     .buttonStyle(.cardPress)
                     .accessibilityLabel("返回")
@@ -73,11 +73,11 @@ struct WorkoutDetailView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(workout.activityName)
                             .font(.system(size: 20, weight: .bold, design: .rounded))
-                            .foregroundStyle(VelaTheme.primaryText)
+                            .foregroundStyle(VelaTheme.fg)
                             .lineLimit(1)
                         Text(workout.start.formatted(date: .abbreviated, time: .shortened))
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(VelaTheme.secondaryText)
+                            .foregroundStyle(VelaTheme.fg2)
                     }
                     Spacer()
                     Image(systemName: iconForWorkout(workout.activityName))
@@ -88,8 +88,8 @@ struct WorkoutDetailView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .background(.ultraThinMaterial)
-                Divider().opacity(0.4)
+                .background(VelaTheme.bg.opacity(0.97))
+                Divider().foregroundStyle(VelaTheme.separatorSoft)
             }
         }
         .toolbar {
@@ -177,7 +177,7 @@ struct WorkoutDetailView: View {
                     .font(.system(size: 22, weight: .bold, design: .rounded))
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
-                    .foregroundStyle(VelaTheme.primaryText)
+                    .foregroundStyle(VelaTheme.fg)
                 Text(unit)
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(mutedColor)
@@ -190,7 +190,7 @@ struct WorkoutDetailView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.primaryText.opacity(0.06)))
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.fg.opacity(0.06)))
     }
 
     private var hero: some View {
@@ -220,10 +220,10 @@ struct WorkoutDetailView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("训练智能摘要")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
                     Text("本次为 \(workout.activityName) 运动，持续时间约 \(Int((workout.end.timeIntervalSince(workout.start) / 60).rounded())) 分钟。")
                         .font(.system(size: 13))
-                        .foregroundStyle(VelaTheme.secondaryText)
+                        .foregroundStyle(VelaTheme.fg2)
                         .lineLimit(2)
                 }
             }
@@ -241,7 +241,7 @@ struct WorkoutDetailView: View {
                 
                 Text(L10n.t("Heart Rate Fluctuation", "心率波动趋势"))
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(VelaTheme.primaryText)
+                    .foregroundStyle(VelaTheme.fg)
             }
             
             if isLoading {
@@ -360,14 +360,14 @@ struct WorkoutDetailView: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(value)
                 .font(.system(size: 14, weight: .bold, design: .rounded))
-                .foregroundStyle(VelaTheme.primaryText)
+                .foregroundStyle(VelaTheme.fg)
             Text(title)
                 .font(.system(size: 10))
-                .foregroundStyle(VelaTheme.secondaryText)
+                .foregroundStyle(VelaTheme.fg2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.primaryText.opacity(0.05)))
+        .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.fg.opacity(0.05)))
     }
     
     private var gpsRouteSection: some View {
@@ -380,7 +380,7 @@ struct WorkoutDetailView: View {
                 
                 Text(L10n.t("GPS Workout Route", "GPS 运动轨迹"))
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(VelaTheme.primaryText)
+                    .foregroundStyle(VelaTheme.fg)
             }
             
             if isLoading {
@@ -711,11 +711,11 @@ struct WorkoutDetailView: View {
             HStack {
                 Text("肌群分布")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(VelaTheme.primaryText)
+                    .foregroundStyle(VelaTheme.fg)
                 Spacer()
                 Text("有效组")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(VelaTheme.secondaryText)
+                    .foregroundStyle(VelaTheme.fg2)
             }
 
             if analysis.muscleGroupSets.isEmpty {
@@ -778,5 +778,4 @@ struct WorkoutDetailView: View {
         }
     }
 }
-
 

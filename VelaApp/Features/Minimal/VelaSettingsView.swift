@@ -25,56 +25,39 @@ struct VelaSettingsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                // Profile Row (Card style)
+            VStack(spacing: 24) {
                 profileCardRow
-                
-                // 1. 通用 (General) Group matching Screenshot 3 + User Wiki + AI Models + Coach Style + Agent Automation
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("通用")
-                        .font(.system(size: 13, weight: .semibold))
-                        .tracking(0.5)
-                        .textCase(.uppercase)
-                        .foregroundStyle(VelaTheme.muted)
-                        .padding(.leading, 12)
-                    
+
+                settingsGroup(title: "个人与教练") {
                     VStack(spacing: 0) {
                         NavigationLink(destination: AccountSettingsView()) {
                             settingsRow(icon: "person.fill", iconBg: Color(hex: "#00A896"), title: "账户", value: "本机资料")
                         }
-                        
-                        Divider().padding(.leading, 56)
-                        
+                        settingsDivider
                         NavigationLink(destination: UserWikiArchiveView()) {
                             settingsRow(icon: "doc.text.fill", iconBg: VelaTheme.muted, title: "健康档案", value: "本地长期记忆")
                         }
-                        
-                        Divider().padding(.leading, 56)
-                        
+                        settingsDivider
                         NavigationLink(destination: AIModelSettingsView()) {
-                            settingsRow(icon: "cpu.fill", iconBg: Color(hex: "#5C6BC0"), title: "AI 智能模型设置", value: textModel)
+                            settingsRow(icon: "cpu.fill", iconBg: Color(hex: "#5C6BC0"), title: "AI 模型", value: textModel)
                         }
-                        
-                        Divider().padding(.leading, 56)
-
+                        settingsDivider
                         NavigationLink(destination: CoachPersonalitySettingsView()) {
                             settingsRow(icon: "brain.head.profile", iconBg: Color(hex: "#FF5E3A"), title: "教练风格", value: currentCoachPersonalityName)
                         }
-
-                        Divider().padding(.leading, 56)
-
+                        settingsDivider
                         NavigationLink(destination: AgentAutomationSettingsView()) {
-                            settingsRow(icon: "sparkles", iconBg: Color(hex: "#FFCC00"), title: "Agent 自动技能", value: "已配置")
+                            settingsRow(icon: "sparkles", iconBg: Color(hex: "#B8843E"), title: "主动智能", value: "已配置")
                         }
+                    }
+                }
 
-                        Divider().padding(.leading, 56)
-                        
+                settingsGroup(title: "使用偏好") {
+                    VStack(spacing: 0) {
                         NavigationLink(destination: AppearanceSettingsView()) {
                             settingsRow(icon: "moon.fill", iconBg: Color(hex: "#AF52DE"), title: "外观", value: darkModeRaw == "dark" ? "深色" : (darkModeRaw == "light" ? "浅色" : "跟随系统"))
                         }
-                        
-                        Divider().padding(.leading, 56)
-                        
+                        settingsDivider
                         NavigationLink(destination: NotificationSettingsView()) {
                             settingsRow(
                                 icon: "bell.fill",
@@ -83,21 +66,11 @@ struct VelaSettingsView: View {
                                 value: abnormalMetricAlertsOn || morningBriefOn || bedtimeRemindersOn ? "已配置" : "已关闭"
                             )
                         }
-                        
-                        Divider().padding(.leading, 56)
-                        
+                        settingsDivider
                         NavigationLink(destination: CustomizationSettingsView()) {
-                            settingsRow(icon: "slider.horizontal.3", iconBg: Color(hex: "#FF5E3A"), title: "自定义", value: "\(dailyCalorieTarget) kcal · \(SleepTargetSettings.displayHours(sleepTargetHours))")
+                            settingsRow(icon: "slider.horizontal.3", iconBg: VelaTheme.accent, title: "健康目标", value: "\(dailyCalorieTarget) kcal · \(SleepTargetSettings.displayHours(sleepTargetHours))")
                         }
-                        
-                        Divider().padding(.leading, 56)
-                        
-                        NavigationLink(destination: ShortcutsSettingsView()) {
-                            settingsRow(icon: "command", iconBg: Color(hex: "#FFCC00"), title: "快捷指令", value: "已接入")
-                        }
-                        
-                        Divider().padding(.leading, 56)
-                        
+                        settingsDivider
                         NavigationLink(destination: LanguageSettingsView()) {
                             settingsRow(
                                 icon: "globe",
@@ -106,93 +79,59 @@ struct VelaSettingsView: View {
                                 value: AppLanguage(rawValue: languageRaw)?.displayName ?? AppLanguage.simplifiedChinese.displayName
                             )
                         }
+                        settingsDivider
+                        NavigationLink(destination: ShortcutsSettingsView()) {
+                            settingsRow(icon: "command", iconBg: Color(hex: "#B8843E"), title: "快捷指令", value: "已接入")
+                        }
                     }
-                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
-                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
                 }
-                .padding(.horizontal, 16)
-                
-                // 2. 数据 (Data) Group matching Screenshot 3
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("数据")
-                        .font(.system(size: 13, weight: .semibold))
-                        .tracking(0.5)
-                        .textCase(.uppercase)
-                        .foregroundStyle(VelaTheme.muted)
-                        .padding(.leading, 12)
-                    
+
+                settingsGroup(title: "数据与隐私") {
                     VStack(spacing: 0) {
                         NavigationLink(destination: DataSourceSettingsView()) {
                             settingsRow(icon: "applewatch", iconBg: Color(hex: "#FF2D55"), title: "数据源", value: "Apple 健康")
                         }
-                        
-                        Divider().padding(.leading, 56)
-                        
+                        settingsDivider
                         NavigationLink(destination: CGMSettingsView()) {
                             settingsRow(icon: "scope", iconBg: Color(hex: "#30A2FF"), title: "管理 CGM", value: "Apple 健康")
                         }
-
-                        Divider().padding(.leading, 56)
-
+                        settingsDivider
                         NavigationLink(destination: DataCoverageView()) {
-                            settingsRow(icon: "waveform.path.ecg.rectangle", iconBg: Color(hex: "#5C6BC0"), title: "数据覆盖", value: "信号质量")
+                            settingsRow(icon: "waveform.path.ecg.rectangle", iconBg: VelaTheme.accent, title: "数据可信度", value: "信号质量")
                         }
-
-                        Divider().padding(.leading, 56)
-
+                        settingsDivider
                         NavigationLink(destination: HealthDataResyncSettingsView()) {
                             settingsRow(icon: "arrow.clockwise.icloud.fill", iconBg: Color(hex: "#30A2FF"), title: "健康数据重同步", value: "最近 90 天")
                         }
-
-                        Divider().padding(.leading, 56)
-
+                        settingsDivider
                         NavigationLink(destination: TrustCenterView()) {
-                            settingsRow(icon: "checkmark.shield.fill", iconBg: Color(hex: "#34C759"), title: "信任中心", value: "运行日志")
+                            settingsRow(icon: "checkmark.shield.fill", iconBg: VelaTheme.recoveryColor, title: "信任中心", value: "权限与运行日志")
                         }
-
-                        Divider().padding(.leading, 56)
-
+                        settingsDivider
                         NavigationLink(destination: PrivacyDataControlsView()) {
                             settingsRow(icon: "lock.shield.fill", iconBg: Color(hex: "#5856D6"), title: "隐私与数据控制", value: "导出 / 删除")
                         }
-
-                        Divider().padding(.leading, 56)
-
+                        settingsDivider
                         NavigationLink(destination: ExportDataSettingsView()) {
                             settingsRow(icon: "square.and.arrow.up.fill", iconBg: VelaTheme.muted, title: "数据导出", value: "本地资料")
                         }
-                        
+
                         if VelaCapabilityAvailability.cloudKitSyncEnabled {
-                            Divider().padding(.leading, 56)
- 
+                            settingsDivider
                             NavigationLink(destination: iCloudSyncSettingsView()) {
                                 settingsRow(icon: "icloud.fill", iconBg: VelaTheme.accent, title: "iCloud 同步", value: "已接入")
                             }
                         }
                     }
-                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
-                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
                 }
-                .padding(.horizontal, 16)
-                
-                // 3. 资源 (Resources) Group
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("资源")
-                        .font(.system(size: 13, weight: .semibold))
-                        .tracking(0.5)
-                        .textCase(.uppercase)
-                        .foregroundStyle(VelaTheme.muted)
-                        .padding(.leading, 12)
-                    
+
+                settingsGroup(title: "关于") {
                     VStack(spacing: 0) {
                         NavigationLink(destination: WhatsNewSettingsView()) {
                             settingsRow(icon: "sparkles", iconBg: Color(hex: "#5856D6"), title: "最新变化", value: "更新记录")
                         }
                     }
-                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
-                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
                 }
-                .padding(.horizontal, 16)
                 .padding(.bottom, 30)
             }
             .padding(.top, 16)
@@ -210,6 +149,30 @@ struct VelaSettingsView: View {
                 .foregroundStyle(VelaTheme.accent)
             }
         }
+    }
+
+    private func settingsGroup<Content: View>(
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(VelaTheme.caption1().weight(.semibold))
+                .foregroundStyle(VelaTheme.muted)
+                .padding(.leading, 12)
+
+            content()
+                .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
+                )
+        }
+        .padding(.horizontal, 16)
+    }
+
+    private var settingsDivider: some View {
+        Divider().padding(.leading, 60)
     }
     
     private func settingsRow(icon: String, iconBg: Color, title: String, value: String?) -> some View {
@@ -249,18 +212,12 @@ struct VelaSettingsView: View {
         HStack(spacing: 14) {
             ZStack {
                 Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [VelaTheme.accent, Color(hex: "#64D2FF")],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 58, height: 58)
+                    .fill(VelaTheme.accent.opacity(0.12))
+                    .frame(width: 56, height: 56)
                 
                 Image(systemName: "person.fill")
-                    .font(.system(size: 26))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 23, weight: .semibold))
+                    .foregroundStyle(VelaTheme.accent)
             }
             
             VStack(alignment: .leading, spacing: 4) {
@@ -275,8 +232,8 @@ struct VelaSettingsView: View {
             Spacer()
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
         .padding(.horizontal, 16)
     }
 }
@@ -457,7 +414,7 @@ struct LanguageSettingsView: View {
     
     var body: some View {
         Form {
-            Section(header: Text("多语言选择")) {
+            Section {
                 Button { languageRaw = AppLanguage.simplifiedChinese.rawValue } label: {
                     HStack {
                         Text("简体中文")
@@ -469,12 +426,21 @@ struct LanguageSettingsView: View {
                 
                 Button { languageRaw = AppLanguage.english.rawValue } label: {
                     HStack {
-                        Text("English")
-                            .foregroundStyle(VelaTheme.fg)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("English")
+                                .foregroundStyle(VelaTheme.fg)
+                            Text("Beta · 部分页面仍为中文")
+                                .font(.caption)
+                                .foregroundStyle(VelaTheme.muted)
+                        }
                         Spacer()
                         if languageRaw == AppLanguage.english.rawValue { Image(systemName: "checkmark").foregroundStyle(VelaTheme.accent) }
                     }
                 }
+            } header: {
+                Text("多语言选择")
+            } footer: {
+                Text("切换后重新打开 Vela 生效。English 正在持续完善，核心健康与训练页面目前以简体中文体验最佳。")
             }
         }
         .navigationTitle("应用语言")

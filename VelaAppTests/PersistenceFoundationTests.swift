@@ -26,6 +26,22 @@ final class PersistenceFoundationTests: XCTestCase {
         )
     }
 
+    func testActiveStatusDoesNotPersistAMisleadingExpiry() {
+        let suiteName = "ActiveStatusNoExpiry-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        ActiveStatusSettings.update(
+            status: "active",
+            duration: "明天之前",
+            defaults: defaults
+        )
+
+        XCTAssertEqual(defaults.string(forKey: ActiveStatusSettings.statusKey), "active")
+        XCTAssertNil(defaults.string(forKey: ActiveStatusSettings.durationKey))
+        XCTAssertNil(defaults.object(forKey: ActiveStatusSettings.expiresAtKey))
+    }
+
     func testExpiredActiveStatusResetsStoredValueToActive() {
         let suiteName = "ActiveStatusExpiry-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -109,6 +125,55 @@ final class PersistenceFoundationTests: XCTestCase {
         XCTAssertEqual(model.category(id: "daily_summaries")?.count, 1)
         XCTAssertEqual(model.category(id: "journals")?.count, 1)
         XCTAssertEqual(model.category(id: "coach_sessions")?.count, 1)
+    }
+
+    @MainActor
+    func testAllLocalDataDeletionIncludesOperationalModelsAndFileBackedMemory() throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        context.insert(ActiveWorkoutDraftRecord(title: "未完成训练"))
+        context.insert(ExerciseDefinitionRecord(
+            name: "测试动作",
+            primaryMuscleGroup: "chest",
+            equipment: "none",
+            movementPattern: "push"
+        ))
+        context.insert(TrainingPlanAdaptationRecord(
+            planId: UUID(),
+            dayId: UUID(),
+            adjustment: .reduce,
+            reason: "测试"
+        ))
+        context.insert(MemoryEventRecord(
+            source: "test",
+            targetFile: "profile.md",
+            memoryType: .observation,
+            operation: "append",
+            content: "测试记忆",
+            evidence: "测试证据",
+            confidence: 0.8
+        ))
+        context.insert(DeletedWorkoutRecord(id: "deleted-workout"))
+        try context.save()
+
+        let wikiDirectory = FileManager.default.temporaryDirectory
+            .appending(path: "VelaPrivacyDeletion-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: wikiDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: wikiDirectory) }
+        try Data("private memory".utf8).write(to: wikiDirectory.appending(path: "profile.md"))
+
+        _ = try PrivacyDataDeletionService.delete(
+            scope: .allLocalVelaData,
+            modelContext: context,
+            wikiDirectoryURL: wikiDirectory
+        )
+
+        XCTAssertTrue(try context.fetch(FetchDescriptor<ActiveWorkoutDraftRecord>()).isEmpty)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<ExerciseDefinitionRecord>()).isEmpty)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<TrainingPlanAdaptationRecord>()).isEmpty)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<MemoryEventRecord>()).isEmpty)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<DeletedWorkoutRecord>()).isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: wikiDirectory.path))
     }
 
     @MainActor
@@ -331,10 +396,9 @@ final class PersistenceFoundationTests: XCTestCase {
         )
 
         let record = try XCTUnwrap(context.fetch(FetchDescriptor<DailyOperatingPlanRecord>()).first)
-        let payloadData = try XCTUnwrap(record.payloadJSON.data(using: .utf8))
-        let payload = try JSONDecoder().decode(DailyOperatingPlanPayload.self, from: payloadData)
-        let reasonsData = try XCTUnwrap(record.reasonsJSON.data(using: .utf8))
-        let reasons = try JSONDecoder().decode([String].self, from: reasonsData)
+        let payload = try XCTUnwrap(record.operatingPlanPayload)
+        let reasons = record.operatingPlanReasons
+        let persistedDecision = try XCTUnwrap(record.trainingDecision)
         let aiContext = AIContextBuilder().build(
             dashboard: dashboard,
             journalEntries: [],
@@ -351,6 +415,7 @@ final class PersistenceFoundationTests: XCTestCase {
         XCTAssertEqual(payload.intensityCap, canonical.intensityCap)
         XCTAssertEqual(payload.summary, canonical.userFacingSummary)
         XCTAssertEqual(reasons, canonical.reasons)
+        XCTAssertEqual(persistedDecision, canonical)
         XCTAssertEqual(record.confidence, canonical.confidence)
         XCTAssertEqual(dashboard.trainingDecision.volumeMultiplier, canonical.volumeMultiplier)
         XCTAssertEqual(dashboard.trainingDecision.maxIntensity, "RPE \(canonical.intensityCap)")

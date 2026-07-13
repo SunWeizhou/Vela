@@ -5,7 +5,6 @@ import SwiftData
 // Biological Age dial gauge × Interactive Sparkline Biomarker list
 
 struct VelaVitalsView: View {
-    @Environment(\.velaScrollDirection) private var scrollDirection
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     @ObservedObject private var appState = VelaAppState.shared
@@ -42,10 +41,10 @@ struct VelaVitalsView: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text("体征")
-                    .font(.system(size: 24, weight: .bold))
+                    .font(VelaTheme.title1())
                     .foregroundStyle(VelaTheme.fg)
                 Text("健康信号与核心指标")
-                    .font(.system(size: 12))
+                    .font(VelaTheme.caption1())
                     .foregroundStyle(VelaTheme.muted)
             }
             
@@ -67,7 +66,7 @@ struct VelaVitalsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            LazyVStack(alignment: .leading, spacing: 20) {
                 // 1. Health-signal reference or complete PhenoAge estimate
                 biologicalAgeHero
 
@@ -79,13 +78,12 @@ struct VelaVitalsView: View {
             .padding(.bottom, VelaFloatingNavigationMetrics.contentBottomPadding)
         }
         .scrollIndicators(.hidden)
-        .velaTrackScroll(direction: scrollDirection)
         .safeAreaInset(edge: .top) {
             VStack(spacing: 0) {
                 vitalsHeader
                     .padding(.horizontal, 16)
                     .padding(.bottom, 12)
-                    .background(.ultraThinMaterial)
+                    .background(VelaTheme.bg.opacity(0.97))
                 
                 Divider()
                     .opacity(0.4)
@@ -246,8 +244,8 @@ struct VelaVitalsView: View {
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(VelaTheme.cardBg))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
+                .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
+                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
             }
         }
     }
@@ -274,9 +272,9 @@ struct VelaVitalsView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(VelaTheme.cardBg))
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
         )
     }
@@ -286,9 +284,7 @@ struct VelaVitalsView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("其他生物标志物")
-                    .font(.system(size: 13, weight: .semibold))
-                    .tracking(0.5)
-                    .textCase(.uppercase)
+                    .font(VelaTheme.headline())
                     .foregroundStyle(VelaTheme.muted)
 
                 Spacer()
@@ -301,7 +297,7 @@ struct VelaVitalsView: View {
             }
             .padding(.horizontal, 2)
 
-            VStack(spacing: 12) {
+            VStack(spacing: 0) {
                 // Card 1: 体重 (Weight)
                 let weightEval = evaluateBiomarker(.weight, latestValue: rawWeightHistory.last, history: rawWeightHistory)
                 NavigationLink(destination: VelaMetricDetailView(metric: .weight)) {
@@ -317,6 +313,7 @@ struct VelaVitalsView: View {
                     )
                 }
                 .buttonStyle(.cardPress)
+                Divider().padding(.leading, 16)
 
                 // Card 2: HRV 基线 (HRV Baseline) - Open HRV Detail
                 let hrvEval = evaluateBiomarker(.hrv, latestValue: rawHrvHistory.last, history: rawHrvHistory)
@@ -333,6 +330,7 @@ struct VelaVitalsView: View {
                     )
                 }
                 .buttonStyle(.cardPress)
+                Divider().padding(.leading, 16)
 
                 // Card 3: RHR 基线 (RHR Baseline) - Open RHR Detail
                 let rhrEval = evaluateBiomarker(.rhr, latestValue: rawRhrHistory.last, history: rawRhrHistory)
@@ -349,6 +347,7 @@ struct VelaVitalsView: View {
                     )
                 }
                 .buttonStyle(.cardPress)
+                Divider().padding(.leading, 16)
 
                 // Card 4: 呼吸率 (Respiratory Rate)
                 let respEval = evaluateBiomarker(.respiratoryRate, latestValue: rawRespiratoryRateHistory.last, history: rawRespiratoryRateHistory)
@@ -365,6 +364,7 @@ struct VelaVitalsView: View {
                     )
                 }
                 .buttonStyle(.cardPress)
+                Divider().padding(.leading, 16)
 
                 // Card 5: 血氧 (Blood Oxygen)
                 let o2Eval = evaluateBiomarker(.bloodOxygen, latestValue: rawBloodOxygenHistory.last, history: rawBloodOxygenHistory)
@@ -381,6 +381,7 @@ struct VelaVitalsView: View {
                     )
                 }
                 .buttonStyle(.cardPress)
+                Divider().padding(.leading, 16)
 
                 // Card 6: 体脂 (Body Fat)
                 let fatEval = evaluateBiomarker(.bodyFat, latestValue: rawFatHistory.last, history: rawFatHistory)
@@ -398,6 +399,11 @@ struct VelaVitalsView: View {
                 }
                 .buttonStyle(.cardPress)
             }
+            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
+            )
         }
     }
 
@@ -448,7 +454,7 @@ struct VelaVitalsView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
-        .velaNativeCard(radius: 16)
+        .contentShape(Rectangle())
     }
 
     // MARK: - Dynamic Vitals Sync Loader

@@ -3,6 +3,20 @@ import SwiftData
 @testable import Vela
 
 final class WikiMergeTests: XCTestCase {
+    func testDeletingLocalWikiRemovesTheEntireFileBackedMemoryDirectory() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "VelaWikiDeletion-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data("profile".utf8).write(to: root.appending(path: "profile.md"))
+        try Data("future".utf8).write(to: root.appending(path: "future-memory.md"))
+
+        let deleted = try WikiFileService.deleteLocalDocuments(at: root)
+
+        XCTAssertEqual(deleted, 2)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.path))
+    }
+
     func testStructuredFieldReplacementPreservesExistingMemorySections() {
         let original = """
         # 个人档案

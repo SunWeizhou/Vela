@@ -63,7 +63,7 @@ struct MetricCustomWidgetsSection: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .fill(isSleep ? Color(hex: "#161512") : Color.white)
+                        .fill(VelaTheme.cardBg)
                         .shadow(color: Color.black.opacity(isSleep ? 0.0 : 0.01), radius: 8, y: 2)
                 )
                 .overlay(
@@ -96,7 +96,7 @@ struct MetricCustomWidgetsSection: View {
                 .padding(14)
                 .background(
                     RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .fill(isSleep ? Color(hex: "#161512") : Color.white)
+                        .fill(VelaTheme.cardBg)
                         .shadow(color: Color.black.opacity(isSleep ? 0.0 : 0.01), radius: 8, y: 2)
                 )
                 .overlay(
@@ -241,7 +241,7 @@ struct MetricCustomWidgetsSection: View {
                 .padding(16)
                 .background(
                     RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .fill(isSleep ? Color(hex: "#161512") : Color.white)
+                        .fill(VelaTheme.cardBg)
                         .shadow(color: Color.black.opacity(isSleep ? 0.0 : 0.01), radius: 8, y: 2)
                 )
                 .overlay(
@@ -274,7 +274,7 @@ struct MetricCustomWidgetsSection: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .fill(isSleep ? Color(hex: "#161512") : Color.white)
+                        .fill(VelaTheme.cardBg)
                         .shadow(color: Color.black.opacity(isSleep ? 0.0 : 0.01), radius: 8, y: 2)
                 )
                 .overlay(

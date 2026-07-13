@@ -51,11 +51,13 @@ public struct StressIndexInput: Hashable {
         sleepDebtStressScore: Double? = nil,
         recentStrainStressScore: Double? = nil
     ) {
-        self.mode = mode ?? (
-            quietHRToday != nil || hrvToday != nil || respRateToday != nil
-                ? .rawVitals
-                : .legacyComponentScores
-        )
+        let hasRawInput = quietHRToday != nil
+            || hrvToday != nil
+            || respRateToday != nil
+            || bodyTempDelta != nil
+            || sleepScoreLastNight != nil
+            || strainScoreToday != nil
+        self.mode = mode ?? (hasRawInput ? .rawVitals : .legacyComponentScores)
         self.quietHRToday = quietHRToday
         self.quietHRBaseline = quietHRBaseline
         self.quietHRSD = quietHRSD
@@ -211,7 +213,7 @@ public struct StressIndexEngine: ScoreEngine {
             componentWeights["sleep_debt_stress"] = weights["sleep_debt_stress"]!
             
             if debtStress > 40 {
-                reasons.append("睡眠缺失增加了全天候的皮质醇及生理压力敏感性")
+                reasons.append("昨晚睡眠评分偏低，已提高生理压力代理值")
             }
         }
 
@@ -261,7 +263,7 @@ public struct StressIndexEngine: ScoreEngine {
             confidence = .low
         }
 
-        reasons.append("这是生理压力代理指标，反映自主神经平衡状态，并非心理压力临床诊断。")
+        reasons.append("这是基于可用心率、HRV、呼吸、体温、睡眠与负荷信号的代理指标，不是心理或医疗诊断。")
 
         let dataWindow = DateInterval(start: Calendar.current.date(byAdding: .hour, value: -24, to: Date()) ?? Date(), end: Date())
 

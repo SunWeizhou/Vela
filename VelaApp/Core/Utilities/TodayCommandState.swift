@@ -312,7 +312,7 @@ enum TodayCommandBuilder {
             return "HRV 基线仍在建立。"
         }
         let delta = (hrv - baseline) / baseline
-        if delta < -0.10 { return "HRV 低于个人基线，提示自主神经恢复压力偏高。" }
+        if delta < -0.10 { return "HRV 低于个人基线，今天宜结合睡眠和主观状态保守安排训练。" }
         if delta > 0.10 { return "HRV 高于个人基线，恢复信号较积极。" }
         return "HRV 接近个人基线。"
     }

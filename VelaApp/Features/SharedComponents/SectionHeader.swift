@@ -8,12 +8,12 @@ struct SectionHeader: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.system(size: 28, weight: .bold, design: .rounded))
-                .foregroundStyle(VelaTheme.primaryText)
+                .foregroundStyle(VelaTheme.fg)
 
             if let subtitle {
                 Text(subtitle)
                     .font(.subheadline)
-                    .foregroundStyle(VelaTheme.mutedText)
+                    .foregroundStyle(VelaTheme.muted)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

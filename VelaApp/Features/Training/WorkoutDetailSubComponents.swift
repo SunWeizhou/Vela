@@ -194,7 +194,7 @@ struct WorkoutExerciseListView: View {
         return VStack(alignment: .leading, spacing: 12) {
             Text("动作与组次")
                 .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(VelaTheme.primaryText)
+                .foregroundStyle(VelaTheme.fg)
 
             ForEach(strength.exercises) { exercise in
                 VStack(alignment: .leading, spacing: 12) {
@@ -284,7 +284,7 @@ struct WorkoutExerciseListView: View {
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(set.rpe != nil ? VelaTheme.accent : mutedColor)
                 .frame(width: 44, height: 26)
-                .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.04)))
+                .background(RoundedRectangle(cornerRadius: 8).fill(VelaTheme.elevatedBg))
 
             Image(systemName: (set.isCompleted ?? true) ? "checkmark.circle.fill" : "circle")
                 .foregroundStyle((set.isCompleted ?? true) ? VelaTheme.success : mutedColor)
@@ -306,10 +306,10 @@ struct WorkoutNotesCardView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("训练备注", systemImage: "note.text")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
                     Text(strength.notes)
                         .font(.system(size: 13))
-                        .foregroundStyle(VelaTheme.secondaryText)
+                        .foregroundStyle(VelaTheme.fg2)
                 }
             }
         }

@@ -250,29 +250,6 @@ struct StrengthWorkoutLogSheetView: View {
                     .foregroundStyle(VelaTheme.muted)
             }
 
-            // Set Table Header (Xunji style)
-            if !exercise.wrappedValue.sets.isEmpty {
-                HStack(spacing: 12) {
-                    Text("组")
-                        .frame(width: 32, alignment: .leading)
-                    Text("前次")
-                        .frame(width: 70, alignment: .leading)
-                    Text("重量(kg)")
-                        .frame(width: 70, alignment: .center)
-                    Spacer()
-                    Text("次数")
-                        .frame(width: 50, alignment: .center)
-                    Text("RPE")
-                        .frame(width: 44, alignment: .center)
-                    Text("状态")
-                        .frame(width: 44, alignment: .trailing)
-                }
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(VelaTheme.muted)
-                .padding(.horizontal, 4)
-                .padding(.bottom, 2)
-            }
-
             ForEach(Array(exercise.wrappedValue.sets.enumerated()), id: \.element.id) { index, item in
                 strengthSetRow(
                     index: index,
@@ -315,7 +292,7 @@ struct StrengthWorkoutLogSheetView: View {
             .padding(.top, 4)
         }
         .padding(16)
-        .velaNativeCard(radius: 16)
+        .velaNativeCard(radius: 20)
     }
 
     private func strengthSetRow(
@@ -332,89 +309,91 @@ struct StrengthWorkoutLogSheetView: View {
             prevText = "—"
         }
 
-        return HStack(spacing: 12) {
-            // 组号 / 热身标记
-            Button {
-                set.wrappedValue.isWarmup.toggle()
-                scheduleDraftSave()
-            } label: {
-                Text(set.wrappedValue.isWarmup ? "热" : "\(index + 1)")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color.white)
-                    .frame(width: 24, height: 24)
-                    .background(Circle().fill(set.wrappedValue.isWarmup ? Color(hex: "#FF9500") : VelaTheme.accent))
-            }
-            .buttonStyle(.cardPress)
-            .frame(width: 32, alignment: .leading)
-
-            // 前次表现
-            Text(prevText)
-                .font(.system(size: 11, design: .rounded))
-                .foregroundStyle(VelaTheme.muted)
-                .frame(width: 70, alignment: .leading)
-                .lineLimit(1)
-
-            // 重量输入
-            TextField("0", value: set.weightKilograms, format: .number.precision(.fractionLength(0...1)))
-                .keyboardType(.decimalPad)
-                .textFieldStyle(.plain)
-                .multilineTextAlignment(.center)
-                .padding(.vertical, 4)
-                .padding(.horizontal, 8)
-                .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.04)))
-                .frame(width: 70)
-                .font(.system(size: 13, weight: .bold, design: .rounded))
-                .onChange(of: set.wrappedValue.weightKilograms) { _, _ in scheduleDraftSave() }
-
-            Spacer()
-
-            // 次数输入
-            TextField("0", value: set.repetitions, format: .number)
-                .keyboardType(.numberPad)
-                .textFieldStyle(.plain)
-                .multilineTextAlignment(.center)
-                .padding(.vertical, 4)
-                .padding(.horizontal, 8)
-                .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.04)))
-                .frame(width: 50)
-                .font(.system(size: 13, weight: .bold, design: .rounded))
-                .onChange(of: set.wrappedValue.repetitions) { _, _ in scheduleDraftSave() }
-
-            // RPE 菜单选择
-            Menu {
-                Button("无") { 
-                    set.wrappedValue.rpe = nil
+        return VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                Button {
+                    set.wrappedValue.isWarmup.toggle()
                     scheduleDraftSave()
+                } label: {
+                    Text(set.wrappedValue.isWarmup ? "热" : "\(index + 1)")
+                        .font(VelaTheme.caption1().weight(.bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 28, height: 28)
+                        .background(Circle().fill(set.wrappedValue.isWarmup ? VelaTheme.warn : VelaTheme.accent))
                 }
-                ForEach((5...10).reversed(), id: \.self) { val in
-                    Button("RPE \(val)") { 
-                        set.wrappedValue.rpe = Double(val)
-                        scheduleDraftSave()
-                    }
-                }
-            } label: {
-                Text(set.wrappedValue.rpe.map { "\(Int($0))" } ?? "RPE")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(set.wrappedValue.rpe != nil ? VelaTheme.accent : VelaTheme.muted)
-                    .frame(width: 44, height: 26)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.04)))
-            }
-            .buttonStyle(.cardPress)
+                .buttonStyle(.plain)
 
-            // 完成状态
-            Button {
-                complete(set: set, in: exercise)
-            } label: {
-                Image(systemName: (set.wrappedValue.isCompleted ?? false) ? "checkmark.circle.fill" : "circle")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(set.wrappedValue.isWarmup ? "热身组" : "第 \(index + 1) 组")
+                        .font(VelaTheme.subheadline().weight(.semibold))
+                        .foregroundStyle(VelaTheme.fg)
+                    Text("上次 \(prevText)")
+                        .font(VelaTheme.caption2())
+                        .foregroundStyle(VelaTheme.muted)
+                }
+
+                Spacer()
+
+                Button {
+                    complete(set: set, in: exercise)
+                } label: {
+                    Label(
+                        (set.wrappedValue.isCompleted ?? false) ? "已完成" : "完成",
+                        systemImage: (set.wrappedValue.isCompleted ?? false) ? "checkmark.circle.fill" : "circle"
+                    )
+                    .font(VelaTheme.caption1().weight(.semibold))
                     .foregroundStyle((set.wrappedValue.isCompleted ?? false) ? VelaTheme.success : VelaTheme.accent)
-                    .font(.system(size: 22))
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
+                    .frame(minHeight: 44)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.cardPress)
-            .frame(width: 44, alignment: .trailing)
+
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("重量 kg").font(VelaTheme.caption2()).foregroundStyle(VelaTheme.muted)
+                    TextField("0", value: set.weightKilograms, format: .number.precision(.fractionLength(0...1)))
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.center)
+                        .font(VelaTheme.headline().monospacedDigit())
+                        .frame(height: 38)
+                        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 10))
+                        .onChange(of: set.wrappedValue.weightKilograms) { _, _ in scheduleDraftSave() }
+                }
+                .frame(maxWidth: .infinity)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("次数").font(VelaTheme.caption2()).foregroundStyle(VelaTheme.muted)
+                    TextField("0", value: set.repetitions, format: .number)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.center)
+                        .font(VelaTheme.headline().monospacedDigit())
+                        .frame(height: 38)
+                        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 10))
+                        .onChange(of: set.wrappedValue.repetitions) { _, _ in scheduleDraftSave() }
+                }
+                .frame(maxWidth: .infinity)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("RPE").font(VelaTheme.caption2()).foregroundStyle(VelaTheme.muted)
+                    Menu {
+                        Button("无") { set.wrappedValue.rpe = nil; scheduleDraftSave() }
+                        ForEach((5...10).reversed(), id: \.self) { val in
+                            Button("RPE \(val)") { set.wrappedValue.rpe = Double(val); scheduleDraftSave() }
+                        }
+                    } label: {
+                        Text(set.wrappedValue.rpe.map { "\(Int($0))" } ?? "—")
+                            .font(VelaTheme.headline().monospacedDigit())
+                            .foregroundStyle(set.wrappedValue.rpe != nil ? VelaTheme.accent : VelaTheme.muted)
+                            .frame(maxWidth: .infinity, minHeight: 38)
+                            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 10))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .frame(maxWidth: .infinity)
+            }
         }
-        .padding(.vertical, 4)
+        .padding(12)
+        .background(VelaTheme.elevatedBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .contextMenu {
             Button(set.wrappedValue.isWarmup ? "设为正式组" : "设为热身组") {
                 set.wrappedValue.isWarmup.toggle()
@@ -860,4 +839,3 @@ struct StrengthWorkoutLogSheetView: View {
         try? modelContext.save()
     }
 }
-

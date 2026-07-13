@@ -130,7 +130,7 @@ struct CoachArtifactInboxView: View {
             VelaAppState.shared.routeToRecoveryDetail()
         } else if action.type.contains("training") || action.type.contains("workout") || action.type.contains("summary") {
             VelaAppState.shared.logDebug("[CoachArtifactInboxView] Routing to training (tab 1)")
-            VelaAppState.shared.routeToTab(1)
+            VelaAppState.shared.routeToTraining()
         } else if action.type.contains("check") || action.type.contains("journal") {
             VelaAppState.shared.logDebug("[CoachArtifactInboxView] Triggering journal")
             VelaAppState.shared.triggerJournal = true
@@ -208,7 +208,7 @@ struct CoachArtifactDetailWrapper: View {
             VelaAppState.shared.routeToRecoveryDetail()
         } else if action.type.contains("training") || action.type.contains("workout") || action.type.contains("summary") {
             VelaAppState.shared.logDebug("[CoachArtifactDetailWrapper] Routing to training (tab 1)")
-            VelaAppState.shared.routeToTab(1)
+            VelaAppState.shared.routeToTraining()
         } else if action.type.contains("check") || action.type.contains("journal") {
             VelaAppState.shared.logDebug("[CoachArtifactDetailWrapper] Triggering journal")
             VelaAppState.shared.triggerJournal = true

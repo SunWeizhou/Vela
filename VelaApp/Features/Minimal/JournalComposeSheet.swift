@@ -119,7 +119,7 @@ struct CaffeineLoggerView: View {
     var body: some View {
         VStack(spacing: 24) {
             Capsule()
-                .fill(Color(hex: "#E5E5EA"))
+                .fill(VelaTheme.separator)
                 .frame(width: 36, height: 5)
                 .padding(.top, 8)
             
@@ -279,15 +279,15 @@ struct WaterLoggerView: View {
                     VStack(spacing: 12) {
                         HStack(alignment: .firstTextBaseline) {
                             Text("\(Int(customAmount))")
-                                .font(.system(size: 48, weight: .black, design: .rounded))
-                                .foregroundStyle(Color(hex: "#4285F4"))
+                                .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                                .foregroundStyle(VelaTheme.accent)
                             Text("ml")
                                 .font(.system(size: 18, weight: .bold))
                                 .foregroundStyle(VelaTheme.meta)
                         }
                         
                         Slider(value: $customAmount, in: 0...1000, step: 50)
-                            .tint(Color(hex: "#4285F4"))
+                            .tint(VelaTheme.accent)
                             .padding(.horizontal, 20)
                     }
                     .padding(.vertical, 20)
@@ -311,9 +311,9 @@ struct WaterLoggerView: View {
                                         VStack(spacing: 8) {
                                             Image(systemName: icon)
                                                 .font(.system(size: 20))
-                                                .foregroundStyle(Color(hex: "#4285F4"))
+                                                .foregroundStyle(VelaTheme.accent)
                                                 .frame(width: 44, height: 44)
-                                                .background(Circle().fill(Color(hex: "#E8F0FE")))
+                                                .background(Circle().fill(VelaTheme.accent.opacity(0.12)))
                                             
                                             Text(name)
                                                 .font(.system(size: 12, weight: .bold))
@@ -327,7 +327,7 @@ struct WaterLoggerView: View {
                                         .velaNativeCard(radius: 16)
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                                .stroke(customAmount == val ? Color(hex: "#4285F4") : Color.clear, lineWidth: 1.5)
+                                                .stroke(customAmount == val ? VelaTheme.accent : Color.clear, lineWidth: 1.5)
                                         )
                                     }
                                     .buttonStyle(.plain)
@@ -348,8 +348,7 @@ struct WaterLoggerView: View {
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
-                            .background(RoundedRectangle(cornerRadius: 25, style: .continuous).fill(Color(hex: "#4285F4")))
-                            .shadow(color: Color(hex: "#4285F4").opacity(0.2), radius: 6, y: 3)
+                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.accent))
                     }
                     .buttonStyle(.plain)
                     .padding(.horizontal, 20)
@@ -379,7 +378,7 @@ struct MoodLoggerView: View {
     var body: some View {
         VStack(spacing: 24) {
             Capsule()
-                .fill(Color(hex: "#E5E5EA"))
+                .fill(VelaTheme.separator)
                 .frame(width: 36, height: 5)
                 .padding(.top, 8)
             
@@ -518,8 +517,8 @@ struct AlcoholLoggerView: View {
                     VStack(spacing: 16) {
                         HStack(alignment: .firstTextBaseline) {
                             Text(String(format: "%.1f", customDrinks))
-                                .font(.system(size: 48, weight: .black, design: .rounded))
-                                .foregroundStyle(Color(hex: "#8B0000"))
+                                .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                                .foregroundStyle(VelaTheme.stressColor)
                             Text("标准杯")
                                 .font(.system(size: 18, weight: .bold))
                                 .foregroundStyle(VelaTheme.meta)
@@ -557,7 +556,7 @@ struct AlcoholLoggerView: View {
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(VelaTheme.fg)
                         
-                        Text("本页按约 10 克纯酒精记为 1 标准杯，便于统一记录。不同地区的标准不同，实际酒精量应以饮品容量 and 酒精度为准：\n· 普通啤酒约 330 ml、4.5%\n· 红葡萄酒约 150 ml、12%\n· 烈性酒约 45 ml、40%")
+                        Text("本页按约 10 克纯酒精记为 1 标准杯，便于统一记录。不同地区的标准不同，实际酒精量应以饮品容量和酒精度为准：\n· 普通啤酒约 330 ml、4.5%\n· 红葡萄酒约 150 ml、12%\n· 烈性酒约 45 ml、40%")
                             .font(.system(size: 12))
                             .foregroundStyle(VelaTheme.muted)
                             .lineSpacing(5)
@@ -579,8 +578,7 @@ struct AlcoholLoggerView: View {
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
-                            .background(RoundedRectangle(cornerRadius: 25, style: .continuous).fill(Color(hex: "#8B0000")))
-                            .shadow(color: Color(hex: "#8B0000").opacity(0.2), radius: 6, y: 3)
+                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.stressColor))
                     }
                     .buttonStyle(.plain)
                     .padding(.horizontal, 20)

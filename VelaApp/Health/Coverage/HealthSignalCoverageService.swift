@@ -106,7 +106,7 @@ public struct HealthSignalCoverage: Identifiable, Codable, Hashable, Sendable {
     public let quality: SignalQuality
     
     public var isAvailable: Bool {
-        authorizationState == .authorized || authorizationState == .noRecentSamples || authorizationState == .authorizedButNoSamples
+        sampleCount30d > 0
     }
 
     /// Permission has been resolved (user has interacted with the permission prompt).
@@ -135,7 +135,9 @@ public struct HealthSignalCoverage: Identifiable, Codable, Hashable, Sendable {
         case .noRecentSamples:
             return AppLanguage.stored.isChinese ? "近期无数据，置信度较低" : "No recent data; confidence is low"
         case .authorizedButNoSamples:
-            return AppLanguage.stored.isChinese ? "已授权但尚无数据" : "Authorized but no samples recorded"
+            return AppLanguage.stored.isChinese
+                ? "未发现可读取的近期数据；Apple Health 不会向应用透露读权限状态"
+                : "No readable recent data found; Apple Health does not disclose read-permission status to apps"
         case .notDetermined:
             return AppLanguage.stored.isChinese ? "尚未请求权限，相关判断不可用" : "Permission not requested; related judgments are unavailable"
         case .deniedOrUnavailable:
@@ -165,18 +167,14 @@ public final class HealthSignalCoverageService {
             )
         }
 
-        // 1. Resolve Authorization State from HealthStore
+        // Apple does not expose read authorization per type. `authorizationStatus(for:)`
+        // reports sharing authorization, which is not meaningful for read-only requests.
+        // We therefore only use it to identify an untouched prompt and use observed samples
+        // for all other coverage states.
         let status = store.authorizationStatus(for: objectType)
         var authState: HealthSignalAuthorizationState = .notDetermined
 
-        if status == .notDetermined {
-            authState = .notDetermined
-        } else {
-            // Note: Since read authorization cannot be directly queried, we default to deniedOrUnavailable
-            authState = .deniedOrUnavailable
-        }
-
-        // 2. Fetch Sample Details
+        // 1. Fetch Sample Details
         let now = Date()
         let cal = Calendar.current
         let d7 = cal.date(byAdding: .day, value: -7, to: now) ?? now
@@ -186,27 +184,20 @@ public final class HealthSignalCoverageService {
 
         if status != .notDetermined {
             if count30d > 0 {
-                // If there are samples in 30d, we are authorized. Check if there are recent samples in 7d.
+                // Samples returned by HealthKit demonstrate readable data. Check recency.
                 if count7d > 0 {
                     authState = .authorized
                 } else {
                     authState = .noRecentSamples
                 }
             } else {
-                // If sharing is explicitly authorized, we know the permission was prompted and accepted
-                if status == .sharingAuthorized {
-                    authState = .authorizedButNoSamples
-                } else {
-                    // HKHealthStore returns sharingDenied for read-only permissions if declined,
-                    // but also sharingDenied if it's read-only and accepted (since write is denied).
-                    // So we treat 0 samples in 30 days but prompt completed as authorizedButNoSamples,
-                    // since the user completed onboarding.
-                    authState = .authorizedButNoSamples
-                }
+                // A completed prompt with no returned samples is intentionally ambiguous:
+                // it can mean no samples exist or that read access was limited.
+                authState = .authorizedButNoSamples
             }
         }
 
-        // 3. Compute Freshness & Quality
+        // 2. Compute Freshness & Quality
         var freshness: DataFreshness = .missing
         var quality: SignalQuality = .insufficient
 

@@ -296,7 +296,7 @@ HealthKitSyncEngine
     ↓ (Cached Snapshot Builder)
 DailyHealthSnapshot / SwiftData Model Context
     ↓ (Trigger calculation)
-MetricComputationPipeline (Scoring Engines)
+DailyHealthComputation (Scoring Engines)
     ↓ (Format conversion)
 MetricResult 
     ↓ (EnvironmentObject Broadcast)

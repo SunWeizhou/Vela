@@ -49,6 +49,30 @@ struct AIModelSettingsView: View {
                     }
                 }
             }
+
+            Section(header: Text("数据如何流动")) {
+                Label {
+                    Text("只有当你主动发送 Coach 消息时，消息与回答所需的健康、训练上下文才会发送给 DeepSeek。")
+                } icon: {
+                    Image(systemName: "text.bubble.fill")
+                        .foregroundStyle(VelaTheme.accent)
+                }
+
+                Label {
+                    Text("餐食照片仅在你确认分析后发送给 Kimi。自动任务还需要在“联网 AI 授权”中单独开启。")
+                } icon: {
+                    Image(systemName: "photo.badge.checkmark.fill")
+                        .foregroundStyle(VelaTheme.energyColor)
+                }
+
+                Label {
+                    Text("API 密钥保存在系统钥匙串；模型选择保存在本机设置。Vela 不会把密钥写入聊天记录。")
+                } icon: {
+                    Image(systemName: "key.fill")
+                        .foregroundStyle(VelaTheme.recoveryColor)
+                }
+            }
+            .font(.footnote)
             
             Section(header: Text("连接测试与保存")) {
                 Button {
@@ -89,7 +113,7 @@ struct AIModelSettingsView: View {
         .alert("保存成功", isPresented: $showSaveSuccess) {
             Button("好") {}
         } message: {
-            Text("模型密钥与模型选择已安全写入系统钥匙串和本机设置。")
+            Text("模型密钥已写入系统钥匙串，模型选择已保存在本机设置。")
         }
         .navigationTitle("AI 模型设置")
     }
@@ -704,6 +728,25 @@ struct AgentAutomationSettingsView: View {
     
     var body: some View {
         Form {
+            Section(header: Text(isChinese ? "联网 AI 授权" : "Network AI consent")) {
+                Toggle(isChinese ? "允许后台自动任务使用联网 AI" : "Allow background tasks to use network AI", isOn: $agentConfig.backgroundNetworkAIConsent)
+                    .tint(VelaTheme.accent)
+                    .onChange(of: agentConfig.backgroundNetworkAIConsent) { _, enabled in
+                        if enabled {
+                            BackgroundTaskManager.schedule()
+                        } else {
+                            BackgroundTaskManager.cancelAll()
+                        }
+                    }
+
+                Text(isChinese
+                     ? "开启后，已启用的自动任务可能将必要的健康与训练上下文发送给你配置的 AI 服务商以生成报告。手动与 Coach 对话不受此开关影响。"
+                     : "When enabled, active automated tasks may send necessary health and training context to your configured AI provider. Manual Coach conversations are unaffected.")
+                    .font(.caption)
+                    .foregroundStyle(VelaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Section(header: Text("自动任务执行")) {
                 ForEach(agentConfig.skillList(isChinese: isChinese)) { skill in
                     VStack(alignment: .leading, spacing: 8) {
@@ -729,6 +772,11 @@ struct AgentAutomationSettingsView: View {
                                 set: { new in
                                     var config = agentConfig
                                     config[keyPath: skill.configKey] = new
+                                    if agentConfig.canRunBackgroundNetworkAI {
+                                        BackgroundTaskManager.schedule()
+                                    } else {
+                                        BackgroundTaskManager.cancelAll()
+                                    }
                                 }
                             ))
                             .labelsHidden()

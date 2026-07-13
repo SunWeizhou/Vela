@@ -14,99 +14,124 @@ struct CoachWelcomeWorkspace: View {
     @ObservedObject private var appState = VelaAppState.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 24) {
             welcomeHeader
-            
+
             workspaceCarousel
-            
-            Button {
-                showWikiProfile = true
-            } label: {
-                HStack {
-                    Label("健康档案与长期记忆", systemImage: "books.vertical.fill")
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(VelaTheme.fg)
-                .padding(14)
-                .background(RoundedRectangle(cornerRadius: 16).fill(VelaTheme.surface))
-                .overlay(RoundedRectangle(cornerRadius: 16).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
-            }
-            .buttonStyle(.plain)
 
-            NavigationLink(destination: VelaReportsView()) {
-                HStack {
-                    Label("历史报告与自动分析", systemImage: "doc.text.fill")
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(VelaTheme.fg)
-                .padding(14)
-                .background(RoundedRectangle(cornerRadius: 16).fill(VelaTheme.surface))
-                .overlay(RoundedRectangle(cornerRadius: 16).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
-            }
-            .buttonStyle(.plain)
-
-            // Suggestion questions
-            VStack(alignment: .leading, spacing: 10) {
-                Text(L10n.t("QUICK SUGGESTIONS", "快捷提问"))
-                    .font(VelaTheme.caption2().weight(.bold))
+            VStack(alignment: .leading, spacing: 8) {
+                Text("你可以这样问")
+                    .font(VelaTheme.caption1().weight(.semibold))
                     .foregroundStyle(VelaTheme.muted)
-                    .tracking(0.5)
-                    .padding(.leading, 4)
 
-                FlexStack(spacing: 8) {
-                    ForEach(vm.quickQuestions, id: \.self) { text in
-                        Button(text) {
+                VStack(spacing: 0) {
+                    ForEach(Array(vm.quickQuestions.prefix(4).enumerated()), id: \.offset) { index, text in
+                        Button {
                             onSendMessage(text)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Text(text)
+                                    .font(VelaTheme.body())
+                                    .foregroundStyle(VelaTheme.fg)
+                                    .multilineTextAlignment(.leading)
+                                Spacer(minLength: 8)
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(VelaTheme.meta)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 14)
+                            .contentShape(Rectangle())
                         }
-                        .font(VelaTheme.subheadline())
-                        .foregroundStyle(VelaTheme.fg)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(VelaTheme.cardBg)
-                                .overlay(
-                                    Capsule(style: .continuous)
-                                        .stroke(VelaTheme.borderSoft, lineWidth: 0.7)
-                                )
-                        )
                         .buttonStyle(.plain)
+
+                        if index < min(vm.quickQuestions.count, 4) - 1 {
+                            Divider().padding(.leading, 16)
+                        }
                     }
                 }
+                .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(VelaTheme.borderSoft.opacity(0.6), lineWidth: 0.5)
+                )
+            }
+
+            HStack(spacing: 12) {
+                Button {
+                    showWikiProfile = true
+                } label: {
+                    shortcutCard(title: "健康档案", subtitle: "长期记忆", icon: "books.vertical.fill")
+                }
+                .buttonStyle(.plain)
+
+                NavigationLink(destination: VelaReportsView()) {
+                    shortcutCard(title: "历史报告", subtitle: "自动分析", icon: "doc.text.fill")
+                }
+                .buttonStyle(.plain)
             }
         }
     }
 
     private var welcomeHeader: some View {
-        VStack(spacing: 16) {
-            AppleIntelligenceOrb()
-                .padding(.top, 10)
+        VStack(alignment: .leading, spacing: 14) {
+            ZStack {
+                Circle().fill(VelaTheme.accent.opacity(0.11))
+                Image(systemName: "sparkles")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(VelaTheme.accent)
+            }
+            .frame(width: 52, height: 52)
 
-            Text("Vela 教练")
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundStyle(VelaTheme.fg)
-
-            Text("你的 AI 身体智能代理。你可以与我讨论训练、恢复、睡眠或营养，我将基于你的健康 data 为你提供个性化建议。")
-                .font(VelaTheme.subheadline())
-                .foregroundStyle(VelaTheme.muted)
-                .multilineTextAlignment(.center)
-                .lineSpacing(4.5)
-                .padding(.horizontal, 24)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("今天想聊什么？")
+                    .font(VelaTheme.title1())
+                    .foregroundStyle(VelaTheme.fg)
+                Text("我会结合你的健康数据，帮助你理解状态并决定下一步。")
+                    .font(VelaTheme.body())
+                    .foregroundStyle(VelaTheme.muted)
+                    .lineSpacing(3)
+            }
         }
-        .padding(.vertical, 14)
+        .padding(.horizontal, 4)
+        .padding(.top, 8)
+    }
+
+    private func shortcutCard(title: String, subtitle: String, icon: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(VelaTheme.accent)
+                .frame(width: 32, height: 32)
+                .background(VelaTheme.accent.opacity(0.09), in: RoundedRectangle(cornerRadius: 10))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(VelaTheme.fg)
+                Text(subtitle)
+                    .font(VelaTheme.caption2())
+                    .foregroundStyle(VelaTheme.muted)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(VelaTheme.meta)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 60)
+        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(VelaTheme.borderSoft.opacity(0.6), lineWidth: 0.5)
+        )
     }
 
     private var workspaceCarousel: some View {
         VStack(alignment: .leading, spacing: 10) {
-            workspaceSectionTitle(L10n.t("INTELLIGENCE WORKSPACE", "智能决策舱"), L10n.t("Active insights & actionable plans", "主动智能洞察与建议"))
+            workspaceSectionTitle(L10n.t("TODAY", "今天"), L10n.t("Your current recommendation", "当前最重要的建议"))
                 .padding(.horizontal, 4)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
+            LazyVStack(spacing: 12) {
                     if let plan = todayOperatingPlan {
                         let display = displayModel(for: plan)
                         carouselCard(
@@ -115,15 +140,14 @@ struct CoachWelcomeWorkspace: View {
                             icon: "sparkles",
                             footer: "\(display.confidenceLabel) · 训练建议"
                         ) {
-                            appState.routeToTab(1)
+                            appState.routeToTraining()
                         }
                     } else {
                         carouselCard(
-                            title: "今日计划正在生成",
-                            detail: "正在读取恢复、睡眠、训练负荷和近期训练记录；完成后会与训练页保持同一条建议。",
-                            icon: "arrow.triangle.2.circlepath",
-                            footer: "数据同步中",
-                            isAI: true
+                            title: "今日计划待数据",
+                            detail: "同步健康数据后，Vela 会生成与训练页一致的建议；也可以先按当前有限信息生成保守方案。",
+                            icon: "waveform.path.ecg",
+                            footer: "数据不足 · 可生成保守建议"
                         ) {
                             onSendMessage("请根据当前可用数据生成保守的今日训练建议。")
                         }
@@ -151,10 +175,9 @@ struct CoachWelcomeWorkspace: View {
                             onSendMessage("基于产物 \(artifact.title) 给我下一步行动。")
                         }
                     }
-                }
-                .padding(.vertical, 4)
-                .padding(.horizontal, 2)
             }
+            .padding(.vertical, 4)
+            .padding(.horizontal, 2)
         }
     }
 
@@ -177,28 +200,28 @@ struct CoachWelcomeWorkspace: View {
                         .background(Circle().fill(accentColor.opacity(0.12)))
                     
                     Text(title)
-                        .font(.system(size: 14, weight: .bold))
+                        .font(VelaTheme.subheadline().weight(.bold))
                         .foregroundStyle(VelaTheme.fg)
-                        .lineLimit(1)
+                        .lineLimit(2)
                     
                     Spacer()
                 }
                 
                 Text(detail)
-                    .font(.system(size: 12))
+                    .font(VelaTheme.footnote())
                     .foregroundStyle(VelaTheme.fg2)
-                    .lineLimit(3)
-                    .frame(height: 54, alignment: .topLeading)
+                    .lineLimit(4)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
                     .multilineTextAlignment(.leading)
                 
                 Spacer(minLength: 0)
                 
                 Text(footer)
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(VelaTheme.caption2().weight(.semibold))
                     .foregroundStyle(VelaTheme.muted)
-                    .lineLimit(1)
+                    .lineLimit(2)
             }
-            .frame(width: 250, height: 132)
+            .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
             .padding(14)
             .background(RoundedRectangle(cornerRadius: 18).fill(VelaTheme.cardBg))
             .overlay(
@@ -208,6 +231,9 @@ struct CoachWelcomeWorkspace: View {
             .appleIntelligenceGlow(isHighlighted: isAI, radius: 18)
         }
         .buttonStyle(.cardPress)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title)。\(detail)。\(footer)")
+        .accessibilityHint("轻点查看或继续讨论")
     }
 
     private func workspaceSectionTitle(_ title: String, _ subtitle: String) -> some View {
@@ -222,12 +248,8 @@ struct CoachWelcomeWorkspace: View {
     }
 
     private func displayModel(for plan: DailyOperatingPlanRecord) -> DailyOperatingPlanDisplayModel {
-        let payload: DailyOperatingPlanPayload? = {
-            guard let data = plan.payloadJSON.data(using: .utf8) else { return nil }
-            return try? JSONDecoder().decode(DailyOperatingPlanPayload.self, from: data)
-        }()
         return DailyOperatingPlanDisplayModel.build(
-            payload: payload,
+            payload: plan.operatingPlanPayload,
             primaryActionType: plan.primaryActionType,
             source: plan.source,
             safetyNotice: plan.safetyNotice,

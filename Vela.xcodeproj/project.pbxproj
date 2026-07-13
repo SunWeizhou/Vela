@@ -79,6 +79,11 @@
 		0B1000530000000000000053 /* MarkdownText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001540000000000000054 /* MarkdownText.swift */; };
 		0B1000540000000000000054 /* CoachChatPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001550000000000000055 /* CoachChatPanel.swift */; };
 		0B25D0600000000000000060 /* CoachChatVM.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1600000000000000060 /* CoachChatVM.swift */; };
+		0B25D0610000000000000060 /* CoachSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1610000000000000060 /* CoachSessionStore.swift */; };
+		0B25D0620000000000000060 /* CoachContextAssembler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1620000000000000060 /* CoachContextAssembler.swift */; };
+		0B25D0630000000000000060 /* CoachPersistenceWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1630000000000000060 /* CoachPersistenceWriter.swift */; };
+		0B25D0640000000000000060 /* CoachRequestRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1640000000000000060 /* CoachRequestRunner.swift */; };
+		0B25D0650000000000000060 /* FoodPhotoWorkflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1650000000000000060 /* FoodPhotoWorkflow.swift */; };
 		0B25D0800000000000000080 /* FlexStack.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1800000000000000080 /* FlexStack.swift */; };
 		0B25D0810000000000000081 /* CoachHistoryDrawer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1810000000000000081 /* CoachHistoryDrawer.swift */; };
 		0B25D0820000000000000082 /* CoachWelcomeWorkspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1820000000000000082 /* CoachWelcomeWorkspace.swift */; };
@@ -89,6 +94,7 @@
 		0B1000550000000000000055 /* MetricCoachCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001560000000000000056 /* MetricCoachCard.swift */; };
 		0B1000560000000000000056 /* VelaLogoMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001570000000000000057 /* VelaLogoMark.swift */; };
 		0B1000570000000000000057 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0B1001580000000000000058 /* Assets.xcassets */; };
+		0B3000010000000000000001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 0B3000020000000000000002 /* PrivacyInfo.xcprivacy */; };
 		0B1000600000000000000060 /* WikiProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001600000000000000060 /* WikiProfileView.swift */; };
 		0B1000710000000000000071 /* MorningBriefScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001710000000000000071 /* MorningBriefScheduler.swift */; };
 		0B1000720000000000000072 /* ProactiveInsightService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001720000000000000072 /* ProactiveInsightService.swift */; };
@@ -154,7 +160,6 @@
 		0B25D0110000000000000011 /* TodayEvidenceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1110000000000000011 /* TodayEvidenceSheet.swift */; };
 		0B25D0120000000000000012 /* TodayWeatherBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1120000000000000012 /* TodayWeatherBar.swift */; };
 		0B25D0130000000000000013 /* VelaSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1130000000000000013 /* VelaSettingsView.swift */; };
-		0B25D0140000000000000014 /* CoachChatInterface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1140000000000000014 /* CoachChatInterface.swift */; };
 		0B25D0150000000000000015 /* SettingsAccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1150000000000000015 /* SettingsAccountView.swift */; };
 		0B25D0160000000000000016 /* SettingsCoachModelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1160000000000000016 /* SettingsCoachModelView.swift */; };
 		0B25D0170000000000000017 /* TodayExperienceModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1170000000000000017 /* TodayExperienceModel.swift */; };
@@ -288,6 +293,11 @@
 		0B1001540000000000000054 /* MarkdownText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/SharedComponents/MarkdownText.swift; sourceTree = "<group>"; };
 		0B1001550000000000000055 /* CoachChatPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/CoachChatPanel.swift; sourceTree = "<group>"; };
 		0B25D1600000000000000060 /* CoachChatVM.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/CoachChatVM.swift; sourceTree = "<group>"; };
+		0B25D1610000000000000060 /* CoachSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/CoachSessionStore.swift; sourceTree = "<group>"; };
+		0B25D1620000000000000060 /* CoachContextAssembler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/CoachContextAssembler.swift; sourceTree = "<group>"; };
+		0B25D1630000000000000060 /* CoachPersistenceWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/CoachPersistenceWriter.swift; sourceTree = "<group>"; };
+		0B25D1640000000000000060 /* CoachRequestRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/CoachRequestRunner.swift; sourceTree = "<group>"; };
+		0B25D1650000000000000060 /* FoodPhotoWorkflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/FoodPhotoWorkflow.swift; sourceTree = "<group>"; };
 		0B25D1800000000000000080 /* FlexStack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/FlexStack.swift; sourceTree = "<group>"; };
 		0B25D1810000000000000081 /* CoachHistoryDrawer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/CoachHistoryDrawer.swift; sourceTree = "<group>"; };
 		0B25D1820000000000000082 /* CoachWelcomeWorkspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/CoachWelcomeWorkspace.swift; sourceTree = "<group>"; };
@@ -298,6 +308,7 @@
 		0B1001560000000000000056 /* MetricCoachCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/SharedComponents/MetricCoachCard.swift; sourceTree = "<group>"; };
 		0B1001570000000000000057 /* VelaLogoMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/SharedComponents/VelaLogoMark.swift; sourceTree = "<group>"; };
 		0B1001580000000000000058 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Resources/Assets.xcassets; sourceTree = "<group>"; };
+		0B3000020000000000000002 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = Resources/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		0B1001600000000000000060 /* WikiProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/WikiProfileView.swift; sourceTree = "<group>"; };
 		0B1001610000000000000061 /* Vela-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Vela-Info.plist"; sourceTree = "<group>"; };
 		0B1001710000000000000071 /* MorningBriefScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Proactive/MorningBriefScheduler.swift; sourceTree = "<group>"; };
@@ -364,7 +375,6 @@
 		0B25D1110000000000000011 /* TodayEvidenceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/TodayEvidenceSheet.swift; sourceTree = "<group>"; };
 		0B25D1120000000000000012 /* TodayWeatherBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/TodayWeatherBar.swift; sourceTree = "<group>"; };
 		0B25D1130000000000000013 /* VelaSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/VelaSettingsView.swift; sourceTree = "<group>"; };
-		0B25D1140000000000000014 /* CoachChatInterface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/CoachChatInterface.swift; sourceTree = "<group>"; };
 		0B25D1150000000000000015 /* SettingsAccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/SettingsAccountView.swift; sourceTree = "<group>"; };
 		0B25D1160000000000000016 /* SettingsCoachModelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/SettingsCoachModelView.swift; sourceTree = "<group>"; };
 		0B25D1170000000000000017 /* TodayExperienceModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/TodayExperienceModel.swift; sourceTree = "<group>"; };
@@ -461,6 +471,7 @@
 				0B1001030000000000000003 /* VelaRootView.swift */,
 				0B1001230000000000000023 /* Vela.entitlements */,
 				0B1001580000000000000058 /* Assets.xcassets */,
+				0B3000020000000000000002 /* PrivacyInfo.xcprivacy */,
 				0B1001040000000000000004 /* VelaAppMetadata.swift */,
 				0B1001050000000000000005 /* AppDocumentation.swift */,
 				0B1001240000000000000024 /* DateRangeQuery.swift */,
@@ -519,7 +530,6 @@
 				0B25D1110000000000000011 /* TodayEvidenceSheet.swift */,
 				0B25D1120000000000000012 /* TodayWeatherBar.swift */,
 				0B25D1130000000000000013 /* VelaSettingsView.swift */,
-				0B25D1140000000000000014 /* CoachChatInterface.swift */,
 				0B25D1150000000000000015 /* SettingsAccountView.swift */,
 				0B25D1160000000000000016 /* SettingsCoachModelView.swift */,
 				0B25D1170000000000000017 /* TodayExperienceModel.swift */,
@@ -547,6 +557,11 @@
 				0B25D1860000000000000086 /* VitalsMetricDetailSubComponents.swift */,
 				0B1001550000000000000055 /* CoachChatPanel.swift */,
 				0B25D1600000000000000060 /* CoachChatVM.swift */,
+				0B25D1610000000000000060 /* CoachSessionStore.swift */,
+				0B25D1620000000000000060 /* CoachContextAssembler.swift */,
+				0B25D1630000000000000060 /* CoachPersistenceWriter.swift */,
+				0B25D1640000000000000060 /* CoachRequestRunner.swift */,
+				0B25D1650000000000000060 /* FoodPhotoWorkflow.swift */,
 				0B1001180000000000000018 /* HealthAuthorizationService.swift */,
 				0B1001190000000000000019 /* HealthDomainModels.swift */,
 				0B1001270000000000000027 /* HealthQueryService.swift */,
@@ -766,6 +781,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				0B1000570000000000000057 /* Assets.xcassets in Resources */,
+				0B3000010000000000000001 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -857,7 +873,6 @@
 				0B25D0110000000000000011 /* TodayEvidenceSheet.swift in Sources */,
 				0B25D0120000000000000012 /* TodayWeatherBar.swift in Sources */,
 				0B25D0130000000000000013 /* VelaSettingsView.swift in Sources */,
-				0B25D0140000000000000014 /* CoachChatInterface.swift in Sources */,
 				0B25D0150000000000000015 /* SettingsAccountView.swift in Sources */,
 				0B25D0160000000000000016 /* SettingsCoachModelView.swift in Sources */,
 				0B25D0170000000000000017 /* TodayExperienceModel.swift in Sources */,
@@ -887,6 +902,11 @@
 				0B25D0860000000000000086 /* VitalsMetricDetailSubComponents.swift in Sources */,
 				0B1000540000000000000054 /* CoachChatPanel.swift in Sources */,
 				0B25D0600000000000000060 /* CoachChatVM.swift in Sources */,
+				0B25D0610000000000000060 /* CoachSessionStore.swift in Sources */,
+				0B25D0620000000000000060 /* CoachContextAssembler.swift in Sources */,
+				0B25D0630000000000000060 /* CoachPersistenceWriter.swift in Sources */,
+				0B25D0640000000000000060 /* CoachRequestRunner.swift in Sources */,
+				0B25D0650000000000000060 /* FoodPhotoWorkflow.swift in Sources */,
 				0B1000180000000000000018 /* HealthAuthorizationService.swift in Sources */,
 				0B1000190000000000000019 /* HealthDomainModels.swift in Sources */,
 				0B1000260000000000000026 /* HealthQueryService.swift in Sources */,
@@ -1130,7 +1150,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 4.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sunweizhou.Vela4;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				INFOPLIST_KEY_CFBundleDisplayName = "Vela 4.0";
@@ -1159,7 +1179,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 4.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sunweizhou.Vela4;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				INFOPLIST_KEY_CFBundleDisplayName = "Vela 4.0";

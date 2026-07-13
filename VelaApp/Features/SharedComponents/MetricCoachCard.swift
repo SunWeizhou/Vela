@@ -48,11 +48,11 @@ struct MetricCoachCard: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(AppLanguage.stored.isChinese ? "让 Coach 实时分析" : "Vela Coach Live")
                         .font(.headline)
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
 
                     Text(AppLanguage.stored.isChinese ? "由 DeepSeek 提供强力支持" : "Powered by DeepSeek AI")
                         .font(.caption2)
-                        .foregroundStyle(VelaTheme.mutedText)
+                        .foregroundStyle(VelaTheme.muted)
                 }
 
                 Spacer()
@@ -72,7 +72,7 @@ struct MetricCoachCard: View {
                     if let errorMessage = errorMessage {
                         Text(errorMessage)
                             .font(.footnote)
-                            .foregroundStyle(VelaTheme.stress)
+                            .foregroundStyle(VelaTheme.stressColor)
                             .padding(.vertical, 4)
                     } else if hasFinished {
                         MetricCoachAdviceView(advice: MetricCoachAdviceFormatter.parse(streamText))
@@ -86,7 +86,7 @@ struct MetricCoachCard: View {
             } else {
                 Text(AppLanguage.stored.isChinese ? "点击下方按钮，由 AI 针对当前生命体征和最新运动数据，提供定制的训练与恢复行动建议。" : "Tap below to let AI analyze your current vitals and recent activity trends, and deliver tailored training or recovery advice.")
                     .font(.footnote)
-                    .foregroundStyle(VelaTheme.secondaryText)
+                    .foregroundStyle(VelaTheme.fg2)
                     .lineSpacing(3)
             }
 
@@ -99,10 +99,10 @@ struct MetricCoachCard: View {
                             Image(systemName: "arrow.clockwise")
                                 .font(.subheadline.weight(.semibold))
                                 .frame(width: 38, height: 38)
-                                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(VelaTheme.subtleFill))
+                                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(VelaTheme.fillSoft))
                         }
                         .buttonStyle(.plain)
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
                     }
 
                     Button {
@@ -391,7 +391,7 @@ private struct MetricCoachAdviceView: View {
             }
         }
         .font(.subheadline)
-        .foregroundStyle(VelaTheme.secondaryText)
+        .foregroundStyle(VelaTheme.fg2)
         .lineSpacing(3)
         .padding(.top, 4)
     }
@@ -403,7 +403,7 @@ private struct MetricCoachAdviceView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(VelaTheme.primaryText)
+                .foregroundStyle(VelaTheme.fg)
             content()
         }
     }

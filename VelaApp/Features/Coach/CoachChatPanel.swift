@@ -39,7 +39,7 @@ struct CoachChatPanel: View {
                                     .foregroundStyle(VelaTheme.accent)
                                 Text(L10n.t("Ask about \(focus.title)", "询问关于\(focus.title)"))
                                     .font(.headline)
-                                    .foregroundStyle(VelaTheme.primaryText)
+                                    .foregroundStyle(VelaTheme.fg)
                             }
                             .padding(.top, 20)
                         }

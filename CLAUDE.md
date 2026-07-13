@@ -2,6 +2,20 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in GitHub Issues for `SunWeizhou/Vela`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the canonical `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix` labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repository: read `CONTEXT.md` and relevant decisions in `docs/adr/`. See `docs/agents/domain.md`.
+
 ## 项目概述
 
 Vela 是一个 local-first 的 iOS 健康分析 App（SwiftUI + SwiftData + HealthKit），对标 Bevel Health。原始健康数据留在设备本地，只有结构化摘要通过 DeepSeek API 直接发送给 LLM（不经过中间服务器）。
@@ -104,9 +118,9 @@ xcodebuild -project Vela.xcodeproj -scheme Vela -sdk iphoneos -configuration Deb
 ## 数据流（当前架构，Vela 3.0 Active Coach OS）
 
 ```
-HealthKit → HealthKitSyncEngine (2-pass: raw snapshot → MetricComputationPipeline)
+HealthKit → HealthKitSyncEngine (2-pass: raw snapshot → DailyHealthComputation)
   → SwiftData DailyHealthSummaryRecord（本地缓存，50+ 字段）
-  → ScoreEngineFactory / MetricComputationPipeline → 9 引擎计算 MetricResult
+  → DailyHealthComputation → 评分引擎计算 MetricResult
   → DashboardSummary（聚合体）→ DashboardViewModel (@EnvironmentObject)
   → TodayCommandBuilder.build() → TodayCommandState (readiness / actions / signals)
   → AIContextBuilder.build() → AgentContextEnvelope
@@ -117,7 +131,7 @@ HealthKit → HealthKitSyncEngine (2-pass: raw snapshot → MetricComputationPip
 
 ### 引擎调用路径说明
 
-主路径 `MetricComputationPipeline.compute(for:history:)` 从快照内联构建 Input 并直接调用各引擎。`ScoreEngineFactory` 仅在回填路径 (`DailySummaryUseCase.backfillSleepHistoryIfNeeded`) 中使用。PreviewDataFactory 用固定种子合成预览数据。**修改引擎算法时需同时更新三处**。
+`DailyHealthComputation.compute(for:history:)` 是前台刷新、后台同步和历史计算的唯一评分入口。评估时间、日历和用户配置显式注入；不要在其他路径重新组装评分引擎 Input。PreviewDataFactory 用固定种子合成预览数据。
 
 ### 历史数据组装
 
@@ -128,8 +142,8 @@ HealthKit → HealthKitSyncEngine (2-pass: raw snapshot → MetricComputationPip
 关键类型：
 - `DashboardSummary`: 所有评分的聚合体（`Core/Utilities/DashboardSummary.swift`）
 - `DashboardViewModel`: ObservableObject，持有 DashboardSummary，通过 `@EnvironmentObject` 注入页面
-- `ScoreEngineFactory`: 统一创建各评分引擎的 Input struct（回填路径使用）
-- `MetricComputationPipeline`: 主路径编排者，内联构建 Input 并调用引擎（`Health/Services/HealthKitSyncEngine.swift`）
+- `DailyHealthComputation`: 唯一的每日评分 module，构建 Input 并调用引擎（当前位于 `Health/Services/HealthKitSyncEngine.swift`）
+- `DashboardMetricProjection`: 从规范评分结果构建展示所需的睡眠与健康年龄 projection
 - `PreviewDataFactory`: 用真实引擎 + 固定种子生成预览 DashboardSummary
 - `AIContextBuilder`: 构建发给 LLM 的结构化上下文包（AgentContextEnvelope v1 / TypedAgentContext v2）
 - `DomainContextBuilders`: 各领域的上下文构建器（Sleep/Recovery/Strain/Stress/EnergyBank/StrengthTraining 等）
@@ -176,7 +190,7 @@ HealthKit → HealthKitSyncEngine (2-pass: raw snapshot → MetricComputationPip
 | `JournalCorrelationEngine` | `Scoring/Correlation/JournalCorrelationEngine.swift` | 行为标签 vs 次日体征滞后关联分析 | Spearman + 点二列相关，刚提高最低样本门槛 |
 | `DailyPlanLimiterEngine` | `Scoring/DailyPlan/DailyPlanLimiterEngine.swift` | 规则引擎: sleep/recovery/stress/load/temp/手记 → keep/reduce/swap/rest | 保守安全规则，任何 severity 3 → rest |
 | `PersonalBaselineEngine` | `Scoring/PersonalBaselineEngine.swift` | 30 天均值 ± SD 个人基线，写入 Wiki baselines.md | 标准运动监测，支持 round-trip markdown 解析 |
-| `ScoreEngineFactory` | `Scoring/ScoreEngineFactory.swift` | 统一创建引擎 Input（仅回填路径使用） | — |
+| `DailyHealthComputation` | `Health/Services/HealthKitSyncEngine.swift` | 前台、后台、历史共用的唯一评分入口 | — |
 
 ### 已知改进空间
 

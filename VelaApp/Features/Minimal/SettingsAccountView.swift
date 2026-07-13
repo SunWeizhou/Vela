@@ -37,7 +37,7 @@ struct AccountSettingsView: View {
                 if hasHealthProfileData {
                     Label("已同步的 Apple 健康资料会自动用于评分与训练建议。", systemImage: "heart.text.square")
                         .font(.footnote)
-                        .foregroundStyle(VelaTheme.mutedText)
+                        .foregroundStyle(VelaTheme.muted)
                 }
                 HStack {
                     TextField("年龄", text: $ageDraft)
@@ -76,7 +76,7 @@ struct AccountSettingsView: View {
                 } else {
                     Text("填写年龄后可使用年龄推断的最大心率。")
                         .font(.footnote)
-                        .foregroundStyle(VelaTheme.mutedText)
+                        .foregroundStyle(VelaTheme.muted)
                 }
             }
 

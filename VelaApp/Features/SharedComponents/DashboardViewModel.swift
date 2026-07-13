@@ -102,6 +102,16 @@ final class DashboardViewModel: ObservableObject {
     @Published private(set) var heatmapPoints: [HeatmapPoint] = []
     @Published private(set) var fitnessActivityHistory: [FitnessActivityDay] = []
 
+    // Secondary data properties for the dashboard view
+    @Published private(set) var todayExperience: TodayExperienceModel?
+    @Published private(set) var todayCommandState: TodayCommandState?
+    @Published private(set) var latestTodayArtifact: CoachArtifact?
+    @Published private(set) var persistedOperatingPlan: DailyOperatingPlanRecord?
+    @Published private(set) var todayCalories: Int = 0
+    @Published private(set) var todayProtein: Int = 0
+    @Published private(set) var todayCarbs: Int = 0
+    @Published private(set) var todayFat: Int = 0
+
     var isToday: Bool {
         Calendar.current.isDateInToday(selectedDate)
     }
@@ -154,6 +164,7 @@ final class DashboardViewModel: ObservableObject {
             lastUpdated = cached.recovery.lastUpdated
             computeStreaK(modelContext: modelContext)
             computeWeeklyComparison(modelContext: modelContext)
+            loadSecondaryData(modelContext: modelContext)
             return true
         } catch {
             return false
@@ -218,6 +229,7 @@ final class DashboardViewModel: ObservableObject {
             if let modelContext {
                 computeStreaK(modelContext: modelContext)
                 computeWeeklyComparison(modelContext: modelContext)
+                loadSecondaryData(modelContext: modelContext)
             }
         } catch {
             let message = error.localizedDescription
@@ -400,5 +412,169 @@ final class DashboardViewModel: ObservableObject {
         }
         
         self.heatmapPoints = points
+    }
+
+    func loadSecondaryData(modelContext: ModelContext) {
+        let calendar = Calendar.current
+        let refDate = selectedDate
+        let startOfDayRef = calendar.startOfDay(for: refDate)
+        
+        let healthLookbackDays = 42
+        let trainingLookbackDays = 30
+        
+        let startLimit = calendar.startOfDay(for: calendar.date(byAdding: .day, value: -healthLookbackDays, to: startOfDayRef) ?? startOfDayRef)
+        let trainingStartLimit = calendar.startOfDay(for: calendar.date(byAdding: .day, value: -trainingLookbackDays, to: startOfDayRef) ?? startOfDayRef)
+        let endLimit = calendar.date(byAdding: .day, value: 1, to: startOfDayRef) ?? startOfDayRef
+        
+        let artifactsDesc = FetchDescriptor<CoachArtifactRecord>(
+            predicate: #Predicate<CoachArtifactRecord> { $0.createdAt >= trainingStartLimit && $0.createdAt <= endLimit },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        let coachArtifacts = (try? modelContext.fetch(artifactsDesc)) ?? []
+
+        let strengthDesc = FetchDescriptor<StrengthWorkoutRecord>(
+            predicate: #Predicate<StrengthWorkoutRecord> { $0.startedAt >= trainingStartLimit && $0.startedAt <= endLimit },
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+        let strengthWorkouts = (try? modelContext.fetch(strengthDesc)) ?? []
+
+        let eventsDesc = FetchDescriptor<WorkoutEventRecord>(
+            predicate: #Predicate<WorkoutEventRecord> { $0.startedAt >= trainingStartLimit && $0.startedAt <= endLimit },
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+        let workoutEvents = (try? modelContext.fetch(eventsDesc)) ?? []
+
+        let responsesDesc = FetchDescriptor<TrainingResponseRecord>(
+            predicate: #Predicate<TrainingResponseRecord> { $0.date >= startLimit && $0.date <= endLimit },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        let trainingResponses = (try? modelContext.fetch(responsesDesc)) ?? []
+
+        let foodDesc = FetchDescriptor<FoodLogRecord>(
+            predicate: #Predicate<FoodLogRecord> { $0.createdAt >= startLimit && $0.createdAt <= endLimit },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        let foodLogs = (try? modelContext.fetch(foodDesc)) ?? []
+
+        let journalDesc = FetchDescriptor<JournalEntryRecord>(
+            predicate: #Predicate<JournalEntryRecord> { $0.createdAt >= startLimit && $0.createdAt <= endLimit },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        let journalEntries = (try? modelContext.fetch(journalDesc)) ?? []
+
+        let summaryDesc = FetchDescriptor<DailyHealthSummaryRecord>(
+            predicate: #Predicate<DailyHealthSummaryRecord> { $0.date >= startLimit && $0.date <= endLimit },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        let dailySummaries = (try? modelContext.fetch(summaryDesc)) ?? []
+
+        var plansDesc = FetchDescriptor<TrainingPlanRecord>(
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        plansDesc.fetchLimit = 10
+        let trainingPlans = (try? modelContext.fetch(plansDesc)) ?? []
+
+        let dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: refDate, calendar: calendar)
+        var opPlansDesc = FetchDescriptor<DailyOperatingPlanRecord>(
+            predicate: #Predicate<DailyOperatingPlanRecord> { $0.dayIdentifier == dayIdentifier },
+            sortBy: [SortDescriptor(\.generatedAt, order: .reverse)]
+        )
+        opPlansDesc.fetchLimit = 1
+        let operatingPlans = (try? modelContext.fetch(opPlansDesc)) ?? []
+        
+        let activePlan = trainingPlans.first(where: \.isActive)
+        
+        // 1. Resolve Persisted Operating Plan
+        self.persistedOperatingPlan = operatingPlans.first
+        
+        // 2. Build BodyState
+        let currentDailySummary = dailySummaries.first(where: {
+            Calendar.current.isDate($0.date, inSameDayAs: refDate)
+        })
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: dashboard,
+            dailySummary: currentDailySummary,
+            workoutEvents: workoutEvents,
+            strengthWorkouts: strengthWorkouts,
+            trainingResponses: trainingResponses,
+            foodLogs: foodLogs,
+            journalEntries: journalEntries,
+            activePlan: activePlan,
+            activeStatus: ActiveStatusSettings.resolveCurrentStatus(),
+            generatedAt: Date()
+        ))
+        
+        // 3. Build Training Decision
+        let recentStrengthSummary = TrainingAnalyticsService().buildRecentSummary(
+            workouts: strengthWorkouts,
+            days: 7,
+            endingAt: refDate
+        )
+        
+        let dailyTrainingDecision: DailyTrainingDecision
+        if let persistedPlan = persistedOperatingPlan,
+           let decoded = persistedPlan.trainingDecision {
+            dailyTrainingDecision = decoded
+        } else {
+            dailyTrainingDecision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
+                bodyState: bodyState,
+                activePlan: activePlan,
+                recentStrengthSummary: recentStrengthSummary,
+                trainingResponses: trainingResponses
+            ))
+        }
+        
+        // 4. Update Dashboard metrics
+        var updatedDashboard = dashboard
+        updatedDashboard.bodyState = bodyState
+        updatedDashboard.trainingDecision = TrainingDecision.compatibilityView(
+            of: dailyTrainingDecision,
+            bodyState: bodyState
+        )
+        self.dashboard = updatedDashboard
+        
+        // 5. Build TodayExperienceModel
+        let todayLogs = foodLogs.filter { calendar.isDate($0.createdAt, inSameDayAs: startOfDayRef) }
+        let cals = todayLogs.map(\.totalCalories).reduce(0, +)
+        let prot = todayLogs.map(\.proteinGrams).reduce(0, +)
+        let carbs = todayLogs.map(\.carbsGrams).reduce(0, +)
+        let fat = todayLogs.map(\.fatGrams).reduce(0, +)
+        
+        self.todayCalories = cals
+        self.todayProtein = prot
+        self.todayCarbs = carbs
+        self.todayFat = fat
+        
+        let targetCalorieTarget = UserDefaults.standard.integer(forKey: "vela_daily_calorie_target")
+        let dailyTarget = targetCalorieTarget > 0 ? targetCalorieTarget : 2000
+        
+        self.todayExperience = TodayExperienceModel.build(
+            dashboard: updatedDashboard,
+            bodyState: bodyState,
+            trainingDecision: dailyTrainingDecision,
+            nutrition: TodayExperienceNutrition(
+                calories: cals,
+                calorieTarget: dailyTarget,
+                protein: prot,
+                carbs: carbs,
+                fat: fat
+            )
+        )
+        
+        // 6. Build Latest Today Artifact
+        self.latestTodayArtifact = coachArtifacts
+            .map(\.artifact)
+            .first { artifact in
+                guard let relatedDate = artifact.relatedDate else { return true }
+                return Calendar.current.isDate(relatedDate, inSameDayAs: refDate)
+            }
+            
+        // 7. Build TodayCommandState
+        self.todayCommandState = TodayCommandBuilder.build(
+            from: updatedDashboard,
+            recentStrengthSummary: recentStrengthSummary,
+            coachArtifact: latestTodayArtifact,
+            generatedAt: Date()
+        )
     }
 }

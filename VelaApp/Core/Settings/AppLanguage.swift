@@ -146,7 +146,7 @@ func localizedReason(_ reason: String) -> String {
         return "HRV 显著低于个人基线"
     }
     if reason.contains("HRV slightly below baseline") { return "HRV 略低于基线" }
-    if reason.contains("HRV above baseline") { return "HRV 高于基线，自主神经恢复良好" }
+    if reason.contains("HRV above baseline") { return "HRV 高于个人基线，恢复信号较积极" }
     if reason.contains("HRV within normal range") { return "HRV 处于正常范围" }
     if reason.contains("Resting heart rate elevated") {
         let bpm = reason.components(separatedBy: CharacterSet.decimalDigits.inverted).first { !$0.isEmpty }

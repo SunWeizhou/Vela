@@ -3,27 +3,23 @@ import SwiftUI
 struct MarkdownText: View {
     let markdown: String
     var font: Font = .body
-    var color: Color = VelaTheme.secondaryText
+    var color: Color = VelaTheme.fg2
     var isStreaming: Bool = false
 
-    @State private var blink = true
-    private let timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
-
     var body: some View {
-        let paragraphs = parsedParagraphs
-        VStack(alignment: .leading, spacing: 10) {
-            ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, attrStr in
-                Text(attrStr)
-                    .font(font)
-                    .foregroundStyle(color)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .onReceive(timer) { _ in
-            if isStreaming {
-                blink.toggle()
+        TimelineView(.animation(minimumInterval: 0.5, paused: !isStreaming)) { context in
+            let blink = Int(context.date.timeIntervalSinceReferenceDate * 2).isMultiple(of: 2)
+            let paragraphs = parsedParagraphs(showStreamingCursor: isStreaming && blink)
+
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, attrStr in
+                    Text(attrStr)
+                        .font(font)
+                        .foregroundStyle(color)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }
@@ -33,7 +29,7 @@ struct MarkdownText: View {
     /// Splits raw markdown into paragraphs (separated by blank lines),
     /// parses each paragraph individually via AttributedString(markdown:),
     /// and appends the streaming cursor to the final paragraph.
-    private var parsedParagraphs: [AttributedString] {
+    private func parsedParagraphs(showStreamingCursor: Bool) -> [AttributedString] {
         let normalized = markdown
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
@@ -103,11 +99,11 @@ struct MarkdownText: View {
 
             if let parsed = try? AttributedString(markdown: paraText) {
                 var attrStr = parsed
-                if isLast { appendStreamingCursor(to: &attrStr) }
+                if isLast { appendStreamingCursor(to: &attrStr, isVisible: showStreamingCursor) }
                 result.append(attrStr)
             } else {
                 var plain = AttributedString(paraText)
-                if isLast { appendStreamingCursor(to: &plain) }
+                if isLast { appendStreamingCursor(to: &plain, isVisible: showStreamingCursor) }
                 result.append(plain)
             }
         }
@@ -117,8 +113,8 @@ struct MarkdownText: View {
 
     // MARK: - Streaming Cursor
 
-    private func appendStreamingCursor(to result: inout AttributedString) {
-        if isStreaming && blink {
+    private func appendStreamingCursor(to result: inout AttributedString, isVisible: Bool) {
+        if isVisible {
             var cursor = AttributedString(" ▊")
             cursor.foregroundColor = VelaTheme.accent
             result.append(cursor)

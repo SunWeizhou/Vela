@@ -101,7 +101,7 @@ struct FitnessActivitySummaryDetailView: View {
                             .foregroundStyle(VelaTheme.accent)
                             .frame(width: 38, height: 38)
                             .background(Circle().fill(VelaTheme.surface))
-                            .overlay(Circle().stroke(VelaTheme.stroke, lineWidth: 0.5))
+                            .overlay(Circle().stroke(VelaTheme.borderSoft, lineWidth: 0.5))
                     }
                     .buttonStyle(.cardPress)
                     .accessibilityLabel("返回")
@@ -109,10 +109,10 @@ struct FitnessActivitySummaryDetailView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("活动摘要")
                             .font(.system(size: 21, weight: .bold, design: .rounded))
-                            .foregroundStyle(VelaTheme.primaryText)
+                            .foregroundStyle(VelaTheme.fg)
                         Text("过去 30 天")
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(VelaTheme.secondaryText)
+                            .foregroundStyle(VelaTheme.fg2)
                     }
                     Spacer()
                     Image(systemName: "figure.run.circle.fill")
@@ -135,22 +135,22 @@ struct FitnessActivitySummaryDetailView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("训练总时长")
                             .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(VelaTheme.secondaryText)
+                            .foregroundStyle(VelaTheme.fg2)
                             .textCase(.uppercase)
                             .tracking(0.5)
                         HStack(alignment: .firstTextBaseline, spacing: 4) {
                             Text("\(workoutMinutes / 60)")
                                 .font(.system(size: 42, weight: .bold, design: .rounded))
-                                .foregroundStyle(VelaTheme.primaryText)
+                                .foregroundStyle(VelaTheme.fg)
                             Text("小时")
                                 .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(VelaTheme.secondaryText)
+                                .foregroundStyle(VelaTheme.fg2)
                             Text("\(workoutMinutes % 60)")
                                 .font(.system(size: 42, weight: .bold, design: .rounded))
-                                .foregroundStyle(VelaTheme.primaryText)
+                                .foregroundStyle(VelaTheme.fg)
                             Text("分钟")
                                 .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(VelaTheme.secondaryText)
+                                .foregroundStyle(VelaTheme.fg2)
                         }
                     }
                     Spacer()
@@ -162,7 +162,7 @@ struct FitnessActivitySummaryDetailView: View {
                 }
                 Text("Apple 健康训练与日常活动汇总")
                     .font(.system(size: 13))
-                    .foregroundStyle(VelaTheme.secondaryText)
+                    .foregroundStyle(VelaTheme.fg2)
             }
         }
     }
@@ -171,9 +171,9 @@ struct FitnessActivitySummaryDetailView: View {
     private var activityStats: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
             activityStat(title: "活跃天数", value: "\(activeDays) 天", icon: "calendar", color: VelaTheme.accent)
-            activityStat(title: "训练次数", value: "\(workoutCount) 次", icon: "figure.run", color: VelaTheme.strain)
+            activityStat(title: "训练次数", value: "\(workoutCount) 次", icon: "figure.run", color: VelaTheme.strainColor)
             activityStat(title: "活动消耗", value: "\(activeCalories) kcal", icon: "flame.fill", color: Color(hex: "#FF9F0A"))
-            activityStat(title: "平均耗力", value: averageStrain.map { String(format: "%.0f", $0) } ?? "--", icon: "bolt.heart.fill", color: VelaTheme.recovery)
+            activityStat(title: "平均耗力", value: averageStrain.map { String(format: "%.0f", $0) } ?? "--", icon: "bolt.heart.fill", color: VelaTheme.recoveryColor)
         }
     }
 
@@ -186,12 +186,12 @@ struct FitnessActivitySummaryDetailView: View {
                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(color.opacity(0.12)))
             Text(value)
                 .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundStyle(VelaTheme.primaryText)
+                .foregroundStyle(VelaTheme.fg)
                 .minimumScaleFactor(0.7)
                 .lineLimit(1)
             Text(title)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(VelaTheme.secondaryText)
+                .foregroundStyle(VelaTheme.fg2)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -206,29 +206,29 @@ struct FitnessActivitySummaryDetailView: View {
                     VStack(alignment: .leading, spacing: 5) {
                         Label("训练心率波动", systemImage: "waveform.path.ecg")
                             .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(VelaTheme.primaryText)
+                            .foregroundStyle(VelaTheme.fg)
                         Text("来自统一训练记录的平均心率")
                             .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(VelaTheme.secondaryText)
+                            .foregroundStyle(VelaTheme.fg2)
                     }
                     Spacer()
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(averageWorkoutHeartRate.map { "\(Int($0.rounded()))" } ?? "--")
                             .font(.system(size: 26, weight: .bold, design: .rounded))
-                            .foregroundStyle(VelaTheme.primaryText)
+                            .foregroundStyle(VelaTheme.fg)
                         Text("bpm 平均")
                             .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(VelaTheme.secondaryText)
+                            .foregroundStyle(VelaTheme.fg2)
                     }
                 }
 
                 if workoutHeartRates.count < 2 {
                     HStack(spacing: 8) {
                         Image(systemName: "info.circle")
-                            .foregroundStyle(VelaTheme.secondaryText)
+                            .foregroundStyle(VelaTheme.fg2)
                         Text("导入或同步至少 2 次带心率的训练后显示波动图。")
                             .font(.system(size: 13))
-                            .foregroundStyle(VelaTheme.secondaryText)
+                            .foregroundStyle(VelaTheme.fg2)
                     }
                     .frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
                 } else {
@@ -252,14 +252,14 @@ struct FitnessActivitySummaryDetailView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Label("耗力趋势", systemImage: "chart.line.uptrend.xyaxis")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(VelaTheme.primaryText)
+                    .foregroundStyle(VelaTheme.fg)
                 if chartPoints.isEmpty {
                     HStack(spacing: 8) {
                         Image(systemName: "info.circle")
-                            .foregroundStyle(VelaTheme.secondaryText)
+                            .foregroundStyle(VelaTheme.fg2)
                         Text("积累至少 2 天记录后显示趋势。")
                             .font(.system(size: 13))
-                            .foregroundStyle(VelaTheme.secondaryText)
+                            .foregroundStyle(VelaTheme.fg2)
                     }
                     .frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
                 } else {
@@ -287,15 +287,15 @@ struct FitnessActivitySummaryDetailView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("让 Coach 分析活动趋势")
                             .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(VelaTheme.primaryText)
+                            .foregroundStyle(VelaTheme.fg)
                         Text("结合恢复、睡眠和能量给出下一步建议")
                             .font(.system(size: 12))
-                            .foregroundStyle(VelaTheme.secondaryText)
+                            .foregroundStyle(VelaTheme.fg2)
                     }
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(VelaTheme.secondaryText)
+                        .foregroundStyle(VelaTheme.fg2)
                 }
             }
             .appleIntelligenceGlow(isHighlighted: true, radius: 20)

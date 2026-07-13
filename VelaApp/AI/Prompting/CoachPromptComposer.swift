@@ -310,12 +310,35 @@ struct CoachPromptComposer {
 
     let lang: AppLanguage
     let personality: CoachPersonality
+    let focus: CoachContextFocus
     let wikiText: String
     let baselinePrompt: String
     let activePlan: TrainingPlanRecord?
     let contextJSON: String
     let correlationText: String
     let wikiFiles: String
+
+    init(
+        lang: AppLanguage,
+        personality: CoachPersonality,
+        focus: CoachContextFocus = .general,
+        wikiText: String,
+        baselinePrompt: String,
+        activePlan: TrainingPlanRecord?,
+        contextJSON: String,
+        correlationText: String,
+        wikiFiles: String
+    ) {
+        self.lang = lang
+        self.personality = personality
+        self.focus = focus
+        self.wikiText = wikiText
+        self.baselinePrompt = baselinePrompt
+        self.activePlan = activePlan
+        self.contextJSON = contextJSON
+        self.correlationText = correlationText
+        self.wikiFiles = wikiFiles
+    }
 
     func compose(for policy: ResponseLengthPolicy) -> String {
         switch policy {
@@ -326,6 +349,23 @@ struct CoachPromptComposer {
         case .full:
             return buildFullPrompt()
         }
+    }
+
+    private var focusBlock: String {
+        if lang.isChinese {
+            return """
+            ## 当前专项上下文
+            - 入口：\(focus.title)
+            - 关注范围：\(focus.systemContext)
+            回答应优先围绕该范围；若用户当前问题明确转向其他主题，以当前问题为准。
+            """
+        }
+        return """
+        ## Current Focus Context
+        - Entry point: \(focus.title)
+        - Scope: \(focus.systemContext)
+        Prioritize this scope unless the user's current message clearly changes the topic.
+        """
     }
 
     // MARK: - Casual (2-3 sentences, no health data)
@@ -339,6 +379,8 @@ struct CoachPromptComposer {
 
             ## 你的人格设定
             \(PromptFragments.personalityBlock(personality: personality))
+
+            \(focusBlock)
 
             ## 联网搜索能力
             \(PromptFragments.webSearchBlock(lang: lang))
@@ -367,6 +409,8 @@ struct CoachPromptComposer {
 
         ## Your Personality
         \(PromptFragments.personalityBlock(personality: personality))
+
+        \(focusBlock)
 
         ## Web Search Capability
         \(PromptFragments.webSearchBlock(lang: lang))
@@ -429,6 +473,8 @@ struct CoachPromptComposer {
             \(PromptFragments.personalityBlock(personality: personality))
             请用自然、温暖、如同极高素养的私人健康搭档般的语调进行对话。多用第一人称"我"，避免冰冷生硬的预设套路。
 
+            \(focusBlock)
+
             ## 联网搜索能力
             \(PromptFragments.webSearchBlock(lang: lang))
 
@@ -483,6 +529,8 @@ struct CoachPromptComposer {
         ## Personality and Communication Style
         \(PromptFragments.personalityBlock(personality: personality))
         Speak naturally, warmly, and empathetically, like an elite personal health partner. Use first-person pronouns.
+
+        \(focusBlock)
 
         ## Web Search Capability
         \(PromptFragments.webSearchBlock(lang: lang))

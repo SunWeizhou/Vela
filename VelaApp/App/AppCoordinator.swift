@@ -65,7 +65,7 @@ struct AppCoordinator: View {
     private var storeWarningBanner: some View {
         HStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(VelaTheme.energy)
+                .foregroundStyle(VelaTheme.energyColor)
             Text(appState.isReadOnlySafetyMode
                  ? (language.isChinese
                     ? "数据库无法打开，原文件已备份并进入只读安全模式。"
@@ -74,11 +74,11 @@ struct AppCoordinator: View {
                     ? "存储不可用，数据不会跨启动保存。"
                     : "Storage unavailable. Data won't persist across launches."))
                 .font(.caption.weight(.medium))
-                .foregroundStyle(VelaTheme.primaryText)
+                .foregroundStyle(VelaTheme.fg)
             Spacer()
             if appState.isReadOnlySafetyMode {
                 Button(language.isChinese ? "恢复/导出" : "Recover/Export") {
-                    appState.routeToTab(4)
+                    appState.routeToMe()
                 }
                 .font(.caption.weight(.bold))
             } else {
@@ -89,13 +89,13 @@ struct AppCoordinator: View {
                     }
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(VelaTheme.secondaryText)
+                        .foregroundStyle(VelaTheme.fg2)
                 }
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(VelaTheme.elevatedSurface)
+        .background(VelaTheme.elevatedBg)
     }
 
     nonisolated static func shouldForceOnboarding(arguments: [String]) -> Bool {

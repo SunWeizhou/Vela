@@ -51,7 +51,7 @@ struct MetricChartSection: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 14)
                 
                 Spacer()
                 if rawSelectedDate != nil {
@@ -66,7 +66,7 @@ struct MetricChartSection: View {
             // Value and Status
             VStack(alignment: .leading, spacing: 4) {
                 Text(dynamicValueText)
-                    .font(.system(size: 34, weight: .bold, design: .rounded).monospacedDigit())
+                    .font(.largeTitle.weight(.bold).monospacedDigit())
                     .foregroundStyle(isSleep ? Color(hex: "#F2EFE8") : VelaTheme.fg)
                 
                 Text(rawSelectedDate != nil ? "选定读数" : metricSubtitle)
@@ -77,14 +77,19 @@ struct MetricChartSection: View {
             
             // The Swift Chart!
             if points.isEmpty {
-                VStack {
-                    Spacer()
-                    Text(selectedRange == .day ? "当天仅有日汇总；切换至 7 天查看真实趋势" : "暂无趋势数据")
-                        .font(.system(size: 13))
-                        .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
-                    Spacer()
+                HStack(spacing: 10) {
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(metricColor)
+                        .frame(width: 34, height: 34)
+                        .background(metricColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+                    Text(selectedRange == .day ? "切换至 7 天查看真实趋势" : "积累更多数据后显示趋势")
+                        .font(VelaTheme.footnote())
+                        .foregroundStyle(VelaTheme.muted)
+                    Spacer(minLength: 0)
                 }
-                .frame(height: 160)
+                .padding(.horizontal, 16)
+                .frame(height: 68)
                 .frame(maxWidth: .infinity)
             } else {
                 Chart {
@@ -146,23 +151,23 @@ struct MetricChartSection: View {
                         AxisMarks(values: .stride(by: .hour, count: 4)) { value in
                             AxisValueLabel(format: .dateTime.hour(.twoDigits(amPM: .omitted)), centered: true)
                                 .font(.system(size: 9, weight: .medium))
-                                .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                                .foregroundStyle(VelaTheme.muted)
                         }
                     } else {
                         AxisMarks(values: .stride(by: .day, count: points.count > 10 ? points.count / 5 : 2)) { value in
                             AxisValueLabel(format: .dateTime.month().day(), centered: true)
                                 .font(.system(size: 9, weight: .medium))
-                                .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                                .foregroundStyle(VelaTheme.muted)
                         }
                     }
                 }
                 .chartYAxis {
                     AxisMarks(position: .trailing) { value in
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 2]))
-                            .foregroundStyle(isSleep ? Color.white.opacity(0.06) : Color.black.opacity(0.04))
+                            .foregroundStyle(VelaTheme.separatorSoft)
                         AxisValueLabel()
                             .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                            .foregroundStyle(VelaTheme.muted)
                     }
                 }
                 .chartXSelection(value: $rawSelectedDate)
@@ -177,5 +182,10 @@ struct MetricChartSection: View {
             }
         }
         .padding(.vertical, 14)
+        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
+        )
     }
 }

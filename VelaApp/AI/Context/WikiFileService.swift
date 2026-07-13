@@ -307,6 +307,31 @@ enum WikiFileService {
             .appendingPathComponent(filename)
     }
 
+    @discardableResult
+    static func deleteLocalDocuments(
+        at directoryURL: URL? = nil,
+        fileManager: FileManager = .default
+    ) throws -> Int {
+        let directory = directoryURL ?? localURL(for: "profile.md").deletingLastPathComponent()
+        guard fileManager.fileExists(atPath: directory.path) else { return 0 }
+
+        let contents = try fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil
+        )
+        try fileManager.removeItem(at: directory)
+        return contents.count
+    }
+
+    static func localDocumentCount(fileManager: FileManager = .default) -> Int {
+        let directory = localURL(for: "profile.md").deletingLastPathComponent()
+        guard let contents = try? fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil
+        ) else { return 0 }
+        return contents.filter { $0.pathExtension.lowercased() == "md" }.count
+    }
+
     private static func bundledContent(for filename: String) -> String {
         let name = (filename as NSString).deletingPathExtension
         guard let url = Bundle.main.url(forResource: name, withExtension: "md", subdirectory: "user_wiki"),

@@ -203,8 +203,8 @@ struct CoachArtifactCard: View {
 
     private var accent: Color {
         switch artifact.type {
-        case .postWorkoutReview, .trainingAdjustment, .workoutReadiness: return VelaTheme.strain
-        case .eveningReview: return VelaTheme.sleep
+        case .postWorkoutReview, .trainingAdjustment, .workoutReadiness: return VelaTheme.strainColor
+        case .eveningReview: return VelaTheme.sleepColor
         case .wikiUpdateProposal: return Color(hex: "#FF9F0A")
         default: return VelaTheme.accent
         }
@@ -471,9 +471,9 @@ struct WorkoutSessionCard: View {
             HStack(spacing: 12) {
                 Image(systemName: "figure.strengthtraining.traditional")
                     .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(VelaTheme.strain)
+                    .foregroundStyle(VelaTheme.strainColor)
                     .frame(width: 36, height: 36)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(VelaTheme.strain.opacity(0.12)))
+                    .background(RoundedRectangle(cornerRadius: 10).fill(VelaTheme.strainColor.opacity(0.12)))
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
@@ -584,83 +584,24 @@ struct PlusButtonStyle: ButtonStyle {
 struct AmbientGlowModifier: ViewModifier {
     let color: Color
     let intensity: CGFloat
-    @State private var breathe = false
 
     func body(content: Content) -> some View {
         content
             .background(
                 RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
-                    .fill(color)
-                    .blur(radius: breathe ? 24 : 16)
-                    .opacity(breathe ? intensity * 1.15 : intensity)
-                    .scaleEffect(breathe ? 1.015 : 0.985)
-                    .onAppear {
-                        withAnimation(.easeInOut(duration: 3.6).repeatForever(autoreverses: true)) {
-                            breathe = true
-                        }
-                    }
+                    .fill(color.opacity(intensity))
             )
     }
 }
 
 struct VelaThemeBackground: View {
-    @Environment(\.colorScheme) private var colorScheme
-    @State private var animate = false
-
     var body: some View {
-        ZStack {
-            // Base background gradient matching iOS 26 Liquid Glass
-            LinearGradient(
-                colors: [
-                    VelaTheme.bg,
-                    VelaTheme.surface
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-
-            // Dynamic background blobs
-            GeometryReader { geo in
-                ZStack {
-                    // Blob 1: Accent (Strain/Energy)
-                    Circle()
-                        .fill(VelaTheme.accent.opacity(colorScheme == .dark ? 0.16 : 0.20))
-                        .frame(width: geo.size.width * 0.85, height: geo.size.width * 0.85)
-                        .blur(radius: 70)
-                        .offset(
-                            x: animate ? geo.size.width * 0.25 : -geo.size.width * 0.15,
-                            y: animate ? -geo.size.height * 0.12 : geo.size.height * 0.08
-                        )
-
-                    // Blob 2: Recovery (Green)
-                    Circle()
-                        .fill(VelaTheme.recoveryColor.opacity(colorScheme == .dark ? 0.14 : 0.18))
-                        .frame(width: geo.size.width * 0.75, height: geo.size.width * 0.75)
-                        .blur(radius: 65)
-                        .offset(
-                            x: animate ? -geo.size.width * 0.25 : geo.size.width * 0.25,
-                            y: animate ? geo.size.height * 0.18 : -geo.size.height * 0.15
-                        )
-
-                    // Blob 3: Sleep (Indigo/Blue)
-                    Circle()
-                        .fill(VelaTheme.sleepColor.opacity(colorScheme == .dark ? 0.14 : 0.18))
-                        .frame(width: geo.size.width * 0.9, height: geo.size.width * 0.9)
-                        .blur(radius: 80)
-                        .offset(
-                            x: animate ? geo.size.width * 0.15 : -geo.size.width * 0.25,
-                            y: animate ? geo.size.height * 0.25 : geo.size.height * 0.05
-                        )
-                }
-            }
-            .ignoresSafeArea()
-            .onAppear {
-                withAnimation(.easeInOut(duration: 8.0).repeatForever(autoreverses: true)) {
-                    animate = true
-                }
-            }
-        }
+        LinearGradient(
+            colors: [VelaTheme.elevatedBg.opacity(0.42), VelaTheme.bg, VelaTheme.bg],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
     }
 }
 
@@ -670,16 +611,19 @@ struct VelaNativeCardModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .glassEffect(radius: radius)
-            .shadow(color: VelaTheme.cardShadow(colorScheme), radius: 8, y: 3)
+            .background(VelaTheme.cardBg)
+            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .stroke(VelaTheme.borderSoft.opacity(0.55), lineWidth: 0.5)
+            )
+            .shadow(color: VelaTheme.cardShadow(colorScheme).opacity(0.55), radius: 3, y: 1)
     }
 }
 
 struct AppleIntelligenceGlowModifier: ViewModifier {
     let isHighlighted: Bool
     let radius: CGFloat
-    @State private var rotation: Double = 0.0
-    
     func body(content: Content) -> some View {
         if isHighlighted {
             content
@@ -690,8 +634,6 @@ struct AppleIntelligenceGlowModifier: ViewModifier {
                                 colors: [
                                     Color(hex: "#9C5FF2"),
                                     Color(hex: "#00A2FF"),
-                                    Color(hex: "#FF2D55"),
-                                    Color(hex: "#FF9F0A"),
                                     Color(hex: "#9C5FF2")
                                 ],
                                 startPoint: .topLeading,
@@ -699,13 +641,7 @@ struct AppleIntelligenceGlowModifier: ViewModifier {
                             ),
                             lineWidth: 1.5
                         )
-                        .hueRotation(.degrees(rotation))
                 )
-                .onAppear {
-                    withAnimation(.linear(duration: 4.0).repeatForever(autoreverses: false)) {
-                        rotation = 360.0
-                    }
-                }
         } else {
             content
         }
@@ -725,52 +661,40 @@ extension View {
         self.modifier(VelaNativeCardModifier(radius: radius))
     }
 
-    func cardSurface(padding: CGFloat = VelaTheme.spaceLG, radius: CGFloat = VelaTheme.radiusLG) -> some View {
+    func cardSurface(padding: CGFloat = VelaTheme.space4, radius: CGFloat = VelaTheme.radiusCardLarge) -> some View {
         self
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .glassEffect(radius: radius)
     }
 
-    func heroCardSurface(accent: Color = VelaTheme.accent, padding: CGFloat = VelaTheme.spaceLG) -> some View {
+    func heroCardSurface(accent: Color = VelaTheme.accent, padding: CGFloat = VelaTheme.space4) -> some View {
         self
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: VelaTheme.radiusHero, style: .continuous)
+                RoundedRectangle(cornerRadius: VelaTheme.radiusFeature, style: .continuous)
                     .fill(accent.opacity(0.06))
             )
-            .glassEffect(radius: VelaTheme.radiusHero)
+            .glassEffect(radius: VelaTheme.radiusFeature)
             .overlay(
-                RoundedRectangle(cornerRadius: VelaTheme.radiusHero, style: .continuous)
+                RoundedRectangle(cornerRadius: VelaTheme.radiusFeature, style: .continuous)
                     .stroke(accent.opacity(0.25), lineWidth: 0.8)
             )
     }
 
-    func glassEffect(radius: CGFloat = VelaTheme.radiusLG) -> some View {
+    func glassEffect(radius: CGFloat = VelaTheme.radiusCardLarge) -> some View {
         self
             .background(.ultraThinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.24),
-                                Color.white.opacity(0.04),
-                                Color.black.opacity(0.04),
-                                Color.white.opacity(0.12)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 0.8
-                    )
+                    .stroke(VelaTheme.borderSoft.opacity(0.55), lineWidth: 0.5)
             )
     }
 
     func sectionSpacing() -> some View {
-        self.padding(.bottom, VelaTheme.sectionGap)
+        self.padding(.bottom, VelaTheme.space8)
     }
 }
 
@@ -814,8 +738,8 @@ struct VelaMinimalSectionHeader: View {
                     .foregroundStyle(VelaTheme.muted)
             }
         }
-        .padding(.top, VelaTheme.spaceSM)
-        .padding(.bottom, VelaTheme.spaceSM)
+        .padding(.top, VelaTheme.space2)
+        .padding(.bottom, VelaTheme.space2)
     }
 }
 

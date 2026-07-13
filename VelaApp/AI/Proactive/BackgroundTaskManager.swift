@@ -26,8 +26,15 @@ enum BackgroundTaskManager {
     /// Schedule the next background refresh targeting the nearest agent time window.
     /// iOS determines the actual fire time based on app usage patterns and system conditions.
     static func schedule() {
+        let config = AutoAgentConfig.shared
+        guard config.canRunBackgroundNetworkAI else {
+            cancelAll()
+            logger.info("Background network AI is not enabled by the user; no refresh scheduled.")
+            return
+        }
+
         let request = BGAppRefreshTaskRequest(identifier: refreshTaskIdentifier)
-        request.earliestBeginDate = nextTargetTime()
+        request.earliestBeginDate = nextTargetTime(config: config)
 
         do {
             try BGTaskScheduler.shared.submit(request)
@@ -42,22 +49,19 @@ enum BackgroundTaskManager {
     }
 
     /// Calculates the next target time for background refresh.
-    /// Targets: 23:00 (evening wiki sync) or 07:00 (morning brief), whichever comes next.
-    private static func nextTargetTime() -> Date {
+    /// Targets enabled evening/morning skills, whichever comes next.
+    private static func nextTargetTime(config: AutoAgentConfig) -> Date {
         let now = Date()
         let cal = Calendar.current
 
-        let eveningTarget = cal.date(bySettingHour: 23, minute: 0, second: 0, of: now) ?? now
-        let morningTarget = cal.date(bySettingHour: 7, minute: 0, second: 0, of: now) ?? now
-
-        // Find the next target from now
-        var candidates: [Date] = []
-        if eveningTarget > now { candidates.append(eveningTarget) }
-        if morningTarget > now { candidates.append(morningTarget) }
-        // If both have passed today, schedule for tomorrow morning
-        if candidates.isEmpty {
-            let tomorrow = cal.date(byAdding: .day, value: 1, to: morningTarget) ?? morningTarget
-            candidates.append(tomorrow)
+        let enabledHours = [
+            config.autoEveningWikiSync ? config.eveningSyncHour : nil,
+            config.autoMorningBrief ? config.morningBriefHour : nil
+        ].compactMap { $0 }
+        let candidateHours = enabledHours.isEmpty ? [config.morningBriefHour] : enabledHours
+        let candidates = candidateHours.map { hour -> Date in
+            let today = cal.date(bySettingHour: hour, minute: 0, second: 0, of: now) ?? now
+            return today > now ? today : (cal.date(byAdding: .day, value: 1, to: today) ?? today)
         }
 
         return candidates.min() ?? now.addingTimeInterval(3600)
@@ -74,7 +78,13 @@ enum BackgroundTaskManager {
     private static func handleRefreshTask(task: BGAppRefreshTask) {
         logger.info("Background refresh task fired.")
 
-        // Schedule the next refresh immediately
+        guard AutoAgentConfig.shared.canRunBackgroundNetworkAI else {
+            logger.info("Background network AI consent is absent; refresh skipped.")
+            task.setTaskCompleted(success: true)
+            return
+        }
+
+        // Schedule the next refresh immediately while this one runs.
         schedule()
 
         let handle = Task { @MainActor in
@@ -96,7 +106,8 @@ enum BackgroundTaskManager {
 
                 // Build DashboardSummary from HealthKit
                 let queryService = HealthKitQueryService()
-                let services = VelaServices(queryService: queryService)
+                VelaResolver.shared.register(HealthQueryService.self) { queryService }
+                let services = VelaServices()
 
 
                 let dashboard = try await DailySummaryUseCase(
@@ -104,7 +115,7 @@ enum BackgroundTaskManager {
                 ).loadDashboard(for: Date(), modelContext: modelContext, syncDays: 7)
                 try? DailyLogService.refresh(dashboard: dashboard)
 
-                if config.autoEveningWikiSync, hour >= 23 || hour < 4 {
+                if config.autoEveningWikiSync, (hour >= 23 || hour < 4) {
                     logger.info("Running daily profile sync in background.")
                     await EveningWikiSyncAgent.shared.runIfNeeded(
                         modelContext: modelContext,

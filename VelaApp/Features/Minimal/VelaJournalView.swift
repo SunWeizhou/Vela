@@ -2,7 +2,6 @@ import SwiftUI
 import SwiftData
 
 struct VelaJournalView: View {
-    @Environment(\.velaScrollDirection) private var scrollDirection
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     @ObservedObject private var appState = VelaAppState.shared
@@ -124,7 +123,6 @@ struct VelaJournalView: View {
             .padding(.bottom, VelaFloatingNavigationMetrics.contentBottomPadding)
         }
         .scrollIndicators(.hidden)
-        .velaTrackScroll(direction: scrollDirection)
         .background(VelaTheme.systemGroupedBackground)
         .onAppear {
             loadRealJournalData()
@@ -670,6 +668,13 @@ struct VelaJournalView: View {
         
         let entry = JournalEntryRecord(createdAt: targetDate, tags: tags, note: note, value: value, unit: unit)
         modelContext.insert(entry)
+        VelaEventService.shared.log(
+            modelContext: modelContext,
+            type: "journal_log",
+            title: AppLanguage.stored.isChinese ? "记录日志" : "Log Journal",
+            detail: "Tags: \(tags.joined(separator: ", ")), Note: \(note)",
+            metadata: ["tags": tags, "note": note]
+        )
         do {
             try modelContext.save()
             VelaAppState.shared.markLocalDataChanged()
@@ -695,6 +700,13 @@ struct VelaJournalView: View {
         let tags = Array(Set(["behavior_signal", "随手记"] + signalTags)).sorted()
         let entry = JournalEntryRecord(createdAt: createdAt, tags: tags, note: trimmed)
         modelContext.insert(entry)
+        VelaEventService.shared.log(
+            modelContext: modelContext,
+            type: "journal_log",
+            title: AppLanguage.stored.isChinese ? "快捷日志随手记" : "Quick journal note",
+            detail: "Tags: \(tags.joined(separator: ", ")), Note: \(trimmed)",
+            metadata: ["tags": tags, "note": trimmed]
+        )
         do {
             try modelContext.save()
             VelaAppState.shared.markLocalDataChanged()

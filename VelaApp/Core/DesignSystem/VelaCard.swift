@@ -325,10 +325,10 @@ struct WorkoutCard: View {
     }
 }
 
-// MARK: - VelaGlassCard — glass-style card wrapper
+// MARK: - VelaGlassCard — retained API, calm adaptive surface
 
 struct VelaGlassCard<Content: View>: View {
-    var padding: CGFloat = VelaTheme.spaceLG
+    var padding: CGFloat = VelaTheme.space4
     var cornerRadius: CGFloat = VelaTheme.radiusLg
     @ViewBuilder let content: () -> Content
 
@@ -336,20 +336,12 @@ struct VelaGlassCard<Content: View>: View {
         content()
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.ultraThinMaterial)
+            .background(VelaTheme.cardBg)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(
-                        LinearGradient(
-                            colors: [.white.opacity(0.25), .clear, .white.opacity(0.1)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 0.5
-                    )
+                    .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
             )
-            .shadow(color: Color.black.opacity(0.04), radius: 8, y: 3)
     }
 }
 
@@ -394,8 +386,8 @@ struct VelaMemoryProposalCardCompat: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(VelaTheme.fg)
             Text(displayEvidence)
-                .font(VelaTheme.captionFont)
-                .foregroundStyle(VelaTheme.onSurfaceVariant)
+                .font(VelaTheme.captionLarge())
+                .foregroundStyle(VelaTheme.fg2)
             if !source.isEmpty || !target.isEmpty {
                 HStack(spacing: 8) {
                     VelaMetricPill(title: "Source", value: source, systemImage: "point.3.connected.trianglepath.dotted", tint: VelaTheme.sleepColor)
@@ -417,7 +409,7 @@ struct VelaMemoryProposalCardCompat: View {
                 .tint(VelaTheme.muted)
             }
         }
-        .padding(VelaTheme.spaceLG)
+        .padding(VelaTheme.space4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
@@ -488,14 +480,14 @@ struct VelaHeroSurface<Content: View>: View {
 
     var body: some View {
         content()
-            .padding(VelaTheme.spaceLG)
+            .padding(VelaTheme.space4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: VelaTheme.radiusHero, style: .continuous)
+                RoundedRectangle(cornerRadius: VelaTheme.radiusFeature, style: .continuous)
                     .fill(tint.opacity(0.06))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: VelaTheme.radiusHero, style: .continuous)
+                RoundedRectangle(cornerRadius: VelaTheme.radiusFeature, style: .continuous)
                     .stroke(tint.opacity(0.2), lineWidth: 0.5)
             )
     }
@@ -515,13 +507,16 @@ struct VelaEmptyStateCompat: View {
     var body: some View {
         VStack(spacing: 12) {
             Image(systemName: systemImage)
-                .font(.system(size: 32))
+                .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(tint)
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(tint.opacity(0.12)))
             Text(title)
                 .font(VelaTheme.headline())
                 .foregroundStyle(VelaTheme.fg)
-            if !message.isEmpty {
-                Text(message)
+            let supportingText = message.isEmpty ? subtitle : message
+            if !supportingText.isEmpty {
+                Text(supportingText)
                     .font(VelaTheme.subheadline())
                     .foregroundStyle(VelaTheme.muted)
                     .multilineTextAlignment(.center)
@@ -531,20 +526,23 @@ struct VelaEmptyStateCompat: View {
                     Text(label)
                         .font(VelaTheme.subheadline())
                         .fontWeight(.medium)
-                        .foregroundStyle(VelaTheme.accent)
+                        .foregroundStyle(VelaTheme.accentOn)
                         .padding(.horizontal, 20)
-                        .padding(.vertical, 8)
-                        .background(Capsule().stroke(VelaTheme.accent, lineWidth: 1))
+                        .padding(.vertical, 10)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.accent))
                 }
             }
         }
-        .padding(32)
+        .padding(24)
         .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: VelaTheme.radiusLg)
                 .fill(VelaTheme.cardBg)
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: VelaTheme.radiusLg)
+                .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+        )
     }
 }
 typealias VelaEmptyState = VelaEmptyStateCompat
-

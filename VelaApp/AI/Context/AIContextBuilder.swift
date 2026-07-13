@@ -1,7 +1,9 @@
 import Foundation
+import SwiftData
 
 struct AIContextBuilder {
     static let schemaVersion = "v1.0"
+    static let canonicalSchemaVersion = "v2.0"
 
     func build(
         dashboard: DashboardSummary,
@@ -27,63 +29,25 @@ struct AIContextBuilder {
             foodLogs: foodLogs,
             generatedAt: generatedAt
         ))
-        let envelope = AgentContextEnvelope(
-            metadata: AgentContextMetadata(generatedAt: generatedAt, contextWindow: "today"),
-            todaySummary: [
-                "date": dashboard.date.formatted(date: .numeric, time: .omitted),
-                "overall_state": dashboard.recovery.hasData ? dashboard.recovery.band.rawValue.lowercased() : "unavailable",
-                "source": dashboard.source.rawValue,
-                "top_reason": dashboard.recovery.reasons.first ?? dashboard.dailyInsight,
-                "readiness_level": dashboard.trainingDecision.readinessLevel,
-                "readiness_guidance": dashboard.trainingDecision.readinessGuidance
-            ],
-            bodyState: [
-                "readiness": resolvedBodyState.readiness.rawValue,
-                "confidence": resolvedBodyState.confidence.rawValue,
-                "freshness": resolvedBodyState.freshness.rawValue,
-                "source": resolvedBodyState.source,
-                "context_hash": resolvedBodyState.hash,
-                "drivers": resolvedBodyState.drivers.map { "\($0.title): \($0.detail)" }.joined(separator: " | "),
-                "safety": "General wellness guidance only; not a medical diagnosis."
-            ],
-            sleep: SleepContextBuilder().build(from: dashboard),
-            recovery: RecoveryContextBuilder().build(from: dashboard),
-            strain: StrainContextBuilder().build(from: dashboard),
-            workouts: WorkoutsContextBuilder().build(from: dashboard.workouts),
-            unifiedWorkouts: buildUnifiedWorkoutDict(workoutEvents, generatedAt: generatedAt),
-            stress: StressContextBuilder().build(from: dashboard),
-            energyBank: EnergyBankContextBuilder().build(from: dashboard),
-            healthAgeTrend: HealthAgeContextBuilder().build(from: dashboard),
-            recentTrends: [
-                "note": "Recent trends require enough cached history. No trend is reported until sufficient snapshots exist."
-            ],
-            weeklyTrends: weeklyTrends.isEmpty ? ["note": "No weekly trend data available yet. Historical snapshots require a few days of data."] : weeklyTrends,
+        let envelope = LegacyReportContextAdapter().render(
+            dashboard: dashboard,
+            bodyState: resolvedBodyState,
+            journalEntries: journalEntries,
+            historicalReports: historicalReports,
+            mergedUserWiki: mergedUserWiki,
+            weeklyTrends: weeklyTrends,
             nutrition: buildNutritionDict(foodLogs),
-            journal: [
-                "entries": journalEntries.map { "\($0.tags.joined(separator: "|")): \($0.text)" }.joined(separator: "\n")
-            ],
-            historicalAIReports: [
-                "recent": historicalReports.map { "\($0.title): \($0.markdownContent.prefix(160))" }.joined(separator: "\n")
-            ],
-            userWiki: mergedUserWiki,
-            agentInstruction: [
-                "role": "Private health data analyst and lifestyle coach",
-                "safety": "Do not diagnose. Be cautious with stress and health age trend."
-            ],
-            extendedMetrics: ExtendedMetricsContextBuilder().build(
-                ext: dashboard.extendedMetrics,
-                body: dashboard.bodyMetrics
-            ),
+            unifiedWorkouts: buildUnifiedWorkoutDict(workoutEvents, generatedAt: generatedAt),
             strengthTraining: buildStrengthTrainingDict(
                 strengthWorkouts,
                 trainingResponses: trainingResponses,
                 dashboard: dashboard,
                 generatedAt: generatedAt
-            )
+            ),
+            generatedAt: generatedAt
         )
 
-        let contextJSON = (try? String(data: JSONEncoder().encode(envelope), encoding: .utf8)) ?? "{}"
-        let hash = ContentHash.hash(contextJSON)
+        let hash = legacyContentHash(envelope)
         let metadata = ContextSnapshotMetadata(
             schemaVersion: AIContextBuilder.schemaVersion,
             generatedAt: generatedAt,
@@ -99,9 +63,9 @@ struct AIContextBuilder {
         return (envelope: envelope, metadata: metadata)
     }
 
-    // MARK: - Typed Context Builder (v2)
+    // MARK: - Canonical Agent Facts (v2)
 
-    func buildTyped(
+    func buildFacts(
         dashboard: DashboardSummary,
         journalEntries: [JournalContextEntry],
         historicalReports: [GeneratedAIReport],
@@ -113,73 +77,114 @@ struct AIContextBuilder {
         trainingResponses: [TrainingResponseRecord] = [],
         onboardingState: OnboardingState? = nil,
         bodyModelState: BodyModelState? = nil,
+        bodyState: BodyState? = nil,
+        profileAge: Int? = nil,
+        calendar: Calendar = .current,
         generatedAt: Date = Date()
-    ) -> (context: TypedAgentContext, metadata: ContextSnapshotMetadata) {
+    ) -> (snapshot: AgentFactSnapshot, metadata: ContextSnapshotMetadata) {
         let mergedUserWiki = Self.mergedUserWiki(userWiki, onboardingState: onboardingState, bodyModelState: bodyModelState)
+        let resolvedBodyState = bodyState ?? BodyStateKernel().build(input: BodyStateInput(
+            dashboard: dashboard,
+            workoutEvents: workoutEvents,
+            strengthWorkouts: strengthWorkouts,
+            trainingResponses: trainingResponses,
+            foodLogs: foodLogs,
+            generatedAt: generatedAt
+        ))
         let hrvMs = dashboard.recoveryMetrics.hrvMilliseconds
         let rhrBpm = dashboard.recoveryMetrics.restingHeartRate
+
+        func dataConfidence(_ confidence: MetricConfidence) -> DataConfidence {
+            switch confidence {
+            case .high: .high
+            case .medium: .medium
+            case .low: .low
+            }
+        }
+
+        func freshness(measuredAt: Date?, hasValue: Bool) -> DataFreshness {
+            guard hasValue else { return .missing }
+            guard let measuredAt else { return .recent }
+            let age = generatedAt.timeIntervalSince(measuredAt)
+            if age <= 2 * 3_600 { return .live }
+            if calendar.isDate(measuredAt, inSameDayAs: generatedAt) { return .today }
+            if age <= 3 * 86_400 { return .recent }
+            return .stale
+        }
 
         func healthMetric<T: Codable & Hashable>(
             _ value: T?,
             unit: String,
-            note: String
+            note: String,
+            measuredAt: Date? = nil,
+            source: HealthDataSource = .healthKit,
+            confidence: DataConfidence = .high,
+            baseline: BaselineComparison? = nil
         ) -> MetricValue<T> {
             guard let value else { return .missing(unit: unit, note: note) }
-            return .live(value, unit: unit)
+            return .live(
+                value,
+                unit: unit,
+                source: source,
+                measuredAt: measuredAt,
+                freshness: freshness(measuredAt: measuredAt, hasValue: true),
+                confidence: confidence,
+                baseline: baseline
+            )
         }
 
         let recovery = RecoveryContext(
-            score: healthMetric(dashboard.recovery.hasData ? dashboard.recovery.value : nil, unit: "pts", note: "Recovery score is not computed yet."),
+            score: healthMetric(dashboard.recovery.hasData ? dashboard.recovery.value : nil, unit: "pts", note: "Recovery score is not computed yet.", measuredAt: dashboard.recovery.lastUpdated, source: .computed, confidence: dataConfidence(dashboard.recovery.confidence)),
             band: dashboard.recovery.hasData ? dashboard.recovery.band.rawValue : "unavailable",
-            hrv: healthMetric(hrvMs, unit: "ms", note: "HRV is unavailable."),
-            restingHeartRate: healthMetric(rhrBpm, unit: "bpm", note: "Resting heart rate is unavailable."),
-            respiratoryRate: healthMetric(dashboard.recoveryMetrics.respiratoryRate, unit: "br/min", note: "Respiratory rate is unavailable."),
+            hrv: healthMetric(hrvMs, unit: "ms", note: "HRV is unavailable.", measuredAt: dashboard.recovery.lastUpdated),
+            restingHeartRate: healthMetric(rhrBpm, unit: "bpm", note: "Resting heart rate is unavailable.", measuredAt: dashboard.recovery.lastUpdated),
+            respiratoryRate: healthMetric(dashboard.recoveryMetrics.respiratoryRate, unit: "br/min", note: "Respiratory rate is unavailable.", measuredAt: dashboard.recovery.lastUpdated),
             topReason: dashboard.recovery.reasons.first
         )
 
         let sleepMetrics = dashboard.sleepScore.metrics
         let sleep = SleepContext(
-            score: healthMetric(dashboard.sleepScore.hasData ? dashboard.sleepScore.value : nil, unit: "pts", note: "Sleep score is not computed yet."),
+            score: healthMetric(dashboard.sleepScore.hasData ? dashboard.sleepScore.value : nil, unit: "pts", note: "Sleep score is not computed yet.", measuredAt: dashboard.sleepScore.lastUpdated, source: .computed, confidence: dataConfidence(dashboard.sleepScore.confidence)),
             band: dashboard.sleepScore.hasData ? dashboard.sleepScore.band.rawValue : "unavailable",
-            totalMinutes: healthMetric(dashboard.sleepScore.hasData ? dashboard.sleepSummary.totalSleepMinutes : nil, unit: "min", note: "Sleep duration is unavailable."),
-            efficiency: healthMetric(sleepMetrics["sleep_efficiency"], unit: "%", note: "Sleep efficiency is unavailable."),
-            remPercent: healthMetric(sleepMetrics["rem_pct"], unit: "%", note: "REM sleep percentage is unavailable."),
-            deepPercent: healthMetric(sleepMetrics["deep_pct"], unit: "%", note: "Deep sleep percentage is unavailable."),
-            coreMinutes: healthMetric(dashboard.sleepSummary.stageMinutes[.core], unit: "min", note: "Core sleep duration is unavailable."),
-            remMinutes: healthMetric(dashboard.sleepSummary.stageMinutes[.rem], unit: "min", note: "REM sleep duration is unavailable."),
-            deepMinutes: healthMetric(dashboard.sleepSummary.stageMinutes[.deep], unit: "min", note: "Deep sleep duration is unavailable."),
-            awakeMinutes: healthMetric(dashboard.sleepSummary.stageMinutes[.awake], unit: "min", note: "Awake duration is unavailable."),
+            totalMinutes: healthMetric(dashboard.sleepScore.hasData ? dashboard.sleepSummary.totalSleepMinutes : nil, unit: "min", note: "Sleep duration is unavailable.", measuredAt: dashboard.sleepScore.lastUpdated),
+            efficiency: healthMetric(sleepMetrics["sleep_efficiency"], unit: "%", note: "Sleep efficiency is unavailable.", measuredAt: dashboard.sleepScore.lastUpdated, source: .computed),
+            remPercent: healthMetric(sleepMetrics["rem_pct"], unit: "%", note: "REM sleep percentage is unavailable.", measuredAt: dashboard.sleepScore.lastUpdated, source: .computed),
+            deepPercent: healthMetric(sleepMetrics["deep_pct"], unit: "%", note: "Deep sleep percentage is unavailable.", measuredAt: dashboard.sleepScore.lastUpdated, source: .computed),
+            coreMinutes: healthMetric(dashboard.sleepSummary.stageMinutes[.core], unit: "min", note: "Core sleep duration is unavailable.", measuredAt: dashboard.sleepScore.lastUpdated),
+            remMinutes: healthMetric(dashboard.sleepSummary.stageMinutes[.rem], unit: "min", note: "REM sleep duration is unavailable.", measuredAt: dashboard.sleepScore.lastUpdated),
+            deepMinutes: healthMetric(dashboard.sleepSummary.stageMinutes[.deep], unit: "min", note: "Deep sleep duration is unavailable.", measuredAt: dashboard.sleepScore.lastUpdated),
+            awakeMinutes: healthMetric(dashboard.sleepSummary.stageMinutes[.awake], unit: "min", note: "Awake duration is unavailable.", measuredAt: dashboard.sleepScore.lastUpdated),
             bedtime: dashboard.sleepSummary.bedtime,
             wakeTime: dashboard.sleepSummary.wakeTime,
             topReason: dashboard.sleepScore.reasons.first
         )
 
         let strain = StrainContext(
-            score: healthMetric(dashboard.strain.hasData ? dashboard.strain.value : nil, unit: "pts", note: "Strain score is not computed yet."),
+            score: healthMetric(dashboard.strain.hasData ? dashboard.strain.value : nil, unit: "pts", note: "Strain score is not computed yet.", measuredAt: dashboard.strain.lastUpdated, source: .computed, confidence: dataConfidence(dashboard.strain.confidence)),
             band: dashboard.strain.hasData ? dashboard.strain.band.rawValue : "unavailable",
             targetStatus: dashboard.strain.hasData ? dashboard.strain.targetStatus.rawValue : "unavailable",
             recommendedRangeLower: dashboard.strain.recommendedRange.lowerBound,
             recommendedRangeUpper: dashboard.strain.recommendedRange.upperBound,
-            steps: healthMetric(dashboard.strain.metrics["steps_raw"].map(Int.init), unit: "steps", note: "Step count is unavailable."),
-            activeEnergyKcal: healthMetric(dashboard.strain.metrics["active_energy_raw"].map(Int.init), unit: "kcal", note: "Active energy is unavailable."),
-            exerciseMinutes: healthMetric(dashboard.strain.metrics["exercise_minutes_raw"].map(Int.init), unit: "min", note: "Exercise duration is unavailable.")
+            steps: healthMetric(dashboard.strain.metrics["steps_raw"].map(Int.init), unit: "steps", note: "Step count is unavailable.", measuredAt: dashboard.strain.lastUpdated),
+            activeEnergyKcal: healthMetric(dashboard.strain.metrics["active_energy_raw"].map(Int.init), unit: "kcal", note: "Active energy is unavailable.", measuredAt: dashboard.strain.lastUpdated),
+            exerciseMinutes: healthMetric(dashboard.strain.metrics["exercise_minutes_raw"].map(Int.init), unit: "min", note: "Exercise duration is unavailable.", measuredAt: dashboard.strain.lastUpdated)
         )
 
         let stress = StressContext(
-            stressIndex: healthMetric(dashboard.stress.hasData ? dashboard.stress.value : nil, unit: "index", note: "Stress index is not computed yet."),
+            stressIndex: healthMetric(dashboard.stress.hasData ? dashboard.stress.value : nil, unit: "index", note: "Stress index is not computed yet.", measuredAt: dashboard.stress.lastUpdated, source: .computed, confidence: dataConfidence(dashboard.stress.confidence)),
             band: dashboard.stress.hasData ? dashboard.stress.band.rawValue : "unavailable",
             confidence: dashboard.stress.hasData ? (dashboard.stress.confidence.rawValue == "high" ? .high : .medium) : .unavailable,
             proxyNote: "Physiological proxy, not a medical or mental health diagnosis."
         )
 
         let energyBank = EnergyBankContext(
-            morningEnergy: healthMetric(dashboard.energy.hasData ? dashboard.energy.morningEnergy : nil, unit: "pts", note: "Morning energy is unavailable."),
-            currentEnergy: healthMetric(dashboard.energy.hasData ? dashboard.energy.value : nil, unit: "pts", note: "Current energy is unavailable."),
+            morningEnergy: healthMetric(dashboard.energy.hasData ? dashboard.energy.morningEnergy : nil, unit: "pts", note: "Morning energy is unavailable.", measuredAt: dashboard.energy.lastUpdated, source: .computed, confidence: dataConfidence(dashboard.energy.confidence)),
+            currentEnergy: healthMetric(dashboard.energy.hasData ? dashboard.energy.value : nil, unit: "pts", note: "Current energy is unavailable.", measuredAt: dashboard.energy.lastUpdated, source: .computed, confidence: dataConfidence(dashboard.energy.confidence)),
             status: dashboard.energy.hasData ? dashboard.energy.status.rawValue : "unavailable",
-            chargeEfficiency: healthMetric(dashboard.energy.metrics["charge_efficiency"], unit: "ratio", note: "Charge efficiency is unavailable."),
-            atl7Day: healthMetric(dashboard.energy.metrics["atl"], unit: "AU", note: "Acute training load is unavailable."),
-            ctl42Day: healthMetric(dashboard.energy.metrics["ctl"], unit: "AU", note: "Chronic training load is unavailable."),
-            tsbFreshness: healthMetric(dashboard.energy.metrics["tsb"], unit: "AU", note: "Training stress balance is unavailable.")
+            chargeEfficiency: healthMetric(dashboard.energy.metrics["charge_efficiency"], unit: "ratio", note: "Charge efficiency is unavailable.", measuredAt: dashboard.energy.lastUpdated, source: .computed),
+            atl7Day: healthMetric(dashboard.energy.metrics["atl"], unit: "AU", note: "Acute training load is unavailable.", measuredAt: dashboard.energy.lastUpdated, source: .computed),
+            ctl42Day: healthMetric(dashboard.energy.metrics["ctl"], unit: "AU", note: "Chronic training load is unavailable.", measuredAt: dashboard.energy.lastUpdated, source: .computed),
+            tsbFreshness: healthMetric(dashboard.energy.metrics["tsb"], unit: "AU", note: "Training stress balance is unavailable.", measuredAt: dashboard.energy.lastUpdated, source: .computed)
         )
 
         let workouts = dashboard.workouts
@@ -204,7 +209,7 @@ struct AIContextBuilder {
 
         let ext = dashboard.extendedMetrics
         let body = dashboard.bodyMetrics
-        let age = WikiFileService.getAgeFromWiki() ?? ext.age
+        let age = profileAge ?? ext.age
         let extended = ExtendedMetricsContext(
             age: age,
             biologicalSex: ext.biologicalSex,
@@ -227,11 +232,56 @@ struct AIContextBuilder {
             wristTempC: ext.bodyTemperature.map { MetricValue.live($0, unit: "°C") }
         )
 
-        let context = TypedAgentContext(
-            schemaVersion: AIContextBuilder.schemaVersion,
+        let coreAvailability: [(String, Bool)] = [
+            ("recovery", dashboard.recovery.hasData),
+            ("sleep", dashboard.sleepScore.hasData),
+            ("strain", dashboard.strain.hasData),
+            ("stress", dashboard.stress.hasData),
+            ("energy", dashboard.energy.hasData)
+        ]
+        let missingSections = coreAvailability.filter { !$0.1 }.map(\.0).sorted()
+        let availableSections = coreAvailability.count - missingSections.count
+        let coverageConfidence: DataConfidence
+        if availableSections == coreAvailability.count {
+            coverageConfidence = .high
+        } else if availableSections >= 3 {
+            coverageConfidence = .medium
+        } else if availableSections >= 1 {
+            coverageConfidence = .low
+        } else {
+            coverageConfidence = .unavailable
+        }
+        let decision = dashboard.trainingDecision
+
+        let context = AgentFactSnapshot(
+            schemaVersion: AIContextBuilder.canonicalSchemaVersion,
             contextHash: "",
             generatedAt: generatedAt,
             contextWindow: "today",
+            bodyState: AgentBodyStateContext(
+                readiness: resolvedBodyState.readiness,
+                confidence: resolvedBodyState.confidence,
+                freshness: resolvedBodyState.freshness,
+                source: resolvedBodyState.source,
+                activeStatus: resolvedBodyState.activeStatus,
+                contextHash: resolvedBodyState.hash,
+                drivers: resolvedBodyState.drivers.sorted { $0.id < $1.id }
+            ),
+            trainingDecision: AgentTrainingDecisionContext(
+                readinessLevel: decision.readinessLevel,
+                readinessGuidance: decision.readinessGuidance,
+                volumeMultiplier: decision.volumeMultiplier,
+                maxIntensity: decision.maxIntensity,
+                recommendedTrainingType: decision.recommendedTrainingType,
+                reasons: decision.whyThis,
+                confidence: decision.trainingLoadConfidence
+            ),
+            dataCoverage: AgentDataCoverageContext(
+                availableSections: availableSections,
+                totalSections: coreAvailability.count,
+                missingSections: missingSections,
+                confidence: coverageConfidence
+            ),
             recovery: recovery,
             sleep: sleep,
             strain: strain,
@@ -240,7 +290,7 @@ struct AIContextBuilder {
             training: training,
             nutrition: nutrition,
             extendedMetrics: extended,
-            strengthTraining: buildTypedStrengthTraining(
+            strengthTraining: buildStrengthTrainingFacts(
                 strengthWorkouts,
                 trainingResponses: trainingResponses,
                 dashboard: dashboard,
@@ -253,13 +303,12 @@ struct AIContextBuilder {
             userWiki: mergedUserWiki
         )
 
-        let contextJSON = (try? String(data: JSONEncoder().encode(context), encoding: .utf8)) ?? "{}"
-        let hash = ContentHash.hash(contextJSON)
+        let hash = canonicalContentHash(context)
         var withHash = context
         withHash.contextHash = hash
 
         let metadata = ContextSnapshotMetadata(
-            schemaVersion: AIContextBuilder.schemaVersion,
+            schemaVersion: AIContextBuilder.canonicalSchemaVersion,
             generatedAt: generatedAt,
             hash: hash,
             includedSections: ["recovery", "sleep", "strain", "stress", "energy_bank", "training", "nutrition", "extended_metrics", "strength_training"]
@@ -268,7 +317,29 @@ struct AIContextBuilder {
             redactedFields: []
         )
 
-        return (context: withHash, metadata: metadata)
+        return (snapshot: withHash, metadata: metadata)
+    }
+
+    private func canonicalContentHash(_ context: AgentFactSnapshot) -> String {
+        var semantic = context
+        semantic.contextHash = ""
+        semantic.generatedAt = Date(timeIntervalSince1970: 0)
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        let data = (try? encoder.encode(semantic)) ?? Data("{}".utf8)
+        return ContentHash.hash(String(data: data, encoding: .utf8) ?? "{}")
+    }
+
+    private func legacyContentHash(_ envelope: AgentContextEnvelope) -> String {
+        var semantic = envelope
+        semantic.metadata.generatedAt = Date(timeIntervalSince1970: 0)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        let data = (try? encoder.encode(semantic)) ?? Data("{}".utf8)
+        return ContentHash.hash(String(data: data, encoding: .utf8) ?? "{}")
     }
 
     // MARK: - Private Helpers
@@ -407,7 +478,7 @@ struct AIContextBuilder {
         ]
     }
 
-    private func buildTypedStrengthTraining(
+    private func buildStrengthTrainingFacts(
         _ workouts: [StrengthWorkoutRecord],
         trainingResponses: [TrainingResponseRecord],
         dashboard: DashboardSummary,
@@ -626,4 +697,292 @@ struct AIContextBuilder {
         return result
     }
 
+}
+
+/// Compatibility adapter for report prompts and persisted v1 snapshots.
+/// New consumers should use AgentFactSnapshot and a purpose-built adapter.
+struct LegacyReportContextAdapter {
+    func render(
+        dashboard: DashboardSummary,
+        bodyState: BodyState,
+        journalEntries: [JournalContextEntry],
+        historicalReports: [GeneratedAIReport],
+        mergedUserWiki: [String: String],
+        weeklyTrends: [String: String],
+        nutrition: [String: String],
+        unifiedWorkouts: [String: String],
+        strengthTraining: [String: String],
+        generatedAt: Date
+    ) -> AgentContextEnvelope {
+        AgentContextEnvelope(
+            metadata: AgentContextMetadata(generatedAt: generatedAt, contextWindow: "today"),
+            todaySummary: [
+                "date": dashboard.date.formatted(date: .numeric, time: .omitted),
+                "overall_state": dashboard.recovery.hasData ? dashboard.recovery.band.rawValue.lowercased() : "unavailable",
+                "source": dashboard.source.rawValue,
+                "top_reason": dashboard.recovery.reasons.first ?? dashboard.dailyInsight,
+                "readiness_level": dashboard.trainingDecision.readinessLevel,
+                "readiness_guidance": dashboard.trainingDecision.readinessGuidance
+            ],
+            bodyState: [
+                "readiness": bodyState.readiness.rawValue,
+                "confidence": bodyState.confidence.rawValue,
+                "freshness": bodyState.freshness.rawValue,
+                "source": bodyState.source,
+                "context_hash": bodyState.hash,
+                "drivers": bodyState.drivers.map { "\($0.title): \($0.detail)" }.joined(separator: " | "),
+                "safety": "General wellness guidance only; not a medical diagnosis."
+            ],
+            sleep: SleepContextBuilder().build(from: dashboard),
+            recovery: RecoveryContextBuilder().build(from: dashboard),
+            strain: StrainContextBuilder().build(from: dashboard),
+            workouts: WorkoutsContextBuilder().build(from: dashboard.workouts),
+            unifiedWorkouts: unifiedWorkouts,
+            stress: StressContextBuilder().build(from: dashboard),
+            energyBank: EnergyBankContextBuilder().build(from: dashboard),
+            healthAgeTrend: HealthAgeContextBuilder().build(from: dashboard),
+            recentTrends: [
+                "note": "Recent trends require enough cached history. No trend is reported until sufficient snapshots exist."
+            ],
+            weeklyTrends: weeklyTrends.isEmpty
+                ? ["note": "No weekly trend data available yet. Historical snapshots require a few days of data."]
+                : weeklyTrends,
+            nutrition: nutrition,
+            journal: [
+                "entries": journalEntries.map { "\($0.tags.joined(separator: "|")): \($0.text)" }.joined(separator: "\n")
+            ],
+            historicalAIReports: [
+                "recent": historicalReports.map { "\($0.title): \($0.markdownContent.prefix(160))" }.joined(separator: "\n")
+            ],
+            userWiki: mergedUserWiki,
+            agentInstruction: [
+                "role": "Private health data analyst and lifestyle coach",
+                "safety": "Do not diagnose. Be cautious with stress and health age trend."
+            ],
+            extendedMetrics: ExtendedMetricsContextBuilder().build(
+                ext: dashboard.extendedMetrics,
+                body: dashboard.bodyMetrics
+            ),
+            strengthTraining: strengthTraining
+        )
+    }
+}
+
+/// The single persistence boundary for facts consumed by reports and Coach.
+/// Keeping fetch windows and ordering here prevents each agent from seeing a
+/// subtly different version of the same day.
+@MainActor
+struct AgentFactInputLoader {
+    struct Input {
+        var asOf: Date
+        var journalRecords: [JournalEntryRecord]
+        var reportRecords: [AIReportRecord]
+        var weeklyTrends: [String: String]
+        var foodLogs: [FoodLogRecord]
+        var workoutEvents: [WorkoutEventRecord]
+        var strengthWorkouts: [StrengthWorkoutRecord]
+        var trainingResponses: [TrainingResponseRecord]
+        var dailySummaries: [DailyHealthSummaryRecord]
+        var activePlan: TrainingPlanRecord?
+        var onboardingState: OnboardingState?
+
+        var journalContext: [JournalContextEntry] {
+            journalRecords.map { JournalContextEntry(tags: $0.tags, text: $0.note) }
+        }
+
+        var reportContext: [GeneratedAIReport] {
+            reportRecords.map { record in
+                GeneratedAIReport(
+                    type: AIReportType(rawValue: record.type) ?? .morningBrief,
+                    title: record.title,
+                    markdownContent: record.markdownContent,
+                    contextSnapshot: record.serializedContextSnapshot,
+                    createdAt: record.createdAt
+                )
+            }
+        }
+
+        func bodyState(dashboard: DashboardSummary) -> BodyState {
+            BodyStateKernel().build(input: BodyStateInput(
+                dashboard: dashboard,
+                dailySummary: dailySummaries.first,
+                workoutEvents: workoutEvents,
+                strengthWorkouts: strengthWorkouts,
+                trainingResponses: trainingResponses,
+                foodLogs: foodLogs,
+                journalEntries: journalRecords,
+                activePlan: activePlan,
+                activeStatus: ActiveStatusSettings.resolveCurrentStatus(),
+                generatedAt: asOf
+            ))
+        }
+    }
+
+    func load(modelContext: ModelContext, asOf: Date = Date()) -> Input {
+        let historyStart = asOf.addingTimeInterval(-35 * 86_400)
+
+        var journalDescriptor = FetchDescriptor<JournalEntryRecord>(
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        journalDescriptor.fetchLimit = 12
+        let journals = (try? modelContext.fetch(journalDescriptor)) ?? []
+
+        let allReports = (try? modelContext.fetch(FetchDescriptor<AIReportRecord>(
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        ))) ?? []
+        let reports = Array(allReports.lazy
+            .filter { $0.type != "coach_prompt" && $0.type != "coach_thread" }
+            .prefix(6))
+
+        let foods = (try? modelContext.fetch(FetchDescriptor<FoodLogRecord>(
+            predicate: #Predicate<FoodLogRecord> { $0.createdAt >= historyStart },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        ))) ?? []
+        let workoutEvents = (try? modelContext.fetch(FetchDescriptor<WorkoutEventRecord>(
+            predicate: #Predicate<WorkoutEventRecord> { $0.startedAt >= historyStart },
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        ))) ?? []
+        let strength = (try? modelContext.fetch(FetchDescriptor<StrengthWorkoutRecord>(
+            predicate: #Predicate<StrengthWorkoutRecord> { $0.startedAt >= historyStart },
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        ))) ?? []
+        let responses = (try? modelContext.fetch(FetchDescriptor<TrainingResponseRecord>(
+            predicate: #Predicate<TrainingResponseRecord> { $0.date >= historyStart },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        ))) ?? []
+        let summaries = (try? modelContext.fetch(FetchDescriptor<DailyHealthSummaryRecord>(
+            predicate: #Predicate<DailyHealthSummaryRecord> { $0.date >= historyStart },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        ))) ?? []
+        let activePlan = (try? modelContext.fetch(FetchDescriptor<TrainingPlanRecord>(
+            predicate: #Predicate<TrainingPlanRecord> { $0.isActive }
+        )))?.first
+        var onboardingDescriptor = FetchDescriptor<OnboardingState>(
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        onboardingDescriptor.fetchLimit = 1
+
+        return Input(
+            asOf: asOf,
+            journalRecords: journals,
+            reportRecords: reports,
+            weeklyTrends: (try? HealthSnapshotRepository(modelContext: modelContext).buildWeeklyTrendSummary()) ?? [:],
+            foodLogs: foods,
+            workoutEvents: workoutEvents,
+            strengthWorkouts: strength,
+            trainingResponses: responses,
+            dailySummaries: summaries,
+            activePlan: activePlan,
+            onboardingState: (try? modelContext.fetch(onboardingDescriptor))?.first
+        )
+    }
+}
+
+struct CoachCompactContextAdapter {
+    func render(
+        snapshot: AgentFactSnapshot,
+        language: AppLanguage,
+        maxCharacters: Int = 800,
+        healthReferenceLine: String? = nil
+    ) -> String {
+        let isChinese = language.isChinese
+        let bodyDrivers = snapshot.bodyState.drivers.prefix(3)
+            .map(\.title)
+            .joined(separator: isChinese ? "、" : ", ")
+        let coverage = snapshot.dataCoverage
+        let missing = coverage.missingSections.joined(separator: ", ")
+
+        let required: [String] = [
+            isChinese ? "## 今日事实快照" : "## Today's Fact Snapshot",
+            isChinese
+                ? "- Body State：\(snapshot.bodyState.readiness.rawValue) · 置信度 \(localizedDataConfidence(snapshot.bodyState.confidence)) · 新鲜度 \(localizedDataFreshness(snapshot.bodyState.freshness))"
+                : "- Body State: \(snapshot.bodyState.readiness.rawValue) · confidence \(snapshot.bodyState.confidence.rawValue) · freshness \(snapshot.bodyState.freshness.rawValue)",
+            isChinese
+                ? "- 恢复 \(metric(snapshot.recovery.score, language: language)) · 睡眠 \(metric(snapshot.sleep.score, language: language)) · 负荷 \(metric(snapshot.strain.score, language: language))"
+                : "- Recovery \(metric(snapshot.recovery.score, language: language)) · Sleep \(metric(snapshot.sleep.score, language: language)) · Strain \(metric(snapshot.strain.score, language: language))",
+            isChinese
+                ? "- 能量 \(metric(snapshot.energyBank.currentEnergy, language: language)) · 压力代理 \(metric(snapshot.stress.stressIndex, language: language))"
+                : "- Energy \(metric(snapshot.energyBank.currentEnergy, language: language)) · Stress proxy \(metric(snapshot.stress.stressIndex, language: language))",
+            isChinese
+                ? "- Training Decision：\(snapshot.trainingDecision.readinessLevel) · \(snapshot.trainingDecision.readinessGuidance)"
+                : "- Training Decision: \(snapshot.trainingDecision.readinessLevel) · \(snapshot.trainingDecision.readinessGuidance)",
+            isChinese
+                ? "- Data Coverage：\(coverage.availableSections)/\(coverage.totalSections) 可用\(missing.isEmpty ? "" : " · 缺失 \(missing)")"
+                : "- Data Coverage: \(coverage.availableSections)/\(coverage.totalSections) available\(missing.isEmpty ? "" : " · missing \(missing)")",
+            isChinese ? "- 安全：一般健康建议，不构成医疗诊断。" : "- Safety: General wellness guidance only; not a medical diagnosis.",
+            "- content_hash: \(snapshot.contextHash)"
+        ]
+
+        var lines = required
+        var wasTruncated = false
+
+        func appendIfFits(_ value: String?) {
+            guard let value, !value.isEmpty else { return }
+            let candidate = (lines + [value]).joined(separator: "\n")
+            if candidate.count <= maxCharacters {
+                lines.append(value)
+            } else {
+                wasTruncated = true
+            }
+        }
+
+        appendIfFits(bodyDrivers.isEmpty ? nil : (isChinese ? "- 主要驱动：\(bodyDrivers)" : "- Main drivers: \(bodyDrivers)"))
+        appendIfFits(healthReferenceLine)
+
+        let trendLines = snapshot.weeklyTrends
+            .sorted { $0.key < $1.key }
+            .map { "- \($0.key): \($0.value.prefix(120))" }
+        if !trendLines.isEmpty {
+            appendIfFits((isChinese ? "## 周趋势\n" : "## Weekly Trends\n") + trendLines.joined(separator: "\n"))
+        }
+
+        if let strength = snapshot.strengthTraining {
+            if strength.sessions7d > 0 {
+                appendIfFits(isChinese
+                    ? "- 近 7 天力量训练：\(strength.sessions7d) 次 · \(strength.hardSets7d) 个有效组 · \(Int(strength.volume7dKg)) kg"
+                    : "- Strength 7d: \(strength.sessions7d) sessions · \(strength.hardSets7d) effective sets · \(Int(strength.volume7dKg)) kg")
+            }
+            let summary = strength.recoveryResponseSummary
+            if !summary.isEmpty && summary != "No post-training response data yet." && summary != "No post-training recovery response records in the past 28 days." {
+                appendIfFits(isChinese
+                    ? "- 近期恢复反应：\(summary)"
+                    : "- Recent recovery response: \(summary)")
+            }
+        }
+
+        if let goal = snapshot.userWiki["body_model.primary_goal"],
+           let style = snapshot.userWiki["body_model.training_style"] {
+            let days = snapshot.userWiki["body_model.weekly_training_days"] ?? "--"
+            appendIfFits(isChinese
+                ? "- 身体模型：目标 \(localizedOnboardingGoal(goal)) · \(localizedOnboardingTrainingStyle(style)) · 每周 \(days) 次"
+                : "- Body model: \(localizedOnboardingGoal(goal)) · \(localizedOnboardingTrainingStyle(style)) · \(days)x/week")
+        }
+
+        let rendered = lines.joined(separator: "\n")
+        guard rendered.count > maxCharacters else {
+            if wasTruncated {
+                let marker = isChinese ? "\n[其余事实已按预算省略，可通过工具查询。]" : "\n[Additional facts omitted; use tools for details.]"
+                if rendered.count + marker.count <= maxCharacters { return rendered + marker }
+            }
+            return rendered
+        }
+
+        // Required safety and hash lines take priority over descriptive detail.
+        var compact = required
+        while compact.joined(separator: "\n").count > maxCharacters, compact.count > 4 {
+            compact.remove(at: compact.count - 3)
+        }
+        return String(compact.joined(separator: "\n").prefix(maxCharacters))
+    }
+
+    private func metric(_ metric: MetricValue<Double>, language: AppLanguage) -> String {
+        guard let value = metric.value else {
+            return language.isChinese ? "--（缺失）" : "-- (missing)"
+        }
+        let freshness = language.isChinese
+            ? localizedDataFreshness(metric.freshness)
+            : metric.freshness.rawValue
+        let valueAndUnit = "\(Int(value.rounded())) \(metric.unit ?? "")"
+        return language.isChinese ? "\(valueAndUnit)（\(freshness)）" : "\(valueAndUnit) (\(freshness))"
+    }
 }

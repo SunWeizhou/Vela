@@ -160,38 +160,26 @@ struct MetricTrendsSection: View {
                 .fontWeight(.bold)
                 .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
             
-            VStack(spacing: VelaTheme.cardGap) {
+            VStack(spacing: 0) {
                 if items.isEmpty {
-                    Text("暂无可用趋势数据")
-                        .font(VelaTheme.caption1())
-                        .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                    Label("积累更多数据后显示长期变化", systemImage: "chart.line.uptrend.xyaxis")
+                        .font(VelaTheme.footnote())
+                        .foregroundStyle(VelaTheme.muted)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(14)
-                        .background(
-                            RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                                .fill(isSleep ? Color(hex: "#161512") : Color.white)
-                                .shadow(color: Color.black.opacity(isSleep ? 0.0 : 0.01), radius: 8, y: 2)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                                .stroke(isSleep ? Color.white.opacity(0.08) : Color(hex: "#E5E5EA"), lineWidth: 0.5)
-                        )
+                        .padding(16)
                 } else {
-                    ForEach(items) { item in
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                         HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack(spacing: 6) {
                                     Image(systemName: item.icon)
                                         .font(.system(size: 12))
-                                        .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                                        .foregroundStyle(VelaTheme.muted)
                                     Text(item.title)
                                         .font(VelaTheme.caption1())
                                         .fontWeight(.semibold)
-                                        .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                                        .foregroundStyle(VelaTheme.muted)
                                     Spacer()
-                                    Image(systemName: "arrow.right")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
                                 }
                                 
                                 HStack(alignment: .bottom) {
@@ -199,7 +187,7 @@ struct MetricTrendsSection: View {
                                         Text(item.value)
                                             .font(.system(size: 20, weight: .bold, design: .rounded))
                                             .monospacedDigit()
-                                            .foregroundStyle(isSleep ? Color(hex: "#F2EFE8") : VelaTheme.fg)
+                                            .foregroundStyle(VelaTheme.fg)
                                         Text(item.statusLabel)
                                             .font(.system(size: 10, weight: .bold))
                                             .foregroundStyle(item.statusColor)
@@ -212,25 +200,25 @@ struct MetricTrendsSection: View {
                                     } else {
                                         Text("无可用趋势")
                                             .font(VelaTheme.caption2())
-                                            .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                                            .foregroundStyle(VelaTheme.muted)
                                             .frame(width: 85, height: 32)
                                     }
                                 }
                             }
                         }
                         .padding(14)
-                        .background(
-                            RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                                .fill(isSleep ? Color(hex: "#161512") : Color.white)
-                                .shadow(color: Color.black.opacity(isSleep ? 0.0 : 0.01), radius: 8, y: 2)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                                .stroke(isSleep ? Color.white.opacity(0.08) : Color(hex: "#E5E5EA"), lineWidth: 0.5)
-                        )
+
+                        if index < items.count - 1 {
+                            Divider().padding(.leading, 14)
+                        }
                     }
                 }
             }
+            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
+            )
         }
     }
 }

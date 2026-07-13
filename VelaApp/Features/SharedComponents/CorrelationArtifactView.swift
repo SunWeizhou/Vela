@@ -12,15 +12,15 @@ struct CorrelationArtifactView: View {
     private func colorForMetric(_ metric: String) -> Color {
         switch metric {
         case "hrv", "recovery", "recovery_score":
-            return VelaTheme.recovery
+            return VelaTheme.recoveryColor
         case "sleep", "sleep_score", "sleep_hours":
-            return VelaTheme.sleep
+            return VelaTheme.sleepColor
         case "strain", "strain_score", "steps":
-            return VelaTheme.strain
+            return VelaTheme.strainColor
         case "stress", "stress_index", "alcohol", "late_meal":
-            return VelaTheme.stress
+            return VelaTheme.stressColor
         case "energy", "energy_bank", "caffeine":
-            return VelaTheme.energy
+            return VelaTheme.energyColor
         default:
             return VelaTheme.accent
         }
@@ -60,10 +60,10 @@ struct CorrelationArtifactView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("行为关联检查")
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
                     Text("尚未生成可验证的统计结果")
                         .font(.system(size: 12))
-                        .foregroundStyle(VelaTheme.mutedText)
+                        .foregroundStyle(VelaTheme.muted)
                 }
                 Spacer()
             }
@@ -72,28 +72,28 @@ struct CorrelationArtifactView: View {
                 metricPill(displayNameForMetric(metrics.x), color: colorForMetric(metrics.x))
                 Image(systemName: "arrow.left.arrow.right")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(VelaTheme.mutedText)
+                    .foregroundStyle(VelaTheme.muted)
                 metricPill(displayNameForMetric(metrics.y), color: colorForMetric(metrics.y))
             }
 
             Text("关联分析需要同一日期的行为记录与健康数据配对计算。当前卡片未携带原始样本、样本量或统计检验，因此不会展示趋势图、相关系数或因果结论。")
                 .font(.system(size: 13))
-                .foregroundStyle(VelaTheme.secondaryText)
+                .foregroundStyle(VelaTheme.fg2)
                 .lineSpacing(3)
 
             Label("即使后续出现关联，也应结合样本量、生活变化和身体感受解读，不能据此认定因果。", systemImage: "info.circle")
                 .font(.system(size: 12))
-                .foregroundStyle(VelaTheme.mutedText)
+                .foregroundStyle(VelaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard, style: .continuous)
-                .fill(VelaTheme.cardBackground.opacity(0.5))
+            RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
+                .fill(VelaTheme.cardBg.opacity(0.5))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard, style: .continuous)
-                .stroke(VelaTheme.stroke, lineWidth: 1)
+            RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
+                .stroke(VelaTheme.borderSoft, lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("行为关联检查，尚未生成可验证的统计结果")
@@ -106,7 +106,7 @@ struct CorrelationArtifactView: View {
                 .frame(width: 7, height: 7)
             Text(title)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(VelaTheme.primaryText)
+                .foregroundStyle(VelaTheme.fg)
                 .lineLimit(1)
         }
         .padding(.horizontal, 10)

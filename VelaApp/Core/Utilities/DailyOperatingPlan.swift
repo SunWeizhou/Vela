@@ -187,10 +187,14 @@ enum DailyOperatingPlanCoordinator {
             modelContext.insert(record)
         }
 
-        let artifacts = try modelContext.fetch(FetchDescriptor<AgentArtifactRecord>())
-        if let artifact = artifacts.first(where: {
-            $0.type == AgentArtifactType.dailyPlan.rawValue && $0.sourceContextHash == bodyState.hash
-        }) {
+        let artifactType = AgentArtifactType.dailyPlan.rawValue
+        let sourceContextHash = bodyState.hash
+        let artifactDescriptor = FetchDescriptor<AgentArtifactRecord>(
+            predicate: #Predicate<AgentArtifactRecord> {
+                $0.type == artifactType && $0.sourceContextHash == sourceContextHash
+            }
+        )
+        if let artifact = try modelContext.fetch(artifactDescriptor).first {
             artifact.title = record.title
             artifact.payloadJSON = payloadJSON
             artifact.confidence = decision.confidence
@@ -228,19 +232,30 @@ enum DailyOperatingPlanCoordinator {
 }
 
 extension DailyOperatingPlanRecord {
-    var trainingDecision: DailyTrainingDecision? {
-        guard let payloadData = payloadJSON.data(using: .utf8),
-              let payload = try? JSONDecoder().decode(DailyOperatingPlanPayload.self, from: payloadData) else {
+    var operatingPlanPayload: DailyOperatingPlanPayload? {
+        guard let payloadData = payloadJSON.data(using: .utf8) else {
             return nil
         }
-        let reasonsData = reasonsJSON.data(using: .utf8)
-        let reasons = (try? JSONDecoder().decode([String].self, from: reasonsData ?? Data())) ?? []
+        return try? JSONDecoder().decode(DailyOperatingPlanPayload.self, from: payloadData)
+    }
+
+    var operatingPlanReasons: [String] {
+        guard let reasonsData = reasonsJSON.data(using: .utf8) else {
+            return []
+        }
+        return (try? JSONDecoder().decode([String].self, from: reasonsData)) ?? []
+    }
+
+    var trainingDecision: DailyTrainingDecision? {
+        guard let payload = operatingPlanPayload else {
+            return nil
+        }
         return DailyTrainingDecision(
             decision: payload.decision,
             targetSessionTitle: payload.targetSessionTitle,
             volumeMultiplier: payload.volumeMultiplier,
             intensityCap: payload.intensityCap,
-            reasons: reasons,
+            reasons: operatingPlanReasons,
             userFacingSummary: payload.summary,
             confidence: confidence,
             source: source ?? "BodyStateKernel + TrainingDecisionKernel",
@@ -248,4 +263,3 @@ extension DailyOperatingPlanRecord {
         )
     }
 }
-

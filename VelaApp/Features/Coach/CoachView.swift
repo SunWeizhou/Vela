@@ -24,6 +24,7 @@ enum CoachChatLayout {
 }
 
 struct VelaCoachView: View {
+    @Environment(\.velaSurfaceIsActive) private var isActiveSurface
     var presentation: CoachPresentationStyle
     var usesOverlayNavigation: Bool
     @ObservedObject var vm: CoachChatVM
@@ -93,7 +94,7 @@ struct VelaCoachView: View {
             // Main Chat Panel
             VStack(spacing: 0) {
                 headerView
-                    .background(.ultraThinMaterial)
+                    .background(VelaTheme.bg.opacity(0.98))
 
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -221,12 +222,11 @@ struct VelaCoachView: View {
             }
             .ignoresSafeArea()
         }
-        .onAppear {
+        .task(id: isActiveSurface) {
+            guard isActiveSurface else { return }
             vm.loadSessions(modelContext: modelContext)
             consumePendingRouteIfVisible()
             try? DailyLogService.refresh(dashboard: dashboard)
-        }
-        .task {
             await dashboardVM.refresh(modelContext: modelContext)
             await loadDataCoverageSummary()
         }
@@ -303,13 +303,15 @@ struct VelaCoachView: View {
             } label: {
                 Image(systemName: "sidebar.left")
                     .font(.system(size: 18))
-                    .foregroundStyle(Color(hex: "#007AFF"))
-                    .frame(width: 36, height: 36)
+                    .foregroundStyle(VelaTheme.accent)
+                    .frame(width: 44, height: 44)
                     .background(
                         Circle().fill(VelaTheme.surface)
                     )
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("对话历史")
+            .accessibilityHint("打开历史对话列表")
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(vm.currentSession?.title.isEmpty != false ? "Coach" : vm.currentSession!.title)
@@ -332,21 +334,22 @@ struct VelaCoachView: View {
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(Color(hex: "#007AFF"))
-                    .frame(width: 36, height: 36)
+                    .foregroundStyle(VelaTheme.accent)
+                    .frame(width: 44, height: 44)
                     .background(
                         Circle().fill(VelaTheme.surface)
                     )
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("新建对话")
 
             Button {
                 showModelSettings = true
             } label: {
                 Image(systemName: "gearshape.fill")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#007AFF"))
-                    .frame(width: 36, height: 36)
+                    .foregroundStyle(VelaTheme.accent)
+                    .frame(width: 44, height: 44)
                     .background(
                         Circle().fill(VelaTheme.surface)
                     )
@@ -360,8 +363,8 @@ struct VelaCoachView: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Color(hex: "#007AFF"))
-                        .frame(width: 36, height: 36)
+                        .foregroundStyle(VelaTheme.accent)
+                        .frame(width: 44, height: 44)
                         .background(
                             Circle().fill(VelaTheme.surface)
                         )
@@ -412,7 +415,7 @@ struct VelaCoachView: View {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
+                        .frame(width: 44, height: 44)
                         .background(
                             Circle()
                                 .fill(inputText.trimmingCharacters(in: .whitespaces).isEmpty
@@ -421,6 +424,7 @@ struct VelaCoachView: View {
                 }
                 .disabled(inputText.trimmingCharacters(in: .whitespaces).isEmpty)
                 .buttonStyle(.plusButton)
+                .accessibilityLabel("发送消息")
             }
         }
         .padding(.horizontal, 16)
@@ -484,7 +488,7 @@ struct VelaCoachView: View {
             }
         } else if action.type.contains("training") || action.type.contains("workout") || action.type.contains("summary") {
             print("[CoachView] Routing to training (tab 1)")
-            appState.routeToTab(1)
+            appState.routeToTraining()
             if presentation == .quickCover {
                 dismiss()
             }
@@ -561,5 +565,3 @@ struct VelaCoachView: View {
     }
 
 }
-
-

@@ -1,0 +1,72 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "codex/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    name: iOS build and tests
+    runs-on: macos-26
+    timeout-minutes: 35
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.5.0.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Reject tracked dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-files | grep -E '(^|/)node_modules/' > /tmp/tracked-node-modules.txt; then
+            echo "node_modules must not be tracked."
+            head -n 20 /tmp/tracked-node-modules.txt
+            exit 1
+          fi
+
+      - name: Build with warnings as errors
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Vela.xcodeproj \
+            -scheme Vela \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
+            GCC_TREAT_WARNINGS_AS_ERRORS=YES \
+            clean build
+
+      - name: Run iOS tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          device_id="$({ xcrun simctl list devices available -j | \
+            jq -r '.devices[][] | select(.name | startswith("iPhone")) | .udid'; } | head -n 1)"
+          test -n "$device_id"
+          set -o pipefail
+          xcodebuild test \
+            -project Vela.xcodeproj \
+            -scheme Vela \
+            -destination "platform=iOS Simulator,id=$device_id" \
+            CODE_SIGNING_ALLOWED=NO
+
+  backend:
+    name: Backend tests
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run Swift package tests
+        run: swift test --package-path VelaBackend

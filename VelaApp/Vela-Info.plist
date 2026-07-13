@@ -6,6 +6,8 @@
 	<array>
 		<string>com.sunweizhou.Vela.refresh</string>
 	</array>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -34,8 +36,6 @@
 	<string>AccentColor</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Vela 读取 Apple 健康中的必要汇总数据，用于在本机生成恢复、睡眠和训练趋势。</string>
-	<key>NSHealthUpdateUsageDescription</key>
-	<string>Vela 仅会保存由你确认的健康摘要，不会写入原始 Apple 健康样本。</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Vela 仅在应用打开时使用位置，用于显示当地天气并辅助安排当天训练。</string>
 	<key>NSCameraUsageDescription</key>
@@ -48,8 +48,8 @@
 	</array>
 	<key>UILaunchScreen</key>
 	<dict>
-		<key>UILaunchScreen</key>
-		<dict/>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
 	</dict>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>

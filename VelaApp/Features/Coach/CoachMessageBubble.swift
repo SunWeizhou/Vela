@@ -55,16 +55,11 @@ struct CoachDataCoverageStrip: View {
                     .background(Circle().fill(accent.opacity(0.12)))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(model.title)
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(VelaTheme.fg)
-                            .lineLimit(1)
-                        Text(model.status == .unknown ? "--" : "\(model.scorePercent)%")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .foregroundStyle(accent)
-                            .monospacedDigit()
-                    }
+                    Text(model.compactDisplayTitle)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(model.status == .unknown ? VelaTheme.fg : accent)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                     Text(model.status == .low
                          ? "低覆盖时 Coach 会保守回答"
                          : model.topBlockers.isEmpty ? "关键数据可用于本轮判断" : "缺口：\(model.topBlockers.joined(separator: "、"))")
@@ -91,7 +86,7 @@ struct CoachDataCoverageStrip: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Coach 数据可信度 \(model.scorePercent)%")
+        .accessibilityLabel("Coach \(model.compactDisplayTitle)")
     }
 
     private var accent: Color {
@@ -166,9 +161,8 @@ struct MiniBubble: View {
                                 CorrelationArtifactView(key: key)
                                     .padding(.vertical, 4)
                             } else {
-                                Text("[Artifact: \(type) - \(key)]")
-                                    .font(.caption)
-                                    .foregroundStyle(message.role == .user ? .white.opacity(0.7) : VelaTheme.muted)
+                                ArtifactRendererView(type: type, key: key)
+                                    .padding(.vertical, 4)
                             }
                         }
                     }
@@ -301,4 +295,60 @@ func parseMessageContent(_ content: String) -> [MessageSegment] {
     }
     
     return segments.isEmpty ? [.text(content)] : segments
+}
+
+// MARK: - ArtifactRendererView
+struct ArtifactRendererView: View {
+    let type: String
+    let key: String
+    
+    @Environment(\.modelContext) private var modelContext
+    @State private var artifactRecord: CoachArtifactRecord? = nil
+    
+    var body: some View {
+        Group {
+            if let record = artifactRecord {
+                CoachArtifactCard(artifact: record.artifact, compact: true) { action in
+                    handleArtifactAction(action, artifact: record.artifact)
+                }
+            } else {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(L10n.t("Loading card...", "加载建议卡片..."))
+                        .font(.caption)
+                        .foregroundStyle(VelaTheme.muted)
+                }
+                .padding(.vertical, 6)
+                .onAppear {
+                    loadRecord()
+                }
+            }
+        }
+    }
+    
+    private func loadRecord() {
+        guard let id = UUID(uuidString: key) else { return }
+        let descriptor = FetchDescriptor<CoachArtifactRecord>(
+            predicate: #Predicate<CoachArtifactRecord> { $0.id == id }
+        )
+        if let record = try? modelContext.fetch(descriptor).first {
+            self.artifactRecord = record
+        }
+    }
+    
+    private func handleArtifactAction(_ action: CoachArtifactAction, artifact: CoachArtifact) {
+        VelaAppState.shared.logDebug("[ArtifactRendererView] handleArtifactAction: type=\(action.type), payload=\(action.payload)")
+        if action.type == "start_check_in", let raw = action.payload["workout_id"], let id = UUID(uuidString: raw) {
+            VelaAppState.shared.routeToPostWorkoutCheckIn(workoutID: id)
+        } else if action.type == "open_recovery_detail" {
+            VelaAppState.shared.routeToRecoveryDetail()
+        } else if action.type.contains("training") || action.type.contains("workout") {
+            VelaAppState.shared.routeToTraining()
+        } else if action.type.contains("check") || action.type.contains("journal") {
+            VelaAppState.shared.triggerJournal = true
+        } else {
+            VelaAppState.shared.routeToCoach(question: action.label)
+        }
+    }
 }

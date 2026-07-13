@@ -52,7 +52,7 @@ struct CoreMetricCoachContext {
                     title: "心率变异性",
                     systemContext: "HRV 与日常行为的相关性分析"
                 ),
-                suggestedQuestion: "哪些行为最能拉升我的 HRV？"
+                suggestedQuestion: "哪些已记录行为与我的 HRV 变化相关？"
             )
         case .rhr:
             return CoreMetricCoachContext(
@@ -82,9 +82,9 @@ struct CoreMetricCoachContext {
             return CoreMetricCoachContext(
                 focus: CoachContextFocus(
                     title: "呼吸率",
-                    systemContext: "夜间呼吸频率与免疫系统预警"
+                    systemContext: "夜间呼吸频率趋势与个人基线"
                 ),
-                suggestedQuestion: "呼吸率偏高是否代表身体在抵抗病毒？"
+                suggestedQuestion: "呼吸率持续偏离个人基线时该如何记录与观察？"
             )
         case .bloodOxygen:
             return CoreMetricCoachContext(
@@ -108,7 +108,7 @@ struct CoreMetricCoachContext {
                     title: "活动消耗",
                     systemContext: "运动总消耗与燃脂区间时长"
                 ),
-                suggestedQuestion: "怎么利用低强度 activity 刷掉更多卡路里？"
+                suggestedQuestion: "如何用低强度活动增加日常活动量？"
             )
         case .activeMinutes:
             return CoreMetricCoachContext(

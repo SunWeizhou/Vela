@@ -101,7 +101,7 @@ final class FoodPhotoAnalyzer: Sendable {
         urlRequest.timeoutInterval = 60
         urlRequest.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        let (data, response) = try await PrivateAIURLSession.shared.data(for: urlRequest)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw FoodAnalysisError.invalidResponse
         }

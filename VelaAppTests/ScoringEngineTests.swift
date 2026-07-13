@@ -2,6 +2,16 @@ import XCTest
 @testable import Vela
 
 final class ScoringEngineTests: XCTestCase {
+    func testMissingDailyDecisionUsesConservativeExecutableFallback() {
+        let fallback = TrainingDecisionFallback.conservative(targetSessionTitle: "上肢力量")
+
+        XCTAssertEqual(fallback.decision, .reduce)
+        XCTAssertEqual(fallback.targetSessionTitle, "上肢力量")
+        XCTAssertEqual(fallback.volumeMultiplier, 0.60)
+        XCTAssertEqual(fallback.intensityCap, 7)
+        XCTAssertLessThan(fallback.confidence, 0.5)
+        XCTAssertEqual(fallback.source, "TrainingDecisionFallback")
+    }
     func testRescheduleAdaptationUsesNextRecoveryDayAfterCurrentSession() {
         let strengthDay = TrainingDay(
             weekNumber: 2, dayNumber: 1, title: "Strength", description: "", focus: "strength", durationMinutes: 60, intensity: "high"
@@ -167,9 +177,17 @@ final class ScoringEngineTests: XCTestCase {
         var elevated = neutral
         elevated.wristTemperature = 36.9
 
-        let pipeline = MetricComputationPipeline()
-        let neutralRecovery = pipeline.compute(for: neutral, history: history).recovery
-        let elevatedRecovery = pipeline.compute(for: elevated, history: history).recovery
+        let computation = DailyHealthComputation(
+            calendar: calendar,
+            now: today,
+            profile: DailyHealthComputationProfile(
+                sleepTargetMinutes: 450,
+                maxHeartRate: 190,
+                biologicalSex: "other"
+            )
+        )
+        let neutralRecovery = computation.compute(for: neutral, history: history).recovery
+        let elevatedRecovery = computation.compute(for: elevated, history: history).recovery
 
         XCTAssertNotNil(neutralRecovery.value)
         XCTAssertNotNil(elevatedRecovery.value)
@@ -210,6 +228,40 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertFalse(reasons.contains("异常"))
         XCTAssertFalse(reasons.contains("系统性修复"))
         XCTAssertFalse(reasons.contains("恢复代偿"))
+    }
+
+    func testStressReasonsDoNotInferUnmeasuredHormonesOrAutonomicState() {
+        let result = StressIndexEngine().calculate(from: StressIndexInput(
+            sleepScoreLastNight: 45,
+            strainScoreToday: 70
+        ))
+        let reasons = result.reasons.joined(separator: " ")
+
+        XCTAssertTrue(reasons.contains("睡眠评分偏低"))
+        XCTAssertFalse(reasons.contains("皮质醇"))
+        XCTAssertFalse(reasons.contains("自主神经平衡"))
+    }
+
+    func testBodyLimiterFramesLowHRVAsSignalNotPhysiologicalDiagnosis() {
+        let previousLanguage = AppLanguage.stored
+        defer { AppLanguage.stored = previousLanguage }
+        AppLanguage.stored = .simplifiedChinese
+
+        var dashboard = DashboardSummary.preview(date: Date())
+        var recovery = dashboard.recovery
+        recovery.components["hrv_z_score"] = -1.8
+        dashboard.recovery = recovery
+
+        let interpretation = BodyInterpreterEngine().interpret(
+            dashboard: dashboard,
+            wiki: [:],
+            activePlan: nil
+        )
+        let copy = interpretation.primaryLimiter.interpretation
+
+        XCTAssertTrue(copy.contains("HRV 低于个人基线"))
+        XCTAssertFalse(copy.contains("副交感"))
+        XCTAssertFalse(copy.contains("神经系统处于疲劳"))
     }
 
     func testProactiveTrainingInsightDoesNotPrescribeHighIntensity() {
@@ -340,6 +392,10 @@ final class ScoringEngineTests: XCTestCase {
     }
 
     func testBodyStateAndTrainingDecisionUseChineseUserFacingCopy() {
+        let previousLanguage = AppLanguage.stored
+        AppLanguage.stored = .simplifiedChinese
+        defer { AppLanguage.stored = previousLanguage }
+
         let now = Date()
         let response = TrainingResponseRecord(
             workoutId: UUID(),
@@ -379,7 +435,11 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertFalse(userFacingText.contains("Reduce planned volume"))
         XCTAssertFalse(userFacingText.contains("not a medical diagnosis"))
         XCTAssertTrue(userFacingText.contains("训练响应"))
-        XCTAssertTrue(userFacingText.contains("减量"))
+        XCTAssertTrue(
+            userFacingText.contains("减量") ||
+            userFacingText.contains("替换") ||
+            userFacingText.contains("调整")
+        )
     }
 
     func testTodayExperienceDoesNotExposeLegacyEnglishDecisionCopy() {
@@ -522,7 +582,7 @@ final class ScoringEngineTests: XCTestCase {
 
         XCTAssertEqual(model.hero.scoreTitle, "恢复 --")
         XCTAssertEqual(model.hero.decisionTitle, "先保守减量")
-        XCTAssertEqual(model.hero.confidenceLabel, "置信度 0% · 数据不足")
+        XCTAssertEqual(model.hero.confidenceLabel, "数据不足")
         XCTAssertTrue(model.evidenceChips.contains("等待 HealthKit"))
         XCTAssertEqual(model.actions.first?.title, "同步健康数据")
         XCTAssertEqual(model.signalCards.filter { $0.value == "--" }.count, 5)

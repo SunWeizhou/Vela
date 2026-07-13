@@ -41,14 +41,14 @@ struct DataCoverageView: View {
                 HStack {
                     VelaDetailBackButton(label: AppLanguage.stored.isChinese ? "返回设置" : "Back to Settings")
 
-                    Text(AppLanguage.stored.isChinese ? "数据覆盖" : "Data Coverage")
-                        .font(.system(size: 21, weight: .bold, design: .rounded))
-                        .foregroundStyle(VelaTheme.primaryText)
+                    Text(AppLanguage.stored.isChinese ? "数据可信度" : "Data Confidence")
+                        .font(VelaTheme.title2())
+                        .foregroundStyle(VelaTheme.fg)
                     Spacer()
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .background(.ultraThinMaterial)
+                .background(VelaTheme.bg.opacity(0.97))
 
                 Divider()
                     .opacity(0.4)
@@ -72,7 +72,7 @@ struct DataCoverageView: View {
                 HStack(alignment: .center, spacing: 14) {
                     ZStack {
                         Circle()
-                            .stroke(VelaTheme.elevatedSurface, lineWidth: 8)
+                            .stroke(VelaTheme.elevatedBg, lineWidth: 8)
                             .frame(width: 74, height: 74)
                         Circle()
                             .trim(from: 0, to: CGFloat(pct) / 100)
@@ -81,7 +81,7 @@ struct DataCoverageView: View {
                             .rotationEffect(.degrees(-90))
                         Text("\(pct)%")
                             .font(.headline.weight(.bold))
-                            .foregroundStyle(VelaTheme.primaryText)
+                            .foregroundStyle(VelaTheme.fg)
                             .monospacedDigit()
                     }
                     .accessibilityLabel(AppLanguage.stored.isChinese ? "数据覆盖 \(pct)%" : "Data coverage \(pct)%")
@@ -89,13 +89,13 @@ struct DataCoverageView: View {
                     VStack(alignment: .leading, spacing: 5) {
                         Text(AppLanguage.stored.isChinese ? "今天哪些判断可信？" : "Which judgments are reliable today?")
                             .font(.headline.weight(.semibold))
-                            .foregroundStyle(VelaTheme.primaryText)
+                            .foregroundStyle(VelaTheme.fg)
                         Text(AppLanguage.stored.isChinese
                              ? "\(usable)/\(total) 个信号可分析，\(missing) 个需补齐或授权。"
                              : "\(usable)/\(total) signals analytically usable; \(missing) need data or permission."
                         )
                         .font(.subheadline)
-                        .foregroundStyle(VelaTheme.secondaryText)
+                        .foregroundStyle(VelaTheme.fg2)
                         .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -111,7 +111,7 @@ struct DataCoverageView: View {
                         title: AppLanguage.stored.isChinese ? "缺失" : "Missing",
                         value: "\(missing)",
                         systemImage: "exclamationmark.triangle.fill",
-                        tint: missing == 0 ? VelaTheme.recovery : VelaTheme.strain
+                        tint: missing == 0 ? VelaTheme.recoveryColor : VelaTheme.strainColor
                     )
                 }
 
@@ -150,13 +150,13 @@ struct DataCoverageView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(group.title)
                             .font(.headline.weight(.semibold))
-                            .foregroundStyle(VelaTheme.primaryText)
+                            .foregroundStyle(VelaTheme.fg)
                         Text(AppLanguage.stored.isChinese
                              ? "\(usable)/\(total) 个信号可分析 · \(staleOrMissing) 个陈旧或缺失"
                              : "\(usable)/\(total) signals analytically usable · \(staleOrMissing) stale or missing"
                         )
                         .font(.caption)
-                        .foregroundStyle(VelaTheme.secondaryText)
+                        .foregroundStyle(VelaTheme.fg2)
                     }
 
                     Spacer()
@@ -170,7 +170,7 @@ struct DataCoverageView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(AppLanguage.stored.isChinese ? "影响的判断" : "Affected judgments")
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(VelaTheme.mutedText)
+                        .foregroundStyle(VelaTheme.muted)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 112), spacing: 8)], alignment: .leading, spacing: 8) {
                         ForEach(group.affectedJudgments, id: \.self) { judgment in
                             VelaStatusBadge(label: localizedJudgment(judgment), systemImage: "scope", tint: tint)
@@ -178,7 +178,7 @@ struct DataCoverageView: View {
                     }
                 }
 
-                Divider().overlay(VelaTheme.stroke)
+                Divider().overlay(VelaTheme.borderSoft)
 
                 VStack(spacing: 8) {
                     ForEach(group.signals) { signal in
@@ -199,7 +199,7 @@ struct DataCoverageView: View {
                         ? "在系统健康权限中打开相关数据类型，可提升 Vela 今天判断的置信度。"
                         : "Enable the related Health data types in system permissions to improve today's confidence.",
                         systemImage: "lock.open.fill",
-                        tint: VelaTheme.strain
+                        tint: VelaTheme.strainColor
                     )
                 }
             }
@@ -216,16 +216,16 @@ struct DataCoverageView: View {
     // MARK: - Helpers
 
     private func coverageColor(_ pct: Int) -> Color {
-        if pct >= 80 { return VelaTheme.energy }
+        if pct >= 80 { return VelaTheme.energyColor }
         if pct >= 50 { return VelaTheme.accent }
-        return VelaTheme.strain
+        return VelaTheme.strainColor
     }
 
     private func qualityColor(_ quality: SignalQuality) -> Color {
         switch quality {
-        case .enough: return VelaTheme.energy
+        case .enough: return VelaTheme.energyColor
         case .partial: return VelaTheme.accent
-        case .insufficient: return VelaTheme.strain
+        case .insufficient: return VelaTheme.strainColor
         }
     }
 
@@ -240,13 +240,13 @@ struct DataCoverageView: View {
 
     private func groupColor(_ group: CoverageGroup) -> Color {
         switch group.id {
-        case "recovery": return VelaTheme.recovery
-        case "sleep": return VelaTheme.sleep
-        case "training": return VelaTheme.strain
+        case "recovery": return VelaTheme.recoveryColor
+        case "sleep": return VelaTheme.sleepColor
+        case "training": return VelaTheme.strainColor
         case "gait": return VelaTheme.accent
-        case "cardio": return VelaTheme.energy
-        case "nutrition": return VelaTheme.stress
-        case "environment": return VelaTheme.secondaryText
+        case "cardio": return VelaTheme.energyColor
+        case "nutrition": return VelaTheme.stressColor
+        case "environment": return VelaTheme.fg2
         default: return VelaTheme.accent
         }
     }
@@ -313,6 +313,25 @@ struct DataCoverageSummaryModel: Hashable, Sendable {
     var domainSummaries: [DataCoverageDomainSummary]
     var topBlockers: [String]
     var coachContextLine: String
+
+    var compactDisplayTitle: String {
+        guard status != .unknown else { return title }
+
+        let statusLabel: String
+        switch status {
+        case .high:
+            statusLabel = AppLanguage.stored.isChinese ? "高" : "High"
+        case .moderate:
+            statusLabel = AppLanguage.stored.isChinese ? "中等" : "Moderate"
+        case .low:
+            statusLabel = AppLanguage.stored.isChinese ? "低" : "Low"
+        case .unknown:
+            statusLabel = ""
+        }
+
+        let base = AppLanguage.stored.isChinese ? "数据可信度" : "Data confidence"
+        return "\(base) · \(statusLabel) · \(scorePercent)%"
+    }
 
     static var unknown: DataCoverageSummaryModel {
         DataCoverageSummaryModel(

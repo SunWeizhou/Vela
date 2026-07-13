@@ -10,7 +10,7 @@ struct VelaLogoMark: View {
                     LinearGradient(
                         colors: [
                             VelaTheme.accent.opacity(0.12),
-                            VelaTheme.sleep.opacity(0.06)
+                            VelaTheme.sleepColor.opacity(0.06)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -39,7 +39,7 @@ struct VelaLogoMark: View {
                 context.fill(
                     sail,
                     with: .linearGradient(
-                        Gradient(colors: [VelaTheme.accent, VelaTheme.sleep]),
+                        Gradient(colors: [VelaTheme.accent, VelaTheme.sleepColor]),
                         startPoint: left,
                         endPoint: right
                     )
@@ -49,11 +49,11 @@ struct VelaLogoMark: View {
                 mast.move(to: left)
                 mast.addLine(to: bottom)
                 mast.addLine(to: CGPoint(x: w * 0.34, y: h * 0.62))
-                context.stroke(mast, with: .color(VelaTheme.primaryText.opacity(0.88)), style: StrokeStyle(lineWidth: max(1.5, size * 0.045), lineCap: .round, lineJoin: .round))
+                context.stroke(mast, with: .color(VelaTheme.fg.opacity(0.88)), style: StrokeStyle(lineWidth: max(1.5, size * 0.045), lineCap: .round, lineJoin: .round))
 
                 [left, bottom, right].forEach { point in
                     let rect = CGRect(x: point.x - size * 0.035, y: point.y - size * 0.035, width: size * 0.07, height: size * 0.07)
-                    context.fill(Path(ellipseIn: rect), with: .color(VelaTheme.primaryText))
+                    context.fill(Path(ellipseIn: rect), with: .color(VelaTheme.fg))
                 }
             }
             .padding(size * 0.17)

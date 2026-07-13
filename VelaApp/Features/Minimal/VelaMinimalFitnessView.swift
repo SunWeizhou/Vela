@@ -6,8 +6,8 @@ import Combine
 // Double-Month thinned activity heatmaps × Area workouts summary × Target safe-zone Exertion workload chart
 
 struct VelaTrainingView: View {
+    @Environment(\.velaSurfaceIsActive) private var isActiveSurface
     @Environment(\.colorScheme) private var cs
-    @Environment(\.velaScrollDirection) private var scrollDirection
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     @EnvironmentObject private var services: VelaServices
@@ -41,24 +41,7 @@ struct VelaTrainingView: View {
         )
     }
     private var todayDecision: DailyTrainingDecision? {
-        guard let plan = todayPlan,
-              let payloadData = plan.payloadJSON.data(using: .utf8),
-              let payload = try? JSONDecoder().decode(DailyOperatingPlanPayload.self, from: payloadData) else {
-            return nil
-        }
-        let reasons = plan.reasonsJSON.data(using: .utf8)
-            .flatMap { try? JSONDecoder().decode([String].self, from: $0) } ?? []
-        return DailyTrainingDecision(
-            decision: payload.decision,
-            targetSessionTitle: payload.targetSessionTitle,
-            volumeMultiplier: payload.volumeMultiplier,
-            intensityCap: payload.intensityCap,
-            reasons: reasons,
-            userFacingSummary: payload.summary,
-            confidence: plan.confidence,
-            source: plan.source ?? "BodyStateKernel + TrainingDecisionKernel",
-            safetyNotice: plan.safetyNotice ?? "仅提供一般健康与训练建议，不构成医疗诊断。"
-        )
+        todayPlan?.trainingDecision
     }
     private let xunjiKeychainAccount = "xunji_open_api_key"
 
@@ -70,8 +53,7 @@ struct VelaTrainingView: View {
     @State private var summaryPeakStrainText = "--"
     @State private var summaryWorkPathPoints: [CGPoint] = []
     @State private var dynamicExertionWorkload: [Double] = []
-    @State private var changePercentageText = "--"
-    @State private var isExertionBelowTarget: Bool = true
+    @State private var targetComparison: TrainingTargetComparison = .unavailable
     @State private var recentWorkouts: [WorkoutSummary] = []
     @State private var showStrengthWorkoutLog = false
     @State private var selectedTemplateID: UUID?
@@ -90,12 +72,21 @@ struct VelaTrainingView: View {
     @State private var handledAdaptiveTrainingStartRequest = 0
 
     var body: some View {
+        let strengthSummary = recentStrengthSummary
+
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                TrainingHeroSection(
+                    todaySession: todaySession,
+                    todayPlan: todayPlan,
+                    activePlan: activePlan,
+                    lastWorkoutSummary: strengthSummary.lastWorkoutSummary,
+                    startStrengthWorkout: { startStrengthWorkout() }
+                )
+
                 TrainingStatsSection(
                     selectedAnalyticsTab: $selectedAnalyticsTab,
-                    changePercentageText: changePercentageText,
-                    isExertionBelowTarget: isExertionBelowTarget,
+                    targetComparison: targetComparison,
                     dynamicExertionWorkload: dynamicExertionWorkload,
                     totalWorkoutDurationText: totalWorkoutDurationText,
                     summaryWorkPathPoints: summaryWorkPathPoints,
@@ -105,18 +96,10 @@ struct VelaTrainingView: View {
                     currentMonthActiveTiers: currentMonthActiveTiers
                 )
 
-                TrainingHeroSection(
-                    todaySession: todaySession,
-                    todayPlan: todayPlan,
-                    activePlan: activePlan,
-                    lastWorkoutSummary: recentStrengthSummary.lastWorkoutSummary,
-                    startStrengthWorkout: { startStrengthWorkout() }
-                )
-
                 RecentWorkoutsSection(recentWorkouts: recentWorkouts)
 
                 MuscleVolumeCard(
-                    summary: recentStrengthSummary,
+                    summary: strengthSummary,
                     exerciseProgressLines: exerciseProgressLines
                 )
 
@@ -132,25 +115,23 @@ struct VelaTrainingView: View {
             .padding(.bottom, VelaFloatingNavigationMetrics.contentBottomPadding)
         }
         .scrollIndicators(.hidden)
-        .velaTrackScroll(direction: scrollDirection)
         .safeAreaInset(edge: .top) {
             VStack(spacing: 0) {
                 fitnessHeader
                     .padding(.horizontal, 16)
                     .padding(.bottom, 12)
-                    .background(.ultraThinMaterial)
+                    .background(VelaTheme.bg.opacity(0.98))
                 
                 Divider()
                     .opacity(0.4)
             }
         }
         .background(VelaTheme.systemGroupedBackground)
-        .onAppear {
+        .task(id: isActiveSurface) {
+            guard isActiveSurface else { return }
             loadRealFitnessData()
             loadXunjiAPIKey()
             consumeAdaptiveTrainingStartIfNeeded()
-        }
-        .task {
             try? ExerciseLibraryService.seedDefaultsIfNeeded(modelContext: modelContext)
             await syncRealFitnessData()
             await autoImportRecentXunjiTraining()
@@ -160,12 +141,14 @@ struct VelaTrainingView: View {
             await autoImportRecentXunjiTraining()
         }
         .onChange(of: dashboardVM.selectedDate) { _, _ in
+            guard isActiveSurface else { return }
             loadRealFitnessData()
             Task {
                 await syncRealFitnessData()
             }
         }
         .onChange(of: appState.localDataRevision) { _, _ in
+            guard isActiveSurface else { return }
             loadRealFitnessData()
             Task {
                 await syncRealFitnessData()
@@ -239,10 +222,10 @@ struct VelaTrainingView: View {
     private var fitnessHeader: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text("训练分析")
+                Text("训练")
                     .font(.system(size: 24, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
-                Text("历史表现与今日建议")
+                Text("今日安排与训练趋势")
                     .font(.system(size: 12))
                     .foregroundStyle(VelaTheme.muted)
             }
@@ -266,6 +249,7 @@ struct VelaTrainingView: View {
                     .shadow(color: Color.black.opacity(0.01), radius: 8, y: 2)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("让 Coach 分析训练")
 
                 Button {
                     xunjiImportDate = dashboardVM.selectedDate
@@ -275,9 +259,10 @@ struct VelaTrainingView: View {
                     Image(systemName: "tray.and.arrow.down")
                         .font(.system(size: 18, weight: .medium))
                         .foregroundStyle(VelaTheme.muted)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("导入寻迹训练")
 
                 Button {
                     startStrengthWorkout()
@@ -285,9 +270,10 @@ struct VelaTrainingView: View {
                     Image(systemName: "plus")
                         .font(.system(size: 20, weight: .medium))
                         .foregroundStyle(VelaTheme.muted)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("开始力量训练")
             }
         }
     }
@@ -322,10 +308,7 @@ struct VelaTrainingView: View {
             showStrengthWorkoutLog = true
             return
         }
-        guard let decision = todayDecision else {
-            trainingExecutionMessage = "今日训练决策尚未生成，请先刷新 Today 页面。"
-            return
-        }
+        let decision = todayDecision ?? TrainingDecisionFallback.conservative(targetSessionTitle: day.title)
         let draft = TrainingSessionDraftBuilder().build(
             day: day,
             decision: decision,
@@ -672,7 +655,7 @@ struct VelaTrainingView: View {
                 guard !strains.isEmpty else {
                     summaryWorkPathPoints = []
                     dynamicExertionWorkload = []
-                    changePercentageText = "--"
+                    targetComparison = .unavailable
                     summaryPeakStrainText = "--"
                     return
                 }
@@ -700,16 +683,10 @@ struct VelaTrainingView: View {
                 dynamicExertionWorkload = strainRecent.map { srDiff > 0 ? ($0 - minSR) / srDiff : 0.5 }
                 
                 // Target exertion zone comparison
-                let avgStrain = strains.reduce(0, +) / Double(strains.count)
-                let target = Double(dashboard.strain.recommendedRange.lowerBound + dashboard.strain.recommendedRange.upperBound) / 2
-                let percentDiff = target > 0 ? Int((avgStrain - target) / target * 100.0) : 0
-                if percentDiff >= 0 {
-                    changePercentageText = "+\(percentDiff)%"
-                    isExertionBelowTarget = false
-                } else {
-                    changePercentageText = "\(percentDiff)%"
-                    isExertionBelowTarget = true
-                }
+                targetComparison = TrainingTargetComparison.evaluate(
+                    strainValues: strains,
+                    target: dashboard.strain
+                )
             } else {
                 useEmptyFitnessDefaults()
             }
@@ -751,10 +728,12 @@ struct VelaTrainingView: View {
         plansDesc.fetchLimit = 10
         self.trainingPlans = (try? modelContext.fetch(plansDesc)) ?? []
 
+        let dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: refDate, calendar: calendar)
         var opPlansDesc = FetchDescriptor<DailyOperatingPlanRecord>(
+            predicate: #Predicate<DailyOperatingPlanRecord> { $0.dayIdentifier == dayIdentifier },
             sortBy: [SortDescriptor(\.generatedAt, order: .reverse)]
         )
-        opPlansDesc.fetchLimit = 50
+        opPlansDesc.fetchLimit = 1
         self.operatingPlans = (try? modelContext.fetch(opPlansDesc)) ?? []
     }
     
@@ -765,8 +744,7 @@ struct VelaTrainingView: View {
         summaryPeakStrainText = "--"
         summaryWorkPathPoints = []
         dynamicExertionWorkload = []
-        changePercentageText = "--"
-        isExertionBelowTarget = true
+        targetComparison = .unavailable
     }
     
     private func monthStart(for date: Date) -> Date {

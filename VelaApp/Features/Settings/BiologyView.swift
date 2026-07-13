@@ -6,10 +6,10 @@ struct BiologyView: View {
     @EnvironmentObject var dashboardVM: DashboardViewModel
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \BiomarkerRecord.date, order: .reverse) private var biomarkers: [BiomarkerRecord]
-    
+
     @State private var showLogSheet = false
     @State private var hoverFactorId: UUID? = nil
-    
+
     private var language: AppLanguage {
         AppLanguage.stored
     }
@@ -27,7 +27,7 @@ struct BiologyView: View {
             || dashboard.strain.metrics["steps_raw"] != nil
             || !biomarkers.isEmpty
     }
-    
+
     // Calculated Result
     private var bioAgeResult: BiologicalAgeResult {
         let chronologicalAge = Double(chronologicalAge ?? 0)
@@ -37,7 +37,7 @@ struct BiologyView: View {
         let sleepHours = sleepMinutes > 0 ? Double(sleepMinutes) / 60.0 : nil
         let steps = dashboardVM.dashboard.strain.metrics["steps_raw"]
         let sleepEfficiency = dashboardVM.dashboard.sleepScore.metrics["sleep_efficiency"].map { $0 / 100 }
-        
+
         let input = BiologicalAgeInput(
             chronologicalAge: chronologicalAge,
             restingHR: restingHR,
@@ -47,7 +47,7 @@ struct BiologyView: View {
             steps: steps,
             biomarkers: Array(biomarkers)
         )
-        
+
         return BiologicalAgeEngine().calculate(input: input)
     }
 
@@ -60,14 +60,14 @@ struct BiologyView: View {
                     : L10n.t("Health Signal Reference", "健康信号参考")
                 )
                 .font(.system(size: 26, weight: .bold, design: .rounded))
-                .foregroundStyle(VelaTheme.primaryText)
+                .foregroundStyle(VelaTheme.fg)
                 Text(L10n.t("BIOLOGY DASHBOARD", "生物特征仪表盘"))
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(VelaTheme.accent)
                     .tracking(0.8)
             }
             Spacer()
-            
+
             Button {
                 UISelectionFeedbackGenerator().selectionChanged()
                 showLogSheet = true
@@ -90,15 +90,15 @@ struct BiologyView: View {
                 } else {
                     // Arc Gauge Hero Card
                     bioAgeArcCard
-                    
+
                     // Stats Breakdown Grid
                     statsGrid
-                    
+
                     // Wearables and Biomarkers Sections
                     VStack(alignment: .leading, spacing: 16) {
                         SectionLabel(title: L10n.t("Wearable Physiology", "生理可穿戴指标"), icon: "appletwatch")
                         wearableFactorsSection
-                        
+
                         HStack {
                             SectionLabel(title: L10n.t("Lab Blood Biomarkers", "血检生化指标"), icon: "drop.fill")
                             Spacer()
@@ -119,12 +119,12 @@ struct BiologyView: View {
                             }
                         }
                         .padding(.top, 8)
-                        
+
                         biomarkersSection
                     }
-                    .padding(.horizontal, VelaTheme.screenPadding)
+                    .padding(.horizontal, VelaTheme.pagePadding)
                 }
-                
+
                 Spacer(minLength: 40)
             }
             .padding(.top, 12)
@@ -136,7 +136,7 @@ struct BiologyView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                     .background(.ultraThinMaterial)
-                
+
                 Divider()
                     .opacity(0.4)
             }
@@ -148,7 +148,7 @@ struct BiologyView: View {
                 .presentationDragIndicator(.visible)
         }
     }
-    
+
     // MARK: - Subviews
 
     private var profileSetupCard: some View {
@@ -158,14 +158,14 @@ struct BiologyView: View {
                 .foregroundStyle(VelaTheme.accent)
             Text(L10n.t("Set up your profile first", "请先完成个人档案初始设置"))
                 .font(.headline)
-                .foregroundStyle(VelaTheme.primaryText)
+                .foregroundStyle(VelaTheme.fg)
             Text(L10n.t(
                 "Biological age needs your real chronological age. Vela reads it from Apple Health or your personal Wiki profile.",
                 "生物年龄需要你的真实年龄。Vela 会优先读取个人 Wiki 档案，也可以读取 Apple 健康中的年龄。"
             ))
             .font(.caption)
             .multilineTextAlignment(.center)
-            .foregroundStyle(VelaTheme.secondaryText)
+            .foregroundStyle(VelaTheme.fg2)
             NavigationLink(destination: WikiProfileView()) {
                 Text(L10n.t("Open personal Wiki", "打开个人 Wiki 档案"))
                     .font(.subheadline.weight(.bold))
@@ -177,8 +177,8 @@ struct BiologyView: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity)
-        .background(RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard).fill(VelaTheme.surface))
-        .padding(.horizontal, VelaTheme.screenPadding)
+        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge).fill(VelaTheme.surface))
+        .padding(.horizontal, VelaTheme.pagePadding)
     }
 
     private var healthSignalSetupCard: some View {
@@ -188,18 +188,18 @@ struct BiologyView: View {
                 .foregroundStyle(VelaTheme.accent)
             Text("健康信号尚未形成")
                 .font(.headline)
-                .foregroundStyle(VelaTheme.primaryText)
+                .foregroundStyle(VelaTheme.fg)
             Text("同步至少一项静息心率、睡眠、活动、最大摄氧量或化验记录后，才会显示健康信号参考。完整 PhenoAge 化验组合齐全后才生成生物年龄估算。")
                 .font(.caption)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(VelaTheme.secondaryText)
+                .foregroundStyle(VelaTheme.fg2)
         }
         .padding(20)
         .frame(maxWidth: .infinity)
-        .background(RoundedRectangle(cornerRadius: VelaTheme.cornerRadiusCard).fill(VelaTheme.surface))
-        .padding(.horizontal, VelaTheme.screenPadding)
+        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge).fill(VelaTheme.surface))
+        .padding(.horizontal, VelaTheme.pagePadding)
     }
-    
+
     private var bioAgeArcCard: some View {
         let result = bioAgeResult
         let chronologicalAge = Double(chronologicalAge ?? 0)
@@ -207,15 +207,15 @@ struct BiologyView: View {
         let isPositive = result.isPhenoAge
             ? result.biologicalAge <= chronologicalAge
             : result.healthAgeTrend != "worsening"
-        
+
         return VStack(spacing: 20) {
             ZStack {
                 // Glow Backdrop
                 Circle()
-                    .fill(isPositive ? VelaTheme.recovery.opacity(0.08) : VelaTheme.stress.opacity(0.08))
+                    .fill(isPositive ? VelaTheme.recoveryColor.opacity(0.08) : VelaTheme.stressColor.opacity(0.08))
                     .frame(width: 170, height: 170)
                     .blur(radius: 20)
-                
+
                 // 270 degree Gauge Arc
                 Circle()
                     .trim(from: 0.0, to: 0.75)
@@ -225,15 +225,15 @@ struct BiologyView: View {
                     )
                     .frame(width: 170, height: 170)
                     .rotationEffect(.degrees(135))
-                
+
                 // Value Arc
                 Circle()
                     .trim(from: 0.0, to: 0.75 * CGFloat(result.overallScore / 100))
                     .stroke(
                         LinearGradient(
                             colors: isPositive
-                                ? [VelaTheme.accent, VelaTheme.recovery] 
-                                : [VelaTheme.energy, VelaTheme.stress],
+                                ? [VelaTheme.accent, VelaTheme.recoveryColor]
+                                : [VelaTheme.energyColor, VelaTheme.stressColor],
                             startPoint: .leading,
                             endPoint: .trailing
                         ),
@@ -241,30 +241,30 @@ struct BiologyView: View {
                     )
                     .frame(width: 170, height: 170)
                     .rotationEffect(.degrees(135))
-                
+
                 // End Dot Pointer with Neon Glow
                 let progressAngle = 135.0 + (result.overallScore / 100.0) * 270.0
                 let radius = 170.0 / 2.0
                 Circle()
-                    .fill(isPositive ? VelaTheme.recovery : VelaTheme.stress)
+                    .fill(isPositive ? VelaTheme.recoveryColor : VelaTheme.stressColor)
                     .frame(width: 14, height: 14)
-                    .shadow(color: isPositive ? VelaTheme.recovery : VelaTheme.stress, radius: 6)
+                    .shadow(color: isPositive ? VelaTheme.recoveryColor : VelaTheme.stressColor, radius: 6)
                     .offset(
                         x: cos(CGFloat(progressAngle * .pi / 180.0)) * radius,
                         y: sin(CGFloat(progressAngle * .pi / 180.0)) * radius
                     )
-                
+
                 // Center Data Display
                 VStack(spacing: 2) {
                     if result.isPhenoAge {
                         Text(String(format: "%.1f", result.biologicalAge))
                             .font(.system(size: 40, weight: .black, design: .rounded))
-                            .foregroundStyle(VelaTheme.primaryText)
+                            .foregroundStyle(VelaTheme.fg)
                             .monospacedDigit()
 
                         Text(L10n.t("Years Old", "岁 (生物年龄)"))
                             .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(VelaTheme.mutedText)
+                            .foregroundStyle(VelaTheme.muted)
                             .tracking(1)
 
                         HStack(spacing: 4) {
@@ -273,27 +273,27 @@ struct BiologyView: View {
                                 .bold()
                         }
                         .font(.system(size: 12))
-                        .foregroundStyle(VelaTheme.secondaryText)
+                        .foregroundStyle(VelaTheme.fg2)
                         .padding(.top, 4)
                     } else {
                         Text(result.healthAgeTrendLabel)
                             .font(.system(size: 28, weight: .black, design: .rounded))
-                            .foregroundStyle(VelaTheme.primaryText)
+                            .foregroundStyle(VelaTheme.fg)
 
                         Text(L10n.t("Health Signal Reference", "健康信号参考"))
                             .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(VelaTheme.mutedText)
+                            .foregroundStyle(VelaTheme.muted)
                             .tracking(1)
                     }
                 }
             }
             .frame(width: 200, height: 200)
-            
+
             // Age Comparison Banner
             HStack(spacing: 8) {
                 Image(systemName: isPositive ? "leaf.fill" : "exclamationmark.triangle.fill")
-                    .foregroundStyle(isPositive ? VelaTheme.recovery : VelaTheme.stress)
-                
+                    .foregroundStyle(isPositive ? VelaTheme.recoveryColor : VelaTheme.stressColor)
+
                 Text(result.isPhenoAge
                     ? (diff >= 0
                         ? L10n.t(String(format: "Estimated biological age is %.1f years below chronological age.", diff), String(format: "生物年龄估算比实际年龄低 %.1f 岁。", diff))
@@ -301,17 +301,17 @@ struct BiologyView: View {
                     : L10n.t("Current health signals: \(result.healthAgeTrendLabel)", "当前健康信号：\(result.healthAgeTrendLabel)")
                 )
                 .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(VelaTheme.primaryText)
+                .foregroundStyle(VelaTheme.fg)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(isPositive ? VelaTheme.recovery.opacity(0.08) : VelaTheme.stress.opacity(0.08))
+                    .fill(isPositive ? VelaTheme.recoveryColor.opacity(0.08) : VelaTheme.stressColor.opacity(0.08))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(isPositive ? VelaTheme.recovery.opacity(0.15) : VelaTheme.stress.opacity(0.15), lineWidth: 1)
+                    .stroke(isPositive ? VelaTheme.recoveryColor.opacity(0.15) : VelaTheme.stressColor.opacity(0.15), lineWidth: 1)
             )
         }
         .padding(.vertical, 24)
@@ -319,12 +319,12 @@ struct BiologyView: View {
         .frame(maxWidth: .infinity)
         .velaNativeCard(radius: 24)
         .appleIntelligenceGlow(isHighlighted: isPositive, radius: 24)
-        .padding(.horizontal, VelaTheme.screenPadding)
+        .padding(.horizontal, VelaTheme.pagePadding)
     }
-    
+
     private var statsGrid: some View {
         let result = bioAgeResult
-        
+
         return LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
             StatGridCard(
                 title: L10n.t("Overall Score", "综合活力分"),
@@ -333,27 +333,27 @@ struct BiologyView: View {
                 icon: "bolt.heart.fill",
                 color: VelaTheme.accent
             )
-            
+
             StatGridCard(
                 title: L10n.t("Biomarkers Status", "指标正常数"),
                 value: "\(result.optimalCount)",
                 unit: "/\(result.factors.count)",
                 icon: "checkmark.shield.fill",
-                color: VelaTheme.recovery
+                color: VelaTheme.recoveryColor
             )
         }
-        .padding(.horizontal, VelaTheme.screenPadding)
+        .padding(.horizontal, VelaTheme.pagePadding)
     }
-    
+
     private var wearableFactorsSection: some View {
         let result = bioAgeResult
         let wearables = result.factors.filter { $0.type == .wearable }
-        
+
         return VStack(spacing: 12) {
             if wearables.isEmpty {
                 Text(L10n.t("No wearable logs found for calculation.", "暂无生理指标数据。"))
                     .font(.caption)
-                    .foregroundStyle(VelaTheme.mutedText)
+                    .foregroundStyle(VelaTheme.muted)
                     .padding()
             } else {
                 ForEach(wearables) { factor in
@@ -364,25 +364,25 @@ struct BiologyView: View {
         .padding(14)
         .velaNativeCard(radius: 16)
     }
-    
+
     private var biomarkersSection: some View {
         let result = bioAgeResult
         let bios = result.factors.filter { $0.type == .biomarker }
-        
+
         return VStack(spacing: 12) {
             if bios.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "drop.triangle.fill")
                         .font(.largeTitle)
-                        .foregroundStyle(VelaTheme.mutedText)
-                    
+                        .foregroundStyle(VelaTheme.muted)
+
                     Text(L10n.t("No blood records entered.", "还没有录入过血检指标。"))
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(VelaTheme.primaryText)
-                    
+                        .foregroundStyle(VelaTheme.fg)
+
                     Text(L10n.t("Record lab values here for reference. A biological-age estimate appears only when the complete PhenoAge laboratory set is available.", "可在这里记录化验指标供参考；只有完整的 PhenoAge 化验组合齐全后才会生成生物年龄估算。"))
                         .font(.caption)
-                        .foregroundStyle(VelaTheme.mutedText)
+                        .foregroundStyle(VelaTheme.muted)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 16)
                 }
@@ -396,9 +396,9 @@ struct BiologyView: View {
                     }
                 }
                 .padding(.vertical, 8)
-                
-                Divider().background(VelaTheme.stroke)
-                
+
+                Divider().background(VelaTheme.borderSoft)
+
                 // Detailed biomarker list
                 VStack(spacing: 12) {
                     ForEach(bios) { factor in
@@ -416,7 +416,7 @@ struct BiologyView: View {
 struct SectionLabel: View {
     let title: String
     let icon: String
-    
+
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
@@ -424,7 +424,7 @@ struct SectionLabel: View {
                 .foregroundStyle(VelaTheme.accent)
             Text(title)
                 .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(VelaTheme.primaryText)
+                .foregroundStyle(VelaTheme.fg)
         }
     }
 }
@@ -436,7 +436,7 @@ struct StatGridCard: View {
     let unit: String
     let icon: String
     let color: Color
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -445,21 +445,21 @@ struct StatGridCard: View {
                     .font(.body)
                 Spacer()
             }
-            
+
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .lastTextBaseline, spacing: 2) {
                     Text(value)
                         .font(.system(size: 26, weight: .bold, design: .rounded))
-                        .foregroundStyle(VelaTheme.primaryText)
-                    
+                        .foregroundStyle(VelaTheme.fg)
+
                     Text(unit)
                         .font(.caption)
-                        .foregroundStyle(VelaTheme.secondaryText)
+                        .foregroundStyle(VelaTheme.fg2)
                 }
-                
+
                 Text(title)
                     .font(.caption2)
-                    .foregroundStyle(VelaTheme.mutedText)
+                    .foregroundStyle(VelaTheme.muted)
             }
         }
         .padding(14)
@@ -470,38 +470,38 @@ struct StatGridCard: View {
 // MARK: - Factor Row
 struct FactorRowView: View {
     let factor: BiologicalAgeFactor
-    
+
     var body: some View {
         HStack(spacing: 12) {
             Circle()
-                .fill(factor.isOptimal ? VelaTheme.recovery.opacity(0.12) : VelaTheme.stress.opacity(0.12))
+                .fill(factor.isOptimal ? VelaTheme.recoveryColor.opacity(0.12) : VelaTheme.stressColor.opacity(0.12))
                 .frame(width: 32, height: 32)
                 .overlay(
                     Image(systemName: factor.isOptimal ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
                         .font(.caption.bold())
-                        .foregroundStyle(factor.isOptimal ? VelaTheme.recovery : VelaTheme.stress)
+                        .foregroundStyle(factor.isOptimal ? VelaTheme.recoveryColor : VelaTheme.stressColor)
                 )
-            
+
             VStack(alignment: .leading, spacing: 3) {
                 Text(factor.name)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(VelaTheme.primaryText)
-                
+                    .foregroundStyle(VelaTheme.fg)
+
                 Text(factor.description)
                     .font(.system(size: 11))
-                    .foregroundStyle(VelaTheme.mutedText)
+                    .foregroundStyle(VelaTheme.muted)
             }
-            
+
             Spacer()
-            
+
             VStack(alignment: .trailing, spacing: 2) {
                 Text(String(format: "%.0f", factor.score))
                     .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundStyle(factor.isOptimal ? VelaTheme.recovery : VelaTheme.stress)
-                
+                    .foregroundStyle(factor.isOptimal ? VelaTheme.recoveryColor : VelaTheme.stressColor)
+
                 Text(L10n.t("Score", "得分"))
                     .font(.system(size: 8))
-                    .foregroundStyle(VelaTheme.mutedText)
+                    .foregroundStyle(VelaTheme.muted)
             }
         }
         .padding(8)
@@ -512,39 +512,39 @@ struct FactorRowView: View {
 // MARK: - Biomarker Badge View
 struct BiomarkerBadgeView: View {
     let biomarker: BiomarkerRecord
-    
+
     var body: some View {
         VStack(spacing: 8) {
             ZStack {
                 // Glowing outer ring
                 Circle()
-                    .stroke(biomarker.isOptimal ? VelaTheme.recovery.opacity(0.15) : VelaTheme.stress.opacity(0.15), lineWidth: 4)
+                    .stroke(biomarker.isOptimal ? VelaTheme.recoveryColor.opacity(0.15) : VelaTheme.stressColor.opacity(0.15), lineWidth: 4)
                     .frame(width: 66, height: 66)
-                    .shadow(color: biomarker.isOptimal ? VelaTheme.recovery.opacity(0.2) : VelaTheme.stress.opacity(0.2), radius: 4)
-                
+                    .shadow(color: biomarker.isOptimal ? VelaTheme.recoveryColor.opacity(0.2) : VelaTheme.stressColor.opacity(0.2), radius: 4)
+
                 Circle()
-                    .fill(VelaTheme.background.opacity(0.8))
+                    .fill(VelaTheme.bg.opacity(0.8))
                     .frame(width: 58, height: 58)
-                
+
                 VStack(spacing: 1) {
                     Text(String(format: "%.1f", biomarker.value))
                         .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
                         .minimumScaleFactor(0.7)
                         .lineLimit(1)
-                    
+
                     Text(biomarker.unit)
                         .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(VelaTheme.mutedText)
+                        .foregroundStyle(VelaTheme.muted)
                         .minimumScaleFactor(0.7)
                         .lineLimit(1)
                 }
             }
             .frame(width: 70, height: 70)
-            
+
             Text(biomarker.name)
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(VelaTheme.primaryText)
+                .foregroundStyle(VelaTheme.fg)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
@@ -561,7 +561,7 @@ struct BiomarkerBadgeView: View {
 struct BloodLogSheetView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    
+
     @State private var name = ""
     @State private var valueString = ""
     @State private var unit = "ng/mL"
@@ -569,40 +569,40 @@ struct BloodLogSheetView: View {
     @State private var refMaxString = ""
     @State private var date = Date()
     @State private var errorMsg: String? = nil
-    
+
     private let commonBiomarkers = [
         "Albumin", "Creatinine", "Glucose", "CRP", "Lymphocyte Percentage", "MCV", "RDW",
         "Alkaline Phosphatase", "WBC", "Vitamin D", "Cortisol", "Ferritin", "Cholesterol",
         "Testosterone", "TSH", "HbA1c"
     ]
-    
+
     var body: some View {
         NavigationStack {
             ZStack {
-                VelaTheme.background.ignoresSafeArea()
-                
+                VelaTheme.bg.ignoresSafeArea()
+
                 ScrollView {
                     VStack(spacing: 20) {
                         if let errorMsg = errorMsg {
                             HStack {
                                 Image(systemName: "exclamationmark.octagon.fill")
-                                    .foregroundStyle(VelaTheme.stress)
+                                    .foregroundStyle(VelaTheme.stressColor)
                                 Text(errorMsg)
                                     .font(.caption)
-                                    .foregroundStyle(VelaTheme.primaryText)
+                                    .foregroundStyle(VelaTheme.fg)
                             }
                             .padding()
                             .frame(maxWidth: .infinity)
-                            .background(VelaTheme.stress.opacity(0.12))
+                            .background(VelaTheme.stressColor.opacity(0.12))
                             .cornerRadius(10)
                         }
-                        
+
                         // Suggestion chips
                         VStack(alignment: .leading, spacing: 8) {
                             Text(L10n.t("Common Biomarkers", "常用血检指标"))
                                 .font(.caption.bold())
-                                .foregroundStyle(VelaTheme.secondaryText)
-                            
+                                .foregroundStyle(VelaTheme.fg2)
+
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(spacing: 8) {
                                     ForEach(commonBiomarkers, id: \.self) { item in
@@ -613,7 +613,7 @@ struct BloodLogSheetView: View {
                                         } label: {
                                             Text(item)
                                                 .font(.caption.weight(.medium))
-                                                .foregroundStyle(name == item ? VelaTheme.background : VelaTheme.primaryText)
+                                                .foregroundStyle(name == item ? VelaTheme.bg : VelaTheme.fg)
                                                 .padding(.horizontal, 12)
                                                 .padding(.vertical, 6)
                                                 .background(name == item ? VelaTheme.accent : Color.black.opacity(0.08))
@@ -623,26 +623,26 @@ struct BloodLogSheetView: View {
                                 }
                             }
                         }
-                        
+
                         // Fields
                         VStack(spacing: 16) {
                             StyledTextField(label: L10n.t("BIOMARKER NAME", "指标名称"), placeholder: "e.g., Vitamin D", text: $name)
-                            
+
                             HStack(spacing: 12) {
                                 StyledTextField(label: L10n.t("VALUE", "数值"), placeholder: "e.g., 42.5", text: $valueString)
                                     .keyboardType(.decimalPad)
-                                
+
                                 StyledTextField(label: L10n.t("UNIT", "单位"), placeholder: "e.g., ng/mL", text: $unit)
                             }
-                            
+
                             HStack(spacing: 12) {
                                 StyledTextField(label: L10n.t("MIN REFERENCE", "标准下限"), placeholder: "e.g., 30", text: $refMinString)
                                     .keyboardType(.decimalPad)
-                                
+
                                 StyledTextField(label: L10n.t("MAX REFERENCE", "标准上限"), placeholder: "e.g., 100", text: $refMaxString)
                                     .keyboardType(.decimalPad)
                             }
-                            
+
                             DatePicker(
                                 L10n.t("TEST DATE", "检测日期"),
                                 selection: $date,
@@ -650,29 +650,29 @@ struct BloodLogSheetView: View {
                             )
                             .tint(VelaTheme.accent)
                             .font(.subheadline.bold())
-                            .foregroundStyle(VelaTheme.primaryText)
+                            .foregroundStyle(VelaTheme.fg)
                             .padding(14)
                             .background(
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(VelaTheme.cardBackground.opacity(0.6))
+                                    .fill(VelaTheme.cardBg.opacity(0.6))
                             )
                         }
-                        
+
                         Spacer(minLength: 20)
-                        
+
                         Button {
                             saveBiomarker()
                         } label: {
                             Text(L10n.t("Save Biomarker", "保存指标"))
                                 .font(.system(.body, design: .rounded).bold())
-                                .foregroundStyle(VelaTheme.background)
+                                .foregroundStyle(VelaTheme.bg)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 14)
                                 .background(VelaTheme.accent)
                                 .cornerRadius(99)
                         }
                     }
-                    .padding(VelaTheme.screenPadding)
+                    .padding(VelaTheme.pagePadding)
                 }
             }
             .navigationTitle(L10n.t("Log Lab Biomarker", "录入血检数据"))
@@ -682,12 +682,12 @@ struct BloodLogSheetView: View {
                     Button(L10n.t("Cancel", "取消")) {
                         dismiss()
                     }
-                    .foregroundStyle(VelaTheme.secondaryText)
+                    .foregroundStyle(VelaTheme.fg2)
                 }
             }
         }
     }
-    
+
     private func autoFillDefaults(for bName: String) {
         switch bName {
         case "Albumin":
@@ -758,7 +758,7 @@ struct BloodLogSheetView: View {
             break
         }
     }
-    
+
     private func saveBiomarker() {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             errorMsg = L10n.t("Name is required.", "请输入指标名称。")
@@ -785,7 +785,7 @@ struct BloodLogSheetView: View {
             UINotificationFeedbackGenerator().notificationOccurred(.error)
             return
         }
-        
+
         let isOptimal = val >= rMin && val <= rMax
         let record = BiomarkerRecord(
             name: name,
@@ -796,7 +796,7 @@ struct BloodLogSheetView: View {
             referenceMin: rMin,
             referenceMax: rMax
         )
-        
+
         modelContext.insert(record)
 
         do {
@@ -814,25 +814,25 @@ struct StyledTextField: View {
     let label: String
     let placeholder: String
     @Binding var text: String
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
                 .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(VelaTheme.mutedText)
+                .foregroundStyle(VelaTheme.muted)
                 .tracking(1)
-            
+
             TextField(placeholder, text: $text)
                 .padding(14)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(VelaTheme.cardBackground.opacity(0.6))
+                        .fill(VelaTheme.cardBg.opacity(0.6))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(VelaTheme.stroke, lineWidth: 1)
+                        .stroke(VelaTheme.borderSoft, lineWidth: 1)
                 )
-                .foregroundStyle(VelaTheme.primaryText)
+                .foregroundStyle(VelaTheme.fg)
         }
     }
 }

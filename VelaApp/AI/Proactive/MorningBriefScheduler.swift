@@ -22,6 +22,11 @@ final class MorningBriefScheduler: ObservableObject {
     ///   - force: If true, runs generation bypassing time window and date checks
     func runIfNeeded(modelContext: ModelContext, dashboard: DashboardSummary, force: Bool = false, services: VelaServices? = nil) async {
         logger.info("runIfNeeded called (force: \(force))")
+
+        guard force || (AutoAgentConfig.shared.backgroundNetworkAIConsent && AutoAgentConfig.shared.autoMorningBrief) else {
+            logger.info("Automated morning brief is not enabled by the user. Skipping.")
+            return
+        }
         
         // 1. If not forced, check time window (06:00 - 11:00)
         if !force {
@@ -74,106 +79,40 @@ final class MorningBriefScheduler: ObservableObject {
         try? modelContext.save()
 
         do {
-            // 4. Fetch last 12 JournalEntryRecord
-            let journalDescriptor = FetchDescriptor<JournalEntryRecord>(
-                sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+            // 4. Load the same bounded fact set used by Coach and evening sync.
+            let contextAsOf = Date()
+            let input = AgentFactInputLoader().load(
+                modelContext: modelContext,
+                asOf: contextAsOf
             )
-            var journals = try modelContext.fetch(journalDescriptor)
-            if journals.count > 12 {
-                journals = Array(journals.prefix(12))
-            }
-            
-            // 5. Fetch last 6 AIReportRecord
-            let reportDescriptor = FetchDescriptor<AIReportRecord>(
-                sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-            )
-            let allReports = try modelContext.fetch(reportDescriptor)
-            // Filter out coach prompts/threads in memory to keep simple SwiftData Predicate
-            let savedReports = allReports.filter { $0.type != "coach_prompt" && $0.type != "coach_thread" }
-            let filteredReports = Array(savedReports.prefix(6))
-            
-            // 6. Load Wiki data
+
+            // 5. Load Wiki data
             let wiki = WikiFileService.loadDictionary()
-            
-            // 7. Map structures to AI Context format
-            let journalEntries = journals.map { JournalContextEntry(tags: $0.tags, text: $0.note) }
-            let historicalReports = filteredReports.map { record in
-                GeneratedAIReport(
-                    type: AIReportType(rawValue: record.type) ?? .morningBrief,
-                    title: record.title,
-                    markdownContent: record.markdownContent,
-                    contextSnapshot: record.serializedContextSnapshot,
-                    createdAt: record.createdAt
-                )
-            }
-            
-            // 8. Construct AgentContextEnvelope using AIContextBuilder
-            let weeklyTrends = (try? HealthSnapshotRepository(modelContext: modelContext).buildWeeklyTrendSummary()) ?? [:]
-            let foodLogs = (try? modelContext.fetch(
-                FetchDescriptor<FoodLogRecord>(
-                    sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-                )
-            )) ?? []
-            let fourteenDaysAgo = Date().addingTimeInterval(-14 * 24 * 3600)
-            let strengthWorkouts = (try? modelContext.fetch(
-                FetchDescriptor<StrengthWorkoutRecord>(
-                    predicate: #Predicate<StrengthWorkoutRecord> { $0.startedAt >= fourteenDaysAgo },
-                    sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
-                )
-            )) ?? []
-            let workoutEvents = (try? modelContext.fetch(
-                FetchDescriptor<WorkoutEventRecord>(
-                    predicate: #Predicate<WorkoutEventRecord> { $0.startedAt >= fourteenDaysAgo },
-                    sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
-                )
-            )) ?? []
-            let trainingResponses = (try? modelContext.fetch(
-                FetchDescriptor<TrainingResponseRecord>(
-                    sortBy: [SortDescriptor(\.date, order: .reverse)]
-                )
-            )) ?? []
-            let activePlan = (try? modelContext.fetch(
-                FetchDescriptor<TrainingPlanRecord>(
-                    predicate: #Predicate<TrainingPlanRecord> { $0.isActive }
-                )
-            ))?.first
-            let dailySummary = (try? modelContext.fetch(
-                FetchDescriptor<DailyHealthSummaryRecord>(
-                    sortBy: [SortDescriptor(\.date, order: .reverse)]
-                )
-            ))?.first
-            let bodyState = BodyStateKernel().build(input: BodyStateInput(
-                dashboard: dashboard,
-                dailySummary: dailySummary,
-                workoutEvents: workoutEvents,
-                strengthWorkouts: strengthWorkouts,
-                trainingResponses: trainingResponses,
-                foodLogs: Array(foodLogs.prefix(8)),
-                journalEntries: journals,
-                activePlan: activePlan,
-                activeStatus: ActiveStatusSettings.resolveCurrentStatus()
-            ))
+
+            // 6. Render the frozen v1 report contract from the shared facts.
             let (context, contextMeta) = (services?.contextBuilder ?? AIContextBuilder()).build(
                 dashboard: dashboard,
-                journalEntries: journalEntries,
-                historicalReports: historicalReports,
+                journalEntries: input.journalContext,
+                historicalReports: input.reportContext,
                 userWiki: wiki,
-                weeklyTrends: weeklyTrends,
-                foodLogs: Array(foodLogs.prefix(8)),
-                workoutEvents: workoutEvents,
-                strengthWorkouts: strengthWorkouts,
-                trainingResponses: trainingResponses,
-                bodyState: bodyState
+                weeklyTrends: input.weeklyTrends,
+                foodLogs: input.foodLogs,
+                workoutEvents: input.workoutEvents,
+                strengthWorkouts: input.strengthWorkouts,
+                trainingResponses: input.trainingResponses,
+                onboardingState: input.onboardingState,
+                bodyState: input.bodyState(dashboard: dashboard),
+                generatedAt: contextAsOf
             )
             
-            // 9. Generate Report using ReportGenerator
+            // 7. Generate Report using ReportGenerator
             let provider = services?.deepSeekProvider(apiKey: apiKey) ?? DeepSeekProvider(apiKey: apiKey)
             let generator = ReportGenerator(provider: provider, language: AppLanguage.stored)
             
             logger.info("Calling ReportGenerator for morning brief...")
             let generatedReport = try await generator.generate(type: .morningBrief, context: context)
             
-            // 10. Persist back as a new AIReportRecord in SwiftData modelContext
+            // 8. Persist back as a new AIReportRecord in SwiftData modelContext
             let newRecord = AIReportRecord(
                 createdAt: generatedReport.createdAt,
                 type: generatedReport.type.rawValue,

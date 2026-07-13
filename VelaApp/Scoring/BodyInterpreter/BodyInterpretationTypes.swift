@@ -70,7 +70,7 @@ enum FatigueCategory: String, Codable, Hashable, CaseIterable {
 
     var label: String {
         switch self {
-        case .autonomic: return AppLanguage.stored.isChinese ? "自主神经疲劳" : "Autonomic Fatigue"
+        case .autonomic: return AppLanguage.stored.isChinese ? "HRV 恢复信号" : "HRV Recovery Signal"
         case .muscular: return AppLanguage.stored.isChinese ? "肌肉疲劳" : "Muscular Fatigue"
         case .sleepRelated: return AppLanguage.stored.isChinese ? "睡眠不足" : "Sleep Deficit"
         case .mentalStress: return AppLanguage.stored.isChinese ? "精神压力" : "Mental Stress"

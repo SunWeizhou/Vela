@@ -18,51 +18,33 @@ struct VelaOnboardingView: View {
     @State private var hasGym = true
     @State private var hasHomeEquipment = true
     @State private var hasBodyweight = true
+    @State private var currentStep = 0
 
     @Query(sort: \OnboardingState.updatedAt, order: .reverse)
     private var onboardingStates: [OnboardingState]
 
     var body: some View {
         ZStack {
-            VelaBackground()
+            VelaTheme.bg.ignoresSafeArea()
 
-            // Top glow effect
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            VelaTheme.recovery.opacity(0.12),
-                            VelaTheme.recovery.opacity(0.02),
-                            .clear
-                        ],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: 200
-                    )
-                )
-                .frame(width: 400, height: 400)
-                .offset(y: -240)
-                .blur(radius: 20)
-                .allowsHitTesting(false)
+            VStack(spacing: 0) {
+                onboardingHeader
 
-            ScrollView {
-                VStack(spacing: 18) {
-                    heroSection
-                    bodyModelSetupCard
-                    signalPreviewCard
-
-                    Text(L10n.t(
-                        "Your health data stays on-device. Nothing leaves without permission.",
-                        "你的健康数据保留在设备本地，不会未经允许离开你的手机。"
-                    ))
-                    .font(.system(size: 12))
-                    .foregroundStyle(VelaTheme.muted.opacity(0.55))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 22)
-                    .padding(.bottom, 132)
+                ScrollView {
+                    Group {
+                        switch currentStep {
+                        case 0: welcomeStep
+                        case 1: modelStep
+                        default: healthStep
+                        }
+                    }
+                    .id(currentStep)
+                    .transition(.opacity.combined(with: .move(edge: .trailing)))
+                    .padding(.horizontal, 20)
+                    .padding(.top, 28)
+                    .padding(.bottom, 150)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 46)
+                .scrollIndicators(.hidden)
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -70,7 +52,8 @@ struct VelaOnboardingView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 12)
                 .padding(.bottom, 10)
-                .background(.ultraThinMaterial)
+                .background(VelaTheme.bg.opacity(0.97))
+                .overlay(alignment: .top) { Divider().opacity(0.55) }
         }
         .alert(isPresented: $showingErrorAlert) {
             Alert(
@@ -97,6 +80,131 @@ struct VelaOnboardingView: View {
         }
     }
 
+    private var onboardingHeader: some View {
+        HStack(spacing: 10) {
+            VelaLogoMark(size: 30)
+            Text("Vela")
+                .font(VelaTheme.headline())
+                .foregroundStyle(VelaTheme.fg)
+
+            Spacer()
+
+            Text("\(currentStep + 1) / 3")
+                .font(VelaTheme.caption1().weight(.semibold))
+                .foregroundStyle(VelaTheme.muted)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+    }
+
+    private var welcomeStep: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            VStack(alignment: .leading, spacing: 12) {
+                VelaLogoMark(size: 64)
+                    .padding(.bottom, 4)
+
+                Text(L10n.t("Know what your body needs today.", "每天，只回答一个重要问题。"))
+                    .font(VelaTheme.largeTitle())
+                    .foregroundStyle(VelaTheme.fg)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(L10n.t(
+                    "Vela turns your health and training signals into one clear next step — with the evidence behind it.",
+                    "Vela 会把健康与训练信号整理成一个清晰的下一步，并告诉你判断依据。"
+                ))
+                .font(VelaTheme.body())
+                .foregroundStyle(VelaTheme.muted)
+                .lineSpacing(4)
+            }
+
+            VStack(spacing: 0) {
+                onboardingValueRow(icon: "sun.max.fill", title: "今天怎么练", detail: "根据恢复、睡眠和近期负荷调整建议")
+                Divider().padding(.leading, 52)
+                onboardingValueRow(icon: "sparkles", title: "为什么这样建议", detail: "Coach 用自然语言解释证据与不确定性")
+                Divider().padding(.leading, 52)
+                onboardingValueRow(icon: "lock.shield.fill", title: "数据由你控制", detail: "健康资料默认保存在本机，联网 AI 由你决定")
+            }
+            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
+            )
+        }
+    }
+
+    private var modelStep: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("先认识你的训练方式")
+                    .font(VelaTheme.title1())
+                    .foregroundStyle(VelaTheme.fg)
+                Text("这些信息用于生成首日建议，之后可以随时在个人中心修改。")
+                    .font(VelaTheme.body())
+                    .foregroundStyle(VelaTheme.muted)
+                    .lineSpacing(3)
+            }
+
+            bodyModelSetupCard
+        }
+    }
+
+    private var healthStep: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            Image(systemName: "heart.text.square.fill")
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(VelaTheme.recoveryColor)
+                .frame(width: 60, height: 60)
+                .background(VelaTheme.recoveryColor.opacity(0.11), in: RoundedRectangle(cornerRadius: 18))
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("连接 Apple 健康")
+                    .font(VelaTheme.title1())
+                    .foregroundStyle(VelaTheme.fg)
+                Text("授权后，Vela 才能结合睡眠、心率、HRV 与训练记录生成个性化建议。")
+                    .font(VelaTheme.body())
+                    .foregroundStyle(VelaTheme.muted)
+                    .lineSpacing(4)
+            }
+
+            VStack(spacing: 0) {
+                permissionRow(icon: "bed.double.fill", title: "睡眠与恢复", detail: "判断今天是否适合提高训练强度")
+                Divider().padding(.leading, 52)
+                permissionRow(icon: "heart.fill", title: "心率与 HRV", detail: "建立属于你的个人基线")
+                Divider().padding(.leading, 52)
+                permissionRow(icon: "figure.run", title: "活动与训练", detail: "理解近期负荷并避免重复记录")
+            }
+            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
+            )
+
+            Label("你可以逐项选择权限；Vela 无法写入或修改 Apple 健康中的原始数据。", systemImage: "lock.fill")
+                .font(VelaTheme.footnote())
+                .foregroundStyle(VelaTheme.muted)
+        }
+    }
+
+    private func onboardingValueRow(icon: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(VelaTheme.accent)
+                .frame(width: 38, height: 38)
+                .background(VelaTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 11))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(VelaTheme.headline()).foregroundStyle(VelaTheme.fg)
+                Text(detail).font(VelaTheme.footnote()).foregroundStyle(VelaTheme.muted).lineSpacing(2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+    }
+
+    private func permissionRow(icon: String, title: String, detail: String) -> some View {
+        onboardingValueRow(icon: icon, title: title, detail: detail)
+    }
+
     private var heroSection: some View {
         VStack(spacing: 12) {
             Text(L10n.t("Welcome to", "欢迎使用"))
@@ -109,11 +217,11 @@ struct VelaOnboardingView: View {
 
             Text("VELA")
                 .font(.system(size: 44, weight: .black, design: .rounded))
-                .foregroundStyle(VelaTheme.onSurface)
+                .foregroundStyle(VelaTheme.fg)
 
             Text(L10n.t("Active Coach OS", "主动式身体教练系统"))
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(VelaTheme.onSurface)
+                .foregroundStyle(VelaTheme.fg)
 
             Text(L10n.t(
                 "Build your first body model, connect Apple Health, then let Vela turn readiness, training, and recovery into daily decisions.",
@@ -130,7 +238,7 @@ struct VelaOnboardingView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text(L10n.t("First-Day Body Model", "首日身体模型"))
                 .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(VelaTheme.onSurface)
+                .foregroundStyle(VelaTheme.fg)
 
             Picker(L10n.t("Goal", "目标"), selection: $primaryGoal) {
                 Text(localizedOnboardingGoal("performance")).tag("performance")
@@ -152,7 +260,7 @@ struct VelaOnboardingView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(L10n.t("\(weeklyTrainingDays)x / week", "每周 \(weeklyTrainingDays) 次"))
                             .font(.system(size: 15, weight: .semibold, design: .rounded))
-                            .foregroundStyle(VelaTheme.onSurface)
+                            .foregroundStyle(VelaTheme.fg)
                         Text(L10n.t("training frequency", "训练频次"))
                             .font(.system(size: 11))
                             .foregroundStyle(VelaTheme.muted)
@@ -163,7 +271,7 @@ struct VelaOnboardingView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("\(sessionDurationMinutes) min")
                             .font(.system(size: 15, weight: .semibold, design: .rounded))
-                            .foregroundStyle(VelaTheme.onSurface)
+                            .foregroundStyle(VelaTheme.fg)
                         Text(L10n.t("session", "单次时长"))
                             .font(.system(size: 11))
                             .foregroundStyle(VelaTheme.muted)
@@ -199,15 +307,15 @@ struct VelaOnboardingView: View {
         VStack(spacing: 10) {
             featureCard(
                 icon: "heart.fill",
-                bgColor: VelaTheme.recovery.opacity(0.12),
-                fgColor: VelaTheme.recovery,
+                bgColor: VelaTheme.recoveryColor.opacity(0.12),
+                fgColor: VelaTheme.recoveryColor,
                 title: L10n.t("Readiness Decision", "每日准备度决策"),
                 detail: L10n.t("Recovery, HRV, resting heart rate, sleep, and strain become one action.", "恢复、HRV、静息心率、睡眠和负荷会合成为一个行动建议。")
             )
             featureCard(
                 icon: "figure.strengthtraining.traditional",
-                bgColor: VelaTheme.strain.opacity(0.12),
-                fgColor: VelaTheme.strain,
+                bgColor: VelaTheme.strainColor.opacity(0.12),
+                fgColor: VelaTheme.strainColor,
                 title: L10n.t("Training Loop", "训练闭环"),
                 detail: L10n.t("Templates, set logging, post-workout review, and Coach artifact memory.", "模板、组记录、训练后复盘和 Coach artifact 记忆。")
             )
@@ -223,27 +331,47 @@ struct VelaOnboardingView: View {
 
     private var ctaButtons: some View {
         VStack(spacing: 12) {
-            Button {
-                Task { await connectHealthAndFinish() }
-            } label: {
-                Text(L10n.t("Build Model + Connect Apple Health", "建立模型并连接 Apple 健康"))
-                    .font(.system(.body, design: .rounded).weight(.bold))
-                    .foregroundStyle(VelaTheme.background)
+            Button(action: primaryOnboardingAction) {
+                Text(primaryButtonTitle)
+                    .font(VelaTheme.headline())
+                    .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(Capsule().fill(VelaTheme.recovery))
+                    .frame(height: 52)
+                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.accent))
             }
             .buttonStyle(.cardPress)
 
-            Button {
-                finishOnboarding(missingSignals: [])
-            } label: {
-                Text(L10n.t("Build model without Health for now", "先建立模型，稍后连接健康数据"))
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(VelaTheme.muted)
-                    .padding(.vertical, 8)
+            if currentStep > 0 {
+                Button {
+                    if currentStep == 2 {
+                        finishOnboarding(missingSignals: [])
+                    } else {
+                        withAnimation(VelaTheme.smooth) { currentStep -= 1 }
+                    }
+                } label: {
+                    Text(currentStep == 2 ? "稍后连接" : "返回")
+                        .font(VelaTheme.subheadline().weight(.semibold))
+                        .foregroundStyle(VelaTheme.muted)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.cardPress)
+        }
+    }
+
+    private var primaryButtonTitle: String {
+        switch currentStep {
+        case 0: return "开始设置"
+        case 1: return "继续"
+        default: return "连接 Apple 健康"
+        }
+    }
+
+    private func primaryOnboardingAction() {
+        if currentStep < 2 {
+            withAnimation(VelaTheme.smooth) { currentStep += 1 }
+        } else {
+            Task { await connectHealthAndFinish() }
         }
     }
 
@@ -253,16 +381,16 @@ struct VelaOnboardingView: View {
         } label: {
             Text(title)
                 .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(isOn.wrappedValue ? VelaTheme.background : VelaTheme.onSurface)
+                .foregroundStyle(isOn.wrappedValue ? VelaTheme.bg : VelaTheme.fg)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 9)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(isOn.wrappedValue ? VelaTheme.recovery : VelaTheme.surface.opacity(0.7))
+                        .fill(isOn.wrappedValue ? VelaTheme.recoveryColor : VelaTheme.surface.opacity(0.7))
                 )
                 .overlay(
                     Capsule(style: .continuous)
-                        .stroke(VelaTheme.outline, lineWidth: 0.5)
+                        .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
                 )
         }
         .buttonStyle(.cardPress)
@@ -408,7 +536,7 @@ struct VelaOnboardingView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(VelaTheme.onSurface)
+                        .foregroundStyle(VelaTheme.fg)
                     Text(detail)
                         .font(.system(size: 13))
                         .foregroundStyle(VelaTheme.muted)

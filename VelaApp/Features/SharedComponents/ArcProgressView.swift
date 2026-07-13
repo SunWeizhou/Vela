@@ -19,8 +19,8 @@ struct ArcProgressView: View {
 
     private var scoreColor: Color {
         switch score {
-        case ..<40: return VelaTheme.stress
-        case ..<70: return VelaTheme.energy
+        case ..<40: return VelaTheme.stressColor
+        case ..<70: return VelaTheme.energyColor
         default: return tint
         }
     }
@@ -77,7 +77,7 @@ struct ArcProgressView: View {
             VStack(spacing: 1) {
                 Text(score.formatted(.number.precision(.fractionLength(0))))
                     .font(.system(size: size * 0.24, weight: .bold, design: .rounded))
-                    .foregroundStyle(VelaTheme.primaryText)
+                    .foregroundStyle(VelaTheme.fg)
                     .monospacedDigit()
 
                 Text(bandText)
@@ -141,24 +141,24 @@ struct ArcProgressPreview: View {
         VStack(spacing: 24) {
             ArcProgressView(
                 score: 65,
-                tint: VelaTheme.strain,
+                tint: VelaTheme.strainColor,
                 recommendedRange: 40...70
             )
 
             ArcProgressView(
                 score: 30,
-                tint: VelaTheme.strain,
+                tint: VelaTheme.strainColor,
                 recommendedRange: 40...70
             )
 
             ArcProgressView(
                 score: 85,
-                tint: VelaTheme.recovery,
+                tint: VelaTheme.recoveryColor,
                 recommendedRange: 60...80
             )
         }
         .padding()
-        .background(VelaTheme.background)
+        .background(VelaTheme.bg)
         .previewLayout(.sizeThatFits)
     }
 }

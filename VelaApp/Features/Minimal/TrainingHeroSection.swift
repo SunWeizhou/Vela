@@ -9,14 +9,8 @@ struct TrainingHeroSection: View {
 
     var body: some View {
         let session = todaySession
-        let payload = todayPlan.flatMap { plan -> DailyOperatingPlanPayload? in
-            guard let data = plan.payloadJSON.data(using: .utf8) else { return nil }
-            return try? JSONDecoder().decode(DailyOperatingPlanPayload.self, from: data)
-        }
-        let reasons = todayPlan.flatMap { plan -> [String]? in
-            guard let data = plan.reasonsJSON.data(using: .utf8) else { return nil }
-            return try? JSONDecoder().decode([String].self, from: data)
-        } ?? []
+        let payload = todayPlan?.operatingPlanPayload
+        let reasons = todayPlan?.operatingPlanReasons ?? []
         let display = DailyOperatingPlanDisplayModel.build(
             payload: payload,
             primaryActionType: todayPlan?.primaryActionType,
@@ -24,29 +18,34 @@ struct TrainingHeroSection: View {
             safetyNotice: todayPlan?.safetyNotice,
             confidence: todayPlan?.confidence ?? 0.0
         )
-        return VStack(alignment: .leading, spacing: 12) {
+        let hasPlan = todayPlan != nil
+        return VStack(alignment: .leading, spacing: 16) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("基于今日状态的训练建议")
-                        .font(.caption.weight(.bold))
+                    Text("今天的训练")
+                        .font(VelaTheme.caption1().weight(.semibold))
                         .foregroundStyle(VelaTheme.muted)
                     Text(session?.title ?? activePlan?.title ?? "自由训练")
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .font(VelaTheme.title1())
                         .foregroundStyle(VelaTheme.fg)
                 }
                 Spacer()
-                Text(display.actionLabel)
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(VelaTheme.accent)
+                if hasPlan {
+                    Text(display.actionLabel)
+                        .font(VelaTheme.caption1().weight(.semibold))
+                        .foregroundStyle(VelaTheme.accent)
+                }
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(display.statusTitle)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(VelaTheme.accent)
+                Text(hasPlan ? display.statusTitle : "还没有足够数据生成个性化建议")
+                    .font(VelaTheme.headline())
+                    .foregroundStyle(hasPlan ? VelaTheme.accent : VelaTheme.fg)
                 
-                Text(session?.description ?? display.summary)
-                    .font(.subheadline)
+                Text(session?.description ?? (hasPlan
+                    ? display.summary
+                    : "你仍然可以开始自由训练；同步健康数据后，Vela 会补充容量和强度建议。"))
+                    .font(VelaTheme.subheadline())
                     .foregroundStyle(VelaTheme.fg2)
                     .lineSpacing(4)
                     .lineLimit(3)
@@ -61,12 +60,12 @@ struct TrainingHeroSection: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Divider()
-
-            HStack(spacing: 10) {
-                executionMetric("容量", payload.map { "\(Int(($0.volumeMultiplier * 100).rounded()))%" } ?? "--")
-                executionMetric("RPE 上限", payload.map { "\($0.intensityCap)" } ?? "--")
-                executionMetric("时长", session.map { "\($0.durationMinutes) 分" } ?? "--")
+            if hasPlan {
+                HStack(spacing: 8) {
+                    executionMetric("容量", payload.map { "\(Int(($0.volumeMultiplier * 100).rounded()))%" } ?? "--")
+                    executionMetric("RPE 上限", payload.map { "\($0.intensityCap)" } ?? "--")
+                    executionMetric("时长", session.map { "\($0.durationMinutes) 分" } ?? "--")
+                }
             }
 
             if let latest = lastWorkoutSummary {
@@ -87,36 +86,36 @@ struct TrainingHeroSection: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "play.fill")
-                    Text("执行建议并记录训练")
+                    Text(hasPlan ? "执行建议并记录训练" : "开始自由训练")
                 }
-                .font(.subheadline.weight(.bold))
+                .font(VelaTheme.headline())
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 13)
                 .foregroundStyle(.white)
                 .background(
-                    RoundedRectangle(cornerRadius: 16)
+                    RoundedRectangle(cornerRadius: 15)
                         .fill(VelaTheme.accent)
                 )
             }
             .buttonStyle(.plain)
 
-            HStack {
-                Text(display.evidenceLine)
-                    .lineLimit(2)
-                Spacer()
-                Text(display.confidenceLabel)
-                    .lineLimit(1)
+            if hasPlan {
+                HStack {
+                    Text(display.evidenceLine).lineLimit(2)
+                    Spacer()
+                    Text(display.confidenceLabel).lineLimit(1)
+                }
+                .font(VelaTheme.caption2())
+                .foregroundStyle(VelaTheme.muted)
             }
-            .font(.system(size: 9))
-            .foregroundStyle(VelaTheme.muted)
         }
-        .padding(14)
+        .padding(18)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(VelaTheme.cardBg)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
         )
     }

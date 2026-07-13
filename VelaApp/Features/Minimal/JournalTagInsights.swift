@@ -23,41 +23,21 @@ struct JournalTagInsights: View {
                 Spacer()
             }
 
-            if !state.claims.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(state.claims.prefix(3)) { claim in
-                        HStack(alignment: .top, spacing: 8) {
-                            Image(systemName: "checkmark.seal.fill")
-                                .font(.system(size: 11))
-                                .foregroundStyle(confidenceColor(claim.confidence))
-                                .padding(.top, 2)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(claim.title)
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundStyle(VelaTheme.fg)
-                                Text("\(claim.summary) 置信度：\(displayConfidence(claim.confidence.rawValue))，n=\(claim.evidenceCount)。")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(VelaTheme.muted)
-                                    .lineLimit(3)
-                            }
-                        }
-                    }
+            if let claim = state.claims.first {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(confidenceColor(claim.confidence))
+                        .padding(.top, 2)
+                    Text("\(claim.title)：\(claim.summary)")
+                        .font(.system(size: 11))
+                        .foregroundStyle(VelaTheme.fg2)
+                        .lineLimit(2)
                 }
-            }
-
-            if !state.uncertainAreas.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("暂不下结论")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(VelaTheme.muted)
-                        .textCase(.uppercase)
-                    ForEach(state.uncertainAreas.prefix(3)) { area in
-                        Text("• \(area.title)：\(area.detail)")
-                            .font(.system(size: 11))
-                            .foregroundStyle(VelaTheme.muted)
-                            .lineSpacing(2)
-                    }
-                }
+            } else if !state.uncertainAreas.isEmpty {
+                Text("仍有 \(state.uncertainAreas.count) 类证据不足，积累更多记录后再形成结论。")
+                    .font(.system(size: 11))
+                    .foregroundStyle(VelaTheme.muted)
             }
         }
         .padding(12)

@@ -522,6 +522,28 @@ final class AgentActionParserTests: XCTestCase {
         XCTAssertTrue(prompt.contains("缺失或不可用的数据不是正常数据"))
         XCTAssertTrue(prompt.contains("只有当所需字段全部存在"))
     }
+
+    func testCoachPromptHonorsMetricEntryFocus() {
+        let focus = CoachContextFocus(
+            title: "HRV 详情",
+            systemContext: "优先解释 HRV 的近期变化、个人基线和数据置信度。"
+        )
+        let prompt = CoachPromptComposer(
+            lang: .simplifiedChinese,
+            personality: .guardian,
+            focus: focus,
+            wikiText: "",
+            baselinePrompt: "",
+            activePlan: nil,
+            contextJSON: "{}",
+            correlationText: "",
+            wikiFiles: "profile.md"
+        ).compose(for: .focused)
+
+        XCTAssertTrue(prompt.contains("## 当前专项上下文"))
+        XCTAssertTrue(prompt.contains("入口：HRV 详情"))
+        XCTAssertTrue(prompt.contains("优先解释 HRV 的近期变化、个人基线和数据置信度"))
+    }
 }
 
 private final class FakeAgentChatProvider: AgentChatProvider, @unchecked Sendable {

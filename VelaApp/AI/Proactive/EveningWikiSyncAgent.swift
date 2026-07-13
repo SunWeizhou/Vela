@@ -27,8 +27,8 @@ final class EveningWikiSyncAgent: ObservableObject {
         force: Bool = false,
         services: VelaServices? = nil
     ) async {
-        guard AutoAgentConfig.shared.autoEveningWikiSync else {
-            logger.info("Evening wiki sync is disabled in settings.")
+        guard force || (AutoAgentConfig.shared.backgroundNetworkAIConsent && AutoAgentConfig.shared.autoEveningWikiSync) else {
+            logger.info("Automated evening wiki sync is not enabled by the user.")
             return
         }
 
@@ -65,28 +65,25 @@ final class EveningWikiSyncAgent: ObservableObject {
         try? modelContext.save()
 
         do {
+            let contextAsOf = Date()
+            let input = AgentFactInputLoader().load(
+                modelContext: modelContext,
+                asOf: contextAsOf
+            )
             let wiki = WikiFileService.loadDictionary()
-
-            let foodLogs = (try? modelContext.fetch(
-                FetchDescriptor<FoodLogRecord>(
-                    sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-                )
-            )) ?? []
-            let fourteenDaysAgo = Date().addingTimeInterval(-14 * 24 * 3600)
-            let strengthWorkouts = (try? modelContext.fetch(
-                FetchDescriptor<StrengthWorkoutRecord>(
-                    predicate: #Predicate<StrengthWorkoutRecord> { $0.startedAt >= fourteenDaysAgo },
-                    sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
-                )
-            )) ?? []
             let (context, contextMeta) = (services?.contextBuilder ?? AIContextBuilder()).build(
                 dashboard: dashboard,
-                journalEntries: [],
-                historicalReports: [],
+                journalEntries: input.journalContext,
+                historicalReports: input.reportContext,
                 userWiki: wiki,
-                weeklyTrends: (try? HealthSnapshotRepository(modelContext: modelContext).buildWeeklyTrendSummary()) ?? [:],
-                foodLogs: Array(foodLogs.prefix(8)),
-                strengthWorkouts: strengthWorkouts
+                weeklyTrends: input.weeklyTrends,
+                foodLogs: input.foodLogs,
+                workoutEvents: input.workoutEvents,
+                strengthWorkouts: input.strengthWorkouts,
+                trainingResponses: input.trainingResponses,
+                onboardingState: input.onboardingState,
+                bodyState: input.bodyState(dashboard: dashboard),
+                generatedAt: contextAsOf
             )
 
             let prompt = buildSyncPrompt(

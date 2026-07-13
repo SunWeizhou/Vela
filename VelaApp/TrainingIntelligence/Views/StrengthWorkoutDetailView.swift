@@ -369,7 +369,7 @@ struct StrengthWorkoutDetailView: View {
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(set.rpe != nil ? VelaTheme.accent : mutedColor)
                 .frame(width: 44, height: 26)
-                .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.04)))
+                .background(RoundedRectangle(cornerRadius: 8).fill(VelaTheme.elevatedBg))
 
             // 状态
             Image(systemName: (set.isCompleted ?? true) ? "checkmark.circle.fill" : "circle")
@@ -507,4 +507,3 @@ private struct VolumeItem: Identifiable {
     let index: Int
     let volume: Double
 }
-

@@ -34,10 +34,10 @@ struct TodayCoachPreview: View {
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(VelaTheme.muted)
             }
-            .padding(14)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(VelaTheme.cardBg))
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
             .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .stroke(VelaTheme.accent.opacity(0.14), lineWidth: 0.7)
             )
         }

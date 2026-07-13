@@ -4,7 +4,13 @@ import Foundation
 final class AutoAgentConfig: ObservableObject, @unchecked Sendable {
     static let shared = AutoAgentConfig()
 
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
+
+    /// Explicit consent for automated tasks that can send health context to a network AI provider.
+    /// Manual Coach requests are an intentional, separate action and are not governed by this flag.
+    @Published var backgroundNetworkAIConsent: Bool {
+        didSet { defaults.set(backgroundNetworkAIConsent, forKey: "agent_background_network_ai_consent") }
+    }
 
     // ── Skill Toggles ──
     @Published var autoEveningWikiSync: Bool {
@@ -69,16 +75,25 @@ final class AutoAgentConfig: ObservableObject, @unchecked Sendable {
         didSet { defaults.set(weeklySummaryHour, forKey: "agent_weekly_summary_hour") }
     }
 
-    private init() {
-        // Skills — all enabled by default
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+
+        // Automated network AI is strictly opt-in. Existing installations must opt in again
+        // because earlier versions enabled these tasks by default.
+        if defaults.object(forKey: "agent_background_network_ai_consent") == nil {
+            defaults.set(false, forKey: "agent_background_network_ai_consent")
+        }
+        self.backgroundNetworkAIConsent = defaults.bool(forKey: "agent_background_network_ai_consent")
+
+        // Background skills are also opt-in on a fresh install.
         if defaults.object(forKey: "agent_auto_evening_wiki_sync") == nil {
-            defaults.set(true, forKey: "agent_auto_evening_wiki_sync")
+            defaults.set(false, forKey: "agent_auto_evening_wiki_sync")
         }
         if defaults.object(forKey: "agent_auto_morning_brief") == nil {
-            defaults.set(true, forKey: "agent_auto_morning_brief")
+            defaults.set(false, forKey: "agent_auto_morning_brief")
         }
         if defaults.object(forKey: "agent_proactive_insights") == nil {
-            defaults.set(true, forKey: "agent_proactive_insights")
+            defaults.set(false, forKey: "agent_proactive_insights")
         }
         self.autoEveningWikiSync = defaults.bool(forKey: "agent_auto_evening_wiki_sync")
         self.autoMorningBrief = defaults.bool(forKey: "agent_auto_morning_brief")
@@ -112,6 +127,10 @@ final class AutoAgentConfig: ObservableObject, @unchecked Sendable {
         self.weeklySummary = defaults.bool(forKey: "agent_weekly_summary")
         self.weeklySummaryDay = defaults.integer(forKey: "agent_weekly_summary_day").nonZero ?? 2
         self.weeklySummaryHour = defaults.integer(forKey: "agent_weekly_summary_hour").nonZero ?? 9
+    }
+
+    var canRunBackgroundNetworkAI: Bool {
+        backgroundNetworkAIConsent && (autoEveningWikiSync || autoMorningBrief || proactiveInsights)
     }
 }
 

@@ -25,8 +25,16 @@ struct TrainingView: View {
         ))
     }
 
+    private var todayOperatingPlan: DailyOperatingPlanRecord? {
+        let identifier = DailyHealthSummaryRecord.dayIdentifier(for: viewModel.dashboard.date)
+        return operatingPlans.first(where: { $0.dayIdentifier == identifier })
+    }
+
     private var trainingDecision: DailyTrainingDecision {
-        TrainingDecisionKernel().decide(input: TrainingDecisionInput(
+        if let persistedDecision = todayOperatingPlan?.trainingDecision {
+            return persistedDecision
+        }
+        return TrainingDecisionKernel().decide(input: TrainingDecisionInput(
             bodyState: trainingBodyState,
             activePlan: activePlan
         ))
@@ -42,12 +50,7 @@ struct TrainingView: View {
     }
 
     private var todayOperatingPlanPayload: DailyOperatingPlanPayload? {
-        let identifier = DailyHealthSummaryRecord.dayIdentifier(for: viewModel.dashboard.date)
-        guard let plan = operatingPlans.first(where: { $0.dayIdentifier == identifier }),
-              let data = plan.payloadJSON.data(using: .utf8) else {
-            return nil
-        }
-        return try? JSONDecoder().decode(DailyOperatingPlanPayload.self, from: data)
+        todayOperatingPlan?.operatingPlanPayload
     }
 
     private var trainingSurfaceSummary: TrainingSurfaceSummaryModel {
@@ -102,11 +105,11 @@ struct TrainingView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(L10n.t("Training", "训练"))
                     .font(.system(size: 30, weight: .bold, design: .rounded))
-                    .foregroundStyle(VelaTheme.primaryText)
+                    .foregroundStyle(VelaTheme.fg)
 
                 Text(activePlan?.title ?? L10n.t("Adaptive plan workspace", "自适应训练计划"))
                     .font(.subheadline)
-                    .foregroundStyle(VelaTheme.secondaryText)
+                    .foregroundStyle(VelaTheme.fg2)
                     .lineLimit(1)
             }
 
@@ -120,7 +123,7 @@ struct TrainingView: View {
             } label: {
                 Image(systemName: "plus")
                     .font(.headline.weight(.bold))
-                    .foregroundStyle(VelaTheme.primaryText)
+                    .foregroundStyle(VelaTheme.fg)
                     .frame(width: 38, height: 38)
                     .background(Circle().fill(VelaTheme.surface))
                     .overlay(Circle().stroke(Color.black.opacity(0.06), lineWidth: 0.5))
@@ -135,7 +138,7 @@ struct TrainingView: View {
         return HStack(alignment: .center, spacing: 18) {
             ArcProgressView(
                 score: viewModel.dashboard.strain.score,
-                tint: VelaTheme.strain,
+                tint: VelaTheme.strainColor,
                 recommendedRange: viewModel.dashboard.strain.recommendedRange,
                 size: 122,
                 lineWidth: 10
@@ -145,12 +148,12 @@ struct TrainingView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(summary.confidenceLabel)
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(VelaTheme.mutedText)
+                        .foregroundStyle(VelaTheme.muted)
                         .textCase(.uppercase)
 
                     Text(summary.headline)
                         .font(.system(size: 26, weight: .bold, design: .rounded))
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
                         .lineLimit(2)
                         .minimumScaleFactor(0.82)
                 }
@@ -159,17 +162,17 @@ struct TrainingView: View {
                     trainingSignalPill(
                         title: L10n.t("Recovery", "恢复"),
                         value: summary.recoveryValue,
-                        tint: VelaTheme.recovery
+                        tint: VelaTheme.recoveryColor
                     )
                     trainingSignalPill(
                         title: L10n.t("Sleep", "睡眠"),
                         value: summary.sleepValue,
-                        tint: VelaTheme.sleep
+                        tint: VelaTheme.sleepColor
                     )
                     trainingSignalPill(
                         title: L10n.t("RPE Cap", "RPE 上限"),
                         value: summary.intensityCapText,
-                        tint: VelaTheme.energy
+                        tint: VelaTheme.energyColor
                     )
                 }
 
@@ -177,13 +180,13 @@ struct TrainingView: View {
                     if let sessionTitle = summary.sessionTitle, !sessionTitle.isEmpty {
                         Text(sessionTitle)
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(VelaTheme.primaryText)
+                            .foregroundStyle(VelaTheme.fg)
                             .lineLimit(1)
                     }
 
                     Text(summary.guidance)
                         .font(.caption)
-                        .foregroundStyle(VelaTheme.secondaryText)
+                        .foregroundStyle(VelaTheme.fg2)
                         .fixedSize(horizontal: false, vertical: true)
                         .lineLimit(3)
                 }
@@ -209,7 +212,7 @@ struct TrainingView: View {
 
                     Text(L10n.t("Target", "目标") + " \(summary.targetRangeText)")
                         .font(.caption2.weight(.bold))
-                        .foregroundStyle(VelaTheme.mutedText)
+                        .foregroundStyle(VelaTheme.muted)
                         .monospacedDigit()
                         .lineLimit(1)
                 }
@@ -255,10 +258,10 @@ struct TrainingView: View {
 
     private func trainingDecisionAccent(_ decision: DailyTrainingDecisionType) -> Color {
         switch decision {
-        case .keep: return VelaTheme.recovery
-        case .reduce: return VelaTheme.strain
+        case .keep: return VelaTheme.recoveryColor
+        case .reduce: return VelaTheme.strainColor
         case .swap: return VelaTheme.accent
-        case .rest: return VelaTheme.sleep
+        case .rest: return VelaTheme.sleepColor
         }
     }
 
@@ -275,12 +278,12 @@ struct TrainingView: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
                 .font(.caption2.weight(.bold))
-                .foregroundStyle(VelaTheme.mutedText)
+                .foregroundStyle(VelaTheme.muted)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
             Text(value)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(VelaTheme.primaryText)
+                .foregroundStyle(VelaTheme.fg)
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
         }
@@ -304,12 +307,12 @@ struct TrainingView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.subheadline.weight(.bold))
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
                         .lineLimit(1)
                         .minimumScaleFactor(0.82)
                     Text(subtitle)
                         .font(.caption)
-                        .foregroundStyle(VelaTheme.secondaryText)
+                        .foregroundStyle(VelaTheme.fg2)
                         .lineLimit(1)
                         .minimumScaleFactor(0.82)
                 }

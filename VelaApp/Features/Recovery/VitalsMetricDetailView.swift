@@ -58,7 +58,7 @@ struct VitalsMetricDetailView: View {
                     .foregroundStyle(VelaTheme.accent)
                     .frame(width: 38, height: 38)
                     .background(Circle().fill(VelaTheme.surface))
-                    .overlay(Circle().stroke(VelaTheme.stroke, lineWidth: 0.5))
+                    .overlay(Circle().stroke(VelaTheme.borderSoft, lineWidth: 0.5))
             }
             .buttonStyle(.cardPress)
             .accessibilityLabel("返回")
@@ -66,10 +66,10 @@ struct VitalsMetricDetailView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(metric.title)
                     .font(.system(size: 21, weight: .bold, design: .rounded))
-                    .foregroundStyle(VelaTheme.primaryText)
+                    .foregroundStyle(VelaTheme.fg)
                 Text(viewModel.isToday ? L10n.t("Today", "今日") : viewModel.selectedDate.formatted(date: .abbreviated, time: .omitted))
                     .font(.subheadline)
-                    .foregroundStyle(VelaTheme.secondaryText)
+                    .foregroundStyle(VelaTheme.fg2)
             }
 
             Spacer()
@@ -79,10 +79,10 @@ struct VitalsMetricDetailView: View {
             } label: {
                 Image(systemName: "sparkles")
                     .font(.headline.weight(.semibold))
-                    .foregroundStyle(VelaTheme.primaryText)
+                    .foregroundStyle(VelaTheme.fg)
                     .frame(width: 38, height: 38)
                     .background(Circle().fill(VelaTheme.surface))
-                    .overlay(Circle().stroke(VelaTheme.stroke, lineWidth: 0.5))
+                    .overlay(Circle().stroke(VelaTheme.borderSoft, lineWidth: 0.5))
             }
             .buttonStyle(.cardPress)
         }
@@ -106,19 +106,19 @@ struct VitalsMetricDetailView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text(metric.shortTitle)
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(VelaTheme.mutedText)
+                    .foregroundStyle(VelaTheme.muted)
                     .textCase(.uppercase)
 
                 Text(metric.valueText(in: viewModel.dashboard))
                     .font(.system(size: 36, weight: .bold, design: .rounded))
-                    .foregroundStyle(VelaTheme.primaryText)
+                    .foregroundStyle(VelaTheme.fg)
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.74)
 
                 Text(metric.statusCopy(in: viewModel.dashboard))
                     .font(.subheadline)
-                    .foregroundStyle(VelaTheme.secondaryText)
+                    .foregroundStyle(VelaTheme.fg2)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -134,7 +134,7 @@ struct VitalsMetricDetailView: View {
                 HStack {
                     Label(L10n.t("Trend", "趋势"), systemImage: "chart.xyaxis.line")
                         .font(.headline.weight(.semibold))
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
                     Spacer()
                     rangeSelector
                 }
@@ -142,7 +142,7 @@ struct VitalsMetricDetailView: View {
                 if filteredTrend.isEmpty {
                     Text(L10n.t("Trend data will appear after more daily summaries are saved.", "保存更多每日摘要后会显示趋势。"))
                         .font(.subheadline)
-                        .foregroundStyle(VelaTheme.secondaryText)
+                        .foregroundStyle(VelaTheme.fg2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 18)
                 } else {
@@ -163,7 +163,7 @@ struct VitalsMetricDetailView: View {
 
                         if let baseline = metric.baselineValue(in: viewModel.dashboard) {
                             RuleMark(y: .value("Baseline", baseline))
-                                .foregroundStyle(VelaTheme.mutedText.opacity(0.42))
+                                .foregroundStyle(VelaTheme.muted.opacity(0.42))
                                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
                         }
                     }
@@ -180,7 +180,7 @@ struct VitalsMetricDetailView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Label(L10n.t("Context", "指标背景"), systemImage: "slider.horizontal.3")
                     .font(.headline.weight(.semibold))
-                    .foregroundStyle(VelaTheme.primaryText)
+                    .foregroundStyle(VelaTheme.fg)
 
                 if metric.supportsRangeBar {
                     VelaRangeBar(
@@ -203,12 +203,12 @@ struct VitalsMetricDetailView: View {
                     title: L10n.t("Baseline", "基线"),
                     value: metric.baselineText(in: viewModel.dashboard),
                     icon: "scope",
-                    tint: VelaTheme.secondaryText
+                    tint: VelaTheme.fg2
                 )
 
                 Text(metric.explanation)
                     .font(.caption)
-                    .foregroundStyle(VelaTheme.secondaryText)
+                    .foregroundStyle(VelaTheme.fg2)
                     .lineSpacing(3)
             }
         }
@@ -230,10 +230,10 @@ struct VitalsMetricDetailView: View {
                 } label: {
                     Text(range.title)
                         .font(.caption2.weight(.bold))
-                        .foregroundStyle(selectedRange == range ? VelaTheme.inverseText : VelaTheme.secondaryText)
+                        .foregroundStyle(selectedRange == range ? VelaTheme.bg : VelaTheme.fg2)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
-                        .background(Capsule(style: .continuous).fill(selectedRange == range ? VelaTheme.strongControl : VelaTheme.subtleFill))
+                        .background(Capsule(style: .continuous).fill(selectedRange == range ? VelaTheme.accent : VelaTheme.fillSoft))
                 }
                 .buttonStyle(.cardPress)
             }
@@ -261,18 +261,18 @@ struct VitalsMetricDetailView: View {
 
             Text(title)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(VelaTheme.primaryText)
+                .foregroundStyle(VelaTheme.fg)
 
             Spacer()
 
             Text(value)
                 .font(.system(.headline, design: .rounded).weight(.bold))
-                .foregroundStyle(VelaTheme.primaryText)
+                .foregroundStyle(VelaTheme.fg)
         }
         .padding(.vertical, 10)
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(VelaTheme.stroke)
+                .fill(VelaTheme.borderSoft)
                 .frame(height: 0.5)
                 .padding(.leading, 40)
         }

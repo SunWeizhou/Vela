@@ -15,6 +15,11 @@ enum ActiveStatusSettings {
         calendar: Calendar = .current
     ) {
         defaults.set(status, forKey: statusKey)
+        guard status != "active" else {
+            defaults.removeObject(forKey: durationKey)
+            defaults.removeObject(forKey: expiresAtKey)
+            return
+        }
         defaults.set(duration, forKey: durationKey)
         if let expiresAt = expirationDate(for: duration, now: now, calendar: calendar) {
             defaults.set(expiresAt, forKey: expiresAtKey)
@@ -93,14 +98,15 @@ final class DailySummaryUseCase {
     func loadDashboard(
         for date: Date = Date(),
         modelContext: ModelContext? = nil,
-        syncDays: Int = 3
+        syncDays: Int = 3,
+        shouldSyncHealthData: Bool = true
     ) async throws -> DashboardSummary {
         let now = date
         
         // 1. Do not fan out HealthKit reads before the user has seen the initial
         // authorization request. This keeps an empty first launch responsive.
         let shouldDeferHealthSync = await HealthAuthorizationService().shouldDeferBackgroundSync()
-        if let modelContext, !shouldDeferHealthSync {
+        if shouldSyncHealthData, let modelContext, !shouldDeferHealthSync {
             let syncEngine = HealthKitSyncEngine(queryService: queryService, modelContext: modelContext, calendar: calendar)
             if let syncCoordinator {
                 await syncCoordinator.run(source: .healthKit, force: false) {
@@ -284,12 +290,12 @@ final class DailySummaryUseCase {
         pipelineSnapshot.awakeEpisodeCount = pipelineSnapshot.awakeEpisodeCount ?? context.sleepSummary?.segments.filter { $0.stage == .awake && $0.end.timeIntervalSince($0.start) >= 120 }.count
 
         let historicalSnapshots = snapshots42.filter { !calendar.isDate($0.date, inSameDayAs: now) }
-        let metrics = MetricComputationPipeline().compute(
+        let metrics = DailyHealthComputation(calendar: calendar, now: now).compute(
             for: pipelineSnapshot,
             history: historicalSnapshots
         )
         let sleepScore = metrics.sleepScore
-        let resolvedSleepSummary = ScoreEngineFactory.resolvedSleepSummary(
+        let resolvedSleepSummary = DashboardMetricProjection.resolvedSleepSummary(
             from: context,
             sleepScore: sleepScore.value
         )
@@ -299,7 +305,7 @@ final class DailySummaryUseCase {
         let energy = metrics.energy
         
         let healthAge = HealthAgeTrendEngine().calculate(
-            from: ScoreEngineFactory.healthAge(
+            from: DashboardMetricProjection.healthAge(
                 from: context,
                 recovery: recovery,
                 sleepScore: sleepScore,
@@ -489,239 +495,6 @@ final class DailySummaryUseCase {
     }
 
 
-
-    private func backfillSleepHistoryIfNeeded(modelContext: ModelContext, now: Date) async {
-        let snapshotRepo = HealthSnapshotRepository(modelContext: modelContext, calendar: calendar)
-        let existingSnapshots = (try? snapshotRepo.fetchSnapshots(days: 30, endingAt: now)) ?? []
-
-        // Check if we need a full backfill — less than 5 records or missing recovery/strain scores
-        let needsBackfill = existingSnapshots.count < 5
-        let missingRecovery = existingSnapshots.filter { $0.recoveryScore != nil }.count < 5
-        let needsFullBackfill = needsBackfill || missingRecovery
-        guard needsFullBackfill else { return }
-
-        let episodes = (try? await queryService.sleepEpisodes(in: DateRangeQuery.recentDays(30, endingAt: now, calendar: calendar))) ?? []
-        let pastDays = episodes.map(\.date)
-
-        // Query 28-day baselines for scoring context
-        let baselineRange = DateRangeQuery.recentDays(28, endingAt: calendar.startOfDay(for: now), calendar: calendar)
-        let baselineRecovery = try? await queryService.recoveryMetrics(in: baselineRange)
-        let baselineStrain = try? await queryService.strainSummary(in: baselineRange)
-        let baselineStrainDaily = baselineStrain?.dailyAverage(days: 28)
-
-        for episode in episodes {
-            let dayStart = calendar.startOfDay(for: episode.date)
-            let singleDayRange = DateRangeQuery(start: dayStart, end: calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart)
-
-            // Query recovery and strain data for this specific day
-            let dayRecovery = try? await queryService.recoveryMetrics(in: singleDayRange)
-            let dayStrain = try? await queryService.strainSummary(in: singleDayRange)
-
-            // Build a mini context for scoring
-            let context = DailyHealthContext(
-                date: episode.date,
-                sleepSummary: episode,
-                recoveryMetrics: dayRecovery ?? RecoveryMetricSummary(),
-                recoveryBaseline: baselineRecovery ?? RecoveryMetricSummary(),
-                strainToday: dayStrain ?? StrainActivitySummary(workouts: []),
-                strainBaselineDaily: baselineStrainDaily ?? StrainActivitySummary(workouts: []),
-                bodyMetrics: BodyMetricsSummary()
-            )
-
-            let sleepScore = SleepScoreEngine().calculate(
-                from: ScoreEngineFactory.sleep(
-                    from: context,
-                    sleepTarget: SleepTargetSettings.targetMinutes(),
-                    todayBedtime: context.sleepSummary?.bedtime,
-                    recentBedtimes: []
-                )
-            )
-            let recovery = RecoveryScoreEngine().calculate(
-                from: ScoreEngineFactory.recovery(
-                    from: context,
-                    sleepScore: sleepScore.value,
-                    strainScoreYesterday: nil,
-                    hrvHistory: [],
-                    rhrHistory: []
-                )
-            )
-            let strain = StrainScoreEngine().calculate(
-                from: await ScoreEngineFactory.strain(
-                    from: context,
-                    recoveryScore: recovery.score,
-                    last28DaysDailyLoads: [],
-                    queryService: queryService
-                )
-            )
-            let stress = StressIndexEngine().calculate(
-                from: ScoreEngineFactory.stress(
-                    from: context,
-                    sleepScore: sleepScore.value,
-                    strainScore: strain.score,
-                    hrvHistory: [],
-                    rhrHistory: []
-                )
-            )
-            let energy = EnergyBankEngine().calculate(
-                from: ScoreEngineFactory.energyBank(
-                    from: context,
-                    recoveryScore: recovery.score,
-                    sleepScore: sleepScore.value,
-                    strainScore: strain.score,
-                    stressIndex: stress.stressIndex,
-                    strainHistory: []
-                )
-            )
-            let healthAge = HealthAgeTrendEngine().calculate(
-                from: ScoreEngineFactory.healthAge(
-                    from: context,
-                    recovery: recovery,
-                    sleepScore: sleepScore,
-                    strain: strain
-                )
-            )
-            let dashboard = DashboardSummary(
-                date: context.date,
-                sleepSummary: context.sleepSummary ?? SleepSummary(date: context.date, totalSleepMinutes: 0, bedtime: nil, wakeTime: nil, stageMinutes: [:], segments: [], sleepScore: nil),
-                sleepScore: sleepScore,
-                recovery: recovery,
-                recoveryMetrics: context.recoveryMetrics,
-                recoveryBaseline: context.recoveryBaseline,
-                strain: strain,
-                stress: stress,
-                energy: energy,
-                healthAge: healthAge,
-                bodyMetrics: context.bodyMetrics,
-                extendedMetrics: context.extendedMetrics,
-                workouts: context.strainToday.workouts,
-                dailyInsight: dailyInsight(recovery: recovery, sleepScore: sleepScore, strain: strain, source: .healthKit),
-                source: .healthKit
-            )
-
-            let snapshot = makeSnapshot(from: dashboard, context: context, date: episode.date)
-            let snapshotRepo = HealthSnapshotRepository(modelContext: modelContext, calendar: calendar)
-            try? WorkoutAggregationService.shared.upsertHealthKitWorkoutEvents(
-                snapshot.workouts,
-                on: episode.date,
-                modelContext: modelContext,
-                calendar: calendar
-            )
-            try? snapshotRepo.saveDailySnapshot(snapshot)
-            try? WorkoutAggregationService.shared.aggregateDay(
-                date: episode.date,
-                modelContext: modelContext,
-                calendar: calendar
-            )
-        }
-
-        // Also backfill days without sleep data (e.g. no sleep recorded)
-        for dayOffset in 0..<30 {
-            let day = calendar.date(byAdding: .day, value: -dayOffset, to: now) ?? now
-            let dayStart = calendar.startOfDay(for: day)
-            let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
-
-            // Skip days already covered by sleep episodes
-            if pastDays.contains(where: { calendar.isDate($0, inSameDayAs: day) }) { continue }
-
-            let singleDayRange = DateRangeQuery(start: dayStart, end: dayEnd)
-            let dayRecovery = try? await queryService.recoveryMetrics(in: singleDayRange)
-            let dayStrain = try? await queryService.strainSummary(in: singleDayRange)
-
-            // Only create a record if there's at least some data
-            let hasRecoveryData = dayRecovery?.hrvMilliseconds != nil || dayRecovery?.restingHeartRate != nil
-            let hasStrainData = (dayStrain?.activeEnergyKilocalories ?? 0) > 0 || (dayStrain?.exerciseMinutes ?? 0) > 0
-            guard hasRecoveryData || hasStrainData else { continue }
-
-            let context = DailyHealthContext(
-                date: day,
-                sleepSummary: nil,
-                recoveryMetrics: dayRecovery ?? RecoveryMetricSummary(),
-                recoveryBaseline: baselineRecovery ?? RecoveryMetricSummary(),
-                strainToday: dayStrain ?? StrainActivitySummary(workouts: []),
-                strainBaselineDaily: baselineStrainDaily ?? StrainActivitySummary(workouts: []),
-                bodyMetrics: BodyMetricsSummary()
-            )
-
-            let sleepScore = SleepScoreEngine().calculate(
-                from: ScoreEngineFactory.sleep(
-                    from: context,
-                    sleepTarget: SleepTargetSettings.targetMinutes(),
-                    todayBedtime: nil,
-                    recentBedtimes: []
-                )
-            )
-            let recovery = RecoveryScoreEngine().calculate(
-                from: ScoreEngineFactory.recovery(
-                    from: context,
-                    sleepScore: sleepScore.value,
-                    strainScoreYesterday: nil,
-                    hrvHistory: [],
-                    rhrHistory: []
-                )
-            )
-            let strain = StrainScoreEngine().calculate(
-                from: await ScoreEngineFactory.strain(
-                    from: context,
-                    recoveryScore: recovery.score,
-                    last28DaysDailyLoads: [],
-                    queryService: queryService
-                )
-            )
-            let stress = StressIndexEngine().calculate(
-                from: ScoreEngineFactory.stress(
-                    from: context,
-                    sleepScore: sleepScore.value,
-                    strainScore: strain.score,
-                    hrvHistory: [],
-                    rhrHistory: []
-                )
-            )
-            let energy = EnergyBankEngine().calculate(
-                from: ScoreEngineFactory.energyBank(
-                    from: context,
-                    recoveryScore: recovery.score,
-                    sleepScore: sleepScore.value,
-                    strainScore: strain.score,
-                    stressIndex: stress.stressIndex,
-                    strainHistory: []
-                )
-            )
-            let healthAge = HealthAgeTrendEngine().calculate(
-                from: ScoreEngineFactory.healthAge(from: context, recovery: recovery, sleepScore: sleepScore, strain: strain)
-            )
-            let dashboard = DashboardSummary(
-                date: context.date,
-                sleepSummary: context.sleepSummary ?? SleepSummary(date: context.date, totalSleepMinutes: 0, bedtime: nil, wakeTime: nil, stageMinutes: [:], segments: [], sleepScore: nil),
-                sleepScore: sleepScore,
-                recovery: recovery,
-                recoveryMetrics: context.recoveryMetrics,
-                recoveryBaseline: context.recoveryBaseline,
-                strain: strain,
-                stress: stress,
-                energy: energy,
-                healthAge: healthAge,
-                bodyMetrics: context.bodyMetrics,
-                extendedMetrics: context.extendedMetrics,
-                workouts: context.strainToday.workouts,
-                dailyInsight: dailyInsight(recovery: recovery, sleepScore: sleepScore, strain: strain, source: .healthKit),
-                source: .healthKit
-            )
-
-            let snapshot = makeSnapshot(from: dashboard, context: context, date: day)
-            try? WorkoutAggregationService.shared.upsertHealthKitWorkoutEvents(
-                snapshot.workouts,
-                on: day,
-                modelContext: modelContext,
-                calendar: calendar
-            )
-            try? snapshotRepo.saveDailySnapshot(snapshot)
-            try? WorkoutAggregationService.shared.aggregateDay(
-                date: day,
-                modelContext: modelContext,
-                calendar: calendar
-            )
-        }
-    }
 
     private func computeSleepTimingBaseline(modelContext: ModelContext, now: Date) async -> (bedtimeOffset: Double?, wakeOffset: Double?)? {
         let thirtyDays = DateRangeQuery.recentDays(30, endingAt: now, calendar: calendar)
@@ -1158,17 +931,22 @@ final class DailySummaryUseCase {
             metrics: ["trend_score": score]
         )
     }
+
 }
 
 @MainActor
 final class DailyPlanRefreshCoordinator {
     static let shared = DailyPlanRefreshCoordinator()
-    
+
     private init() {}
-    
+
     func refreshPlan(for date: Date = Date(), modelContext: ModelContext) async {
         let useCase = DailySummaryUseCase()
-        _ = try? await useCase.loadDashboard(for: date, modelContext: modelContext)
+        _ = try? await useCase.loadDashboard(
+            for: date,
+            modelContext: modelContext,
+            shouldSyncHealthData: false
+        )
         VelaAppState.shared.markLocalDataChanged()
     }
 }

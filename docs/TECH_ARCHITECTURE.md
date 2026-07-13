@@ -77,7 +77,8 @@
 │          Domain Layer            │
 │  Score Engines (Sleep/Recovery/  │
 │    Strain/Stress/Energy/HealthAge)│
-│  ScoreEngineFactory              │
+│  DailyHealthComputation          │
+│  DashboardMetricProjection      │
 │  BodyStateKernel                 │
 │  TrainingDecisionKernel          │
 │  WorkoutAggregationService       │
@@ -121,7 +122,8 @@
 - SleepScoreEngine, RecoveryScoreEngine, StrainScoreEngine
 - StressIndexEngine, EnergyBankEngine
 - HealthAgeTrendEngine, BiologicalAgeEngine
-- ScoreEngineFactory（统一创建引擎 Input）
+- DailyHealthComputation（每日评分唯一入口，显式注入日历、评估时间与用户配置）
+- DashboardMetricProjection（仅负责健康年龄与睡眠展示投影）
 - AdaptiveTrainingEngine, TrainingDecisionEngine
 - BodyInterpreterEngine
 - JournalCorrelationEngine
@@ -182,11 +184,11 @@
 ```text
 HealthKit Raw Samples
     ↓
-HealthKitSyncEngine (2-pass: raw snapshot → MetricComputationPipeline)
+HealthKitSyncEngine (2-pass: raw snapshot → DailyHealthComputation)
     ↓
 DailyHealthSummaryRecord (SwiftData 缓存，50+ 字段)
     ↓
-MetricComputationPipeline 内联构建引擎 Input 并调用
+DailyHealthComputation 构建全部评分引擎 Input 并调用
     ↓
 评分引擎 → MetricResult
     ↓
@@ -199,7 +201,7 @@ DashboardViewModel (@Published, @EnvironmentObject 注入全视图树)
 UI Refresh
 ```
 
-**注意**: `MetricComputationPipeline` 是主路径，绕过 `ScoreEngineFactory` 直接构建输入。`ScoreEngineFactory` 仅在回填路径 (`backfillSleepHistoryIfNeeded`) 中使用。PreviewDataFactory 用固定种子合成预览数据。**修改引擎算法需同步更新三处**。
+**约束**: `DailyHealthComputation.compute(for:history:)` 是前台刷新、后台同步与历史日期计算的唯一评分入口。调用方不得自行拼装评分引擎 Input；计算结果通过 `ScoredMetricsPipelineResult.applying(to:)` 一次性写回快照。PreviewDataFactory 使用固定种子合成预览数据。
 
 ### 5.2 AI 上下文构建
 ```text

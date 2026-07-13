@@ -48,8 +48,24 @@ struct MetricValue<T: Codable & Hashable>: Codable, Hashable {
         MetricValue(value: nil, unit: unit, source: .healthKit, freshness: .missing, confidence: .unavailable, note: note)
     }
 
-    static func live(_ value: T, unit: String? = nil, source: HealthDataSource = .healthKit, confidence: DataConfidence = .high, baseline: BaselineComparison? = nil) -> MetricValue<T> {
-        MetricValue(value: value, unit: unit, source: source, measuredAt: Date(), freshness: .live, confidence: confidence, baseline: baseline)
+    static func live(
+        _ value: T,
+        unit: String? = nil,
+        source: HealthDataSource = .healthKit,
+        measuredAt: Date? = nil,
+        freshness: DataFreshness = .live,
+        confidence: DataConfidence = .high,
+        baseline: BaselineComparison? = nil
+    ) -> MetricValue<T> {
+        MetricValue(
+            value: value,
+            unit: unit,
+            source: source,
+            measuredAt: measuredAt,
+            freshness: freshness,
+            confidence: confidence,
+            baseline: baseline
+        )
     }
 }
 
@@ -157,13 +173,44 @@ struct ExtendedMetricsContext: Codable, Hashable {
     var wristTempC: MetricValue<Double>?
 }
 
-// MARK: - Typed Context Envelope (v2)
+struct AgentBodyStateContext: Codable, Hashable {
+    var readiness: BodyReadiness
+    var confidence: DataConfidence
+    var freshness: DataFreshness
+    var source: String
+    var activeStatus: String
+    var contextHash: String
+    var drivers: [BodyStateDriver]
+}
 
-struct TypedAgentContext: Codable, Hashable {
+struct AgentTrainingDecisionContext: Codable, Hashable {
+    var readinessLevel: String
+    var readinessGuidance: String
+    var volumeMultiplier: Double
+    var maxIntensity: String
+    var recommendedTrainingType: String
+    var reasons: String
+    var confidence: DataConfidence
+}
+
+struct AgentDataCoverageContext: Codable, Hashable {
+    var availableSections: Int
+    var totalSections: Int
+    var missingSections: [String]
+    var confidence: DataConfidence
+}
+
+// MARK: - Canonical Agent Fact Snapshot (v2)
+
+struct AgentFactSnapshot: Codable, Hashable {
     var schemaVersion: String
     var contextHash: String
     var generatedAt: Date
     var contextWindow: String
+
+    var bodyState: AgentBodyStateContext
+    var trainingDecision: AgentTrainingDecisionContext
+    var dataCoverage: AgentDataCoverageContext
 
     var recovery: RecoveryContext
     var sleep: SleepContext
@@ -181,4 +228,3 @@ struct TypedAgentContext: Codable, Hashable {
     var historicalReports: [String]
     var userWiki: [String: String]
 }
-

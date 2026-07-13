@@ -1,9 +1,60 @@
 import SwiftUI
 
+enum TrainingTargetComparison: Equatable {
+    case unavailable
+    case below(Int)
+    case withinTarget
+    case above(Int)
+
+    static func evaluate(strainValues: [Double], target: MetricResult) -> Self {
+        guard target.hasData,
+              strainValues.count >= 3,
+              let lower = target.components["recommended_lower"],
+              let upper = target.components["recommended_upper"],
+              upper >= lower else {
+            return .unavailable
+        }
+
+        let targetMidpoint = (lower + upper) / 2
+        guard targetMidpoint > 0 else { return .unavailable }
+        let average = strainValues.reduce(0, +) / Double(strainValues.count)
+        let percent = Int(((average - targetMidpoint) / targetMidpoint * 100).rounded())
+
+        if abs(percent) <= 5 { return .withinTarget }
+        return percent < 0 ? .below(abs(percent)) : .above(percent)
+    }
+
+    var valueText: String {
+        switch self {
+        case .unavailable: return "--"
+        case let .below(percent): return "低 \(percent)%"
+        case .withinTarget: return "接近目标"
+        case let .above(percent): return "高 \(percent)%"
+        }
+    }
+
+    var contextText: String {
+        switch self {
+        case .unavailable: return "目标范围待计算"
+        case .below: return "低于个人目标中值"
+        case .withinTarget: return "处于个人目标范围"
+        case .above: return "高于个人目标中值"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .unavailable: return VelaTheme.muted
+        case .below: return VelaTheme.accent
+        case .withinTarget: return VelaTheme.success
+        case .above: return VelaTheme.warn
+        }
+    }
+}
+
 struct TrainingStatsSection: View {
     @Binding var selectedAnalyticsTab: Int
-    let changePercentageText: String
-    let isExertionBelowTarget: Bool
+    let targetComparison: TrainingTargetComparison
     let dynamicExertionWorkload: [Double]
     let totalWorkoutDurationText: String
     let summaryWorkPathPoints: [CGPoint]
@@ -66,15 +117,22 @@ struct TrainingStatsSection: View {
 
             switch selectedAnalyticsTab {
             case 0:
-                VStack(alignment: .leading, spacing: 12) {
+                if dynamicExertionWorkload.isEmpty {
+                    compactEmptyState(
+                        icon: "waveform.path.ecg",
+                        title: "负荷趋势将在训练后出现",
+                        detail: "完成或同步一次训练，即可开始建立个人目标范围。"
+                    )
+                } else {
+                    VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(changePercentageText)
+                            Text(targetComparison.valueText)
                                 .font(.system(size: 26, weight: .bold, design: .rounded))
                                 .foregroundStyle(VelaTheme.fg)
-                            Text(dynamicExertionWorkload.isEmpty ? "暂无耗力记录" : (isExertionBelowTarget ? "低于目标值" : "高于目标值"))
+                            Text(dynamicExertionWorkload.isEmpty ? "暂无耗力记录" : targetComparison.contextText)
                                 .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(isExertionBelowTarget ? Color(hex: "#4285F4") : Color(hex: "#66BB6A"))
+                                .foregroundStyle(targetComparison.tint)
                         }
                         Spacer()
                         NavigationLink(destination: VelaMetricDetailView(metric: .strain)) {
@@ -88,12 +146,23 @@ struct TrainingStatsSection: View {
                         .buttonStyle(.cardPress)
                     }
                     
-                    SafeZoneWorkloadChartView(workload: dynamicExertionWorkload)
+                    SafeZoneWorkloadChartView(
+                        workload: dynamicExertionWorkload,
+                        showsTargetZone: targetComparison != .unavailable
+                    )
                         .frame(height: 72)
                         .padding(.vertical, 4)
+                    }
                 }
             case 1:
-                VStack(alignment: .leading, spacing: 12) {
+                if summaryWorkPathPoints.isEmpty || totalWorkoutDurationText == "--" {
+                    compactEmptyState(
+                        icon: "chart.line.uptrend.xyaxis",
+                        title: "还没有可分析的趋势",
+                        detail: "积累几次训练后，这里会显示 30 天训练量变化。"
+                    )
+                } else {
+                    VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(totalWorkoutDurationText)
@@ -136,6 +205,7 @@ struct TrainingStatsSection: View {
                         .foregroundStyle(Color(hex: "#BFB9AC"))
                         .padding(.top, 114)
                     }
+                    }
                 }
             default:
                 VStack(alignment: .leading, spacing: 12) {
@@ -174,6 +244,29 @@ struct TrainingStatsSection: View {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
         )
+    }
+
+    private func compactEmptyState(icon: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(VelaTheme.accent)
+                .frame(width: 36, height: 36)
+                .background(VelaTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(VelaTheme.subheadline().weight(.semibold))
+                    .foregroundStyle(VelaTheme.fg)
+                Text(detail)
+                    .font(VelaTheme.footnote())
+                    .foregroundStyle(VelaTheme.muted)
+                    .lineSpacing(2)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 6)
     }
 
     private func monthHeatmap(
@@ -275,12 +368,12 @@ struct MuscleVolumeCard: View {
                                 Spacer()
                                 Text("\(sets) 组")
                                     .font(.system(size: 11, weight: .bold))
-                                    .foregroundStyle(sets >= 18 ? Color(hex: "#FF3B30") : (sets < 6 ? Color(hex: "#4285F4") : Color(hex: "#34C759")))
+                                    .foregroundStyle(sets >= 18 ? VelaTheme.danger : (sets < 6 ? VelaTheme.accent : VelaTheme.success))
                             }
                             
                             GeometryReader { geo in
                                 let pct = min(CGFloat(sets) / 20.0, 1.0)
-                                let barColor = sets >= 18 ? Color(hex: "#FF3B30") : (sets < 6 ? Color(hex: "#4285F4") : Color(hex: "#34C759"))
+                                let barColor = sets >= 18 ? VelaTheme.danger : (sets < 6 ? VelaTheme.accent : VelaTheme.success)
                                 ZStack(alignment: .leading) {
                                     RoundedRectangle(cornerRadius: 3)
                                         .fill(VelaTheme.surface)
@@ -536,13 +629,18 @@ struct StrengthWorkoutsSection: View {
 // MARK: - Safe-zone workload chart helpers
 struct SafeZoneWorkloadChartView: View {
     let workload: [Double]
+    let showsTargetZone: Bool
     
     var body: some View {
         GeometryReader { geo in
             ZStack {
                 // Green-tinged horizontal safe-zone band
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(Color(hex: "#E8F5E9").opacity(0.8))
+                    .fill(
+                        showsTargetZone
+                            ? Color(hex: "#E8F5E9").opacity(0.8)
+                            : VelaTheme.surface.opacity(0.8)
+                    )
                     .frame(height: geo.size.height * 0.45)
                     .position(x: geo.size.width / 2, y: geo.size.height / 2)
                 
@@ -562,7 +660,7 @@ struct SafeZoneWorkloadChartView: View {
                 }
                 .stroke(
                     LinearGradient(
-                        colors: [Color(hex: "#81C784"), Color(hex: "#FFB74D"), Color(hex: "#64B5F6")],
+                        colors: [VelaTheme.recoveryColor, VelaTheme.strainColor, VelaTheme.accent],
                         startPoint: .leading,
                         endPoint: .trailing
                     ),
@@ -574,9 +672,9 @@ struct SafeZoneWorkloadChartView: View {
                     let x = geo.size.width
                     let y = geo.size.height - (CGFloat(lastVal) * (geo.size.height - 8) + 4)
                     Circle()
-                        .fill(Color(hex: "#4285F4"))
+                        .fill(VelaTheme.accent)
                         .frame(width: 8, height: 8)
-                        .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
+                        .overlay(Circle().stroke(VelaTheme.cardBg, lineWidth: 1.5))
                         .position(x: x, y: y)
                 }
             }

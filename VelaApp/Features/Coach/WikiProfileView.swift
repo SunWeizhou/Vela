@@ -35,7 +35,7 @@ struct WikiProfileView: View {
                         wikiFileCard(doc)
                     }
                 }
-                .padding(VelaTheme.screenPadding)
+                .padding(VelaTheme.pagePadding)
                 .padding(.top, 4)
                 .padding(.bottom, 40)
             }
@@ -49,10 +49,10 @@ struct WikiProfileView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(L10n.t("My Profile", "我的档案"))
                             .font(.system(size: 21, weight: .bold, design: .rounded))
-                            .foregroundStyle(VelaTheme.primaryText)
+                            .foregroundStyle(VelaTheme.fg)
                         Text(L10n.t("Health memory & knowledge base", "健康记忆与知识档案库"))
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(VelaTheme.secondaryText)
+                            .foregroundStyle(VelaTheme.fg2)
                     }
                     Spacer()
                     Image(systemName: "brain.head.profile")
@@ -90,14 +90,14 @@ struct WikiProfileView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(L10n.t("Your Health Profile", "你的健康档案"))
                         .font(.headline)
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
 
                     Text(L10n.t(
                         "Vela maintains this profile based on your data and conversations.",
                         "Vela 根据你的数据和对话维护此档案。"
                     ))
                     .font(.caption)
-                    .foregroundStyle(VelaTheme.secondaryText)
+                    .foregroundStyle(VelaTheme.fg2)
                 }
 
                 Spacer()
@@ -109,7 +109,7 @@ struct WikiProfileView: View {
                 HStack {
                     Text(L10n.t("Profile completeness", "档案完整度"))
                         .font(.caption.weight(.medium))
-                        .foregroundStyle(VelaTheme.secondaryText)
+                        .foregroundStyle(VelaTheme.fg2)
                     Spacer()
                     Text("\(filled)/\(total)")
                         .font(.caption.weight(.bold))
@@ -151,16 +151,16 @@ struct WikiProfileView: View {
             HStack(spacing: 12) {
                 Image(systemName: "heart.text.square.fill")
                     .font(.title3)
-                    .foregroundStyle(VelaTheme.energy)
+                    .foregroundStyle(VelaTheme.energyColor)
                     .frame(width: 32, height: 32)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(AppLanguage.stored.isChinese ? "个人生理基线" : "Personal Baselines")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
                     Text(appLanguageAwareDateLabel(daysSince: daysSince))
                         .font(.caption2)
-                        .foregroundStyle(VelaTheme.mutedText)
+                        .foregroundStyle(VelaTheme.muted)
                 }
 
                 Spacer()
@@ -186,18 +186,18 @@ struct WikiProfileView: View {
                         HStack {
                             Text(metric.label)
                                 .font(.caption)
-                                .foregroundStyle(VelaTheme.secondaryText)
+                                .foregroundStyle(VelaTheme.fg2)
                             Spacer()
                             Text(metric.value)
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(VelaTheme.primaryText)
+                                .foregroundStyle(VelaTheme.fg)
                         }
                     }
                 }
                 .padding(10)
                 .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(VelaTheme.elevatedSurface)
+                        .fill(VelaTheme.elevatedBg)
                 )
             }
 
@@ -207,7 +207,7 @@ struct WikiProfileView: View {
                      : "Baseline data is being computed..."
                 )
                 .font(.caption)
-                .foregroundStyle(VelaTheme.mutedText)
+                .foregroundStyle(VelaTheme.muted)
             }
         }
         .padding(16)
@@ -276,10 +276,10 @@ struct WikiProfileView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(doc.title)
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
                     Text(fields.count.formatted() + " " + (AppLanguage.stored.isChinese ? "项" : "fields"))
                         .font(.caption2)
-                        .foregroundStyle(VelaTheme.mutedText)
+                        .foregroundStyle(VelaTheme.muted)
                 }
 
                 Spacer()
@@ -290,7 +290,7 @@ struct WikiProfileView: View {
                     } label: {
                         Text(L10n.t("Cancel", "取消"))
                             .font(.caption.weight(.medium))
-                            .foregroundStyle(VelaTheme.secondaryText)
+                            .foregroundStyle(VelaTheme.fg2)
                     }
 
                     Button {
@@ -344,7 +344,7 @@ struct WikiProfileView: View {
                 .foregroundStyle(tintForFile(fieldsToFilename[field.label] ?? ""))
             Text(field.value.isEmpty ? "—" : field.value)
                 .font(.footnote)
-                .foregroundStyle(field.value.isEmpty ? VelaTheme.mutedText : VelaTheme.primaryText)
+                .foregroundStyle(field.value.isEmpty ? VelaTheme.muted : VelaTheme.fg)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 14)
@@ -369,12 +369,12 @@ struct WikiProfileView: View {
                 axis: .vertical
             )
             .font(.footnote)
-            .foregroundStyle(VelaTheme.primaryText)
+            .foregroundStyle(VelaTheme.fg)
             .lineLimit(1...4)
             .padding(10)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(VelaTheme.elevatedSurface)
+                    .fill(VelaTheme.elevatedBg)
             )
         }
         .padding(.horizontal, 14)
@@ -585,13 +585,13 @@ struct WikiProfileView: View {
     private func tintForFile(_ filename: String) -> Color {
         switch filename {
         case "profile.md": return VelaTheme.accent
-        case "goals.md": return VelaTheme.energy
-        case "habits.md": return VelaTheme.recovery
-        case "training_history.md": return VelaTheme.strain
-        case "health_context.md": return VelaTheme.sleep
-        case "notes.md", "observations.md": return VelaTheme.secondaryText
-        case "constraints.md": return VelaTheme.stress
-        case "preferences.md": return VelaTheme.energy
+        case "goals.md": return VelaTheme.energyColor
+        case "habits.md": return VelaTheme.recoveryColor
+        case "training_history.md": return VelaTheme.strainColor
+        case "health_context.md": return VelaTheme.sleepColor
+        case "notes.md", "observations.md": return VelaTheme.fg2
+        case "constraints.md": return VelaTheme.stressColor
+        case "preferences.md": return VelaTheme.energyColor
         case "strategies.md": return VelaTheme.accent
         default: return VelaTheme.accent
         }
@@ -601,26 +601,26 @@ struct WikiProfileView: View {
 
     @ViewBuilder
     private var pendingMemoriesSection: some View {
-        VelaHeroSurface(tint: VelaTheme.energy) {
+        VelaHeroSurface(tint: VelaTheme.energyColor) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: "brain.head.profile")
                         .font(.title3.weight(.semibold))
-                        .foregroundStyle(VelaTheme.energy)
+                        .foregroundStyle(VelaTheme.energyColor)
                         .frame(width: 40, height: 40)
-                        .background(Circle().fill(VelaTheme.energy.opacity(0.12)))
+                        .background(Circle().fill(VelaTheme.energyColor.opacity(0.12)))
                         .accessibilityHidden(true)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(AppLanguage.stored.isChinese ? "Vela 学到了一些关于你的信息" : "Vela learned something about you")
                             .font(.headline.weight(.semibold))
-                            .foregroundStyle(VelaTheme.primaryText)
+                            .foregroundStyle(VelaTheme.fg)
                         Text(AppLanguage.stored.isChinese
                              ? "确认后才会写入个人 Wiki。你可以保存可信记忆，或拒绝不准确的发现。"
                              : "Nothing is saved to your Wiki until you confirm it. Save trusted memories or reject anything inaccurate."
                         )
                         .font(.subheadline)
-                        .foregroundStyle(VelaTheme.secondaryText)
+                        .foregroundStyle(VelaTheme.fg2)
                         .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -633,7 +633,7 @@ struct WikiProfileView: View {
                     ? "\(pendingProposals.count) 条候选长期记忆会影响未来建议、解释和训练调整。"
                     : "\(pendingProposals.count) proposed memories may shape future recommendations, explanations, and training adjustments.",
                     systemImage: "person.crop.circle.badge.questionmark",
-                    tint: VelaTheme.energy
+                    tint: VelaTheme.energyColor
                 )
 
                 ForEach(pendingProposals) { proposal in
@@ -654,19 +654,19 @@ struct WikiProfileView: View {
             HStack(spacing: 10) {
                 Image(systemName: "clock.badge.questionmark")
                     .font(.title3)
-                    .foregroundStyle(VelaTheme.energy)
+                    .foregroundStyle(VelaTheme.energyColor)
                     .frame(width: 32, height: 32)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(AppLanguage.stored.isChinese ? "待确认记忆" : "Pending Memories")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
                     Text(AppLanguage.stored.isChinese
                          ? "Vela 发现了 \(pendingProposals.count) 条可能需要你确认的长期记忆"
                          : "Vela found \(pendingProposals.count) memories for your review"
                     )
                     .font(.caption2)
-                    .foregroundStyle(VelaTheme.mutedText)
+                    .foregroundStyle(VelaTheme.muted)
                 }
                 Spacer()
             }
@@ -685,19 +685,19 @@ struct WikiProfileView: View {
 
                         Text(confidenceLabel(proposal.confidence))
                             .font(.caption2)
-                            .foregroundStyle(VelaTheme.mutedText)
+                            .foregroundStyle(VelaTheme.muted)
                     }
 
                     Text(proposal.content)
                         .font(.footnote)
-                        .foregroundStyle(VelaTheme.primaryText)
+                        .foregroundStyle(VelaTheme.fg)
                         .lineLimit(4)
                         .fixedSize(horizontal: false, vertical: true)
 
                     if !proposal.evidence.isEmpty {
                         Text(proposal.evidence)
                             .font(.caption2)
-                            .foregroundStyle(VelaTheme.secondaryText)
+                            .foregroundStyle(VelaTheme.fg2)
                             .lineLimit(3)
                     }
 
@@ -724,17 +724,17 @@ struct WikiProfileView: View {
                                 systemImage: "xmark.circle"
                             )
                             .font(.caption.weight(.medium))
-                            .foregroundStyle(VelaTheme.secondaryText)
+                            .foregroundStyle(VelaTheme.fg2)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 6)
-                            .background(Capsule().fill(VelaTheme.elevatedSurface))
+                            .background(Capsule().fill(VelaTheme.elevatedBg))
                         }
                     }
                 }
                 .padding(12)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(VelaTheme.elevatedSurface)
+                        .fill(VelaTheme.elevatedBg)
                 )
             }
         }

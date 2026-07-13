@@ -110,7 +110,9 @@ struct TodayExperienceModel: Codable, Hashable {
                 decision: trainingDecision,
                 hasReadinessData: hasReadinessData
             ),
-            confidenceLabel: "置信度 \(Int((displayConfidence * 100).rounded()))% · \(confidenceDetail)",
+            confidenceLabel: hasReadinessData
+                ? "置信度 \(Int((displayConfidence * 100).rounded()))% · \(confidenceDetail)"
+                : confidenceDetail,
             primaryActionTitle: primaryActionTitle(
                 trainingDecision,
                 hasReadinessData: hasReadinessData

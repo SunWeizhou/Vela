@@ -242,15 +242,19 @@ struct VelaInlineAlertCompat: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(VelaTheme.fg)
                 Text(message)
-                    .font(VelaTheme.captionFont)
-                    .foregroundStyle(VelaTheme.onSurfaceVariant)
+                    .font(VelaTheme.captionLarge())
+                    .foregroundStyle(VelaTheme.fg2)
             }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: VelaTheme.radiusMd)
-                .fill(tint.opacity(0.06))
+                .fill(tint.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: VelaTheme.radiusMd)
+                .stroke(tint.opacity(0.18), lineWidth: 0.5)
         )
     }
 }
@@ -278,8 +282,8 @@ struct VelaDataQualityRowCompat: View {
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(VelaTheme.fg)
                 Text(subtitle)
-                    .font(VelaTheme.microFont)
-                    .foregroundStyle(VelaTheme.onSurfaceVariant)
+                    .font(VelaTheme.caption1())
+                    .foregroundStyle(VelaTheme.fg2)
             }
             Spacer()
             Text(qualityLabel)
@@ -291,4 +295,3 @@ struct VelaDataQualityRowCompat: View {
 }
 typealias VelaDataQualityRow = VelaDataQualityRowCompat
 typealias VelaAppleDataQualityRow = VelaDataQualityRowCompat
-

@@ -92,7 +92,7 @@ struct DeepSeekProvider: LLMProvider {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await URLSession.shared.data(for: urlRequest)
+            (data, response) = try await PrivateAIURLSession.shared.data(for: urlRequest)
         } catch {
             throw LLMProviderError.classify(error)
         }
@@ -153,7 +153,7 @@ struct DeepSeekProvider: LLMProvider {
                         )
                     )
 
-                    let (bytes, response) = try await URLSession.shared.bytes(for: urlRequest)
+                    let (bytes, response) = try await PrivateAIURLSession.shared.bytes(for: urlRequest)
                     guard let httpResponse = response as? HTTPURLResponse else {
                         throw LLMProviderError.invalidResponse
                     }
