@@ -221,7 +221,10 @@ public struct StrainScoreEngine: ScoreEngine {
                 } else if input.biologicalSex == "female" {
                     trimp = workout.durationMinutes * clampedHRR * 0.86 * exp(1.67 * clampedHRR)
                 } else {
-                    // gender neutral fallback
+                    // gender-neutral fallback. NOTE: the 0.75 / 1.80 coefficients are an
+                    // unvalidated interpolation between the published male (0.64 / 1.92) and
+                    // female (0.86 / 1.67) Banister constants — they do NOT come from the
+                    // literature. Applied only when HealthKit biologicalSex is other/not-set.
                     trimp = workout.durationMinutes * clampedHRR * 0.75 * exp(1.80 * clampedHRR)
                 }
                 workoutLoad = trimp

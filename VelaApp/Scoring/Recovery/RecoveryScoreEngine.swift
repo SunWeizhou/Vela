@@ -200,9 +200,10 @@ public struct RecoveryScoreEngine: ScoreEngine {
         var respiratoryRateZ = 0.0
         if let respToday = input.respiratoryRateToday, let respBaseline = input.respiratoryRateBaseline {
             let respHistoryToUse = input.respiratoryRateHistory.count >= 5 ? input.respiratoryRateHistory : [respBaseline]
-            let mean = respHistoryToUse.reduce(0, +) / Double(max(1, respHistoryToUse.count))
-            let variance = respHistoryToUse.map { pow($0 - mean, 2) }.reduce(0, +) / Double(max(1, respHistoryToUse.count))
-            let sd = max(0.5, sqrt(variance))
+            // Reuse the shared sample SD (n-1, Bessel's correction) so respiratory
+            // baselines stay consistent with every other scoring module. The previous
+            // inline population SD (÷n) diverged from PersonalBaselineEngine.
+            let sd = max(0.5, PersonalBaselineEngine.sampleStandardDeviation(respHistoryToUse) ?? 0.5)
             respiratoryRateZ = (respToday - respBaseline) / sd
             
             if respiratoryRateZ >= 1.5 {
