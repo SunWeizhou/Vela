@@ -483,13 +483,102 @@ final class DashboardViewModel: ObservableObject {
         let operatingPlans = (try? modelContext.fetch(opPlansDesc)) ?? []
         
         let activePlan = trainingPlans.first(where: \.isActive)
-        
-        // 1. Resolve Persisted Operating Plan
-        self.persistedOperatingPlan = operatingPlans.first
-        
+        let persistedPlan = operatingPlans.first
+        self.persistedOperatingPlan = persistedPlan
+
+        // Domain assembly (pure computation, no DB writes / Watch I/O) is extracted
+        // into SecondaryDataAssembler so it is unit-testable; the VM only fetches,
+        // assigns results, and coordinates side effects.
+        let assembly = SecondaryDataAssembler.assemble(
+            dashboard: dashboard,
+            refDate: refDate,
+            calendar: calendar,
+            dailySummaries: dailySummaries,
+            workoutEvents: workoutEvents,
+            strengthWorkouts: strengthWorkouts,
+            trainingResponses: trainingResponses,
+            foodLogs: foodLogs,
+            journalEntries: journalEntries,
+            coachArtifacts: coachArtifacts,
+            activePlan: activePlan,
+            persistedOperatingPlan: persistedPlan
+        )
+
+        self.dashboard = assembly.updatedDashboard
+        self.todayCalories = assembly.todayCalories
+        self.todayProtein = assembly.todayProtein
+        self.todayCarbs = assembly.todayCarbs
+        self.todayFat = assembly.todayFat
+        self.todayExperience = assembly.todayExperience
+        self.latestTodayArtifact = assembly.latestTodayArtifact
+        self.todayCommandState = assembly.todayCommandState
+
+        // Side effects stay in the VM (coordination, not pure assembly).
+        if calendar.isDateInToday(refDate), let activePlan {
+            _ = try? AdaptiveTrainingManager().refreshDailyProposal(
+                plan: activePlan,
+                dashboard: assembly.updatedDashboard,
+                events: workoutEvents,
+                foodLogs: foodLogs,
+                journalEntries: journalEntries,
+                modelContext: modelContext,
+                date: refDate,
+                calendar: calendar
+            )
+        }
+        if calendar.isDateInToday(refDate) {
+            WristSnapshotBridge.shared.publish(
+                dashboard: assembly.updatedDashboard,
+                command: assembly.todayCommandState,
+                plan: activePlan,
+                scheduledDay: assembly.scheduledDay
+            )
+        }
+    }
+}
+
+// MARK: - Secondary Data Assembly
+
+/// Pure result of the dashboard secondary-data computation. Extracted from
+/// `DashboardViewModel.loadSecondaryData` so the heavy domain logic is a pure,
+/// unit-testable function of the already-fetched records — the ViewModel keeps
+/// only fetching, property assignment, and side effects (Watch publish,
+/// adaptive-training write).
+struct SecondaryDataAssembly {
+    var bodyState: BodyState
+    var dailyTrainingDecision: DailyTrainingDecision
+    var updatedDashboard: DashboardSummary
+    var todayCalories: Int
+    var todayProtein: Int
+    var todayCarbs: Int
+    var todayFat: Int
+    var todayExperience: TodayExperienceModel
+    var latestTodayArtifact: CoachArtifact?
+    var todayCommandState: TodayCommandState
+    var scheduledDay: TrainingDay?
+}
+
+@MainActor
+enum SecondaryDataAssembler {
+    static func assemble(
+        dashboard: DashboardSummary,
+        refDate: Date,
+        calendar: Calendar,
+        dailySummaries: [DailyHealthSummaryRecord],
+        workoutEvents: [WorkoutEventRecord],
+        strengthWorkouts: [StrengthWorkoutRecord],
+        trainingResponses: [TrainingResponseRecord],
+        foodLogs: [FoodLogRecord],
+        journalEntries: [JournalEntryRecord],
+        coachArtifacts: [CoachArtifactRecord],
+        activePlan: TrainingPlanRecord?,
+        persistedOperatingPlan: DailyOperatingPlanRecord?
+    ) -> SecondaryDataAssembly {
+        let startOfDayRef = calendar.startOfDay(for: refDate)
+
         // 2. Build BodyState
         let currentDailySummary = dailySummaries.first(where: {
-            Calendar.current.isDate($0.date, inSameDayAs: refDate)
+            calendar.isDate($0.date, inSameDayAs: refDate)
         })
         let bodyState = BodyStateKernel().build(input: BodyStateInput(
             dashboard: dashboard,
@@ -503,14 +592,13 @@ final class DashboardViewModel: ObservableObject {
             activeStatus: ActiveStatusSettings.resolveCurrentStatus(),
             generatedAt: Date()
         ))
-        
+
         // 3. Build Training Decision
         let recentStrengthSummary = TrainingAnalyticsService().buildRecentSummary(
             workouts: strengthWorkouts,
             days: 7,
             endingAt: refDate
         )
-        
         let dailyTrainingDecision: DailyTrainingDecision
         if let persistedPlan = persistedOperatingPlan,
            let decoded = persistedPlan.trainingDecision {
@@ -523,7 +611,7 @@ final class DashboardViewModel: ObservableObject {
                 trainingResponses: trainingResponses
             ))
         }
-        
+
         // 4. Update Dashboard metrics
         var updatedDashboard = dashboard
         updatedDashboard.bodyState = bodyState
@@ -531,24 +619,16 @@ final class DashboardViewModel: ObservableObject {
             of: dailyTrainingDecision,
             bodyState: bodyState
         )
-        self.dashboard = updatedDashboard
-        
-        // 5. Build TodayExperienceModel
+
+        // 5. Today nutrition aggregates + experience model
         let todayLogs = foodLogs.filter { calendar.isDate($0.createdAt, inSameDayAs: startOfDayRef) }
         let cals = todayLogs.map(\.totalCalories).reduce(0, +)
         let prot = todayLogs.map(\.proteinGrams).reduce(0, +)
         let carbs = todayLogs.map(\.carbsGrams).reduce(0, +)
         let fat = todayLogs.map(\.fatGrams).reduce(0, +)
-        
-        self.todayCalories = cals
-        self.todayProtein = prot
-        self.todayCarbs = carbs
-        self.todayFat = fat
-        
         let targetCalorieTarget = UserDefaults.standard.integer(forKey: "vela_daily_calorie_target")
         let dailyTarget = targetCalorieTarget > 0 ? targetCalorieTarget : 2000
-        
-        self.todayExperience = TodayExperienceModel.build(
+        let todayExperience = TodayExperienceModel.build(
             dashboard: updatedDashboard,
             bodyState: bodyState,
             trainingDecision: dailyTrainingDecision,
@@ -561,24 +641,22 @@ final class DashboardViewModel: ObservableObject {
             ),
             history: dailySummaries
         )
-        
-        // 6. Build Latest Today Artifact
-        self.latestTodayArtifact = coachArtifacts
+
+        // 6. Latest today artifact
+        let latestTodayArtifact = coachArtifacts
             .map(\.artifact)
             .first { artifact in
                 guard let relatedDate = artifact.relatedDate else { return true }
-                return Calendar.current.isDate(relatedDate, inSameDayAs: refDate)
+                return calendar.isDate(relatedDate, inSameDayAs: refDate)
             }
-            
-        // 7. Build TodayCommandState
-        let commandState = TodayCommandBuilder.build(
+
+        // 7. TodayCommandState + scheduled day
+        let todayCommandState = TodayCommandBuilder.build(
             from: updatedDashboard,
             recentStrengthSummary: recentStrengthSummary,
             coachArtifact: latestTodayArtifact,
             generatedAt: Date()
         )
-        self.todayCommandState = commandState
-
         let scheduledDay = activePlan.flatMap {
             TrainingScheduleResolver.resolve(
                 plan: $0,
@@ -587,25 +665,19 @@ final class DashboardViewModel: ObservableObject {
                 calendar: calendar
             )
         }
-        if calendar.isDateInToday(refDate), let activePlan {
-            _ = try? AdaptiveTrainingManager().refreshDailyProposal(
-                plan: activePlan,
-                dashboard: updatedDashboard,
-                events: workoutEvents,
-                foodLogs: foodLogs,
-                journalEntries: journalEntries,
-                modelContext: modelContext,
-                date: refDate,
-                calendar: calendar
-            )
-        }
-        if calendar.isDateInToday(refDate) {
-            WristSnapshotBridge.shared.publish(
-                dashboard: updatedDashboard,
-                command: commandState,
-                plan: activePlan,
-                scheduledDay: scheduledDay
-            )
-        }
+
+        return SecondaryDataAssembly(
+            bodyState: bodyState,
+            dailyTrainingDecision: dailyTrainingDecision,
+            updatedDashboard: updatedDashboard,
+            todayCalories: cals,
+            todayProtein: prot,
+            todayCarbs: carbs,
+            todayFat: fat,
+            todayExperience: todayExperience,
+            latestTodayArtifact: latestTodayArtifact,
+            todayCommandState: todayCommandState,
+            scheduledDay: scheduledDay
+        )
     }
 }
