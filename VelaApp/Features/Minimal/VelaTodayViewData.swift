@@ -204,7 +204,7 @@ extension VelaTodayView {
     func loadDataCoverageSummary() async {
         let groups = await DataCoverageGroupFactory.loadPriorityGroups()
         let summary = DataCoverageSummaryModel.build(groups: groups)
-        withAnimation(VelaTheme.smooth) {
+        withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) {
             dataCoverageSummary = summary
         }
     }

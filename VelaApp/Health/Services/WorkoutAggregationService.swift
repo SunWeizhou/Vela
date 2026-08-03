@@ -15,8 +15,9 @@ public final class WorkoutAggregationService {
         modelContext: ModelContext,
         calendar: Calendar = .current
     ) -> [WorkoutSummary] {
-        let dayStart = calendar.startOfDay(for: date)
-        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+        let dayRange = DateRangeQuery.singleDay(date, calendar: calendar)
+        let dayStart = dayRange.start
+        let dayEnd = dayRange.end
         
         let descriptor = FetchDescriptor<WorkoutEventRecord>(
             predicate: #Predicate<WorkoutEventRecord> {
@@ -39,6 +40,7 @@ public final class WorkoutAggregationService {
                     activityName: hk.activityName,
                     energyKilocalories: hk.energyKilocalories,
                     averageHeartRate: hk.averageHeartRate,
+                    heartRateRecoveryOneMinuteBPM: hk.heartRateRecoveryOneMinuteBPM,
                     distanceMeters: hk.distanceMeters,
                     source: hk.source ?? "healthKit",
                     rpe: hk.rpe
@@ -59,6 +61,7 @@ public final class WorkoutAggregationService {
                 activityName: useLocalDisplay ? local.title : (useHealthKitTiming ? matchedHK?.activityName ?? local.activityType : local.activityType),
                 energyKilocalories: local.energyKilocalories ?? matchedHK?.energyKilocalories,
                 averageHeartRate: local.averageHeartRate ?? matchedHK?.averageHeartRate,
+                heartRateRecoveryOneMinuteBPM: matchedHK?.heartRateRecoveryOneMinuteBPM,
                 distanceMeters: matchedHK?.distanceMeters,
                 source: local.source,
                 rpe: local.rpe
@@ -75,8 +78,9 @@ public final class WorkoutAggregationService {
         calendar: Calendar = .current
     ) throws {
         // 1. Identify and remove any previously synced HealthKit workouts for this day that are no longer in healthKitWorkouts payload
-        let dayStart = calendar.startOfDay(for: date)
-        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+        let dayRange = DateRangeQuery.singleDay(date, calendar: calendar)
+        let dayStart = dayRange.start
+        let dayEnd = dayRange.end
         
         let descriptor = FetchDescriptor<WorkoutEventRecord>(
             predicate: #Predicate<WorkoutEventRecord> {
@@ -109,7 +113,7 @@ public final class WorkoutAggregationService {
                 event = existing
                 event.startedAt = workout.start
                 event.endedAt = workout.end
-                event.dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: workout.start, calendar: calendar)
+                event.dayIdentifier = DailyHealthSummaryRecord.healthDayIdentifier(forSampleAt: workout.start, calendar: calendar)
                 if existing.linkedStrengthWorkoutId == nil {
                     event.activityType = workout.activityName
                     event.title = workout.activityName
@@ -124,7 +128,7 @@ public final class WorkoutAggregationService {
                 event = matched
                 event.startedAt = workout.start
                 event.endedAt = workout.end
-                event.dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: workout.start, calendar: calendar)
+                event.dayIdentifier = DailyHealthSummaryRecord.healthDayIdentifier(forSampleAt: workout.start, calendar: calendar)
                 if event.linkedStrengthWorkoutId != nil {
                     event.activityType = event.title
                 }
@@ -231,7 +235,7 @@ public final class WorkoutAggregationService {
             event = existing
             event.startedAt = strengthWorkout.startedAt
             event.endedAt = strengthWorkout.endedAt
-            event.dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: strengthWorkout.startedAt, calendar: calendar)
+            event.dayIdentifier = DailyHealthSummaryRecord.healthDayIdentifier(forSampleAt: strengthWorkout.startedAt, calendar: calendar)
             event.activityType = strengthWorkout.title
             event.title = strengthWorkout.title
             event.durationMinutes = Double(strengthWorkout.durationMinutes)
@@ -240,8 +244,9 @@ public final class WorkoutAggregationService {
             event.updatedAt = Date()
         } else {
             // Find if there is an overlapping HealthKit event to merge with (30 mins range)
-            let dayStart = calendar.startOfDay(for: strengthWorkout.startedAt)
-            let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+            let dayRange = HealthDayBoundary(calendar: calendar).range(containing: strengthWorkout.startedAt)
+            let dayStart = dayRange.start
+            let dayEnd = dayRange.end
             let overlapDescriptor = FetchDescriptor<WorkoutEventRecord>(
                 predicate: #Predicate<WorkoutEventRecord> {
                     $0.startedAt >= dayStart && $0.startedAt < dayEnd && $0.linkedStrengthWorkoutId == nil
@@ -421,8 +426,9 @@ public final class WorkoutAggregationService {
         modelContext: ModelContext,
         calendar: Calendar
     ) throws -> WorkoutEventRecord? {
-        let dayStart = calendar.startOfDay(for: healthKitWorkout.start)
-        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+        let dayRange = HealthDayBoundary(calendar: calendar).range(containing: healthKitWorkout.start)
+        let dayStart = dayRange.start
+        let dayEnd = dayRange.end
         let descriptor = FetchDescriptor<WorkoutEventRecord>(
             predicate: #Predicate<WorkoutEventRecord> {
                 $0.startedAt >= dayStart && $0.startedAt < dayEnd
@@ -638,7 +644,50 @@ public final class WorkoutAggregationService {
         }
     }
 
-    /// Deletes a StrengthWorkoutRecord and cleans up its linked WorkoutEventRecord, XunjiWorkoutMirrorRecord, and daily load.
+    /// Creates or updates a TrainingResponseRecord linked to a StrengthWorkoutRecord.
+    @discardableResult
+    func upsertTrainingResponseRecord(
+        for workout: StrengthWorkoutRecord,
+        sessionRPE: Double?,
+        modelContext: ModelContext,
+        calendar: Calendar = .current
+    ) throws -> TrainingResponseRecord {
+        let workoutID = workout.id
+        let descriptor = FetchDescriptor<TrainingResponseRecord>(
+            predicate: #Predicate<TrainingResponseRecord> { $0.workoutId == workoutID }
+        )
+        let existing = (try? modelContext.fetch(descriptor))?.first
+
+        let primaryMuscles = Set(workout.exercises.compactMap { $0.primaryMuscleGroup }.filter { !$0.isEmpty })
+        let muscleGroupsArray = Array(primaryMuscles)
+        let effectiveSets = workout.exercises.flatMap(\.sets).filter { $0.isWarmup != true && $0.isCompleted != false }.count
+        let totalVolume = workout.totalVolumeKilograms
+        let nextDay = calendar.date(byAdding: .day, value: 1, to: workout.startedAt) ?? workout.startedAt.addingTimeInterval(86400)
+
+        if let record = existing {
+            record.date = workout.startedAt
+            record.nextDayDate = nextDay
+            record.primaryMuscleGroups = muscleGroupsArray
+            record.totalEffectiveSets = effectiveSets
+            record.totalVolumeKg = totalVolume
+            record.sessionRPE = sessionRPE ?? workout.sessionRPE
+            return record
+        } else {
+            let record = TrainingResponseRecord(
+                workoutId: workoutID,
+                date: workout.startedAt,
+                nextDayDate: nextDay,
+                primaryMuscleGroups: muscleGroupsArray,
+                totalEffectiveSets: effectiveSets,
+                totalVolumeKg: totalVolume,
+                sessionRPE: sessionRPE ?? workout.sessionRPE
+            )
+            modelContext.insert(record)
+            return record
+        }
+    }
+
+    /// Deletes a StrengthWorkoutRecord and cleans up its linked WorkoutEventRecord, XunjiWorkoutMirrorRecord, TrainingResponseRecord, and daily load.
     func deleteStrengthWorkout(
         _ workout: StrengthWorkoutRecord,
         modelContext: ModelContext,
@@ -674,13 +723,22 @@ public final class WorkoutAggregationService {
             modelContext.insert(DeletedWorkoutRecord(id: mirror.externalID))
             modelContext.delete(mirror)
         }
+
+        // 3. Find linked TrainingResponseRecords
+        let responseDescriptor = FetchDescriptor<TrainingResponseRecord>(
+            predicate: #Predicate<TrainingResponseRecord> { $0.workoutId == workoutID }
+        )
+        let responses = try modelContext.fetch(responseDescriptor)
+        for resp in responses {
+            modelContext.delete(resp)
+        }
         
-        // 3. Delete the StrengthWorkoutRecord itself
+        // 4. Delete the StrengthWorkoutRecord itself
         modelContext.delete(workout)
         
         try modelContext.save()
         
-        // 4. Recalculate summary and aggregation for the affected day
+        // 5. Recalculate summary and aggregation for the affected day
         try aggregateDay(date: workoutDate, modelContext: modelContext, calendar: calendar)
         try modelContext.save()
         
@@ -754,6 +812,12 @@ struct WorkoutSaveCoordinator {
                 sessionRPE: sessionRPE,
                 calendar: calendar
             )
+            _ = try aggregationService.upsertTrainingResponseRecord(
+                for: workout,
+                sessionRPE: sessionRPE,
+                modelContext: modelContext,
+                calendar: calendar
+            )
 
             try failureInjector(.artifactInsertion)
             modelContext.insert(artifact)
@@ -800,6 +864,12 @@ struct WorkoutSaveCoordinator {
                 from: workout,
                 modelContext: modelContext,
                 sessionRPE: sessionRPE,
+                calendar: calendar
+            )
+            _ = try aggregationService.upsertTrainingResponseRecord(
+                for: workout,
+                sessionRPE: sessionRPE,
+                modelContext: modelContext,
                 calendar: calendar
             )
 

@@ -1,6 +1,157 @@
 import Foundation
 import SwiftData
 
+struct DailyScoreEvidenceEnvelope: Codable, Hashable {
+    static let currentVersion = 1
+
+    var version: Int
+    var sleep: MetricResult
+    var recovery: MetricResult
+    var strain: MetricResult
+    var stress: MetricResult
+    var energy: MetricResult
+    var persistedAt: Date
+
+    init(
+        version: Int = currentVersion,
+        sleep: MetricResult,
+        recovery: MetricResult,
+        strain: MetricResult,
+        stress: MetricResult,
+        energy: MetricResult,
+        persistedAt: Date = Date()
+    ) {
+        self.version = version
+        self.sleep = sleep
+        self.recovery = recovery
+        self.strain = strain
+        self.stress = stress
+        self.energy = energy
+        self.persistedAt = persistedAt
+    }
+
+    init(evidence: ScoredHealthEvidence, persistedAt: Date = Date()) {
+        self.init(
+            sleep: evidence.sleep,
+            recovery: evidence.recovery,
+            strain: evidence.strain,
+            stress: evidence.physiologicalStress,
+            energy: evidence.energy,
+            persistedAt: persistedAt
+        )
+    }
+}
+
+struct IntradaySignalPoint: Hashable, Sendable {
+    var date: Date
+    var value: Double
+    var sourceIdentifier: String = "unknown"
+}
+
+struct IntradaySignalBucket: Hashable, Sendable {
+    var signal: HealthSignal
+    var start: Date
+    var end: Date
+    var average: Double
+    var minimum: Double
+    var maximum: Double
+    var sampleCount: Int
+    var unit: String
+    var sourceIdentifier: String
+}
+
+enum IntradaySignalBucketizer {
+    static func bucket(
+        points: [IntradaySignalPoint],
+        signal: HealthSignal,
+        unit: String,
+        sourceIdentifier: String,
+        interval: TimeInterval = 5 * 60
+    ) -> [IntradaySignalBucket] {
+        guard interval > 0 else { return [] }
+        let groups = Dictionary(grouping: points) { point in
+            floor(point.date.timeIntervalSince1970 / interval) * interval
+        }
+        return groups.compactMap { epoch, values in
+            guard !values.isEmpty else { return nil }
+            let start = Date(timeIntervalSince1970: epoch)
+            let scalarValues = values.map(\.value)
+            return IntradaySignalBucket(
+                signal: signal,
+                start: start,
+                end: start.addingTimeInterval(interval),
+                average: scalarValues.reduce(0, +) / Double(scalarValues.count),
+                minimum: scalarValues.min() ?? 0,
+                maximum: scalarValues.max() ?? 0,
+                sampleCount: scalarValues.count,
+                unit: unit,
+                sourceIdentifier: sourceIdentifier
+            )
+        }
+        .sorted { $0.start < $1.start }
+    }
+}
+
+@Model
+final class IntradaySignalBucketRecord {
+    @Attribute(.unique) var id: String
+    var dayIdentifier: String
+    var signalRawValue: String
+    var bucketStart: Date
+    var bucketEnd: Date
+    var average: Double
+    var minimum: Double
+    var maximum: Double
+    var sampleCount: Int
+    var unit: String
+    var sourceIdentifier: String
+    var sourceRevision: String
+    var updatedAt: Date
+
+    init(
+        bucket: IntradaySignalBucket,
+        sourceRevision: String = "healthKit.v1",
+        calendar: Calendar = .current,
+        updatedAt: Date = Date()
+    ) {
+        let dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(
+            for: bucket.start,
+            calendar: calendar
+        )
+        self.id = [
+            dayIdentifier,
+            bucket.signal.rawValue,
+            String(Int(bucket.start.timeIntervalSince1970)),
+            bucket.sourceIdentifier
+        ].joined(separator: "|")
+        self.dayIdentifier = dayIdentifier
+        self.signalRawValue = bucket.signal.rawValue
+        self.bucketStart = bucket.start
+        self.bucketEnd = bucket.end
+        self.average = bucket.average
+        self.minimum = bucket.minimum
+        self.maximum = bucket.maximum
+        self.sampleCount = bucket.sampleCount
+        self.unit = bucket.unit
+        self.sourceIdentifier = bucket.sourceIdentifier
+        self.sourceRevision = sourceRevision
+        self.updatedAt = updatedAt
+    }
+
+    func apply(bucket: IntradaySignalBucket, sourceRevision: String, updatedAt: Date = Date()) {
+        bucketStart = bucket.start
+        bucketEnd = bucket.end
+        average = bucket.average
+        minimum = bucket.minimum
+        maximum = bucket.maximum
+        sampleCount = bucket.sampleCount
+        unit = bucket.unit
+        sourceIdentifier = bucket.sourceIdentifier
+        self.sourceRevision = sourceRevision
+        self.updatedAt = updatedAt
+    }
+}
+
 @Model
 final class DailyHealthSummaryRecord {
     @Attribute(.unique) var dayIdentifier: String
@@ -59,6 +210,7 @@ final class DailyHealthSummaryRecord {
     var deepSleepMinutes: Double?
     var remSleepMinutes: Double?
     @Attribute(.externalStorage) var workoutsData: Data?
+    @Attribute(.externalStorage) var scoreEvidenceData: Data?
 
     init(
         dayIdentifier: String,
@@ -104,6 +256,7 @@ final class DailyHealthSummaryRecord {
         deepSleepMinutes: Double? = nil,
         remSleepMinutes: Double? = nil,
         workoutsData: Data? = nil,
+        scoreEvidenceData: Data? = nil,
         configVersion: String = VelaAppMetadata.configVersion,
         schemaVersion: Int = 2,
         updatedAt: Date = Date(),
@@ -152,6 +305,7 @@ final class DailyHealthSummaryRecord {
         self.deepSleepMinutes = deepSleepMinutes
         self.remSleepMinutes = remSleepMinutes
         self.workoutsData = workoutsData
+        self.scoreEvidenceData = scoreEvidenceData
         self.configVersion = configVersion
         self.schemaVersion = schemaVersion
         self.updatedAt = updatedAt
@@ -249,6 +403,28 @@ final class DailyHealthSummaryRecord {
         self.updatedAt = updatedAt
     }
 
+    func apply(scoreEvidence: DailyScoreEvidenceEnvelope?) throws {
+        guard let scoreEvidence else {
+            scoreEvidenceData = nil
+            return
+        }
+        scoreEvidenceData = try JSONEncoder().encode(scoreEvidence)
+        configVersion = [
+            scoreEvidence.sleep.algorithmVersion,
+            scoreEvidence.recovery.algorithmVersion,
+            scoreEvidence.strain.algorithmVersion,
+            scoreEvidence.stress.algorithmVersion,
+            scoreEvidence.energy.algorithmVersion
+        ].joined(separator: "|")
+        schemaVersion = 2
+        updatedAt = scoreEvidence.persistedAt
+    }
+
+    func decodedScoreEvidence() -> DailyScoreEvidenceEnvelope? {
+        guard let scoreEvidenceData else { return nil }
+        return try? JSONDecoder().decode(DailyScoreEvidenceEnvelope.self, from: scoreEvidenceData)
+    }
+
     static func dayIdentifier(for date: Date, calendar: Calendar = .current) -> String {
         let components = calendar.dateComponents([.year, .month, .day], from: date)
         return [
@@ -258,6 +434,14 @@ final class DailyHealthSummaryRecord {
         ]
         .map { String(format: "%02d", $0) }
         .joined(separator: "-")
+    }
+
+    static func healthDayIdentifier(
+        forSampleAt date: Date,
+        calendar: Calendar = .current
+    ) -> String {
+        let labelDate = HealthDayBoundary(calendar: calendar).labelDate(containing: date)
+        return dayIdentifier(for: labelDate, calendar: calendar)
     }
 
     func toSnapshot() -> DailyHealthSnapshot {
@@ -318,6 +502,34 @@ final class DailyHealthSummaryRecord {
 
 }
 
+enum StrengthSetKind: String, Codable, Hashable, CaseIterable {
+    case working
+    case warmup
+    case drop
+    case backoff
+    case failure
+
+    var displayName: String {
+        switch self {
+        case .working: "正式组"
+        case .warmup: "热身组"
+        case .drop: "递减组"
+        case .backoff: "回退组"
+        case .failure: "力竭组"
+        }
+    }
+
+    var shortLabel: String {
+        switch self {
+        case .working: "正"
+        case .warmup: "热"
+        case .drop: "降"
+        case .backoff: "退"
+        case .failure: "竭"
+        }
+    }
+}
+
 struct StrengthSetLog: Identifiable, Codable, Hashable {
     var id: UUID = UUID()
     var repetitions: Int
@@ -327,10 +539,34 @@ struct StrengthSetLog: Identifiable, Codable, Hashable {
     var rir: Double?
     var isCompleted: Bool?
     var completedAt: Date?
+    var kindRaw: String? = nil
+
+    var kind: StrengthSetKind {
+        get {
+            if isWarmup { return .warmup }
+            return kindRaw.flatMap(StrengthSetKind.init(rawValue:)) ?? .working
+        }
+        set {
+            kindRaw = newValue == .working ? nil : newValue.rawValue
+            isWarmup = newValue == .warmup
+        }
+    }
 
     var volumeKilograms: Double {
-        guard !isWarmup else { return 0 }
+        guard kind != .warmup else { return 0 }
         return Double(repetitions) * weightKilograms
+    }
+}
+
+enum StrengthExerciseGroupKind: String, Codable, Hashable, CaseIterable {
+    case superset
+    case circuit
+
+    var displayName: String {
+        switch self {
+        case .superset: "超级组"
+        case .circuit: "循环组"
+        }
     }
 }
 
@@ -342,6 +578,14 @@ struct StrengthExerciseLog: Identifiable, Codable, Hashable {
     var equipment: String
     var primaryMuscleGroup: String?
     var sets: [StrengthSetLog]
+    var groupID: UUID? = nil
+    var groupKindRaw: String? = nil
+    var groupPosition: Int? = nil
+
+    var groupKind: StrengthExerciseGroupKind? {
+        get { groupKindRaw.flatMap(StrengthExerciseGroupKind.init(rawValue:)) }
+        set { groupKindRaw = newValue?.rawValue }
+    }
 
     var volumeKilograms: Double {
         sets.reduce(0) { $0 + $1.volumeKilograms }
@@ -1453,6 +1697,11 @@ final class FoodLogRecord {
         return "\(mealName): \(foodText) · \(totalCalories) kcal · P\(proteinGrams) C\(carbsGrams) F\(fatGrams)"
     }
 
+    @Transient
+    var micronutrients: [NutritionMicronutrientAmount] {
+        NutritionAnalysisArchiveCodec.micronutrients(from: rawAnalysis)
+    }
+
     init(
         id: UUID = UUID(),
         mealName: String,
@@ -1506,7 +1755,10 @@ final class FoodLogRecord {
             healthScore: analysis.healthScore,
             suggestions: analysis.suggestions,
             source: source,
-            rawAnalysis: analysis.rawAnalysis,
+            rawAnalysis: NutritionAnalysisArchiveCodec.encode(
+                original: analysis.rawAnalysis,
+                micronutrients: analysis.micronutrients
+            ),
             createdAt: createdAt,
             updatedAt: createdAt
         )
@@ -1720,7 +1972,10 @@ public final class WorkoutEventRecord {
         self.source = source
         self.startedAt = startedAt
         self.endedAt = endedAt
-        self.dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: startedAt, calendar: calendar)
+        self.dayIdentifier = DailyHealthSummaryRecord.healthDayIdentifier(
+            forSampleAt: startedAt,
+            calendar: calendar
+        )
         self.activityType = activityType
         self.title = title ?? activityType
         self.durationMinutes = max(0, endedAt.timeIntervalSince(startedAt) / 60)
@@ -1889,5 +2144,78 @@ final class VelaEventRecord {
         self.title = title
         self.detail = detail
         self.metadataJSON = metadataJSON
+    }
+}
+
+@Model
+public final class ProactiveInsightRecord {
+    @Attribute(.unique) public var id: UUID
+    public var date: Date
+    public var focusRaw: String
+    public var severityRaw: String
+    public var title: String
+    public var bodyText: String
+    public var suggestedAction: String?
+    public var priority: Int
+    public var coachPresetQuestion: String
+    public var createdAt: Date
+
+    public init(
+        id: UUID = UUID(),
+        date: Date = Date(),
+        focusRaw: String,
+        severityRaw: String,
+        title: String,
+        bodyText: String,
+        suggestedAction: String? = nil,
+        priority: Int = 50,
+        coachPresetQuestion: String = "",
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.date = date
+        self.focusRaw = focusRaw
+        self.severityRaw = severityRaw
+        self.title = title
+        self.bodyText = bodyText
+        self.suggestedAction = suggestedAction
+        self.priority = priority
+        self.coachPresetQuestion = coachPresetQuestion
+        self.createdAt = createdAt
+    }
+}
+
+extension ProactiveInsightRecord {
+    var toInsight: ProactiveInsight {
+        let focusVal: ProactiveInsight.Focus
+        switch focusRaw {
+        case "recovery": focusVal = .recovery
+        case "sleep": focusVal = .sleep
+        case "training", "strain", "adaptation": focusVal = .training
+        case "stress": focusVal = .stress
+        case "energy": focusVal = .energy
+        case "movement": focusVal = .movement
+        default: focusVal = .readiness
+        }
+
+        let sevVal: ProactiveInsight.Severity
+        switch severityRaw {
+        case "alert": sevVal = .alert
+        case "warning": sevVal = .warning
+        case "positive": sevVal = .info
+        default: sevVal = .info
+        }
+
+        return ProactiveInsight(
+            focus: focusVal,
+            severity: sevVal,
+            title: title,
+            body: bodyText,
+            suggestedAction: suggestedAction,
+            relatedMetrics: [],
+            evidence: [],
+            priority: priority,
+            coachPresetQuestion: coachPresetQuestion
+        )
     }
 }

@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct ArcProgressView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let score: Double
     let tint: Color
     let recommendedRange: ClosedRange<Int>
@@ -48,10 +50,15 @@ struct ArcProgressView: View {
                     .rotationEffect(.degrees(-135))
             }
 
-            // Animated progress arc
+            // Animated progress arc with glowing gradient stroke
             ArcShape(from: 0, to: animatedProgress)
                 .stroke(
-                    scoreColor,
+                    AngularGradient(
+                        gradient: Gradient(colors: [scoreColor.opacity(0.6), scoreColor]),
+                        center: .center,
+                        startAngle: .degrees(225),
+                        endAngle: .degrees(225 + animatedProgress * 270)
+                    ),
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-135))
@@ -88,12 +95,12 @@ struct ArcProgressView: View {
         }
         .frame(width: size, height: size)
         .onAppear {
-            withAnimation(.easeOut(duration: 0.8)) {
+            withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) {
                 animatedProgress = progress
             }
         }
         .onChange(of: score) { _, newValue in
-            withAnimation(.easeOut(duration: 0.8)) {
+            withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) {
                 animatedProgress = min(max(newValue / 100, 0), 1)
             }
         }

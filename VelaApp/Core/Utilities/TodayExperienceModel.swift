@@ -66,6 +66,9 @@ struct TodayExperienceSignalCard: Codable, Hashable, Identifiable {
     var id: String
     var title: String
     var value: String
+    var directionLabel: String
+    var confidenceLabel: String
+    var coverageLabel: String
     var subtitle: String
     var trend: [Double]
     var accent: DailyPlanAccent
@@ -77,6 +80,7 @@ struct TodayExperienceAction: Codable, Hashable, Identifiable {
     var detail: String
     var destination: String
     var isPrimary: Bool
+    var evidence: String? = nil
 }
 
 struct TodayExperienceModel: Codable, Hashable {
@@ -93,7 +97,8 @@ struct TodayExperienceModel: Codable, Hashable {
         bodyState: BodyState,
         trainingDecision: DailyTrainingDecision,
         generatedAt: Date = Date(),
-        nutrition: TodayExperienceNutrition = .empty
+        nutrition: TodayExperienceNutrition = .empty,
+        history: [DailyHealthSummaryRecord] = []
     ) -> TodayExperienceModel {
         let hasReadinessData = dashboard.recovery.hasData
         let confidenceDetail = hasReadinessData ? label(for: bodyState.confidence) : "数据不足"
@@ -122,35 +127,65 @@ struct TodayExperienceModel: Codable, Hashable {
                 title: "恢复",
                 metric: dashboard.recovery,
                 fallbackSubtitle: "等待 HealthKit 恢复基线",
-                accent: .recovery
+                accent: .recovery,
+                trend: historicalTrend(
+                    id: "recovery",
+                    current: dashboard.recovery,
+                    selectedDate: dashboard.date,
+                    history: history
+                )
             ),
             signal(
                 id: "sleep",
                 title: "睡眠",
                 metric: dashboard.sleepScore,
                 fallbackSubtitle: "等待睡眠时长与连续性",
-                accent: .sleep
+                accent: .sleep,
+                trend: historicalTrend(
+                    id: "sleep",
+                    current: dashboard.sleepScore,
+                    selectedDate: dashboard.date,
+                    history: history
+                )
             ),
             signal(
                 id: "strain",
                 title: "负荷",
                 metric: dashboard.strain,
                 fallbackSubtitle: "等待训练负荷",
-                accent: .strain
+                accent: .strain,
+                trend: historicalTrend(
+                    id: "strain",
+                    current: dashboard.strain,
+                    selectedDate: dashboard.date,
+                    history: history
+                )
             ),
             signal(
                 id: "stress",
                 title: "压力",
                 metric: dashboard.stress,
                 fallbackSubtitle: "等待压力指标",
-                accent: .stress
+                accent: .stress,
+                trend: historicalTrend(
+                    id: "stress",
+                    current: dashboard.stress,
+                    selectedDate: dashboard.date,
+                    history: history
+                )
             ),
             signal(
                 id: "energy",
                 title: "能量",
                 metric: dashboard.energy,
                 fallbackSubtitle: "等待能量模型",
-                accent: .energy
+                accent: .energy,
+                trend: historicalTrend(
+                    id: "energy",
+                    current: dashboard.energy,
+                    selectedDate: dashboard.date,
+                    history: history
+                )
             )
         ]
 
@@ -165,6 +200,8 @@ struct TodayExperienceModel: Codable, Hashable {
                 hasReadinessData: hasReadinessData
             ),
             actions: actionPlan(
+                dashboard: dashboard,
+                bodyState: bodyState,
                 decision: trainingDecision,
                 hasReadinessData: hasReadinessData
             ),
@@ -226,18 +263,104 @@ struct TodayExperienceModel: Codable, Hashable {
         title: String,
         metric: MetricResult,
         fallbackSubtitle: String,
-        accent: DailyPlanAccent
+        accent: DailyPlanAccent,
+        trend: [Double]
     ) -> TodayExperienceSignalCard {
         let value = metric.hasData ? "\(Int(metric.score.rounded()))" : "--"
-        let subtitle = metric.hasData ? "已纳入今日评估" : fallbackSubtitle
+        let subtitle = metric.hasData ? signalSubtitle(for: metric) : fallbackSubtitle
         return TodayExperienceSignalCard(
             id: id,
             title: title,
             value: value,
+            directionLabel: directionLabel(for: metric.direction),
+            confidenceLabel: confidenceLabel(for: metric),
+            coverageLabel: coverageLabel(for: metric.dataCoverage),
             subtitle: subtitle,
-            trend: [],
+            trend: trend,
             accent: accent
         )
+    }
+
+    private static func historicalTrend(
+        id: String,
+        current: MetricResult,
+        selectedDate: Date,
+        history: [DailyHealthSummaryRecord],
+        calendar: Calendar = .current
+    ) -> [Double] {
+        let selectedDay = calendar.startOfDay(for: selectedDate)
+        let previousValues = history
+            .filter { calendar.startOfDay(for: $0.date) < selectedDay }
+            .sorted { $0.date < $1.date }
+            .compactMap { record -> Double? in
+                switch id {
+                case "recovery": return record.recoveryScore
+                case "sleep": return record.sleepScore
+                case "strain": return record.strainScore
+                case "stress": return record.stressIndex
+                case "energy": return record.currentEnergy ?? record.morningEnergy ?? record.energyBank
+                default: return nil
+                }
+            }
+
+        var values = Array(previousValues.suffix(6))
+        if current.hasData {
+            values.append(current.score)
+        }
+        return values
+    }
+
+    private static func signalSubtitle(for metric: MetricResult) -> String {
+        guard let value = metric.value else { return "等待可用数据" }
+        switch metric.domain {
+        case .recovery:
+            if value < 45 { return "偏低，今天恢复优先" }
+            if value < 75 { return "中等，训练时保留余力" }
+            return "较好，支持计划训练"
+        case .sleep:
+            if value < 60 { return "偏低，今晚优先修复睡眠" }
+            if value < 80 { return "尚可，继续保护睡眠节奏" }
+            return "较好，保持当前睡眠节奏"
+        case .strain:
+            let target = metric.recommendedRange
+            if value < Double(target.lowerBound) { return "低于建议负荷区间" }
+            if value > Double(target.upperBound) { return "高于建议区间，停止加量" }
+            return "位于建议负荷区间"
+        case .physiologicalStress:
+            if value >= 70 { return "偏高，安排低刺激恢复窗口" }
+            if value >= 45 { return "中等，减少额外刺激" }
+            return "处于可控区间"
+        case .energy:
+            if value < 35 { return "偏低，保留能量避免透支" }
+            if value < 70 { return "适中，优先重要任务" }
+            return "较高，支持主要计划"
+        }
+    }
+
+    private static func directionLabel(for direction: ScoreDirection) -> String {
+        switch direction {
+        case .higherIsBetter: return "越高越好"
+        case .higherIsLoad: return "越高负荷越大"
+        case .higherNeedsAttention: return "越高越需关注"
+        }
+    }
+
+    private static func confidenceLabel(for metric: MetricResult) -> String {
+        guard metric.hasData else { return "数据不足" }
+        switch metric.confidence {
+        case .low: return "低置信度"
+        case .medium: return "中置信度"
+        case .high: return "高置信度"
+        }
+    }
+
+    private static func coverageLabel(for coverage: ScoreDataCoverage) -> String {
+        switch coverage {
+        case .unavailable: return "暂无覆盖"
+        case .partial: return "部分数据"
+        case .substantial: return "主要数据"
+        case .complete: return "完整数据"
+        }
     }
 
     private static func evidenceChips(
@@ -264,42 +387,73 @@ struct TodayExperienceModel: Codable, Hashable {
     }
 
     private static func actionPlan(
+        dashboard: DashboardSummary,
+        bodyState: BodyState,
         decision: DailyTrainingDecision,
         hasReadinessData: Bool
     ) -> [TodayExperienceAction] {
         guard hasReadinessData else {
             return [
-                .init(id: "sync_health", title: "同步健康数据", detail: "更新 HRV、静息心率、睡眠和训练负荷。", destination: "sync", isPrimary: true),
+                .init(id: "sync_health", title: "同步健康数据", detail: "更新 HRV、静息心率、睡眠和训练负荷。", destination: "sync", isPrimary: true, evidence: "恢复、睡眠和负荷尚不可用"),
                 .init(id: "log_status", title: "记录身体状态", detail: "补充疲劳、酸痛、压力或生病状态。", destination: "journal", isPrimary: false),
                 .init(id: "ask_coach", title: "询问 Vela", detail: "用当前有限数据生成保守建议。", destination: "coach", isPrimary: false)
             ]
         }
+        let evidence = actionEvidence(
+            dashboard: dashboard,
+            bodyState: bodyState,
+            decision: decision
+        )
         switch decision.decision {
         case .keep:
             return [
-                .init(id: "start_training", title: "开始今日训练", detail: "正常执行计划，保留 1-2 次余力。", destination: "training", isPrimary: true),
+                .init(id: "start_training", title: "开始今日训练", detail: "正常执行计划，保留 1–2 次余力；动作质量下降时停止加量。", destination: "training", isPrimary: true, evidence: evidence),
                 .init(id: "protect_sleep", title: "保护今晚睡眠", detail: "固定入睡时间，避免训练后过晚进食。", destination: "journal", isPrimary: false),
                 .init(id: "ask_coach", title: "问 Vela 调整细节", detail: "根据动作、RPE 和肌群疲劳微调。", destination: "coach", isPrimary: false)
             ]
         case .reduce:
             return [
-                .init(id: "reduce_training", title: "减量训练", detail: "容量 \(Int((decision.volumeMultiplier * 100).rounded()))%，RPE 上限 \(decision.intensityCap)。", destination: "training", isPrimary: true),
-                .init(id: "check_in", title: "记录疲劳", detail: "把酸痛、精神状态 and 压力写入上下文。", destination: "journal", isPrimary: false),
+                .init(id: "reduce_training", title: "减量训练", detail: "容量 \(Int((decision.volumeMultiplier * 100).rounded()))%，RPE 上限 \(decision.intensityCap)；热身状态差时继续下调。", destination: "training", isPrimary: true, evidence: evidence),
+                .init(id: "check_in", title: "记录疲劳", detail: "把酸痛、精神状态和压力写入上下文。", destination: "journal", isPrimary: false),
                 .init(id: "recovery_block", title: "安排恢复块", detail: "补水、低强度步行和提前睡眠。", destination: "recovery", isPrimary: false)
             ]
         case .swap:
             return [
-                .init(id: "swap_session", title: "替换训练内容", detail: "避开高疲劳肌群，保留训练节奏。", destination: "training", isPrimary: true),
+                .init(id: "swap_session", title: "替换训练内容", detail: "避开高疲劳肌群，保留训练节奏，RPE 不超过 \(decision.intensityCap)。", destination: "training", isPrimary: true, evidence: evidence),
                 .init(id: "mobility", title: "增加活动度", detail: "优先低冲击和技术练习。", destination: "recovery", isPrimary: false),
                 .init(id: "ask_coach", title: "让 Vela 改计划", detail: "生成替代动作与组数。", destination: "coach", isPrimary: false)
             ]
         case .rest:
             return [
-                .init(id: "recovery_day", title: "执行恢复日", detail: "停止高强度训练，只做轻 activity。", destination: "recovery", isPrimary: true),
+                .init(id: "recovery_day", title: "执行恢复日", detail: "停止高强度训练，只做能轻松交谈的低强度活动。", destination: "recovery", isPrimary: true, evidence: evidence),
                 .init(id: "symptom_check", title: "记录异常信号", detail: "如果有不适，记录并考虑专业意见。", destination: "journal", isPrimary: false),
                 .init(id: "sleep_plan", title: "今晚提前睡眠", detail: "把恢复放在训练之前。", destination: "journal", isPrimary: false)
             ]
         }
+    }
+
+    private static func actionEvidence(
+        dashboard: DashboardSummary,
+        bodyState: BodyState,
+        decision: DailyTrainingDecision
+    ) -> String {
+        var parts: [String] = []
+        if dashboard.recovery.hasData {
+            parts.append("恢复 \(Int(dashboard.recovery.score.rounded()))")
+        }
+        if dashboard.sleepScore.hasData {
+            parts.append("睡眠 \(Int(dashboard.sleepScore.score.rounded()))")
+        }
+        if decision.decision == .rest || decision.decision == .reduce,
+           dashboard.stress.hasData {
+            parts.append("压力 \(Int(dashboard.stress.score.rounded()))")
+        } else if dashboard.strain.hasData {
+            parts.append("负荷 \(Int(dashboard.strain.score.rounded()))")
+        }
+        if let driver = bodyState.drivers.first {
+            parts.append(displayDriverTitle(driver))
+        }
+        return Array(parts.prefix(3)).joined(separator: " · ")
     }
 
     private static func coachPreview(

@@ -346,4 +346,52 @@ struct JournalCorrelationEngine {
         }
         return lines.joined(separator: "\n")
     }
+
+    // MARK: - Cross-Lagged Time Series Correlation Engine (Functional Deep Optimization)
+
+    struct CrossLaggedResult: Sendable, Equatable {
+        var lagDays: Int
+        var correlation: Double
+        var isOptimalLag: Bool
+    }
+
+    /// Computes cross-lagged Spearman rank correlation between two time series (e.g. Strain on T vs HRV on T+k).
+    func calculateCrossLaggedCorrelation(
+        seriesA: [Double],
+        seriesB: [Double],
+        maxLagDays: Int = 3
+    ) -> [CrossLaggedResult] {
+        guard seriesA.count == seriesB.count, seriesA.count >= 7 else { return [] }
+
+        var results: [CrossLaggedResult] = []
+        var maxAbsCorr = -1.0
+        var maxIdx = -1
+
+        for lag in 0...maxLagDays {
+            let count = seriesA.count - lag
+            guard count >= 5 else { break }
+
+            let subA = Array(seriesA.prefix(count))
+            let subB = Array(seriesB.suffix(count))
+
+            let corr = spearmanCorrelation(subA, subB)
+            results.append(CrossLaggedResult(
+                lagDays: lag,
+                correlation: corr,
+                isOptimalLag: false
+            ))
+
+            if abs(corr) > maxAbsCorr {
+                maxAbsCorr = abs(corr)
+                maxIdx = lag
+            }
+        }
+
+        if maxIdx >= 0 && maxIdx < results.count {
+            results[maxIdx].isOptimalLag = true
+        }
+
+        return results
+    }
 }
+

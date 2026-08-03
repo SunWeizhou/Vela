@@ -7,6 +7,7 @@ private let logger = Logger(subsystem: "com.sunweizhou.Vela", category: "ModelCo
 enum VelaModelContainer {
     static let modelTypes: [any PersistentModel.Type] = [
         DailyHealthSummaryRecord.self,
+        IntradaySignalBucketRecord.self,
         SleepSummaryRecord.self,
         JournalEntryRecord.self,
         CoachInteractionRecord.self,
@@ -35,9 +36,10 @@ enum VelaModelContainer {
         XunjiDailyCacheRecord.self,
         XunjiWorkoutMirrorRecord.self,
         DeletedWorkoutRecord.self,
-        VelaEventRecord.self
+        VelaEventRecord.self,
+        ProactiveInsightRecord.self
     ]
-    static let schema = Schema(modelTypes)
+    static let schema = Schema(VelaSchemaV2.models)
 
     private static let storeURL: URL = {
         let base = URL.applicationSupportDirectory
@@ -100,12 +102,7 @@ enum VelaModelContainer {
         }
 
         do {
-            let config = ModelConfiguration(schema: schema, url: storeURL)
-            return try ModelContainer(
-                for: schema,
-                migrationPlan: VelaMigrationPlan.self,
-                configurations: [config]
-            )
+            return try make(at: storeURL)
         } catch {
             let recoveryRoot = URL.applicationSupportDirectory
                 .appending(path: "VelaRecovery", directoryHint: .isDirectory)
@@ -130,10 +127,130 @@ enum VelaModelContainer {
             throw error
         }
     }
+
+    static func make(at storeURL: URL) throws -> ModelContainer {
+        let config = ModelConfiguration(schema: schema, url: storeURL)
+        return try ModelContainer(
+            for: schema,
+            migrationPlan: VelaMigrationPlan.self,
+            configurations: [config]
+        )
+    }
 }
 
 enum VelaSchemaV1: VersionedSchema {
     static let versionIdentifier = Schema.Version(1, 0, 0)
+
+    @Model
+    final class DailyHealthSummaryRecord {
+        @Attribute(.unique) var dayIdentifier: String
+        var date: Date
+        var sleepScore: Double?
+        var recoveryScore: Double?
+        var strainScore: Double?
+        var stressIndex: Double?
+        var morningEnergy: Double?
+        var currentEnergy: Double?
+        var energyBank: Double?
+        var configVersion: String
+        var schemaVersion: Int
+        var updatedAt: Date
+        var createdAt: Date
+        var healthAge: Double?
+        var hrvAverage: Double?
+        var restingHeartRate: Double?
+        var sleepHours: Double?
+        var deepSleepPercent: Double?
+        var remSleepPercent: Double?
+        var sleepEfficiency: Double?
+        var steps: Double?
+        var activeCalories: Double?
+        var activeMinutes: Double?
+        var workoutCount: Int?
+        var workoutTypes: String?
+        var workoutDuration: Double?
+        var bodyWeight: Double?
+        var bodyFatPercent: Double?
+        var bmi: Double?
+        var oxygenSaturation: Double?
+        var respiratoryRate: Double?
+        var wristTemperature: Double?
+        var dailyLoad: Double?
+        var workoutLoad: Double?
+        var activityLoad: Double?
+        var trainingLoadRatio: Double?
+        var atl: Double?
+        var ctl: Double?
+        var tsb: Double?
+        var acwr: Double?
+        var bedtime: Date?
+        var wakeTime: Date?
+        var awakeMinutes: Double?
+        var awakeEpisodeCount: Int?
+        var deepSleepMinutes: Double?
+        var remSleepMinutes: Double?
+        @Attribute(.externalStorage) var workoutsData: Data?
+
+        init(
+            dayIdentifier: String,
+            date: Date,
+            sleepScore: Double? = nil,
+            recoveryScore: Double? = nil,
+            configVersion: String = VelaAppMetadata.configVersion,
+            schemaVersion: Int = 1,
+            updatedAt: Date = Date(),
+            createdAt: Date = Date()
+        ) {
+            self.dayIdentifier = dayIdentifier
+            self.date = date
+            self.sleepScore = sleepScore
+            self.recoveryScore = recoveryScore
+            self.configVersion = configVersion
+            self.schemaVersion = schemaVersion
+            self.updatedAt = updatedAt
+            self.createdAt = createdAt
+        }
+    }
+
+    static var models: [any PersistentModel.Type] {
+        [
+            DailyHealthSummaryRecord.self,
+            SleepSummaryRecord.self,
+            JournalEntryRecord.self,
+            CoachInteractionRecord.self,
+            AIReportRecord.self,
+            UserWikiDocumentRecord.self,
+            CoachSessionRecord.self,
+            OnboardingState.self,
+            CoachArtifactRecord.self,
+            FoodLogRecord.self,
+            StrengthWorkoutRecord.self,
+            ActiveWorkoutDraftRecord.self,
+            ExerciseDefinitionRecord.self,
+            WorkoutTemplateRecord.self,
+            TrainingResponseRecord.self,
+            TrainingPlanRecord.self,
+            BiomarkerRecord.self,
+            MemoryEventRecord.self,
+            AgentRunRecord.self,
+            DailyOperatingPlanRecord.self,
+            DailyDecisionFeedbackRecord.self,
+            PersonalExperimentRecord.self,
+            ExperimentCheckInRecord.self,
+            AgentArtifactRecord.self,
+            TrainingPlanAdaptationRecord.self,
+            WorkoutEventRecord.self,
+            XunjiDailyCacheRecord.self,
+            XunjiWorkoutMirrorRecord.self,
+            DeletedWorkoutRecord.self,
+            VelaEventRecord.self,
+            ProactiveInsightRecord.self
+        ]
+    }
+}
+
+enum VelaSchemaV2: VersionedSchema {
+    static let versionIdentifier = Schema.Version(2, 0, 0)
     static var models: [any PersistentModel.Type] {
         VelaModelContainer.modelTypes
     }
@@ -141,11 +258,13 @@ enum VelaSchemaV1: VersionedSchema {
 
 enum VelaMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [VelaSchemaV1.self]
+        [VelaSchemaV1.self, VelaSchemaV2.self]
     }
 
     static var stages: [MigrationStage] {
-        []
+        [
+            .lightweight(fromVersion: VelaSchemaV1.self, toVersion: VelaSchemaV2.self)
+        ]
     }
 }
 

@@ -475,7 +475,7 @@ struct BodyModelDetailView: View {
     }
     
     private var behavioralDynamicsSection: some View {
-        JournalCorrelationSection(bodyModelState: bodyModelState)
+        JournalCorrelationSection(bodyModelState: bodyModelState, insights: insights)
     }
     
     private func loadModelData() {

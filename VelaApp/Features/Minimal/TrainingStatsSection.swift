@@ -52,6 +52,184 @@ enum TrainingTargetComparison: Equatable {
     }
 }
 
+enum CardioLoadStatus: String, Equatable {
+    case building
+    case maintaining
+    case easing
+    case spike
+
+    var title: String {
+        switch self {
+        case .building: "逐步提升"
+        case .maintaining: "维持"
+        case .easing: "负荷回落"
+        case .spike: "短期陡增"
+        }
+    }
+}
+
+struct CardioTrainingSnapshot: Equatable {
+    var acuteMinutes: Int
+    var baselineWeeklyMinutes: Int?
+    var loadRatio: Double?
+    var status: CardioLoadStatus?
+    var focus: String?
+    var cardioSessions: Int
+    var heartRateCoverage: Int
+    var heartRateRecoveryBPM: Double?
+}
+
+enum CardioTrainingAnalyzer {
+    static func analyze(
+        workouts: [WorkoutSummary],
+        endingAt endDate: Date,
+        heartRateRecoverySamples: [Double] = [],
+        calendar: Calendar = .current
+    ) -> CardioTrainingSnapshot {
+        let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: endDate)) ?? endDate
+        let acuteStart = calendar.date(byAdding: .day, value: -7, to: end) ?? end.addingTimeInterval(-7 * 86_400)
+        let baselineStart = calendar.date(byAdding: .day, value: -28, to: end) ?? end.addingTimeInterval(-28 * 86_400)
+        let cardio = workouts.filter {
+            $0.start >= baselineStart && $0.start < end && isCardio($0.activityName) && $0.end > $0.start
+        }
+        let acute = cardio.filter { $0.start >= acuteStart }
+        let baseline = cardio.filter { $0.start < acuteStart }
+        let acuteMinutes = Int(acute.reduce(0) { $0 + $1.end.timeIntervalSince($1.start) } / 60)
+        let baselineMinutes = Int(baseline.reduce(0) { $0 + $1.end.timeIntervalSince($1.start) } / 60)
+        let baselineWeekly = baseline.count >= 3 ? Int((Double(baselineMinutes) / 3).rounded()) : nil
+        let ratio: Double? = {
+            guard let baselineWeekly, baselineWeekly > 0, !acute.isEmpty else { return nil }
+            return Double(acuteMinutes) / Double(baselineWeekly)
+        }()
+        let status = ratio.map { value -> CardioLoadStatus in
+            switch value {
+            case ..<0.75: .easing
+            case 0.75..<1.15: .maintaining
+            case 1.15...1.5: .building
+            default: .spike
+            }
+        }
+        let focus = Dictionary(grouping: acute, by: { focusName($0.activityName) })
+            .mapValues { sessions in sessions.reduce(0) { $0 + $1.end.timeIntervalSince($1.start) } }
+            .max(by: { $0.value < $1.value })?.key
+        let sourcedRecovery = heartRateRecoverySamples.isEmpty
+            ? acute.compactMap(\.heartRateRecoveryOneMinuteBPM)
+            : heartRateRecoverySamples
+        let validRecovery = sourcedRecovery.filter { $0.isFinite && $0 >= 0 && $0 <= 120 }.sorted()
+        let recovery: Double? = validRecovery.count >= 3 ? median(validRecovery) : nil
+
+        return CardioTrainingSnapshot(
+            acuteMinutes: acuteMinutes,
+            baselineWeeklyMinutes: baselineWeekly,
+            loadRatio: ratio,
+            status: status,
+            focus: focus,
+            cardioSessions: acute.count,
+            heartRateCoverage: acute.filter { $0.averageHeartRate != nil }.count,
+            heartRateRecoveryBPM: recovery
+        )
+    }
+
+    private static func isCardio(_ name: String) -> Bool {
+        let value = name.lowercased()
+        let excluded = ["strength", "力量", "weight", "yoga", "瑜伽", "flexibility", "mobility"]
+        if excluded.contains(where: value.contains) { return false }
+        let included = [
+            "run", "跑", "walk", "步行", "hiking", "徒步", "cycle", "cycling", "骑行",
+            "swim", "游泳", "row", "划船", "elliptical", "椭圆", "cardio", "有氧",
+            "soccer", "football", "basketball", "dance", "舞蹈", "stair", "爬楼"
+        ]
+        return included.contains(where: value.contains)
+    }
+
+    private static func focusName(_ name: String) -> String {
+        let value = name.lowercased()
+        if value.contains("run") || value.contains("跑") { return "跑步" }
+        if value.contains("walk") || value.contains("步行") || value.contains("hiking") || value.contains("徒步") { return "步行 / 徒步" }
+        if value.contains("cycle") || value.contains("骑行") { return "骑行" }
+        if value.contains("swim") || value.contains("游泳") { return "游泳" }
+        if value.contains("row") || value.contains("划船") { return "划船" }
+        return "综合有氧"
+    }
+
+    private static func median(_ values: [Double]) -> Double {
+        let middle = values.count / 2
+        return values.count.isMultiple(of: 2)
+            ? (values[middle - 1] + values[middle]) / 2
+            : values[middle]
+    }
+}
+
+struct CardioStatusCard: View {
+    let snapshot: CardioTrainingSnapshot
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Label("有氧状态", systemImage: "heart.circle.fill")
+                    .font(VelaTheme.headline())
+                Spacer()
+                Text("最近 7 天")
+                    .font(VelaTheme.caption2())
+                    .foregroundStyle(VelaTheme.muted)
+            }
+
+            HStack(spacing: 8) {
+                cardioMetric("Cardio Load", snapshot.cardioSessions == 0 ? "—" : "\(snapshot.acuteMinutes) 分", detail: baselineDetail)
+                cardioMetric("Cardio Status", snapshot.status?.title ?? "校准中", detail: statusDetail)
+            }
+            HStack(spacing: 8) {
+                cardioMetric("Cardio Focus", snapshot.focus ?? "—", detail: snapshot.focus == nil ? "暂无有氧训练" : "按训练时长最多")
+                cardioMetric("心率恢复", snapshot.heartRateRecoveryBPM.map { "\(Int($0.rounded())) bpm" } ?? "—", detail: recoveryDetail)
+            }
+
+            if snapshot.loadRatio.map({ $0 > 1.5 }) == true {
+                Label("短期有氧时长明显高于前三周基线；结合恢复与身体感受决定是否降量。", systemImage: "exclamationmark.triangle.fill")
+                    .font(VelaTheme.caption2())
+                    .foregroundStyle(VelaTheme.warn)
+            }
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(VelaTheme.cardBg))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+    }
+
+    private var baselineDetail: String {
+        guard let baseline = snapshot.baselineWeeklyMinutes else { return "需前三周至少 3 次" }
+        return "前三周均值 \(baseline) 分/周"
+    }
+
+    private var statusDetail: String {
+        guard let ratio = snapshot.loadRatio else { return "基线不足，不作判断" }
+        return "7 天 / 基线 \(String(format: "%.2f", ratio))×"
+    }
+
+    private var recoveryDetail: String {
+        snapshot.heartRateRecoveryBPM == nil
+            ? "需至少 3 次训练后心率下降样本"
+            : "训练后 1 分钟下降中位数"
+    }
+
+    private func cardioMetric(_ title: String, _ value: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(VelaTheme.caption2().weight(.semibold))
+                .foregroundStyle(VelaTheme.muted)
+            Text(value)
+                .font(VelaTheme.subheadline().weight(.bold).monospacedDigit())
+                .foregroundStyle(VelaTheme.fg)
+            Text(detail)
+                .font(.system(size: 9))
+                .foregroundStyle(VelaTheme.muted)
+                .lineLimit(2)
+        }
+        .padding(11)
+        .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
+        .background(VelaTheme.secondaryGroupedBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+}
+
 struct TrainingStatsSection: View {
     @Binding var selectedAnalyticsTab: Int
     let targetComparison: TrainingTargetComparison

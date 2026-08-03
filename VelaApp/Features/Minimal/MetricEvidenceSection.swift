@@ -28,35 +28,21 @@ struct MetricEvidenceSection: View {
 
             VStack(spacing: 0) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                    HStack(alignment: .center, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(item.title)
-                                .font(VelaTheme.subheadline().weight(.semibold))
-                                .foregroundStyle(VelaTheme.fg)
-                            Text(item.detail)
-                                .font(VelaTheme.caption1())
-                                .foregroundStyle(VelaTheme.muted)
-                                .lineLimit(2)
-                        }
-
-                        Spacer(minLength: 8)
-
-                        Text(item.value)
-                            .font(VelaTheme.headline().monospacedDigit())
-                            .foregroundStyle(VelaTheme.fg)
-                            .lineLimit(1)
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
+                    VelaEvidenceRow(
+                        title: item.title,
+                        detail: item.detail,
+                        value: item.value,
+                        tint: isSleep ? VelaTheme.sleepColor : VelaTheme.accent
+                    )
 
                     if index < items.count - 1 {
-                        Divider().padding(.leading, 14)
+                        Divider().padding(.leading, 58)
                     }
                 }
             }
-            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
                     .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
             )
         }

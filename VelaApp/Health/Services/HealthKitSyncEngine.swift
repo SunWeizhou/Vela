@@ -1,16 +1,115 @@
 import Foundation
 import SwiftData
 
+struct HealthSyncCursorState: Codable, Equatable {
+    var lastSuccessfulSyncAt: Date?
+    var pendingDirtyDayIdentifiers: Set<String> = []
+}
+
+struct HealthSyncPlan: Equatable {
+    var rawRefreshDays: [Date]
+    var scoreRecomputeDays: [Date]
+}
+
+struct HealthSyncPlanner {
+    static func plan(
+        requestedDays: Int,
+        endingAt endDate: Date,
+        cachedDays: Set<Date>,
+        state: HealthSyncCursorState,
+        forceRefreshRecentDays: Int,
+        calendar: Calendar
+    ) -> HealthSyncPlan {
+        let endDay = calendar.startOfDay(for: endDate)
+        let totalDays = max(requestedDays, 1) + 42
+        let allDays = (0..<totalDays).compactMap {
+            calendar.date(byAdding: .day, value: -$0, to: endDay).map(calendar.startOfDay(for:))
+        }
+        let recentCutoff = calendar.date(
+            byAdding: .day,
+            value: -max(0, forceRefreshRecentDays - 1),
+            to: endDay
+        ) ?? endDay
+        let cursorDay = state.lastSuccessfulSyncAt.map(calendar.startOfDay(for:))
+
+        let rawDays = allDays.filter { day in
+            let identifier = DailyHealthSummaryRecord.dayIdentifier(for: day, calendar: calendar)
+            return !cachedDays.contains(day)
+                || day >= recentCutoff
+                || state.pendingDirtyDayIdentifiers.contains(identifier)
+                || cursorDay.map { day >= $0 } == true
+        }
+        .sorted()
+
+        let targetStart = calendar.date(
+            byAdding: .day,
+            value: -max(0, requestedDays - 1),
+            to: endDay
+        ) ?? endDay
+        let scoreDays: [Date]
+        if state.lastSuccessfulSyncAt == nil {
+            scoreDays = allDays.filter { $0 >= targetStart }.sorted()
+        } else if let earliestChanged = rawDays.first {
+            scoreDays = allDays.filter { $0 >= min(earliestChanged, targetStart) }.sorted()
+        } else {
+            scoreDays = []
+        }
+
+        return HealthSyncPlan(rawRefreshDays: rawDays, scoreRecomputeDays: scoreDays)
+    }
+}
+
+final class HealthSyncCursorStore {
+    private let defaults: UserDefaults
+    private let key = "vela.healthSync.cursor.v1"
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    func load() -> HealthSyncCursorState {
+        guard let data = defaults.data(forKey: key),
+              let state = try? JSONDecoder().decode(HealthSyncCursorState.self, from: data) else {
+            return HealthSyncCursorState()
+        }
+        return state
+    }
+
+    func save(_ state: HealthSyncCursorState) {
+        guard let data = try? JSONEncoder().encode(state) else { return }
+        defaults.set(data, forKey: key)
+    }
+
+    func markDirty(_ date: Date, calendar: Calendar = .current) {
+        var state = load()
+        state.pendingDirtyDayIdentifiers.insert(
+            DailyHealthSummaryRecord.dayIdentifier(for: date, calendar: calendar)
+        )
+        save(state)
+    }
+}
+
 @MainActor
 final class HealthKitSyncEngine {
     private let queryService: HealthQueryService
     private let modelContext: ModelContext
     private let calendar: Calendar
+    private let cursorStore: HealthSyncCursorStore
 
-    init(queryService: HealthQueryService, modelContext: ModelContext, calendar: Calendar = .current) {
+    init(
+        queryService: HealthQueryService,
+        modelContext: ModelContext,
+        calendar: Calendar = .current,
+        cursorStore: HealthSyncCursorStore = HealthSyncCursorStore()
+    ) {
         self.queryService = queryService
         self.modelContext = modelContext
         self.calendar = calendar
+        self.cursorStore = cursorStore
+    }
+
+    func markDirty(_ date: Date) {
+        cursorStore.markDirty(date, calendar: calendar)
     }
 
     /// Backfills and calculates metrics for the past N calendar days.
@@ -37,17 +136,18 @@ final class HealthKitSyncEngine {
         let cachedSnapshots = (try? snapshotRepo.fetchSnapshots(days: totalDaysToSync, endingAt: endDate)) ?? []
         let cachedDays = Set(cachedSnapshots.map { calendar.startOfDay(for: $0.date) })
         let refreshWindow = forceRefreshRecentDays ?? min(days, 3)
-        let recentRefreshCutoff = calendar.date(
-            byAdding: .day,
-            value: -max(0, refreshWindow - 1),
-            to: calendar.startOfDay(for: endDate)
-        ) ?? calendar.startOfDay(for: endDate)
+        let cursorState = cursorStore.load()
+        let plan = HealthSyncPlanner.plan(
+            requestedDays: days,
+            endingAt: endDate,
+            cachedDays: cachedDays,
+            state: cursorState,
+            forceRefreshRecentDays: refreshWindow,
+            calendar: calendar
+        )
+        var failedDayIdentifiers = Set<String>()
 
-        for i in (0..<totalDaysToSync).reversed() {
-            guard let date = calendar.date(byAdding: .day, value: -i, to: endDate) else { continue }
-            let dayStart = calendar.startOfDay(for: date)
-            guard dayStart >= recentRefreshCutoff || !cachedDays.contains(dayStart) else { continue }
-            
+        for dayStart in plan.rawRefreshDays {
             // Build raw daily snapshot from HealthKit and local workouts
             let snapshot = await DailySnapshotBuilder.buildSnapshot(
                 for: dayStart,
@@ -66,6 +166,9 @@ final class HealthKitSyncEngine {
                 )
                 try modelContext.save()
             } catch {
+                failedDayIdentifiers.insert(
+                    DailyHealthSummaryRecord.dayIdentifier(for: dayStart, calendar: calendar)
+                )
                 PipelineDiagnosticsLogger.log(
                     modelContext: modelContext,
                     stage: "HealthKitSyncEngine.syncPastDays.saveRawSnapshot",
@@ -77,15 +180,15 @@ final class HealthKitSyncEngine {
         }
 
         // Pass 2: Calculate scores day-by-day, pulling correct rolling raw baselines
-        for i in (0..<days).reversed() {
-            guard let date = calendar.date(byAdding: .day, value: -i, to: endDate) else { continue }
-            let dayStart = calendar.startOfDay(for: date)
-            
+        for dayStart in plan.scoreRecomputeDays {
             // Load this day's snapshot from SwiftData
             let existingSnapshots: [DailyHealthSnapshot]
             do {
                 existingSnapshots = try snapshotRepo.fetchSnapshots(days: 1, endingAt: dayStart)
             } catch {
+                failedDayIdentifiers.insert(
+                    DailyHealthSummaryRecord.dayIdentifier(for: dayStart, calendar: calendar)
+                )
                 PipelineDiagnosticsLogger.log(
                     modelContext: modelContext,
                     stage: "HealthKitSyncEngine.syncPastDays.fetchExistingSnapshot",
@@ -123,7 +226,13 @@ final class HealthKitSyncEngine {
             snapshot = metrics.applying(to: snapshot)
 
             do {
-                try snapshotRepo.saveDailySnapshot(snapshot)
+                try snapshotRepo.saveDailySnapshot(
+                    snapshot,
+                    scoreEvidence: DailyScoreEvidenceEnvelope(
+                        evidence: metrics,
+                        persistedAt: endDate
+                    )
+                )
                 try WorkoutAggregationService.shared.aggregateDay(
                     date: dayStart,
                     modelContext: modelContext,
@@ -148,6 +257,16 @@ final class HealthKitSyncEngine {
             isSuccess: true,
             summary: "Successfully synced and computed metrics for past \(days) days."
         )
+        var completedState = cursorState
+        completedState.lastSuccessfulSyncAt = endDate
+        let processedIdentifiers = Set(plan.rawRefreshDays.map {
+            DailyHealthSummaryRecord.dayIdentifier(for: $0, calendar: calendar)
+        })
+        completedState.pendingDirtyDayIdentifiers.subtract(
+            processedIdentifiers.subtracting(failedDayIdentifiers)
+        )
+        completedState.pendingDirtyDayIdentifiers.formUnion(failedDayIdentifiers)
+        cursorStore.save(completedState)
         try? syncTrainingIntelligenceInsights(endingAt: endDate)
 
         // DailySummaryUseCase owns plan derivation after this method returns.
@@ -179,6 +298,15 @@ final class HealthKitSyncEngine {
             endingAt: endDate,
             calendar: calendar
         )
+        _ = try service.persistMonthlyBodyReportIfNeeded(
+            modelContext: modelContext,
+            snapshots: snapshots,
+            foodLogs: foodLogs,
+            journalEntries: journalEntries,
+            strengthWorkouts: strengthWorkouts,
+            endingAt: endDate,
+            calendar: calendar
+        )
         _ = try service.proposeStableTrainingResponses(
             modelContext: modelContext,
             responses: responses
@@ -195,8 +323,7 @@ final class DailySnapshotBuilder {
         modelContext: ModelContext? = nil
     ) async -> DailyHealthSnapshot {
         let dayStart = calendar.startOfDay(for: date)
-        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
-        let range = DateRangeQuery(start: dayStart, end: dayEnd)
+        let range = DateRangeQuery.singleDay(dayStart, calendar: calendar)
 
         // Query components independently with fail-safes
         let sleep = try? await queryService.sleepSummary(in: range)
@@ -288,230 +415,5 @@ final class DailySnapshotBuilder {
         snapshot.wristTemperature = extended.bodyTemperature
 
         return snapshot
-    }
-}
-
-struct ScoredMetricsPipelineResult {
-    var sleepScore: MetricResult
-    var recovery: MetricResult
-    var strain: MetricResult
-    var stress: MetricResult
-    var energy: MetricResult
-
-    func applying(to snapshot: DailyHealthSnapshot) -> DailyHealthSnapshot {
-        var result = snapshot
-        result.sleepScore = sleepScore.value
-        result.recoveryScore = recovery.value
-        result.strainScore = strain.value
-        result.stressIndex = stress.value
-        result.morningEnergy = energy.components["morningEnergy"]
-        result.currentEnergy = energy.value
-        result.energyBank = energy.value
-        result.dailyLoad = strain.components["daily_load"]
-        result.workoutLoad = strain.components["workout_load"]
-        result.activityLoad = strain.components["activity_load"]
-        result.trainingLoadRatio = strain.components["training_load_ratio"]
-        result.atl = energy.components["atl"]
-        result.ctl = energy.components["ctl"]
-        result.tsb = energy.components["tsb"]
-        result.acwr = energy.components["acwr"]
-        return result
-    }
-}
-
-struct DailyHealthComputationProfile: Sendable {
-    let sleepTargetMinutes: Double
-    let maxHeartRate: Double?
-    let biologicalSex: String?
-
-    static func current() -> DailyHealthComputationProfile {
-        let age = UserProfileSettings.age() ?? WikiFileService.getAgeFromWiki()
-        return DailyHealthComputationProfile(
-            sleepTargetMinutes: SleepTargetSettings.targetMinutes(),
-            maxHeartRate: UserProfileSettings.maxHeartRate()
-                ?? WikiFileService.getMaxHeartRateFromWiki()
-                ?? age.map(UserProfileSettings.inferredMaxHeartRate),
-            biologicalSex: UserProfileSettings.biologicalSex()
-        )
-    }
-}
-
-final class DailyHealthComputation {
-    private let calendar: Calendar
-    private let now: Date
-    private let profile: DailyHealthComputationProfile
-
-    init(
-        calendar: Calendar = .current,
-        now: Date = Date(),
-        profile: DailyHealthComputationProfile = .current()
-    ) {
-        self.calendar = calendar
-        self.now = now
-        self.profile = profile
-    }
-
-    private func calculateMedian(_ values: [Double]) -> Double? {
-        guard !values.isEmpty else { return nil }
-        let sorted = values.sorted()
-        if sorted.count % 2 == 1 {
-            return sorted[sorted.count / 2]
-        } else {
-            return (sorted[sorted.count / 2 - 1] + sorted[sorted.count / 2]) / 2.0
-        }
-    }
-
-    private func wristTemperatureDelta(
-        current: Double?,
-        history: [DailyHealthSnapshot]
-    ) -> Double? {
-        guard let current else { return nil }
-        let samples = history.compactMap(\.wristTemperature)
-        guard samples.count >= 5, let baseline = calculateMedian(samples) else { return nil }
-        return current - baseline
-    }
-
-    private func calculateStandardDeviation(_ values: [Double]) -> Double? {
-        guard values.count >= 2 else { return nil }
-        let mean = values.reduce(0.0, +) / Double(values.count)
-        let sumSquaredDiffs = values.map { pow($0 - mean, 2) }.reduce(0.0, +)
-        let variance = sumSquaredDiffs / Double(values.count - 1)
-        let sd = sqrt(variance)
-        return sd > 0 ? sd : nil
-    }
-
-    func compute(
-        for snapshot: DailyHealthSnapshot,
-        history: [DailyHealthSnapshot]
-    ) -> ScoredMetricsPipelineResult {
-        // 1. Sleep Scoring Engine
-        let pastBedtimes = history.compactMap(\.bedtime)
-        let previousDay = calendar.date(byAdding: .day, value: -1, to: snapshot.date) ?? snapshot.date
-        let todayBedtime = snapshot.bedtime
-            ?? calendar.date(bySettingHour: 23, minute: 30, second: 0, of: previousDay)
-        
-        let sleepInput = SleepScoreInput(
-            totalSleepMinutes: snapshot.sleepHours.map { $0 * 60.0 },
-            sleepTargetMinutes: profile.sleepTargetMinutes,
-            todayBedtime: todayBedtime,
-            recentBedtimes: pastBedtimes,
-            awakeMinutes: snapshot.awakeMinutes,
-            awakeEpisodeCount: snapshot.awakeEpisodeCount,
-            remMinutes: snapshot.remSleepMinutes,
-            deepMinutes: snapshot.deepSleepMinutes
-        )
-        let sleepScore = SleepScoreEngine().calculate(from: sleepInput)
-
-        // 2. Recovery Scoring Engine
-        let hrvHistory = history.compactMap(\.hrvAverage)
-        let rhrHistory = history.compactMap(\.restingHeartRate)
-        let respHistory = history.compactMap(\.respiratoryRate)
-        let temperatureDelta = wristTemperatureDelta(current: snapshot.wristTemperature, history: history)
-        
-        let yesterday = calendar.date(byAdding: .day, value: -1, to: snapshot.date) ?? snapshot.date
-        let yesterdayStrain = history.first(where: { calendar.isDate($0.date, inSameDayAs: yesterday) })?.strainScore
-        
-        let recoveryInput = RecoveryScoreInput(
-            hrvToday: snapshot.hrvAverage,
-            hrvBaseline: calculateMedian(hrvHistory),
-            hrvHistory: hrvHistory,
-            restingHeartRateToday: snapshot.restingHeartRate,
-            restingHeartRateBaseline: calculateMedian(rhrHistory),
-            rhrHistory: rhrHistory,
-            sleepScoreLastNight: sleepScore.value,
-            strainScoreYesterday: yesterdayStrain,
-            respiratoryRateToday: snapshot.respiratoryRate,
-            respiratoryRateBaseline: calculateMedian(respHistory),
-            respiratoryRateHistory: respHistory,
-            bodyTempDelta: temperatureDelta,
-            SpO2: snapshot.oxygenSaturation
-        )
-        let recoveryScore = RecoveryScoreEngine().calculate(from: recoveryInput)
-
-        // 3. Strain Scoring Engine
-        let dailyLoadsHistory = history.compactMap(\.dailyLoad)
-        var workouts: [WorkoutInput] = []
-        for w in snapshot.workouts {
-            workouts.append(WorkoutInput(
-                id: w.id,
-                durationMinutes: w.end.timeIntervalSince(w.start) / 60.0,
-                averageHeartRate: w.averageHeartRate,
-                rpe: w.rpe
-            ))
-        }
-
-        let strainInput = StrainScoreInput(
-            workouts: workouts,
-            activeEnergyToday: snapshot.activeCalories,
-            exerciseMinutesToday: snapshot.activeMinutes ?? snapshot.workoutDuration,
-            stepCount: snapshot.steps,
-            restingHR: snapshot.restingHeartRate ?? 0,
-            maxHR: profile.maxHeartRate ?? 0,
-            biologicalSex: profile.biologicalSex,
-            last28DaysDailyLoads: dailyLoadsHistory,
-            recoveryScore: recoveryScore.value
-        )
-        let strainScore = StrainScoreEngine().calculate(from: strainInput)
-
-        // 4. Physiological Stress Index Engine
-        let quietHRSD = calculateStandardDeviation(rhrHistory)
-        let hrvSD = calculateStandardDeviation(hrvHistory)
-        let respRateSD = calculateStandardDeviation(respHistory)
-
-        let stressInput = StressIndexInput(
-            quietHRToday: snapshot.restingHeartRate,
-            quietHRBaseline: calculateMedian(rhrHistory),
-            quietHRSD: quietHRSD,
-            hrvToday: snapshot.hrvAverage,
-            hrvBaseline: calculateMedian(hrvHistory),
-            hrvSD: hrvSD,
-            respRateToday: snapshot.respiratoryRate,
-            respRateBaseline: calculateMedian(respHistory),
-            respRateSD: respRateSD,
-            bodyTempDelta: temperatureDelta,
-            sleepScoreLastNight: sleepScore.value,
-            strainScoreToday: strainScore.value,
-            isWithinWorkoutWindow: false
-        )
-        let stressScore = StressIndexEngine().calculate(from: stressInput)
-
-        // 5. Energy Bank Scoring Engine
-        let isToday = calendar.isDate(snapshot.date, inSameDayAs: now)
-        let wake = snapshot.wakeTime ?? calendar.date(bySettingHour: 7, minute: 30, second: 0, of: snapshot.date) ?? snapshot.date
-        let hoursSinceWake: Double
-        if isToday {
-            hoursSinceWake = max(0.0, min(24.0, now.timeIntervalSince(wake) / 3600.0))
-        } else {
-            hoursSinceWake = 16.0
-        }
-
-        let energyInput = EnergyBankInput(
-            recoveryScore: recoveryScore.value,
-            sleepScore: sleepScore.value,
-            strainScore: strainScore.value,
-            stressIndex: stressScore.value,
-            hrvToday: snapshot.hrvAverage,
-            hrvBaseline: calculateMedian(hrvHistory),
-            rhrToday: snapshot.restingHeartRate,
-            rhrBaseline: calculateMedian(rhrHistory),
-            sleepHours: snapshot.sleepHours,
-            strainHistory: dailyLoadsHistory,
-            bodyTempDelta: temperatureDelta,
-            hoursSinceWake: hoursSinceWake,
-            respiratoryRateZ: nil,
-            SpO2: snapshot.oxygenSaturation,
-            mindfulMinutes: nil,
-            napMinutes: nil,
-            trainingLoadStatus: strainScore.trainingLoadStatus
-        )
-        let energyScore = EnergyBankEngine().calculate(from: energyInput)
-
-        return ScoredMetricsPipelineResult(
-            sleepScore: sleepScore,
-            recovery: recoveryScore,
-            strain: strainScore,
-            stress: stressScore,
-            energy: energyScore
-        )
     }
 }

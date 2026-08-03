@@ -301,6 +301,7 @@ enum RecoveryDetailRange: String, CaseIterable, Identifiable {
 struct DateNavigationBar: View {
     @EnvironmentObject var viewModel: DashboardViewModel
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showDatePicker = false
     @State private var dragOffset: CGFloat = 0
 
@@ -315,7 +316,7 @@ struct DateNavigationBar: View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                         viewModel.goToPreviousDay()
                     }
                     onDateChanged()
@@ -355,7 +356,7 @@ struct DateNavigationBar: View {
                 Spacer()
 
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                         viewModel.goToNextDay()
                     }
                     onDateChanged()
@@ -374,7 +375,7 @@ struct DateNavigationBar: View {
 
             if !viewModel.isToday {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                         viewModel.goToToday()
                     }
                     onDateChanged()
@@ -395,13 +396,13 @@ struct DateNavigationBar: View {
                 .onEnded { value in
                     let threshold: CGFloat = 50
                     if value.translation.width > threshold {
-                        withAnimation(.easeInOut(duration: 0.2)) {
+                        withAnimation(reduceMotion ? .easeOut(duration: 0.12) : VelaTheme.momentumSpring) {
                             viewModel.goToPreviousDay()
                         }
                         onDateChanged()
                     } else if value.translation.width < -threshold {
                         if !viewModel.isToday {
-                            withAnimation(.easeInOut(duration: 0.2)) {
+                            withAnimation(reduceMotion ? .easeOut(duration: 0.12) : VelaTheme.momentumSpring) {
                                 viewModel.goToNextDay()
                             }
                             onDateChanged()

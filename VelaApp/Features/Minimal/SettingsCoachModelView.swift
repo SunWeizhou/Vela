@@ -5,6 +5,16 @@ import Charts
 struct AIModelSettingsView: View {
     @AppStorage("vela_coach_text_model") private var textModel = "DeepSeek V4 Pro"
     @AppStorage("vela_coach_vision_model") private var visionModel = "Kimi 2.6"
+    @AppStorage(CoachReasoningMode.storageKey) private var reasoningMode = CoachReasoningMode.adaptive.rawValue
+    @AppStorage(CoachOutboundDataPolicy.consentVersionKey) private var outboundConsentVersion = 0
+    @AppStorage(CoachOutboundDataPolicy.healthKey) private var outboundHealth = false
+    @AppStorage(CoachOutboundDataPolicy.trainingKey) private var outboundTraining = false
+    @AppStorage(CoachOutboundDataPolicy.nutritionKey) private var outboundNutrition = false
+    @AppStorage(CoachOutboundDataPolicy.journalKey) private var outboundJournal = false
+    @AppStorage(CoachOutboundDataPolicy.wikiKey) private var outboundWiki = false
+    @AppStorage(CoachOutboundDataPolicy.reportsKey) private var outboundReports = false
+    @AppStorage(CoachOutboundDataPolicy.conversationHistoryKey) private var outboundConversationHistory = false
+    @AppStorage(CoachOutboundDataPolicy.webSearchKey) private var outboundWebSearch = false
     @State private var deepseekKey = ""
     @State private var kimiKey = ""
     @State private var isTesting = false
@@ -37,6 +47,15 @@ struct AIModelSettingsView: View {
             }
             
             Section(header: Text("大语言模型选择")) {
+                Picker("响应模式", selection: $reasoningMode) {
+                    ForEach(CoachReasoningMode.allCases, id: \.rawValue) { mode in
+                        Text(mode.displayName).tag(mode.rawValue)
+                    }
+                }
+                Text((CoachReasoningMode(rawValue: reasoningMode) ?? .adaptive).detail)
+                    .font(.caption)
+                    .foregroundStyle(VelaTheme.muted)
+
                 Picker("对话文本模型", selection: $textModel) {
                     ForEach(textModels, id: \.self) { m in
                         Text(m).tag(m)
@@ -73,6 +92,32 @@ struct AIModelSettingsView: View {
                 }
             }
             .font(.footnote)
+
+            Section(header: Text("DeepSeek 数据授权")) {
+                if outboundConsentVersion >= CoachOutboundDataPolicy.currentConsentVersion {
+                    Toggle("健康指标与化验", isOn: $outboundHealth)
+                    Toggle("训练记录与计划", isOn: $outboundTraining)
+                    Toggle("营养记录", isOn: $outboundNutrition)
+                    Toggle("日志与习惯", isOn: $outboundJournal)
+                    Toggle("个人档案与长期记忆", isOn: $outboundWiki)
+                    Toggle("历史 AI 报告", isOn: $outboundReports)
+                    Toggle("当前对话历史", isOn: $outboundConversationHistory)
+                    Toggle("Bing 联网搜索关键词", isOn: $outboundWebSearch)
+
+                    Text("关闭的类别会在本机组装上下文时移除，同时禁用对应的 AI 读取工具。你的手动问题文本仍会发送。")
+                        .font(.caption)
+                        .foregroundStyle(VelaTheme.muted)
+
+                    Button("撤销全部联网数据授权", role: .destructive) {
+                        CoachOutboundDataPolicy.revoke()
+                        outboundConsentVersion = 0
+                    }
+                } else {
+                    Label("尚未授权。首次发送联网 Coach 消息时，Vela 会逐项询问。", systemImage: "lock.shield")
+                        .font(.footnote)
+                        .foregroundStyle(VelaTheme.muted)
+                }
+            }
             
             Section(header: Text("连接测试与保存")) {
                 Button {
@@ -722,9 +767,20 @@ struct CoachPersonalitySettingsView: View {
 struct AgentAutomationSettingsView: View {
     @StateObject private var agentConfig = AutoAgentConfig.shared
     @AppStorage("vela_app_language") private var languageRaw = AppLanguage.simplifiedChinese.rawValue
+    @State private var oneTimeCheckInDate = Date().addingTimeInterval(3600)
+    @State private var oneTimeStatus = ""
     
     private var isChinese: Bool {
         AppLanguage(rawValue: languageRaw)?.isChinese ?? true
+    }
+
+    private var checkInSignature: String {
+        [
+            agentConfig.hourlyCheckins ? "1" : "0", "\(agentConfig.hourlyCheckinMinute)",
+            agentConfig.progressCheckins ? "1" : "0", "\(agentConfig.progressCheckinHour)",
+            agentConfig.weeklySummary ? "1" : "0", "\(agentConfig.weeklySummaryDay)", "\(agentConfig.weeklySummaryHour)",
+            agentConfig.monthlySummary ? "1" : "0", "\(agentConfig.monthlySummaryDay)", "\(agentConfig.monthlySummaryHour)",
+        ].joined(separator: ":")
     }
     
     var body: some View {
@@ -792,7 +848,68 @@ struct AgentAutomationSettingsView: View {
                     .padding(.vertical, 6)
                 }
             }
+
+            Section(header: Text(isChinese ? "本机 Check-ins" : "On-device check-ins")) {
+                Text(isChinese
+                     ? "这些提醒完全由 iPhone 本机安排，不会发送健康数据，也不保证精确到分钟。小时提醒默认关闭。"
+                     : "These reminders are scheduled on-device and send no health data. Delivery is not guaranteed to the exact minute. Hourly reminders default off.")
+                    .font(.caption)
+                    .foregroundStyle(VelaTheme.muted)
+
+                DatePicker(isChinese ? "一次性" : "One-time", selection: $oneTimeCheckInDate, in: Date()..., displayedComponents: [.date, .hourAndMinute])
+                Button(isChinese ? "安排一次性 Check-in" : "Schedule one-time check-in") {
+                    Task {
+                        let success = await CoachCheckInScheduler.scheduleOneTime(at: oneTimeCheckInDate)
+                        oneTimeStatus = success
+                            ? (isChinese ? "已安排" : "Scheduled")
+                            : (isChinese ? "未安排：请检查通知权限" : "Not scheduled: check notification permission")
+                    }
+                }
+                if !oneTimeStatus.isEmpty {
+                    Text(oneTimeStatus).font(.caption).foregroundStyle(VelaTheme.muted)
+                }
+
+                Toggle(isChinese ? "每小时提醒" : "Hourly", isOn: $agentConfig.hourlyCheckins)
+                if agentConfig.hourlyCheckins {
+                    Picker(isChinese ? "每小时的分钟" : "Minute of each hour", selection: $agentConfig.hourlyCheckinMinute) {
+                        ForEach([0, 15, 30, 45], id: \.self) { Text(":\(String(format: "%02d", $0))").tag($0) }
+                    }
+                }
+
+                Toggle(isChinese ? "每日回顾" : "Daily", isOn: $agentConfig.progressCheckins)
+                if agentConfig.progressCheckins {
+                    Picker(isChinese ? "每日时间" : "Daily time", selection: $agentConfig.progressCheckinHour) {
+                        ForEach(0..<24, id: \.self) { Text("\($0):00").tag($0) }
+                    }
+                }
+
+                Toggle(isChinese ? "每周回顾" : "Weekly", isOn: $agentConfig.weeklySummary)
+                if agentConfig.weeklySummary {
+                    Picker(isChinese ? "星期" : "Weekday", selection: $agentConfig.weeklySummaryDay) {
+                        ForEach(1...7, id: \.self) { Text(weekdayLabel($0)).tag($0) }
+                    }
+                    Picker(isChinese ? "时间" : "Time", selection: $agentConfig.weeklySummaryHour) {
+                        ForEach(0..<24, id: \.self) { Text("\($0):00").tag($0) }
+                    }
+                }
+
+                Toggle(isChinese ? "每月回顾" : "Monthly", isOn: $agentConfig.monthlySummary)
+                if agentConfig.monthlySummary {
+                    Stepper(isChinese ? "每月第 \(agentConfig.monthlySummaryDay) 天" : "Day \(agentConfig.monthlySummaryDay)", value: $agentConfig.monthlySummaryDay, in: 1...28)
+                    Picker(isChinese ? "时间" : "Time", selection: $agentConfig.monthlySummaryHour) {
+                        ForEach(0..<24, id: \.self) { Text("\($0):00").tag($0) }
+                    }
+                }
+            }
         }
         .navigationTitle("Agent 自动化技能")
+        .onChange(of: checkInSignature) { _, _ in
+            Task { await CoachCheckInScheduler.reschedule(config: agentConfig) }
+        }
+    }
+
+    private func weekdayLabel(_ value: Int) -> String {
+        let symbols = Calendar.current.shortWeekdaySymbols
+        return symbols.indices.contains(value - 1) ? symbols[value - 1] : "\(value)"
     }
 }

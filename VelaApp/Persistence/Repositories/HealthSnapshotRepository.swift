@@ -18,6 +18,76 @@ final class HealthSnapshotRepository {
         try SwiftDataDailyHealthSummaryRepository(modelContext: modelContext).upsert(snapshot, calendar: calendar)
     }
 
+    func saveDailySnapshot(
+        _ snapshot: DailyHealthSnapshot,
+        scoreEvidence: DailyScoreEvidenceEnvelope
+    ) throws {
+        try SwiftDataDailyHealthSummaryRepository(modelContext: modelContext).upsert(
+            snapshot,
+            scoreEvidence: scoreEvidence,
+            calendar: calendar
+        )
+    }
+
+    func reconcileIntradayBuckets(
+        _ buckets: [IntradaySignalBucket],
+        signal: HealthSignal,
+        on date: Date,
+        sourceRevision: String = "healthKit.v1"
+    ) throws {
+        let dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: date, calendar: calendar)
+        let signalRawValue = signal.rawValue
+        let descriptor = FetchDescriptor<IntradaySignalBucketRecord>(
+            predicate: #Predicate {
+                $0.dayIdentifier == dayIdentifier
+                    && $0.signalRawValue == signalRawValue
+            }
+        )
+        let existing = try modelContext.fetch(descriptor)
+        let incomingByID = Dictionary(uniqueKeysWithValues: buckets.map {
+            let record = IntradaySignalBucketRecord(
+                bucket: $0,
+                sourceRevision: sourceRevision,
+                calendar: calendar
+            )
+            return (record.id, (record, $0))
+        })
+
+        for record in existing {
+            guard let incoming = incomingByID[record.id] else {
+                modelContext.delete(record)
+                continue
+            }
+            record.apply(
+                bucket: incoming.1,
+                sourceRevision: sourceRevision
+            )
+        }
+
+        let existingIDs = Set(existing.map(\.id))
+        for (id, incoming) in incomingByID where !existingIDs.contains(id) {
+            modelContext.insert(incoming.0)
+        }
+        try modelContext.save()
+    }
+
+    func fetchIntradayBuckets(
+        signal: HealthSignal,
+        in range: DateRangeQuery
+    ) throws -> [IntradaySignalBucketRecord] {
+        let signalRawValue = signal.rawValue
+        let start = range.start
+        let end = range.end
+        return try modelContext.fetch(FetchDescriptor<IntradaySignalBucketRecord>(
+            predicate: #Predicate {
+                $0.signalRawValue == signalRawValue
+                    && $0.bucketStart >= start
+                    && $0.bucketStart < end
+            },
+            sortBy: [SortDescriptor(\.bucketStart)]
+        ))
+    }
+
     /// Fetch snapshots for the last N days (including today).
     func fetchSnapshots(days: Int, endingAt endDate: Date = Date()) throws -> [DailyHealthSnapshot] {
         let safeDays = max(days, 1)

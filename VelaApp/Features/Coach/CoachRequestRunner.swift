@@ -10,17 +10,21 @@ final class CoachRequestRunner {
         dashboard: DashboardSummary,
         modelContext: ModelContext,
         services: VelaServices?,
+        isGhostMode: Bool = false,
         onStreamDelta: @MainActor @escaping (String) -> Void
     ) async throws -> AgentLoopResult {
-        let baseProvider = services?.deepSeekProvider(apiKey: apiKey) ?? DeepSeekProvider(apiKey: apiKey)
+        let lang = AppLanguage.stored
+        let policy = ResponseLengthPolicy.forQuery(userText, lang: lang)
+        let selectedModel = CoachReasoningMode.stored.model(for: policy).apiIdentifier
+        let baseProvider = services?.deepSeekProvider(apiKey: apiKey, model: selectedModel)
+            ?? DeepSeekProvider(apiKey: apiKey, model: selectedModel)
         let provider = RetryingAgentChatProvider(base: baseProvider)
         let toolRegistry = ToolFactory.makeRegistry(
             modelContext: modelContext,
-            dashboard: dashboard
+            dashboard: dashboard,
+            readOnly: isGhostMode,
+            outboundPolicy: CoachOutboundDataPolicy.stored
         )
-        
-        let lang = AppLanguage.stored
-        let policy = ResponseLengthPolicy.forQuery(userText, lang: lang)
         
         if policy == .casual {
             var fullResponse = ""

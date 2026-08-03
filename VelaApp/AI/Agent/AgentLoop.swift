@@ -222,6 +222,21 @@ struct AgentLoop {
                 for tc in toolCalls {
                     toolCallBudget -= 1
 
+                    guard toolRegistry.contains(name: tc.name) else {
+                        let blocked = "[BLOCKED: Tool '\(tc.name)' is not in this session's allowlist.]"
+                        agentMessages.append(ChatMessage(
+                            role: .tool,
+                            content: blocked,
+                            toolCallId: tc.id
+                        ))
+                        executedTools.append(ExecutedTool(
+                            name: tc.name,
+                            arguments: tc.arguments,
+                            result: blocked
+                        ))
+                        continue
+                    }
+
                     let toolRisk = toolRegistry.risk(for: tc.name)
                     if (toolRisk == .write || toolRisk == .destructive) && executedToolCallIds.contains(tc.id) {
                         agentMessages.append(ChatMessage(
@@ -233,7 +248,7 @@ struct AgentLoop {
                     }
 
                     // Duplicate tool call detection (same name + same args within this loop)
-                    let callSignature = "\(tc.name):\(tc.arguments)"
+                    let callSignature = Self.canonicalCallSignature(name: tc.name, arguments: tc.arguments)
                     if !duplicateToolTracker.insert(callSignature).inserted {
                         agentMessages.append(ChatMessage(
                             role: .tool,
@@ -395,10 +410,10 @@ struct AgentLoop {
                 AgentRunTrace.ExecutedToolSnapshot(
                     name: $0.name,
                     arguments: redactToolArguments($0.name, arguments: $0.arguments),
-                    result: sanitizeForTrace($0.result)
+                    result: redactToolResult($0.name, result: $0.result)
                 )
             },
-            finalResponse: finalResponse,
+            finalResponse: sanitizeForTrace(finalResponse),
             contextHash: resolvedHash,
             schemaVersion: "agentTrace.v1",
             providerCallCount: providerCallCount
@@ -414,23 +429,24 @@ struct AgentLoop {
             "blood", "血糖", "glucose", "heart_rate", "心率",
             "HRV", "睡眠", "sleep", "recovery", "恢复"
         ]
-        guard text.count > 200 else { return text }
-
-        // Check if content likely contains sensitive health/diet data
         let lowercased = text.lowercased()
         let needsTruncation = sensitivePatterns.contains(where: { lowercased.contains($0.lowercased()) })
         guard needsTruncation else { return text }
 
         let hash = ContentHash.hash(text)
-        let prefix = String(text.prefix(80)).replacingOccurrences(of: "\n", with: " ")
-        return "[TRUNCATED] \(prefix)... hash=\(hash.prefix(12)) (original length=\(text.count))"
+        return "[REDACTED: sensitive content] hash=\(hash.prefix(12)) length=\(text.count)"
     }
 
     /// Redacts sensitive tool arguments while preserving non-sensitive ones.
     private func redactToolArguments(_ toolName: String, arguments: String) -> String {
-        let fullyRedacted = ["food_photo", "food_search", "update_food_log", "journal_entry", "journal_search"]
+        let fullyRedacted = [
+            "log_food", "journal_correlation", "get_today_health", "get_health_history",
+            "get_health_trends", "get_training_response_history", "get_strength_workout_history",
+            "get_unified_workout_history", "food_photo", "food_search", "update_food_log",
+            "journal_entry", "journal_search"
+        ]
         guard !fullyRedacted.contains(toolName) else {
-            return "[REDACTED: tool=\(toolName)]"
+            return "[REDACTED: tool=\(toolName) hash=\(ContentHash.hash(arguments).prefix(12))]"
         }
         // For wiki tools, preserve the file name but redact content
         if toolName == "update_user_wiki",
@@ -442,6 +458,27 @@ struct AgentLoop {
             }
         }
         return arguments
+    }
+
+    private func redactToolResult(_ toolName: String, result: String) -> String {
+        let sensitiveTools = [
+            "log_food", "journal_correlation", "get_today_health", "get_health_history",
+            "get_health_trends", "get_training_response_history", "get_strength_workout_history",
+            "get_unified_workout_history", "update_user_wiki"
+        ]
+        guard sensitiveTools.contains(toolName) else { return sanitizeForTrace(result) }
+        return "[REDACTED: tool result] hash=\(ContentHash.hash(result).prefix(12)) length=\(result.count)"
+    }
+
+    private static func canonicalCallSignature(name: String, arguments: String) -> String {
+        guard let data = arguments.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              JSONSerialization.isValidJSONObject(object),
+              let canonical = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+              let canonicalString = String(data: canonical, encoding: .utf8) else {
+            return "\(name):\(arguments.trimmingCharacters(in: .whitespacesAndNewlines))"
+        }
+        return "\(name):\(canonicalString)"
     }
 
     /// Extracts the data_version field from a JSON tool result.

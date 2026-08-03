@@ -126,6 +126,12 @@ final class VelaServices: ObservableObject {
     var coachChat: CoachChatVM {
         VelaResolver.shared.resolve(CoachChatVM.self)
     }
+    var proactiveOrchestrator: ProactiveIntelligenceOrchestrator {
+        VelaResolver.shared.resolve(ProactiveIntelligenceOrchestrator.self)
+    }
+    var workoutAdaptationService: WorkoutAdaptationService {
+        VelaResolver.shared.resolve(WorkoutAdaptationService.self)
+    }
 
     /// WebSearchService uses a private singleton — expose via computed property.
     var webSearchService: WebSearchService { .shared }
@@ -137,8 +143,8 @@ final class VelaServices: ObservableObject {
 
     init() {}
 
-    func deepSeekProvider(apiKey: String) -> DeepSeekProvider {
-        let model = DeepSeekTextModel.stored.apiIdentifier
+    func deepSeekProvider(apiKey: String, model: String? = nil) -> DeepSeekProvider {
+        let model = model ?? DeepSeekTextModel.stored.apiIdentifier
         let cacheKey = "\(apiKey)|\(model)"
         if let cached = providerCache[cacheKey] {
             return cached
@@ -173,6 +179,8 @@ final class VelaResolver {
         }
         register(CoachChatVM.self) { CoachChatVM() }
         register(VelaEventService.self) { VelaEventService.shared }
+        register(ProactiveIntelligenceOrchestrator.self) { ProactiveIntelligenceOrchestrator() }
+        register(WorkoutAdaptationService.self) { WorkoutAdaptationService() }
     }
     
     func register<T>(_ type: T.Type, factory: @escaping () -> T) {
@@ -254,6 +262,9 @@ enum VelaProductEventType {
     static let dailyDecisionFeedbackSaved = "daily_decision_feedback_saved"
     static let healthSyncSucceeded = "health_sync_succeeded"
     static let healthSyncFailed = "health_sync_failed"
+    static let proactiveInsightGenerated = "proactive_insight_generated"
+    static let trainingPlanAdapted = "training_plan_adapted"
+    static let workoutCompleted = "workout_completed"
 }
 
 struct ProductQualitySnapshot: Equatable {

@@ -13,9 +13,32 @@ enum ToolFactory {
     @MainActor
     static func makeRegistry(
         modelContext: ModelContext,
-        dashboard: DashboardSummary
+        dashboard: DashboardSummary,
+        readOnly: Bool = false,
+        outboundPolicy: CoachOutboundDataPolicy = .all
     ) -> ToolRegistry {
-        ToolRegistry(tools: allTools(modelContext: modelContext, dashboard: dashboard))
+        let tools = allTools(modelContext: modelContext, dashboard: dashboard)
+            .filter { toolIsAllowed($0.name, policy: outboundPolicy) }
+        return ToolRegistry(tools: readOnly ? tools.filter { $0.riskLevel == .read } : tools)
+    }
+
+    private static func toolIsAllowed(_ name: String, policy: CoachOutboundDataPolicy) -> Bool {
+        switch name {
+        case "web_search":
+            return policy.webSearch
+        case "get_today_health", "get_health_history", "get_health_trends":
+            return policy.health
+        case "get_unified_workout_history", "get_strength_workout_history",
+             "get_training_response_history", "generate_training_plan",
+             "create_training_plan", "delete_plan":
+            return policy.training
+        case "journal_correlation", "render_correlation_chart":
+            return policy.journal && policy.health
+        case "log_food":
+            return policy.nutrition
+        default:
+            return true
+        }
     }
 
     /// Returns all available agent tools.

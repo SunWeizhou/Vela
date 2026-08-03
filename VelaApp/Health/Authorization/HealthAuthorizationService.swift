@@ -7,7 +7,6 @@ protocol HealthStoreProviding {
 
     func requestAuthorization(toShare typesToShare: Set<HKSampleType>, read typesToRead: Set<HKObjectType>) async throws
     func authorizationRequestStatus(toShare typesToShare: Set<HKSampleType>, read typesToRead: Set<HKObjectType>) async throws -> HKAuthorizationRequestStatus
-    func authorizationStatus(for type: HKObjectType) -> HKAuthorizationStatus
 }
 
 extension HKHealthStore: HealthStoreProviding {
@@ -37,34 +36,6 @@ public enum HealthPermissionTier: String, Codable, CaseIterable {
     case advanced
 }
 
-public struct HealthPermissionMatrix: Codable, Hashable {
-    public var hasSleepAnalysis: Bool
-    public var hasHRV: Bool
-    public var hasRestingHR: Bool
-    public var hasHeartRate: Bool
-    public var hasRespiratoryRate: Bool
-    public var hasActiveEnergy: Bool
-    public var hasExerciseTime: Bool
-    public var hasStepCount: Bool
-    public var hasWorkout: Bool
-    
-    // Enhanced
-    public var hasVO2Max: Bool
-    public var hasBodyMass: Bool
-    public var hasBodyFat: Bool
-    public var hasLeanBodyMass: Bool
-    public var hasOxygenSaturation: Bool
-    public var hasBodyTemperature: Bool
-    
-    // Advanced
-    public var hasBloodGlucose: Bool
-    public var hasBloodPressure: Bool
-    public var hasNutrition: Bool
-    public var hasWalkingSteadiness: Bool
-    public var hasEnvironmentalAudio: Bool
-    public var hasMindfulSession: Bool
-}
-
 @MainActor
 final class HealthAuthorizationService {
     private let healthStore: HealthStoreProviding
@@ -86,15 +57,7 @@ final class HealthAuthorizationService {
             throw HealthAuthorizationError.healthDataUnavailable
         }
 
-        let readTypes: Set<HKObjectType>
-        switch tier {
-        case .core:
-            readTypes = Set(HealthDataTypeCatalog.coreTypes)
-        case .enhanced:
-            readTypes = Set(HealthDataTypeCatalog.coreTypes + HealthDataTypeCatalog.enhancedTypes)
-        case .advanced:
-            readTypes = Set(HealthDataTypeCatalog.readTypes)
-        }
+        let readTypes = Set(HealthSignalCatalog.readTypes(for: tier))
 
         try await healthStore.requestAuthorization(toShare: [], read: readTypes)
     }
@@ -119,46 +82,6 @@ final class HealthAuthorizationService {
         )
     }
 
-    func permissionMatrix() -> HealthPermissionMatrix {
-        func check(_ identifier: HKCategoryTypeIdentifier) -> Bool {
-            guard let type = HKObjectType.categoryType(forIdentifier: identifier) else { return false }
-            return healthStore.authorizationStatus(for: type) != .notDetermined
-        }
-        func check(_ identifier: HKQuantityTypeIdentifier) -> Bool {
-            guard let type = HKObjectType.quantityType(forIdentifier: identifier) else { return false }
-            return healthStore.authorizationStatus(for: type) != .notDetermined
-        }
-        func checkWorkout() -> Bool {
-            let type = HKObjectType.workoutType()
-            return healthStore.authorizationStatus(for: type) != .notDetermined
-        }
-
-        return HealthPermissionMatrix(
-            hasSleepAnalysis: check(.sleepAnalysis),
-            hasHRV: check(.heartRateVariabilitySDNN),
-            hasRestingHR: check(.restingHeartRate),
-            hasHeartRate: check(.heartRate),
-            hasRespiratoryRate: check(.respiratoryRate),
-            hasActiveEnergy: check(.activeEnergyBurned),
-            hasExerciseTime: check(.appleExerciseTime),
-            hasStepCount: check(.stepCount),
-            hasWorkout: checkWorkout(),
-            
-            hasVO2Max: check(.vo2Max),
-            hasBodyMass: check(.bodyMass),
-            hasBodyFat: check(.bodyFatPercentage),
-            hasLeanBodyMass: check(.leanBodyMass),
-            hasOxygenSaturation: check(.oxygenSaturation),
-            hasBodyTemperature: check(.appleSleepingWristTemperature) || check(.bodyTemperature),
-            
-            hasBloodGlucose: check(.bloodGlucose),
-            hasBloodPressure: check(.bloodPressureSystolic),
-            hasNutrition: check(.dietaryWater),
-            hasWalkingSteadiness: check(.appleWalkingSteadiness),
-            hasEnvironmentalAudio: check(.environmentalAudioExposure),
-            hasMindfulSession: check(.mindfulSession)
-        )
-    }
 }
 
 enum HealthAuthorizationError: Error {
@@ -172,56 +95,19 @@ struct HealthPermissionSnapshot: Hashable {
 
 enum HealthDataTypeCatalog {
     static var coreTypes: [HKObjectType] {
-        [
-            HKObjectType.categoryType(forIdentifier: .sleepAnalysis),
-            HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN),
-            HKObjectType.quantityType(forIdentifier: .restingHeartRate),
-            HKObjectType.quantityType(forIdentifier: .heartRate),
-            HKObjectType.quantityType(forIdentifier: .respiratoryRate),
-            HKObjectType.quantityType(forIdentifier: .activeEnergyBurned),
-            HKObjectType.quantityType(forIdentifier: .appleExerciseTime),
-            HKObjectType.quantityType(forIdentifier: .stepCount),
-            HKObjectType.workoutType()
-        ].compactMap { $0 }
+        HealthSignalCatalog.readTypes(for: .core)
     }
 
     static var enhancedTypes: [HKObjectType] {
-        [
-            HKObjectType.quantityType(forIdentifier: .vo2Max),
-            HKObjectType.quantityType(forIdentifier: .bodyMass),
-            HKObjectType.quantityType(forIdentifier: .bodyFatPercentage),
-            HKObjectType.quantityType(forIdentifier: .leanBodyMass),
-            HKObjectType.quantityType(forIdentifier: .oxygenSaturation),
-            HKObjectType.quantityType(forIdentifier: .bodyTemperature),
-            HKObjectType.quantityType(forIdentifier: .appleSleepingWristTemperature)
-        ].compactMap { $0 }
+        Array(Set(HealthSignalCatalog.enhancedSignals.compactMap(\.objectType)))
     }
 
     static var advancedTypes: [HKObjectType] {
-        var types = [
-            HKObjectType.quantityType(forIdentifier: .bloodPressureSystolic),
-            HKObjectType.quantityType(forIdentifier: .bloodPressureDiastolic),
-            HKObjectType.quantityType(forIdentifier: .bloodGlucose),
-            HKObjectType.quantityType(forIdentifier: .dietaryWater),
-            HKObjectType.quantityType(forIdentifier: .dietaryCaffeine),
-            HKObjectType.quantityType(forIdentifier: .dietaryEnergyConsumed),
-            HKObjectType.quantityType(forIdentifier: .dietaryProtein),
-            HKObjectType.quantityType(forIdentifier: .dietaryCarbohydrates),
-            HKObjectType.quantityType(forIdentifier: .dietaryFatTotal),
-            HKObjectType.quantityType(forIdentifier: .appleWalkingSteadiness),
-            HKObjectType.quantityType(forIdentifier: .environmentalAudioExposure),
-            HKObjectType.categoryType(forIdentifier: .mindfulSession)
-        ].compactMap { $0 }
-        if #available(iOS 18.0, *) {
-            if let disturbances = HKObjectType.quantityType(forIdentifier: .appleSleepingBreathingDisturbances) {
-                types.append(disturbances)
-            }
-        }
-        return types
+        Array(Set(HealthSignalCatalog.advancedSignals.compactMap(\.objectType)))
     }
 
     static var readTypes: [HKObjectType] {
-        Array(Set(coreTypes + enhancedTypes + advancedTypes))
+        HealthSignalCatalog.readTypes(for: .advanced)
     }
 
     // Legacy helpers for backward compatibility with existing tests

@@ -1,6 +1,36 @@
 import Foundation
 @preconcurrency import HealthKit
 
+struct HeartRateRecoverySample: Hashable, Sendable {
+    var date: Date
+    var bpm: Double
+}
+
+enum WorkoutHeartRateRecoveryMatcher {
+    static func match(
+        samples: [HeartRateRecoverySample],
+        workouts: [WorkoutSummary],
+        maximumDelay: TimeInterval = 6 * 3_600
+    ) -> [UUID: Double] {
+        var available = samples.filter { $0.bpm.isFinite && $0.bpm >= 0 }.sorted { $0.date < $1.date }
+        var result: [UUID: Double] = [:]
+
+        for workout in workouts.sorted(by: { $0.end < $1.end }) {
+            let earliest = workout.end.addingTimeInterval(-15 * 60)
+            let latest = workout.end.addingTimeInterval(maximumDelay)
+            guard let candidate = available.enumerated()
+                .filter({ $0.element.date >= earliest && $0.element.date <= latest })
+                .min(by: {
+                    abs($0.element.date.timeIntervalSince(workout.end))
+                        < abs($1.element.date.timeIntervalSince(workout.end))
+                }) else { continue }
+            result[workout.id] = candidate.element.bpm
+            available.remove(at: candidate.offset)
+        }
+        return result
+    }
+}
+
 final class HealthKitQueryService: HealthQueryService {
     private let healthStore: HKHealthStore
 
@@ -9,7 +39,7 @@ final class HealthKitQueryService: HealthQueryService {
     }
 
     func sleepSummary(in range: DateRangeQuery) async throws -> SleepSummary? {
-        guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
+        guard let sleepType = HealthSignalCatalog.objectType(for: .sleepAnalysis) as? HKCategoryType else {
             return nil
         }
 
@@ -26,7 +56,7 @@ final class HealthKitQueryService: HealthQueryService {
     }
 
     func sleepEpisodes(in range: DateRangeQuery) async throws -> [SleepSummary] {
-        guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
+        guard let sleepType = HealthSignalCatalog.objectType(for: .sleepAnalysis) as? HKCategoryType else {
             return []
         }
 
@@ -43,8 +73,8 @@ final class HealthKitQueryService: HealthQueryService {
     }
 
     func recoveryMetrics(in range: DateRangeQuery) async throws -> RecoveryMetricSummary {
-        async let hrv = averageQuantity(.heartRateVariabilitySDNN, unit: .secondUnit(with: .milli), range: range)
-        async let rhr = averageQuantity(.restingHeartRate, unit: HKUnit.count().unitDivided(by: .minute()), range: range)
+        async let hrv = averageQuantity(.hrvSDNN, unit: .secondUnit(with: .milli), range: range)
+        async let rhr = averageQuantity(.restingHR, unit: HKUnit.count().unitDivided(by: .minute()), range: range)
         async let sleepHR = sleepHeartRate(in: range)
         async let respiratoryRate = averageQuantity(.respiratoryRate, unit: HKUnit.count().unitDivided(by: .minute()), range: range)
 
@@ -58,8 +88,8 @@ final class HealthKitQueryService: HealthQueryService {
 
     func strainSummary(in range: DateRangeQuery) async throws -> StrainActivitySummary {
         try await StrainActivitySummary(
-            activeEnergyKilocalories: sumQuantity(.activeEnergyBurned, unit: .kilocalorie(), range: range),
-            exerciseMinutes: sumQuantity(.appleExerciseTime, unit: .minute(), range: range),
+            activeEnergyKilocalories: sumQuantity(.activeEnergy, unit: .kilocalorie(), range: range),
+            exerciseMinutes: sumQuantity(.exerciseTime, unit: .minute(), range: range),
             stepCount: sumQuantity(.stepCount, unit: .count(), range: range),
             workouts: workoutSummaries(in: range)
         )
@@ -101,21 +131,21 @@ final class HealthKitQueryService: HealthQueryService {
         }
     }
 
-    private func sumQuantity(_ identifier: HKQuantityTypeIdentifier, unit: HKUnit, range: DateRangeQuery) async throws -> Double? {
-        try await statisticsQuantity(identifier, unit: unit, options: .cumulativeSum, range: range)
+    private func sumQuantity(_ signal: HealthSignal, unit: HKUnit, range: DateRangeQuery) async throws -> Double? {
+        try await statisticsQuantity(signal, unit: unit, options: .cumulativeSum, range: range)
     }
 
-    private func averageQuantity(_ identifier: HKQuantityTypeIdentifier, unit: HKUnit, range: DateRangeQuery) async throws -> Double? {
-        try await statisticsQuantity(identifier, unit: unit, options: .discreteAverage, range: range)
+    private func averageQuantity(_ signal: HealthSignal, unit: HKUnit, range: DateRangeQuery) async throws -> Double? {
+        try await statisticsQuantity(signal, unit: unit, options: .discreteAverage, range: range)
     }
 
     private func statisticsQuantity(
-        _ identifier: HKQuantityTypeIdentifier,
+        _ signal: HealthSignal,
         unit: HKUnit,
         options: HKStatisticsOptions,
         range: DateRangeQuery
     ) async throws -> Double? {
-        guard let quantityType = HKObjectType.quantityType(forIdentifier: identifier) else {
+        guard let quantityType = HealthSignalCatalog.objectType(for: signal) as? HKQuantityType else {
             return nil
         }
 
@@ -145,8 +175,8 @@ final class HealthKitQueryService: HealthQueryService {
         }
     }
 
-    private func mostRecentQuantity(_ identifier: HKQuantityTypeIdentifier, unit: HKUnit, range: DateRangeQuery) async throws -> Double? {
-        guard let quantityType = HKObjectType.quantityType(forIdentifier: identifier) else {
+    private func mostRecentQuantity(_ signal: HealthSignal, unit: HKUnit, range: DateRangeQuery) async throws -> Double? {
+        guard let quantityType = HealthSignalCatalog.objectType(for: signal) as? HKQuantityType else {
             return nil
         }
 
@@ -178,6 +208,9 @@ final class HealthKitQueryService: HealthQueryService {
     }
 
     private func workoutSummaries(in range: DateRangeQuery) async throws -> [WorkoutSummary] {
+        guard let workoutType = HealthSignalCatalog.objectType(for: .workouts) as? HKWorkoutType else {
+            return []
+        }
         let rawWorkouts: [HKWorkout] = try await withCheckedThrowingContinuation { continuation in
             let predicate = HKQuery.predicateForSamples(
                 withStart: range.start,
@@ -185,7 +218,7 @@ final class HealthKitQueryService: HealthQueryService {
                 options: []
             )
             let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
-            let query = HKSampleQuery(sampleType: .workoutType(), predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, error in
+            let query = HKSampleQuery(sampleType: workoutType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, error in
                 if let error {
                     let nsError = error as NSError
                     if nsError.domain == HKErrorDomain && (nsError.code == 4 || nsError.code == 3) {
@@ -202,7 +235,10 @@ final class HealthKitQueryService: HealthQueryService {
             healthStore.execute(query)
         }
 
-        let heartRates = (try? await averageHeartRates(for: rawWorkouts)) ?? [:]
+        async let heartRatesTask = averageHeartRates(for: rawWorkouts)
+        async let recoveriesTask = heartRateRecoveries(for: rawWorkouts)
+        let heartRates = (try? await heartRatesTask) ?? [:]
+        let recoveries = (try? await recoveriesTask) ?? [:]
         var summaries: [WorkoutSummary] = []
         for workout in rawWorkouts {
             summaries.append(WorkoutSummary(
@@ -212,6 +248,7 @@ final class HealthKitQueryService: HealthQueryService {
                 activityName: workout.workoutActivityType.displayName,
                 energyKilocalories: workout.totalEnergyBurned?.doubleValue(for: .kilocalorie()),
                 averageHeartRate: heartRates[workout.uuid],
+                heartRateRecoveryOneMinuteBPM: recoveries[workout.uuid],
                 distanceMeters: workout.totalDistance?.doubleValue(for: .meter())
             ))
         }
@@ -233,7 +270,7 @@ final class HealthKitQueryService: HealthQueryService {
         m.bmi = try? await mostRecentQuantity(.bodyMassIndex, unit: .count(), range: range)
 
         // Cardiovascular
-        m.walkingHeartRateAvg = try? await averageQuantity(.walkingHeartRateAverage, unit: HKUnit.count().unitDivided(by: .minute()), range: range)
+        m.walkingHeartRateAvg = try? await averageQuantity(.walkingHeartRate, unit: HKUnit.count().unitDivided(by: .minute()), range: range)
         m.oxygenSaturation = (try? await mostRecentQuantity(.oxygenSaturation, unit: .percent(), range: range)).map { $0 * 100 }
         m.bloodPressureSystolic = try? await mostRecentQuantity(.bloodPressureSystolic, unit: .millimeterOfMercury(), range: range)
         m.bloodPressureDiastolic = try? await mostRecentQuantity(.bloodPressureDiastolic, unit: .millimeterOfMercury(), range: range)
@@ -244,29 +281,29 @@ final class HealthKitQueryService: HealthQueryService {
         // Mobility & gait
         m.walkingSpeed = try? await averageQuantity(.walkingSpeed, unit: HKUnit.meter().unitDivided(by: .second()), range: range)
         m.walkingStepLength = try? await averageQuantity(.walkingStepLength, unit: .meter(), range: range)
-        m.walkingAsymmetry = (try? await averageQuantity(.walkingAsymmetryPercentage, unit: .percent(), range: range)).map { $0 * 100 }
-        m.walkingDoubleSupport = (try? await averageQuantity(.walkingDoubleSupportPercentage, unit: .percent(), range: range)).map { $0 * 100 }
-        m.walkingSteadiness = (try? await averageQuantity(.appleWalkingSteadiness, unit: .percent(), range: range)).map { $0 * 100 }
+        m.walkingAsymmetry = (try? await averageQuantity(.walkingAsymmetry, unit: .percent(), range: range)).map { $0 * 100 }
+        m.walkingDoubleSupport = (try? await averageQuantity(.doubleSupport, unit: .percent(), range: range)).map { $0 * 100 }
+        m.walkingSteadiness = (try? await averageQuantity(.walkingSteadiness, unit: .percent(), range: range)).map { $0 * 100 }
         m.stairAscentSpeed = try? await averageQuantity(.stairAscentSpeed, unit: HKUnit.meter().unitDivided(by: .second()), range: range)
         m.stairDescentSpeed = try? await averageQuantity(.stairDescentSpeed, unit: HKUnit.meter().unitDivided(by: .second()), range: range)
-        m.sixMinuteWalkDistance = try? await mostRecentQuantity(.sixMinuteWalkTestDistance, unit: .meter(), range: range)
+        m.sixMinuteWalkDistance = try? await mostRecentQuantity(.sixMinuteWalkDistance, unit: .meter(), range: range)
 
         // Activity totals
-        m.exerciseMinutes = (try? await sumQuantity(.appleExerciseTime, unit: .minute(), range: range)).map { Int($0) }
-        m.standMinutes = (try? await sumQuantity(.appleStandTime, unit: .minute(), range: range)).map { Int($0) }
+        m.exerciseMinutes = (try? await sumQuantity(.exerciseTime, unit: .minute(), range: range)).map { Int($0) }
+        m.standMinutes = (try? await sumQuantity(.standTime, unit: .minute(), range: range)).map { Int($0) }
         m.flightsClimbed = (try? await sumQuantity(.flightsClimbed, unit: .count(), range: range)).map { Int($0) }
-        m.distanceKm = try? await sumQuantity(.distanceWalkingRunning, unit: .meterUnit(with: .kilo), range: range)
-        m.cyclingDistanceKm = try? await sumQuantity(.distanceCycling, unit: .meterUnit(with: .kilo), range: range)
+        m.distanceKm = try? await sumQuantity(.walkingRunningDistance, unit: .meterUnit(with: .kilo), range: range)
+        m.cyclingDistanceKm = try? await sumQuantity(.cyclingDistance, unit: .meterUnit(with: .kilo), range: range)
 
         // Environment
-        m.environmentalNoisedB = try? await averageQuantity(.environmentalAudioExposure, unit: .decibelAWeightedSoundPressureLevel(), range: range)
-        m.headphoneNoisedB = try? await averageQuantity(.headphoneAudioExposure, unit: .decibelAWeightedSoundPressureLevel(), range: range)
-        m.timeInDaylight = try? await sumQuantity(.timeInDaylight, unit: .minute(), range: range)
+        m.environmentalNoisedB = try? await averageQuantity(.envNoise, unit: .decibelAWeightedSoundPressureLevel(), range: range)
+        m.headphoneNoisedB = try? await averageQuantity(.headphoneNoise, unit: .decibelAWeightedSoundPressureLevel(), range: range)
+        m.timeInDaylight = try? await sumQuantity(.daylight, unit: .minute(), range: range)
 
         // Apple Watch records nightly wrist temperature separately from manually-entered
         // body temperature. Prefer the wearable signal and fall back only if absent.
         let wristTemperature = try? await mostRecentQuantity(
-            .appleSleepingWristTemperature,
+            .wristTemperature,
             unit: .degreeCelsius(),
             range: range
         )
@@ -281,16 +318,16 @@ final class HealthKitQueryService: HealthQueryService {
         }
 
         // Nutrition
-        m.waterMl = try? await sumQuantity(.dietaryWater, unit: .literUnit(with: .milli), range: range)
-        m.caffeineMg = try? await sumQuantity(.dietaryCaffeine, unit: .gramUnit(with: .milli), range: range)
-        m.dietaryEnergyKcal = try? await sumQuantity(.dietaryEnergyConsumed, unit: .kilocalorie(), range: range)
+        m.waterMl = try? await sumQuantity(.water, unit: .literUnit(with: .milli), range: range)
+        m.caffeineMg = try? await sumQuantity(.caffeine, unit: .gramUnit(with: .milli), range: range)
+        m.dietaryEnergyKcal = try? await sumQuantity(.dietaryEnergy, unit: .kilocalorie(), range: range)
         m.dietaryProteinG = try? await sumQuantity(.dietaryProtein, unit: .gram(), range: range)
         m.dietaryCarbsG = try? await sumQuantity(.dietaryCarbohydrates, unit: .gram(), range: range)
-        m.dietaryFatG = try? await sumQuantity(.dietaryFatTotal, unit: .gram(), range: range)
+        m.dietaryFatG = try? await sumQuantity(.dietaryFat, unit: .gram(), range: range)
 
         // Wellness
         // Mindful sessions — category type, sum durations manually
-        if let mindfulType = HKObjectType.categoryType(forIdentifier: .mindfulSession) {
+        if let mindfulType = HealthSignalCatalog.objectType(for: .mindfulSession) as? HKCategoryType {
             do {
                 let mindfulSamples = try await categorySamples(type: mindfulType, range: range)
                 let totalMinutes = mindfulSamples.reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) } / 60.0
@@ -302,7 +339,7 @@ final class HealthKitQueryService: HealthQueryService {
 
         // Sleep breathing disturbances (iOS 18+)
         if #available(iOS 18.0, *) {
-            m.sleepBreathingDisturbances = try? await averageQuantity(.appleSleepingBreathingDisturbances, unit: HKUnit.count().unitDivided(by: .hour()), range: range)
+            m.sleepBreathingDisturbances = try? await averageQuantity(.sleepBreathingDisturbances, unit: HKUnit.count().unitDivided(by: .hour()), range: range)
         }
 
         return m
@@ -315,7 +352,7 @@ final class HealthKitQueryService: HealthQueryService {
     /// Fetch daily average HRV values using HKStatisticsCollectionQuery.
     /// Returns one value per day (discrete average) instead of all raw samples.
     private func hrvDailyAverages(in range: DateRangeQuery) async throws -> [Double] {
-        guard let quantityType = HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN) else {
+        guard let quantityType = HealthSignalCatalog.objectType(for: .hrvSDNN) as? HKQuantityType else {
             return []
         }
 
@@ -363,7 +400,7 @@ final class HealthKitQueryService: HealthQueryService {
 
     /// Fetch daily average RHR values using HKStatisticsCollectionQuery.
     private func rhrDailyAverages(in range: DateRangeQuery) async throws -> [Double] {
-        guard let quantityType = HKObjectType.quantityType(forIdentifier: .restingHeartRate) else {
+        guard let quantityType = HealthSignalCatalog.objectType(for: .restingHR) as? HKQuantityType else {
             return []
         }
 
@@ -428,9 +465,12 @@ final class HealthKitQueryService: HealthQueryService {
     }
 
     func recentWorkouts(limit: Int) async throws -> [WorkoutSummary] {
+        guard let workoutType = HealthSignalCatalog.objectType(for: .workouts) as? HKWorkoutType else {
+            return []
+        }
         let rawWorkouts: [HKWorkout] = try await withCheckedThrowingContinuation { continuation in
             let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
-            let query = HKSampleQuery(sampleType: .workoutType(), predicate: nil, limit: limit, sortDescriptors: [sort]) { _, samples, error in
+            let query = HKSampleQuery(sampleType: workoutType, predicate: nil, limit: limit, sortDescriptors: [sort]) { _, samples, error in
                 if error != nil {
                     continuation.resume(returning: [])
                     return
@@ -440,7 +480,10 @@ final class HealthKitQueryService: HealthQueryService {
             healthStore.execute(query)
         }
 
-        let heartRates = (try? await averageHeartRates(for: rawWorkouts)) ?? [:]
+        async let heartRatesTask = averageHeartRates(for: rawWorkouts)
+        async let recoveriesTask = heartRateRecoveries(for: rawWorkouts)
+        let heartRates = (try? await heartRatesTask) ?? [:]
+        let recoveries = (try? await recoveriesTask) ?? [:]
         var summaries: [WorkoutSummary] = []
         for workout in rawWorkouts {
             summaries.append(WorkoutSummary(
@@ -450,6 +493,7 @@ final class HealthKitQueryService: HealthQueryService {
                 activityName: workout.workoutActivityType.displayName,
                 energyKilocalories: workout.totalEnergyBurned?.doubleValue(for: .kilocalorie()),
                 averageHeartRate: heartRates[workout.uuid],
+                heartRateRecoveryOneMinuteBPM: recoveries[workout.uuid],
                 distanceMeters: workout.totalDistance?.doubleValue(for: .meter())
             ))
         }
@@ -460,7 +504,7 @@ final class HealthKitQueryService: HealthQueryService {
         let episodes = try await sleepEpisodes(in: range)
         let sleepRange = SleepHeartRateRangeResolver.range(for: episodes, fallback: range)
         return try await averageQuantity(
-            .heartRate,
+            .workoutHR,
             unit: HKUnit.count().unitDivided(by: .minute()),
             range: sleepRange
         )
@@ -484,8 +528,48 @@ final class HealthKitQueryService: HealthQueryService {
         return WorkoutHeartRateAverager.averageHeartRates(samples: samples, workouts: summaries)
     }
 
+    private func heartRateRecoveries(for workouts: [HKWorkout]) async throws -> [UUID: Double] {
+        guard let start = workouts.map(\.startDate).min(),
+              let lastEnd = workouts.map(\.endDate).max() else { return [:] }
+        let end = lastEnd.addingTimeInterval(6 * 3_600)
+        let samples = try await heartRateRecoverySamples(start: start, end: end)
+        let summaries = workouts.map {
+            WorkoutSummary(
+                id: $0.uuid,
+                start: $0.startDate,
+                end: $0.endDate,
+                activityName: $0.workoutActivityType.displayName
+            )
+        }
+        return WorkoutHeartRateRecoveryMatcher.match(samples: samples, workouts: summaries)
+    }
+
+    private func heartRateRecoverySamples(start: Date, end: Date) async throws -> [HeartRateRecoverySample] {
+        guard let type = HealthSignalCatalog.objectType(for: .heartRateRecoveryOneMinute) as? HKQuantityType else {
+            return []
+        }
+        return try await withCheckedThrowingContinuation { continuation in
+            let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
+            let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+            let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, error in
+                if error != nil {
+                    continuation.resume(returning: [])
+                    return
+                }
+                let values = (samples as? [HKQuantitySample])?.map {
+                    HeartRateRecoverySample(
+                        date: $0.startDate,
+                        bpm: $0.quantity.doubleValue(for: .count())
+                    )
+                } ?? []
+                continuation.resume(returning: values)
+            }
+            healthStore.execute(query)
+        }
+    }
+
     func heartRateSamples(start: Date, end: Date) async throws -> [HeartRateSample] {
-        guard let heartRateType = HKObjectType.quantityType(forIdentifier: .heartRate) else {
+        guard let heartRateType = HealthSignalCatalog.objectType(for: .workoutHR) as? HKQuantityType else {
             return []
         }
         
@@ -509,8 +593,51 @@ final class HealthKitQueryService: HealthQueryService {
         }
     }
 
+    func intradaySamples(
+        for signal: HealthSignal,
+        in range: DateRangeQuery
+    ) async throws -> [IntradaySignalPoint] {
+        guard let quantityType = HealthSignalCatalog.objectType(for: signal) as? HKQuantityType,
+              let unit = HealthSignalCatalog.unit(for: signal)?.healthKitUnit else {
+            return []
+        }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let predicate = HKQuery.predicateForSamples(
+                withStart: range.start,
+                end: range.end,
+                options: []
+            )
+            let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+            let query = HKSampleQuery(
+                sampleType: quantityType,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [sort]
+            ) { _, samples, error in
+                if let error {
+                    let nsError = error as NSError
+                    if nsError.domain == HKErrorDomain && (nsError.code == 4 || nsError.code == 3 || nsError.code == 5) {
+                        continuation.resume(returning: [])
+                    } else {
+                        continuation.resume(throwing: error)
+                    }
+                    return
+                }
+                continuation.resume(returning: (samples as? [HKQuantitySample])?.map {
+                    IntradaySignalPoint(
+                        date: $0.startDate,
+                        value: $0.quantity.doubleValue(for: unit),
+                        sourceIdentifier: $0.sourceRevision.source.bundleIdentifier
+                    )
+                } ?? [])
+            }
+            healthStore.execute(query)
+        }
+    }
+
     func bloodGlucoseSamples(in range: DateRangeQuery) async throws -> [BloodGlucoseReading] {
-        guard let glucoseType = HKObjectType.quantityType(forIdentifier: .bloodGlucose) else {
+        guard let glucoseType = HealthSignalCatalog.objectType(for: .bloodGlucose) as? HKQuantityType else {
             return []
         }
 
@@ -554,8 +681,11 @@ final class HealthKitQueryService: HealthQueryService {
 
     func workoutRoute(workoutId: UUID) async throws -> [RouteCoordinate] {
         let workoutPredicate = HKQuery.predicateForObject(with: workoutId)
+        guard let workoutType = HealthSignalCatalog.objectType(for: .workouts) as? HKWorkoutType else {
+            return []
+        }
         let workouts: [HKWorkout] = try await withCheckedThrowingContinuation { continuation in
-            let query = HKSampleQuery(sampleType: .workoutType(), predicate: workoutPredicate, limit: 1, sortDescriptors: nil) { _, samples, error in
+            let query = HKSampleQuery(sampleType: workoutType, predicate: workoutPredicate, limit: 1, sortDescriptors: nil) { _, samples, error in
                 continuation.resume(returning: (samples as? [HKWorkout]) ?? [])
             }
             healthStore.execute(query)
@@ -563,7 +693,9 @@ final class HealthKitQueryService: HealthQueryService {
         
         guard let workout = workouts.first else { return [] }
         
-        let routeType = HKSeriesType.workoutRoute()
+        guard let routeType = HealthSignalCatalog.objectType(for: .workoutRoute) as? HKSeriesType else {
+            return []
+        }
         let routePredicate = HKQuery.predicateForObjects(from: workout)
         let routes: [HKWorkoutRoute] = try await withCheckedThrowingContinuation { continuation in
             let query = HKSampleQuery(sampleType: routeType, predicate: routePredicate, limit: 1, sortDescriptors: nil) { _, samples, error in

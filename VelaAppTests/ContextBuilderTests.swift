@@ -2,6 +2,46 @@ import XCTest
 @testable import Vela
 
 final class ContextBuilderTests: XCTestCase {
+    @MainActor
+    func testEveningWikiAgentUsesCanonicalAvailabilityInsteadOfDefaultZeroScores() {
+        let snapshot = AIContextBuilder().buildFacts(
+            dashboard: .empty(date: Date()),
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:]
+        ).snapshot
+
+        let prompt = EveningWikiSyncAgent.shared.buildSyncPrompt(
+            snapshot: snapshot,
+            chatMessages: []
+        )
+
+        XCTAssertTrue(prompt.contains("v2.0"))
+        XCTAssertTrue(prompt.contains(snapshot.contextHash))
+        XCTAssertTrue(prompt.contains("Data Coverage"))
+        XCTAssertFalse(prompt.contains("恢复: 0"))
+        XCTAssertFalse(prompt.contains("Recovery: 0"))
+    }
+
+    func testCanonicalFactsUseTheSameExplicitDataCoverageProjectionAsUI() {
+        let coverage = AgentDataCoverageContext(
+            availableSections: 2,
+            totalSections: 4,
+            missingSections: ["recovery", "sleep"],
+            confidence: .medium
+        )
+
+        let snapshot = AIContextBuilder().buildFacts(
+            dashboard: .preview(date: Date()),
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:],
+            dataCoverage: coverage
+        ).snapshot
+
+        XCTAssertEqual(snapshot.dataCoverage, coverage)
+    }
+
     private func makeDate(
         year: Int = 2026,
         month: Int = 4,
@@ -705,6 +745,7 @@ final class ContextBuilderTests: XCTestCase {
             profile: profile
         ).compute(for: snapshot, history: history)
 
+        XCTAssertEqual(syncMetrics, dashboardMetrics)
         XCTAssertEqual(syncMetrics.sleepScore.score, dashboardMetrics.sleepScore.score, accuracy: 0.001)
         XCTAssertEqual(syncMetrics.recovery.score, dashboardMetrics.recovery.score, accuracy: 0.001)
         XCTAssertEqual(syncMetrics.strain.score, dashboardMetrics.strain.score, accuracy: 0.001)

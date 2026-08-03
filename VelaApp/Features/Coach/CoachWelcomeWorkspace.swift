@@ -54,10 +54,10 @@ struct CoachWelcomeWorkspace: View {
                         }
                     }
                 }
-                .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(VelaTheme.borderSoft.opacity(0.6), lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
+                        .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
                 )
             }
 
@@ -321,6 +321,7 @@ struct CoachWelcomeWorkspace: View {
 }
 
 struct VelaReportsView: View {
+    @Environment(\.modelContext) private var modelContext
     @Query(sort: \AIReportRecord.createdAt, order: .reverse)
     private var reports: [AIReportRecord]
     @Query(sort: \AgentArtifactRecord.createdAt, order: .reverse)
@@ -330,6 +331,8 @@ struct VelaReportsView: View {
     @AppStorage("agent_bedtime_reminders") private var sleepReviewOn = true
     @AppStorage("agent_weekly_review_enabled") private var weeklyReviewOn = true
     @AppStorage("agent_post_workout_checkin_enabled") private var postWorkoutOn = true
+    @State private var artifactPendingDeletion: AgentArtifactRecord?
+    @State private var artifactError: String?
 
     var body: some View {
         ScrollView {
@@ -339,7 +342,14 @@ struct VelaReportsView: View {
                 VelaMakeSectionHeader(title: "今日")
                 reportRows
 
-                VelaMakeSectionHeader(title: "生成物")
+                HStack {
+                    VelaMakeSectionHeader(title: "生成物")
+                    Spacer()
+                    NavigationLink("查看全部") {
+                        AgentArtifactLibraryView()
+                    }
+                    .font(.system(size: 13, weight: .semibold))
+                }
                 artifactRows
 
                 VelaMakeSectionHeader(title: "自动报告")
@@ -356,6 +366,31 @@ struct VelaReportsView: View {
         .background(VelaTheme.systemGroupedBackground)
         .navigationTitle("历史报告")
         .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog(
+            "删除这个生成物？",
+            isPresented: Binding(
+                get: { artifactPendingDeletion != nil },
+                set: { if !$0 { artifactPendingDeletion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("删除生成物", role: .destructive) {
+                deletePendingArtifact()
+            }
+            Button("取消", role: .cancel) {
+                artifactPendingDeletion = nil
+            }
+        } message: {
+            Text("这只会删除本机保存的生成物，且无法撤销。")
+        }
+        .alert("无法删除", isPresented: Binding(
+            get: { artifactError != nil },
+            set: { if !$0 { artifactError = nil } }
+        )) {
+            Button("好", role: .cancel) { artifactError = nil }
+        } message: {
+            Text(artifactError ?? "未知错误")
+        }
     }
 
     private var morningBriefHero: some View {
@@ -422,12 +457,24 @@ struct VelaReportsView: View {
         } else {
             VStack(spacing: 0) {
                 ForEach(Array(artifacts.prefix(5).enumerated()), id: \.element.id) { index, artifact in
-                    reportRow(
-                        icon: "doc.text.fill",
-                        color: .indigo,
-                        title: artifact.title,
-                        subtitle: "\(artifact.type.replacingOccurrences(of: "_", with: " ")) · \(artifact.createdAt.formatted(.relative(presentation: .named)))"
-                    )
+                    NavigationLink {
+                        AgentArtifactDetailView(record: artifact)
+                    } label: {
+                        reportRow(
+                            icon: AgentArtifactPresentation.icon(for: artifact.type),
+                            color: .indigo,
+                            title: artifact.title,
+                            subtitle: "\(AgentArtifactPresentation.typeLabel(for: artifact.type)) · \(artifact.createdAt.formatted(.relative(presentation: .named)))"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) {
+                            artifactPendingDeletion = artifact
+                        } label: {
+                            Label("删除", systemImage: "trash")
+                        }
+                    }
                     if index < min(artifacts.count, 5) - 1 {
                         Divider().padding(.leading, 60)
                     }
@@ -501,5 +548,353 @@ struct VelaReportsView: View {
             .replacingOccurrences(of: "#", with: "")
             .replacingOccurrences(of: "*", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func deletePendingArtifact() {
+        guard let artifact = artifactPendingDeletion else { return }
+        do {
+            try PersistenceWriteGate.shared.assertWritable(
+                operation: "VelaReportsView: delete agent artifact",
+                modelContext: modelContext
+            )
+            modelContext.delete(artifact)
+            try modelContext.save()
+            artifactPendingDeletion = nil
+            VelaAppState.shared.markLocalDataChanged()
+        } catch {
+            artifactError = error.localizedDescription
+        }
+    }
+}
+
+// MARK: - Agent artifact library
+
+struct AgentArtifactFact: Identifiable, Equatable {
+    let label: String
+    let value: String
+    var id: String { "\(label):\(value)" }
+}
+
+struct AgentArtifactPresentation: Equatable {
+    let summary: String?
+    let facts: [AgentArtifactFact]
+
+    static func parse(payloadJSON: String) -> AgentArtifactPresentation {
+        guard let data = payloadJSON.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return AgentArtifactPresentation(summary: nil, facts: [])
+        }
+
+        let summary = nonEmptyString(root["summary"])
+            ?? nonEmptyString(root["decision"])
+            ?? nonEmptyString(root["description"])
+        var facts: [AgentArtifactFact] = []
+
+        appendStringFact("训练决策", key: "decision", from: root, to: &facts)
+        appendStringFact("目标训练", key: "targetSessionTitle", from: root, to: &facts)
+        if let value = root["volumeMultiplier"] as? NSNumber {
+            facts.append(AgentArtifactFact(label: "训练量", value: "\(Int((value.doubleValue * 100).rounded()))%"))
+        }
+        if let value = root["intensityCap"] as? NSNumber {
+            facts.append(AgentArtifactFact(label: "强度上限", value: "RPE \(value.intValue)"))
+        }
+        appendStringFact("结论", key: "decisionText", from: root, to: &facts)
+
+        if let reasons = root["reasons"] as? [[String: Any]] {
+            for reason in reasons.prefix(4) {
+                let signal = nonEmptyString(reason["signal"]) ?? "判断依据"
+                let value = nonEmptyString(reason["value"])
+                let explanation = nonEmptyString(reason["explanation"])
+                let detail = [value, explanation].compactMap { $0 }.joined(separator: " · ")
+                if !detail.isEmpty {
+                    facts.append(AgentArtifactFact(label: signal, value: detail))
+                }
+            }
+        } else if let reasons = root["reasons"] as? [String] {
+            for (index, reason) in reasons.prefix(4).enumerated() where !reason.isEmpty {
+                facts.append(AgentArtifactFact(label: "依据 \(index + 1)", value: reason))
+            }
+        }
+
+        return AgentArtifactPresentation(summary: summary, facts: Array(facts.prefix(8)))
+    }
+
+    static func typeLabel(for type: String) -> String {
+        switch type {
+        case "daily_plan": return "每日计划"
+        case "training_adjustment": return "训练调整"
+        case "weekly_report", "weekly_review": return "周度报告"
+        case "correlation_chart": return "关联分析"
+        case "wiki_diff", "wiki_update_proposal": return "记忆更新"
+        case "nutrition_feedback": return "营养反馈"
+        case "morning_brief": return "今日简报"
+        case "workout_readiness": return "训练准备度"
+        case "post_workout_review": return "训练后复盘"
+        case "evening_review": return "晚间回顾"
+        default: return "Coach 生成物"
+        }
+    }
+
+    static func icon(for type: String) -> String {
+        switch type {
+        case "daily_plan": return "calendar.badge.checkmark"
+        case "training_adjustment", "workout_readiness": return "slider.horizontal.3"
+        case "weekly_report", "weekly_review": return "chart.line.uptrend.xyaxis"
+        case "correlation_chart": return "point.3.connected.trianglepath.dotted"
+        case "wiki_diff", "wiki_update_proposal": return "brain.head.profile"
+        case "nutrition_feedback": return "fork.knife"
+        case "post_workout_review": return "figure.strengthtraining.traditional"
+        default: return "doc.text.fill"
+        }
+    }
+
+    private static func appendStringFact(
+        _ label: String,
+        key: String,
+        from object: [String: Any],
+        to facts: inout [AgentArtifactFact]
+    ) {
+        guard let value = nonEmptyString(object[key]),
+              !facts.contains(where: { $0.value == value }) else { return }
+        facts.append(AgentArtifactFact(label: label, value: value))
+    }
+
+    private static func nonEmptyString(_ value: Any?) -> String? {
+        guard let value = value as? String else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+struct AgentArtifactLibraryView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Query(sort: \AgentArtifactRecord.createdAt, order: .reverse)
+    private var artifacts: [AgentArtifactRecord]
+
+    @State private var searchText = ""
+    @State private var selectedType = "all"
+    @State private var pendingDeletion: AgentArtifactRecord?
+    @State private var errorMessage: String?
+
+    private var availableTypes: [String] {
+        Array(Set(artifacts.map(\.type))).sorted {
+            AgentArtifactPresentation.typeLabel(for: $0) < AgentArtifactPresentation.typeLabel(for: $1)
+        }
+    }
+
+    private var filteredArtifacts: [AgentArtifactRecord] {
+        artifacts.filter { artifact in
+            let matchesType = selectedType == "all" || artifact.type == selectedType
+            let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let matchesSearch = query.isEmpty
+                || artifact.title.localizedCaseInsensitiveContains(query)
+                || AgentArtifactPresentation.typeLabel(for: artifact.type).localizedCaseInsensitiveContains(query)
+            return matchesType && matchesSearch
+        }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                Picker("类型", selection: $selectedType) {
+                    Text("全部").tag("all")
+                    ForEach(availableTypes, id: \.self) { type in
+                        Text(AgentArtifactPresentation.typeLabel(for: type)).tag(type)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+
+            Section("本机生成物 · \(filteredArtifacts.count)") {
+                if filteredArtifacts.isEmpty {
+                    ContentUnavailableView(
+                        searchText.isEmpty ? "暂无生成物" : "没有匹配结果",
+                        systemImage: searchText.isEmpty ? "tray" : "magnifyingglass",
+                        description: Text(searchText.isEmpty ? "Coach 创建的计划、分析和报告会保存在这里。" : "请尝试其他关键词或类型。")
+                    )
+                } else {
+                    ForEach(filteredArtifacts) { artifact in
+                        NavigationLink {
+                            AgentArtifactDetailView(record: artifact)
+                        } label: {
+                            AgentArtifactLibraryRow(record: artifact)
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                pendingDeletion = artifact
+                            } label: {
+                                Label("删除", systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .navigationTitle("生成物")
+        .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $searchText, prompt: "搜索计划、报告或分析")
+        .confirmationDialog(
+            "删除这个生成物？",
+            isPresented: Binding(
+                get: { pendingDeletion != nil },
+                set: { if !$0 { pendingDeletion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("删除生成物", role: .destructive) { deletePendingArtifact() }
+            Button("取消", role: .cancel) { pendingDeletion = nil }
+        } message: {
+            Text("这只会删除本机保存的生成物，且无法撤销。")
+        }
+        .alert("无法删除", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("好", role: .cancel) { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "未知错误")
+        }
+    }
+
+    private func deletePendingArtifact() {
+        guard let artifact = pendingDeletion else { return }
+        do {
+            try PersistenceWriteGate.shared.assertWritable(
+                operation: "AgentArtifactLibraryView: delete agent artifact",
+                modelContext: modelContext
+            )
+            modelContext.delete(artifact)
+            try modelContext.save()
+            pendingDeletion = nil
+            VelaAppState.shared.markLocalDataChanged()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct AgentArtifactLibraryRow: View {
+    let record: AgentArtifactRecord
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VelaMakeIconTile(
+                systemName: AgentArtifactPresentation.icon(for: record.type),
+                color: .indigo,
+                size: 36
+            )
+            VStack(alignment: .leading, spacing: 3) {
+                Text(record.title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(VelaTheme.fg)
+                    .lineLimit(2)
+                Text("\(AgentArtifactPresentation.typeLabel(for: record.type)) · \(record.createdAt.formatted(.dateTime.month().day().hour().minute()))")
+                    .font(.system(size: 12))
+                    .foregroundStyle(VelaTheme.fg2)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            ConfidenceBadge(score: record.confidence)
+        }
+        .padding(.vertical, 3)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+struct AgentArtifactDetailView: View {
+    let record: AgentArtifactRecord
+
+    private var presentation: AgentArtifactPresentation {
+        AgentArtifactPresentation.parse(payloadJSON: record.payloadJSON)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .top) {
+                        VelaMakeIconTile(
+                            systemName: AgentArtifactPresentation.icon(for: record.type),
+                            color: .indigo,
+                            size: 42
+                        )
+                        Spacer()
+                        ConfidenceBadge(score: record.confidence)
+                    }
+                    Text(record.title)
+                        .font(VelaTheme.title2())
+                        .foregroundStyle(VelaTheme.fg)
+                    Text(AgentArtifactPresentation.typeLabel(for: record.type))
+                        .font(VelaTheme.caption1().weight(.semibold))
+                        .foregroundStyle(VelaTheme.muted)
+                }
+                .padding(18)
+                .velaNativeCard(radius: 20)
+
+                if let summary = presentation.summary {
+                    artifactSection(title: "摘要") {
+                        Text(summary)
+                            .font(VelaTheme.body())
+                            .foregroundStyle(VelaTheme.fg2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                if !presentation.facts.isEmpty {
+                    artifactSection(title: "关键内容") {
+                        VStack(spacing: 0) {
+                            ForEach(Array(presentation.facts.enumerated()), id: \.element.id) { index, fact in
+                                HStack(alignment: .top, spacing: 12) {
+                                    Text(fact.label)
+                                        .font(VelaTheme.subheadline().weight(.semibold))
+                                        .foregroundStyle(VelaTheme.fg)
+                                        .frame(width: 82, alignment: .leading)
+                                    Text(fact.value)
+                                        .font(VelaTheme.subheadline())
+                                        .foregroundStyle(VelaTheme.fg2)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .padding(.vertical, 11)
+                                if index < presentation.facts.count - 1 { Divider() }
+                            }
+                        }
+                    }
+                }
+
+                artifactSection(title: "来源与安全") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label(record.source.isEmpty ? "本机生成" : record.source, systemImage: "iphone")
+                        Label(record.createdAt.formatted(.dateTime.year().month().day().hour().minute()), systemImage: "clock")
+                        Label(record.status == "active" ? "当前有效" : record.status, systemImage: "checkmark.shield")
+                        if let notice = record.safetyNotice, !notice.isEmpty {
+                            Label(notice, systemImage: "cross.case")
+                        }
+                    }
+                    .font(VelaTheme.footnote())
+                    .foregroundStyle(VelaTheme.fg2)
+                }
+            }
+            .padding(16)
+            .padding(.bottom, 24)
+        }
+        .background(VelaTheme.systemGroupedBackground)
+        .navigationTitle("生成物详情")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func artifactSection<Content: View>(
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(VelaTheme.caption1().weight(.semibold))
+                .foregroundStyle(VelaTheme.muted)
+            content()
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .velaNativeCard(radius: 18)
     }
 }

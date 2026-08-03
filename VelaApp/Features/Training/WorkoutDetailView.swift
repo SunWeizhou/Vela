@@ -440,6 +440,11 @@ struct WorkoutDetailView: View {
                 systemContext: L10n.t(
                     "Analyze detailed workout segment, heart rate ranges, recovery speed, energy expense, and distance coverage.",
                     "分析特定的训练表现、心率区间分布、恢复速率、运动热量消耗和距离表现细节。"
+                ),
+                screenContext: CoachScreenContext(
+                    surface: .workoutDetail,
+                    entityType: "workout",
+                    selectedDate: workout.start
                 )
             ),
             suggestedQuestion: L10n.t(
@@ -778,4 +783,3 @@ struct WorkoutDetailView: View {
         }
     }
 }
-

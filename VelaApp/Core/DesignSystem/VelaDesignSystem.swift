@@ -349,25 +349,64 @@ struct TrendChartCard: View {
     let title: String
     let values: [Double]
     var accent: Color = VelaTheme.accent
+    var currentValue: String? = nil
+    var subtitle: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(VelaTheme.subheadline())
-                .fontWeight(.semibold)
-                .foregroundStyle(VelaTheme.fg)
+            HStack(alignment: .firstTextBaseline) {
+                Text(title)
+                    .font(VelaTheme.subheadline().weight(.semibold))
+                    .foregroundStyle(VelaTheme.fg)
 
-            HStack(alignment: .bottom, spacing: 4) {
-                ForEach(Array(values.enumerated()), id: \.offset) { index, value in
-                    RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .fill(index == values.indices.last ? accent : accent.opacity(0.24))
-                        .frame(height: max(4, min(54, value)))
+                Spacer()
+
+                if let currentValue {
+                    Text(currentValue)
+                        .font(VelaTheme.headline().monospacedDigit())
+                        .foregroundStyle(accent)
                 }
             }
-            .frame(height: 56)
+
+            if values.isEmpty {
+                Label("暂无真实趋势", systemImage: "chart.line.uptrend.xyaxis")
+                    .font(VelaTheme.caption1())
+                    .foregroundStyle(VelaTheme.muted)
+                    .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+            } else {
+                GeometryReader { geometry in
+                    let minimum = values.min() ?? 0
+                    let maximum = values.max() ?? 1
+                    let span = max(maximum - minimum, 1)
+
+                    HStack(alignment: .bottom, spacing: 4) {
+                        ForEach(Array(values.enumerated()), id: \.offset) { index, value in
+                            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                                .fill(index == values.indices.last ? accent : accent.opacity(0.24))
+                                .frame(
+                                    height: max(
+                                        4,
+                                        8 + ((value - minimum) / span) * (geometry.size.height - 8)
+                                    )
+                                )
+                        }
+                    }
+                }
+                .frame(height: 56)
+            }
+
+            if let subtitle {
+                Text(subtitle)
+                    .font(VelaTheme.caption2())
+                    .foregroundStyle(VelaTheme.fg2)
+            }
         }
-        .padding(14)
-        .velaNativeCard(radius: 16)
+        .padding(VelaTheme.compactCardPadding)
+        .velaNativeCard(radius: VelaTheme.radiusLg)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "\(title)，\(currentValue ?? "暂无当前值")，\(values.isEmpty ? "暂无趋势" : "包含\(values.count)个真实读数")"
+        )
     }
 }
 
@@ -533,15 +572,18 @@ extension ButtonStyle where Self == CardPressStyle {
 }
 
 struct CardPressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
-            .onChange(of: configuration.isPressed) { _, isPressed in
-                if isPressed {
-                    VelaHaptic.light()
-                }
-            }
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
+            .opacity(configuration.isPressed ? 0.90 : 1)
+            .animation(
+                reduceMotion
+                    ? .easeOut(duration: VelaTheme.reducedMotionDuration)
+                    : VelaTheme.press,
+                value: configuration.isPressed
+            )
     }
 }
 
@@ -550,10 +592,13 @@ extension ButtonStyle where Self == TabItemStyle {
 }
 
 struct TabItemStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .opacity(configuration.isPressed ? 0.6 : 1)
-            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+            .opacity(configuration.isPressed ? 0.68 : 1)
+            .animation(reduceMotion ? .easeOut(duration: 0.16) : VelaTheme.press, value: configuration.isPressed)
             .onChange(of: configuration.isPressed) { _, isPressed in
                 if isPressed {
                     VelaHaptic.selection()
@@ -567,10 +612,13 @@ extension ButtonStyle where Self == PlusButtonStyle {
 }
 
 struct PlusButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.92 : 1)
-            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.94 : 1)
+            .opacity(configuration.isPressed ? 0.84 : 1)
+            .animation(reduceMotion ? .easeOut(duration: 0.16) : VelaTheme.press, value: configuration.isPressed)
             .onChange(of: configuration.isPressed) { _, isPressed in
                 if isPressed {
                     VelaHaptic.medium()
@@ -607,6 +655,7 @@ struct VelaThemeBackground: View {
 
 struct VelaNativeCardModifier: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     let radius: CGFloat
 
     func body(content: Content) -> some View {
@@ -615,9 +664,44 @@ struct VelaNativeCardModifier: ViewModifier {
             .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(VelaTheme.borderSoft.opacity(0.42), lineWidth: 0.5)
+                    .stroke(
+                        colorSchemeContrast == .increased
+                            ? VelaTheme.border
+                            : VelaTheme.borderSoft.opacity(0.42),
+                        lineWidth: colorSchemeContrast == .increased ? 1 : 0.5
+                    )
             )
             .shadow(color: VelaTheme.cardShadow(colorScheme), radius: 12, y: 5)
+    }
+}
+
+struct VelaGlassSurfaceModifier: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
+    let radius: CGFloat
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        let needsSolidSurface = reduceTransparency || colorSchemeContrast == .increased
+
+        content
+            .background {
+                if needsSolidSurface {
+                    shape.fill(VelaTheme.cardBg)
+                } else {
+                    shape.fill(.ultraThinMaterial)
+                }
+            }
+            .clipShape(shape)
+            .overlay(
+                shape.stroke(
+                    colorSchemeContrast == .increased
+                        ? VelaTheme.border
+                        : VelaTheme.borderSoft.opacity(0.55),
+                    lineWidth: colorSchemeContrast == .increased ? 1 : 0.5
+                )
+            )
     }
 }
 
@@ -684,17 +768,18 @@ extension View {
     }
 
     func glassEffect(radius: CGFloat = VelaTheme.radiusCardLarge) -> some View {
-        self
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(VelaTheme.borderSoft.opacity(0.55), lineWidth: 0.5)
-            )
+        self.modifier(VelaGlassSurfaceModifier(radius: radius))
     }
 
     func sectionSpacing() -> some View {
         self.padding(.bottom, VelaTheme.space8)
+    }
+
+    func velaSheetSurface() -> some View {
+        self
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(VelaTheme.radiusSheet)
+            .presentationBackground(VelaTheme.systemGroupedBackground)
     }
 }
 
@@ -946,6 +1031,7 @@ struct VelaMinimalFloatingTabBar: View {
 // MARK: - Premium Shimmer & Skeleton View Modifiers
 
 struct ShimmerModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var phase: CGFloat = 0.0
 
     func body(content: Content) -> some View {
@@ -953,25 +1039,37 @@ struct ShimmerModifier: ViewModifier {
             .overlay(
                 GeometryReader { geo in
                     let width = geo.size.width
-                    
-                    LinearGradient(
-                        colors: [
-                            .clear,
-                            .white.opacity(0.12),
-                            .white.opacity(0.35),
-                            .white.opacity(0.12),
-                            .clear
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    .rotationEffect(.degrees(15))
-                    .scaleEffect(1.5)
-                    .offset(x: -width + (phase * width * 2.5))
+
+                    if reduceMotion {
+                        Color.white.opacity(0.08)
+                    } else {
+                        LinearGradient(
+                            colors: [
+                                .clear,
+                                .white.opacity(0.12),
+                                .white.opacity(0.35),
+                                .white.opacity(0.12),
+                                .clear
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        .rotationEffect(.degrees(15))
+                        .scaleEffect(1.5)
+                        .offset(x: -width + (phase * width * 2.5))
+                    }
                 }
             )
             .mask(content)
             .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
+                    phase = 1.0
+                }
+            }
+            .onChange(of: reduceMotion) { _, shouldReduceMotion in
+                phase = 0
+                guard !shouldReduceMotion else { return }
                 withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
                     phase = 1.0
                 }

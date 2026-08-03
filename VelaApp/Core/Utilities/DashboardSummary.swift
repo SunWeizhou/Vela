@@ -194,7 +194,7 @@ struct DashboardSummary: Hashable, @unchecked Sendable {
             ),
             recovery: MetricResult(
                 name: "Recovery Score",
-                value: 0,
+                value: nil,
                 band: .low,
                 confidence: .low,
                 components: [:],

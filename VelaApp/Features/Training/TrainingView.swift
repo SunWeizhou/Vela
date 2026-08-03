@@ -87,10 +87,7 @@ struct TrainingView: View {
                 trainingHeader
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(.ultraThinMaterial)
-                
-                Divider()
-                    .opacity(0.4)
+                    .background(.bar)
             }
         }
         .task {

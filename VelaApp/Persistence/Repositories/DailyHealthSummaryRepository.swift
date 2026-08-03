@@ -14,6 +14,14 @@ final class SwiftDataDailyHealthSummaryRepository: DailyHealthSummaryRepository 
     }
 
     func upsert(_ snapshot: DailyHealthSnapshot, calendar: Calendar = .current) throws {
+        try upsert(snapshot, scoreEvidence: nil, calendar: calendar)
+    }
+
+    func upsert(
+        _ snapshot: DailyHealthSnapshot,
+        scoreEvidence: DailyScoreEvidenceEnvelope?,
+        calendar: Calendar = .current
+    ) throws {
         let day = calendar.startOfDay(for: snapshot.date)
         let dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: day, calendar: calendar)
         let descriptor = FetchDescriptor<DailyHealthSummaryRecord>(
@@ -22,8 +30,13 @@ final class SwiftDataDailyHealthSummaryRepository: DailyHealthSummaryRepository 
 
         if let existing = try modelContext.fetch(descriptor).first {
             existing.apply(snapshot: snapshot, calendar: calendar)
+            if scoreEvidence != nil {
+                try existing.apply(scoreEvidence: scoreEvidence)
+            }
         } else {
-            modelContext.insert(DailyHealthSummaryRecord(snapshot: snapshot, calendar: calendar))
+            let record = DailyHealthSummaryRecord(snapshot: snapshot, calendar: calendar)
+            try record.apply(scoreEvidence: scoreEvidence)
+            modelContext.insert(record)
         }
 
         try modelContext.save()

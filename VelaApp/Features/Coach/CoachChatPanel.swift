@@ -12,6 +12,7 @@ import UIKit
 
 struct CoachChatPanel: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var services: VelaServices
     @Query(sort: \JournalEntryRecord.createdAt, order: .reverse) private var journalEntries: [JournalEntryRecord]
     @Query(sort: \AIReportRecord.createdAt, order: .reverse) private var savedReports: [AIReportRecord]
@@ -60,7 +61,13 @@ struct CoachChatPanel: View {
                 }
                 .onChange(of: vm.messages.count) {
                     if let id = vm.messages.last?.id {
-                        withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .bottom) }
+                        if reduceMotion {
+                            proxy.scrollTo(id, anchor: .bottom)
+                        } else {
+                            withAnimation(VelaTheme.interfaceAnimation(reduceMotion: false)) {
+                                proxy.scrollTo(id, anchor: .bottom)
+                            }
+                        }
                     }
                 }
                 .onChange(of: vm.streamingContent) {
@@ -131,7 +138,7 @@ struct CoachChatPanel: View {
     private func loadDataCoverageSummary() async {
         let groups = await DataCoverageGroupFactory.loadPriorityGroups()
         let summary = DataCoverageSummaryModel.build(groups: groups)
-        withAnimation(VelaTheme.smooth) {
+        withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) {
             dataCoverageSummary = summary
         }
     }

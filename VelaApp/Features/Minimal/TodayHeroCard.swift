@@ -6,6 +6,7 @@ struct TodayHeroCard: View {
     let model: TodayExperienceModel
     let recoveryScoreText: String
     let accent: Color
+    let targetStrainRange: ClosedRange<Double>?
     let primaryActionIcon: String
     let onPrimaryAction: () -> Void
     
@@ -17,163 +18,224 @@ struct TodayHeroCard: View {
         recoveryScoreText != "--"
     }
 
-    private var evidenceIcon: String {
-        if !hasRecoveryScore { return "circle.dotted" }
-        return model.hero.confidenceLabel.contains("充分") ? "checkmark.seal.fill" : "info.circle.fill"
+    private var coreSignals: [TodayExperienceSignalCard] {
+        ["recovery", "sleep", "strain"].compactMap { id in
+            model.signalCards.first(where: { $0.id == id })
+        }
     }
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            Circle()
-                .fill(accent.opacity(0.34))
-                .frame(width: 190, height: 190)
-                .blur(radius: 18)
-                .offset(x: 72, y: -88)
-                .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Label(statusTitle, systemImage: statusIcon)
+                    .font(VelaTheme.caption2().weight(.semibold))
+                    .foregroundStyle(statusColor)
 
-            Circle()
-                .fill(Color(hex: "#6574FF").opacity(0.16))
-                .frame(width: 150, height: 150)
-                .blur(radius: 28)
-                .offset(x: -205, y: 245)
-                .accessibilityHidden(true)
+                Spacer(minLength: 8)
 
-            VStack(alignment: .leading, spacing: 18) {
-                HStack(spacing: 8) {
-                    Label(statusTitle, systemImage: statusIcon)
-                        .font(VelaTheme.caption2().weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.88))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(.white.opacity(0.10), in: Capsule())
-
-                    Spacer(minLength: 8)
-
-                    if let generatedAt {
-                        Text(formattedTime(generatedAt))
-                            .font(VelaTheme.caption2().monospacedDigit())
-                            .foregroundStyle(.white.opacity(0.55))
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("TODAY · 今日重点")
-                        .font(VelaTheme.caption2().weight(.bold))
-                        .tracking(0.8)
-                        .foregroundStyle(.white.opacity(0.58))
-
-                    Text(model.hero.decisionTitle)
-                        .font(VelaTheme.title1())
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.78)
-
-                    Text(model.hero.summary)
-                        .font(VelaTheme.subheadline())
-                        .foregroundStyle(.white.opacity(0.70))
-                        .lineSpacing(3)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
-                }
-
-                if hasRecoveryScore {
-                    HStack(spacing: 10) {
-                        heroMetric(value: recoveryScoreText, label: "恢复")
-                        heroMetric(
-                            value: model.hero.confidenceLabel.replacingOccurrences(of: "判断依据", with: ""),
-                            label: "判断依据",
-                            icon: evidenceIcon
-                        )
-                    }
-                } else {
-                    Label(model.hero.confidenceLabel, systemImage: evidenceIcon)
-                        .font(VelaTheme.caption1().weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.74))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(.white.opacity(0.08), in: Capsule())
-                }
-
-                Button(action: onPrimaryAction) {
-                    HStack(spacing: 10) {
-                        Image(systemName: primaryActionIcon)
-                        ViewThatFits(in: .horizontal) {
-                            Text(model.hero.primaryActionTitle)
-                                .lineLimit(1)
-                            Text(compactPrimaryActionTitle)
-                                .lineLimit(1)
-                        }
-                        .layoutPriority(1)
-                        Spacer(minLength: 8)
-                        Image(systemName: "arrow.up.right")
-                    }
-                    .font(VelaTheme.headline())
-                    .foregroundStyle(Color(hex: "#111629"))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                    .frame(minHeight: 52)
-                    .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                }
-                .buttonStyle(.plain)
-
-                if !model.evidenceChips.isEmpty {
-                    Label(
-                        model.evidenceChips.prefix(2).map(localizedReason).joined(separator: " · "),
-                        systemImage: "waveform.path.ecg"
-                    )
-                    .font(VelaTheme.caption2())
-                    .foregroundStyle(.white.opacity(0.58))
-                    .lineLimit(2)
-                }
-
-                if let safetyNotice, !safetyNotice.isEmpty {
-                    Text(safetyNotice)
-                        .font(VelaTheme.caption2())
-                        .foregroundStyle(.white.opacity(0.52))
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
+                if let generatedAt {
+                    Text(formattedTime(generatedAt))
+                        .font(VelaTheme.caption2().monospacedDigit())
+                        .foregroundStyle(VelaTheme.muted)
                 }
             }
-            .padding(20)
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 8)
+
+            coreScoreOverview
+                .padding(.horizontal, 12)
+                .padding(.bottom, 12)
+
+            Divider()
+                .padding(.horizontal, 16)
+
+            Button(action: onPrimaryAction) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text("指导")
+                            .font(VelaTheme.caption2().weight(.semibold))
+                            .foregroundStyle(VelaTheme.muted)
+                        Spacer()
+                        Label(model.hero.confidenceLabel, systemImage: evidenceIcon)
+                            .font(VelaTheme.caption2().weight(.semibold))
+                            .foregroundStyle(statusColor)
+                    }
+
+                    HStack(alignment: .top, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(model.hero.decisionTitle)
+                                .font(VelaTheme.headline())
+                                .foregroundStyle(VelaTheme.fg)
+                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+
+                            Text(model.hero.summary)
+                                .font(VelaTheme.caption1())
+                                .foregroundStyle(VelaTheme.fg2)
+                                .lineSpacing(2)
+                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        }
+
+                        Spacer(minLength: 4)
+
+                        Image(systemName: "chevron.right")
+                            .font(VelaTheme.caption1().weight(.bold))
+                            .foregroundStyle(VelaTheme.muted)
+                            .padding(.top, 3)
+                    }
+
+                    HStack(spacing: 6) {
+                        Image(systemName: primaryActionIcon)
+                        Text(model.hero.primaryActionTitle)
+                        Spacer()
+                        if let targetStrainText {
+                            Text(targetStrainText)
+                        }
+                    }
+                    .font(VelaTheme.caption2().weight(.semibold))
+                    .foregroundStyle(accent)
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.cardPress)
+
+            if let safetyNotice, !safetyNotice.isEmpty {
+                Text(safetyNotice)
+                    .font(.system(size: 10, weight: .regular))
+                    .foregroundStyle(VelaTheme.meta)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+                    .frame(maxWidth: .infinity)
+            }
         }
-        .background(
-            LinearGradient(
-                colors: [Color(hex: "#111629"), Color(hex: "#1A2342")],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: VelaTheme.radiusFeature, style: .continuous)
+        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
+                .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
         )
-        .clipShape(RoundedRectangle(cornerRadius: VelaTheme.radiusFeature, style: .continuous))
-        .shadow(color: Color(hex: "#111629").opacity(0.16), radius: 22, y: 12)
+        .shadow(color: Color.black.opacity(0.045), radius: 16, y: 8)
         .accessibilityElement(children: .contain)
     }
 
-    private func heroMetric(value: String, label: String, icon: String? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 5) {
-                if let icon {
-                    Image(systemName: icon)
+    @ViewBuilder
+    private var coreScoreOverview: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: 8) {
+                ForEach(coreSignals) { signal in
+                    coreScoreMetric(signal, horizontal: true)
                 }
-                Text(value.isEmpty ? "有限" : value)
             }
-            .font(VelaTheme.headline().weight(.semibold))
-            .foregroundStyle(.white)
-            .lineLimit(1)
+        } else {
+            HStack(spacing: 0) {
+                ForEach(coreSignals) { signal in
+                    coreScoreMetric(signal, horizontal: false)
+                        .frame(maxWidth: .infinity)
 
-            Text(label)
-                .font(VelaTheme.caption2())
-                .foregroundStyle(.white.opacity(0.52))
+                    if signal.id != coreSignals.last?.id {
+                        Divider()
+                            .frame(height: 74)
+                    }
+                }
+            }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
-    private var compactPrimaryActionTitle: String {
-        if model.hero.primaryActionTitle.contains("同步") { return "立即同步" }
-        if model.hero.primaryActionTitle.contains("训练") { return "开始训练" }
-        return "查看行动"
+    private func coreScoreMetric(
+        _ signal: TodayExperienceSignalCard,
+        horizontal: Bool
+    ) -> some View {
+        let color = scoreColor(for: signal.id)
+
+        return Group {
+            if horizontal {
+                HStack(spacing: 12) {
+                    metricRing(signal, color: color, size: 62)
+                    scoreLabel(signal)
+                    Spacer(minLength: 0)
+                }
+            } else {
+                VStack(spacing: 5) {
+                    metricRing(signal, color: color, size: 70)
+                    scoreLabel(signal)
+                }
+            }
+        }
+        .padding(.horizontal, horizontal ? 8 : 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, minHeight: horizontal ? 68 : 104)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "\(signal.title)，\(signal.value == "--" ? "待同步" : "\(signal.value)分")，\(signal.directionLabel)，\(signal.confidenceLabel)"
+        )
+    }
+
+    private func metricRing(
+        _ signal: TodayExperienceSignalCard,
+        color: Color,
+        size: CGFloat
+    ) -> some View {
+        VelaMetricScoreRing(
+            score: Double(signal.value),
+            label: signal.title,
+            domain: metricDomain(for: signal.id),
+            size: size,
+            accent: color,
+            targetRange: nil,
+            allowsOverflow: signal.id == "strain",
+            showsLabel: false,
+            direction: signal.directionLabel,
+            confidence: signal.confidenceLabel,
+            dataState: signal.coverageLabel
+        )
+        .accessibilityHidden(true)
+    }
+
+    private func scoreLabel(_ signal: TodayExperienceSignalCard) -> some View {
+        VStack(alignment: .center, spacing: 1) {
+            Text(signal.title)
+                .font(VelaTheme.caption1().weight(.semibold))
+                .foregroundStyle(VelaTheme.fg)
+            Text(signal.value == "--" ? "待同步" : signal.directionLabel)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(VelaTheme.muted)
+                .lineLimit(1)
+        }
+    }
+
+    private func scoreColor(for signalID: String) -> Color {
+        switch signalID {
+        case "recovery": return VelaTheme.recoveryColor
+        case "sleep": return VelaTheme.sleepColor
+        case "strain": return VelaTheme.strainColor
+        default: return accent
+        }
+    }
+
+    private func metricDomain(for signalID: String) -> VelaMetricDomain {
+        switch signalID {
+        case "recovery": .recovery
+        case "sleep": .sleep
+        case "strain": .strain
+        default: .neutral
+        }
+    }
+
+    private var strainTargetRange: ClosedRange<Double>? {
+        targetStrainRange
+    }
+
+    private var targetStrainText: String? {
+        guard let strainTargetRange else { return nil }
+        return "目标负荷 \(Int(strainTargetRange.lowerBound))–\(Int(strainTargetRange.upperBound))"
+    }
+
+    private var evidenceIcon: String {
+        if !hasRecoveryScore { return "circle.dotted" }
+        return model.hero.confidenceLabel.contains("充分") ? "checkmark.seal.fill" : "info.circle.fill"
     }
 
     private var statusTitle: String {

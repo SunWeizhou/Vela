@@ -1,4 +1,114 @@
 import SwiftUI
+
+struct MetricRecommendationPresentation: Equatable {
+    var title: String
+    var detail: String
+    var evidence: String
+    var symbol: String
+}
+
+enum MetricRecommendationPolicy {
+    static func make(
+        metric: VelaMetricDetailView.MetricType,
+        dashboard: DashboardSummary,
+        valueText: String,
+        hasData: Bool
+    ) -> MetricRecommendationPresentation {
+        guard hasData else {
+            return MetricRecommendationPresentation(
+                title: "先补齐数据，再做判断",
+                detail: "当前没有足够的真实读数。同步 Apple 健康后，Vela 才会给出这个指标的趋势和行动建议。",
+                evidence: "当前值 -- · 不使用估算值",
+                symbol: "arrow.triangle.2.circlepath"
+            )
+        }
+
+        switch metric {
+        case .recovery:
+            let score = dashboard.recovery.score
+            if score < 45 {
+                return recommendation("恢复优先，降低训练成本", "避免追求训练量；如要训练，以低强度、短时长和动作质量为上限。", valueText, "heart.text.square")
+            }
+            if score < 75 {
+                return recommendation("可以训练，但要保留余力", "按计划的保守版本执行，保留 2 次左右余力，并观察热身后的主观状态。", valueText, "gauge.with.dots.needle.50percent")
+            }
+            return recommendation("恢复信号支持计划训练", "可以执行计划，同时仍以动作质量、疼痛和异常不适作为即时停止条件。", valueText, "checkmark.circle")
+
+        case .sleep:
+            let score = dashboard.sleepScore.score
+            if score < 60 {
+                return recommendation("今晚优先修复睡眠", "今天避免过晚高强度训练和过晚进食，固定上床时间，给睡眠留出完整窗口。", valueText, "moon.zzz")
+            }
+            if score < 80 {
+                return recommendation("保护今晚的睡眠节奏", "睡眠基本可用但仍有改进空间；保持规律入睡，并减少临睡前额外刺激。", valueText, "bed.double")
+            }
+            return recommendation("保持当前睡眠节奏", "当前睡眠信号较好，优先维持相近的入睡、起床和睡眠时长。", valueText, "moon.stars")
+
+        case .strain:
+            let score = dashboard.strain.score
+            let target = dashboard.strain.recommendedRange
+            if score > Double(target.upperBound) {
+                return recommendation("今天停止继续加量", "当前负荷已经超过建议区间；后续活动以轻松完成和恢复为主。", "负荷 \(valueText) · 目标 \(target.lowerBound)–\(target.upperBound)", "stop.circle")
+            }
+            if score < Double(target.lowerBound) {
+                return recommendation("负荷仍低于今日目标", "若恢复和睡眠允许，可按计划补足活动；恢复建议始终优先于负荷目标。", "负荷 \(valueText) · 目标 \(target.lowerBound)–\(target.upperBound)", "figure.walk")
+            }
+            return recommendation("负荷位于建议区间", "无需为了数字继续加量；完成计划后把重点转向补水、进食和恢复。", "负荷 \(valueText) · 目标 \(target.lowerBound)–\(target.upperBound)", "target")
+
+        case .stress:
+            let score = dashboard.stress.stressIndex
+            if score >= 70 {
+                return recommendation("安排一个低刺激恢复窗口", "先做 5–10 分钟安静呼吸或轻松步行，再决定是否继续高要求任务或训练。", valueText, "wind")
+            }
+            if score >= 45 {
+                return recommendation("减少额外刺激", "当前压力信号偏高；把高认知负荷、咖啡因和高强度训练错开。", valueText, "waveform.path.ecg")
+            }
+            return recommendation("压力信号处于可控区间", "保持当前节奏，并结合连续趋势判断，而不是追逐单次低值。", valueText, "leaf")
+
+        case .energy:
+            let score = dashboard.energy.currentEnergy
+            if score < 35 {
+                return recommendation("保留能量，避免透支", "优先补水、规律进食和低强度活动；高强度训练应服从恢复与睡眠建议。", valueText, "battery.25percent")
+            }
+            if score < 70 {
+                return recommendation("把能量留给最重要的任务", "当前储备适中，先完成优先训练或工作，减少不必要的额外消耗。", valueText, "battery.50percent")
+            }
+            return recommendation("能量储备支持主要计划", "可以执行今天的主要任务，但不要把较高能量分理解为无限负荷许可。", valueText, "battery.100percent")
+
+        case .hrv:
+            return recommendation("围绕个人基线观察变化", "HRV 个体差异很大；连续偏离个人基线比与他人比较更有意义。", valueText, "waveform.path.ecg")
+        case .rhr:
+            return recommendation("关注连续偏离，而非单次波动", "结合 HRV、睡眠、体温和主观状态观察静息心率趋势。", valueText, "heart")
+        case .weight, .bodyFat:
+            return recommendation("用 4 周趋势判断变化", "尽量在相近时间和条件下测量；不要根据单日水分波动调整训练或饮食。", valueText, "chart.line.uptrend.xyaxis")
+        case .respiratoryRate:
+            return recommendation("与夜间个人基线比较", "连续偏离更值得关注；同时查看睡眠、体温与主观不适记录。", valueText, "lungs")
+        case .bloodOxygen:
+            return recommendation("结合趋势和测量条件解读", "单次腕上读数可能受佩戴和运动影响；持续异常或伴随不适时应寻求专业意见。", valueText, "drop")
+        case .steps:
+            return recommendation("用轻松步行补足日常活动", "把步数分散到全天，不必在高负荷或低恢复时为了目标集中补步。", valueText, "shoeprints.fill")
+        case .activeCalories:
+            return recommendation("把活动消耗放回负荷背景", "活动热量是估算值；结合训练负荷、恢复和饮食目标判断，不单独追高。", valueText, "flame")
+        case .activeMinutes:
+            return recommendation("优先稳定累计，而不是一次补齐", "将活跃时间分散到一周，并让高强度时段服从恢复与睡眠状态。", valueText, "clock.badge.checkmark")
+        }
+    }
+
+    private static func recommendation(
+        _ title: String,
+        _ detail: String,
+        _ evidence: String,
+        _ symbol: String
+    ) -> MetricRecommendationPresentation {
+        MetricRecommendationPresentation(
+            title: title,
+            detail: detail,
+            evidence: evidence,
+            symbol: symbol
+        )
+    }
+}
+
 enum EvidenceFormat {
     case integer(String)
     case decimal(String)
@@ -7,6 +117,99 @@ enum EvidenceFormat {
 
 
 extension VelaMetricDetailView {
+    var metricRecommendation: MetricRecommendationPresentation {
+        MetricRecommendationPolicy.make(
+            metric: metric,
+            dashboard: dashboard,
+            valueText: dynamicValueText,
+            hasData: hasMetricData
+        )
+    }
+
+    var currentMetricResult: MetricResult? {
+        switch metric {
+        case .recovery, .hrv, .rhr: return dashboard.recovery
+        case .sleep: return dashboard.sleepScore
+        case .strain, .steps, .activeCalories, .activeMinutes: return dashboard.strain
+        case .stress: return dashboard.stress
+        case .energy: return dashboard.energy
+        case .weight, .bodyFat, .respiratoryRate, .bloodOxygen: return nil
+        }
+    }
+
+    var metricDirectionLabel: String {
+        if let result = currentMetricResult, metric.isScoredHealthDomain {
+            switch result.direction {
+            case .higherIsBetter: return "越高越好"
+            case .higherIsLoad: return "越高负荷越大"
+            case .higherNeedsAttention: return "越高越需关注"
+            }
+        }
+        switch metric {
+        case .hrv: return "相对基线解读"
+        case .rhr, .respiratoryRate, .bloodOxygen: return "偏离基线更重要"
+        case .weight, .bodyFat: return "关注长期趋势"
+        case .steps, .activeCalories, .activeMinutes: return "结合个人目标"
+        default: return "结合趋势解读"
+        }
+    }
+
+    var metricConfidenceLabel: String {
+        guard hasMetricData else { return "不可用" }
+        guard let result = currentMetricResult, metric.isScoredHealthDomain else {
+            return "原始读数"
+        }
+        switch result.confidence {
+        case .low: return "低"
+        case .medium: return "中"
+        case .high: return "高"
+        }
+    }
+
+    var metricCoverageLabel: String {
+        guard hasMetricData else { return "暂无数据" }
+        guard let result = currentMetricResult, metric.isScoredHealthDomain else {
+            return "今日可用"
+        }
+        switch result.dataCoverage {
+        case .unavailable: return "不可用"
+        case .partial: return "部分"
+        case .substantial: return "主要数据"
+        case .complete: return "完整"
+        }
+    }
+
+    var metricUpdatedAtLabel: String {
+        let date = currentMetricResult?.lastUpdated ?? dashboardVM.selectedDate
+        let timestamp = date.formatted(
+            Date.FormatStyle(date: .abbreviated, time: .shortened, locale: Locale(identifier: "zh_CN"))
+        )
+        return "更新于 \(timestamp)"
+    }
+
+    var metricMissingSummary: String? {
+        guard hasMetricData else { return "缺少可用读数；当前页面不会用 0 或默认值代替。" }
+        guard let result = currentMetricResult,
+              metric.isScoredHealthDomain,
+              !result.missingInputs.isEmpty else { return nil }
+        let labels = result.missingInputs.prefix(3).map(displayMissingInput)
+        return "仍缺少：\(labels.joined(separator: "、"))。当前结果已降低证据覆盖度。"
+    }
+
+    private func displayMissingInput(_ input: String) -> String {
+        let normalized = input.lowercased()
+        if normalized.contains("hrv") { return "HRV" }
+        if normalized.contains("rhr") || normalized.contains("resting") { return "静息心率" }
+        if normalized.contains("sleep") || normalized.contains("bedtime") || normalized.contains("wake") { return "完整睡眠" }
+        if normalized.contains("workout") { return "训练记录" }
+        if normalized.contains("step") { return "步数" }
+        if normalized.contains("energy") { return "活动能量" }
+        if normalized.contains("resp") { return "呼吸率" }
+        if normalized.contains("temp") { return "腕温" }
+        if normalized.contains("spo2") || normalized.contains("oxygen") { return "血氧" }
+        return "部分输入"
+    }
+
     var displayDateText: String {
         let dateToUse = selectedPoint?.date ?? dashboardVM.selectedDate
         let formatter = DateFormatter()

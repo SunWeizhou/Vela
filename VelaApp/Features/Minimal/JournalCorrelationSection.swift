@@ -1,14 +1,56 @@
+import Charts
 import SwiftUI
 import SwiftData
 
+struct ImpactMatrixPoint: Identifiable, Hashable {
+    var id: String
+    var habit: String
+    var outcome: String
+    var magnitude: Double
+    var signedCorrelation: Double
+    var sampleSize: Int
+    var lagDays: Int
+    var confidence: MetricConfidence
+}
+
+enum ImpactMatrixBuilder {
+    static func build(_ insights: [HabitCorrelationInsight]) -> [ImpactMatrixPoint] {
+        insights
+            .filter { $0.sampleSize > 0 && $0.correlation.isFinite }
+            .map {
+                ImpactMatrixPoint(
+                    id: $0.id,
+                    habit: $0.habit,
+                    outcome: $0.outcome,
+                    magnitude: abs($0.correlation),
+                    signedCorrelation: $0.correlation,
+                    sampleSize: $0.sampleSize,
+                    lagDays: $0.lagDays,
+                    confidence: $0.confidence
+                )
+            }
+            .sorted {
+                if $0.magnitude == $1.magnitude { return $0.sampleSize > $1.sampleSize }
+                return $0.magnitude > $1.magnitude
+            }
+    }
+}
+
 struct JournalCorrelationSection: View {
     let bodyModelState: BodyModelState
+    let insights: [HabitCorrelationInsight]
+
+    private var matrixPoints: [ImpactMatrixPoint] {
+        ImpactMatrixBuilder.build(insights)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("行为信号与待验证区域")
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(VelaTheme.muted)
+
+            impactMatrix
 
             if bodyModelState.maturity.overall == .seed || bodyModelState.uncertainAreas.contains(where: { $0.id == "behavior_pairs" }) {
                 VStack(spacing: 12) {
@@ -53,6 +95,66 @@ struct JournalCorrelationSection: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private var impactMatrix: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Impact Matrix")
+                        .font(.system(size: 15, weight: .bold))
+                    Text("关联强度 × 真实配对样本")
+                        .font(.system(size: 11))
+                        .foregroundStyle(VelaTheme.muted)
+                }
+                Spacer()
+                Image(systemName: "circle.grid.cross")
+                    .foregroundStyle(VelaTheme.accent)
+            }
+
+            if matrixPoints.isEmpty {
+                VelaStateCard(
+                    state: .partial,
+                    title: "矩阵仍在积累",
+                    message: "至少记录 28 天行为与健康结果，并保留足够记录日和对照日后，才会显示关联点。"
+                )
+            } else {
+                Chart(matrixPoints) { point in
+                    PointMark(
+                        x: .value("关联强度", point.magnitude),
+                        y: .value("配对样本", point.sampleSize)
+                    )
+                    .symbolSize(72)
+                    .foregroundStyle(point.signedCorrelation >= 0 ? VelaTheme.success : VelaTheme.warn)
+                    .annotation(position: .top, spacing: 4) {
+                        Text(point.habit)
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(VelaTheme.fg2)
+                            .lineLimit(1)
+                    }
+                }
+                .chartXScale(domain: 0...1)
+                .chartXAxisLabel("关联强度 |ρ|")
+                .chartYAxisLabel("真实配对 n")
+                .frame(height: 190)
+
+                HStack(spacing: 14) {
+                    Label("正相关", systemImage: "circle.fill")
+                        .foregroundStyle(VelaTheme.success)
+                    Label("负相关", systemImage: "circle.fill")
+                        .foregroundStyle(VelaTheme.warn)
+                    Spacer()
+                    Text("仅探索性证据")
+                        .foregroundStyle(VelaTheme.muted)
+                }
+                .font(.system(size: 10, weight: .semibold))
+            }
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+        .accessibilityElement(children: .contain)
     }
 
     private func bodyModelStatsRow(_ state: BodyModelState) -> some View {

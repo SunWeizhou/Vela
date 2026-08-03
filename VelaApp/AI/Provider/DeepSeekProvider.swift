@@ -24,6 +24,45 @@ enum DeepSeekTextModel: String, CaseIterable, Sendable {
     }
 }
 
+enum CoachReasoningMode: String, CaseIterable, Sendable {
+    static let storageKey = "vela_coach_reasoning_mode"
+    case fast
+    case thinking
+    case adaptive
+
+    static var stored: CoachReasoningMode {
+        CoachReasoningMode(rawValue: UserDefaults.standard.string(forKey: storageKey) ?? "adaptive") ?? .adaptive
+    }
+
+    var displayName: String {
+        switch self {
+        case .fast: "快速"
+        case .thinking: "深度思考"
+        case .adaptive: "自适应"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .fast: "优先低延迟，使用 Flash 模型。"
+        case .thinking: "始终使用 Pro 模型处理复杂分析。"
+        case .adaptive: "简短问题使用 Flash，完整报告与复杂分析使用 Pro。"
+        }
+    }
+
+    func model(for policy: ResponseLengthPolicy) -> DeepSeekTextModel {
+        switch self {
+        case .fast: .flash
+        case .thinking: .pro
+        case .adaptive:
+            switch policy {
+            case .full: .pro
+            case .casual, .focused: .flash
+            }
+        }
+    }
+}
+
 enum DeepSeekStreamCompletion {
     static func isComplete(didReceiveDone: Bool) -> Bool {
         didReceiveDone

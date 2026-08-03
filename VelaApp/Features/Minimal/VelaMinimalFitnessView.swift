@@ -96,6 +96,13 @@ struct VelaTrainingView: View {
                     currentMonthActiveTiers: currentMonthActiveTiers
                 )
 
+                CardioStatusCard(
+                    snapshot: CardioTrainingAnalyzer.analyze(
+                        workouts: recentWorkouts,
+                        endingAt: dashboardVM.selectedDate
+                    )
+                )
+
                 RecentWorkoutsSection(recentWorkouts: recentWorkouts)
 
                 MuscleVolumeCard(

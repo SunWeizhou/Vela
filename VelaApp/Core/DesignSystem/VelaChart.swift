@@ -1,8 +1,294 @@
 import SwiftUI
 
+// MARK: - Canonical metric score ring
+
+struct VelaMetricScoreRing: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let score: Double?
+    let label: String
+    let domain: VelaMetricDomain
+    var size: CGFloat = VelaTheme.ringMd
+    var accent: Color? = nil
+    var targetRange: ClosedRange<Double>? = nil
+    var allowsOverflow = false
+    var showsLabel = true
+    var direction: String? = nil
+    var confidence: String? = nil
+    var dataState: String? = nil
+
+    @State private var animatedProgress = 0.0
+
+    private var clampedProgress: Double {
+        guard let score else { return 0 }
+        return min(max(score / 100, 0), 1)
+    }
+
+    private var overflowProgress: Double {
+        guard allowsOverflow, let score, score > 100 else { return 0 }
+        return min((score - 100) / 100, 1)
+    }
+
+    private var valueText: String {
+        score.map { String(Int($0.rounded())) } ?? "--"
+    }
+
+    var body: some View {
+        VStack(spacing: showsLabel ? 8 : 0) {
+            ZStack {
+                Circle()
+                    .stroke(
+                        VelaTheme.borderSoft,
+                        style: StrokeStyle(
+                            lineWidth: ringWidth,
+                            lineCap: .round,
+                            dash: score == nil ? [2, 5] : []
+                        )
+                    )
+
+                if let targetRange {
+                    Circle()
+                        .trim(
+                            from: min(max(targetRange.lowerBound / 100, 0), 1),
+                            to: min(max(targetRange.upperBound / 100, 0), 1)
+                        )
+                        .stroke(
+                            effectiveColor.opacity(0.24),
+                            style: StrokeStyle(lineWidth: ringWidth + 4, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(-90))
+                }
+
+                if score != nil {
+                    Circle()
+                        .trim(from: 0, to: max(0.006, animatedProgress))
+                        .stroke(
+                            AngularGradient(
+                                colors: [effectiveColor.opacity(0.58), effectiveColor],
+                                center: .center
+                            ),
+                            style: StrokeStyle(lineWidth: ringWidth, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(-90))
+
+                    if overflowProgress > 0 {
+                        Circle()
+                            .trim(from: 0, to: overflowProgress)
+                            .stroke(
+                                VelaTheme.danger,
+                                style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
+                            )
+                            .rotationEffect(.degrees(-90))
+                            .padding(-6)
+                    }
+                }
+
+                Text(valueText)
+                    .font(.system(size: size * 0.28, weight: .bold, design: .rounded))
+                    .foregroundStyle(VelaTheme.fg)
+                    .monospacedDigit()
+                    .minimumScaleFactor(0.7)
+            }
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
+
+            if showsLabel {
+                Text(label)
+                    .font(VelaTheme.caption1().weight(.semibold))
+                    .foregroundStyle(VelaTheme.fg2)
+                    .lineLimit(1)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilitySummary)
+        .onAppear(perform: animateToCurrentScore)
+        .onChange(of: score) { _, _ in animateToCurrentScore() }
+    }
+
+    private var ringWidth: CGFloat {
+        max(5, size * 0.082)
+    }
+
+    private var effectiveColor: Color {
+        accent ?? domain.color
+    }
+
+    private var accessibilitySummary: String {
+        var parts = [label, score.map { "\(Int($0.rounded()))分" } ?? "暂无数据"]
+        if let direction, !direction.isEmpty { parts.append(direction) }
+        if let confidence, !confidence.isEmpty { parts.append(confidence) }
+        if let dataState, !dataState.isEmpty { parts.append(dataState) }
+        return parts.joined(separator: "，")
+    }
+
+    private func animateToCurrentScore() {
+        if reduceMotion {
+            animatedProgress = clampedProgress
+        } else {
+            withAnimation(VelaTheme.dataAnimation(reduceMotion: false)) {
+                animatedProgress = clampedProgress
+            }
+        }
+    }
+}
+
+// MARK: - Canonical stage and event timelines
+
+struct VelaTimelineItem: Identifiable {
+    let id: String
+    let title: String
+    let subtitle: String
+    var systemImage: String = "circle.fill"
+    var domain: VelaMetricDomain = .neutral
+}
+
+struct VelaTimelineCard: View {
+    let items: [VelaTimelineItem]
+    var emptyMessage = "此期间没有记录到活动。"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if items.isEmpty {
+                HStack(spacing: 10) {
+                    Image(systemName: VelaDataPresentationState.empty.systemImage)
+                        .foregroundStyle(VelaTheme.muted)
+                        .accessibilityHidden(true)
+                    Text(emptyMessage)
+                        .font(VelaTheme.caption1())
+                        .foregroundStyle(VelaTheme.fg2)
+                }
+                .frame(minHeight: 44)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(emptyMessage)
+            } else {
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                    VelaTimelineItemRow(
+                        item: item,
+                        showsConnector: index < items.count - 1
+                    )
+                }
+            }
+        }
+        .padding(VelaTheme.compactCardPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
+                .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
+        )
+    }
+}
+
+private struct VelaTimelineItemRow: View {
+    let item: VelaTimelineItem
+    let showsConnector: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(spacing: 0) {
+                Image(systemName: item.systemImage)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(item.domain.color)
+                    .frame(width: 32, height: 32)
+                    .background(item.domain.color.opacity(0.10), in: Circle())
+
+                if showsConnector {
+                    Rectangle()
+                        .fill(VelaTheme.borderSoft)
+                        .frame(width: 1.5)
+                        .frame(minHeight: 18)
+                }
+            }
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.title)
+                    .font(VelaTheme.subheadline().weight(.semibold))
+                    .foregroundStyle(VelaTheme.fg)
+                Text(item.subtitle)
+                    .font(VelaTheme.caption1())
+                    .foregroundStyle(VelaTheme.fg2)
+            }
+            .padding(.top, 4)
+
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(item.title + "，" + item.subtitle)
+    }
+}
+
+enum VelaStageKind: String {
+    case awake
+    case core
+    case deep
+    case rem
+
+    var color: Color {
+        switch self {
+        case .awake: VelaTheme.warn
+        case .core: VelaTheme.sleepColor.opacity(0.70)
+        case .deep: VelaTheme.sleepColor
+        case .rem: Color(uiColor: .systemCyan)
+        }
+    }
+}
+
+struct VelaStageInterval: Identifiable {
+    let id: String
+    let start: Date
+    let end: Date
+    let stage: VelaStageKind
+}
+
+enum VelaStageTimelineLayout {
+    static func normalizedRange(
+        interval: VelaStageInterval,
+        window: DateInterval
+    ) -> ClosedRange<Double>? {
+        guard window.duration > 0, interval.end > interval.start else { return nil }
+        let lower = min(max(interval.start.timeIntervalSince(window.start) / window.duration, 0), 1)
+        let upper = min(max(interval.end.timeIntervalSince(window.start) / window.duration, 0), 1)
+        guard upper > lower else { return nil }
+        return lower...upper
+    }
+}
+
+struct VelaStageTimeline: View {
+    let intervals: [VelaStageInterval]
+    let window: DateInterval
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(VelaTheme.secondaryGroupedBackground)
+
+                ForEach(intervals) { interval in
+                    if let range = VelaStageTimelineLayout.normalizedRange(
+                        interval: interval,
+                        window: window
+                    ) {
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(interval.stage.color)
+                            .frame(width: max(2, geometry.size.width * (range.upperBound - range.lowerBound)))
+                            .offset(x: geometry.size.width * range.lowerBound)
+                    }
+                }
+            }
+        }
+        .frame(height: 18)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("睡眠阶段时间线")
+        .accessibilityValue(intervals.isEmpty ? "暂无阶段数据" : "包含\(intervals.count)个真实阶段区间")
+    }
+}
+
 // MARK: - ScoreRing (Ring progress view)
 
 struct ScoreRing: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let score: Double      // 0…1
     let color: Color
     let size: CGFloat
@@ -39,7 +325,7 @@ struct ScoreRing: View {
                 .trim(from: 0, to: score)
                 .stroke(color, style: StrokeStyle(lineWidth: sw, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-                .animation(.smooth(duration: 0.8), value: score)
+                .animation(VelaTheme.dataAnimation(reduceMotion: reduceMotion), value: score)
 
             VStack(spacing: 0) {
                 if let unit = unit {
@@ -77,67 +363,23 @@ struct BevelScoreRing: View {
     let label: String
     let valueText: String
 
-    @State private var animatedScore: Double = 0.0
-
     var body: some View {
-        VStack(spacing: 8) {
-            ZStack {
-                // Track
-                Circle()
-                    .stroke(VelaTheme.borderSoft, lineWidth: 6.5)
-                    .frame(width: size, height: size)
-                
-                if animatedScore > 0 {
-                    // Gradient or solid arc using system gradient to avoid rotation coordinate bugs
-                    Circle()
-                        .trim(from: 0, to: max(0.01, animatedScore))
-                        .stroke(
-                            useGradient 
-                            ? AnyShapeStyle(color.gradient)
-                            : AnyShapeStyle(color),
-                            style: StrokeStyle(lineWidth: 6.5, lineCap: .round)
-                        )
-                        .rotationEffect(.degrees(-90))
-                        .frame(width: size, height: size)
-                }
-                
-                // Small indicator dot at progress end aligned perfectly on stroke center path
-                if animatedScore > 0 {
-                    let angle = -90 + (max(0.01, animatedScore) * 360)
-                    let radius = (size - 6.5) / 2
-                    Circle()
-                        .fill(color)
-                        .frame(width: 8, height: 8)
-                        .offset(x: radius * cos(angle * .pi / 180), y: radius * sin(angle * .pi / 180))
-                }
-                
-                // Center Value
-                Text(valueText)
-                    .font(.system(size: size * 0.28, weight: .bold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(VelaTheme.fg)
-            }
-            .frame(width: size, height: size)
-            
-            Text(label)
-                .font(VelaTheme.caption2())
-                .foregroundStyle(VelaTheme.muted)
-        }
-        .onAppear {
-            withAnimation(.spring(response: 0.85, dampingFraction: 0.82, blendDuration: 0)) {
-                animatedScore = score
-            }
-        }
-        .onChange(of: score) { _, newScore in
-            withAnimation(.spring(response: 0.85, dampingFraction: 0.82, blendDuration: 0)) {
-                animatedScore = newScore
-            }
-        }
+        VelaMetricScoreRing(
+            score: valueText == "--" ? nil : score * 100,
+            label: label,
+            domain: .neutral,
+            size: size,
+            accent: color,
+            showsLabel: !label.isEmpty
+        )
     }
 }
 
 // MARK: - Dotted Circle Gauge (Bevel-style circular tick gauge)
 
 struct DottedCircleGauge: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let score: Double // 0 to 100
     let labelText: String // e.g. "低"
     var size: CGFloat = 72
@@ -170,12 +412,12 @@ struct DottedCircleGauge: View {
         }
         .frame(width: size, height: size)
         .onAppear {
-            withAnimation(.spring(response: 0.85, dampingFraction: 0.82, blendDuration: 0)) {
+            withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) {
                 animatedScore = score
             }
         }
         .onChange(of: score) { _, newScore in
-            withAnimation(.spring(response: 0.85, dampingFraction: 0.82, blendDuration: 0)) {
+            withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) {
                 animatedScore = newScore
             }
         }
@@ -185,6 +427,8 @@ struct DottedCircleGauge: View {
 // MARK: - Segmented Battery Bar (Bevel-style segmented horizontal bar)
 
 struct SegmentedBatteryBar: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let percentage: Double // 0 to 1
     var barCount: Int = 26
     let color: Color
@@ -201,12 +445,12 @@ struct SegmentedBatteryBar: View {
             }
         }
         .onAppear {
-            withAnimation(.spring(response: 1.1, dampingFraction: 0.82, blendDuration: 0)) {
+            withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) {
                 animatedPercentage = percentage
             }
         }
         .onChange(of: percentage) { _, newPercentage in
-            withAnimation(.spring(response: 1.1, dampingFraction: 0.82, blendDuration: 0)) {
+            withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) {
                 animatedPercentage = newPercentage
             }
         }
@@ -282,6 +526,8 @@ struct SparklineLineGraph: View {
 // MARK: - TripleConcentricScoreRing (Concentric Recovery/Sleep/Strain activity-style rings)
 
 struct TripleConcentricScoreRing: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let recovery: Double // 0...1
     let sleep: Double    // 0...1
     let strain: Double   // 0...1
@@ -349,20 +595,20 @@ struct TripleConcentricScoreRing: View {
                 .shadow(color: VelaTheme.strainColor.opacity(0.25), radius: 2)
         }
         .onAppear {
-            withAnimation(.spring(response: 1.0, dampingFraction: 0.82)) {
+            withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) {
                 animRecovery = recovery
                 animSleep = sleep
                 animStrain = strain
             }
         }
         .onChange(of: recovery) { _, newRecovery in
-            withAnimation(.spring(response: 1.0, dampingFraction: 0.82)) { animRecovery = newRecovery }
+            withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) { animRecovery = newRecovery }
         }
         .onChange(of: sleep) { _, newSleep in
-            withAnimation(.spring(response: 1.0, dampingFraction: 0.82)) { animSleep = newSleep }
+            withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) { animSleep = newSleep }
         }
         .onChange(of: strain) { _, newStrain in
-            withAnimation(.spring(response: 1.0, dampingFraction: 0.82)) { animStrain = newStrain }
+            withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) { animStrain = newStrain }
         }
     }
 }

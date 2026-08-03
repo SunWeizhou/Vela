@@ -47,6 +47,22 @@ final class MemoryLedger {
 
     // MARK: - Confirm (accept proposal → write to wiki)
 
+    func editProposal(_ proposalId: UUID, content: String, userNote: String? = nil) throws {
+        try PersistenceWriteGate.shared.assertWritable(operation: "MemoryLedger: editProposal", modelContext: modelContext)
+        let descriptor = FetchDescriptor<MemoryEventRecord>(
+            predicate: #Predicate { $0.id == proposalId }
+        )
+        guard let record = try modelContext.fetch(descriptor).first,
+              record.status == MemoryProposalStatus.proposed.rawValue else { return }
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        record.content = trimmed
+        record.userNote = userNote?.trimmingCharacters(in: .whitespacesAndNewlines)
+        record.operation = "edit_proposal"
+        try modelContext.save()
+        logger.info("Memory proposal edited before confirmation: \(proposalId)")
+    }
+
     func confirmProposal(_ proposalId: UUID) throws {
         try PersistenceWriteGate.shared.assertWritable(operation: "MemoryLedger: confirmProposal", modelContext: modelContext)
         let descriptor = FetchDescriptor<MemoryEventRecord>(
@@ -64,6 +80,7 @@ final class MemoryLedger {
 
         // Write to wiki markdown file
         let previousContent = (try? String(contentsOf: WikiFileService.localURL(for: record.targetFile), encoding: .utf8)) ?? ""
+        record.previousContent = previousContent
         record.previousContentHash = ContentHash.hash(previousContent)
 
         try WikiFileService.updateSection(
@@ -110,6 +127,26 @@ final class MemoryLedger {
             logger.warning("Cannot rollback: record \(recordId) is not in accepted state.")
             return
         }
+
+        guard let previousContent = record.previousContent else {
+            logger.warning("Cannot rollback legacy memory \(recordId): previous markdown was not captured.")
+            return
+        }
+
+        let currentURL = WikiFileService.localURL(for: record.targetFile)
+        let currentContent = (try? String(contentsOf: currentURL, encoding: .utf8)) ?? ""
+        if let appliedHash = record.newContentHash,
+           ContentHash.hash(currentContent) != appliedHash {
+            logger.warning("Cannot rollback memory \(recordId): wiki changed after this memory was applied.")
+            return
+        }
+
+        try WikiFileService.updateSection(
+            filename: record.targetFile,
+            content: previousContent,
+            mode: .replace
+        )
+        WikiSyncManager.sync(modelContext: modelContext)
 
         record.status = MemoryProposalStatus.superseded.rawValue
         record.operation = "rollback"
@@ -173,5 +210,54 @@ enum ContentHash {
         // Mix in the length for extra spread
         hash ^= UInt64(input.count)
         return String(format: "%016llx", hash)
+    }
+}
+
+// MARK: - Automatic Memory Extractor
+
+@MainActor
+final class AutomaticMemoryExtractor: Sendable {
+    private let modelContext: ModelContext
+
+    init(modelContext: ModelContext) {
+        self.modelContext = modelContext
+    }
+
+    /// Extracts health constraints, preferences, or symptoms from user text (e.g. journal entry or chat message).
+    /// Creates memory proposals via MemoryLedger if explicit health signals are detected.
+    @discardableResult
+    func extract(from text: String, source: String = "User Text") throws -> [MemoryEventRecord] {
+        var createdRecords: [MemoryEventRecord] = []
+        let ledger = MemoryLedger(modelContext: modelContext)
+
+        let lower = text.lowercased()
+
+        // 1. Injury / Pain signals
+        if lower.contains("痛") || lower.contains("拉伤") || lower.contains("不适") || lower.contains("受伤") || lower.contains("pain") || lower.contains("injured") {
+            let record = try ledger.createProposal(
+                targetFile: "user_profile.md",
+                memoryType: .constraint,
+                content: "- 【伤病/不适记录】: \(text)",
+                evidence: "从用户输入中自动提炼伤病不适信号: \"\(text)\"",
+                confidence: 0.85,
+                source: source
+            )
+            createdRecords.append(record)
+        }
+
+        // 2. Dietary preferences
+        if lower.contains("咖啡因") || lower.contains("低碳水") || lower.contains("过敏") || lower.contains("caffeine") || lower.contains("allergic") {
+            let record = try ledger.createProposal(
+                targetFile: "user_profile.md",
+                memoryType: .preference,
+                content: "- 【饮食偏好/禁忌】: \(text)",
+                evidence: "从用户输入中自动提炼饮食偏好信号: \"\(text)\"",
+                confidence: 0.80,
+                source: source
+            )
+            createdRecords.append(record)
+        }
+
+        return createdRecords
     }
 }

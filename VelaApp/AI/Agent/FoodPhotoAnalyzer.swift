@@ -7,9 +7,28 @@ struct FoodAnalysisResult: Sendable {
     var foods: [IdentifiedFood]
     var totalCalories: Int
     var macros: MacroBreakdown
+    var micronutrients: [NutritionMicronutrientAmount]
     var healthScore: String   // e.g., "good", "moderate", "needs_improvement"
     var suggestions: [String]
     var rawAnalysis: String
+
+    init(
+        foods: [IdentifiedFood],
+        totalCalories: Int,
+        macros: MacroBreakdown,
+        micronutrients: [NutritionMicronutrientAmount] = [],
+        healthScore: String,
+        suggestions: [String],
+        rawAnalysis: String
+    ) {
+        self.foods = foods
+        self.totalCalories = totalCalories
+        self.macros = macros
+        self.micronutrients = micronutrients
+        self.healthScore = healthScore
+        self.suggestions = suggestions
+        self.rawAnalysis = rawAnalysis
+    }
 
     func formattedMarkdown() -> String {
         var md = "## Food Analysis\n\n"
@@ -25,6 +44,13 @@ struct FoodAnalysisResult: Sendable {
         md += "| Carbs    | \(macros.carbs)g |\n"
         md += "| Fat      | \(macros.fat)g |\n"
         md += "| Fiber    | \(macros.fiber)g |\n\n"
+        if !micronutrients.isEmpty {
+            md += "### Label Micronutrients\n"
+            for nutrient in micronutrients {
+                md += "- \(nutrient.label): \(nutrient.formattedValue)\n"
+            }
+            md += "\n"
+        }
         let scoreLabel: String = {
             switch healthScore {
             case "good": return "Good"
@@ -47,6 +73,45 @@ struct FoodAnalysisResult: Sendable {
     func plainTextSummary() -> String {
         let foodNames = foods.map { "\($0.name)" }.joined(separator: ", ")
         return "Meal: \(foodNames) | \(totalCalories) kcal | P:\(macros.protein)g C:\(macros.carbs)g F:\(macros.fat)g Fiber:\(macros.fiber)g | Score: \(healthScore)"
+    }
+}
+
+struct NutritionMicronutrientAmount: Codable, Hashable, Sendable, Identifiable {
+    var id: String { key }
+    var key: String
+    var label: String
+    var value: Double
+    var unit: String
+    var source: String
+
+    var formattedValue: String {
+        let decimals = value < 10 && value.rounded() != value ? 1 : 0
+        return "\(value.formatted(.number.precision(.fractionLength(decimals)))) \(unit)"
+    }
+}
+
+private struct NutritionAnalysisArchive: Codable {
+    var schema: String
+    var originalAnalysis: String
+    var micronutrients: [NutritionMicronutrientAmount]
+}
+
+enum NutritionAnalysisArchiveCodec {
+    static func encode(original: String, micronutrients: [NutritionMicronutrientAmount]) -> String {
+        guard !micronutrients.isEmpty,
+              let data = try? JSONEncoder().encode(NutritionAnalysisArchive(
+                schema: "nutritionAnalysis.v1",
+                originalAnalysis: original,
+                micronutrients: micronutrients
+              )) else { return original }
+        return String(data: data, encoding: .utf8) ?? original
+    }
+
+    static func micronutrients(from raw: String) -> [NutritionMicronutrientAmount] {
+        guard let data = raw.data(using: .utf8),
+              let archive = try? JSONDecoder().decode(NutritionAnalysisArchive.self, from: data),
+              archive.schema == "nutritionAnalysis.v1" else { return [] }
+        return archive.micronutrients.filter { $0.value.isFinite && $0.value >= 0 }
     }
 }
 

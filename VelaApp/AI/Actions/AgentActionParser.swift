@@ -1,5 +1,6 @@
 import Foundation
 import os.log
+import SwiftData
 
 private let logger = Logger(subsystem: "com.sunweizhou.Vela", category: "AgentActionParser")
 
@@ -332,5 +333,53 @@ enum AgentActionParser {
         case .createDailyLog:
             return ("daily", body)
         }
+    }
+}
+
+// MARK: - Artifact Generator Tool
+
+enum ArtifactGeneratorTool {
+    @MainActor
+    static func createArtifact(
+        type: CoachArtifactType,
+        title: String,
+        summary: String,
+        reasons: [CoachArtifactReason] = [],
+        actions: [CoachArtifactAction] = [],
+        confidence: Double = 0,
+        sourceContextHash: String = "unavailable",
+        modelContext: ModelContext
+    ) -> CoachArtifact {
+        let artifact = CoachArtifact(
+            id: UUID(),
+            type: type,
+            title: title,
+            summary: summary,
+            createdAt: Date(),
+            relatedDate: Date(),
+            confidence: confidence,
+            reasons: reasons,
+            actions: actions,
+            sourceContextHash: sourceContextHash
+        )
+
+        let payloadJSON = (try? JSONEncoder().encode(artifact))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+
+        let record = AgentArtifactRecord(
+            id: artifact.id,
+            type: artifact.type.rawValue,
+            title: artifact.title,
+            createdAt: artifact.createdAt,
+            payloadJSON: payloadJSON,
+            sourceContextHash: artifact.sourceContextHash,
+            status: artifact.status.rawValue,
+            confidence: artifact.confidence,
+            source: "artifact_generator"
+        )
+
+        modelContext.insert(record)
+        try? modelContext.save()
+        return artifact
     }
 }

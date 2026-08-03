@@ -78,6 +78,8 @@ struct AIContextBuilder {
         onboardingState: OnboardingState? = nil,
         bodyModelState: BodyModelState? = nil,
         bodyState: BodyState? = nil,
+        trainingDecision: DailyTrainingDecision? = nil,
+        dataCoverage: AgentDataCoverageContext? = nil,
         profileAge: Int? = nil,
         calendar: Calendar = .current,
         generatedAt: Date = Date()
@@ -251,7 +253,39 @@ struct AIContextBuilder {
         } else {
             coverageConfidence = .unavailable
         }
-        let decision = dashboard.trainingDecision
+        let agentTrainingDecision: AgentTrainingDecisionContext
+        if let trainingDecision {
+            let confidence: DataConfidence
+            if trainingDecision.confidence >= 0.8 {
+                confidence = .high
+            } else if trainingDecision.confidence >= 0.55 {
+                confidence = .medium
+            } else if trainingDecision.confidence > 0 {
+                confidence = .low
+            } else {
+                confidence = .unavailable
+            }
+            agentTrainingDecision = AgentTrainingDecisionContext(
+                readinessLevel: trainingDecision.decision.rawValue,
+                readinessGuidance: trainingDecision.userFacingSummary,
+                volumeMultiplier: trainingDecision.volumeMultiplier,
+                maxIntensity: "RPE \(trainingDecision.intensityCap)",
+                recommendedTrainingType: trainingDecision.targetSessionTitle ?? trainingDecision.decision.rawValue,
+                reasons: trainingDecision.reasons.joined(separator: " · "),
+                confidence: confidence
+            )
+        } else {
+            let decision = dashboard.trainingDecision
+            agentTrainingDecision = AgentTrainingDecisionContext(
+                readinessLevel: decision.readinessLevel,
+                readinessGuidance: decision.readinessGuidance,
+                volumeMultiplier: decision.volumeMultiplier,
+                maxIntensity: decision.maxIntensity,
+                recommendedTrainingType: decision.recommendedTrainingType,
+                reasons: decision.whyThis,
+                confidence: decision.trainingLoadConfidence
+            )
+        }
 
         let context = AgentFactSnapshot(
             schemaVersion: AIContextBuilder.canonicalSchemaVersion,
@@ -267,16 +301,8 @@ struct AIContextBuilder {
                 contextHash: resolvedBodyState.hash,
                 drivers: resolvedBodyState.drivers.sorted { $0.id < $1.id }
             ),
-            trainingDecision: AgentTrainingDecisionContext(
-                readinessLevel: decision.readinessLevel,
-                readinessGuidance: decision.readinessGuidance,
-                volumeMultiplier: decision.volumeMultiplier,
-                maxIntensity: decision.maxIntensity,
-                recommendedTrainingType: decision.recommendedTrainingType,
-                reasons: decision.whyThis,
-                confidence: decision.trainingLoadConfidence
-            ),
-            dataCoverage: AgentDataCoverageContext(
+            trainingDecision: agentTrainingDecision,
+            dataCoverage: dataCoverage ?? AgentDataCoverageContext(
                 availableSections: availableSections,
                 totalSections: coreAvailability.count,
                 missingSections: missingSections,
@@ -784,6 +810,7 @@ struct AgentFactInputLoader {
         var trainingResponses: [TrainingResponseRecord]
         var dailySummaries: [DailyHealthSummaryRecord]
         var activePlan: TrainingPlanRecord?
+        var dailyOperatingPlan: DailyOperatingPlanRecord?
         var onboardingState: OnboardingState?
 
         var journalContext: [JournalContextEntry] {
@@ -815,6 +842,15 @@ struct AgentFactInputLoader {
                 activeStatus: ActiveStatusSettings.resolveCurrentStatus(),
                 generatedAt: asOf
             ))
+        }
+
+        func canonicalTrainingDecision(for bodyState: BodyState) -> DailyTrainingDecision? {
+            guard let dailyOperatingPlan,
+                  dailyOperatingPlan.status == "active",
+                  dailyOperatingPlan.bodyStateHash == bodyState.hash else {
+                return nil
+            }
+            return dailyOperatingPlan.trainingDecision
         }
     }
 
@@ -857,6 +893,10 @@ struct AgentFactInputLoader {
         let activePlan = (try? modelContext.fetch(FetchDescriptor<TrainingPlanRecord>(
             predicate: #Predicate<TrainingPlanRecord> { $0.isActive }
         )))?.first
+        let dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: asOf)
+        let operatingPlans = (try? modelContext.fetch(FetchDescriptor<DailyOperatingPlanRecord>(
+            sortBy: [SortDescriptor(\.generatedAt, order: .reverse)]
+        ))) ?? []
         var onboardingDescriptor = FetchDescriptor<OnboardingState>(
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
@@ -873,6 +913,7 @@ struct AgentFactInputLoader {
             trainingResponses: responses,
             dailySummaries: summaries,
             activePlan: activePlan,
+            dailyOperatingPlan: operatingPlans.first { $0.dayIdentifier == dayIdentifier },
             onboardingState: (try? modelContext.fetch(onboardingDescriptor))?.first
         )
     }
@@ -986,3 +1027,83 @@ struct CoachCompactContextAdapter {
         return language.isChinese ? "\(valueAndUnit)（\(freshness)）" : "\(valueAndUnit) (\(freshness))"
     }
 }
+
+// MARK: - Food Vision & Nutrition Intelligence Engine
+
+public struct MacroNutrientAnalysisResult: Sendable, Equatable {
+    public var estimatedCalories: Int
+    public var proteinGrams: Int
+    public var carbsGrams: Int
+    public var fatGrams: Int
+    public var fiberGrams: Int
+    public var glycemicLoadEstimate: String // "low", "medium", "high"
+    public var metabolicTag: String          // "protein_rich", "balanced", "high_glycemic_risk"
+    public var recommendations: [String]
+
+    public init(
+        estimatedCalories: Int,
+        proteinGrams: Int,
+        carbsGrams: Int,
+        fatGrams: Int,
+        fiberGrams: Int,
+        glycemicLoadEstimate: String,
+        metabolicTag: String,
+        recommendations: [String]
+    ) {
+        self.estimatedCalories = estimatedCalories
+        self.proteinGrams = proteinGrams
+        self.carbsGrams = carbsGrams
+        self.fatGrams = fatGrams
+        self.fiberGrams = fiberGrams
+        self.glycemicLoadEstimate = glycemicLoadEstimate
+        self.metabolicTag = metabolicTag
+        self.recommendations = recommendations
+    }
+}
+
+public struct FoodVisionIntelligenceEngine: Sendable {
+    public init() {}
+
+    public func analyzeMealText(_ text: String) -> MacroNutrientAnalysisResult {
+        let lower = text.lowercased()
+        var protein = 25
+        var carbs = 45
+        var fat = 15
+        var fiber = 6
+        var gl = "medium"
+        var tag = "balanced"
+        var recs: [String] = []
+
+        if lower.contains("鸡胸肉") || lower.contains("牛肉") || lower.contains("蛋白") || lower.contains("chicken") || lower.contains("steak") {
+            protein += 20
+            tag = "protein_rich"
+            recs.append("蛋白质比例充沛，非常有利于训练后肌肉修复与合成。")
+        }
+
+        if lower.contains("米饭") || lower.contains("面条") || lower.contains("面包") || lower.contains("扎实") || lower.contains("noodle") || lower.contains("rice") {
+            carbs += 30
+            gl = "high"
+            recs.append("高升糖碳水源，建议搭配膳食纤维或饭后散步 10 分钟以平缓血糖波动。")
+        }
+
+        if lower.contains("沙拉") || lower.contains("蔬菜") || lower.contains("燕麦") || lower.contains("salad") {
+            fiber += 5
+            gl = "low"
+            recs.append("膳食纤维丰富，有助于维持肠道菌群与平稳能量释放。")
+        }
+
+        let calories = protein * 4 + carbs * 4 + fat * 9
+
+        return MacroNutrientAnalysisResult(
+            estimatedCalories: calories,
+            proteinGrams: protein,
+            carbsGrams: carbs,
+            fatGrams: fat,
+            fiberGrams: fiber,
+            glycemicLoadEstimate: gl,
+            metabolicTag: tag,
+            recommendations: recs
+        )
+    }
+}
+

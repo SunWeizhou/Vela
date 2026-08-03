@@ -32,7 +32,10 @@ enum PersonalBaselineEngine {
     // MARK: - Compute
 
     /// Compute personalized baselines from the user's own historical snapshots (last 30 days).
-    static func computeBaselines(from snapshots: [DailyHealthSnapshot]) -> PersonalBaselines {
+    static func computeBaselines(
+        from snapshots: [DailyHealthSnapshot],
+        calculatedAt: Date = Date()
+    ) -> PersonalBaselines {
         let sorted = snapshots.sorted { $0.date < $1.date }
         let recent = Array(sorted.suffix(30))
 
@@ -60,7 +63,7 @@ enum PersonalBaselineEngine {
             strainBaselineMean: meanOfIfReady(strainValues),
             stepsBaseline: meanOfIfReady(stepsValues),
             activeCaloriesBaseline: meanOfIfReady(caloriesValues),
-            calculatedAt: Date(),
+            calculatedAt: calculatedAt,
             daysOfData: recent.count,
             recoveryBaselineMean: meanOfIfReady(recoveryValues),
             recoveryBaselineSD: standardDeviationIfReady(recoveryValues),
@@ -324,9 +327,35 @@ enum PersonalBaselineEngine {
     }
 
     private static func standardDeviationOf(_ values: [Double]) -> Double? {
+        sampleStandardDeviation(values)
+    }
+
+    /// Shared Personal Baseline statistics used by Daily Health Computation and
+    /// individual score implementations. Keeping them here prevents subtly
+    /// different baseline math from leaking across scoring modules.
+    static func median(_ values: [Double]) -> Double? {
+        guard !values.isEmpty else { return nil }
+        let sorted = values.sorted()
+        let midpoint = sorted.count / 2
+        return sorted.count.isMultiple(of: 2)
+            ? (sorted[midpoint - 1] + sorted[midpoint]) / 2
+            : sorted[midpoint]
+    }
+
+    static func sampleStandardDeviation(_ values: [Double]) -> Double? {
         guard values.count > 1, let mean = meanOf(values) else { return nil }
-        let sumSquaredDiff = values.reduce(0.0) { $0 + pow($1 - mean, 2) }
-        return sqrt(sumSquaredDiff / Double(values.count - 1))
+        let squaredDifference = values.reduce(0.0) { $0 + pow($1 - mean, 2) }
+        let value = sqrt(squaredDifference / Double(values.count - 1))
+        return value > 0 ? value : nil
+    }
+
+    static func robustStandardDeviation(
+        _ values: [Double],
+        around median: Double
+    ) -> Double? {
+        guard let mad = self.median(values.map { abs($0 - median) }) else { return nil }
+        let value = 1.4826 * mad
+        return value > 0 ? value : nil
     }
 
     static func resolveThresholds() -> PersonalBaselineThresholds {
@@ -360,6 +389,36 @@ enum PersonalBaselineEngine {
             )
         }
     }
+
+    // MARK: - Huber Loss Robust Estimator (Vertical Deep Optimization)
+
+    /// Computes a Huber M-estimator robust mean resistant to single-day extreme outliers (e.g. alcohol / sensor noise).
+    static func huberMean(_ values: [Double], k: Double = 1.5, maxIterations: Int = 10) -> Double? {
+        guard !values.isEmpty else { return nil }
+        var mu = median(values) ?? (values.reduce(0, +) / Double(values.count))
+        let scale = (robustStandardDeviation(values, around: mu) ?? 1.0)
+
+        guard scale > 0.001 else { return mu }
+
+        for _ in 0..<maxIterations {
+            var sumWeights = 0.0
+            var sumWeightedValues = 0.0
+
+            for x in values {
+                let residual = (x - mu) / scale
+                let absRes = abs(residual)
+                let w = absRes <= k ? 1.0 : k / absRes
+                sumWeights += w
+                sumWeightedValues += w * x
+            }
+
+            guard sumWeights > 0 else { break }
+            let nextMu = sumWeightedValues / sumWeights
+            if abs(nextMu - mu) < 0.001 { break }
+            mu = nextMu
+        }
+        return mu
+    }
 }
 
 struct PersonalBaselineThresholds {
@@ -370,4 +429,3 @@ struct PersonalBaselineThresholds {
     var sleepRest: Double
     var source: String
 }
-

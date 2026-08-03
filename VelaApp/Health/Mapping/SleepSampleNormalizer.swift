@@ -81,6 +81,7 @@ enum SleepSampleNormalizer {
         guard !sortedSegments.isEmpty else { return [] }
 
         let calendar = Calendar.current
+        let boundary = HealthDayBoundary(calendar: calendar)
         let maximumGap = TimeInterval(maximumGapMinutes * 60)
         var episodes: [[SleepStageSegment]] = []
         var currentEpisode: [SleepStageSegment] = []
@@ -101,7 +102,7 @@ enum SleepSampleNormalizer {
         return episodes.compactMap { episode in
             guard episode.contains(where: { $0.stage.countsTowardSleepDuration }),
                   let lastSegment = episode.last else { return nil }
-            let date = calendar.startOfDay(for: lastSegment.end)
+            let date = boundary.labelDate(containing: lastSegment.end)
             return summary(for: date, segments: episode)
         }
     }

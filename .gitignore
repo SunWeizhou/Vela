@@ -25,5 +25,10 @@ StitchExports/
 新前端/
 stitch_vela_ios_26_liquid_glass/
 
+# Bevel competitor reference media (screenshots/videos of the third-party reference app)
+# Not staged into git — copyright/IP caution; keep local only.
+docs/reference/bevel-3.1.4/*.png
+docs/reference/bevel-3.1.4/*.mov
+
 # SQLite databases
 *.sqlite

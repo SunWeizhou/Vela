@@ -288,3 +288,81 @@ struct AdaptiveTrainingManager {
         return true
     }
 }
+
+// MARK: - Workout Adaptation Service
+
+@MainActor
+struct WorkoutAdaptationService: Sendable {
+    init() {}
+
+    /// Main entry point for closed-loop post-workout training adaptation.
+    /// Called when a workout is completed or post-workout check-in sheet is submitted.
+    @discardableResult
+    func processWorkoutCompletion(
+        workoutID: UUID?,
+        modelContext: ModelContext,
+        now: Date = Date()
+    ) async throws -> TrainingPlanAdaptationRecord? {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: now)
+
+        // 1. Fetch active plan
+        let activePlans = (try? modelContext.fetch(FetchDescriptor<TrainingPlanRecord>(
+            predicate: #Predicate { $0.isActive }
+        ))) ?? []
+        guard let activePlan = activePlans.first else {
+            return nil
+        }
+
+        // 2. Refresh raw health snapshot & dashboard
+        let dashboard = (try? await DailySummaryUseCase().loadDashboard(for: now, modelContext: modelContext)) ?? DashboardSummary.empty(date: today)
+
+        let events = (try? modelContext.fetch(FetchDescriptor<WorkoutEventRecord>())) ?? []
+        let foods = (try? modelContext.fetch(FetchDescriptor<FoodLogRecord>())) ?? []
+        let journals = (try? modelContext.fetch(FetchDescriptor<JournalEntryRecord>())) ?? []
+
+        // 3. Trigger AdaptiveTrainingManager refreshDailyProposal
+        let manager = AdaptiveTrainingManager()
+        let proposal = try manager.refreshDailyProposal(
+            plan: activePlan,
+            dashboard: dashboard,
+            events: events,
+            foodLogs: foods,
+            journalEntries: journals,
+            modelContext: modelContext,
+            date: now,
+            calendar: calendar
+        )
+
+        // 4. Log event in Event Service
+        VelaEventService.shared.log(
+            modelContext: modelContext,
+            type: VelaProductEventType.workoutCompleted,
+            title: "完成训练记录打卡",
+            detail: "系统已自动联动肌肉疲劳与身体状态生成最新调整方案。",
+            metadata: [
+                "workout_id": workoutID?.uuidString ?? "",
+                "has_proposal": proposal != nil
+            ]
+        )
+
+        if let proposal {
+            VelaEventService.shared.log(
+                modelContext: modelContext,
+                type: VelaProductEventType.trainingPlanAdapted,
+                title: "智能训练处方微调",
+                detail: proposal.reason,
+                metadata: [
+                    "adjustment": proposal.adjustment,
+                    "plan_id": activePlan.id.uuidString
+                ]
+            )
+        }
+
+        try modelContext.save()
+        VelaAppState.shared.markLocalDataChanged()
+
+        return proposal
+    }
+}
+

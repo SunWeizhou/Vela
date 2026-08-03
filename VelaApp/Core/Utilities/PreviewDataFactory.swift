@@ -11,6 +11,7 @@ enum PreviewDataFactory {
 
         // Sleep
         let sleepInput = SleepScoreInput(
+            asOf: date,
             totalSleepMinutes: Double(sleepSummary.totalSleepMinutes),
             sleepTargetMinutes: 450,
             bedtimeOffsetMinutes: 45,
@@ -20,6 +21,7 @@ enum PreviewDataFactory {
 
         // Recovery — simulate a user with HRV slightly below baseline (mild fatigue)
         let recoveryInput = RecoveryScoreInput(
+            asOf: date,
             hrvToday: 42,
             hrvBaseline: 45,
             hrvHistory: [44, 46, 43, 47, 42, 45, 44],
@@ -33,6 +35,7 @@ enum PreviewDataFactory {
 
         // Strain
         let strainInput = StrainScoreInput(
+            asOf: date,
             activeEnergyToday: 420,
             exerciseMinutesToday: 28,
             activeEnergyBaseline: 500,
@@ -44,6 +47,7 @@ enum PreviewDataFactory {
 
         // Stress
         let stressInput = StressIndexInput(
+            asOf: date,
             heartRateElevationScore: 38,
             hrvSuppressionScore: 45,
             sleepDebtStressScore: max(0, 100 - sleepScore.score),
@@ -53,6 +57,7 @@ enum PreviewDataFactory {
 
         // Energy
         let energyInput = EnergyBankInput(
+            asOf: date,
             recoveryScore: recovery.score,
             sleepScore: sleepScore.score,
             strainScore: strain.score,
@@ -116,4 +121,3 @@ enum PreviewDataFactory {
     }
 }
 #endif
-

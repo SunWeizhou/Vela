@@ -21,6 +21,8 @@ struct VelaJournalView: View {
     @State private var addedSugarState: Int = 1
     @State private var ketoDietState: Int = 1
     @State private var bedDeviceState: Int = 1
+    @AppStorage("vela_custom_journal_habits") private var customHabitsRaw = ""
+    @State private var customHabitStates: [String: Int] = [:]
     
     // Log row dynamic display values
     @State private var caffeineValueText: String = "- mg"
@@ -35,6 +37,7 @@ struct VelaJournalView: View {
     @State private var showAlcoholLogger = false
     @State private var showBehaviorQuickNote = false
     @State private var showPersonalExperiment = false
+    @State private var showCustomHabitManager = false
     @State private var entryPendingDeletion: JournalEntryRecord?
     @State private var entryMutationError: String?
 
@@ -120,8 +123,26 @@ struct VelaJournalView: View {
                             title: "在床上使用设备",
                             state: $bedDeviceState
                         )
+                        ForEach(customHabits, id: \.self) { habit in
+                            habitRowDivider
+                            segmentedJournalRow(
+                                icon: "tag.fill",
+                                title: habit,
+                                state: customHabitBinding(for: habit)
+                            )
+                        }
                     }
                     .velaNativeCard(radius: 12)
+
+                    Button {
+                        showCustomHabitManager = true
+                    } label: {
+                        Label("管理自定义习惯", systemImage: "slider.horizontal.3")
+                            .font(VelaTheme.caption1().weight(.semibold))
+                            .foregroundStyle(VelaTheme.accent)
+                            .frame(maxWidth: .infinity, minHeight: VelaTheme.minimumHitTarget)
+                    }
+                    .buttonStyle(.cardPress)
                 }
                 
                 JournalEntryList(entries: selectedDayEntries) { entry in
@@ -220,6 +241,11 @@ struct VelaJournalView: View {
             .presentationDragIndicator(.visible)
             .presentationBackground(VelaTheme.systemGroupedBackground)
         }
+        .sheet(isPresented: $showCustomHabitManager) {
+            CustomJournalHabitSheet(habits: $customHabitsRaw)
+                .presentationDetents([.medium, .large])
+                .velaSheetSurface()
+        }
     }
 
     private var activePersonalExperiment: PersonalExperimentRecord? {
@@ -309,6 +335,7 @@ struct VelaJournalView: View {
         addedSugarState = 1
         ketoDietState = 1
         bedDeviceState = 1
+        customHabitStates = Dictionary(uniqueKeysWithValues: customHabits.map { ($0, 1) })
         
         caffeineValueText = "- mg"
         hydrationValueText = "- ml"
@@ -339,6 +366,12 @@ struct VelaJournalView: View {
             if entry.tags.contains("在床上使用设备"), let val = entry.value {
                 bedDeviceState = Int(val)
                 break
+            }
+        }
+        for habit in customHabits {
+            if let entry = sortedDayEntries.first(where: { $0.tags.contains(habit) }),
+               let value = entry.value {
+                customHabitStates[habit] = Int(value)
             }
         }
         
@@ -395,6 +428,13 @@ struct VelaJournalView: View {
                 .buttonStyle(.plain)
                 
                 Menu {
+                    Button("复制昨日条目", systemImage: "doc.on.doc") {
+                        copyPreviousDayEntries()
+                    }
+                    Button("管理自定义习惯", systemImage: "tag") {
+                        showCustomHabitManager = true
+                    }
+                    Divider()
                     Button("记录咖啡因") {
                         showCaffeineLogger = true
                     }
@@ -666,7 +706,7 @@ struct VelaJournalView: View {
         let targetStart = calendar.startOfDay(for: targetDate)
         let targetEnd = calendar.date(byAdding: .day, value: 1, to: targetStart) ?? targetDate
         
-        let habitTags = Set(["低碳水化合物", "添加糖", "生酮饮食", "在床上使用设备", "mood", "每日心情"])
+        let habitTags = Set(["低碳水化合物", "添加糖", "生酮饮食", "在床上使用设备", "mood", "每日心情"] + customHabits)
         let isHabitOrMood = tags.contains(where: { habitTags.contains($0) })
         
         if isHabitOrMood {
@@ -745,6 +785,64 @@ struct VelaJournalView: View {
         }
     }
 
+    private var customHabits: [String] {
+        customHabitsRaw
+            .split(separator: "|")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private func customHabitBinding(for habit: String) -> Binding<Int> {
+        Binding(
+            get: { customHabitStates[habit] ?? 1 },
+            set: { customHabitStates[habit] = $0 }
+        )
+    }
+
+    private func copyPreviousDayEntries() {
+        let calendar = Calendar.current
+        let selectedStart = calendar.startOfDay(for: dashboardVM.selectedDate)
+        guard let previousStart = calendar.date(byAdding: .day, value: -1, to: selectedStart),
+              let previousEnd = calendar.date(byAdding: .day, value: 1, to: previousStart),
+              let selectedEnd = calendar.date(byAdding: .day, value: 1, to: selectedStart) else {
+            return
+        }
+        let previous = entries.filter { $0.createdAt >= previousStart && $0.createdAt < previousEnd }
+        let existing = entries.filter { $0.createdAt >= selectedStart && $0.createdAt < selectedEnd }
+        var inserted = 0
+
+        for source in previous {
+            guard JournalDayCopyPlanner.shouldCopy(source: source, existing: existing) else { continue }
+            modelContext.insert(
+                JournalEntryRecord(
+                    createdAt: JournalDayCopyPlanner.targetDate(
+                        sourceDate: source.createdAt,
+                        selectedDate: selectedStart,
+                        calendar: calendar
+                    ),
+                    tags: source.tags,
+                    note: source.note,
+                    value: source.value,
+                    unit: source.unit
+                )
+            )
+            inserted += 1
+        }
+
+        guard inserted > 0 else {
+            entryMutationError = previous.isEmpty ? "昨日没有可复制的条目。" : "昨日条目已经复制到这一天。"
+            return
+        }
+        do {
+            try modelContext.save()
+            appState.markLocalDataChanged()
+            loadRealJournalData()
+        } catch {
+            modelContext.rollback()
+            entryMutationError = "昨日条目未复制。请稍后重试。"
+        }
+    }
+
     private func selectedDayWithCurrentTime() -> Date {
         let calendar = Calendar.current
         let now = Date()
@@ -755,5 +853,87 @@ struct VelaJournalView: View {
         components.minute = timeComponents.minute
         components.second = timeComponents.second
         return calendar.date(from: components) ?? selected
+    }
+}
+
+enum JournalDayCopyPlanner {
+    static func shouldCopy(
+        source: JournalEntryRecord,
+        existing: [JournalEntryRecord]
+    ) -> Bool {
+        !existing.contains {
+            Set($0.tags) == Set(source.tags) && $0.note == source.note
+        }
+    }
+
+    static func targetDate(
+        sourceDate: Date,
+        selectedDate: Date,
+        calendar: Calendar = .current
+    ) -> Date {
+        let sourceTime = calendar.dateComponents([.hour, .minute, .second], from: sourceDate)
+        var target = calendar.dateComponents([.year, .month, .day], from: selectedDate)
+        target.hour = sourceTime.hour
+        target.minute = sourceTime.minute
+        target.second = sourceTime.second
+        return calendar.date(from: target) ?? calendar.startOfDay(for: selectedDate)
+    }
+}
+
+private struct CustomJournalHabitSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var habits: String
+    @State private var draft = ""
+
+    private var values: [String] {
+        habits.split(separator: "|").map(String.init).filter { !$0.isEmpty }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("新增") {
+                    HStack {
+                        TextField("例如：晚餐后散步", text: $draft)
+                        Button("添加") { add() }
+                            .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+                Section("自定义习惯") {
+                    if values.isEmpty {
+                        Text("尚未添加自定义习惯")
+                            .foregroundStyle(VelaTheme.muted)
+                    }
+                    ForEach(values, id: \.self) { value in
+                        Text(value)
+                    }
+                    .onDelete(perform: remove)
+                }
+                Section {
+                    Text("自定义习惯会出现在每日行为板中，默认状态为“未记录”。")
+                        .font(VelaTheme.caption2())
+                        .foregroundStyle(VelaTheme.muted)
+                }
+            }
+            .navigationTitle("自定义习惯")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func add() {
+        let value = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty, !values.contains(value), !value.contains("|") else { return }
+        habits = (values + [value]).joined(separator: "|")
+        draft = ""
+    }
+
+    private func remove(at offsets: IndexSet) {
+        var next = values
+        next.remove(atOffsets: offsets)
+        habits = next.joined(separator: "|")
     }
 }

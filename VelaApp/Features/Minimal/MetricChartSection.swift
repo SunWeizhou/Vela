@@ -24,9 +24,25 @@ enum DetailTimeRange: String, CaseIterable, Identifiable {
 }
 
 struct ChartPoint: Identifiable {
-    let id = UUID()
     let date: Date
     let value: Double
+    var id: Date { date }
+}
+
+enum VelaChartSegmentation {
+    static func segments(points: [ChartPoint], maximumGap: TimeInterval) -> [[ChartPoint]] {
+        let sorted = points.sorted { $0.date < $1.date }
+        guard !sorted.isEmpty else { return [] }
+
+        return sorted.dropFirst().reduce(into: [[sorted[0]]]) { segments, point in
+            guard let last = segments.last?.last else { return }
+            if point.date.timeIntervalSince(last.date) > maximumGap {
+                segments.append([point])
+            } else {
+                segments[segments.count - 1].append(point)
+            }
+        }
+    }
 }
 
 struct MetricChartSection: View {
@@ -40,28 +56,23 @@ struct MetricChartSection: View {
     let displayDateText: String
     let dynamicValueText: String
     let metricSubtitle: String
+    var baselineValue: Double? = nil
+    var targetRange: ClosedRange<Double>? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Segment Selector
-            HStack {
-                Picker("时间区间", selection: $selectedRange) {
-                    ForEach(DetailTimeRange.allCases) { range in
-                        Text(range.title).tag(range)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 14)
-                
+            HStack(spacing: 10) {
+                rangePicker
                 Spacer()
+
                 if rawSelectedDate != nil {
-                    // Scrub indicator info
                     Text(displayDateText)
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
-                        .padding(.trailing, 16)
+                        .foregroundStyle(VelaTheme.fg2)
+                        .padding(.trailing, 4)
                 }
             }
+            .padding(.horizontal, 14)
             
             // Value and Status
             VStack(alignment: .leading, spacing: 4) {
@@ -77,53 +88,74 @@ struct MetricChartSection: View {
             
             // The Swift Chart!
             if points.isEmpty {
-                HStack(spacing: 10) {
-                    Image(systemName: "chart.line.uptrend.xyaxis")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(metricColor)
-                        .frame(width: 34, height: 34)
-                        .background(metricColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
-                    Text(selectedRange == .day ? "切换至 7 天查看真实趋势" : "积累更多数据后显示趋势")
-                        .font(VelaTheme.footnote())
-                        .foregroundStyle(VelaTheme.muted)
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 16)
-                .frame(height: 68)
-                .frame(maxWidth: .infinity)
+                VelaStateCard(
+                    state: selectedRange == .day ? .empty : .calibrating,
+                    message: selectedRange == .day
+                        ? "今天尚无可绘制的真实读数，可切换至 7 天查看历史趋势。"
+                        : "继续佩戴设备并同步数据，Vela 不会用插值伪造缺失趋势。"
+                )
+                .padding(.horizontal, 14)
+            } else if points.count < 3 {
+                VelaStateCard(
+                    state: .calibrating,
+                    message: "目前只有 \(points.count) 个真实读数；达到 3 个后显示方向与个人基线。"
+                )
+                .padding(.horizontal, 14)
             } else {
                 Chart {
                     let unit: Calendar.Component = selectedRange == .day ? .hour : .day
-                    ForEach(points) { pt in
-                        if isBarChart {
-                            BarMark(
-                                x: .value("Date", pt.date, unit: unit),
-                                y: .value("Value", pt.value)
-                            )
-                            .foregroundStyle(metricColor)
-                            .cornerRadius(3)
-                        } else {
-                            // Line Graph with Area Mark
-                            LineMark(
-                                x: .value("Date", pt.date, unit: unit),
-                                y: .value("Value", pt.value)
-                            )
-                            .foregroundStyle(metricColor)
-                            .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
-                            .interpolationMethod(.catmullRom)
-                            
-                            AreaMark(
-                                x: .value("Date", pt.date, unit: unit),
-                                y: .value("Value", pt.value)
-                            )
-                            .foregroundStyle(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [metricColor.opacity(0.24), metricColor.opacity(0.0)]),
-                                    startPoint: .top,
-                                    endPoint: .bottom
+
+                    if let targetRange,
+                       let firstDate = points.first?.date,
+                       let lastDate = points.last?.date {
+                        RectangleMark(
+                            xStart: .value("Target start", firstDate, unit: unit),
+                            xEnd: .value("Target end", lastDate, unit: unit),
+                            yStart: .value("Target lower", targetRange.lowerBound),
+                            yEnd: .value("Target upper", targetRange.upperBound)
+                        )
+                        .foregroundStyle(metricColor.opacity(0.08))
+                    }
+
+                    if let effectiveBaseline {
+                        RuleMark(y: .value("Personal baseline", effectiveBaseline))
+                            .foregroundStyle(VelaTheme.muted.opacity(0.58))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    }
+
+                    ForEach(Array(chartSegments.enumerated()), id: \.offset) { segmentIndex, segment in
+                        ForEach(segment) { pt in
+                            if isBarChart {
+                                BarMark(
+                                    x: .value("Date", pt.date, unit: unit),
+                                    y: .value("Value", pt.value)
                                 )
-                            )
-                            .interpolationMethod(.catmullRom)
+                                .foregroundStyle(metricColor)
+                                .cornerRadius(3)
+                            } else {
+                                LineMark(
+                                    x: .value("Date", pt.date, unit: unit),
+                                    y: .value("Value", pt.value),
+                                    series: .value("Segment", segmentIndex)
+                                )
+                                .foregroundStyle(metricColor)
+                                .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                                .interpolationMethod(.catmullRom)
+
+                                AreaMark(
+                                    x: .value("Date", pt.date, unit: unit),
+                                    y: .value("Value", pt.value),
+                                    series: .value("Area segment", segmentIndex)
+                                )
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [metricColor.opacity(0.20), metricColor.opacity(0.0)]),
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+                                .interpolationMethod(.catmullRom)
+                            }
                         }
                     }
                     
@@ -174,6 +206,8 @@ struct MetricChartSection: View {
                 .frame(height: 160)
                 .padding(.horizontal, 12)
                 .padding(.bottom, 6)
+                .accessibilityLabel("\(metricSubtitle)趋势图，共\(points.count)个真实读数")
+                .accessibilityValue(dynamicValueText)
                 .onChange(of: rawSelectedDate) { oldValue, newValue in
                     if newValue != nil {
                         VelaHaptic.selection()
@@ -187,5 +221,45 @@ struct MetricChartSection: View {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
         )
+    }
+
+    private var rangePicker: some View {
+        HStack(spacing: 3) {
+            ForEach(DetailTimeRange.allCases) { range in
+                Button {
+                    guard selectedRange != range else { return }
+                    selectedRange = range
+                    rawSelectedDate = nil
+                    VelaHaptic.selection()
+                } label: {
+                    Text(range.title)
+                        .font(VelaTheme.caption2().weight(.semibold))
+                        .foregroundStyle(selectedRange == range ? VelaTheme.fg : VelaTheme.muted)
+                        .padding(.horizontal, 10)
+                        .frame(minHeight: 32)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(selectedRange == range ? VelaTheme.cardBg : Color.clear)
+                        )
+                }
+                .buttonStyle(.cardPress)
+                .accessibilityAddTraits(selectedRange == range ? .isSelected : [])
+            }
+        }
+        .padding(3)
+        .background(VelaTheme.secondaryGroupedBackground, in: Capsule(style: .continuous))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("时间区间")
+    }
+
+    private var effectiveBaseline: Double? {
+        if let baselineValue { return baselineValue }
+        guard points.count >= 3 else { return nil }
+        return points.map(\.value).reduce(0, +) / Double(points.count)
+    }
+
+    private var chartSegments: [[ChartPoint]] {
+        let maximumGap: TimeInterval = selectedRange == .day ? 2 * 60 * 60 : 36 * 60 * 60
+        return VelaChartSegmentation.segments(points: points, maximumGap: maximumGap)
     }
 }

@@ -6,6 +6,7 @@ public enum StressIndexInputMode: Hashable {
 }
 
 public struct StressIndexInput: Hashable {
+    public var asOf: Date
     public var mode: StressIndexInputMode
     public var quietHRToday: Double?
     public var quietHRBaseline: Double?
@@ -32,6 +33,7 @@ public struct StressIndexInput: Hashable {
     public var recentStrainStressScore: Double?
 
     public init(
+        asOf: Date,
         mode: StressIndexInputMode? = nil,
         quietHRToday: Double? = nil,
         quietHRBaseline: Double? = nil,
@@ -51,6 +53,7 @@ public struct StressIndexInput: Hashable {
         sleepDebtStressScore: Double? = nil,
         recentStrainStressScore: Double? = nil
     ) {
+        self.asOf = asOf
         let hasRawInput = quietHRToday != nil
             || hrvToday != nil
             || respRateToday != nil
@@ -102,9 +105,13 @@ public struct StressIndexEngine: ScoreEngine {
         // Check if inside workout/post-workout window (exercise exclusion rule)
         if input.isWithinWorkoutWindow {
             reasons.append("静息生理压力指标已自动排除运动窗口及运动后 90 分钟的自主神经恢复期。")
-            let dataWindow = DateInterval(start: Calendar.current.date(byAdding: .hour, value: -2, to: Date()) ?? Date(), end: Date())
+            let dataWindow = DateInterval(
+                start: Calendar.current.date(byAdding: .hour, value: -2, to: input.asOf) ?? input.asOf,
+                end: input.asOf
+            )
             
             return MetricResult(
+                domain: .physiologicalStress,
                 name: "Physiological Stress Index",
                 value: nil, // Excluded
                 band: .low,
@@ -115,8 +122,8 @@ public struct StressIndexEngine: ScoreEngine {
                 missingInputs: ["quietWindow"],
                 dataWindow: dataWindow,
                 source: .derived,
-                algorithmVersion: "1.0.0",
-                lastUpdated: Date()
+                algorithmVersion: ScoringAlgorithmVersions.physiologicalStress,
+                lastUpdated: input.asOf
             )
         }
 
@@ -265,9 +272,13 @@ public struct StressIndexEngine: ScoreEngine {
 
         reasons.append("这是基于可用心率、HRV、呼吸、体温、睡眠与负荷信号的代理指标，不是心理或医疗诊断。")
 
-        let dataWindow = DateInterval(start: Calendar.current.date(byAdding: .hour, value: -24, to: Date()) ?? Date(), end: Date())
+        let dataWindow = DateInterval(
+            start: Calendar.current.date(byAdding: .hour, value: -24, to: input.asOf) ?? input.asOf,
+            end: input.asOf
+        )
 
         return MetricResult(
+            domain: .physiologicalStress,
             name: "Physiological Stress Index",
             value: stressValue,
             band: band,
@@ -278,8 +289,8 @@ public struct StressIndexEngine: ScoreEngine {
             missingInputs: missingInputs,
             dataWindow: dataWindow,
             source: .derived,
-            algorithmVersion: "1.0.0",
-            lastUpdated: Date()
+            algorithmVersion: ScoringAlgorithmVersions.physiologicalStress,
+            lastUpdated: input.asOf
         )
     }
 }

@@ -70,7 +70,7 @@ final class HealthDataRefreshService {
 
     func refreshContext(now: Date = Date()) async throws -> DailyHealthContext {
         let todayRange = DateRangeQuery.today(containing: now, calendar: calendar)
-        let baselineRange = DateRangeQuery.recentDays(28, endingAt: calendar.startOfDay(for: now), calendar: calendar)
+        let baselineRange = DateRangeQuery.recentDays(28, endingAt: now, calendar: calendar)
 
         let resolvedSleep = try? await queryService.sleepSummary(in: DateRangeQuery.recentDays(2, endingAt: now, calendar: calendar))
         let recovery = (try? await queryService.recoveryMetrics(in: todayRange)) ?? RecoveryMetricSummary()

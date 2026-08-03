@@ -19,12 +19,45 @@ private struct WatchSnapshot: Codable, Equatable {
     var planProgress: String?
 }
 
+private struct WatchStrengthSet: Codable, Equatable, Identifiable {
+    var id: UUID
+    var repetitions: Int
+    var weightKilograms: Double
+    var isCompleted: Bool
+}
+
+private struct WatchStrengthExercise: Codable, Equatable, Identifiable {
+    var id: UUID
+    var name: String
+    var sets: [WatchStrengthSet]
+}
+
+private struct WatchActiveWorkout: Codable, Equatable {
+    var draftID: UUID
+    var title: String
+    var startedAt: Date
+    var updatedAt: Date
+    var exercises: [WatchStrengthExercise]
+}
+
+private struct WatchStrengthSetEdit: Codable {
+    var id: UUID
+    var draftID: UUID
+    var exerciseID: UUID
+    var setID: UUID
+    var repetitions: Int
+    var weightKilograms: Double
+    var isCompleted: Bool
+}
+
 @MainActor
 private final class WatchSnapshotStore: NSObject, ObservableObject, WCSessionDelegate {
     @Published private(set) var snapshot: WatchSnapshot?
+    @Published private(set) var activeWorkout: WatchActiveWorkout?
     @Published private(set) var isRequesting = false
 
     private let cacheKey = "vela.watch.latest-snapshot"
+    private let activeWorkoutCacheKey = "vela.watch.active-workout"
 
     override init() {
         super.init()
@@ -52,6 +85,9 @@ private final class WatchSnapshotStore: NSObject, ObservableObject, WCSessionDel
         if let data = UserDefaults.standard.data(forKey: cacheKey) {
             snapshot = try? JSONDecoder().decode(WatchSnapshot.self, from: data)
         }
+        if let data = UserDefaults.standard.data(forKey: activeWorkoutCacheKey) {
+            activeWorkout = try? JSONDecoder().decode(WatchActiveWorkout.self, from: data)
+        }
         guard WCSession.isSupported() else { return }
         WCSession.default.delegate = self
         WCSession.default.activate()
@@ -62,12 +98,9 @@ private final class WatchSnapshotStore: NSObject, ObservableObject, WCSessionDel
               WCSession.default.isReachable else { return }
         isRequesting = true
         WCSession.default.sendMessage(["command": "latestSnapshot"], replyHandler: { [weak self] response in
-            guard let data = response["snapshot"] as? Data else {
-                Task { @MainActor in self?.isRequesting = false }
-                return
-            }
             Task { @MainActor in
-                self?.apply(data)
+                if let data = response["snapshot"] as? Data { self?.apply(data) }
+                if let data = response["activeWorkout"] as? Data { self?.applyActiveWorkout(data) }
                 self?.isRequesting = false
             }
         }, errorHandler: { [weak self] _ in
@@ -88,12 +121,18 @@ private final class WatchSnapshotStore: NSObject, ObservableObject, WCSessionDel
         _ session: WCSession,
         didReceiveApplicationContext applicationContext: [String: Any]
     ) {
-        if applicationContext["clear"] as? Bool == true {
+        if applicationContext["clearSnapshot"] as? Bool == true {
             Task { @MainActor [weak self] in self?.clear() }
-            return
         }
-        guard let data = applicationContext["snapshot"] as? Data else { return }
-        Task { @MainActor [weak self] in self?.apply(data) }
+        if applicationContext["clearActiveWorkout"] as? Bool == true {
+            Task { @MainActor [weak self] in self?.clearActiveWorkout() }
+        }
+        if let data = applicationContext["snapshot"] as? Data {
+            Task { @MainActor [weak self] in self?.apply(data) }
+        }
+        if let data = applicationContext["activeWorkout"] as? Data {
+            Task { @MainActor [weak self] in self?.applyActiveWorkout(data) }
+        }
     }
 
     nonisolated func session(
@@ -113,6 +152,56 @@ private final class WatchSnapshotStore: NSObject, ObservableObject, WCSessionDel
     private func clear() {
         snapshot = nil
         UserDefaults.standard.removeObject(forKey: cacheKey)
+    }
+
+    func updateSet(
+        exerciseID: UUID,
+        setID: UUID,
+        repetitions: Int,
+        weightKilograms: Double,
+        isCompleted: Bool
+    ) {
+        guard var workout = activeWorkout,
+              let exerciseIndex = workout.exercises.firstIndex(where: { $0.id == exerciseID }),
+              let setIndex = workout.exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setID }) else { return }
+        workout.exercises[exerciseIndex].sets[setIndex].repetitions = min(999, max(0, repetitions))
+        workout.exercises[exerciseIndex].sets[setIndex].weightKilograms = min(999.9, max(0, weightKilograms))
+        workout.exercises[exerciseIndex].sets[setIndex].isCompleted = isCompleted
+        workout.updatedAt = Date()
+        activeWorkout = workout
+        if let data = try? JSONEncoder().encode(workout) {
+            UserDefaults.standard.set(data, forKey: activeWorkoutCacheKey)
+        }
+
+        let edit = WatchStrengthSetEdit(
+            id: UUID(),
+            draftID: workout.draftID,
+            exerciseID: exerciseID,
+            setID: setID,
+            repetitions: workout.exercises[exerciseIndex].sets[setIndex].repetitions,
+            weightKilograms: workout.exercises[exerciseIndex].sets[setIndex].weightKilograms,
+            isCompleted: isCompleted
+        )
+        guard let data = try? JSONEncoder().encode(edit) else { return }
+        let message: [String: Any] = ["strengthSetEdit": data]
+        if WCSession.default.activationState == .activated, WCSession.default.isReachable {
+            WCSession.default.sendMessage(message, replyHandler: nil) { _ in
+                WCSession.default.transferUserInfo(message)
+            }
+        } else if WCSession.default.activationState == .activated {
+            WCSession.default.transferUserInfo(message)
+        }
+    }
+
+    private func applyActiveWorkout(_ data: Data) {
+        guard let decoded = try? JSONDecoder().decode(WatchActiveWorkout.self, from: data) else { return }
+        activeWorkout = decoded
+        UserDefaults.standard.set(data, forKey: activeWorkoutCacheKey)
+    }
+
+    private func clearActiveWorkout() {
+        activeWorkout = nil
+        UserDefaults.standard.removeObject(forKey: activeWorkoutCacheKey)
     }
 }
 
@@ -135,10 +224,15 @@ private struct WatchRootView: View {
             if let snapshot = store.snapshot {
                 TabView {
                     readinessPage(snapshot)
+                    if let activeWorkout = store.activeWorkout {
+                        activeWorkoutPage(activeWorkout)
+                    }
                     trainingPage(snapshot)
                     signalsPage(snapshot)
                 }
                 .tabViewStyle(.verticalPage)
+            } else if let activeWorkout = store.activeWorkout {
+                activeWorkoutPage(activeWorkout)
             } else {
                 emptyState
             }
@@ -152,6 +246,53 @@ private struct WatchRootView: View {
             for: .navigation
         )
         .onAppear { store.requestLatest() }
+    }
+
+    private func activeWorkoutPage(_ workout: WatchActiveWorkout) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("进行中的训练", systemImage: "figure.strengthtraining.traditional")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.mint)
+                Text(workout.title)
+                    .font(.headline.weight(.bold))
+
+                ForEach(workout.exercises) { exercise in
+                    Text(exercise.name)
+                        .font(.caption.weight(.semibold))
+                    ForEach(Array(exercise.sets.enumerated()), id: \.element.id) { index, set in
+                        VStack(spacing: 5) {
+                            HStack(spacing: 4) {
+                                Button { store.updateSet(exerciseID: exercise.id, setID: set.id, repetitions: set.repetitions, weightKilograms: set.weightKilograms, isCompleted: !set.isCompleted) } label: {
+                                    Image(systemName: set.isCompleted ? "checkmark.circle.fill" : "circle")
+                                }
+                                .buttonStyle(.plain)
+                                Text("\(index + 1)").font(.caption2).foregroundStyle(.secondary)
+                                Spacer()
+                                Text("\(set.weightKilograms.formatted(.number.precision(.fractionLength(0...1)))) kg × \(set.repetitions)")
+                                    .font(.caption.weight(.bold).monospacedDigit())
+                            }
+                            HStack(spacing: 5) {
+                                compactButton("−2.5") { store.updateSet(exerciseID: exercise.id, setID: set.id, repetitions: set.repetitions, weightKilograms: set.weightKilograms - 2.5, isCompleted: set.isCompleted) }
+                                compactButton("+2.5") { store.updateSet(exerciseID: exercise.id, setID: set.id, repetitions: set.repetitions, weightKilograms: set.weightKilograms + 2.5, isCompleted: set.isCompleted) }
+                                compactButton("−1") { store.updateSet(exerciseID: exercise.id, setID: set.id, repetitions: set.repetitions - 1, weightKilograms: set.weightKilograms, isCompleted: set.isCompleted) }
+                                compactButton("+1") { store.updateSet(exerciseID: exercise.id, setID: set.id, repetitions: set.repetitions + 1, weightKilograms: set.weightKilograms, isCompleted: set.isCompleted) }
+                            }
+                        }
+                        .padding(7)
+                        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 9))
+                    }
+                }
+            }
+            .padding(.horizontal, 4)
+        }
+    }
+
+    private func compactButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(title, action: action)
+            .font(.system(size: 9, weight: .bold))
+            .buttonStyle(.bordered)
+            .controlSize(.mini)
     }
 
     private func readinessPage(_ snapshot: WatchSnapshot) -> some View {

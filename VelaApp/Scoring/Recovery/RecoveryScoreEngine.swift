@@ -1,6 +1,7 @@
 import Foundation
 
 public struct RecoveryScoreInput: Hashable {
+    public var asOf: Date
     public var hrvToday: Double?
     public var hrvBaseline: Double?
     public var hrvHistory: [Double] = []
@@ -20,6 +21,7 @@ public struct RecoveryScoreInput: Hashable {
     public var SpO2: Double?
 
     public init(
+        asOf: Date,
         hrvToday: Double?,
         hrvBaseline: Double?,
         hrvHistory: [Double] = [],
@@ -34,6 +36,7 @@ public struct RecoveryScoreInput: Hashable {
         bodyTempDelta: Double? = nil,
         SpO2: Double? = nil
     ) {
+        self.asOf = asOf
         self.hrvToday = hrvToday
         self.hrvBaseline = hrvBaseline
         self.hrvHistory = hrvHistory
@@ -55,22 +58,6 @@ public struct RecoveryScoreEngine: ScoreEngine {
     public typealias Output = MetricResult
 
     public init() {}
-
-    private func calculateMedian(_ values: [Double]) -> Double? {
-        guard !values.isEmpty else { return nil }
-        let sorted = values.sorted()
-        if sorted.count % 2 == 1 {
-            return sorted[sorted.count / 2]
-        } else {
-            return (sorted[sorted.count / 2 - 1] + sorted[sorted.count / 2]) / 2.0
-        }
-    }
-
-    private func robustSD(for values: [Double], medianVal: Double) -> Double {
-        let absDevs = values.map { abs($0 - medianVal) }
-        guard let mad = calculateMedian(absDevs) else { return 0.0 }
-        return 1.4826 * mad
-    }
 
     public func calculate(from input: RecoveryScoreInput) -> MetricResult {
         var components: [String: Double] = [:]
@@ -96,15 +83,19 @@ public struct RecoveryScoreEngine: ScoreEngine {
             let hrvHistoryToUse = input.hrvHistory.count >= 5 ? input.hrvHistory : [input.hrvBaseline ?? hrvToday]
             let lnHistory = hrvHistoryToUse.map { log(max($0, 1.0)) }
             
-            if let lnBaseline = calculateMedian(lnHistory) {
-                var lnSD = robustSD(for: lnHistory, medianVal: lnBaseline)
+            if let lnBaseline = PersonalBaselineEngine.median(lnHistory) {
+                var lnSD = PersonalBaselineEngine.robustStandardDeviation(
+                    lnHistory,
+                    around: lnBaseline
+                ) ?? 0
                 let fallbackSD = lnBaseline * 0.12
                 if lnSD < 0.01 {
                     lnSD = fallbackSD > 0.01 ? fallbackSD : 0.05
                 }
                 
                 hrvZ = (lnToday - lnBaseline) / lnSD
-                var hrvComponent = ScoringMath.clamp(50.0 + 18.0 * hrvZ, min: 0, max: 100)
+                let sigmoidHRV = (2.0 / (1.0 + exp(-0.45 * hrvZ))) - 1.0
+                var hrvComponent = ScoringMath.clamp(50.0 + 48.0 * sigmoidHRV, min: 0, max: 100)
                 
                 if hrvZ > 2.2 && (input.strainScoreYesterday ?? 0) > 75 {
                     hrvComponent = min(hrvComponent, 65.0)
@@ -126,15 +117,19 @@ public struct RecoveryScoreEngine: ScoreEngine {
         // 2. RHR Component (25%) - Robust Z-Score
         if let rhrToday = input.restingHeartRateToday {
             let rhrHistoryToUse = input.rhrHistory.count >= 5 ? input.rhrHistory : [input.restingHeartRateBaseline ?? rhrToday]
-            if let rhrBaseline = calculateMedian(rhrHistoryToUse) {
-                var rhrSD = robustSD(for: rhrHistoryToUse, medianVal: rhrBaseline)
+            if let rhrBaseline = PersonalBaselineEngine.median(rhrHistoryToUse) {
+                var rhrSD = PersonalBaselineEngine.robustStandardDeviation(
+                    rhrHistoryToUse,
+                    around: rhrBaseline
+                ) ?? 0
                 let fallbackSD = max(2.5, rhrBaseline * 0.04)
                 if rhrSD < 0.5 {
                     rhrSD = fallbackSD
                 }
                 
                 rhrZ = (rhrToday - rhrBaseline) / rhrSD
-                let rhrComponent = ScoringMath.clamp(50.0 - 18.0 * rhrZ, min: 0, max: 100)
+                let sigmoidRHR = (2.0 / (1.0 + exp(0.45 * rhrZ))) - 1.0
+                let rhrComponent = ScoringMath.clamp(50.0 + 48.0 * sigmoidRHR, min: 0, max: 100)
                 
                 if rhrZ > 1.5 {
                     reasons.append("静息心率高于近期个人基线（\(Int(rhrToday)) bpm）")
@@ -270,9 +265,13 @@ public struct RecoveryScoreEngine: ScoreEngine {
             }
         }
 
-        let dataWindow = DateInterval(start: Calendar.current.date(byAdding: .day, value: -28, to: Date()) ?? Date(), end: Date())
+        let dataWindow = DateInterval(
+            start: Calendar.current.date(byAdding: .day, value: -28, to: input.asOf) ?? input.asOf,
+            end: input.asOf
+        )
 
         return MetricResult(
+            domain: .recovery,
             name: "Recovery Score",
             value: recoveryValue,
             band: band,
@@ -283,8 +282,8 @@ public struct RecoveryScoreEngine: ScoreEngine {
             missingInputs: missingInputs,
             dataWindow: dataWindow,
             source: .healthKit,
-            algorithmVersion: "1.0.0",
-            lastUpdated: Date()
+            algorithmVersion: ScoringAlgorithmVersions.recovery,
+            lastUpdated: input.asOf
         )
     }
 }

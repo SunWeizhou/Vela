@@ -15,6 +15,8 @@ public struct BiologicalAgeInput {
     public var bloodPressureSystolic: Double?
     public var bloodPressureDiastolic: Double?
     public var sleepScore: Double?
+    public var heartRateRecovery: Double?
+    public var deepSleepFraction: Double?
 
     public init(
         chronologicalAge: Double = 30.0,
@@ -28,7 +30,9 @@ public struct BiologicalAgeInput {
         leanMassRatio: Double? = nil,
         bloodPressureSystolic: Double? = nil,
         bloodPressureDiastolic: Double? = nil,
-        sleepScore: Double? = nil
+        sleepScore: Double? = nil,
+        heartRateRecovery: Double? = nil,
+        deepSleepFraction: Double? = nil
     ) {
         self.chronologicalAge = chronologicalAge
         self.restingHR = restingHR
@@ -42,6 +46,8 @@ public struct BiologicalAgeInput {
         self.bloodPressureSystolic = bloodPressureSystolic
         self.bloodPressureDiastolic = bloodPressureDiastolic
         self.sleepScore = sleepScore
+        self.heartRateRecovery = heartRateRecovery
+        self.deepSleepFraction = deepSleepFraction
     }
 }
 
@@ -337,6 +343,19 @@ public final class BiologicalAgeEngine {
                     score: dir > 0 ? 100.0 : (dir < 0 ? 30.0 : 70.0),
                     isOptimal: dir >= 0,
                     description: dir > 0 ? L10n.t("Activity is above the current reference threshold.", "活动量高于当前参考阈值。") : L10n.t("Activity is below the current reference threshold.", "活动量低于当前参考阈值。"),
+                    type: .wearable
+                ))
+            }
+
+            // Heart Rate Recovery (HRR)
+            if let hrr = input.heartRateRecovery {
+                let dir = hrr >= 25.0 ? 1.0 : (hrr < 15.0 ? -1.0 : 0.0)
+                factorDirections.append(dir)
+                factors.append(BiologicalAgeFactor(
+                    name: L10n.t("Heart Rate Recovery", "心率恢复速率"),
+                    score: dir > 0 ? 100.0 : (dir < 0 ? 30.0 : 70.0),
+                    isOptimal: dir >= 0,
+                    description: dir > 0 ? L10n.t("Vagal nerve reactivation is strong.", "迷走神经张力复常能力优秀。") : L10n.t("Heart rate recovery rate is lagging.", "心率恢复下降速率偏缓。"),
                     type: .wearable
                 ))
             }

@@ -1,6 +1,7 @@
 import Foundation
 
 public struct EnergyBankInput: Hashable {
+    public var asOf: Date
     public var recoveryScore: Double?
     public var sleepScore: Double?
     public var strainScore: Double?
@@ -23,6 +24,7 @@ public struct EnergyBankInput: Hashable {
     public var trainingLoadStatus: TrainingLoadStatus?
 
     public init(
+        asOf: Date,
         recoveryScore: Double?,
         sleepScore: Double?,
         strainScore: Double?,
@@ -41,6 +43,7 @@ public struct EnergyBankInput: Hashable {
         napMinutes: Double? = nil,
         trainingLoadStatus: TrainingLoadStatus? = nil
     ) {
+        self.asOf = asOf
         self.recoveryScore = recoveryScore
         self.sleepScore = sleepScore
         self.strainScore = strainScore
@@ -87,7 +90,7 @@ public struct EnergyBankEngine: ScoreEngine {
         components["overnight_stability"] = overnightStability
 
         // 2. Morning Energy (0.45 Recovery + 0.35 Sleep + 0.20 Stability)
-        var morningEnergy = 50.0
+        var morningEnergy: Double?
         let rec = input.recoveryScore
         let slp = input.sleepScore
 
@@ -106,16 +109,23 @@ public struct EnergyBankEngine: ScoreEngine {
             missingInputs.append("recoveryScore")
             reasons.append("恢复度数据缺失，早间能量根据睡眠评分估算")
         } else {
-            morningEnergy = overnightStability
+            morningEnergy = nil
             missingInputs.append("recoveryScore")
             missingInputs.append("sleepScore")
+            reasons.append("需要恢复或睡眠评分后，才会给出能量评分。")
         }
         let chargeEfficiency = calculateChargeEfficiency(from: input)
         components["charge_efficiency"] = chargeEfficiency
 
-        morningEnergy += (chargeEfficiency - 0.6) * 12.0
-        morningEnergy = ScoringMath.clamp(morningEnergy, min: 0, max: 100)
-        components["morningEnergy"] = morningEnergy
+        if let value = morningEnergy {
+            let adjusted = ScoringMath.clamp(
+                value + (chargeEfficiency - 0.6) * 12.0,
+                min: 0,
+                max: 100
+            )
+            morningEnergy = adjusted
+            components["morningEnergy"] = adjusted
+        }
 
         let trainingLoad = calculateTrainingLoad(
             strainHistory: input.strainHistory,
@@ -133,8 +143,14 @@ public struct EnergyBankEngine: ScoreEngine {
         let strainDrain = 0.35 * strainScore
         let stressDrain = 0.25 * stressIndex
         
-        let hoursSinceWake = input.hoursSinceWake ?? 8.0
-        let timeDrain = ScoringMath.clamp(hoursSinceWake / 16.0 * 12.0, min: 0, max: 12.0)
+        let timeDrain: Double
+        if let hoursSinceWake = input.hoursSinceWake {
+            timeDrain = ScoringMath.clamp(hoursSinceWake / 16.0 * 12.0, min: 0, max: 12.0)
+        } else {
+            timeDrain = 0
+            missingInputs.append("wakeTime")
+            reasons.append("缺少起床时间，当前能量未扣除日间时间消耗。")
+        }
         
         // Training Load status drain
         let loadDrain: Double
@@ -158,7 +174,13 @@ public struct EnergyBankEngine: ScoreEngine {
         }
 
         // Current Energy
-        let currentEnergy = ScoringMath.clamp(morningEnergy - strainDrain - stressDrain - timeDrain - loadDrain + recharge, min: 0, max: 100)
+        let currentEnergy = morningEnergy.map {
+            ScoringMath.clamp(
+                $0 - strainDrain - stressDrain - timeDrain - loadDrain + recharge,
+                min: 0,
+                max: 100
+            )
+        }
 
         components["strain_drain"] = strainDrain
         components["stress_drain"] = stressDrain
@@ -167,33 +189,39 @@ public struct EnergyBankEngine: ScoreEngine {
         components["recharge"] = recharge
 
         let band: MetricBand
-        if currentEnergy < 25 {
+        if let currentEnergy, currentEnergy < 25 {
             band = .veryLow // depleted
-        } else if currentEnergy < 50 {
+        } else if let currentEnergy, currentEnergy < 50 {
             band = .low // low
-        } else if currentEnergy < 75 {
+        } else if let currentEnergy, currentEnergy < 75 {
             band = .normal // stable
-        } else {
+        } else if currentEnergy != nil {
             band = .high // strong
+        } else {
+            band = .low
         }
 
         reasons.append("能量电池是全天体能代理估算值，主要用于规划今日运动与恢复，非医学诊断。")
 
-        let dataWindow = DateInterval(start: Calendar.current.date(byAdding: .hour, value: -12, to: Date()) ?? Date(), end: Date())
+        let dataWindow = DateInterval(
+            start: Calendar.current.date(byAdding: .hour, value: -12, to: input.asOf) ?? input.asOf,
+            end: input.asOf
+        )
 
         return MetricResult(
+            domain: .energy,
             name: "Energy Bank",
             value: currentEnergy,
             band: band,
-            confidence: (rec != nil && slp != nil) ? .high : .medium,
+            confidence: rec != nil && slp != nil ? .high : (currentEnergy == nil ? .low : .medium),
             components: components,
             componentWeights: [:],
             reasons: reasons,
             missingInputs: missingInputs,
             dataWindow: dataWindow,
             source: .derived,
-            algorithmVersion: "1.0.0",
-            lastUpdated: Date()
+            algorithmVersion: ScoringAlgorithmVersions.energy,
+            lastUpdated: input.asOf
         )
     }
 

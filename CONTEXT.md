@@ -28,6 +28,10 @@ _Avoid_: Data quality score, completeness guess
 The single deterministic transformation from a Daily Health Snapshot plus Personal Baselines into scored health evidence. It owns missing-data rules and produces the same result for foreground refresh, background sync, and historical backfill.
 _Avoid_: Metric pipeline, score factory, dashboard calculation
 
+**Scored Health Evidence**:
+The five independently interpretable 0–100 results produced by Daily Health Computation: Recovery, Sleep, Strain, Physiological Stress, and Energy. Each result carries direction, confidence, Data Coverage, contributing Health Signals, Personal Baseline comparisons, an algorithm version, and a data window. Vela does not collapse these results into one total health score: higher Strain means more load and higher Physiological Stress means more concern, so a single total would create false precision.
+_Avoid_: Overall health score, readiness total, wellness grade
+
 **Body State**:
 A conservative interpretation of current recovery, load, sleep, stress, and reported constraints derived from scored health evidence.
 _Avoid_: Readiness score, diagnosis, physical condition
@@ -58,6 +62,7 @@ _Avoid_: Automatic memory, wiki update, inferred profile
 
 - “Summary” previously meant both a Daily Health Snapshot and the scored dashboard projection. Use **Daily Health Snapshot** for evidence before computation; use the concrete projection type for display-only output.
 - “Readiness” previously referred to a score, a Body State, and a Training Decision. Use **Body State** for interpretation and **Training Decision** for the actionable choice.
+- “Score” without a domain is ambiguous. Name the specific **Scored Health Evidence** result: Recovery, Sleep, Strain, Physiological Stress, or Energy.
 
 ## Example dialogue
 

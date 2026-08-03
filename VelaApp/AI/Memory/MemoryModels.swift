@@ -68,6 +68,9 @@ final class MemoryEventRecord {
     var confidence: Double
     var status: String
     var userNote: String?
+    /// Exact pre-apply markdown needed for a real rollback. Hashes alone can
+    /// audit a change but cannot restore it.
+    var previousContent: String?
     var previousContentHash: String?
     var newContentHash: String?
     var linkedAgentRunId: String?
@@ -84,6 +87,7 @@ final class MemoryEventRecord {
         confidence: Double,
         status: MemoryProposalStatus = .proposed,
         userNote: String? = nil,
+        previousContent: String? = nil,
         previousContentHash: String? = nil,
         newContentHash: String? = nil,
         linkedAgentRunId: String? = nil
@@ -99,6 +103,7 @@ final class MemoryEventRecord {
         self.confidence = min(1, max(0, confidence))
         self.status = status.rawValue
         self.userNote = userNote
+        self.previousContent = previousContent
         self.previousContentHash = previousContentHash
         self.newContentHash = newContentHash
         self.linkedAgentRunId = linkedAgentRunId

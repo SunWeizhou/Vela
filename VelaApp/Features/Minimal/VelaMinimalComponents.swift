@@ -109,6 +109,17 @@ struct VelaMetricDetailView: View {
                 metricNavigationBar(isSleep: isSleep)
                     .padding(.horizontal, VelaTheme.pagePadding)
                     .padding(.vertical, 8)
+                    .background(VelaTheme.cardBg.opacity(0.96))
+                    .overlay(alignment: .bottom) {
+                        LinearGradient(
+                            colors: [VelaTheme.borderSoft.opacity(0.35), .clear],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 5)
+                        .offset(y: 5)
+                        .allowsHitTesting(false)
+                    }
 
                 ScrollView {
                     VStack(spacing: 16) {
@@ -119,20 +130,24 @@ struct VelaMetricDetailView: View {
                         // 2. Double Highlight metrics
                         doubleHighlightsSection(isSleep: isSleep)
 
-                        // 3. Guidance Card
+                        // 3. Deterministic interpretation and next action
                         guidanceSection(isSleep: isSleep)
 
-                        // 4. Score inputs and supporting raw data
+                        // 4. Continue from the deterministic interpretation into
+                        // a screen-aware Coach conversation while context is fresh.
+                        coreMetricCoachCard
+
+                        // 5. Direction, confidence, coverage, and freshness
+                        trustSection
+
+                        // 6. Score inputs and supporting raw data
                         supportingEvidenceSection(isSleep: isSleep)
 
-                        // 5. Custom Widgets & Timeline based on Metric Type
+                        // 7. Custom Widgets & Timeline based on Metric Type
                         customWidgetsSection(isSleep: isSleep)
 
-                        // 6. Trend Sparkline Cards List
+                        // 8. Trend Sparkline Cards List
                         trendsSection(isSleep: isSleep)
-
-                        // 7. Metric-specific Coach advice
-                        coreMetricCoachCard
                     }
                     .padding(.horizontal, VelaTheme.pagePadding)
                     .padding(.bottom, 56)
@@ -217,9 +232,10 @@ struct VelaMetricDetailView: View {
             Image(systemName: "square.and.arrow.up")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(isSleep ? Color(hex: "#F2EFE8") : VelaTheme.accent)
-                .frame(width: 36, height: 36)
+                .frame(width: VelaTheme.circularControlSize, height: VelaTheme.circularControlSize)
+                .background(VelaTheme.secondaryGroupedBackground, in: Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.cardPress)
         .accessibilityLabel("分享\(navTitle)")
     }
 
@@ -232,9 +248,10 @@ struct VelaMetricDetailView: View {
             Image(systemName: systemName)
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(isSleep ? Color(hex: "#F2EFE8") : VelaTheme.accent)
-                .frame(width: 36, height: 36)
+                .frame(width: VelaTheme.circularControlSize, height: VelaTheme.circularControlSize)
+                .background(VelaTheme.secondaryGroupedBackground, in: Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.cardPress)
     }
 
 
@@ -270,8 +287,15 @@ struct VelaMetricDetailView: View {
             rawSelectedDate: $rawSelectedDate,
             displayDateText: displayDateText,
             dynamicValueText: dynamicValueText,
-            metricSubtitle: metricSubtitle
+            metricSubtitle: metricSubtitle,
+            targetRange: chartTargetRange
         )
+    }
+
+    private var chartTargetRange: ClosedRange<Double>? {
+        guard metric == .strain else { return nil }
+        let range = dashboard.strain.recommendedRange
+        return Double(range.lowerBound)...Double(range.upperBound)
     }
 
 
@@ -408,14 +432,29 @@ struct VelaMetricDetailView: View {
             rightTitle: rightTitle,
             rightIcon: rightIcon,
             rightValue: rightValue,
-            rightSubtitle: rightSubtitle,
-            guidanceText: guidanceText
+            rightSubtitle: rightSubtitle
         )
     }
 
     // MARK: - 3. Guidance Card
     private func guidanceSection(isSleep: Bool) -> some View {
-        EmptyView()
+        MetricInterpretationSection(
+            title: metricRecommendation.title,
+            detail: metricRecommendation.detail,
+            evidence: metricRecommendation.evidence,
+            symbol: metricRecommendation.symbol,
+            tint: metricColor
+        )
+    }
+
+    private var trustSection: some View {
+        MetricTrustSection(
+            direction: metricDirectionLabel,
+            confidence: metricConfidenceLabel,
+            coverage: metricCoverageLabel,
+            updatedAt: metricUpdatedAtLabel,
+            missingSummary: metricMissingSummary
+        )
     }
 
     // MARK: - 4. Supporting Evidence
@@ -630,6 +669,15 @@ enum MetricHeroPresentation: Equatable {
 }
 
 extension VelaMetricDetailView.MetricType {
+    var isScoredHealthDomain: Bool {
+        switch self {
+        case .strain, .recovery, .sleep, .stress, .energy:
+            return true
+        case .hrv, .rhr, .weight, .bodyFat, .respiratoryRate, .bloodOxygen, .steps, .activeCalories, .activeMinutes:
+            return false
+        }
+    }
+
     var heroPresentation: MetricHeroPresentation {
         switch self {
         case .strain, .recovery, .sleep, .energy:
@@ -648,4 +696,113 @@ enum DailyActivityDetailCatalog {
         .activeCalories,
         .activeMinutes
     ]
+}
+
+// MARK: - Digital Twin Simulator Glass Card
+
+struct DigitalTwinSimulatorCard: View {
+    @Environment(\.colorScheme) private var cs
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let dashboard: DashboardSummary
+
+    @State private var plannedStrain: Double = 12.0
+    @State private var plannedHour: Double = 19.0
+    @State private var targetSleepHours: Double = 7.5
+
+    var simulationResult: DigitalTwinSimulationResult {
+        let scenario = SimulationScenarioInput(
+            plannedWorkoutStrain: plannedStrain,
+            plannedWorkoutHour: plannedHour,
+            targetSleepDurationHours: targetSleepHours
+        )
+        return AutonomousHealthDigitalTwin().simulateNextDay(dashboard: dashboard, scenario: scenario)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // Header
+            HStack {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles.tv")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(VelaTheme.accent)
+                    Text("数字双胞胎前瞻模拟")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(VelaTheme.fg)
+                }
+                Spacer()
+                Text(simulationResult.scenarioTag == "optimal" ? "最佳节奏" : (simulationResult.scenarioTag == "suboptimal_timing" ? "时机风险" : "负荷偏高"))
+                    .font(.caption2.weight(.bold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule()
+                            .fill(simulationResult.scenarioTag == "optimal" ? Color.green.opacity(0.18) : (simulationResult.scenarioTag == "suboptimal_timing" ? Color.orange.opacity(0.18) : Color.red.opacity(0.18)))
+                    )
+                    .foregroundStyle(simulationResult.scenarioTag == "optimal" ? Color.green : (simulationResult.scenarioTag == "suboptimal_timing" ? Color.orange : Color.red))
+            }
+
+            // Results Display Grid
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("预测次日恢复")
+                        .font(.caption)
+                        .foregroundStyle(VelaTheme.muted)
+                    Text("\(Int(simulationResult.predictedNextDayRecovery.rounded()))%")
+                        .font(.system(size: 26, weight: .black, design: .rounded))
+                        .foregroundStyle(simulationResult.predictedNextDayRecovery >= 66 ? Color.green : (simulationResult.predictedNextDayRecovery >= 34 ? Color.yellow : Color.red))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.surface))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("预测次日能量")
+                        .font(.caption)
+                        .foregroundStyle(VelaTheme.muted)
+                    Text("\(Int(simulationResult.predictedEnergyScore.rounded()))%")
+                        .font(.system(size: 26, weight: .black, design: .rounded))
+                        .foregroundStyle(VelaTheme.accent)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.surface))
+            }
+
+            // Sliders Controls
+            VStack(spacing: 10) {
+                HStack {
+                    Text("计划训练负荷: \(String(format: "%.1f", plannedStrain))")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(VelaTheme.fg2)
+                    Spacer()
+                }
+                Slider(value: $plannedStrain, in: 2.0...21.0, step: 0.5)
+                    .tint(VelaTheme.accent)
+
+                HStack {
+                    Text("预计训练时间: \(String(format: "%02d:00", Int(plannedHour)))")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(VelaTheme.fg2)
+                    Spacer()
+                }
+                Slider(value: $plannedHour, in: 7.0...22.0, step: 1.0)
+                    .tint(VelaTheme.accent)
+            }
+
+            // Recommendation Line
+            Text(simulationResult.recommendation)
+                .font(.caption)
+                .foregroundStyle(VelaTheme.fg2)
+                .lineLimit(2)
+                .padding(.top, 2)
+        }
+        .padding(16)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+        )
+    }
 }

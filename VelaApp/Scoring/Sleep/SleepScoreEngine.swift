@@ -16,6 +16,7 @@ enum SleepTargetSettings {
 }
 
 public struct SleepScoreInput: Hashable {
+    public var asOf: Date
     public var totalSleepMinutes: Double?
     public var sleepTargetMinutes: Double
     public var todayBedtime: Date?
@@ -31,6 +32,7 @@ public struct SleepScoreInput: Hashable {
     public var wakeOffsetMinutes: Double?
 
     public init(
+        asOf: Date,
         totalSleepMinutes: Double?,
         sleepTargetMinutes: Double = 450,
         todayBedtime: Date? = nil,
@@ -43,6 +45,7 @@ public struct SleepScoreInput: Hashable {
         bedtimeOffsetMinutes: Double? = nil,
         wakeOffsetMinutes: Double? = nil
     ) {
+        self.asOf = asOf
         self.totalSleepMinutes = totalSleepMinutes
         self.sleepTargetMinutes = sleepTargetMinutes
         self.todayBedtime = todayBedtime
@@ -82,20 +85,14 @@ public struct SleepScoreEngine: ScoreEngine {
         return minutes
     }
 
-    private func calculateMedian(_ values: [Double]) -> Double? {
-        guard !values.isEmpty else { return nil }
-        let sorted = values.sorted()
-        if sorted.count % 2 == 1 {
-            return sorted[sorted.count / 2]
-        } else {
-            return (sorted[sorted.count / 2 - 1] + sorted[sorted.count / 2]) / 2.0
-        }
-    }
-
     public func calculate(from input: SleepScoreInput) -> MetricResult {
         guard let totalSleep = input.totalSleepMinutes, totalSleep > 0 else {
-            let dataWindow = DateInterval(start: Calendar.current.date(byAdding: .day, value: -13, to: Date()) ?? Date(), end: Date())
+            let dataWindow = DateInterval(
+                start: Calendar.current.date(byAdding: .day, value: -13, to: input.asOf) ?? input.asOf,
+                end: input.asOf
+            )
             return MetricResult(
+                domain: .sleep,
                 name: "Sleep Score",
                 value: nil,
                 band: .low,
@@ -106,8 +103,8 @@ public struct SleepScoreEngine: ScoreEngine {
                 missingInputs: ["totalSleepMinutes"],
                 dataWindow: dataWindow,
                 source: .healthKit,
-                algorithmVersion: "1.0.0",
-                lastUpdated: Date()
+                algorithmVersion: ScoringAlgorithmVersions.sleep,
+                lastUpdated: input.asOf
             )
         }
 
@@ -146,7 +143,7 @@ public struct SleepScoreEngine: ScoreEngine {
         var consistencyScore: Double? = nil
         if input.recentBedtimes.count >= 5, let todayBedtime = input.todayBedtime {
             let baselineBedtimesMinutes = input.recentBedtimes.map { minutesFromNoon($0) }
-            if let baselineMedian = calculateMedian(baselineBedtimesMinutes) {
+            if let baselineMedian = PersonalBaselineEngine.median(baselineBedtimesMinutes) {
                 let todayBedtimeMinutes = minutesFromNoon(todayBedtime)
                 let diff = abs(todayBedtimeMinutes - baselineMedian)
                 
@@ -257,9 +254,13 @@ public struct SleepScoreEngine: ScoreEngine {
             components["awake_episode_count"] = Double(awakeCount)
         }
 
-        let dataWindow = DateInterval(start: Calendar.current.date(byAdding: .day, value: -13, to: Date()) ?? Date(), end: Date())
+        let dataWindow = DateInterval(
+            start: Calendar.current.date(byAdding: .day, value: -13, to: input.asOf) ?? input.asOf,
+            end: input.asOf
+        )
 
         return MetricResult(
+            domain: .sleep,
             name: "Sleep Score",
             value: finalValue,
             band: band,
@@ -270,8 +271,8 @@ public struct SleepScoreEngine: ScoreEngine {
             missingInputs: missingInputs,
             dataWindow: dataWindow,
             source: .healthKit,
-            algorithmVersion: "1.0.0",
-            lastUpdated: Date()
+            algorithmVersion: ScoringAlgorithmVersions.sleep,
+            lastUpdated: input.asOf
         )
     }
 

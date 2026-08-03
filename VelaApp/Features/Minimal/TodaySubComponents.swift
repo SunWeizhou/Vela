@@ -2,6 +2,8 @@ import SwiftUI
 
 // MARK: - TodayReadinessDial
 struct TodayReadinessDial: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let score: Double
     let accent: Color
 
@@ -21,7 +23,7 @@ struct TodayReadinessDial: View {
                     style: StrokeStyle(lineWidth: 8, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-                .animation(VelaTheme.smooth, value: progress)
+                .animation(VelaTheme.dataAnimation(reduceMotion: reduceMotion), value: progress)
 
             VStack(spacing: 1) {
                 Text(score > 0 ? "\(Int(score.rounded()))" : "--")

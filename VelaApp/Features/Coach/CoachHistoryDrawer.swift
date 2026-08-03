@@ -4,6 +4,7 @@ import SwiftData
 // MARK: - CoachHistoryDrawer
 
 struct CoachHistoryDrawer: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let width: CGFloat
     @ObservedObject var vm: CoachChatVM
     let modelContext: ModelContext
@@ -12,6 +13,17 @@ struct CoachHistoryDrawer: View {
     @Binding var renameText: String
     @Binding var isRenamingSession: Bool
     @Binding var sessionPendingDeletion: CoachSessionRecord?
+    @State private var searchText = ""
+
+    private var filteredSessions: [CoachSessionRecord] {
+        guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return vm.sessions
+        }
+        return vm.sessions.filter {
+            $0.title.localizedCaseInsensitiveContains(searchText)
+                || $0.serializedMessages.localizedCaseInsensitiveContains(searchText)
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -22,7 +34,7 @@ struct CoachHistoryDrawer: View {
                     .foregroundStyle(VelaTheme.fg)
                 Spacer()
                 Button {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                         showHistoryDrawer = false
                     }
                 } label: {
@@ -30,6 +42,7 @@ struct CoachHistoryDrawer: View {
                         .font(.system(size: 16))
                         .foregroundStyle(VelaTheme.accent)
                 }
+                .buttonStyle(.cardPress)
             }
             .padding(.horizontal, 20)
             .padding(.top, 64)
@@ -38,7 +51,7 @@ struct CoachHistoryDrawer: View {
             // New Chat Button
             Button {
                 vm.createNewSession(modelContext: modelContext)
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                     showHistoryDrawer = false
                 }
             } label: {
@@ -53,16 +66,34 @@ struct CoachHistoryDrawer: View {
                 .frame(height: 44)
                 .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.accent))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
+
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(VelaTheme.muted)
+                TextField("搜索标题或对话内容", text: $searchText)
+                    .textInputAutocapitalization(.never)
+                if !searchText.isEmpty {
+                    Button { searchText = "" } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(VelaTheme.muted)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(10)
+            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
             
             Divider().padding(.horizontal, 20).padding(.bottom, 12)
             
             // Sessions Scroll List
             ScrollView {
                 VStack(spacing: 10) {
-                    ForEach(vm.sessions) { session in
+                    ForEach(filteredSessions) { session in
                         HStack(spacing: 12) {
                             Image(systemName: "bubble.left.and.bubble.right.fill")
                                 .font(.system(size: 13))
@@ -92,7 +123,7 @@ struct CoachHistoryDrawer: View {
                                         .foregroundStyle(VelaTheme.accent)
                                         .frame(width: 24, height: 24)
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.cardPress)
                                 
                                 Button {
                                     sessionPendingDeletion = session
@@ -102,7 +133,7 @@ struct CoachHistoryDrawer: View {
                                         .foregroundStyle(VelaTheme.danger)
                                         .frame(width: 24, height: 24)
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.cardPress)
                             }
                         }
                         .padding(.horizontal, 14)
@@ -118,7 +149,7 @@ struct CoachHistoryDrawer: View {
                         .padding(.horizontal, 14)
                         .onTapGesture {
                             vm.selectSession(session, modelContext: modelContext)
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                            withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                                 showHistoryDrawer = false
                             }
                         }

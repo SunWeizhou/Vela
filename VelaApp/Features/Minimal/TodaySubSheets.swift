@@ -961,6 +961,11 @@ struct PostWorkoutCheckInSheet: View {
             workout?.sessionRPE = rpe
             try modelContext.save()
             VelaAppState.shared.markLocalDataChanged()
+            let wID = workoutID
+            let ctx = modelContext
+            Task { @MainActor in
+                try? await WorkoutAdaptationService().processWorkoutCompletion(workoutID: wID, modelContext: ctx)
+            }
             dismiss()
         } catch {
             saveError = "保存失败：\(error.localizedDescription)"
@@ -1661,7 +1666,7 @@ struct FoodSearchSheetView: View {
                 .padding(.top, 8)
             
             HStack {
-                Text("搜索常见食物")
+                Text("搜索常见食物（估算）")
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
                 Spacer()
@@ -1737,8 +1742,8 @@ struct FoodSearchSheetView: View {
             proteinGrams: prot,
             carbsGrams: carb,
             fatGrams: fat,
-            fiberGrams: 2,
-            healthScore: "A",
+            fiberGrams: 0,
+            healthScore: "",
             source: .manual
         )
         modelContext.insert(record)
@@ -2094,14 +2099,41 @@ struct BarcodeFoodLookupService: Sendable {
         let fat = roundedInt(number(in: nutriments, key: "fat\(suffix)"))
         let fiber = roundedInt(number(in: nutriments, key: "fiber\(suffix)"))
         let grade = (product["nutrition_grades"] as? String)?.lowercased()
+        let micronutrients = [
+            micronutrient("sodium", label: "钠", unit: "mg", multiplier: 1_000, values: nutriments, suffix: suffix),
+            micronutrient("potassium", label: "钾", unit: "mg", multiplier: 1_000, values: nutriments, suffix: suffix),
+            micronutrient("calcium", label: "钙", unit: "mg", multiplier: 1_000, values: nutriments, suffix: suffix),
+            micronutrient("iron", label: "铁", unit: "mg", multiplier: 1_000, values: nutriments, suffix: suffix),
+            micronutrient("vitamin-c", label: "维生素 C", unit: "mg", multiplier: 1_000, values: nutriments, suffix: suffix),
+            micronutrient("vitamin-d", label: "维生素 D", unit: "μg", multiplier: 1_000_000, values: nutriments, suffix: suffix)
+        ].compactMap { $0 }
 
         return FoodAnalysisResult(
             foods: [IdentifiedFood(name: name, portion: portion, calories: calories)],
             totalCalories: calories,
             macros: MacroBreakdown(protein: protein, carbs: carbs, fat: fat, fiber: fiber),
+            micronutrients: micronutrients,
             healthScore: healthScore(for: grade),
             suggestions: ["营养数据来自 Open Food Facts，请核对包装标示。"],
             rawAnalysis: "Open Food Facts barcode lookup: \(barcode)"
+        )
+    }
+
+    private static func micronutrient(
+        _ key: String,
+        label: String,
+        unit: String,
+        multiplier: Double,
+        values: [String: Any],
+        suffix: String
+    ) -> NutritionMicronutrientAmount? {
+        guard let grams = number(in: values, key: "\(key)\(suffix)"), grams >= 0 else { return nil }
+        return NutritionMicronutrientAmount(
+            key: key,
+            label: label,
+            value: grams * multiplier,
+            unit: unit,
+            source: "Open Food Facts"
         )
     }
 

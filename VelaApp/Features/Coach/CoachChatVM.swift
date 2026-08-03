@@ -4,9 +4,45 @@ import UIKit
 
 // MARK: - Shared Types
 
+enum CoachScreenSurface: String, Codable, Hashable, Sendable {
+    case coach
+    case home
+    case metricDetail = "metric_detail"
+    case workoutDetail = "workout_detail"
+    case journal
+    case nutrition
+    case biology
+    case training
+}
+
+struct CoachScreenContext: Codable, Hashable, Sendable {
+    var surface: CoachScreenSurface
+    var entityType: String? = nil
+    var selectedDate: Date? = nil
+
+    func json() -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(self) else { return "{}" }
+        return String(data: data, encoding: .utf8) ?? "{}"
+    }
+}
+
 struct CoachContextFocus: Hashable, Sendable {
     var title: String
     var systemContext: String
+    var screenContext: CoachScreenContext
+
+    init(
+        title: String,
+        systemContext: String,
+        screenContext: CoachScreenContext = CoachScreenContext(surface: .coach)
+    ) {
+        self.title = title
+        self.systemContext = systemContext
+        self.screenContext = screenContext
+    }
 
     static var general: CoachContextFocus {
         CoachContextFocus(
@@ -14,7 +50,8 @@ struct CoachContextFocus: Hashable, Sendable {
             systemContext: L10n.t(
                 "General health coaching across recovery, sleep, strain, stress, energy, and journal context.",
                 "围绕恢复、睡眠、负荷、压力、能量和日记上下文进行综合健康分析。"
-            )
+            ),
+            screenContext: CoachScreenContext(surface: .coach)
         )
     }
 }
@@ -100,6 +137,7 @@ final class CoachChatVM: ObservableObject {
     @Published var isAnalyzingFood = false
     @Published var isAwaitingForegroundRetry = false
     @Published var persistenceError: String?
+    @Published private(set) var isGhostMode = false
 
     let quickQuestions: [String] = [
         L10n.t("Today's training advice", "今天的训练建议"),
@@ -230,6 +268,7 @@ final class CoachChatVM: ObservableObject {
     }
 
     func persistThread(modelContext: ModelContext) {
+        guard !isGhostMode else { return }
         do {
             try writer.persistThread(messages: messages, currentSession: currentSession, modelContext: modelContext)
         } catch {
@@ -240,6 +279,16 @@ final class CoachChatVM: ObservableObject {
     func clearConversation(modelContext: ModelContext) {
         messages = []
         persistThread(modelContext: modelContext)
+    }
+
+    func setGhostMode(_ enabled: Bool, modelContext: ModelContext) {
+        guard !isStreaming, enabled != isGhostMode else { return }
+        isGhostMode = enabled
+        messages = []
+        draft = ""
+        if !enabled {
+            loadSessions(modelContext: modelContext)
+        }
     }
 
     func appendLocalExchange(
@@ -253,7 +302,7 @@ final class CoachChatVM: ObservableObject {
         messages.append(ChatMsg(role: .user, content: cleanText))
         messages.append(ChatMsg(role: .assistant, content: response))
 
-        if let current = currentSession,
+        if !isGhostMode, let current = currentSession,
            current.title == "新对话" || current.title == "New Chat" || current.title == "New Session" || current.title.isEmpty {
             current.title = String(cleanText.prefix(12)) + (cleanText.count > 12 ? "..." : "")
             try? modelContext.save()
@@ -401,7 +450,7 @@ final class CoachChatVM: ObservableObject {
             messages.append(ChatMsg(role: .user, content: userText))
         }
 
-        if appendingUserMessage, let current = currentSession, (current.title == "新对话" || current.title == "New Chat" || current.title == "New Session" || current.title.isEmpty) {
+        if !isGhostMode, appendingUserMessage, let current = currentSession, (current.title == "新对话" || current.title == "New Chat" || current.title == "New Session" || current.title.isEmpty) {
             let cleanQuery = userText.trimmingCharacters(in: .whitespacesAndNewlines)
             let displayTitle = String(cleanQuery.prefix(12)) + (cleanQuery.count > 12 ? "..." : "")
             current.title = displayTitle.isEmpty ? "新对话" : displayTitle
@@ -450,6 +499,7 @@ final class CoachChatVM: ObservableObject {
                 dashboard: dashboard,
                 modelContext: modelContext,
                 services: services,
+                isGhostMode: isGhostMode,
                 onStreamDelta: { [weak self] delta in
                     self?.streamingContent += delta
                 }
@@ -479,6 +529,10 @@ final class CoachChatVM: ObservableObject {
                           let contentRange = Range(match.range(at: 1), in: fullResponse) else { continue }
                     
                     let artifactRaw = String(fullResponse[contentRange])
+                    if isGhostMode {
+                        finalResponseProcessed.replaceSubrange(matchRange, with: "")
+                        continue
+                    }
                     if let parsedArtifact = try? CoachArtifactParser.parse(artifactRaw, sourceContextHash: contextHash) {
                         // Persist to SwiftData
                         let record = CoachArtifactRecord(artifact: parsedArtifact)
@@ -493,20 +547,22 @@ final class CoachChatVM: ObservableObject {
             }
 
             let parsed = AgentActionParser.parse(finalResponseProcessed)
-            let ledger = MemoryLedger(modelContext: modelContext)
-            for action in parsed.actions where action.type == .updateWiki {
-                let memType = WikiFileRole.memoryTypeFor(filename: action.target)
-                let proposal = try? ledger.createProposal(
-                    targetFile: action.target,
-                    memoryType: memType,
-                    content: action.content,
-                    evidence: "Coach conversation — AI detected pattern worth recording.",
-                    confidence: 0.5,
-                    source: "coach_legacy_parser"
-                )
-                if proposal != nil, !wikiFiles.contains(action.target) {
-                    wikiFiles.append(action.target)
-                    wikiUpdateSummaries.append("\(action.target): \(action.content)")
+            if !isGhostMode {
+                let ledger = MemoryLedger(modelContext: modelContext)
+                for action in parsed.actions where action.type == .updateWiki {
+                    let memType = WikiFileRole.memoryTypeFor(filename: action.target)
+                    let proposal = try? ledger.createProposal(
+                        targetFile: action.target,
+                        memoryType: memType,
+                        content: action.content,
+                        evidence: "Coach conversation — AI detected pattern worth recording.",
+                        confidence: 0.5,
+                        source: "coach_legacy_parser"
+                    )
+                    if proposal != nil, !wikiFiles.contains(action.target) {
+                        wikiFiles.append(action.target)
+                        wikiUpdateSummaries.append("\(action.target): \(action.content)")
+                    }
                 }
             }
 
@@ -521,30 +577,32 @@ final class CoachChatVM: ObservableObject {
                 )
             }
 
-            persistThread(modelContext: modelContext)
-            try writer.persistInteraction(
-                userText: userText,
-                assistantText: finalText,
-                focus: focus,
-                contextHash: contextHash,
-                currentSession: currentSession,
-                modelContext: modelContext
-            )
+            if !isGhostMode {
+                persistThread(modelContext: modelContext)
+                try writer.persistInteraction(
+                    userText: userText,
+                    assistantText: finalText,
+                    focus: focus,
+                    contextHash: contextHash,
+                    currentSession: currentSession,
+                    modelContext: modelContext
+                )
 
-            var agentTrace = loopResult.trace
-            agentTrace.finalResponse = finalText
-            agentTrace.endedAt = Date()
-            try writer.persistAgentTrace(agentTrace, modelContext: modelContext)
+                var agentTrace = loopResult.trace
+                agentTrace.finalResponse = finalText
+                agentTrace.endedAt = Date()
+                try writer.persistAgentTrace(agentTrace, modelContext: modelContext)
 
-            try? DailyLogService.recordInteraction(
-                dashboard: dashboard,
-                userText: userText,
-                assistantText: finalText,
-                wikiUpdates: wikiFiles,
-                coachArchiveSummary: wikiUpdateSummaries.isEmpty
-                    ? nil
-                    : "本轮 Coach 主动提出长期档案更新：" + wikiUpdateSummaries.joined(separator: "；")
-            )
+                try? DailyLogService.recordInteraction(
+                    dashboard: dashboard,
+                    userText: userText,
+                    assistantText: finalText,
+                    wikiUpdates: wikiFiles,
+                    coachArchiveSummary: wikiUpdateSummaries.isEmpty
+                        ? nil
+                        : "本轮 Coach 主动提出长期档案更新：" + wikiUpdateSummaries.joined(separator: "；")
+                )
+            }
 
             isReady = true
             isAwaitingForegroundRetry = false

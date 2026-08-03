@@ -33,9 +33,7 @@ extension View {
             } action: { oldY, newY in
                 let delta = newY - oldY
                 if abs(delta) > 2 {
-                    withAnimation(VelaTheme.snappy) {
-                        direction.wrappedValue = delta > 0 ? .down : .up
-                    }
+                    direction.wrappedValue = delta > 0 ? .down : .up
                 }
             }
         } else {

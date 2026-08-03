@@ -1,7 +1,10 @@
 import Foundation
 import SwiftUI
+import SwiftData
 
 struct MetricCoachCard: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let dashboard: DashboardSummary
     let focus: CoachContextFocus
     var suggestedQuestion: String?
@@ -35,8 +38,9 @@ struct MetricCoachCard: View {
                                     )
                                     .scaleEffect(isBouncing ? 1.25 : 0.8)
                                     .opacity(isBouncing ? 1.0 : 0.4)
-                                    .task {
+                                    .task(id: reduceMotion) {
                                         isBouncing = false
+                                        guard !reduceMotion else { return }
                                         withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
                                             isBouncing = true
                                         }
@@ -82,7 +86,7 @@ struct MetricCoachCard: View {
                             .padding(.top, 4)
                     }
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             } else {
                 Text(AppLanguage.stored.isChinese ? "点击下方按钮，由 AI 针对当前生命体征和最新运动数据，提供定制的训练与恢复行动建议。" : "Tap below to let AI analyze your current vitals and recent activity trends, and deliver tailored training or recovery advice.")
                     .font(.footnote)
@@ -101,7 +105,7 @@ struct MetricCoachCard: View {
                                 .frame(width: 38, height: 38)
                                 .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(VelaTheme.fillSoft))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.cardPress)
                         .foregroundStyle(VelaTheme.fg)
                     }
 
@@ -169,29 +173,49 @@ struct MetricCoachCard: View {
                 Keep Evidence to at most 3 bullets, Today's Action to one concrete step, and the total response under 140 words.
                 """
 
+                let asOf = Date()
+                let input = AgentFactInputLoader().load(modelContext: modelContext, asOf: asOf)
+                let bodyState = input.bodyState(dashboard: dashboard)
+                let wiki = WikiFileService.loadDictionary()
+                let coverageSummary = DataCoverageSummaryModel.build(
+                    groups: await DataCoverageGroupFactory.loadPriorityGroups()
+                )
+                let snapshot = AIContextBuilder().buildFacts(
+                    dashboard: dashboard,
+                    journalEntries: input.journalContext,
+                    historicalReports: input.reportContext,
+                    userWiki: wiki,
+                    weeklyTrends: input.weeklyTrends,
+                    foodLogs: input.foodLogs,
+                    workoutEvents: input.workoutEvents,
+                    strengthWorkouts: input.strengthWorkouts,
+                    trainingResponses: input.trainingResponses,
+                    onboardingState: input.onboardingState,
+                    bodyState: bodyState,
+                    trainingDecision: input.canonicalTrainingDecision(for: bodyState),
+                    dataCoverage: coverageSummary.agentFactContext,
+                    profileAge: WikiFileService.getAgeFromWiki() ?? dashboard.extendedMetrics.age,
+                    generatedAt: asOf
+                ).snapshot
+                let canonicalFacts = CoachCompactContextAdapter().render(
+                    snapshot: snapshot,
+                    language: AppLanguage.stored,
+                    maxCharacters: 1_600
+                )
+                let wikiText = ContextBudget.trimWiki(
+                    wiki.sorted { $0.key < $1.key }
+                        .map { "### \($0.key)\n\($0.value)" }
+                        .joined(separator: "\n\n"),
+                    maxChars: 1_600
+                )
                 let metricsPrompt = """
                 Focus Metric: \(focus.title)
                 Focus Metric Context: \(focus.systemContext)
 
-                Current Daily Dashboard Context:
-                - Recovery Readiness Score: \(Int(dashboard.recovery.score))
-                - Sleep Quality Score: \(Int(dashboard.sleepScore.score))
-                - Daily Physical Strain: \(Int(dashboard.strain.score))
-                - Physiological Stress Index: \(Int(dashboard.stress.stressIndex))
-                - Current Energy Bank: \(Int(dashboard.energy.currentEnergy))
-                - Acute Training Load (ATL): \(dashboard.energy.metrics["atl"].map { String(format: "%.1f", $0) } ?? "N/A")
-                - Chronic Training Load (CTL): \(dashboard.energy.metrics["ctl"].map { String(format: "%.1f", $0) } ?? "N/A")
-                - Training Stress Balance (TSB): \(dashboard.energy.metrics["tsb"].map { String(format: "%.1f", $0) } ?? "N/A")
-                - Acute:Chronic Workload Ratio (ACWR): \(dashboard.energy.metrics["acwr"].map { String(format: "%.2f", $0) } ?? "N/A")
-                - Training Load Ratio: \(dashboard.strain.metrics["training_load_ratio"].map { String(format: "%.2f", $0) } ?? "N/A")
-                - Heart Rate Variability (HRV): \(dashboard.recoveryMetrics.hrvMilliseconds.map { "\(Int($0))ms" } ?? "N/A")
-                - Resting Heart Rate (RHR): \(dashboard.recoveryMetrics.restingHeartRate.map { "\(Int($0))bpm" } ?? "N/A")
-                - Sleep Heart Rate: \(dashboard.recoveryMetrics.sleepHeartRate.map { "\(Int($0))bpm" } ?? "N/A")
-                - Respiratory Rate: \(dashboard.recoveryMetrics.respiratoryRate.map { "\(Int($0))/min" } ?? "N/A")
-                - Blood Oxygen: \(dashboard.extendedMetrics.oxygenSaturation.map { "\(Int($0))%" } ?? "N/A")
-                - Daily Steps: \(dashboard.strain.metrics["steps_raw"].map { "\(Int($0))" } ?? "N/A")
-                - Active Energy: \(dashboard.strain.metrics["active_energy_raw"].map { "\(Int($0)) kcal" } ?? "N/A")
-                - Active Time: \(dashboard.strain.metrics["exercise_minutes_raw"].map { "\(Int($0))m" } ?? "N/A")
+                \(canonicalFacts)
+
+                ## Confirmed User Wiki
+                \(wikiText)
 
                 User Question:
                 \(resolvedQuestion)
@@ -410,6 +434,7 @@ private struct MetricCoachAdviceView: View {
 }
 
 struct AppleIntelligenceGlowBorder: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var isGlowing: Bool
     @State private var rotation: Double = 0
 
@@ -428,8 +453,9 @@ struct AppleIntelligenceGlowBorder: ViewModifier {
                                 lineWidth: 2.2
                             )
                             .shadow(color: .purple.opacity(0.42), radius: 6)
-                            .task {
+                            .task(id: reduceMotion) {
                                 rotation = 0
+                                guard !reduceMotion else { return }
                                 withAnimation(.linear(duration: 2.5).repeatForever(autoreverses: false)) {
                                     rotation = 360
                                 }
@@ -437,7 +463,7 @@ struct AppleIntelligenceGlowBorder: ViewModifier {
                     }
                 }
             )
-            .scaleEffect(isGlowing ? 1.012 : 1.0)
-            .animation(.easeInOut(duration: 0.45), value: isGlowing)
+            .scaleEffect(isGlowing && !reduceMotion ? 1.012 : 1.0)
+            .animation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion), value: isGlowing)
     }
 }

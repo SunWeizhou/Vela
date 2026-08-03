@@ -36,6 +36,7 @@ struct StrengthWorkoutDetailView: View {
             VStack(alignment: .leading, spacing: 14) {
                 hero
                 intelligenceStrip
+                progressionAdvice
                 muscleDistribution
                 exerciseList
                 notesCard
@@ -233,6 +234,71 @@ struct StrengthWorkoutDetailView: View {
         }
     }
 
+    private var progressionAdvice: some View {
+        let advice = StrengthProgressionAdvisor.advise(
+            current: workout,
+            history: allWorkouts.filter { $0.id != workout.id }
+        )
+        return VelaGlassCard(padding: 16, cornerRadius: 20) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label("渐进超负荷", systemImage: "arrow.up.forward.circle.fill")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(bodyTextColor)
+                    Spacer()
+                    Text("基于最近 3 次")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(mutedColor)
+                }
+
+                ForEach(Array(advice.prefix(3))) { item in
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(item.exerciseName)
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(bodyTextColor)
+                            Spacer()
+                            Text(progressionStatusLabel(item.status))
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(progressionStatusColor(item.status))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(progressionStatusColor(item.status).opacity(0.12), in: Capsule())
+                        }
+                        Text(item.evidence)
+                            .font(.system(size: 12))
+                            .foregroundStyle(mutedColor)
+                        Text(item.action)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(bodyTextColor)
+                    }
+                    .padding(12)
+                    .background(VelaTheme.fillSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+
+                Text("训练建议仅用于一般健身规划；疼痛、不适或异常疲劳时停止训练并寻求专业意见。")
+                    .font(.system(size: 10))
+                    .foregroundStyle(mutedColor)
+            }
+        }
+    }
+
+    private func progressionStatusLabel(_ status: StrengthProgressionStatus) -> String {
+        switch status {
+        case .ready: "可尝试最小增量"
+        case .hold: "保持或减量"
+        case .collecting: "继续收集"
+        }
+    }
+
+    private func progressionStatusColor(_ status: StrengthProgressionStatus) -> Color {
+        switch status {
+        case .ready: VelaTheme.recoveryColor
+        case .hold: VelaTheme.energyColor
+        case .collecting: VelaTheme.muted
+        }
+    }
+
     private var exerciseList: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("动作与组次")
@@ -343,11 +409,11 @@ struct StrengthWorkoutDetailView: View {
     private func setRow(index: Int, set: StrengthSetLog) -> some View {
         HStack(spacing: 12) {
             // 组号 / 热身标记
-            Text(set.isWarmup ? "热" : "\(index + 1)")
+            Text(set.kind == .working ? "\(index + 1)" : set.kind.shortLabel)
                 .font(.system(size: 11, weight: .bold, design: .rounded))
                 .foregroundStyle(Color.white)
                 .frame(width: 24, height: 24)
-                .background(Circle().fill(set.isWarmup ? Color(hex: "#FF9500") : VelaTheme.accent))
+                .background(Circle().fill(detailSetKindColor(set.kind)))
                 .frame(width: 32, alignment: .leading)
 
             // 重量
@@ -378,6 +444,18 @@ struct StrengthWorkoutDetailView: View {
                 .frame(width: 32, alignment: .trailing)
         }
         .padding(.vertical, 6)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("第 \(index + 1) 组，\(set.kind.displayName)，\(set.weightKilograms.formatted(.number.precision(.fractionLength(0...1)))) 千克，\(set.repetitions) 次")
+    }
+
+    private func detailSetKindColor(_ kind: StrengthSetKind) -> Color {
+        switch kind {
+        case .working: VelaTheme.accent
+        case .warmup: Color(hex: "#FF9500")
+        case .drop: VelaTheme.sleepColor
+        case .backoff: VelaTheme.recoveryColor
+        case .failure: VelaTheme.strainColor
+        }
     }
 
     private var detailBackground: some View {

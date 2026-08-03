@@ -1,5 +1,135 @@
 import SwiftUI
 
+// MARK: - Canonical Metric Card
+
+struct VelaMetricCard<Accessory: View>: View {
+    let title: String
+    let value: String
+    var unit: String? = nil
+    let subtitle: String
+    let domain: VelaMetricDomain
+    @ViewBuilder let accessory: () -> Accessory
+
+    init(
+        title: String,
+        value: String,
+        unit: String? = nil,
+        subtitle: String,
+        domain: VelaMetricDomain = .neutral,
+        @ViewBuilder accessory: @escaping () -> Accessory
+    ) {
+        self.title = title
+        self.value = value
+        self.unit = unit
+        self.subtitle = subtitle
+        self.domain = domain
+        self.accessory = accessory
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: VelaTheme.inlineGap) {
+                Label(title, systemImage: domain.systemImage)
+                    .font(VelaTheme.caption1().weight(.semibold))
+                    .foregroundStyle(VelaTheme.fg2)
+                    .labelStyle(.titleAndIcon)
+
+                Spacer(minLength: 4)
+                accessory()
+            }
+
+            HStack(alignment: .lastTextBaseline, spacing: 4) {
+                Text(value)
+                    .font(VelaTheme.cardValue())
+                    .foregroundStyle(VelaTheme.fg)
+                    .minimumScaleFactor(0.68)
+                    .lineLimit(1)
+
+                if let unit {
+                    Text(unit)
+                        .font(VelaTheme.caption1().weight(.semibold))
+                        .foregroundStyle(VelaTheme.muted)
+                }
+            }
+
+            Text(subtitle)
+                .font(VelaTheme.caption1())
+                .foregroundStyle(VelaTheme.fg2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(VelaTheme.cardPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
+                .stroke(domain.color.opacity(0.16), lineWidth: 0.75)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title)，\(value)\(unit.map { " \($0)" } ?? "")。\(subtitle)")
+    }
+}
+
+extension VelaMetricCard where Accessory == EmptyView {
+    init(
+        title: String,
+        value: String,
+        unit: String? = nil,
+        subtitle: String,
+        domain: VelaMetricDomain = .neutral
+    ) {
+        self.init(
+            title: title,
+            value: value,
+            unit: unit,
+            subtitle: subtitle,
+            domain: domain,
+            accessory: { EmptyView() }
+        )
+    }
+}
+
+struct VelaEvidenceRow: View {
+    let title: String
+    let detail: String
+    let value: String
+    var systemImage: String = "waveform.path.ecg"
+    var tint: Color = VelaTheme.accent
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 32, height: 32)
+                .background(tint.opacity(0.09), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(VelaTheme.subheadline().weight(.semibold))
+                    .foregroundStyle(VelaTheme.fg)
+                Text(detail)
+                    .font(VelaTheme.caption1())
+                    .foregroundStyle(VelaTheme.fg2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            Text(value)
+                .font(VelaTheme.headline().monospacedDigit())
+                .foregroundStyle(VelaTheme.fg)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .padding(.horizontal, VelaTheme.compactCardPadding)
+        .padding(.vertical, 12)
+        .frame(minHeight: VelaTheme.minimumHitTarget)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title)，\(value)。\(detail)")
+    }
+}
+
 // MARK: - VitalCard (vitals metric card)
 
 struct VitalCard: View {
@@ -50,9 +180,11 @@ struct VitalCard: View {
                 .frame(height: 48)
             }
             .padding(18)
-            .background(
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous))
+            .overlay(
                 RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
-                    .fill(VelaTheme.cardBg)
+                    .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
             )
         }
         .buttonStyle(.cardPress)
@@ -167,9 +299,11 @@ struct InsightCard: View {
             }
             .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous))
+            .overlay(
                 RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
-                    .fill(VelaTheme.cardBg)
+                    .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
             )
             .overlay(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 2)
@@ -355,6 +489,7 @@ struct VelaMemoryProposalCardCompat: View {
     var target: String = ""
     var proposal: Any?
     var onAccept: (() -> Void)?
+    var onEdit: (() -> Void)?
     var onReject: (() -> Void)?
 
     var body: some View {
@@ -401,6 +536,14 @@ struct VelaMemoryProposalCardCompat: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(VelaTheme.accent)
+                if onEdit != nil {
+                    Button(action: { onEdit?() }) {
+                        Label("Edit", systemImage: "pencil")
+                            .font(.subheadline.weight(.medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(VelaTheme.accent)
+                }
                 Button(action: { onReject?() }) {
                     Label("Reject", systemImage: "xmark")
                         .font(.subheadline.weight(.medium))
@@ -439,8 +582,11 @@ struct VelaStatusBadgeCompat: View {
         }
         .foregroundStyle(tint)
         .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .frame(minHeight: 28)
         .background(Capsule().fill(tint.opacity(0.12)))
+        .overlay(Capsule().stroke(tint.opacity(0.10), lineWidth: 0.5))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(label)
     }
 }
 typealias VelaStatusBadge = VelaStatusBadgeCompat

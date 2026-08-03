@@ -111,6 +111,7 @@ public struct WorkoutInput: Codable, Hashable {
 }
 
 public struct StrainScoreInput: Hashable {
+    public var asOf: Date
     public var workouts: [WorkoutInput] = []
     public var activeEnergyToday: Double?
     public var exerciseMinutesToday: Double?
@@ -129,6 +130,7 @@ public struct StrainScoreInput: Hashable {
     public var recoveryScore: Double?
 
     public init(
+        asOf: Date,
         workouts: [WorkoutInput] = [],
         activeEnergyToday: Double? = nil,
         exerciseMinutesToday: Double? = nil,
@@ -142,6 +144,7 @@ public struct StrainScoreInput: Hashable {
         workoutIntensityLoad: Double? = nil,
         recoveryScore: Double? = nil
     ) {
+        self.asOf = asOf
         self.workouts = workouts
         self.activeEnergyToday = activeEnergyToday
         self.exerciseMinutesToday = exerciseMinutesToday
@@ -165,21 +168,25 @@ public struct StrainScoreEngine: ScoreEngine {
 
     public init() {}
 
-    private func calculateMedian(_ values: [Double]) -> Double? {
-        guard !values.isEmpty else { return nil }
-        let sorted = values.sorted()
-        if sorted.count % 2 == 1 {
-            return sorted[sorted.count / 2]
-        } else {
-            return (sorted[sorted.count / 2 - 1] + sorted[sorted.count / 2]) / 2.0
-        }
-    }
-
     public func calculate(from input: StrainScoreInput) -> MetricResult {
         var components: [String: Double] = [:]
         var componentWeights: [String: Double] = [:]
         var reasons: [String] = []
-        let missingInputs: [String] = []
+        var missingInputs: [String] = []
+
+        let hasActivityEvidence = !input.workouts.isEmpty
+            || input.activeEnergyToday != nil
+            || input.exerciseMinutesToday != nil
+            || input.stepCount != nil
+        if !hasActivityEvidence {
+            missingInputs.append(contentsOf: [
+                "workouts",
+                "activeEnergyToday",
+                "exerciseMinutesToday",
+                "stepCount"
+            ])
+            reasons.append("需要训练、活动能量、运动分钟或步数中的至少一项，才会给出负荷评分。")
+        }
 
         let hasHeartRateReserve = input.restingHR > 0 && input.maxHR > input.restingHR
         let restingHR = input.restingHR
@@ -191,23 +198,16 @@ public struct StrainScoreEngine: ScoreEngine {
         for workout in input.workouts {
             var workoutLoad = 0.0
             if hasHeartRateReserve && !workout.heartRateSamples.isEmpty {
-                // Method A: Time-in-zone Lucia's TRIMP
+                // Method A: Continuous Banister TRIMP exponential sample integration
                 let sampleWeight = workout.durationMinutes / Double(workout.heartRateSamples.count)
                 for hr in workout.heartRateSamples {
                     let hrr = (hr - restingHR) / hrRange
+                    let clampedHRR = ScoringMath.clamp(hrr, min: 0.01, max: 1.0)
                     let weight: Double
-                    if hrr >= 0.90 {
-                        weight = 8.0 // Z5
-                    } else if hrr >= 0.80 {
-                        weight = 5.0 // Z4
-                    } else if hrr >= 0.70 {
-                        weight = 3.0 // Z3
-                    } else if hrr >= 0.60 {
-                        weight = 2.0 // Z2
-                    } else if hrr >= 0.50 {
-                        weight = 1.0 // Z1
+                    if input.biologicalSex == "female" {
+                        weight = clampedHRR * 0.86 * exp(1.67 * clampedHRR)
                     } else {
-                        weight = 0.5
+                        weight = clampedHRR * 0.64 * exp(1.92 * clampedHRR)
                     }
                     workoutLoad += sampleWeight * weight
                 }
@@ -252,11 +252,13 @@ public struct StrainScoreEngine: ScoreEngine {
         // A static reference scale is only used until a personal load history exists.
         // It must never be described as the user's baseline.
         let hasPersonalLoadBaseline = !historyToUse.isEmpty
-        let baselineDailyLoad = calculateMedian(historyToUse) ?? 60.0
+        let baselineDailyLoad = PersonalBaselineEngine.median(historyToUse) ?? 60.0
         let loadRatio = dailyLoad / baselineDailyLoad
         
         // Logarithmic saturation Daily Strain curve
-        let strainValue = 100.0 * (1.0 - exp(-0.75 * loadRatio))
+        let strainValue = hasActivityEvidence
+            ? 100.0 * (1.0 - exp(-0.75 * loadRatio))
+            : nil
         
         components["workout_load"] = totalWorkoutLoad
         components["activity_load"] = activityLoad
@@ -337,12 +339,16 @@ public struct StrainScoreEngine: ScoreEngine {
             }
         }
 
-        let band = ScoringMath.band(for: strainValue)
-        let confidence = baseConfidence
+        let band = strainValue.map(ScoringMath.band(for:)) ?? .low
+        let confidence: MetricConfidence = hasActivityEvidence ? baseConfidence : .low
 
-        let dataWindow = DateInterval(start: Calendar.current.date(byAdding: .day, value: -28, to: Date()) ?? Date(), end: Date())
+        let dataWindow = DateInterval(
+            start: Calendar.current.date(byAdding: .day, value: -28, to: input.asOf) ?? input.asOf,
+            end: input.asOf
+        )
 
         return MetricResult(
+            domain: .strain,
             name: "Strain Score",
             value: strainValue,
             band: band,
@@ -353,8 +359,8 @@ public struct StrainScoreEngine: ScoreEngine {
             missingInputs: missingInputs,
             dataWindow: dataWindow,
             source: .healthKit,
-            algorithmVersion: "1.0.0",
-            lastUpdated: Date()
+            algorithmVersion: ScoringAlgorithmVersions.strain,
+            lastUpdated: input.asOf
         )
     }
 

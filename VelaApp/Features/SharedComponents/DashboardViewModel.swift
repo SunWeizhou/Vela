@@ -558,7 +558,8 @@ final class DashboardViewModel: ObservableObject {
                 protein: prot,
                 carbs: carbs,
                 fat: fat
-            )
+            ),
+            history: dailySummaries
         )
         
         // 6. Build Latest Today Artifact

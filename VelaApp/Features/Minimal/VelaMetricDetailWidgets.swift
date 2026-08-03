@@ -30,6 +30,35 @@ struct MetricCustomWidgetsSection: View {
 
     var body: some View {
         switch metric {
+        case .recovery:
+            VStack(alignment: .leading, spacing: VelaTheme.cardGap) {
+                Text("恢复基线")
+                    .font(VelaTheme.footnote().weight(.bold))
+                    .foregroundStyle(VelaTheme.muted)
+
+                HStack(spacing: 10) {
+                    recoveryBaselineMetric(
+                        title: "HRV",
+                        current: dashboard.recoveryMetrics.hrvMilliseconds,
+                        baseline: dashboard.recoveryBaseline.hrvMilliseconds,
+                        unit: "ms",
+                        higherIsBetter: true
+                    )
+                    recoveryBaselineMetric(
+                        title: "静息心率",
+                        current: dashboard.recoveryMetrics.restingHeartRate,
+                        baseline: dashboard.recoveryBaseline.restingHeartRate,
+                        unit: "bpm",
+                        higherIsBetter: false
+                    )
+                }
+
+                Text("恢复分会结合睡眠、HRV、静息心率及前一日负荷；每项都与个人基线比较。")
+                    .font(VelaTheme.caption2())
+                    .foregroundStyle(VelaTheme.muted)
+                    .padding(.horizontal, 2)
+            }
+
         case .strain:
             // --- Strain Custom Views ---
             VStack(alignment: .leading, spacing: VelaTheme.cardGap) {
@@ -42,33 +71,19 @@ struct MetricCustomWidgetsSection: View {
                     Spacer()
                 }
                 
-                VStack(alignment: .leading, spacing: 8) {
-                    if dashboard.workouts.isEmpty {
-                        Text("无活动")
-                            .font(VelaTheme.footnote())
-                            .fontWeight(.bold)
-                            .foregroundStyle(isSleep ? Color(hex: "#F2EFE8") : VelaTheme.fg)
-                        Text("此期间没有记录到活动。")
-                            .font(VelaTheme.caption1())
-                            .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
-                    } else {
-                        ForEach(dashboard.workouts) { workout in
-                            Text("\(workout.activityName) · \(VelaMinimalFormatting.duration(minutes: Int(workout.end.timeIntervalSince(workout.start) / 60.0)))")
-                                .font(VelaTheme.caption1())
-                                .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
-                        }
-                    }
-                }
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .fill(VelaTheme.cardBg)
-                        .shadow(color: Color.black.opacity(isSleep ? 0.0 : 0.01), radius: 8, y: 2)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .stroke(isSleep ? Color.white.opacity(0.08) : Color(hex: "#E5E5EA"), lineWidth: 0.5)
+                VelaTimelineCard(
+                    items: dashboard.workouts.map { workout in
+                        VelaTimelineItem(
+                            id: workout.id.uuidString,
+                            title: workout.activityName,
+                            subtitle: VelaMinimalFormatting.duration(
+                                minutes: Int(workout.end.timeIntervalSince(workout.start) / 60.0)
+                            ),
+                            systemImage: "figure.run",
+                            domain: .strain
+                        )
+                    },
+                    emptyMessage: "此期间没有记录到活动。"
                 )
 
                 // Heart Rate Zones
@@ -183,33 +198,19 @@ struct MetricCustomWidgetsSection: View {
                         Spacer()
                     }
                     
-                    HStack {
-                        Image(systemName: "moon.stars.fill")
-                            .font(.system(size: 18))
-                            .foregroundStyle(metricColor)
-                            .frame(width: 36, height: 36)
-                            .background(Circle().fill(metricColor.opacity(0.15)))
-                        
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("主要睡眠")
-                                .font(VelaTheme.subheadline())
-                                .fontWeight(.semibold)
-                                .foregroundStyle(Color(hex: "#F2EFE8"))
-                            Text(primarySleepStartText)
-                                .font(VelaTheme.caption2())
-                                .foregroundStyle(Color(hex: "#7E7A70"))
-                        }
-                        Spacer()
-                    }
-                    .padding(16)
-                    .background(
-                        RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                            .fill(Color(hex: "#161512"))
-                            .shadow(color: Color.black.opacity(0.0), radius: 10, y: 4)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                            .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
+                    VelaTimelineCard(
+                        items: hasCompleteSleepTimes
+                            ? [
+                                VelaTimelineItem(
+                                    id: "primary-sleep",
+                                    title: "主要睡眠",
+                                    subtitle: primarySleepStartText,
+                                    systemImage: "moon.stars.fill",
+                                    domain: .sleep
+                                )
+                            ]
+                            : [],
+                        emptyMessage: "暂无完整睡眠起止时间。"
                     )
                 }
             }
@@ -234,7 +235,15 @@ struct MetricCustomWidgetsSection: View {
                             .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
                     }
 
-                    DailyStressChartView(isSleep: isSleep)
+                    DailyStressChartView(
+                        metric: .stress,
+                        selectedDate: dashboard.date,
+                        restingHeartRate: dashboard.recoveryBaseline.restingHeartRate
+                            ?? dashboard.recoveryMetrics.restingHeartRate,
+                        morningEnergy: dashboard.energy.morningEnergy,
+                        currentEnergy: dashboard.energy.value,
+                        isSleep: isSleep
+                    )
                         .frame(height: 145)
                         .padding(.vertical, 8)
                 }
@@ -247,6 +256,50 @@ struct MetricCustomWidgetsSection: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
                         .stroke(isSleep ? Color.white.opacity(0.08) : Color(hex: "#E5E5EA"), lineWidth: 0.5)
+                )
+            }
+
+        case .energy:
+            VStack(alignment: .leading, spacing: VelaTheme.cardGap) {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("能量变化")
+                                .font(VelaTheme.footnote().weight(.bold))
+                                .foregroundStyle(VelaTheme.fg)
+                            Text("从早间储备到当前状态")
+                                .font(VelaTheme.caption2())
+                                .foregroundStyle(VelaTheme.muted)
+                        }
+                        Spacer()
+                        Text("\(Int(dashboard.energy.morningEnergy.rounded())) → \(dashboard.energy.formattedScore)")
+                            .font(VelaTheme.subheadline().weight(.bold).monospacedDigit())
+                            .foregroundStyle(metricColor)
+                    }
+
+                    DailyStressChartView(
+                        metric: .energy,
+                        selectedDate: dashboard.date,
+                        restingHeartRate: dashboard.recoveryBaseline.restingHeartRate
+                            ?? dashboard.recoveryMetrics.restingHeartRate,
+                        morningEnergy: dashboard.energy.morningEnergy,
+                        currentEnergy: dashboard.energy.value,
+                        isSleep: isSleep
+                    )
+                    .frame(height: 145)
+
+                    HStack(spacing: 8) {
+                        energyDriver("负荷", value: dashboard.energy.components["strain_drain"])
+                        energyDriver("压力", value: dashboard.energy.components["stress_drain"])
+                        energyDriver("时间", value: dashboard.energy.components["time_drain"])
+                        energyDriver("补充", value: dashboard.energy.components["recharge"], positive: true)
+                    }
+                }
+                .padding(16)
+                .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
+                        .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
                 )
             }
 
@@ -283,5 +336,61 @@ struct MetricCustomWidgetsSection: View {
                 )
             }
         }
+    }
+
+    private func recoveryBaselineMetric(
+        title: String,
+        current: Double?,
+        baseline: Double?,
+        unit: String,
+        higherIsBetter: Bool
+    ) -> some View {
+        let delta = current.flatMap { value in baseline.map { value - $0 } }
+        let isPositive = delta.map { higherIsBetter ? $0 >= 0 : $0 <= 0 }
+        return VStack(alignment: .leading, spacing: 7) {
+            Text(title)
+                .font(VelaTheme.caption1().weight(.semibold))
+                .foregroundStyle(VelaTheme.fg)
+            Text(current.map { "\(Int($0.rounded())) \(unit)" } ?? "--")
+                .font(VelaTheme.cardValue())
+                .foregroundStyle(VelaTheme.fg)
+                .monospacedDigit()
+            Text(baseline.map { "基线 \(Int($0.rounded())) \(unit)" } ?? "个人基线建立中")
+                .font(VelaTheme.caption2())
+                .foregroundStyle(VelaTheme.muted)
+            if let delta, let isPositive {
+                Label(
+                    "\(delta >= 0 ? "+" : "")\(String(format: "%.1f", delta))",
+                    systemImage: isPositive ? "arrow.up.right" : "arrow.down.right"
+                )
+                .font(VelaTheme.caption2().weight(.semibold))
+                .foregroundStyle(isPositive ? VelaTheme.recoveryColor : VelaTheme.warn)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 128, alignment: .topLeading)
+        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
+                .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+        )
+    }
+
+    private func energyDriver(
+        _ title: String,
+        value: Double?,
+        positive: Bool = false
+    ) -> some View {
+        VStack(spacing: 2) {
+            Text(title)
+                .font(VelaTheme.caption2())
+                .foregroundStyle(VelaTheme.muted)
+            Text(value.map { "\(positive ? "+" : "−")\(String(format: "%.0f", abs($0)))" } ?? "--")
+                .font(VelaTheme.caption1().weight(.bold).monospacedDigit())
+                .foregroundStyle(positive ? VelaTheme.recoveryColor : VelaTheme.fg)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(VelaTheme.secondaryGroupedBackground, in: RoundedRectangle(cornerRadius: VelaTheme.radiusSm, style: .continuous))
     }
 }

@@ -357,6 +357,7 @@ struct CoachPromptComposer {
             ## 当前专项上下文
             - 入口：\(focus.title)
             - 关注范围：\(focus.systemContext)
+            - 结构化页面上下文：\(focus.screenContext.json())
             回答应优先围绕该范围；若用户当前问题明确转向其他主题，以当前问题为准。
             """
         }
@@ -364,6 +365,7 @@ struct CoachPromptComposer {
         ## Current Focus Context
         - Entry point: \(focus.title)
         - Scope: \(focus.systemContext)
+        - Structured screen context: \(focus.screenContext.json())
         Prioritize this scope unless the user's current message clearly changes the topic.
         """
     }

@@ -41,6 +41,14 @@ struct ToolRegistry {
         tools.map { $0.definition }
     }
 
+    var allowedToolNames: [String] {
+        tools.map(\.name)
+    }
+
+    func contains(name: String) -> Bool {
+        tools.contains(where: { $0.name == name })
+    }
+
     func execute(name: String, arguments: String) async -> String {
         guard let tool = tools.first(where: { $0.name == name }) else {
             return "Error: unknown tool '\(name)'"
@@ -53,7 +61,7 @@ struct ToolRegistry {
     }
 
     func risk(for name: String) -> ToolRiskLevel {
-        tools.first(where: { $0.name == name })?.riskLevel ?? .read
+        tools.first(where: { $0.name == name })?.riskLevel ?? .destructive
     }
 }
 

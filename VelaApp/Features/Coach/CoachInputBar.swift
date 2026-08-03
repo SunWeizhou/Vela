@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct CoachInputBar: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var vm: CoachChatVM
     let dashboard: DashboardSummary
     let focus: CoachContextFocus
@@ -45,7 +46,7 @@ struct CoachInputBar: View {
                             .background(Circle().fill(VelaTheme.borderSoft.opacity(0.5)))
                     }
                     .disabled(vm.isStreaming || vm.isAnalyzingFood)
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plusButton)
 
                     TextField(L10n.t("Ask...", "提问..."), text: $vm.draft, axis: .vertical)
                         .lineLimit(1...4)
@@ -94,7 +95,7 @@ struct CoachInputBar: View {
                         lineWidth: inputFocused ? 1.5 : 0.8
                     )
             )
-            .animation(.easeIn(duration: 0.15), value: inputFocused)
+            .animation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion), value: inputFocused)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

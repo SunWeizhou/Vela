@@ -2,8 +2,7 @@ import SwiftUI
 import SwiftData
 import CoreLocation
 
-// MARK: - VelaTodayView — Bevel Replica Today Tab
-// Warm off-white background (#F2F2F7) × Premium White Cockpit cards with precise shadows
+// MARK: - VelaTodayView — evidence-first daily decision surface
 
 struct VelaTodayView: View {
     @Environment(\.velaSurfaceIsActive) private var isActiveSurface
@@ -11,6 +10,7 @@ struct VelaTodayView: View {
     @Binding var showSettings: Bool
     @Environment(\.colorScheme) var cs
     @Environment(\.modelContext) var modelContext
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
     @EnvironmentObject var dashboardVM: DashboardViewModel
     @ObservedObject var appState = VelaAppState.shared
     @ObservedObject var locationManager = LocationManager.shared
@@ -105,6 +105,8 @@ struct VelaTodayView: View {
             return weatherLocation
         }
     }
+
+    @Query(sort: \ProactiveInsightRecord.priority) private var proactiveRecords: [ProactiveInsightRecord]
 
     // Active Status Settings Toggles (Replicating Screenshot 2)
     @AppStorage("vela_active_status") var activeStatusRaw = "active"
@@ -224,6 +226,7 @@ struct VelaTodayView: View {
                     model: todayExperience,
                     recoveryScoreText: recoveryText,
                     accent: accentColor,
+                    targetStrainRange: Double(dashboard.strain.recommendedRange.lowerBound)...Double(dashboard.strain.recommendedRange.upperBound),
                     primaryActionIcon: primaryIcon,
                     onPrimaryAction: {
                         if let primary = todayExperience.actions.first(where: \.isPrimary) {
@@ -235,12 +238,36 @@ struct VelaTodayView: View {
                     isStale: isStalePlan
                 )
 
+                TodaySignalGrid(
+                    model: todayExperience,
+                    freshness: dashboard.bodyState.freshness,
+                    accentColor: { self.accentColor($0) }
+                )
+
                 if decisionDataCoverageSummary.status != .high {
                     DataCoverageCompactCard(
                         model: decisionDataCoverageSummary,
                         showSettings: $showSettings
                     )
                 }
+
+                TodayDailyModuleLinks(
+                    recoveryMetrics: dashboard.recoveryMetrics,
+                    nutrition: todayExperience.nutrition,
+                    onAddNutrition: {
+                        appState.triggerFoodSearch = true
+                    },
+                    onJournal: {
+                        appState.triggerJournal = true
+                    }
+                )
+
+                TodayCoachPreview(
+                    model: todayExperience,
+                    onQuestion: { question in
+                        VelaAppState.shared.routeToCoach(question: question)
+                    }
+                )
 
                 TodayActionTimeline(
                     model: todayExperience,
@@ -263,16 +290,31 @@ struct VelaTodayView: View {
                     )
                 }
 
-                TodayCoachPreview(
-                    model: todayExperience,
-                    onClick: { VelaAppState.shared.routeToCoach(question: "根据今天的数据，帮我解释训练建议和优先行动。") }
-                )
+                DigitalTwinSimulatorCard(dashboard: dashboard)
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, VelaTheme.pagePadding)
             .padding(.top, 12)
-            .padding(.bottom, VelaFloatingNavigationMetrics.contentBottomPadding)
+            .padding(.bottom, VelaTheme.bottomContentClearance)
         }
         .scrollIndicators(.hidden)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 28)
+                .onEnded { value in
+                    let horizontal = value.predictedEndTranslation.width
+                    let vertical = value.predictedEndTranslation.height
+                    guard abs(horizontal) > 70,
+                          abs(horizontal) > abs(vertical) * 1.35 else {
+                        return
+                    }
+                    withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
+                        if horizontal > 0 {
+                            dashboardVM.goToPreviousDay()
+                        } else if !dashboardVM.isToday {
+                            dashboardVM.goToNextDay()
+                        }
+                    }
+                }
+        )
         .safeAreaInset(edge: .top) {
             VStack(spacing: 0) {
                 TodayDateAndStatusHeader(
@@ -288,12 +330,9 @@ struct VelaTodayView: View {
                     showSettings: $showSettings,
                     requestWeatherUpdate: { requestWeatherUpdate() }
                 )
-                .padding(.horizontal, 16)
+                .padding(.horizontal, VelaTheme.pagePadding)
                 .padding(.bottom, 12)
-                .background(VelaTheme.bg.opacity(0.98))
-                
-                Divider()
-                    .opacity(0.4)
+                .background(.bar)
             }
         }
         .background(VelaTheme.systemGroupedBackground)
@@ -306,7 +345,7 @@ struct VelaTodayView: View {
             await refreshDashboard()
             await loadDataCoverageSummary()
             trackDailyDecisionViewed()
-            withAnimation(VelaTheme.smooth) {
+            withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) {
                 animatedEnergyScore = energyScore
             }
         }
@@ -320,13 +359,13 @@ struct VelaTodayView: View {
             loadDynamicData()
             Task {
                 await refreshDashboard()
-                withAnimation(VelaTheme.smooth) {
+                withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) {
                     animatedEnergyScore = energyScore
                 }
             }
         }
         .onChange(of: energyScore) {
-            withAnimation(VelaTheme.smooth) {
+            withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) {
                 animatedEnergyScore = energyScore
             }
         }
@@ -349,8 +388,7 @@ struct VelaTodayView: View {
         .sheet(isPresented: $showCalendarOverview) {
             CalendarOverviewSheetView()
                 .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(VelaTheme.systemGroupedBackground)
+                .velaSheetSurface()
         }
         .sheet(isPresented: $showActiveStatus) {
             ActiveStatusSelectionSheetView(
@@ -358,8 +396,7 @@ struct VelaTodayView: View {
                 activeStatusDuration: $activeStatusDuration
             )
             .presentationDetents([.medium])
-            .presentationDragIndicator(.visible)
-            .presentationBackground(VelaTheme.systemGroupedBackground)
+            .velaSheetSurface()
         }
         .sheet(item: $selectedInsight) { insight in
             ProactiveInsightDetailSheet(insight: insight) { question in
@@ -369,8 +406,7 @@ struct VelaTodayView: View {
                 }
             }
             .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
-            .presentationBackground(VelaTheme.systemGroupedBackground)
+            .velaSheetSurface()
         }
         .sheet(isPresented: $showTodayEvidence) {
             TodayEvidenceSheet(
@@ -381,7 +417,7 @@ struct VelaTodayView: View {
                 }
             )
             .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
+            .velaSheetSurface()
         }
         .sheet(isPresented: $showDailyDecisionFeedback) {
             if let dailyDecisionFeedback {
@@ -389,8 +425,7 @@ struct VelaTodayView: View {
                     saveDailyDecisionFeedback(values)
                 }
                 .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(VelaTheme.systemGroupedBackground)
+                .velaSheetSurface()
             }
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -527,15 +562,18 @@ struct TodayDateAndStatusHeader: View {
                 } label: {
                     HStack(spacing: 6) {
                         Text(dateHeaderString(for: selectedDate))
-                            .font(.system(size: 26, weight: .bold))
+                            .font(VelaTheme.pageTitle())
                             .foregroundStyle(VelaTheme.fg)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                         
                         Image(systemName: "chevron.down")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(VelaTheme.muted)
                     }
+                    .frame(minHeight: VelaTheme.minimumHitTarget)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
                 .accessibilityLabel("选择日期")
                 .accessibilityValue(dateHeaderString(for: selectedDate))
                 
@@ -549,7 +587,7 @@ struct TodayDateAndStatusHeader: View {
                             .foregroundStyle(VelaTheme.muted)
                             .frame(width: 44, height: 44)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.cardPress)
                     .accessibilityLabel("分享今日摘要")
                     
                     // Profile Avatar
@@ -563,7 +601,7 @@ struct TodayDateAndStatusHeader: View {
                             .frame(width: 44, height: 44)
                             .foregroundStyle(VelaTheme.accent)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.cardPress)
                     .accessibilityLabel("个人设置")
                 }
             }
@@ -597,8 +635,9 @@ struct TodayDateAndStatusHeader: View {
                     .padding(.vertical, 6)
                     .background(Capsule().fill(VelaTheme.cardBg))
                     .overlay(Capsule().stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+                    .frame(minHeight: VelaTheme.minimumHitTarget)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
                 .accessibilityLabel("当前状态")
                 .accessibilityValue(resolvedActiveStatus == "active"
                     ? statusPillTitle
@@ -681,7 +720,7 @@ struct DataCoverageCompactCard: View {
         return Button {
             showSettings = true
         } label: {
-            VStack(alignment: .leading, spacing: needsCalibrationGuidance ? 12 : 8) {
+            VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 8) {
                     Image(systemName: model.actionSystemImage)
                         .font(VelaTheme.caption1().weight(.semibold))
@@ -700,28 +739,16 @@ struct DataCoverageCompactCard: View {
 
                 if needsCalibrationGuidance {
                     Text(model.subtitle)
-                        .font(VelaTheme.footnote())
+                        .font(VelaTheme.caption2())
                         .foregroundStyle(VelaTheme.fg2)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    ProgressView(value: Double(model.scorePercent), total: 100)
-                        .tint(accent)
-
-                    if !model.topBlockers.isEmpty {
-                        Label {
-                            Text("下一步：补充 \(model.topBlockers.prefix(2).joined(separator: "、"))")
-                                .fixedSize(horizontal: false, vertical: true)
-                        } icon: {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                        }
-                        .font(VelaTheme.caption1().weight(.semibold))
-                        .foregroundStyle(accent)
-                    }
+                        .lineLimit(1)
                 }
 
-                coverageDomains
+                if !needsCalibrationGuidance {
+                    coverageDomains
+                }
             }
-            .padding(needsCalibrationGuidance ? 16 : 12)
+            .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)

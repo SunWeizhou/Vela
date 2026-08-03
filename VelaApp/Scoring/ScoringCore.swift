@@ -28,6 +28,44 @@ public enum MetricSource: String, Codable, Hashable {
     case mixed = "mixed"
 }
 
+public enum ScoredHealthDomain: String, Codable, Hashable, CaseIterable {
+    case recovery
+    case sleep
+    case strain
+    case physiologicalStress
+    case energy
+
+    fileprivate static func infer(from name: String) -> ScoredHealthDomain {
+        let normalized = name.lowercased()
+        if normalized.contains("sleep") { return .sleep }
+        if normalized.contains("strain") { return .strain }
+        if normalized.contains("stress") { return .physiologicalStress }
+        if normalized.contains("energy") { return .energy }
+        return .recovery
+    }
+}
+
+public enum ScoreDirection: String, Codable, Hashable {
+    case higherIsBetter
+    case higherIsLoad
+    case higherNeedsAttention
+}
+
+public enum ScoreDataCoverage: String, Codable, Hashable {
+    case unavailable
+    case partial
+    case substantial
+    case complete
+}
+
+enum ScoringAlgorithmVersions {
+    static let sleep = "sleep.v2.0.0"
+    static let recovery = "recovery.v2.0.0"
+    static let strain = "strain.v2.0.0"
+    static let physiologicalStress = "physiologicalStress.v2.0.0"
+    static let energy = "energy.v2.0.0"
+}
+
 public enum StrainTargetStatus: String, Codable, Hashable {
     case belowTarget = "Below target"
     case withinTarget = "Within target"
@@ -50,6 +88,7 @@ public enum TrainingLoadStatus: String, Codable, Hashable {
 }
 
 public struct MetricResult: Codable, Hashable {
+    public var domain: ScoredHealthDomain
     public var name: String
     public var value: Double?              // 0–100; nil if not computable
     public var band: MetricBand            // veryLow / low / normal / high / veryHigh
@@ -64,6 +103,7 @@ public struct MetricResult: Codable, Hashable {
     public var lastUpdated: Date
 
     public init(
+        domain: ScoredHealthDomain? = nil,
         name: String,
         value: Double?,
         band: MetricBand,
@@ -77,6 +117,7 @@ public struct MetricResult: Codable, Hashable {
         algorithmVersion: String,
         lastUpdated: Date
     ) {
+        self.domain = domain ?? ScoredHealthDomain.infer(from: name)
         self.name = name
         self.value = value
         self.band = band
@@ -96,7 +137,26 @@ public struct MetricResult: Codable, Hashable {
     public var weights: [String: Double] { componentWeights }
     public var metrics: [String: Double] { components }
     public var configVersion: String { algorithmVersion }
-    public var hasData: Bool { value != nil && !components.isEmpty }
+    public var hasData: Bool { value != nil }
+    public var formattedScore: String {
+        guard hasData, let v = value else { return "--" }
+        return "\(Int(v.rounded()))"
+    }
+    public var direction: ScoreDirection {
+        switch domain {
+        case .recovery, .sleep, .energy:
+            return .higherIsBetter
+        case .strain:
+            return .higherIsLoad
+        case .physiologicalStress:
+            return .higherNeedsAttention
+        }
+    }
+    public var dataCoverage: ScoreDataCoverage {
+        guard hasData else { return .unavailable }
+        guard !missingInputs.isEmpty else { return .complete }
+        return confidence == .low ? .partial : .substantial
+    }
 
     // For EnergyBankResult
     public var morningEnergy: Double { components["morningEnergy"] ?? (value ?? 0) }
@@ -137,6 +197,40 @@ public struct MetricResult: Codable, Hashable {
 
     // For StressIndexResult
     public var stressIndex: Double { value ?? 0 }
+
+    private enum CodingKeys: String, CodingKey {
+        case domain
+        case name
+        case value
+        case band
+        case confidence
+        case components
+        case componentWeights
+        case reasons
+        case missingInputs
+        case dataWindow
+        case source
+        case algorithmVersion
+        case lastUpdated
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        domain = try container.decodeIfPresent(ScoredHealthDomain.self, forKey: .domain)
+            ?? ScoredHealthDomain.infer(from: name)
+        value = try container.decodeIfPresent(Double.self, forKey: .value)
+        band = try container.decode(MetricBand.self, forKey: .band)
+        confidence = try container.decode(MetricConfidence.self, forKey: .confidence)
+        components = try container.decode([String: Double].self, forKey: .components)
+        componentWeights = try container.decode([String: Double].self, forKey: .componentWeights)
+        reasons = try container.decode([String].self, forKey: .reasons)
+        missingInputs = try container.decode([String].self, forKey: .missingInputs)
+        dataWindow = try container.decode(DateInterval.self, forKey: .dataWindow)
+        source = try container.decode(MetricSource.self, forKey: .source)
+        algorithmVersion = try container.decode(String.self, forKey: .algorithmVersion)
+        lastUpdated = try container.decode(Date.self, forKey: .lastUpdated)
+    }
 }
 
 public enum ScoreBand: String, Codable, Hashable {
@@ -211,5 +305,89 @@ public enum ScoringMath {
         if available == expected { return .high }
         if available >= max(1, expected - 1) { return .medium }
         return .low
+    }
+}
+
+// MARK: - Circadian Alignment Kernel
+
+public struct CircadianInput: Sendable {
+    public var sleepStartHour: Double     // e.g. 23.5 for 23:30
+    public var sleepEndHour: Double       // e.g. 7.5 for 07:30
+    public var targetBedtimeHour: Double  // e.g. 23.0 for 23:00
+    public var hrvLowestPointHour: Double?// e.g. 3.5 for 03:30
+
+    public init(
+        sleepStartHour: Double = 23.5,
+        sleepEndHour: Double = 7.5,
+        targetBedtimeHour: Double = 23.0,
+        hrvLowestPointHour: Double? = nil
+    ) {
+        self.sleepStartHour = sleepStartHour
+        self.sleepEndHour = sleepEndHour
+        self.targetBedtimeHour = targetBedtimeHour
+        self.hrvLowestPointHour = hrvLowestPointHour
+    }
+}
+
+public struct CircadianResult: Sendable, Equatable {
+    public var alignmentScore: Double     // 0..100
+    public var phaseOffsetMinutes: Int   // difference from target bedtime
+    public var estimatedCortisolPeak: String // e.g. "07:45"
+    public var caffeineCutoffTime: String    // e.g. "14:00"
+    public var recommendations: [String]
+
+    public init(
+        alignmentScore: Double,
+        phaseOffsetMinutes: Int,
+        estimatedCortisolPeak: String,
+        caffeineCutoffTime: String,
+        recommendations: [String]
+    ) {
+        self.alignmentScore = alignmentScore
+        self.phaseOffsetMinutes = phaseOffsetMinutes
+        self.estimatedCortisolPeak = estimatedCortisolPeak
+        self.caffeineCutoffTime = caffeineCutoffTime
+        self.recommendations = recommendations
+    }
+}
+
+public struct CircadianAlignmentKernel: Sendable {
+    public init() {}
+
+    public func evaluate(input: CircadianInput) -> CircadianResult {
+        let diffHours = abs(input.sleepStartHour - input.targetBedtimeHour)
+        let phaseOffsetMinutes = Int(diffHours * 60)
+
+        let score = max(0.0, 100.0 - Double(phaseOffsetMinutes) * 0.5)
+
+        let wakeHour = input.sleepEndHour
+        let cortisolHour = wakeHour + 0.5
+        let cortisolInt = Int(cortisolHour)
+        let cortisolMin = Int((cortisolHour - Double(cortisolInt)) * 60)
+        let estimatedCortisolPeak = String(format: "%02d:%02d", cortisolInt, cortisolMin)
+
+        let cutoffHour = max(0, input.targetBedtimeHour - 9.5)
+        let cutoffInt = Int(cutoffHour)
+        let cutoffMin = Int((cutoffHour - Double(cutoffInt)) * 60)
+        let caffeineCutoffTime = String(format: "%02d:%02d", cutoffInt, cutoffMin)
+
+        var recs: [String] = []
+        if phaseOffsetMinutes > 45 {
+            recs.append("入睡时间偏离理想节律窗口超过 45 分钟，建议今晚提前 15 分钟准备躺下。")
+        } else {
+            recs.append("昼夜节律调和状态良好，继续维持稳定的入睡时间窗。")
+        }
+
+        if let hrvLow = input.hrvLowestPointHour, hrvLow > (wakeHour - 2.0) {
+            recs.append("夜间 HRV 最低点出现偏晚，可能与晚间进食或剧烈运动相关。")
+        }
+
+        return CircadianResult(
+            alignmentScore: score,
+            phaseOffsetMinutes: phaseOffsetMinutes,
+            estimatedCortisolPeak: estimatedCortisolPeak,
+            caffeineCutoffTime: caffeineCutoffTime,
+            recommendations: recs
+        )
     }
 }

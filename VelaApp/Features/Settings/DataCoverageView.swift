@@ -13,7 +13,7 @@ struct DataCoverageView: View {
 
             if isLoading {
                 VelaEmptyState(
-                    title: AppLanguage.stored.isChinese ? "正在检查数据质量" : "Checking Data Quality",
+                    title: AppLanguage.stored.isChinese ? "正在检查数据覆盖" : "Checking Data Coverage",
                     message: AppLanguage.stored.isChinese ? "Vela 正在读取授权状态、新鲜度和样本数量。" : "Vela is reading authorization, freshness, and sample counts.",
                     systemImage: "waveform.path.ecg",
                     tint: VelaTheme.accent
@@ -87,7 +87,7 @@ struct DataCoverageView: View {
                     .accessibilityLabel(AppLanguage.stored.isChinese ? "数据覆盖 \(pct)%" : "Data coverage \(pct)%")
 
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(AppLanguage.stored.isChinese ? "今天哪些判断可信？" : "Which judgments are reliable today?")
+                        Text(AppLanguage.stored.isChinese ? "今天哪些判断有足够数据？" : "Which judgments have enough data today?")
                             .font(.headline.weight(.semibold))
                             .foregroundStyle(VelaTheme.fg)
                         Text(AppLanguage.stored.isChinese
@@ -116,10 +116,10 @@ struct DataCoverageView: View {
                 }
 
                 VelaInlineAlert(
-                    title: AppLanguage.stored.isChinese ? "影响范围" : "Confidence impact",
+                    title: AppLanguage.stored.isChinese ? "覆盖影响" : "Coverage impact",
                     message: AppLanguage.stored.isChinese
-                    ? "缺失或陈旧的数据会降低恢复、睡眠、训练负荷和风险判断的置信度。"
-                    : "Missing or stale data lowers confidence for recovery, sleep, training load, and risk judgments.",
+                    ? "缺失或陈旧的数据会减少恢复、睡眠、训练负荷和风险判断的可用证据。"
+                    : "Missing or stale data reduces the usable evidence for recovery, sleep, training load, and risk judgments.",
                     systemImage: "slider.horizontal.3",
                     tint: coverageColor(pct)
                 )
@@ -161,7 +161,7 @@ struct DataCoverageView: View {
 
                     Spacer()
                     VelaStatusBadge(
-                        label: AppLanguage.stored.isChinese ? "可信度 \(pct)%" : "Trust \(pct)%",
+                        label: AppLanguage.stored.isChinese ? "覆盖 \(pct)%" : "Coverage \(pct)%",
                         systemImage: "checkmark.shield.fill",
                         tint: coverageColor(pct)
                     )
@@ -192,7 +192,7 @@ struct DataCoverageView: View {
                     }
                 }
 
-                if group.signals.contains(where: { $0.authorizationState != .authorized }) {
+                if group.signals.contains(where: { $0.authorizationState == .notRequested }) {
                     VelaInlineAlert(
                         title: AppLanguage.stored.isChinese ? "需要健康权限" : "Health permission needed",
                         message: AppLanguage.stored.isChinese
@@ -230,8 +230,16 @@ struct DataCoverageView: View {
     }
 
     private func signalSubtitle(_ signal: HealthSignalCoverage) -> String {
-        if signal.authorizationState != .authorized {
-            return AppLanguage.stored.isChinese ? "未授权 · 需要在 Apple 健康中开启" : "Not authorized · enable in Apple Health"
+        if signal.authorizationState == .notRequested {
+            return AppLanguage.stored.isChinese ? "尚未请求 · 可连接 Apple 健康" : "Not requested · connect Apple Health"
+        }
+        if signal.authorizationState == .noReadableSamples {
+            return AppLanguage.stored.isChinese
+                ? "近期未读取到样本 · 无法判断读权限或数据是否存在"
+                : "No recent samples readable · access and sample availability are indistinguishable"
+        }
+        if signal.authorizationState == .unavailable {
+            return AppLanguage.stored.isChinese ? "设备不支持此数据类型" : "Data type unavailable on this device"
         }
         return AppLanguage.stored.isChinese
             ? "7天 \(signal.sampleCount7d) 条 · 30天 \(signal.sampleCount30d) 条 · \(signal.confidenceImpact)"
@@ -313,6 +321,26 @@ struct DataCoverageSummaryModel: Hashable, Sendable {
     var domainSummaries: [DataCoverageDomainSummary]
     var topBlockers: [String]
     var coachContextLine: String
+
+    var agentFactContext: AgentDataCoverageContext {
+        let confidence: DataConfidence
+        switch status {
+        case .high: confidence = .high
+        case .moderate: confidence = .medium
+        case .low: confidence = .low
+        case .unknown: confidence = .unavailable
+        }
+        let missingDomains = domainSummaries
+            .filter { $0.scorePercent < 67 }
+            .map(\.id)
+            .sorted()
+        return AgentDataCoverageContext(
+            availableSections: domainSummaries.count - missingDomains.count,
+            totalSections: domainSummaries.count,
+            missingSections: missingDomains,
+            confidence: confidence
+        )
+    }
 
     var compactDisplayTitle: String {
         guard status != .unknown else { return title }

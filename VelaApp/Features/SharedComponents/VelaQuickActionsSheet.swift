@@ -98,16 +98,16 @@ struct PlusActionSheet: View {
             VStack(spacing: 8) {
                 ZStack {
                     Circle()
-                        .fill(VelaTheme.cardBg)
+                        .fill(.ultraThinMaterial)
                         .frame(width: 60, height: 60)
-                        .shadow(color: Color.black.opacity(0.02), radius: 4, y: 2)
+                        .shadow(color: Color.black.opacity(0.04), radius: 6, y: 3)
                     
                     Circle()
                         .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
                         .frame(width: 60, height: 60)
                     
                     Image(systemName: icon)
-                        .font(.system(size: 20))
+                        .font(.system(size: 20, weight: .medium))
                         .foregroundStyle(VelaTheme.fg)
                 }
                 
@@ -117,7 +117,7 @@ struct PlusActionSheet: View {
                     .lineLimit(1)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.cardPress)
     }
 
     // MARK: - Center Mascot Sparkles Button

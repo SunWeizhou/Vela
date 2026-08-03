@@ -4,6 +4,7 @@ import SwiftUI
 
 struct GlassTabBar: View {
     @Binding var selectedTab: VelaTab
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var animation
 
     enum VelaTab: CaseIterable {
@@ -21,7 +22,7 @@ struct GlassTabBar: View {
             ForEach(VelaTab.allCases, id: \.self) { tab in
                 Button {
                     VelaHaptic.selection()
-                    withAnimation(.spring(response: 0.38, dampingFraction: 0.78, blendDuration: 0)) {
+                    withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                         selectedTab = tab
                     }
                 } label: {
@@ -39,14 +40,19 @@ struct GlassTabBar: View {
                     .background(
                         ZStack {
                             if isActive {
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(Color(hex: "#E5E5EA").opacity(0.45))
-                                    .matchedGeometryEffect(id: "activeTabBackground", in: animation)
+                                if reduceMotion {
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .fill(Color(hex: "#E5E5EA").opacity(0.45))
+                                } else {
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .fill(Color(hex: "#E5E5EA").opacity(0.45))
+                                        .matchedGeometryEffect(id: "activeTabBackground", in: animation)
+                                }
                             }
                         }
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.tabItem)
             }
         }
         .padding(.horizontal, 8)
@@ -79,12 +85,32 @@ struct GlassTabBar: View {
 }
 
 extension View {
-    @ViewBuilder
     func velaInteractiveGlass<S: Shape>(in shape: S) -> some View {
-        if #available(iOS 26.0, *) {
-            glassEffect(.regular.interactive(), in: shape)
+        modifier(VelaInteractiveGlassModifier(shape: shape))
+    }
+}
+
+private struct VelaInteractiveGlassModifier<S: Shape>: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
+    let shape: S
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if reduceTransparency || colorSchemeContrast == .increased {
+            content
+                .background(VelaTheme.cardBg, in: shape)
+                .overlay(
+                    shape.stroke(
+                        colorSchemeContrast == .increased ? VelaTheme.border : VelaTheme.borderSoft,
+                        lineWidth: colorSchemeContrast == .increased ? 1 : 0.5
+                    )
+                )
+        } else if #available(iOS 26.0, *) {
+            content.glassEffect(.regular.interactive(), in: shape)
         } else {
-            background(.ultraThinMaterial, in: shape)
+            content.background(.ultraThinMaterial, in: shape)
         }
     }
 }

@@ -69,12 +69,18 @@ extension View {
 // Earlier releases keep the custom floating glass navigation.
 
 struct VelaShell: View {
+    let parityInterfaceEnabled: Bool
+
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var services: VelaServices
 
     @State private var showPlusSheet = false
     @State private var showCoach     = false
     @State private var keyboardVisible = false
+    @State private var paritySelectedTab = ParityTab.home.rawValue
+    @State private var previousParityTab = ParityTab.home.rawValue
 
     @ObservedObject private var appState = VelaAppState.shared
     @Namespace private var tabAnimation
@@ -86,6 +92,18 @@ struct VelaShell: View {
         case training = 1
         case coach = 2
         case me = 3
+    }
+
+    enum ParityTab: Int, CaseIterable, Hashable {
+        case home = 0
+        case journal = 1
+        case fitness = 2
+        case biology = 3
+        case intelligence = 4
+    }
+
+    init(parityInterfaceEnabled: Bool = true) {
+        self.parityInterfaceEnabled = parityInterfaceEnabled
     }
 
     // MARK: - Body
@@ -101,88 +119,143 @@ struct VelaShell: View {
                 appState.showCoachHub = false
             }
         }
+        .onReceive(appState.$selectedTab) { selectedTab in
+            guard parityInterfaceEnabled else { return }
+            switch selectedTab {
+            case VelaAppState.trainingTabIndex:
+                paritySelectedTab = ParityTab.fitness.rawValue
+            case VelaAppState.coachTabIndex:
+                showCoach = true
+            case VelaAppState.meTabIndex:
+                paritySelectedTab = ParityTab.biology.rawValue
+            default:
+                paritySelectedTab = ParityTab.home.rawValue
+            }
+        }
+        .onChange(of: paritySelectedTab) { oldValue, newValue in
+            guard newValue == ParityTab.intelligence.rawValue else {
+                previousParityTab = newValue
+                return
+            }
+            paritySelectedTab = oldValue == ParityTab.intelligence.rawValue
+                ? previousParityTab
+                : oldValue
+            showPlusSheet = true
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-            withAnimation(VelaTheme.snappy) {
+            withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                 keyboardVisible = true
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            withAnimation(VelaTheme.snappy) {
+            withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                 keyboardVisible = false
             }
         }
         .onChange(of: scenePhase) { _, phase in
             services.coachChat.handleAppActiveChange(isActive: phase == .active)
+            if phase == .active {
+                let ctx = modelContext
+                Task { @MainActor in
+                    await ProactiveIntelligenceOrchestrator().runAsyncCheck(modelContext: ctx)
+                }
+            }
         }
         .sheet(isPresented: $showPlusSheet, onDismiss: appState.runDeferredQuickAction) {
             PlusActionSheet()
                 .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(VelaTheme.systemGroupedBackground)
+                .velaSheetSurface()
         }
         .fullScreenCover(isPresented: $showCoach) {
             VelaCoachView(presentation: .quickCover, vm: services.coachChat)
         }
         .sheet(isPresented: $appState.showSettings) {
             NavigationStack { VelaSettingsView() }
+                .velaSheetSurface()
         }
         .sheet(isPresented: $appState.triggerWeightLog, onDismiss: appState.markLocalDataChanged) {
             WeightLogSheetView()
+                .velaSheetSurface()
         }
         .sheet(isPresented: $appState.triggerBloodLog, onDismiss: appState.markLocalDataChanged) {
             BloodLogSheetView()
                 .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
+                .velaSheetSurface()
         }
         .sheet(isPresented: $appState.triggerWorkoutLog, onDismiss: appState.markLocalDataChanged) {
             WorkoutLogSheetView()
                 .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(VelaTheme.systemGroupedBackground)
+                .velaSheetSurface()
         }
         .sheet(isPresented: $appState.triggerJournal, onDismiss: appState.markLocalDataChanged) {
             NavigationStack {
                 VelaJournalView()
             }
             .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
-            .presentationBackground(VelaTheme.systemGroupedBackground)
+            .velaSheetSurface()
         }
         .sheet(isPresented: $appState.triggerRecoveryDetail) {
             NavigationStack {
                 VelaMetricDetailView(metric: .recovery)
             }
             .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
-            .presentationBackground(VelaTheme.systemGroupedBackground)
+            .velaSheetSurface()
         }
         .sheet(isPresented: $appState.triggerPostWorkoutCheckIn, onDismiss: appState.markLocalDataChanged) {
             NavigationStack {
                 PostWorkoutCheckInSheet(workoutID: appState.postWorkoutCheckInWorkoutID)
             }
             .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
-            .presentationBackground(VelaTheme.systemGroupedBackground)
+            .velaSheetSurface()
         }
         .sheet(isPresented: $appState.triggerPostWorkoutImpact) {
             NavigationStack {
                 PostWorkoutImpactSheet(workoutID: appState.postWorkoutImpactWorkoutID)
             }
             .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
-            .presentationBackground(VelaTheme.systemGroupedBackground)
+            .velaSheetSurface()
         }
         .tint(VelaTheme.accent)
-        .sensoryFeedback(.selection, trigger: appState.selectedTab)
     }
 
     @ViewBuilder
     private var navigationSurface: some View {
-        if #available(iOS 26.0, *) {
+        if parityInterfaceEnabled {
+            parityTabNavigation
+        } else if #available(iOS 26.0, *) {
             nativeTabNavigation
         } else {
             legacyFloatingNavigation
         }
+    }
+
+    private var parityTabNavigation: some View {
+        TabView(selection: $paritySelectedTab) {
+            VelaTodayView(showCoach: $showCoach, showSettings: $appState.showSettings)
+                .environment(\.velaSurfaceIsActive, paritySelectedTab == ParityTab.home.rawValue)
+                .tabItem { Label(L10n.t("Home", "首页"), systemImage: "house.fill") }
+                .tag(ParityTab.home.rawValue)
+
+            VelaJournalView()
+                .environment(\.velaSurfaceIsActive, paritySelectedTab == ParityTab.journal.rawValue)
+                .tabItem { Label(L10n.t("Journal", "日志"), systemImage: "checklist") }
+                .tag(ParityTab.journal.rawValue)
+
+            VelaTrainingView()
+                .environment(\.velaSurfaceIsActive, paritySelectedTab == ParityTab.fitness.rawValue)
+                .tabItem { Label(L10n.t("Fitness", "健身"), systemImage: "figure.run") }
+                .tag(ParityTab.fitness.rawValue)
+
+            VelaVitalsView()
+                .environment(\.velaSurfaceIsActive, paritySelectedTab == ParityTab.biology.rawValue)
+                .tabItem { Label(L10n.t("Biology", "生理"), systemImage: "waveform.path.ecg") }
+                .tag(ParityTab.biology.rawValue)
+
+            Color.clear
+                .tabItem { Label(L10n.t("Add", "添加"), systemImage: "plus.circle.fill") }
+                .tag(ParityTab.intelligence.rawValue)
+        }
+        .tint(VelaTheme.accent)
     }
 
     @available(iOS 26.0, *)
@@ -259,7 +332,7 @@ struct VelaShell: View {
                 bottomGlassNavBar
                     .padding(.top, 6)
                     .padding(.bottom, VelaFloatingNavigationMetrics.navBottomPadding)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(bottomBarTransition)
             }
         }
     }
@@ -294,24 +367,23 @@ struct VelaShell: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         let isActive = VelaTabSelection.isActive(tab, selectedTab: appState.selectedTab)
-        if isActive {
-            return AnyView(
-                content()
-                    .zIndex(1)
+        return content()
+            .environment(\.velaSurfaceIsActive, isActive)
+            .opacity(isActive ? 1 : 0)
+            .allowsHitTesting(isActive)
+            .accessibilityHidden(!isActive)
+            .zIndex(isActive ? 1 : 0)
+            .animation(
+                .easeOut(duration: reduceMotion ? 0.12 : VelaNavigationMotion.destinationFadeDuration),
+                value: isActive
             )
-        } else {
-            return AnyView(
-                Color.clear
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .zIndex(0)
-            )
-        }
     }
 
     private func customTabButton(_ tab: VelaTab) -> some View {
         let isActive = appState.selectedTab == tab.rawValue
         return Button {
-            withAnimation(VelaTheme.snappy) {
+            guard !isActive else { return }
+            withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                 appState.selectedTab = tab.rawValue
             }
         } label: {
@@ -328,14 +400,19 @@ struct VelaShell: View {
             .background(
                 ZStack {
                     if isActive {
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(VelaTheme.accent.opacity(0.08))
-                            .matchedGeometryEffect(id: "activeTabHighlight", in: tabAnimation)
+                        if reduceMotion {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(VelaTheme.accent.opacity(0.08))
+                        } else {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(VelaTheme.accent.opacity(0.08))
+                                .matchedGeometryEffect(id: "activeTabHighlight", in: tabAnimation)
+                        }
                     }
                 }
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.tabItem)
         .accessibilityLabel(label(for: tab))
         .accessibilityValue(isActive ? "已选中" : "")
         .accessibilityAddTraits(isActive ? .isSelected : [])
@@ -357,6 +434,10 @@ struct VelaShell: View {
         case .coach:    L10n.t("Coach", "教练")
         case .me:       L10n.t("Me", "个人")
         }
+    }
+
+    private var bottomBarTransition: AnyTransition {
+        reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity)
     }
 
     @ViewBuilder
@@ -389,4 +470,3 @@ enum VelaTabSelection {
     }
 
 }
-

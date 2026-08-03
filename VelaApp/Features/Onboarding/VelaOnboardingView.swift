@@ -3,6 +3,7 @@ import SwiftData
 
 struct VelaOnboardingView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     @AppStorage("vela_onboarding_completed") private var onboardingCompleted = false
     @State private var authError: String? = nil
@@ -19,6 +20,7 @@ struct VelaOnboardingView: View {
     @State private var hasHomeEquipment = true
     @State private var hasBodyweight = true
     @State private var currentStep = 0
+    @State private var isMovingForward = true
 
     @Query(sort: \OnboardingState.updatedAt, order: .reverse)
     private var onboardingStates: [OnboardingState]
@@ -39,7 +41,7 @@ struct VelaOnboardingView: View {
                         }
                     }
                     .id(currentStep)
-                    .transition(.opacity.combined(with: .move(edge: .trailing)))
+                    .transition(stepTransition)
                     .padding(.horizontal, 20)
                     .padding(.top, 28)
                     .padding(.bottom, 150)
@@ -52,8 +54,7 @@ struct VelaOnboardingView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 12)
                 .padding(.bottom, 10)
-                .background(VelaTheme.bg.opacity(0.97))
-                .overlay(alignment: .top) { Divider().opacity(0.55) }
+                .background(.bar)
         }
         .alert(isPresented: $showingErrorAlert) {
             Alert(
@@ -346,7 +347,10 @@ struct VelaOnboardingView: View {
                     if currentStep == 2 {
                         finishOnboarding(missingSignals: [])
                     } else {
-                        withAnimation(VelaTheme.smooth) { currentStep -= 1 }
+                        isMovingForward = false
+                        withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
+                            currentStep -= 1
+                        }
                     }
                 } label: {
                     Text(currentStep == 2 ? "稍后连接" : "返回")
@@ -354,7 +358,7 @@ struct VelaOnboardingView: View {
                         .foregroundStyle(VelaTheme.muted)
                         .padding(.vertical, 6)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
             }
         }
     }
@@ -369,10 +373,23 @@ struct VelaOnboardingView: View {
 
     private func primaryOnboardingAction() {
         if currentStep < 2 {
-            withAnimation(VelaTheme.smooth) { currentStep += 1 }
+            isMovingForward = true
+            withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
+                currentStep += 1
+            }
         } else {
             Task { await connectHealthAndFinish() }
         }
+    }
+
+    private var stepTransition: AnyTransition {
+        guard !reduceMotion else { return .opacity }
+        let insertionEdge: Edge = isMovingForward ? .trailing : .leading
+        let removalEdge: Edge = isMovingForward ? .leading : .trailing
+        return .asymmetric(
+            insertion: .move(edge: insertionEdge).combined(with: .opacity),
+            removal: .move(edge: removalEdge).combined(with: .opacity)
+        )
     }
 
     private func equipmentToggle(_ title: String, isOn: Binding<Bool>) -> some View {
@@ -403,7 +420,7 @@ struct VelaOnboardingView: View {
             var missing: [HealthSignal] = []
             for signal in [HealthSignal.hrvSDNN, .restingHR, .sleepAnalysis, .workouts, .activeEnergy, .stepCount] {
                 let cov = await coverageService.fetchCoverage(for: signal)
-                if cov.authorizationState == .deniedOrUnavailable || cov.authorizationState == .notDetermined {
+                if cov.authorizationState == .unavailable || cov.authorizationState == .notRequested {
                     missing.append(signal)
                 }
             }
@@ -425,7 +442,7 @@ struct VelaOnboardingView: View {
         var missing: [HealthSignal] = []
         for signal in [HealthSignal.hrvSDNN, .restingHR, .sleepAnalysis, .workouts, .activeEnergy, .stepCount] {
             let cov = await coverageService.fetchCoverage(for: signal)
-            if cov.authorizationState == .deniedOrUnavailable || cov.authorizationState == .notDetermined {
+            if cov.authorizationState == .unavailable || cov.authorizationState == .notRequested {
                 missing.append(signal)
             }
         }

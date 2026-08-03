@@ -3,6 +3,7 @@ import SwiftData
 
 struct AppCoordinator: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("vela_app_language") private var languageRaw = AppLanguage.simplifiedChinese.rawValue
     @AppStorage("vela_dark_mode") private var darkModeRaw = "system"
     @AppStorage("vela_onboarding_completed") private var onboardingCompleted = false
@@ -37,11 +38,14 @@ struct AppCoordinator: View {
                     storeWarningBanner
                     Spacer()
                 }
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .transition(warningTransition)
             }
         }
         .preferredColorScheme(preferredColorScheme)
-        .animation(.easeOut(duration: 0.3), value: appState.isFallbackStore || appState.isReadOnlySafetyMode)
+        .animation(
+            VelaTheme.interfaceAnimation(reduceMotion: reduceMotion),
+            value: appState.isFallbackStore || appState.isReadOnlySafetyMode
+        )
         .task {
             BackgroundTaskManager.schedule()
             guard !appState.isReadOnlySafetyMode else { return }
@@ -83,7 +87,7 @@ struct AppCoordinator: View {
                 .font(.caption.weight(.bold))
             } else {
                 Button {
-                    withAnimation {
+                    withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                         appState.isFallbackStore = false
                         appState.isReadOnlySafetyMode = false
                     }
@@ -91,11 +95,16 @@ struct AppCoordinator: View {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(VelaTheme.fg2)
                 }
+                .buttonStyle(.cardPress)
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(VelaTheme.elevatedBg)
+    }
+
+    private var warningTransition: AnyTransition {
+        reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity)
     }
 
     nonisolated static func shouldForceOnboarding(arguments: [String]) -> Bool {

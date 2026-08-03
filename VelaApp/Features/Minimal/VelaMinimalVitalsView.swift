@@ -1,8 +1,7 @@
 import SwiftUI
 import SwiftData
 
-// MARK: - VelaVitalsView — Bevel Replica Vitals Tab
-// Biological Age dial gauge × Interactive Sparkline Biomarker list
+// MARK: - VelaVitalsView — health signals and longitudinal biomarkers
 
 struct VelaVitalsView: View {
     @Environment(\.modelContext) private var modelContext
@@ -176,11 +175,12 @@ struct VelaVitalsView: View {
             return delta < 0 ? Color(hex: "#5B8C6F") : VelaTheme.strainColor
         }()
 
-        return Group {
-            if result == nil || chronologicalAge == nil {
-                biologicalAgeUnavailableCard
-            } else {
-                VStack(alignment: .leading, spacing: 14) {
+        return NavigationLink(destination: BiologyView()) {
+            Group {
+                if result == nil || chronologicalAge == nil {
+                    biologicalAgeUnavailableCard
+                } else {
+                    VStack(alignment: .leading, spacing: 14) {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: isPhenoAge ? "cross.case.fill" : "waveform.path.ecg")
                             .font(.system(size: 16, weight: .semibold))
@@ -242,12 +242,16 @@ struct VelaVitalsView: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(VelaTheme.muted)
                 }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
+                    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
+                }
             }
         }
+        .buttonStyle(.cardPress)
+        .accessibilityLabel(result?.isPhenoAge == true ? "打开生物年龄详情" : "打开健康信号详情")
+        .accessibilityHint("查看可信度、贡献因子、二十年情景和生物标志物")
     }
 
     private var biologicalAgeUnavailableCard: some View {

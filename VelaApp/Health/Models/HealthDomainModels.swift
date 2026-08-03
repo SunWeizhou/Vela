@@ -109,6 +109,7 @@ public struct WorkoutSummary: Identifiable, Codable, Hashable {
     public var activityName: String
     public var energyKilocalories: Double?
     public var averageHeartRate: Double?
+    public var heartRateRecoveryOneMinuteBPM: Double?
     public var distanceMeters: Double?
     public var source: String?
     public var rpe: Double?
@@ -120,6 +121,7 @@ public struct WorkoutSummary: Identifiable, Codable, Hashable {
         activityName: String,
         energyKilocalories: Double? = nil,
         averageHeartRate: Double? = nil,
+        heartRateRecoveryOneMinuteBPM: Double? = nil,
         distanceMeters: Double? = nil,
         source: String? = nil,
         rpe: Double? = nil
@@ -130,6 +132,7 @@ public struct WorkoutSummary: Identifiable, Codable, Hashable {
         self.activityName = activityName
         self.energyKilocalories = energyKilocalories
         self.averageHeartRate = averageHeartRate
+        self.heartRateRecoveryOneMinuteBPM = heartRateRecoveryOneMinuteBPM
         self.distanceMeters = distanceMeters
         self.source = source
         self.rpe = rpe

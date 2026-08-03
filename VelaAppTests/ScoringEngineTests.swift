@@ -1,4 +1,5 @@
 import XCTest
+import SwiftData
 @testable import Vela
 
 final class ScoringEngineTests: XCTestCase {
@@ -107,9 +108,58 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertEqual(ready.rhrBaselineMean, 60)
     }
 
+    func testPersonalBaselineUsesInjectedCalculationTime() {
+        let calculatedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let snapshots = (0..<7).map { offset -> DailyHealthSnapshot in
+            var snapshot = DailyHealthSnapshot(
+                date: calculatedAt.addingTimeInterval(Double(-offset) * 86_400)
+            )
+            snapshot.hrvAverage = 50
+            return snapshot
+        }
+
+        let baseline = PersonalBaselineEngine.computeBaselines(
+            from: snapshots,
+            calculatedAt: calculatedAt
+        )
+
+        XCTAssertEqual(baseline.calculatedAt, calculatedAt)
+    }
+
+    func testMetricResultDecodesLegacyCacheWithoutTypedDomain() throws {
+        let asOf = Date(timeIntervalSince1970: 1_700_000_000)
+        let original = MetricResult(
+            domain: .physiologicalStress,
+            name: "Physiological Stress Index",
+            value: 42,
+            band: .low,
+            confidence: .medium,
+            components: ["stress": 42],
+            componentWeights: [:],
+            reasons: [],
+            missingInputs: [],
+            dataWindow: DateInterval(start: asOf.addingTimeInterval(-3600), end: asOf),
+            source: .derived,
+            algorithmVersion: "1.0.0",
+            lastUpdated: asOf
+        )
+        let encoded = try JSONEncoder().encode(original)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        object.removeValue(forKey: "domain")
+
+        let decoded = try JSONDecoder().decode(
+            MetricResult.self,
+            from: JSONSerialization.data(withJSONObject: object)
+        )
+
+        XCTAssertEqual(decoded.domain, .physiologicalStress)
+        XCTAssertEqual(decoded.direction, .higherNeedsAttention)
+    }
+
     func testSleepScoreEngineProducesValidRange() {
         let engine = SleepScoreEngine()
         let input = SleepScoreInput(
+            asOf: Date(timeIntervalSince1970: 1_700_000_000),
             totalSleepMinutes: 420,
             sleepTargetMinutes: 480,
             awakeMinutes: 15,
@@ -125,6 +175,7 @@ final class ScoringEngineTests: XCTestCase {
     func testRecoveryScoreEngineHandlesEmptyHistory() {
         let engine = RecoveryScoreEngine()
         let input = RecoveryScoreInput(
+            asOf: Date(timeIntervalSince1970: 1_700_000_000),
             hrvToday: 45,
             hrvBaseline: 50,
             hrvHistory: [],
@@ -140,6 +191,7 @@ final class ScoringEngineTests: XCTestCase {
 
     func testRecoveryScoreDoesNotPublishFromPriorStrainAlone() {
         let result = RecoveryScoreEngine().calculate(from: RecoveryScoreInput(
+            asOf: Date(timeIntervalSince1970: 1_700_000_000),
             hrvToday: nil,
             hrvBaseline: nil,
             hrvHistory: [],
@@ -195,6 +247,178 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertLessThanOrEqual(elevatedRecovery.value ?? .infinity, (neutralRecovery.value ?? 0) - 7.9)
     }
 
+    func testDailyHealthComputationDoesNotInventBedtimeOrWakeTime() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let asOf = Date(timeIntervalSince1970: 1_700_000_000)
+        let dayStart = calendar.startOfDay(for: asOf)
+        let history = (1...7).map { offset -> DailyHealthSnapshot in
+            let date = calendar.date(byAdding: .day, value: -offset, to: dayStart)!
+            var snapshot = DailyHealthSnapshot(date: date)
+            snapshot.bedtime = calendar.date(bySettingHour: 23, minute: 0, second: 0, of: date)
+            snapshot.hrvAverage = 50
+            snapshot.restingHeartRate = 60
+            snapshot.sleepHours = 7.5
+            return snapshot
+        }
+        var snapshot = DailyHealthSnapshot(date: dayStart)
+        snapshot.hrvAverage = 50
+        snapshot.restingHeartRate = 60
+        snapshot.sleepHours = 7.5
+
+        let evidence = DailyHealthComputation(
+            calendar: calendar,
+            now: asOf,
+            profile: DailyHealthComputationProfile(
+                sleepTargetMinutes: 450,
+                maxHeartRate: 190,
+                biologicalSex: "other"
+            )
+        ).compute(for: snapshot, history: history)
+
+        XCTAssertNil(evidence.sleep.components["consistency"])
+        XCTAssertTrue(evidence.sleep.missingInputs.contains("todayBedtime"))
+        XCTAssertEqual(evidence.energy.components["time_drain"], 0)
+        XCTAssertTrue(evidence.energy.missingInputs.contains("wakeTime"))
+    }
+
+    func testDailyHealthComputationExcludesStressInsideWorkoutRecoveryWindow() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let asOf = Date(timeIntervalSince1970: 1_700_000_000)
+        var snapshot = DailyHealthSnapshot(date: calendar.startOfDay(for: asOf))
+        snapshot.hrvAverage = 50
+        snapshot.restingHeartRate = 60
+        snapshot.sleepHours = 7.5
+        snapshot.workouts = [
+            WorkoutSummary(
+                start: asOf.addingTimeInterval(-3_600),
+                end: asOf.addingTimeInterval(-900),
+                activityName: "Strength Training",
+                energyKilocalories: 220,
+                averageHeartRate: 135,
+                source: "test",
+                rpe: 7
+            )
+        ]
+
+        let evidence = DailyHealthComputation(
+            calendar: calendar,
+            now: asOf,
+            profile: DailyHealthComputationProfile(
+                sleepTargetMinutes: 450,
+                maxHeartRate: 190,
+                biologicalSex: "other"
+            )
+        ).compute(for: snapshot, history: [])
+
+        XCTAssertNil(evidence.physiologicalStress.value)
+        XCTAssertTrue(evidence.physiologicalStress.missingInputs.contains("quietWindow"))
+    }
+
+    func testDailyHealthComputationGoldenFixtureAndVersionConsistency() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let day = calendar.date(from: DateComponents(
+            year: 2026, month: 7, day: 31
+        ))!
+        let now = day.addingTimeInterval(12 * 3_600)
+        let history = (1...14).map { offset -> DailyHealthSnapshot in
+            var item = DailyHealthSnapshot(
+                date: calendar.date(byAdding: .day, value: -offset, to: day)!
+            )
+            item.hrvAverage = 48 + Double(offset % 5)
+            item.restingHeartRate = 58 + Double(offset % 3)
+            item.respiratoryRate = 14 + Double(offset % 2) * 0.2
+            item.sleepHours = 7.2 + Double(offset % 4) * 0.1
+            item.wristTemperature = 36.35 + Double(offset % 3) * 0.02
+            item.dailyLoad = 44 + Double(offset % 6) * 3
+            item.strainScore = 52 + Double(offset % 5)
+            return item
+        }
+        var snapshot = DailyHealthSnapshot(date: day)
+        snapshot.hrvAverage = 54
+        snapshot.restingHeartRate = 57
+        snapshot.respiratoryRate = 14.1
+        snapshot.sleepHours = 7.75
+        snapshot.bedtime = day.addingTimeInterval(-45 * 60)
+        snapshot.wakeTime = day.addingTimeInterval(7 * 3_600)
+        snapshot.awakeMinutes = 24
+        snapshot.awakeEpisodeCount = 2
+        snapshot.deepSleepMinutes = 92
+        snapshot.remSleepMinutes = 108
+        snapshot.wristTemperature = 36.4
+        snapshot.oxygenSaturation = 0.98
+        snapshot.steps = 8_400
+        snapshot.activeCalories = 460
+        snapshot.activeMinutes = 42
+        snapshot.workouts = [
+            WorkoutSummary(
+                start: day.addingTimeInterval(9 * 3_600),
+                end: day.addingTimeInterval(9.75 * 3_600),
+                activityName: "Strength Training",
+                averageHeartRate: 132,
+                source: "fixture",
+                rpe: 7
+            )
+        ]
+
+        let evidence = DailyHealthComputation(
+            calendar: calendar,
+            now: now,
+            profile: DailyHealthComputationProfile(
+                sleepTargetMinutes: 450,
+                maxHeartRate: 190,
+                biologicalSex: "other"
+            )
+        ).compute(for: snapshot, history: history)
+
+        XCTAssertEqual(evidence.sleep.value ?? -1, 77.43, accuracy: 0.01)
+        XCTAssertEqual(evidence.recovery.value ?? -1, 60.70, accuracy: 0.01)
+        XCTAssertEqual(evidence.strain.value ?? -1, 63.67, accuracy: 0.01)
+        XCTAssertEqual(evidence.physiologicalStress.value ?? -1, 33.15, accuracy: 0.01)
+        XCTAssertEqual(evidence.energy.value ?? -1, 39.29, accuracy: 0.01)
+        XCTAssertEqual(evidence.sleep.algorithmVersion, ScoringAlgorithmVersions.sleep)
+        XCTAssertEqual(evidence.recovery.algorithmVersion, ScoringAlgorithmVersions.recovery)
+        XCTAssertEqual(evidence.strain.algorithmVersion, ScoringAlgorithmVersions.strain)
+        XCTAssertEqual(
+            evidence.physiologicalStress.algorithmVersion,
+            ScoringAlgorithmVersions.physiologicalStress
+        )
+        XCTAssertEqual(evidence.energy.algorithmVersion, ScoringAlgorithmVersions.energy)
+    }
+
+    func testDailyHealthComputationIgnoresFutureHistory() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let day = calendar.startOfDay(for: Date(timeIntervalSince1970: 1_785_369_600))
+        var target = DailyHealthSnapshot(date: day)
+        target.hrvAverage = 50
+        target.restingHeartRate = 60
+        target.sleepHours = 7.5
+        let past = (1...7).map { offset -> DailyHealthSnapshot in
+            var item = DailyHealthSnapshot(
+                date: calendar.date(byAdding: .day, value: -offset, to: day)!
+            )
+            item.hrvAverage = 50
+            item.restingHeartRate = 60
+            item.sleepHours = 7.5
+            return item
+        }
+        var future = DailyHealthSnapshot(
+            date: calendar.date(byAdding: .day, value: 1, to: day)!
+        )
+        future.hrvAverage = 2
+        future.restingHeartRate = 180
+        future.sleepHours = 1
+        let computation = DailyHealthComputation(calendar: calendar, now: day)
+
+        XCTAssertEqual(
+            computation.compute(for: target, history: past),
+            computation.compute(for: target, history: past + [future])
+        )
+    }
+
     func testBodyInterpreterUsesConservativeDataCoverageLimiterWhenSignalsAreMissing() {
         let interpretation = BodyInterpreterEngine().interpret(
             dashboard: .empty(date: Date()),
@@ -211,6 +435,7 @@ final class ScoringEngineTests: XCTestCase {
 
     func testRecoveryReasonsDescribeMeasuredSignalsWithoutPhysiologicalClaims() {
         let result = RecoveryScoreEngine().calculate(from: RecoveryScoreInput(
+            asOf: Date(timeIntervalSince1970: 1_700_000_000),
             hrvToday: 50,
             hrvBaseline: 50,
             hrvHistory: [50, 50, 50, 50, 50],
@@ -232,6 +457,7 @@ final class ScoringEngineTests: XCTestCase {
 
     func testStressReasonsDoNotInferUnmeasuredHormonesOrAutonomicState() {
         let result = StressIndexEngine().calculate(from: StressIndexInput(
+            asOf: Date(timeIntervalSince1970: 1_700_000_000),
             sleepScoreLastNight: 45,
             strainScoreToday: 70
         ))
@@ -310,6 +536,7 @@ final class ScoringEngineTests: XCTestCase {
     func testStrainScoreEngineProducesValidRange() {
         let engine = StrainScoreEngine()
         let input = StrainScoreInput(
+            asOf: Date(timeIntervalSince1970: 1_700_000_000),
             workouts: [WorkoutInput(durationMinutes: 45, averageHeartRate: 140, rpe: 6)],
             activeEnergyToday: 500,
             exerciseMinutesToday: 45,
@@ -324,6 +551,7 @@ final class ScoringEngineTests: XCTestCase {
 
     func testStrainScoreDoesNotInventHeartRateReserveWithoutProfile() {
         let result = StrainScoreEngine().calculate(from: StrainScoreInput(
+            asOf: Date(timeIntervalSince1970: 1_700_000_000),
             workouts: [WorkoutInput(durationMinutes: 40, averageHeartRate: 145)],
             activeEnergyToday: 320,
             exerciseMinutesToday: 40,
@@ -334,6 +562,37 @@ final class ScoringEngineTests: XCTestCase {
 
         XCTAssertTrue(result.reasons.contains { $0.contains("心率数据未用于个体化负荷计算") })
         XCTAssertTrue(result.reasons.contains { $0.contains("尚未形成个人历史负荷基线") })
+    }
+
+    func testStrainScoreDoesNotPublishWithoutActivityEvidence() {
+        let result = StrainScoreEngine().calculate(from: StrainScoreInput(
+            asOf: Date(timeIntervalSince1970: 1_700_000_000),
+            restingHR: 60,
+            maxHR: 190,
+            last28DaysDailyLoads: [55, 60, 65]
+        ))
+
+        XCTAssertNil(result.value)
+        XCTAssertFalse(result.hasData)
+        XCTAssertEqual(result.confidence, .low)
+        XCTAssertTrue(result.missingInputs.contains("workouts"))
+    }
+
+    func testEnergyBankDoesNotPublishWithoutRecoveryOrSleepEvidence() {
+        let result = EnergyBankEngine().calculate(from: EnergyBankInput(
+            asOf: Date(timeIntervalSince1970: 1_700_000_000),
+            recoveryScore: nil,
+            sleepScore: nil,
+            strainScore: 30,
+            stressIndex: 20,
+            hoursSinceWake: 4
+        ))
+
+        XCTAssertNil(result.value)
+        XCTAssertFalse(result.hasData)
+        XCTAssertEqual(result.confidence, .low)
+        XCTAssertTrue(result.missingInputs.contains("recoveryScore"))
+        XCTAssertTrue(result.missingInputs.contains("sleepScore"))
     }
 
     func testBodyStateKernelProvidesFallbackWithoutHealthKit() {
@@ -555,11 +814,63 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertEqual(model.hero.decisionTitle, "按计划训练")
         XCTAssertEqual(model.hero.primaryActionTitle, "开始今日训练")
         XCTAssertEqual(model.signalCards.map(\.id), ["recovery", "sleep", "strain", "stress", "energy"])
-        XCTAssertTrue(model.signalCards.allSatisfy { $0.trend.isEmpty })
+        XCTAssertEqual(
+            model.signalCards.map(\.directionLabel),
+            ["越高越好", "越高越好", "越高负荷越大", "越高越需关注", "越高越好"]
+        )
+        XCTAssertTrue(model.signalCards.allSatisfy { $0.coverageLabel != "暂无覆盖" })
+        XCTAssertEqual(model.signalCards.first?.subtitle, "较好，支持计划训练")
+        XCTAssertTrue(model.signalCards.allSatisfy { $0.trend.count == 1 })
         XCTAssertEqual(model.actions.count, 3)
         XCTAssertTrue(model.actions[0].title.contains("训练"))
+        XCTAssertTrue(model.actions[0].evidence?.contains("恢复 82") == true)
+        XCTAssertTrue(model.actions[0].evidence?.contains("睡眠 86") == true)
         XCTAssertTrue(model.coachPreview.contains("判断依据"))
         XCTAssertEqual(model.nutrition.calorieProgress, 0.676, accuracy: 0.001)
+    }
+
+    func testTodayExperienceModelIncludesSevenDaySignalTrends() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+        var dashboard = DashboardSummary.preview(date: now)
+        dashboard.recovery.value = 82
+        dashboard.sleepScore.value = 86
+        dashboard.strain.value = 44
+        dashboard.stress.value = 32
+        dashboard.energy.value = 76
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: dashboard,
+            activeStatus: "active",
+            generatedAt: now
+        ))
+        let decision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(bodyState: bodyState))
+        let history = (1...8).map { offset in
+            let date = calendar.date(byAdding: .day, value: -offset, to: now)!
+            return DailyHealthSummaryRecord(
+                dayIdentifier: "trend-\(offset)",
+                date: date,
+                sleepScore: Double(70 + offset),
+                recoveryScore: Double(60 + offset),
+                strainScore: Double(30 + offset),
+                stressIndex: Double(40 + offset),
+                currentEnergy: Double(50 + offset)
+            )
+        }
+
+        let model = TodayExperienceModel.build(
+            dashboard: dashboard,
+            bodyState: bodyState,
+            trainingDecision: decision,
+            generatedAt: now,
+            history: history
+        )
+
+        XCTAssertEqual(model.signalCards.first(where: { $0.id == "recovery" })?.trend.count, 7)
+        XCTAssertEqual(model.signalCards.first(where: { $0.id == "recovery" })?.trend.last, 82)
+        XCTAssertEqual(model.signalCards.first(where: { $0.id == "sleep" })?.trend.last, 86)
+        XCTAssertEqual(model.signalCards.first(where: { $0.id == "strain" })?.trend.last, 44)
+        XCTAssertEqual(model.signalCards.first(where: { $0.id == "stress" })?.trend.last, 32)
+        XCTAssertEqual(model.signalCards.first(where: { $0.id == "energy" })?.trend.last, 76)
     }
 
     func testTodayExperienceModelIsConservativeWhenHealthDataIsMissing() {
@@ -586,7 +897,50 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertTrue(model.evidenceChips.contains("等待 HealthKit"))
         XCTAssertEqual(model.actions.first?.title, "同步健康数据")
         XCTAssertEqual(model.signalCards.filter { $0.value == "--" }.count, 5)
+        XCTAssertTrue(model.signalCards.allSatisfy { $0.coverageLabel == "暂无覆盖" })
         XCTAssertTrue(model.signalCards.allSatisfy { $0.trend.isEmpty })
+    }
+
+    func testMetricRecommendationPolicyUsesScoreDirectionAndThresholds() {
+        var dashboard = DashboardSummary.preview(date: Date(timeIntervalSince1970: 1_780_000_000))
+        dashboard.recovery.value = 32
+        dashboard.stress.value = 78
+        dashboard.strain.value = Double(dashboard.strain.recommendedRange.upperBound + 12)
+
+        let recovery = MetricRecommendationPolicy.make(
+            metric: .recovery,
+            dashboard: dashboard,
+            valueText: "32/100",
+            hasData: true
+        )
+        let stress = MetricRecommendationPolicy.make(
+            metric: .stress,
+            dashboard: dashboard,
+            valueText: "78/100",
+            hasData: true
+        )
+        let strain = MetricRecommendationPolicy.make(
+            metric: .strain,
+            dashboard: dashboard,
+            valueText: "82/100",
+            hasData: true
+        )
+
+        XCTAssertTrue(recovery.title.contains("恢复优先"))
+        XCTAssertTrue(stress.title.contains("低刺激恢复"))
+        XCTAssertTrue(strain.title.contains("停止继续加量"))
+    }
+
+    func testMetricRecommendationPolicyDoesNotInventMissingReading() {
+        let recommendation = MetricRecommendationPolicy.make(
+            metric: .sleep,
+            dashboard: .empty(date: Date(timeIntervalSince1970: 1_780_000_000)),
+            valueText: "--",
+            hasData: false
+        )
+
+        XCTAssertTrue(recommendation.title.contains("补齐数据"))
+        XCTAssertTrue(recommendation.evidence.contains("不使用估算值"))
     }
 
     func testTodayExperienceNutritionClampsProgressAndExplainsUnsetTarget() {
@@ -816,5 +1170,183 @@ final class ScoringEngineTests: XCTestCase {
         try? FileManager.default.removeItem(at: baselineURL)
         let bodyStateFallback = BodyStateKernel().build(input: BodyStateInput(dashboard: dashboard))
         XCTAssertEqual(bodyStateFallback.readiness, .caution)
+    }
+
+    func testMetricResultMissingDataReturnsFormattedDashAndUnavailableCoverage() {
+        let date = Date()
+        let missingMetric = MetricResult(
+            domain: .recovery,
+            name: "Recovery Score",
+            value: nil,
+            band: .low,
+            confidence: .low,
+            components: [:],
+            componentWeights: [:],
+            reasons: ["No HealthKit signals available"],
+            missingInputs: ["hrv", "rhr", "sleep"],
+            dataWindow: DateInterval(start: date, duration: 86400),
+            source: .derived,
+            algorithmVersion: "1.0.0",
+            lastUpdated: date
+        )
+
+        XCTAssertFalse(missingMetric.hasData)
+        XCTAssertEqual(missingMetric.formattedScore, "--")
+        XCTAssertEqual(missingMetric.dataCoverage, .unavailable)
+        XCTAssertEqual(missingMetric.domain, .recovery)
+        XCTAssertEqual(missingMetric.direction, .higherIsBetter)
+        XCTAssertEqual(missingMetric.missingInputs, ["hrv", "rhr", "sleep"])
+    }
+
+    func testMetricResultWithDataReturnsFormattedNumberAndCompleteCoverage() {
+        let date = Date()
+        let completeMetric = MetricResult(
+            domain: .recovery,
+            name: "Recovery Score",
+            value: 82.4,
+            band: .high,
+            confidence: .high,
+            components: ["hrv": 65.0, "rhr": 55.0],
+            componentWeights: ["hrv": 0.6, "rhr": 0.4],
+            reasons: ["Good HRV trend"],
+            missingInputs: [],
+            dataWindow: DateInterval(start: date, duration: 86400),
+            source: .healthKit,
+            algorithmVersion: "1.0.0",
+            lastUpdated: date
+        )
+
+        XCTAssertTrue(completeMetric.hasData)
+        XCTAssertEqual(completeMetric.formattedScore, "82")
+        XCTAssertEqual(completeMetric.dataCoverage, .complete)
+        XCTAssertEqual(completeMetric.score, 82.4)
+    }
+
+    func testEmptyDashboardProducesUnavailableSignalsAndNoAggregateReadinessScore() {
+        let date = Date()
+        let emptyDashboard = DashboardSummary.empty(date: date)
+
+        // Verify 5 independent scored health evidence metrics exist and are all unpopulated
+        XCTAssertFalse(emptyDashboard.recovery.hasData)
+        XCTAssertFalse(emptyDashboard.sleepScore.hasData)
+        XCTAssertFalse(emptyDashboard.strain.hasData)
+        XCTAssertFalse(emptyDashboard.stress.hasData)
+        XCTAssertFalse(emptyDashboard.energy.hasData)
+
+        XCTAssertEqual(emptyDashboard.recovery.formattedScore, "--")
+        XCTAssertEqual(emptyDashboard.sleepScore.formattedScore, "--")
+        XCTAssertEqual(emptyDashboard.strain.formattedScore, "--")
+
+        // Verify ADR 0003 compliance: domains are distinct and independent
+        XCTAssertEqual(emptyDashboard.recovery.domain, .recovery)
+        XCTAssertEqual(emptyDashboard.sleepScore.domain, .sleep)
+        XCTAssertEqual(emptyDashboard.strain.domain, .strain)
+        XCTAssertEqual(emptyDashboard.stress.domain, .physiologicalStress)
+        XCTAssertEqual(emptyDashboard.energy.domain, .energy)
+    }
+
+    func testTodayExperienceModelBuildsCleanSignalsFromEmptyDashboard() {
+        let date = Date()
+        let emptyDashboard = DashboardSummary.empty(date: date)
+        let bodyState = emptyDashboard.bodyState
+        let decision = DailyTrainingDecision(
+            decision: .rest,
+            volumeMultiplier: 0.5,
+            intensityCap: 50,
+            reasons: ["Data missing"],
+            userFacingSummary: "Waiting for health data",
+            confidence: 0.0,
+            source: "test",
+            safetyNotice: "Notice"
+        )
+
+        let experience = TodayExperienceModel.build(
+            dashboard: emptyDashboard,
+            bodyState: bodyState,
+            trainingDecision: decision,
+            generatedAt: date
+        )
+
+        XCTAssertEqual(experience.signalCards.count, 5)
+        for card in experience.signalCards {
+            XCTAssertEqual(card.value, "--", "Signal \(card.id) should be formatted as -- when missing data")
+            XCTAssertEqual(card.coverageLabel, "暂无覆盖")
+        }
+    }
+
+    @MainActor
+    func testWorkoutSaveCoordinatorCreatesTrainingResponseRecordAndArtifact() throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let modelContext = container.mainContext
+
+        let exercise = StrengthExerciseLog(
+            name: "杠铃卧推",
+            equipment: "杠铃",
+            primaryMuscleGroup: "chest",
+            sets: [
+                StrengthSetLog(repetitions: 10, weightKilograms: 80.0, isWarmup: false, rpe: 8.0, isCompleted: true),
+                StrengthSetLog(repetitions: 8, weightKilograms: 85.0, isWarmup: false, rpe: 9.0, isCompleted: true)
+            ]
+        )
+        let workout = StrengthWorkoutRecord(
+            title: "胸肌力量训练",
+            startedAt: Date(),
+            durationMinutes: 45,
+            notes: "感觉状态很好",
+            exercises: [exercise]
+        )
+        workout.sessionRPE = 8.5
+
+        let artifact = CoachArtifactRecord(artifact: CoachArtifact(
+            type: .askCoachAnswer,
+            title: "训练总结",
+            summary: "完成了胸部力量训练",
+            confidence: 1,
+            reasons: [
+                CoachArtifactReason(
+                    signal: "卧推",
+                    value: "80kg",
+                    explanation: "完成计划训练组"
+                )
+            ],
+            actions: [
+                CoachArtifactAction(
+                    type: "recovery",
+                    label: "安排充分蛋白质补充"
+                )
+            ],
+            sourceContextHash: "hash123"
+        ))
+
+        let coordinator = WorkoutSaveCoordinator()
+        let result = try coordinator.commitNewWorkout(
+            workout: workout,
+            artifact: artifact,
+            sessionRPE: 8.5,
+            modelContext: modelContext
+        )
+
+        XCTAssertEqual(result.workout.id, workout.id)
+        XCTAssertEqual(result.event.linkedStrengthWorkoutId, workout.id)
+        XCTAssertEqual(result.event.rpe, 8.5)
+
+        // Verify TrainingResponseRecord was automatically generated and linked
+        let workoutID = workout.id
+        let responseDescriptor = FetchDescriptor<TrainingResponseRecord>(
+            predicate: #Predicate<TrainingResponseRecord> { $0.workoutId == workoutID }
+        )
+        let responses = try modelContext.fetch(responseDescriptor)
+        XCTAssertEqual(responses.count, 1)
+
+        let response = responses[0]
+        XCTAssertEqual(response.primaryMuscleGroups, ["chest"])
+        XCTAssertEqual(response.totalEffectiveSets, 2)
+        XCTAssertEqual(response.totalVolumeKg, (10 * 80.0) + (8 * 85.0))
+        XCTAssertEqual(response.sessionRPE, 8.5)
+
+        // Verify deletion cleans up all linked records
+        try WorkoutAggregationService.shared.deleteStrengthWorkout(workout, modelContext: modelContext)
+        let remainingResponses = try modelContext.fetch(responseDescriptor)
+        XCTAssertEqual(remainingResponses.count, 0)
     }
 }

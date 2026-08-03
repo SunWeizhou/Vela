@@ -141,7 +141,7 @@ HealthKit → HealthKitSyncEngine (2-pass: raw snapshot → DailyHealthComputati
 关键类型：
 - `DashboardSummary`: 所有评分的聚合体（`Core/Utilities/DashboardSummary.swift`）
 - `DashboardViewModel`: ObservableObject，持有 DashboardSummary，通过 `@EnvironmentObject` 注入页面
-- `DailyHealthComputation`: 唯一的每日评分 module，构建 Input 并调用引擎（当前位于 `Health/Services/HealthKitSyncEngine.swift`）
+- `DailyHealthComputation`: 唯一的每日评分 module，构建 Input 并调用引擎（位于 `Scoring/ScoreEngineFactory.swift`）；HealthKit sync 只负责提供 Daily Health Snapshot
 - `DashboardMetricProjection`: 从规范评分结果构建展示所需的睡眠与健康年龄 projection
 - `PreviewDataFactory`: 用真实引擎 + 固定种子生成预览 DashboardSummary
 - `AIContextBuilder`: 构建发给 LLM 的结构化上下文包（AgentContextEnvelope v1 / TypedAgentContext v2）
@@ -189,7 +189,7 @@ HealthKit → HealthKitSyncEngine (2-pass: raw snapshot → DailyHealthComputati
 | `JournalCorrelationEngine` | `Scoring/Correlation/JournalCorrelationEngine.swift` | 行为标签 vs 次日体征滞后关联分析 | Spearman + 点二列相关，刚提高最低样本门槛 |
 | `DailyPlanLimiterEngine` | `Scoring/DailyPlan/DailyPlanLimiterEngine.swift` | 规则引擎: sleep/recovery/stress/load/temp/手记 → keep/reduce/swap/rest | 保守安全规则，任何 severity 3 → rest |
 | `PersonalBaselineEngine` | `Scoring/PersonalBaselineEngine.swift` | 30 天均值 ± SD 个人基线，写入 Wiki baselines.md | 标准运动监测，支持 round-trip markdown 解析 |
-| `DailyHealthComputation` | `Health/Services/HealthKitSyncEngine.swift` | 前台、后台、历史共用的唯一评分入口 | — |
+| `DailyHealthComputation` | `Scoring/ScoreEngineFactory.swift` | 前台、后台、历史共用的唯一评分入口 | — |
 
 ### 已知改进空间
 

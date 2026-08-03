@@ -27,8 +27,8 @@ final class EveningWikiSyncAgent: ObservableObject {
         force: Bool = false,
         services: VelaServices? = nil
     ) async {
-        guard force || (AutoAgentConfig.shared.backgroundNetworkAIConsent && AutoAgentConfig.shared.autoEveningWikiSync) else {
-            logger.info("Automated evening wiki sync is not enabled by the user.")
+        guard force || AutoAgentConfig.shared.autoEveningWikiSync else {
+            logger.info("Automated local memory maintenance is not enabled by the user.")
             return
         }
 
@@ -42,11 +42,6 @@ final class EveningWikiSyncAgent: ObservableObject {
                 logger.info("Hour \(hour) outside evening window. Skipping.")
                 return
             }
-        }
-
-        guard let apiKey = try? keychain.read(account: apiKeyAccount), !apiKey.isEmpty else {
-            logger.warning("No API key. Cannot run evening wiki sync.")
-            return
         }
 
         logger.info("Starting evening wiki sync...")
@@ -70,8 +65,16 @@ final class EveningWikiSyncAgent: ObservableObject {
                 modelContext: modelContext,
                 asOf: contextAsOf
             )
+            let personalRulesCreated = runLocalMemoryMaintenance(
+                modelContext: modelContext,
+                input: input
+            )
             let wiki = WikiFileService.loadDictionary()
-            let (context, contextMeta) = (services?.contextBuilder ?? AIContextBuilder()).build(
+            let canonicalBodyState = input.bodyState(dashboard: dashboard)
+            let coverageSummary = DataCoverageSummaryModel.build(
+                groups: await DataCoverageGroupFactory.loadPriorityGroups()
+            )
+            let (context, contextMeta) = (services?.contextBuilder ?? AIContextBuilder()).buildFacts(
                 dashboard: dashboard,
                 journalEntries: input.journalContext,
                 historicalReports: input.reportContext,
@@ -82,13 +85,41 @@ final class EveningWikiSyncAgent: ObservableObject {
                 strengthWorkouts: input.strengthWorkouts,
                 trainingResponses: input.trainingResponses,
                 onboardingState: input.onboardingState,
-                bodyState: input.bodyState(dashboard: dashboard),
+                bodyState: canonicalBodyState,
+                trainingDecision: input.canonicalTrainingDecision(for: canonicalBodyState),
+                dataCoverage: coverageSummary.agentFactContext,
+                profileAge: WikiFileService.getAgeFromWiki() ?? dashboard.extendedMetrics.age,
                 generatedAt: contextAsOf
             )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            encoder.dateEncodingStrategy = .iso8601
+            let contextJSON = (try? encoder.encode(context))
+                .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+
+            let networkAIAllowed = force || AutoAgentConfig.shared.backgroundNetworkAIConsent
+            guard networkAIAllowed,
+                  let apiKey = try? keychain.read(account: apiKeyAccount),
+                  !apiKey.isEmpty else {
+                runRecord.endedAt = Date()
+                runRecord.status = AgentRunStatus.success.rawValue
+                runRecord.inputContextHash = contextMeta.hash
+                runRecord.outputSummary = personalRulesCreated > 0
+                    ? "Local memory maintenance proposed \(personalRulesCreated) pattern(s)."
+                    : "Local memory maintenance completed; no stable new pattern found."
+                runRecord.toolCallsJSON = (try? String(data: JSONEncoder().encode([
+                    ["action": "personal_response_scan", "created": "\(personalRulesCreated)"]
+                ]), encoding: .utf8)) ?? "[]"
+                try modelContext.save()
+                lastSummary = runRecord.outputSummary
+                lastRunDate = Date()
+                scheduleBackgroundRefresh()
+                logger.info("Evening local memory maintenance complete without network AI.")
+                return
+            }
 
             let prompt = buildSyncPrompt(
-                dashboard: dashboard,
-                wiki: wiki,
+                snapshot: context,
                 chatMessages: chatMessages
             )
 
@@ -96,12 +127,12 @@ final class EveningWikiSyncAgent: ObservableObject {
             let response = try await provider.complete(request: LLMRequest(
                 systemPrompt: syncSystemPrompt,
                 userPrompt: prompt,
-                contextJSON: (try? String(data: JSONEncoder().encode(context), encoding: .utf8)) ?? "{}"
+                contextJSON: contextJSON
             ))
 
             // Parse legacy [ACTION:update_wiki] and convert to MemoryProposals
             let parsed = AgentActionParser.parse(response.content)
-            var appliedFiles: [String] = []
+            var proposalFiles: [String] = []
             let ledger = MemoryLedger(modelContext: modelContext)
             for action in parsed.actions where action.type == .updateWiki {
                 let memType = WikiFileRole.memoryTypeFor(filename: action.target)
@@ -115,7 +146,7 @@ final class EveningWikiSyncAgent: ObservableObject {
                     linkedAgentRunId: runRecord.id.uuidString
                 )
                 if record != nil {
-                    appliedFiles.append(action.target)
+                    proposalFiles.append(action.target)
                     logger.info("Memory proposal created: \(action.target)")
                 }
             }
@@ -126,8 +157,8 @@ final class EveningWikiSyncAgent: ObservableObject {
                 type: "daily_sync",
                 title: AppLanguage.stored.isChinese ? "每日同步" : "Daily Sync",
                 markdownContent: parsed.displayText.isEmpty ? response.content : parsed.displayText,
-                serializedContextSnapshot: (try? String(data: JSONEncoder().encode(context), encoding: .utf8)) ?? "{}",
-                tags: ["daily_sync", "automated"] + appliedFiles
+                serializedContextSnapshot: contextJSON,
+                tags: ["daily_sync", "automated"] + proposalFiles
             )
             try PersistenceWriteGate.shared.assertWritable(operation: "EveningWikiSyncAgent: save report", modelContext: modelContext)
             modelContext.insert(record)
@@ -135,36 +166,13 @@ final class EveningWikiSyncAgent: ObservableObject {
 
             lastSummary = String(parsed.displayText.prefix(200))
             lastRunDate = Date()
-            logger.info("Evening wiki sync complete. Updated \(appliedFiles.count) files.")
+            logger.info("Evening wiki sync complete. Proposed \(proposalFiles.count) memory update(s).")
             try? DailyLogService.write(
                 dashboard: dashboard,
                 chatMessages: [],
-                wikiUpdates: appliedFiles,
+                wikiUpdates: proposalFiles,
                 coachArchiveSummary: parsed.displayText.isEmpty ? response.content : parsed.displayText
             )
-
-            // ── Personal Response Pattern Scan ──
-            var personalRulesCreated = 0
-            let snapshots = (try? HealthSnapshotRepository(modelContext: modelContext).fetchSnapshots(days: 60)) ?? []
-            if !snapshots.isEmpty {
-                // Fetch existing rules for dedup
-                let existingDescriptor = FetchDescriptor<MemoryEventRecord>(
-                    predicate: #Predicate { $0.source == "personal_response_model" },
-                    sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-                )
-                let existingRules = (try? modelContext.fetch(existingDescriptor)) ?? []
-                let insightService = PersonalResponseInsightService()
-                personalRulesCreated = (try? insightService.scanAndPropose(
-                    modelContext: modelContext,
-                    snapshots: snapshots,
-                    journalEntries: [],
-                    foodLogs: [],
-                    existingRules: existingRules
-                )) ?? 0
-                if personalRulesCreated > 0 {
-                    logger.info("PersonalResponseModel: \(personalRulesCreated) new rules proposed")
-                }
-            }
 
             // Update run record
             runRecord.endedAt = Date()
@@ -174,7 +182,7 @@ final class EveningWikiSyncAgent: ObservableObject {
                 ? "\n\nPersonal Response Model proposed \(personalRulesCreated) new rules."
                 : ""
             runRecord.outputSummary = String((parsed.displayText + personalSummary).prefix(500))
-            var toolCallsInfo: [[String: String]] = appliedFiles.map { ["file": $0, "action": "update_wiki"] }
+            var toolCallsInfo: [[String: String]] = proposalFiles.map { ["file": $0, "action": "propose_memory"] }
             if personalRulesCreated > 0 {
                 toolCallsInfo.append(["action": "personal_response_scan", "created": "\(personalRulesCreated)"])
             }
@@ -200,7 +208,41 @@ final class EveningWikiSyncAgent: ObservableObject {
 
     // MARK: - Private
 
+    private func runLocalMemoryMaintenance(
+        modelContext: ModelContext,
+        input: AgentFactInputLoader.Input
+    ) -> Int {
+        let snapshots = (try? HealthSnapshotRepository(modelContext: modelContext).fetchSnapshots(days: 60)) ?? []
+        guard !snapshots.isEmpty else { return 0 }
+
+        let existingDescriptor = FetchDescriptor<MemoryEventRecord>(
+            predicate: #Predicate { $0.source == "personal_response_model" },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        let existingRules = (try? modelContext.fetch(existingDescriptor)) ?? []
+        let created = (try? PersonalResponseInsightService().scanAndPropose(
+            modelContext: modelContext,
+            snapshots: snapshots,
+            journalEntries: input.journalRecords,
+            foodLogs: input.foodLogs,
+            existingRules: existingRules
+        )) ?? 0
+        if created > 0 {
+            logger.info("PersonalResponseModel: \(created) new rules proposed locally")
+        }
+        return created
+    }
+
     private func alreadyRanToday(modelContext: ModelContext) -> Bool {
+        let runDescriptor = FetchDescriptor<AgentRunRecord>(
+            predicate: #Predicate { $0.agentName == "evening_wiki_sync" && $0.status == "success" },
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+        if let latestRun = try? modelContext.fetch(runDescriptor).first,
+           Calendar.current.isDateInToday(latestRun.startedAt) {
+            return true
+        }
+
         let descriptor = FetchDescriptor<AIReportRecord>(
             predicate: #Predicate { $0.type == "daily_sync" },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
@@ -218,7 +260,7 @@ final class EveningWikiSyncAgent: ObservableObject {
 
             规则：
             1. 观察今天的数据与 Wiki 中已有记录是否有变化、新模式或值得记录的稳定特征
-            2. 如果有值得记录的内容，使用 [ACTION:update_wiki] 标签写入对应的 Wiki 文件
+            2. 如果有值得记录的内容，使用 [ACTION:update_wiki] 标签创建待确认的 Memory Proposal；不要声称已经写入
             3. 如果没有新发现，就不输出任何 ACTION
             4. 输出一段简短的中文摘要（3-5句话），总结今天的关键数据点
 
@@ -230,7 +272,7 @@ final class EveningWikiSyncAgent: ObservableObject {
 
         Rules:
         1. Look for changes, new patterns, or stable characteristics worth recording vs the existing Wiki
-        2. If something is worth recording, use [ACTION:update_wiki] tags to write to the relevant Wiki file
+        2. If something is worth recording, use [ACTION:update_wiki] tags to create a confirmation-required Memory Proposal; do not claim it was already written
         3. If nothing new is worth recording, output NO actions
         4. Output a short summary (3-5 sentences) of today's key data points
 
@@ -238,12 +280,10 @@ final class EveningWikiSyncAgent: ObservableObject {
         """
     }
 
-    private func buildSyncPrompt(
-        dashboard: DashboardSummary,
-        wiki: [String: String],
+    func buildSyncPrompt(
+        snapshot: AgentFactSnapshot,
         chatMessages: [CoachChatMessage]
     ) -> String {
-        let wikiText = wiki.map { "### \($0.key)\n\($0.value)" }.joined(separator: "\n\n")
         let chatSummary: String = if chatMessages.isEmpty {
             ""
         } else {
@@ -254,31 +294,27 @@ final class EveningWikiSyncAgent: ObservableObject {
 
         if AppLanguage.stored.isChinese {
             return """
-            ## 今日健康数据
-            恢复: \(Int(dashboard.recovery.score))分, 睡眠: \(Int(dashboard.sleepScore.score))分, 负荷: \(Int(dashboard.strain.score))分
-            能量: 早\(Int(dashboard.energy.morningEnergy))/现\(Int(dashboard.energy.currentEnergy))
-            HRV: \(dashboard.recoveryMetrics.hrvMilliseconds.map { "\(Int($0))ms" } ?? "N/A")
-            静息心率: \(dashboard.recoveryMetrics.restingHeartRate.map { "\(Int($0))bpm" } ?? "N/A")
-
-            ## 当前 Wiki
-            \(wikiText)
+            ## 权威事实快照
+            - schema: \(snapshot.schemaVersion)
+            - content_hash: \(snapshot.contextHash)
+            - Data Coverage: \(snapshot.dataCoverage.availableSections)/\(snapshot.dataCoverage.totalSections)
+            - 缺失领域: \(snapshot.dataCoverage.missingSections.joined(separator: ", "))
+            - Training Decision: \(snapshot.trainingDecision.readinessLevel) · \(snapshot.trainingDecision.readinessGuidance)
             \(chatSummary)
 
-            请总结今天的发现并更新 Wiki。
+            完整的健康指标、证据状态和当前 Wiki 都在 AgentFactSnapshot JSON 中。只能引用其中 availability 为 available 的指标；总结今天的发现，并仅为稳定模式创建待确认提案。
             """
         }
         return """
-        ## Today's Health Data
-        Recovery: \(Int(dashboard.recovery.score)), Sleep: \(Int(dashboard.sleepScore.score)), Strain: \(Int(dashboard.strain.score))
-        Energy: Morning \(Int(dashboard.energy.morningEnergy))/Current \(Int(dashboard.energy.currentEnergy))
-        HRV: \(dashboard.recoveryMetrics.hrvMilliseconds.map { "\(Int($0))ms" } ?? "N/A")
-        RHR: \(dashboard.recoveryMetrics.restingHeartRate.map { "\(Int($0))bpm" } ?? "N/A")
-
-        ## Current Wiki
-        \(wikiText)
+        ## Canonical Fact Snapshot
+        - schema: \(snapshot.schemaVersion)
+        - content_hash: \(snapshot.contextHash)
+        - Data Coverage: \(snapshot.dataCoverage.availableSections)/\(snapshot.dataCoverage.totalSections)
+        - Missing domains: \(snapshot.dataCoverage.missingSections.joined(separator: ", "))
+        - Training Decision: \(snapshot.trainingDecision.readinessLevel) · \(snapshot.trainingDecision.readinessGuidance)
         \(chatSummary)
 
-        Please summarize today's findings and update the wiki.
+        The complete metrics, evidence states, and current wiki are in the AgentFactSnapshot JSON. Use only metrics whose availability is available. Summarize today and create confirmation-required proposals only for stable patterns.
         """
     }
 }

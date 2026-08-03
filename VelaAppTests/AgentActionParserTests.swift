@@ -543,6 +543,7 @@ final class AgentActionParserTests: XCTestCase {
         XCTAssertTrue(prompt.contains("## 当前专项上下文"))
         XCTAssertTrue(prompt.contains("入口：HRV 详情"))
         XCTAssertTrue(prompt.contains("优先解释 HRV 的近期变化、个人基线和数据置信度"))
+        XCTAssertTrue(prompt.contains(#""surface":"coach""#))
     }
 }
 
@@ -673,6 +674,69 @@ private final class CountingAgentTool: AgentTool, @unchecked Sendable {
 
 // MARK: - Safety and Safeguards Tests
 final class AgentLoopSafetyTests: XCTestCase {
+    func testSemanticallyIdenticalJSONToolCallsExecuteOnlyOnce() async throws {
+        let readTool = CountingAgentTool(name: "read_metric", result: "ok")
+        let provider = ScriptedAgentChatProvider(steps: [
+            .success(LLMResponse(
+                content: "",
+                toolCalls: [
+                    ToolCall(id: "call-1", name: "read_metric", arguments: #"{"day":1,"metric":"hrv"}"#),
+                    ToolCall(id: "call-2", name: "read_metric", arguments: #"{"metric":"hrv","day":1}"#)
+                ]
+            )),
+            .success(LLMResponse(content: "done", toolCalls: nil))
+        ])
+
+        let result = try await AgentLoop(
+            provider: provider,
+            toolRegistry: ToolRegistry(tools: [readTool]),
+            maxIterations: 2
+        ).run(messages: [ChatMessage(role: .user, content: "read it")])
+
+        XCTAssertEqual(readTool.executionCount, 1)
+        XCTAssertTrue(result.finalMessages.contains { $0.content.contains("DUPLICATE DETECTED") })
+    }
+
+    func testUnknownToolIsBlockedByAllowlistBeforeExecution() async throws {
+        let provider = ScriptedAgentChatProvider(steps: [
+            .success(LLMResponse(
+                content: "",
+                toolCalls: [ToolCall(id: "call-1", name: "erase_everything", arguments: "{}")]
+            )),
+            .success(LLMResponse(content: "blocked", toolCalls: nil))
+        ])
+
+        let result = try await AgentLoop(
+            provider: provider,
+            toolRegistry: ToolRegistry(tools: []),
+            maxIterations: 2
+        ).run(messages: [ChatMessage(role: .user, content: "do it")])
+
+        XCTAssertEqual(result.executedTools.count, 1)
+        XCTAssertTrue(result.executedTools[0].result.contains("not in this session's allowlist"))
+    }
+
+    func testHealthToolAuditTraceRedactsShortSensitiveResult() async throws {
+        let tool = CountingAgentTool(name: "get_today_health", result: "sleep score 88, recovery 76")
+        let provider = ScriptedAgentChatProvider(steps: [
+            .success(LLMResponse(
+                content: "",
+                toolCalls: [ToolCall(id: "call-1", name: "get_today_health", arguments: #"{"date":"2026-08-01"}"#)]
+            )),
+            .success(LLMResponse(content: "done", toolCalls: nil))
+        ])
+
+        let result = try await AgentLoop(
+            provider: provider,
+            toolRegistry: ToolRegistry(tools: [tool]),
+            maxIterations: 2
+        ).run(messages: [ChatMessage(role: .user, content: "today")])
+
+        XCTAssertFalse(result.trace.executedTools[0].result.contains("88"))
+        XCTAssertTrue(result.trace.executedTools[0].result.contains("REDACTED"))
+        XCTAssertTrue(result.trace.executedTools[0].arguments.contains("REDACTED"))
+    }
+
     func testWriteToolRequiresConfirmationRejected() async throws {
         let writeTool = CountingAgentTool(
             name: "create_training_plan",

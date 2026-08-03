@@ -49,9 +49,19 @@ struct TodayActionTimeline: View {
                                     .font(.system(size: 15, weight: .bold))
                                     .foregroundStyle(VelaTheme.fg)
                                 Text(action.detail)
-                                    .font(.system(size: 12))
+                                    .font(VelaTheme.footnote())
                                     .foregroundStyle(VelaTheme.fg2)
                                     .fixedSize(horizontal: false, vertical: true)
+
+                                if let evidence = action.evidence, !evidence.isEmpty {
+                                    Label(evidence, systemImage: "checkmark.seal")
+                                        .font(VelaTheme.caption2().weight(.semibold))
+                                        .foregroundStyle(VelaTheme.muted)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 5)
+                                        .background(VelaTheme.surface, in: Capsule(style: .continuous))
+                                        .padding(.top, 2)
+                                }
                             }
 
                             Spacer()

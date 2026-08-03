@@ -1,4 +1,5 @@
 import Foundation
+import UserNotifications
 
 /// Central configuration for all automated agent skills
 final class AutoAgentConfig: ObservableObject, @unchecked Sendable {
@@ -62,6 +63,12 @@ final class AutoAgentConfig: ObservableObject, @unchecked Sendable {
     @Published var progressCheckins: Bool {
         didSet { defaults.set(progressCheckins, forKey: "agent_progress_checkins") }
     }
+    @Published var hourlyCheckins: Bool {
+        didSet { defaults.set(hourlyCheckins, forKey: "agent_hourly_checkins") }
+    }
+    @Published var hourlyCheckinMinute: Int {
+        didSet { defaults.set(hourlyCheckinMinute, forKey: "agent_hourly_checkin_minute") }
+    }
     @Published var progressCheckinHour: Int {
         didSet { defaults.set(progressCheckinHour, forKey: "agent_progress_checkin_hour") }
     }
@@ -73,6 +80,15 @@ final class AutoAgentConfig: ObservableObject, @unchecked Sendable {
     }
     @Published var weeklySummaryHour: Int {
         didSet { defaults.set(weeklySummaryHour, forKey: "agent_weekly_summary_hour") }
+    }
+    @Published var monthlySummary: Bool {
+        didSet { defaults.set(monthlySummary, forKey: "agent_monthly_summary") }
+    }
+    @Published var monthlySummaryDay: Int {
+        didSet { defaults.set(monthlySummaryDay, forKey: "agent_monthly_summary_day") }
+    }
+    @Published var monthlySummaryHour: Int {
+        didSet { defaults.set(monthlySummaryHour, forKey: "agent_monthly_summary_hour") }
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -124,13 +140,112 @@ final class AutoAgentConfig: ObservableObject, @unchecked Sendable {
         if defaults.object(forKey: "agent_weekly_summary") == nil { defaults.set(true, forKey: "agent_weekly_summary") }
         self.progressCheckins = defaults.bool(forKey: "agent_progress_checkins")
         self.progressCheckinHour = defaults.integer(forKey: "agent_progress_checkin_hour").nonZero ?? 12
+        self.hourlyCheckins = defaults.bool(forKey: "agent_hourly_checkins")
+        self.hourlyCheckinMinute = min(59, max(0, defaults.integer(forKey: "agent_hourly_checkin_minute")))
         self.weeklySummary = defaults.bool(forKey: "agent_weekly_summary")
         self.weeklySummaryDay = defaults.integer(forKey: "agent_weekly_summary_day").nonZero ?? 2
         self.weeklySummaryHour = defaults.integer(forKey: "agent_weekly_summary_hour").nonZero ?? 9
+        self.monthlySummary = defaults.bool(forKey: "agent_monthly_summary")
+        self.monthlySummaryDay = defaults.integer(forKey: "agent_monthly_summary_day").nonZero ?? 1
+        self.monthlySummaryHour = defaults.integer(forKey: "agent_monthly_summary_hour").nonZero ?? 9
     }
 
     var canRunBackgroundNetworkAI: Bool {
         backgroundNetworkAIConsent && (autoEveningWikiSync || autoMorningBrief || proactiveInsights)
+    }
+}
+
+enum CoachCheckInCadence: String, CaseIterable {
+    case hourly
+    case daily
+    case weekly
+    case monthly
+}
+
+enum CoachCheckInSchedule {
+    static func components(
+        cadence: CoachCheckInCadence,
+        hour: Int,
+        minute: Int = 0,
+        weekday: Int = 2,
+        day: Int = 1
+    ) -> DateComponents {
+        var components = DateComponents()
+        components.calendar = .current
+        components.timeZone = .current
+        components.minute = min(59, max(0, minute))
+        switch cadence {
+        case .hourly:
+            break
+        case .daily:
+            components.hour = min(23, max(0, hour))
+        case .weekly:
+            components.hour = min(23, max(0, hour))
+            components.weekday = min(7, max(1, weekday))
+        case .monthly:
+            components.hour = min(23, max(0, hour))
+            components.day = min(28, max(1, day))
+        }
+        return components
+    }
+}
+
+enum CoachCheckInScheduler {
+    private static let prefix = "vela.coach.checkin."
+
+    static func reschedule(config: AutoAgentConfig = .shared) async {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        if settings.authorizationStatus == .notDetermined {
+            _ = try? await center.requestAuthorization(options: [.alert, .sound])
+        }
+        center.removePendingNotificationRequests(withIdentifiers: CoachCheckInCadence.allCases.map { prefix + $0.rawValue })
+
+        let plans: [(CoachCheckInCadence, Bool, DateComponents, String, String)] = [
+            (.hourly, config.hourlyCheckins, CoachCheckInSchedule.components(cadence: .hourly, hour: 0, minute: config.hourlyCheckinMinute), "小时 Check-in", "快速记录一下此刻的精力、压力或正在做的事。"),
+            (.daily, config.progressCheckins, CoachCheckInSchedule.components(cadence: .daily, hour: config.progressCheckinHour), "今日 Check-in", "回顾今天的执行、体感和需要调整的下一步。"),
+            (.weekly, config.weeklySummary, CoachCheckInSchedule.components(cadence: .weekly, hour: config.weeklySummaryHour, weekday: config.weeklySummaryDay), "本周回顾", "打开 Vela 查看本周趋势，并确认下周最重要的一项行动。"),
+            (.monthly, config.monthlySummary, CoachCheckInSchedule.components(cadence: .monthly, hour: config.monthlySummaryHour, day: config.monthlySummaryDay), "月度回顾", "查看本月健康、训练与习惯趋势；缺失数据会明确标注。"),
+        ]
+        for (cadence, enabled, components, title, body) in plans where enabled {
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = body
+            content.sound = .default
+            content.userInfo = ["coachRoute": "checkin", "cadence": cadence.rawValue]
+            let request = UNNotificationRequest(
+                identifier: prefix + cadence.rawValue,
+                content: content,
+                trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
+            )
+            try? await center.add(request)
+        }
+    }
+
+    static func scheduleOneTime(at date: Date) async -> Bool {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        if settings.authorizationStatus == .notDetermined {
+            guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else { return false }
+        } else if settings.authorizationStatus != .authorized && settings.authorizationStatus != .provisional {
+            return false
+        }
+        let content = UNMutableNotificationContent()
+        content.title = "Vela Check-in"
+        content.body = "你安排的回顾时间到了。打开 Vela 记录当前状态。"
+        content.sound = .default
+        content.userInfo = ["coachRoute": "checkin", "cadence": "one_time"]
+        let request = UNNotificationRequest(
+            identifier: prefix + "one_time." + UUID().uuidString,
+            content: content,
+            trigger: UNTimeIntervalNotificationTrigger(timeInterval: max(1, date.timeIntervalSinceNow), repeats: false)
+        )
+        do {
+            try await center.add(request)
+            return true
+        } catch {
+            return false
+        }
     }
 }
 

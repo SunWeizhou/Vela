@@ -111,7 +111,11 @@ enum VelaTheme {
     static func monoCaption() -> Font  { .system(size: 12, weight: .regular, design: .monospaced) }
     static func monoValue() -> Font    { .system(size: 15, weight: .medium, design: .monospaced) }
 
-    // MARK: - Spacing (8px grid)
+    // MARK: - Layout & Spacing
+    //
+    // These values are the frozen geometry contract for the Bevel-parity
+    // interface. Feature views should consume these tokens instead of
+    // introducing one-off card insets or hit targets.
 
     static let space1: CGFloat  = 4
     static let space2: CGFloat  = 8
@@ -121,23 +125,38 @@ enum VelaTheme {
     static let space6: CGFloat  = 24
     static let space8: CGFloat  = 32
     static let space12: CGFloat = 48
-    static let cardGap: CGFloat = 14
+    static let inlineGap: CGFloat = 8
+    static let cardGap: CGFloat = 12
+    static let sectionGap: CGFloat = 24
+    static let compactCardPadding: CGFloat = 14
+    static let cardPadding: CGFloat = 18
     static let pagePadding: CGFloat = 20
+    static let minimumHitTarget: CGFloat = 44
+    static let circularControlSize: CGFloat = 44
+    static let bottomContentClearance: CGFloat = 104
     static let tabBarHeight: CGFloat = 84
 
     // MARK: - Radius
 
     static let radiusSm: CGFloat   = 8
     static let radiusMd: CGFloat   = 12
-    static let radiusLg: CGFloat   = 14
+    static let radiusLg: CGFloat   = 18
     static let radiusCardLarge: CGFloat = 22
     static let radiusFeature: CGFloat = 28
     static let radiusXl: CGFloat   = 28
+    static let radiusSheet: CGFloat = 32
     static let radiusPill: CGFloat = 980
 
     static let fillSoft = adaptive("#5664E81A", "#FFFFFF16")
 
     static func captionLarge() -> Font { .system(size: 14, weight: .regular, design: .default) }
+    static func pageTitle() -> Font { .system(.title2, design: .default, weight: .bold) }
+    static func metricHeroValue() -> Font {
+        .system(size: 48, weight: .semibold, design: .rounded).monospacedDigit()
+    }
+    static func cardValue() -> Font {
+        .system(size: 30, weight: .semibold, design: .rounded).monospacedDigit()
+    }
 
     // MARK: - Shadow
 
@@ -151,18 +170,75 @@ enum VelaTheme {
 
     // MARK: - Animation
 
-    static let fast = 0.15
+    static let fast = 0.12
     static let standard = 0.22
+    static let reducedMotionDuration = 0.18
     static let ease = UnitCurve.easeInOut
-    static let snappy = Animation.snappy(duration: 0.28, extraBounce: 0.02)
-    static let smooth = Animation.smooth(duration: 0.32)
-    static let press = Animation.easeOut(duration: 0.16)
+    /// Critically damped by default: responsive, interruptible, and free of decorative bounce.
+    static let responsiveSpring = Animation.spring(
+        response: 0.34,
+        dampingFraction: 1.0,
+        blendDuration: 0.08
+    )
+    /// Reserved for interactions that inherit momentum from a drag or flick.
+    static let momentumSpring = Animation.spring(
+        response: 0.34,
+        dampingFraction: 0.82,
+        blendDuration: 0.08
+    )
+    static let snappy = responsiveSpring
+    static let smooth = Animation.spring(
+        response: 0.40,
+        dampingFraction: 1.0,
+        blendDuration: 0.10
+    )
+    static let press = Animation.easeOut(duration: fast)
+
+    static func interfaceAnimation(reduceMotion: Bool) -> Animation {
+        reduceMotion ? .easeOut(duration: reducedMotionDuration) : responsiveSpring
+    }
+
+    /// Data visualizations should update immediately when motion is reduced.
+    static func dataAnimation(reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : responsiveSpring
+    }
 
     // MARK: - Ring Sizes
 
     static let ringLg: CGFloat  = 120
     static let ringMd: CGFloat  = 72
     static let ringSm: CGFloat  = 48
+}
+
+enum VelaMetricDomain: String, CaseIterable {
+    case strain
+    case recovery
+    case sleep
+    case stress
+    case energy
+    case neutral
+
+    var color: Color {
+        switch self {
+        case .strain: VelaTheme.strainColor
+        case .recovery: VelaTheme.recoveryColor
+        case .sleep: VelaTheme.sleepColor
+        case .stress: VelaTheme.stressColor
+        case .energy: VelaTheme.energyColor
+        case .neutral: VelaTheme.accent
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .strain: VelaTheme.icon.strain
+        case .recovery: VelaTheme.icon.recovery
+        case .sleep: VelaTheme.icon.sleep
+        case .stress: VelaTheme.icon.stress
+        case .energy: VelaTheme.icon.energy
+        case .neutral: "waveform.path.ecg"
+        }
+    }
 }
 
 // MARK: - Color hex convenience

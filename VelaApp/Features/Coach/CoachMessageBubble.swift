@@ -35,7 +35,7 @@ struct CoachRecoveryActionButton: View {
                         .stroke(VelaTheme.accent.opacity(0.22), lineWidth: 0.8)
                 )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.cardPress)
         .accessibilityLabel(action.title)
     }
 }
@@ -85,7 +85,7 @@ struct CoachDataCoverageStrip: View {
                     .stroke(accent.opacity(0.18), lineWidth: 0.7)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.cardPress)
         .accessibilityLabel("Coach \(model.compactDisplayTitle)")
     }
 
@@ -101,6 +101,7 @@ struct CoachDataCoverageStrip: View {
 
 // MARK: - AppleIntelligenceLoaderDots
 struct AppleIntelligenceLoaderDots: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulse = false
     
     var body: some View {
@@ -108,21 +109,27 @@ struct AppleIntelligenceLoaderDots: View {
             Circle()
                 .fill(Color(hex: "#9C5FF2"))
                 .frame(width: 6, height: 6)
-                .scaleEffect(pulse ? 1.4 : 0.8)
-                .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: pulse)
+                .scaleEffect(reduceMotion ? 1 : (pulse ? 1.4 : 0.8))
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: pulse)
             Circle()
                 .fill(Color(hex: "#00A2FF"))
                 .frame(width: 6, height: 6)
-                .scaleEffect(pulse ? 1.4 : 0.8)
-                .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true).delay(0.2), value: pulse)
+                .scaleEffect(reduceMotion ? 1 : (pulse ? 1.4 : 0.8))
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.6).repeatForever(autoreverses: true).delay(0.2), value: pulse)
             Circle()
                 .fill(Color(hex: "#FF2D55"))
                 .frame(width: 6, height: 6)
-                .scaleEffect(pulse ? 1.4 : 0.8)
-                .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true).delay(0.4), value: pulse)
+                .scaleEffect(reduceMotion ? 1 : (pulse ? 1.4 : 0.8))
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.6).repeatForever(autoreverses: true).delay(0.4), value: pulse)
         }
         .onAppear {
-            pulse = true
+            pulse = !reduceMotion
+        }
+        .onChange(of: reduceMotion) { _, shouldReduceMotion in
+            pulse = !shouldReduceMotion
+        }
+        .onDisappear {
+            pulse = false
         }
     }
 }
@@ -177,21 +184,15 @@ struct MiniBubble: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .background(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(
-                            message.role == .user
-                            ? LinearGradient(
-                                colors: [VelaTheme.accent, VelaTheme.accent.opacity(0.85)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                              )
-                            : LinearGradient(
-                                colors: [VelaTheme.cardBg, VelaTheme.cardBg],
-                                startPoint: .top,
-                                endPoint: .bottom
-                              )
-                        )
+                    message.role == .user
+                    ? AnyShapeStyle(LinearGradient(
+                        colors: [VelaTheme.accent, VelaTheme.accent.opacity(0.85)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                      ))
+                    : AnyShapeStyle(.ultraThinMaterial)
                 )
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .stroke(message.role == .user ? Color.clear : VelaTheme.borderSoft, lineWidth: 0.5)

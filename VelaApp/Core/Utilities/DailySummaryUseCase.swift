@@ -242,6 +242,12 @@ final class DailySummaryUseCase {
             workouts = rawHKWorkouts
         }
         let liveExtended = (try? await queryService.extendedMetrics(in: todayRange)) ?? ExtendedHealthMetrics()
+        if let modelContext {
+            await refreshIntradayBuckets(
+                in: todayRange,
+                modelContext: modelContext
+            )
+        }
         
         let resolvedSleep = try? await queryService.sleepSummary(in: DateRangeQuery.recentDays(2, endingAt: now, calendar: calendar))
         let profileWeight = UserProfileSettings.weightKilograms()
@@ -467,7 +473,17 @@ final class DailySummaryUseCase {
         if let modelContext {
             let snapshotRepo = HealthSnapshotRepository(modelContext: modelContext, calendar: calendar)
             do {
-                try snapshotRepo.saveDailySnapshot(persistedSnapshot)
+                try snapshotRepo.saveDailySnapshot(
+                    persistedSnapshot,
+                    scoreEvidence: DailyScoreEvidenceEnvelope(
+                        sleep: dashboard.sleepScore,
+                        recovery: dashboard.recovery,
+                        strain: dashboard.strain,
+                        stress: dashboard.stress,
+                        energy: dashboard.energy,
+                        persistedAt: now
+                    )
+                )
                 try WorkoutAggregationService.shared.aggregateDay(
                     date: now,
                     modelContext: modelContext,
@@ -517,6 +533,44 @@ final class DailySummaryUseCase {
             return sorted[sorted.count / 2]
         } else {
             return (sorted[sorted.count / 2 - 1] + sorted[sorted.count / 2]) / 2.0
+        }
+    }
+
+    private func refreshIntradayBuckets(
+        in range: DateRangeQuery,
+        modelContext: ModelContext
+    ) async {
+        let repository = HealthSnapshotRepository(
+            modelContext: modelContext,
+            calendar: calendar
+        )
+        for signal in [HealthSignal.workoutHR, .activeEnergy, .stepCount] {
+            let points = (try? await queryService.intradaySamples(for: signal, in: range)) ?? []
+            let unit = HealthSignalCatalog.unit(for: signal)?.symbol ?? "unit"
+            let pointsBySource = Dictionary(grouping: points, by: \.sourceIdentifier)
+            let buckets = pointsBySource.flatMap { sourceIdentifier, sourcePoints in
+                IntradaySignalBucketizer.bucket(
+                    points: sourcePoints,
+                    signal: signal,
+                    unit: unit,
+                    sourceIdentifier: sourceIdentifier
+                )
+            }
+            do {
+                try repository.reconcileIntradayBuckets(
+                    buckets,
+                    signal: signal,
+                    on: range.start
+                )
+            } catch {
+                PipelineDiagnosticsLogger.log(
+                    modelContext: modelContext,
+                    stage: "DailySummaryUseCase.refreshIntradayBuckets",
+                    isSuccess: false,
+                    summary: "Failed to persist \(signal.rawValue) intraday buckets.",
+                    error: error
+                )
+            }
         }
     }
 
@@ -762,6 +816,7 @@ final class DailySummaryUseCase {
         _ record: DailyHealthSummaryRecord,
         source: DashboardSummary.DataSource = .cache
     ) -> DashboardSummary {
+        let persistedEvidence = record.decodedScoreEvidence()
         let totalSleepMinutes = max(Int((record.sleepHours ?? 0) * 60), 0)
         let deepMinutes = Int(record.deepSleepMinutes ?? percentMinutes(record.deepSleepPercent, total: totalSleepMinutes))
         let remMinutes = Int(record.remSleepMinutes ?? percentMinutes(record.remSleepPercent, total: totalSleepMinutes))
@@ -782,7 +837,7 @@ final class DailySummaryUseCase {
             sleepScore: record.sleepScore
         )
 
-        let sleep = cachedMetric(
+        let sleep = persistedEvidence?.sleep ?? cachedMetric(
             name: "Sleep Score",
             value: record.sleepScore,
             components: compactComponents([
@@ -795,7 +850,7 @@ final class DailySummaryUseCase {
             ]),
             updatedAt: record.updatedAt
         )
-        let recovery = cachedMetric(
+        let recovery = persistedEvidence?.recovery ?? cachedMetric(
             name: "Recovery Score",
             value: record.recoveryScore,
             components: compactComponents([
@@ -807,7 +862,7 @@ final class DailySummaryUseCase {
             updatedAt: record.updatedAt
         )
         let targetRange = recommendedStrainRange(for: record.recoveryScore)
-        let strain = cachedMetric(
+        let strain = persistedEvidence?.strain ?? cachedMetric(
             name: "Strain Score",
             value: record.strainScore,
             components: compactComponents([
@@ -823,13 +878,13 @@ final class DailySummaryUseCase {
             ]),
             updatedAt: record.updatedAt
         )
-        let stress = cachedMetric(
+        let stress = persistedEvidence?.stress ?? cachedMetric(
             name: "Physiological Stress Index",
             value: record.stressIndex,
             components: compactComponents(["stress_index": record.stressIndex]),
             updatedAt: record.updatedAt
         )
-        let energy = cachedMetric(
+        let energy = persistedEvidence?.energy ?? cachedMetric(
             name: "Energy Bank",
             value: record.currentEnergy ?? record.energyBank,
             components: compactComponents([

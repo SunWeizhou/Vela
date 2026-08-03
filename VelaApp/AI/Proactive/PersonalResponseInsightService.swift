@@ -105,6 +105,15 @@ struct WeeklyBodyReport: Codable, Hashable {
     var trainingResponseCount: Int
 }
 
+struct MonthlyBodyReport: Codable, Hashable {
+    var generatedAt: Date
+    var markdown: String
+    var observedDays: Int
+    var averageRecoveryScore: Double?
+    var averageSleepScore: Double?
+    var trainingSessions: Int
+}
+
 /// Builds the local training-response loop independently from the LLM pipeline.
 /// Stable patterns enter Memory Inbox as proposals and require user confirmation.
 @MainActor
@@ -413,6 +422,148 @@ struct TrainingResponseInsightService {
         return record
     }
 
+    /// Builds a deterministic 30-day review from locally persisted facts. A trend is
+    /// shown only when both 15-day windows contain at least five sourced samples.
+    func buildMonthlyBodyReport(
+        snapshots: [DailyHealthSnapshot],
+        foodLogs: [FoodLogRecord],
+        journalEntries: [JournalEntryRecord],
+        strengthWorkouts: [StrengthWorkoutRecord],
+        endingAt endDate: Date = Date(),
+        calendar: Calendar = .current
+    ) -> MonthlyBodyReport {
+        let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: endDate)) ?? endDate
+        let start = calendar.date(byAdding: .day, value: -30, to: end) ?? end.addingTimeInterval(-30 * 86_400)
+        let midpoint = calendar.date(byAdding: .day, value: -15, to: end) ?? end.addingTimeInterval(-15 * 86_400)
+        let monthSnapshots = snapshots.filter { $0.date >= start && $0.date < end }
+        let sourcedRecovery = monthSnapshots.filter(hasRecoverySourceData)
+        let sourcedSleep = monthSnapshots.filter(hasSleepSourceData)
+        let monthWorkouts = strengthWorkouts.filter { $0.startedAt >= start && $0.startedAt < end }
+        let monthFoodLogs = foodLogs.filter { $0.createdAt >= start && $0.createdAt < end }
+        let monthJournalEntries = journalEntries.filter { $0.createdAt >= start && $0.createdAt < end }
+
+        let recoveryAverage = average(sourcedRecovery.compactMap(\.recoveryScore))
+        let sleepAverage = average(sourcedSleep.compactMap(\.sleepScore))
+        let recoveryTrend = monthlyTrend(
+            label: "恢复分",
+            older: sourcedRecovery.filter { $0.date < midpoint }.compactMap(\.recoveryScore),
+            recent: sourcedRecovery.filter { $0.date >= midpoint }.compactMap(\.recoveryScore)
+        )
+        let sleepTrend = monthlyTrend(
+            label: "睡眠分",
+            older: sourcedSleep.filter { $0.date < midpoint }.compactMap(\.sleepScore),
+            recent: sourcedSleep.filter { $0.date >= midpoint }.compactMap(\.sleepScore)
+        )
+        let hrvTrend = monthlyTrend(
+            label: "HRV",
+            older: monthSnapshots.filter { $0.date < midpoint }.compactMap(\.hrvAverage),
+            recent: monthSnapshots.filter { $0.date >= midpoint }.compactMap(\.hrvAverage),
+            unit: " ms"
+        )
+        let rhrTrend = monthlyTrend(
+            label: "静息心率",
+            older: monthSnapshots.filter { $0.date < midpoint }.compactMap(\.restingHeartRate),
+            recent: monthSnapshots.filter { $0.date >= midpoint }.compactMap(\.restingHeartRate),
+            unit: " bpm"
+        )
+
+        let groupedTags: [String: [String]] = Dictionary(
+            grouping: monthJournalEntries.flatMap(\.tags),
+            by: { $0 }
+        )
+        let tagCountPairs: [(key: String, value: Int)] = groupedTags.map { key, values in
+            (key: key, value: values.count)
+        }
+        let topTags = tagCountPairs
+            .sorted { lhs, rhs in lhs.value == rhs.value ? lhs.key < rhs.key : lhs.value > rhs.value }
+            .prefix(5)
+        let tagCounts = topTags
+            .map { pair in "\(pair.key)（\(pair.value) 次）" }
+            .joined(separator: "、")
+        let coveredDayIDs = Set(monthSnapshots.map {
+            DailyHealthSummaryRecord.dayIdentifier(for: $0.date, calendar: calendar)
+        })
+
+        let markdown = """
+        # 月度身体总结
+
+        ## 数据覆盖
+        - 观察窗口：最近 30 天
+        - 有健康快照：\(coveredDayIDs.count) / 30 天
+        - 有恢复来源：\(sourcedRecovery.count) 天
+        - 有睡眠来源：\(sourcedSleep.count) 天
+
+        ## 本月概览
+        - 平均恢复分：\(formatted(recoveryAverage))
+        - 平均睡眠分：\(formatted(sleepAverage))
+        - 力量训练：\(monthWorkouts.count) 次
+        - 餐食记录：\(monthFoodLogs.count) 条
+        - 日志记录：\(monthJournalEntries.count) 条
+        - 常见日志标签：\(tagCounts.isEmpty ? "暂无" : tagCounts)
+
+        ## 前后半月趋势
+        - \(recoveryTrend)
+        - \(sleepTrend)
+        - \(hrvTrend)
+        - \(rhrTrend)
+
+        ## 解读边界
+        趋势只比较两个 15 天窗口的已记录均值；每个窗口少于 5 个有效样本时不显示方向。观察到的同步变化不代表因果关系，也不构成医疗诊断。
+        """
+
+        return MonthlyBodyReport(
+            generatedAt: endDate,
+            markdown: markdown,
+            observedDays: coveredDayIDs.count,
+            averageRecoveryScore: recoveryAverage,
+            averageSleepScore: sleepAverage,
+            trainingSessions: monthWorkouts.count
+        )
+    }
+
+    @discardableResult
+    func persistMonthlyBodyReportIfNeeded(
+        modelContext: ModelContext,
+        snapshots: [DailyHealthSnapshot],
+        foodLogs: [FoodLogRecord],
+        journalEntries: [JournalEntryRecord],
+        strengthWorkouts: [StrengthWorkoutRecord],
+        endingAt endDate: Date = Date(),
+        calendar: Calendar = .current
+    ) throws -> AIReportRecord? {
+        let reports = try modelContext.fetch(FetchDescriptor<AIReportRecord>(
+            predicate: #Predicate<AIReportRecord> { $0.type == "monthly_body_report" },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        ))
+        if let latest = reports.first,
+           calendar.isDate(latest.createdAt, equalTo: endDate, toGranularity: .month) {
+            return nil
+        }
+        let report = buildMonthlyBodyReport(
+            snapshots: snapshots,
+            foodLogs: foodLogs,
+            journalEntries: journalEntries,
+            strengthWorkouts: strengthWorkouts,
+            endingAt: endDate,
+            calendar: calendar
+        )
+        try PersistenceWriteGate.shared.assertWritable(
+            operation: "TrainingResponseInsightService: persist monthly report",
+            modelContext: modelContext
+        )
+        let record = AIReportRecord(
+            createdAt: endDate,
+            type: "monthly_body_report",
+            title: AppLanguage.stored.isChinese ? "月度身体总结" : "Monthly Body Review",
+            markdownContent: report.markdown,
+            serializedContextSnapshot: "{}",
+            tags: ["monthly_body_report", "training_intelligence", "local_only"]
+        )
+        modelContext.insert(record)
+        try modelContext.save()
+        return record
+    }
+
     func proposeStableTrainingResponses(
         modelContext: ModelContext,
         responses: [TrainingResponseRecord]
@@ -486,5 +637,20 @@ struct TrainingResponseInsightService {
 
     private func formattedDelta(_ value: Double?) -> String {
         value.map { String(format: "%+.1f", $0) } ?? "暂无"
+    }
+
+    private func monthlyTrend(
+        label: String,
+        older: [Double],
+        recent: [Double],
+        unit: String = " 分"
+    ) -> String {
+        guard older.count >= 5, recent.count >= 5,
+              let olderAverage = average(older), let recentAverage = average(recent) else {
+            return "\(label)：样本不足（前、后半月各需至少 5 个有效样本）"
+        }
+        let difference = recentAverage - olderAverage
+        let direction = abs(difference) < 0.5 ? "基本稳定" : (difference > 0 ? "后半月较高" : "后半月较低")
+        return "\(label)：\(direction) \(String(format: "%+.1f", difference))\(unit)（n=\(older.count) / \(recent.count)）"
     }
 }

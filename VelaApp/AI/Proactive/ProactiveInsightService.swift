@@ -1,5 +1,8 @@
 import Foundation
 import SwiftUI
+import SwiftData
+import UserNotifications
+import os.log
 
 struct ProactiveInsight: Identifiable, Hashable {
     let id = UUID()
@@ -287,3 +290,193 @@ enum ProactiveInsightService {
         return Array(insights.sorted { $0.priority < $1.priority }.prefix(4))
     }
 }
+
+// MARK: - Proactive Intelligence Orchestrator
+
+@MainActor
+final class ProactiveIntelligenceOrchestrator: Sendable {
+    private static let logger = Logger(subsystem: "com.sunweizhou.Vela", category: "ProactiveIntelligence")
+
+    init() {}
+
+    /// Main entry point for asynchronous proactive check.
+    /// Executed on app launch, scene active change, or background refresh task.
+    @discardableResult
+    func runAsyncCheck(modelContext: ModelContext, date: Date = Date()) async -> [ProactiveInsight] {
+        Self.logger.info("Running proactive intelligence evaluation for \(date)...")
+        
+        do {
+            // 1. Build current DashboardSummary
+            let dashboard = (try? await DailySummaryUseCase().loadDashboard(for: date, modelContext: modelContext)) ?? DashboardSummary.empty(date: date)
+            
+            // 2. Evaluate Proactive Insights via ProactiveInsightService
+            let evaluatedInsights = ProactiveInsightService.evaluate(dashboard: dashboard)
+            
+            // 3. Persist Insights into SwiftData
+            let dayStart = Calendar.current.startOfDay(for: date)
+            let existingRecords = (try? modelContext.fetch(FetchDescriptor<ProactiveInsightRecord>(
+                predicate: #Predicate { $0.date >= dayStart }
+            ))) ?? []
+            
+            for oldRecord in existingRecords {
+                modelContext.delete(oldRecord)
+            }
+            
+            for insight in evaluatedInsights {
+                let record = ProactiveInsightRecord(
+                    date: dayStart,
+                    focusRaw: "\(insight.focus)",
+                    severityRaw: "\(insight.severity)",
+                    title: insight.title,
+                    bodyText: insight.body,
+                    suggestedAction: insight.suggestedAction,
+                    priority: insight.priority,
+                    coachPresetQuestion: insight.coachPresetQuestion,
+                    createdAt: Date()
+                )
+                modelContext.insert(record)
+            }
+            
+            try? modelContext.save()
+            
+            // 4. Log event in Event Service
+            VelaEventService.shared.log(
+                modelContext: modelContext,
+                type: VelaProductEventType.proactiveInsightGenerated,
+                title: "主动健康分析完成",
+                detail: "生成 \(evaluatedInsights.count) 条今日策略洞察。"
+            )
+            
+            // 5. Trigger Local Push Notification for High Severity Alert
+            if let alertInsight = evaluatedInsights.first(where: { $0.severity == .alert }) {
+                await scheduleLocalAlertNotification(insight: alertInsight)
+            }
+            
+            Self.logger.info("Proactive intelligence check completed with \(evaluatedInsights.count) insights.")
+            return evaluatedInsights
+        } catch {
+            Self.logger.error("Proactive intelligence check failed: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    private func scheduleLocalAlertNotification(insight: ProactiveInsight) async {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .authorized else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Vela Proactive: \(insight.title)"
+        content.body = insight.body
+        content.sound = .default
+        
+        let request = UNNotificationRequest(
+            identifier: "vela_alert_\(insight.focus)",
+            content: content,
+            trigger: nil
+        )
+        
+        do {
+            try await center.add(request)
+        } catch {
+            Self.logger.error("Failed to post local alert notification: \(error.localizedDescription)")
+        }
+    }
+}
+
+// MARK: - Autonomous Health Digital Twin (Epic-Grade Simulation Engine)
+
+public struct SimulationScenarioInput: Sendable {
+    public var plannedWorkoutStrain: Double  // e.g. 14.5
+    public var plannedWorkoutHour: Double    // e.g. 20.0 (20:00)
+    public var targetSleepDurationHours: Double // e.g. 7.5
+    public var caffeineCutoffHour: Double    // e.g. 14.0
+
+    public init(
+        plannedWorkoutStrain: Double = 12.0,
+        plannedWorkoutHour: Double = 18.0,
+        targetSleepDurationHours: Double = 8.0,
+        caffeineCutoffHour: Double = 14.0
+    ) {
+        self.plannedWorkoutStrain = plannedWorkoutStrain
+        self.plannedWorkoutHour = plannedWorkoutHour
+        self.targetSleepDurationHours = targetSleepDurationHours
+        self.caffeineCutoffHour = caffeineCutoffHour
+    }
+}
+
+public struct DigitalTwinSimulationResult: Sendable, Equatable {
+    public var predictedNextDayRecovery: Double  // 0..100
+    public var predictedEnergyScore: Double     // 0..100
+    public var sleepQualityMultiplier: Double   // e.g. 0.92
+    public var recommendation: String
+    public var scenarioTag: String             // "optimal", "strained", "suboptimal_timing"
+
+    public init(
+        predictedNextDayRecovery: Double,
+        predictedEnergyScore: Double,
+        sleepQualityMultiplier: Double,
+        recommendation: String,
+        scenarioTag: String
+    ) {
+        self.predictedNextDayRecovery = predictedNextDayRecovery
+        self.predictedEnergyScore = predictedEnergyScore
+        self.sleepQualityMultiplier = sleepQualityMultiplier
+        self.recommendation = recommendation
+        self.scenarioTag = scenarioTag
+    }
+}
+
+@MainActor
+public struct AutonomousHealthDigitalTwin: Sendable {
+    public init() {}
+
+    /// Simulates the user's biological recovery & energy response 24 hours ahead
+    /// given current body state and a hypothetical workout/sleep scenario.
+    func simulateNextDay(
+        dashboard: DashboardSummary,
+        scenario: SimulationScenarioInput
+    ) -> DigitalTwinSimulationResult {
+        let baseRecovery = dashboard.recovery.hasData ? dashboard.recovery.score : 70.0
+
+        var sleepMultiplier = 1.0
+        if scenario.plannedWorkoutHour >= 20.5 && scenario.plannedWorkoutStrain > 10.0 {
+            sleepMultiplier *= 0.85
+        }
+
+        if scenario.targetSleepDurationHours < 7.0 {
+            sleepMultiplier *= 0.88
+        } else if scenario.targetSleepDurationHours >= 8.0 {
+            sleepMultiplier *= 1.05
+        }
+
+        let strainCost = scenario.plannedWorkoutStrain * 1.8
+        let recoveryGain = 45.0 * sleepMultiplier
+        let predictedRecovery = ScoringMath.clamp(baseRecovery * 0.4 + recoveryGain - strainCost + 30.0, min: 10.0, max: 99.0)
+
+        let predictedEnergy = ScoringMath.clamp(predictedRecovery * 0.85 + (scenario.targetSleepDurationHours / 8.0) * 15.0, min: 15.0, max: 100.0)
+
+        let tag: String
+        let rec: String
+
+        if sleepMultiplier < 0.9 {
+            tag = "suboptimal_timing"
+            rec = "晚间高强度训练可能干扰自主神经平息，建议将训练提早至 19:00 前完成或降低容量。"
+        } else if predictedRecovery >= 75.0 {
+            tag = "optimal"
+            rec = "该模拟组合支持次日恢复维持在绿区，建议按此计划执行。"
+        } else {
+            tag = "strained"
+            rec = "预测次日恢复呈中度偏低，建议增加 30 分钟睡眠或降低 15% 训练容量。"
+        }
+
+        return DigitalTwinSimulationResult(
+            predictedNextDayRecovery: predictedRecovery,
+            predictedEnergyScore: predictedEnergy,
+            sleepQualityMultiplier: sleepMultiplier,
+            recommendation: rec,
+            scenarioTag: tag
+        )
+    }
+}
+

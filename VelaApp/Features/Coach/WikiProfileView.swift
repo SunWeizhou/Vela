@@ -8,6 +8,7 @@ struct WikiProfileView: View {
     @State private var draftFields: [WikiField] = []
     @State private var baselineDoc: WikiDocument?
     @State private var isRefreshingBaselines = false
+    @State private var editingProposal: MemoryEventRecord?
 
     @Query(
         filter: #Predicate<MemoryEventRecord> { $0.status == "proposed" },
@@ -70,6 +71,13 @@ struct WikiProfileView: View {
             let allDocs = WikiFileService.loadAllDocuments()
             documents = allDocs.filter { $0.filename != "baselines.md" }
             baselineDoc = allDocs.first { $0.filename == "baselines.md" && $0.content.count > 100 }
+        }
+        .sheet(item: $editingProposal) { proposal in
+            MemoryProposalEditSheet(proposal: proposal) { content, note in
+                editProposal(proposal, content: content, note: note)
+            }
+            .presentationDetents([.medium, .large])
+            .velaSheetSurface()
         }
     }
 
@@ -640,6 +648,7 @@ struct WikiProfileView: View {
                     VelaMemoryProposalCard(
                         proposal: proposal,
                         onAccept: { confirmProposal(proposal) },
+                        onEdit: { editingProposal = proposal },
                         onReject: { rejectProposal(proposal) }
                     )
                 }
@@ -784,6 +793,67 @@ struct WikiProfileView: View {
             try ledger.rejectProposal(proposal.id)
         } catch {
             print("Failed to reject proposal: \(error)")
+        }
+    }
+
+    private func editProposal(_ proposal: MemoryEventRecord, content: String, note: String?) {
+        do {
+            try MemoryLedger(modelContext: modelContext).editProposal(
+                proposal.id,
+                content: content,
+                userNote: note
+            )
+            editingProposal = nil
+        } catch {
+            print("Failed to edit proposal: \(error)")
+        }
+    }
+}
+
+private struct MemoryProposalEditSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let proposal: MemoryEventRecord
+    let onSave: (String, String?) -> Void
+    @State private var content: String
+    @State private var note: String
+
+    init(proposal: MemoryEventRecord, onSave: @escaping (String, String?) -> Void) {
+        self.proposal = proposal
+        self.onSave = onSave
+        _content = State(initialValue: proposal.content)
+        _note = State(initialValue: proposal.userNote ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("确认前编辑") {
+                    TextEditor(text: $content)
+                        .frame(minHeight: 120)
+                        .accessibilityLabel("记忆内容")
+                }
+                Section("你的备注（可选）") {
+                    TextField("为什么要修改", text: $note, axis: .vertical)
+                }
+                Section {
+                    Text("保存只会更新待确认提案；只有再次点击“确认”后才会写入个人 Wiki。")
+                        .font(VelaTheme.caption2())
+                        .foregroundStyle(VelaTheme.muted)
+                }
+            }
+            .navigationTitle("编辑记忆提案")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存修改") {
+                        onSave(content, note.isEmpty ? nil : note)
+                        dismiss()
+                    }
+                    .disabled(content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
         }
     }
 }

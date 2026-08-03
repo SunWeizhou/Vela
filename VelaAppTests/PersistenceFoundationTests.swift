@@ -66,6 +66,143 @@ final class PersistenceFoundationTests: XCTestCase {
         XCTAssertNotNil(schema)
     }
 
+    @MainActor
+    func testDailyScoreEvidenceRoundTripPreservesAuditableMetricSemantics() throws {
+        let now = Date(timeIntervalSince1970: 1_785_446_400)
+        func metric(_ domain: ScoredHealthDomain, name: String, value: Double) -> MetricResult {
+            MetricResult(
+                domain: domain,
+                name: name,
+                value: value,
+                band: .normal,
+                confidence: .high,
+                components: ["raw": value - 4],
+                componentWeights: ["raw": 0.75],
+                reasons: ["Fixture reason"],
+                missingInputs: ["optional_input"],
+                dataWindow: DateInterval(start: now.addingTimeInterval(-3_600), end: now),
+                source: .mixed,
+                algorithmVersion: "\(domain.rawValue).fixture.v2",
+                lastUpdated: now
+            )
+        }
+
+        let envelope = DailyScoreEvidenceEnvelope(
+            sleep: metric(.sleep, name: "Sleep Score", value: 81),
+            recovery: metric(.recovery, name: "Recovery Score", value: 76),
+            strain: metric(.strain, name: "Strain Score", value: 62),
+            stress: metric(.physiologicalStress, name: "Stress", value: 35),
+            energy: metric(.energy, name: "Energy", value: 70),
+            persistedAt: now
+        )
+        let record = DailyHealthSummaryRecord(dayIdentifier: "2026-07-31", date: now)
+
+        try record.apply(scoreEvidence: envelope)
+        let decoded = try XCTUnwrap(record.decodedScoreEvidence())
+        let dashboard = DailySummaryUseCase().makeDashboardFromRecord(record)
+
+        XCTAssertEqual(decoded, envelope)
+        XCTAssertEqual(dashboard.sleepScore, envelope.sleep)
+        XCTAssertEqual(dashboard.recovery, envelope.recovery)
+        XCTAssertEqual(dashboard.strain, envelope.strain)
+        XCTAssertEqual(dashboard.stress, envelope.stress)
+        XCTAssertEqual(dashboard.energy, envelope.energy)
+        XCTAssertEqual(dashboard.recovery.componentWeights, ["raw": 0.75])
+        XCTAssertEqual(dashboard.recovery.algorithmVersion, "recovery.fixture.v2")
+    }
+
+    @MainActor
+    func testV1StoreMigratesToV2WithoutLosingDailyScores() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "VelaV2Migration-\(UUID().uuidString)", directoryHint: .isDirectory)
+        let storeURL = root.appending(path: "Vela.store")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        func createV1Store() throws {
+            let sourceSchema = Schema(VelaSchemaV1.models)
+            let sourceConfig = ModelConfiguration(schema: sourceSchema, url: storeURL)
+            let sourceContainer = try ModelContainer(
+                for: sourceSchema,
+                configurations: [sourceConfig]
+            )
+            sourceContainer.mainContext.insert(VelaSchemaV1.DailyHealthSummaryRecord(
+                dayIdentifier: "2026-07-30",
+                date: Date(timeIntervalSince1970: 1_785_360_000),
+                sleepScore: 83,
+                recoveryScore: 74,
+                configVersion: "legacy.fixture.v1"
+            ))
+            try sourceContainer.mainContext.save()
+        }
+
+        try createV1Store()
+        let migratedContainer = try VelaModelContainer.make(at: storeURL)
+        let records = try migratedContainer.mainContext.fetch(
+            FetchDescriptor<DailyHealthSummaryRecord>()
+        )
+        let migrated = try XCTUnwrap(records.first)
+
+        XCTAssertEqual(migrated.dayIdentifier, "2026-07-30")
+        XCTAssertEqual(migrated.sleepScore, 83)
+        XCTAssertEqual(migrated.recoveryScore, 74)
+        XCTAssertEqual(migrated.configVersion, "legacy.fixture.v1")
+        XCTAssertNil(migrated.scoreEvidenceData)
+    }
+
+    @MainActor
+    func testIntradayBucketsAggregateAndReconcileDeletedSourceSamples() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let start = Date(timeIntervalSince1970: 1_785_369_600)
+        let points = [
+            IntradaySignalPoint(date: start.addingTimeInterval(15), value: 60, sourceIdentifier: "watch"),
+            IntradaySignalPoint(date: start.addingTimeInterval(45), value: 90, sourceIdentifier: "watch"),
+            IntradaySignalPoint(date: start.addingTimeInterval(320), value: 72, sourceIdentifier: "watch")
+        ]
+        let buckets = IntradaySignalBucketizer.bucket(
+            points: points,
+            signal: .workoutHR,
+            unit: "bpm",
+            sourceIdentifier: "watch"
+        )
+        XCTAssertEqual(buckets.count, 2)
+        XCTAssertEqual(buckets[0].average, 75)
+        XCTAssertEqual(buckets[0].minimum, 60)
+        XCTAssertEqual(buckets[0].maximum, 90)
+        XCTAssertEqual(buckets[0].sampleCount, 2)
+
+        let container = try VelaModelContainer.make(inMemory: true)
+        let repository = HealthSnapshotRepository(
+            modelContext: container.mainContext,
+            calendar: calendar
+        )
+        try repository.reconcileIntradayBuckets(
+            buckets,
+            signal: .workoutHR,
+            on: start
+        )
+        XCTAssertEqual(
+            try repository.fetchIntradayBuckets(
+                signal: .workoutHR,
+                in: DateRangeQuery(start: start, end: start.addingTimeInterval(86_400))
+            ).count,
+            2
+        )
+
+        try repository.reconcileIntradayBuckets(
+            [buckets[1]],
+            signal: .workoutHR,
+            on: start
+        )
+        let reconciled = try repository.fetchIntradayBuckets(
+            signal: .workoutHR,
+            in: DateRangeQuery(start: start, end: start.addingTimeInterval(86_400))
+        )
+        XCTAssertEqual(reconciled.count, 1)
+        XCTAssertEqual(reconciled.first?.average, 72)
+    }
+
     func testStoreRecoveryBackupCopiesSidecarsWithoutDeletingOriginals() throws {
         let root = FileManager.default.temporaryDirectory
             .appending(path: "VelaRecoveryTests-\(UUID().uuidString)", directoryHint: .isDirectory)
@@ -407,6 +544,17 @@ final class PersistenceFoundationTests: XCTestCase {
             generatedAt: now
         )
         let adaptation = try XCTUnwrap(aiContext.envelope.strengthTraining?["training_adaptation"])
+        let input = AgentFactInputLoader().load(modelContext: context, asOf: now)
+        let persistedForAgent = input.canonicalTrainingDecision(for: bodyState)
+        let canonicalFacts = AIContextBuilder().buildFacts(
+            dashboard: .empty(date: now),
+            journalEntries: input.journalContext,
+            historicalReports: input.reportContext,
+            userWiki: [:],
+            bodyState: bodyState,
+            trainingDecision: persistedForAgent,
+            generatedAt: now
+        ).snapshot
 
         XCTAssertEqual(record.bodyStateHash, bodyState.hash)
         XCTAssertEqual(record.primaryActionType, canonical.decision.rawValue)
@@ -421,6 +569,10 @@ final class PersistenceFoundationTests: XCTestCase {
         XCTAssertEqual(dashboard.trainingDecision.maxIntensity, "RPE \(canonical.intensityCap)")
         XCTAssertTrue(adaptation.contains("\(Int((canonical.volumeMultiplier * 100).rounded()))% volume"))
         XCTAssertTrue(adaptation.contains("RPE \(canonical.intensityCap) cap"))
+        XCTAssertEqual(canonicalFacts.trainingDecision.readinessLevel, canonical.decision.rawValue)
+        XCTAssertEqual(canonicalFacts.trainingDecision.volumeMultiplier, canonical.volumeMultiplier)
+        XCTAssertEqual(canonicalFacts.trainingDecision.maxIntensity, "RPE \(canonical.intensityCap)")
+        XCTAssertEqual(canonicalFacts.trainingDecision.readinessGuidance, canonical.userFacingSummary)
     }
 
     func testTrainingDayDecodingToleratesLegacyMissingFields() throws {

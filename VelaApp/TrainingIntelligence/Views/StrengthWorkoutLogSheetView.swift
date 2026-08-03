@@ -26,6 +26,9 @@ struct StrengthWorkoutLogSheetView: View {
     @State private var now = Date()
     @State private var isLoaded = false
     @State private var showIgnoreUncompletedConfirmation = false
+    @State private var showPlateCalculator = false
+    @State private var showExerciseGrouping = false
+    @State private var activeDraftID: UUID?
     @StateObject private var sessionViewModel = StrengthWorkoutSessionViewModel()
 
     private let startingTemplateID: UUID?
@@ -126,10 +129,22 @@ struct StrengthWorkoutLogSheetView: View {
         .onChange(of: title) { _, _ in scheduleDraftSave() }
         .onChange(of: notes) { _, _ in scheduleDraftSave() }
         .onChange(of: exercises) { _, _ in scheduleDraftSave() }
+        .onReceive(NotificationCenter.default.publisher(for: .wristStrengthSetEditQueued)) { _ in
+            applyPendingWatchEdits()
+        }
         .sheet(isPresented: $showExercisePicker) {
             ExercisePickerSheet { definition in
                 addExercise(definition)
             }
+        }
+        .sheet(isPresented: $showPlateCalculator) {
+            BarbellPlateCalculatorSheet()
+                .presentationDetents([.medium])
+                .velaSheetSurface()
+        }
+        .sheet(isPresented: $showExerciseGrouping) {
+            StrengthExerciseGroupingSheet(exercises: $exercises)
+                .velaSheetSurface()
         }
         .sheet(item: $completedSummary, onDismiss: {
             if closeAfterSummary { dismiss() }
@@ -184,6 +199,21 @@ struct StrengthWorkoutLogSheetView: View {
                 .font(.system(size: 18, weight: .bold))
             HStack {
                 Spacer()
+                Button {
+                    showPlateCalculator = true
+                } label: {
+                    Label("杠铃配片", systemImage: "scalemass")
+                }
+                .font(.system(size: 13, weight: .bold))
+
+                Button {
+                    showExerciseGrouping = true
+                } label: {
+                    Label("组合动作", systemImage: "link")
+                }
+                .font(.system(size: 13, weight: .bold))
+                .disabled(exercises.count < 2)
+
                 Menu("从模板开始") {
                     Button("空白训练") { exercises = [] }
                     ForEach(availableTemplates) { template in
@@ -224,12 +254,27 @@ struct StrengthWorkoutLogSheetView: View {
 
     private func exerciseCard(exercise: Binding<StrengthExerciseLog>) -> some View {
         VStack(alignment: .leading, spacing: 12) {
+            if let groupKind = exercise.wrappedValue.groupKind,
+               let groupPosition = exercise.wrappedValue.groupPosition {
+                Label(
+                    "\(groupKind.displayName) · \(groupPosition + 1)",
+                    systemImage: groupKind == .superset ? "link" : "arrow.triangle.2.circlepath"
+                )
+                .font(VelaTheme.caption1().weight(.bold))
+                .foregroundStyle(groupKind == .superset ? VelaTheme.accent : VelaTheme.energyColor)
+            }
+
             HStack {
                 TextField("动作名称，例如卧推", text: exercise.name)
                     .font(.system(size: 16, weight: .bold))
                 if exercises.count > 1 {
                     Button {
-                        exercises.removeAll { $0.id == exercise.wrappedValue.id }
+                        let exerciseID = exercise.wrappedValue.id
+                        let groupID = exercise.wrappedValue.groupID
+                        if let groupID {
+                            exercises = StrengthExerciseGroupingPlanner.ungroup(exercises, groupID: groupID)
+                        }
+                        exercises.removeAll { $0.id == exerciseID }
                     } label: {
                         Image(systemName: "trash")
                             .foregroundStyle(Color.red)
@@ -311,20 +356,27 @@ struct StrengthWorkoutLogSheetView: View {
 
         return VStack(spacing: 10) {
             HStack(spacing: 10) {
-                Button {
-                    set.wrappedValue.isWarmup.toggle()
-                    scheduleDraftSave()
+                Menu {
+                    ForEach(StrengthSetKind.allCases, id: \.self) { kind in
+                        Button {
+                            set.wrappedValue.kind = kind
+                            scheduleDraftSave()
+                        } label: {
+                            Label(kind.displayName, systemImage: setKindIcon(kind))
+                        }
+                    }
                 } label: {
-                    Text(set.wrappedValue.isWarmup ? "热" : "\(index + 1)")
+                    Text(set.wrappedValue.kind == .working ? "\(index + 1)" : set.wrappedValue.kind.shortLabel)
                         .font(VelaTheme.caption1().weight(.bold))
                         .foregroundStyle(.white)
                         .frame(width: 28, height: 28)
-                        .background(Circle().fill(set.wrappedValue.isWarmup ? VelaTheme.warn : VelaTheme.accent))
+                        .background(Circle().fill(setKindColor(set.wrappedValue.kind)))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("第 \(index + 1) 组，\(set.wrappedValue.kind.displayName)，轻点更改类型")
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(set.wrappedValue.isWarmup ? "热身组" : "第 \(index + 1) 组")
+                    Text(set.wrappedValue.kind == .working ? "第 \(index + 1) 组" : set.wrappedValue.kind.displayName)
                         .font(VelaTheme.subheadline().weight(.semibold))
                         .foregroundStyle(VelaTheme.fg)
                     Text("上次 \(prevText)")
@@ -395,9 +447,13 @@ struct StrengthWorkoutLogSheetView: View {
         .padding(12)
         .background(VelaTheme.elevatedBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .contextMenu {
-            Button(set.wrappedValue.isWarmup ? "设为正式组" : "设为热身组") {
-                set.wrappedValue.isWarmup.toggle()
-                scheduleDraftSave()
+            Menu("组类型") {
+                ForEach(StrengthSetKind.allCases, id: \.self) { kind in
+                    Button(kind.displayName) {
+                        set.wrappedValue.kind = kind
+                        scheduleDraftSave()
+                    }
+                }
             }
             
             if exercise.wrappedValue.sets.count > 1 {
@@ -406,6 +462,26 @@ struct StrengthWorkoutLogSheetView: View {
                     scheduleDraftSave()
                 }
             }
+        }
+    }
+
+    private func setKindIcon(_ kind: StrengthSetKind) -> String {
+        switch kind {
+        case .working: "dumbbell.fill"
+        case .warmup: "flame.fill"
+        case .drop: "arrow.down.right"
+        case .backoff: "arrow.uturn.backward"
+        case .failure: "bolt.fill"
+        }
+    }
+
+    private func setKindColor(_ kind: StrengthSetKind) -> Color {
+        switch kind {
+        case .working: VelaTheme.accent
+        case .warmup: VelaTheme.warn
+        case .drop: VelaTheme.sleepColor
+        case .backoff: VelaTheme.recoveryColor
+        case .failure: VelaTheme.strainColor
         }
     }
 
@@ -514,6 +590,7 @@ struct StrengthWorkoutLogSheetView: View {
                     sessionRPE: exertionScore,
                     modelContext: modelContext
                 )
+                clearDraft()
                 
                 VelaAppState.shared.markLocalDataChanged()
                 completedWorkout = record
@@ -768,6 +845,7 @@ struct StrengthWorkoutLogSheetView: View {
         } else {
             let descriptor = FetchDescriptor<ActiveWorkoutDraftRecord>()
             if let draft = (try? modelContext.fetch(descriptor))?.first {
+                self.activeDraftID = draft.id
                 self.title = draft.title
                 self.startedAt = draft.startedAt
                 self.notes = draft.notes
@@ -779,27 +857,36 @@ struct StrengthWorkoutLogSheetView: View {
             }
         }
         self.isLoaded = true
+        if editingWorkout == nil {
+            saveDraft()
+            applyPendingWatchEdits()
+        }
     }
 
     private func saveDraft() {
         guard isLoaded && editingWorkout == nil else { return }
         let descriptor = FetchDescriptor<ActiveWorkoutDraftRecord>()
+        let draft: ActiveWorkoutDraftRecord
         if let existing = (try? modelContext.fetch(descriptor))?.first {
             existing.title = title
             existing.startedAt = startedAt
             existing.notes = notes
             existing.exercises = exercises
             existing.lastUpdated = Date()
+            draft = existing
         } else {
-            let draft = ActiveWorkoutDraftRecord(
+            let created = ActiveWorkoutDraftRecord(
                 title: title,
                 startedAt: startedAt,
                 notes: notes
             )
-            draft.exercises = exercises
-            modelContext.insert(draft)
+            created.exercises = exercises
+            modelContext.insert(created)
+            draft = created
         }
+        activeDraftID = draft.id
         try? modelContext.save()
+        WristSnapshotBridge.shared.publishActiveWorkout(draft)
     }
 
     private func scheduleDraftSave() {
@@ -837,5 +924,92 @@ struct StrengthWorkoutLogSheetView: View {
             }
         }
         try? modelContext.save()
+        activeDraftID = nil
+        WristSnapshotBridge.shared.clearActiveWorkout()
+    }
+
+    private func applyPendingWatchEdits() {
+        guard let activeDraftID else { return }
+        let edits = WristSnapshotBridge.shared.drainPendingStrengthSetEdits()
+        guard !edits.isEmpty else { return }
+        let updated = WristStrengthEditApplier.apply(edits, draftID: activeDraftID, to: exercises)
+        guard updated != exercises else { return }
+        exercises = updated
+        sessionViewModel.saveImmediately { saveDraft() }
+    }
+}
+
+enum BarbellPlateCalculator {
+    static let availablePlates = [25.0, 20.0, 15.0, 10.0, 5.0, 2.5, 1.25, 0.5, 0.25]
+
+    static func platesPerSide(targetKilograms: Double, barKilograms: Double) -> [Double] {
+        var remaining = max(0, (targetKilograms - barKilograms) / 2)
+        var result: [Double] = []
+        for plate in availablePlates {
+            while remaining + 0.0001 >= plate {
+                result.append(plate)
+                remaining -= plate
+            }
+        }
+        return result
+    }
+
+    static func achievableKilograms(targetKilograms: Double, barKilograms: Double) -> Double {
+        barKilograms + platesPerSide(targetKilograms: targetKilograms, barKilograms: barKilograms).reduce(0, +) * 2
+    }
+}
+
+private struct BarbellPlateCalculatorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var targetKilograms = 60.0
+    @State private var barKilograms = 20.0
+
+    private var plates: [Double] {
+        BarbellPlateCalculator.platesPerSide(
+            targetKilograms: targetKilograms,
+            barKilograms: barKilograms
+        )
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("重量") {
+                    LabeledContent("目标总重量") {
+                        TextField("60", value: $targetKilograms, format: .number.precision(.fractionLength(0...2)))
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    Picker("杠铃杆", selection: $barKilograms) {
+                        Text("20 kg").tag(20.0)
+                        Text("15 kg").tag(15.0)
+                        Text("10 kg").tag(10.0)
+                    }
+                }
+
+                Section("每侧配片") {
+                    if plates.isEmpty {
+                        Text(targetKilograms <= barKilograms ? "无需加片" : "没有可用配片组合")
+                            .foregroundStyle(VelaTheme.muted)
+                    } else {
+                        Text(plates.map { $0.formatted(.number.precision(.fractionLength(0...2))) }.joined(separator: " + ") + " kg")
+                            .font(.headline.monospacedDigit())
+                        LabeledContent(
+                            "实际总重量",
+                            value: "\(BarbellPlateCalculator.achievableKilograms(targetKilograms: targetKilograms, barKilograms: barKilograms).formatted(.number.precision(.fractionLength(0...2)))) kg"
+                        )
+                    }
+                    Text("按当前常见公制配片向下取最接近组合；训练前请核对杠铃杆和配片标识。")
+                        .font(.caption)
+                        .foregroundStyle(VelaTheme.muted)
+                }
+            }
+            .navigationTitle("杠铃配片")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
     }
 }
