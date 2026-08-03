@@ -3,6 +3,8 @@ import Foundation
 struct ReportGenerator: Sendable {
     var provider: LLMProvider
     var language: AppLanguage = .stored
+    /// Bounds the context JSON sent to the model to fit its context window.
+    static let maxContextCharacters = 12_000
 
     func generate(type: AIReportType, context: AgentContextEnvelope) async throws -> GeneratedAIReport {
         let encoder: JSONEncoder = {
@@ -11,8 +13,13 @@ struct ReportGenerator: Sendable {
             return encoder
         }()
         let contextData = try encoder.encode(context)
-        let contextJSON = String(data: contextData, encoding: .utf8) ?? "{}"
-        
+        let fullContextJSON = String(data: contextData, encoding: .utf8) ?? "{}"
+        // Cap the context sent to the model. The full AgentContextEnvelope (journal
+        // history, wiki, 34-day trends, past reports) can exceed the model's context
+        // window for long-standing users, causing a hard 400/context-length error on
+        // every report. Bound it (the full snapshot is still stored for the record).
+        let contextJSON = String(fullContextJSON.prefix(Self.maxContextCharacters))
+
         var userPrompt = prompt(for: type)
         if type == .morningBrief {
             let facts = buildMorningBriefFactsPrompt(from: context)
@@ -30,7 +37,7 @@ struct ReportGenerator: Sendable {
             type: type,
             title: localizedReportTitle(type),
             markdownContent: response.content,
-            contextSnapshot: contextJSON,
+            contextSnapshot: fullContextJSON,
             createdAt: Date()
         )
     }

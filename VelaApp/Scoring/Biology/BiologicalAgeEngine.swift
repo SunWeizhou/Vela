@@ -228,7 +228,11 @@ public final class BiologicalAgeEngine {
             let modelAlbumin = alb * 10.0 // g/dL -> g/L
             let modelCreatinine = cre * 88.4 // mg/dL -> umol/L
             let modelGlucose = glu / 18.0182 // mg/dL -> mmol/L
-            let modelCRP = cReactive / 10.0 // mg/L -> mg/dL
+            // Levine PhenoAge's ln(CRP) coefficient was fit on CRP in mg/L (NHANES).
+            // The app's crp input is already mg/L (normal range 0-3 mg/L), so it must
+            // be logged directly — dividing by 10 (mg/L -> mg/dL) shifted ln by
+            // ln(1/10) ≈ -2.303 and muted the inflammation term.
+            let modelCRP = cReactive
             let lnCRP = log(max(modelCRP, 0.001))
 
             // Liu et al. PhenoAge model, using the paper's canonical units.
@@ -243,9 +247,16 @@ public final class BiologicalAgeEngine {
                 + 0.00188 * alp
                 + 0.0554 * wb
                 + 0.0804 * age
-            let mortality = 1.0 - exp((-1.51714 * exp(xb)) / 0.0076927)
+            // Levine et al. (2018) PhenoAge, canonical mortality + transformation.
+            // The previous code used a non-canonical 1.51714 constant and DIVIDED the
+            // hazard coefficient 0.0076927 instead of multiplying, inflating the
+            // exponent ~2564x and making biological age unreliable for older/less-fit
+            // profiles. Canonical form (from Levine 2018 / reference impl):
+            //   q10 = 1 - exp(-0.0076927 * exp(xb))
+            //   PhenoAge = 141.50225 + ln(-0.00553 * ln(1 - q10)) / 0.090165
+            let mortality = 1.0 - exp(-0.0076927 * exp(xb))
             let survival = max(1.0 - mortality, Double.leastNonzeroMagnitude)
-            let phenoAge = 141.50 + log(-0.00553 * log(survival)) / 0.09165
+            let phenoAge = 141.50225 + log(-0.00553 * log(survival)) / 0.090165
             
             // Map factors for display
             let bms = [

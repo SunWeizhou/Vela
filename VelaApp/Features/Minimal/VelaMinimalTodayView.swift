@@ -11,6 +11,7 @@ struct VelaTodayView: View {
     @Environment(\.colorScheme) var cs
     @Environment(\.modelContext) var modelContext
     @Environment(\.accessibilityReduceMotion) var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var dashboardVM: DashboardViewModel
     @ObservedObject var appState = VelaAppState.shared
     @ObservedObject var locationManager = LocationManager.shared
@@ -352,6 +353,19 @@ struct VelaTodayView: View {
         .refreshable {
             await refreshDashboard(force: true)
             await loadDataCoverageSummary()
+        }
+        .onChange(of: scenePhase) {
+            // Returning to foreground (e.g. after being backgrounded overnight) must
+            // re-sync HealthKit and recompute scores. `.task(id: isActiveSurface)` only
+            // re-fires when the tab-selection value CHANGES — if the home tab was already
+            // selected, foregrounding showed yesterday's cached/stale scores. Force a
+            // refresh on active so the Today view always shows fresh data.
+            if scenePhase == .active, isActiveSurface {
+                Task {
+                    await refreshDashboard(force: true)
+                    await loadDataCoverageSummary()
+                }
+            }
         }
         .onChange(of: dashboardVM.selectedDate) {
             guard isActiveSurface else { return }
