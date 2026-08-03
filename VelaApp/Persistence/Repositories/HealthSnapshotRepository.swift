@@ -94,13 +94,18 @@ final class HealthSnapshotRepository {
         let range = DateRangeQuery.recentDays(safeDays, endingAt: endDate, calendar: calendar)
         let rangeStart = range.start
         let rangeEnd = range.end
+        // Fetch without a date #Predicate and filter in memory. SwiftData's
+        // #Predicate date comparison has been observed to trap (SIGTRAP) when a
+        // stored row carries an anomalous `date`, hard-crashing the app on the
+        // workout-save refresh path. The table is bounded (~90 days via
+        // pruneOldSnapshots), so fetching all and filtering is cheap and makes
+        // one bad row unable to crash the fetch.
         let descriptor = FetchDescriptor<DailyHealthSummaryRecord>(
-            predicate: #Predicate { record in
-                record.date >= rangeStart && record.date < rangeEnd
-            },
             sortBy: [SortDescriptor(\.date, order: .forward)]
         )
-        return try modelContext.fetch(descriptor).map { $0.toSnapshot() }
+        return try modelContext.fetch(descriptor)
+            .filter { $0.date >= rangeStart && $0.date < rangeEnd }
+            .map { $0.toSnapshot() }
     }
 
     /// Fetch this week vs last week comparison data.

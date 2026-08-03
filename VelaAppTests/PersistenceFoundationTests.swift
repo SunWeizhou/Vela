@@ -1281,4 +1281,54 @@ final class PersistenceFoundationTests: XCTestCase {
         XCTAssertTrue(state.uncertainAreas.contains { $0.id == "behavior_pairs" })
         XCTAssertTrue(state.claims.allSatisfy { $0.confidence != .high })
     }
+
+    /// Regression guard for the on-device "Vela 意外退出" SIGTRAP in
+    /// HealthSnapshotRepository.fetchSnapshots(days:endingAt:).
+    ///
+    /// Root cause (verified via crash-line symbolization, HealthSnapshotRepository.swift:103):
+    /// SwiftData's #Predicate date comparison trapped when a stored row carried an
+    /// anomalous `date`, hard-crashing the app on the workout-save →
+    /// refreshPlan → loadDashboard(42d) path. The fix fetches without a date
+    /// #Predicate and filters in memory, so a bad row can no longer crash the fetch.
+    ///
+    /// This test adds a record with a deliberately extreme/bad `date` (the class
+    /// of row the predicate fetch used to trap on) and asserts the fetch still
+    /// round-trips the good record without trapping.
+    @MainActor
+    func testFetchSnapshotsDoesNotTrapAfterSavingExternalStorageBlob() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "VelaRepro-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let storeURL = root.appending(path: "VelaRepro.store")
+
+        let container = try VelaModelContainer.make(at: storeURL)
+        let context = container.mainContext
+        let calendar = Calendar.current
+        let todayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: Date(), calendar: calendar)
+
+        // Good record carrying an external-storage workoutsData blob (emulating aggregateDay).
+        let good = DailyHealthSummaryRecord(dayIdentifier: todayIdentifier, date: Date())
+        good.workoutsData = try JSONEncoder().encode(
+            [WorkoutSummary(start: Date(), end: Date().addingTimeInterval(3600), activityName: "测试力量")]
+        )
+        context.insert(good)
+
+        // A bad row of the kind that previously made the date #Predicate trap.
+        // date distant-future, still a valid non-optional Date but outside any
+        // normal range — exercises the filter path with a real non-nil value.
+        let bad = DailyHealthSummaryRecord(
+            dayIdentifier: "distant-bad-row",
+            date: Date.distantFuture
+        )
+        context.insert(bad)
+        try context.save()
+
+        // The crash path: fetch snapshots (round-trips good, excludes bad).
+        let repository = HealthSnapshotRepository(modelContext: context, calendar: calendar)
+        let snapshots = try repository.fetchSnapshots(days: 7, endingAt: Date())
+
+        XCTAssertEqual(snapshots.count, 1, "Only the good today-record should survive the range filter")
+        XCTAssertEqual(snapshots.first?.workouts.count, 1, "workoutsData blob must decode through toSnapshot")
+    }
 }
