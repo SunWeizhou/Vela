@@ -1,0 +1,45 @@
+# Vela 设计系统强制(SwiftLint)
+#
+# 现状:项目未安装 SwiftLint,且约定不脚本修改 pbxproj,故本配置默认不生效。
+# 启用方式(二选一):
+#   1) 手动:brew install swiftlint && swiftlint --config .swiftlint.yml
+#   2) 强制:Xcode → Vela target → Build Phases → + Run Script(手动添加,勿脚本改 pbxproj):
+#        if which swiftlint >/dev/null; then swiftlint --config .swiftlint.yml; fi
+#
+# 设计 Token 只在 Core/Theme 与 Core/DesignSystem 定义,故这两处豁免;
+# 其余视图文件命中以下规则即报警(warning,先不 error,避免破坏现有构建)。
+
+excluded:
+  - VelaApp/Core/Theme
+  - VelaApp/Core/DesignSystem
+  - VelaBackend
+  - design
+  - docs
+  - scratch
+  - .build
+  - DerivedData
+
+custom_rules:
+  no_hardcoded_hex_color:
+    name: "Hardcoded Hex Color"
+    regex: 'Color\(hex:'
+    message: "用 VelaTheme 语义/品牌色 Token,不要直接写 Color(hex:)。"
+    severity: warning
+
+  no_fixed_font_size:
+    name: "Fixed Font Size"
+    regex: '\.font\(\s*\.system\(size:'
+    message: "文本请用 VelaTheme 排版(title/body/…)以支持 Dynamic Type;仅图标可用 .system(size:)。"
+    severity: warning
+
+  no_system_semantic_color:
+    name: "System Semantic Color"
+    regex: 'Color\.(red|green|orange|yellow|pink|purple)\b'
+    message: "用 VelaTheme 健康语义色(strainColor/recoveryColor/sleepColor/stressColor/energyColor)。"
+    severity: warning
+
+  no_inline_rounded_rectangle:
+    name: "Inline RoundedRectangle"
+    regex: 'RoundedRectangle\(cornerRadius:'
+    message: "卡片请用 .cardSurface()/.heroCardSurface() 等 DesignSystem 组件,不要内联圆角。"
+    severity: warning
