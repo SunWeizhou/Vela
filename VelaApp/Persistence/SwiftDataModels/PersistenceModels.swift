@@ -417,7 +417,10 @@ final class DailyHealthSummaryRecord {
             scoreEvidence.energy.algorithmVersion
         ].joined(separator: "|")
         schemaVersion = 2
-        updatedAt = scoreEvidence.persistedAt
+        // Never move updatedAt backwards: persistedAt is the scoring timestamp and
+        // can predate the actual write. updatedAt drives dashboard cache-freshness,
+        // so it must be monotonic (max of current and the evidence timestamp).
+        updatedAt = max(updatedAt, scoreEvidence.persistedAt)
     }
 
     func decodedScoreEvidence() -> DailyScoreEvidenceEnvelope? {

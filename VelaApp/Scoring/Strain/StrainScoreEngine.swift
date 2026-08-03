@@ -279,7 +279,10 @@ public struct StrainScoreEngine: ScoreEngine {
         reasons.append("非运动日常活动负荷为 \(Int(activityLoad)) (步数: \(Int(steps)), 活动能量: \(Int(activeEnergy)) kcal)")
 
         // 4. Training Load Status (ATL / CTL)
-        let loadsIncludingToday = input.last28DaysDailyLoads + [dailyLoad]
+        // `last28DaysDailyLoads` is newest-first (see personalBaselineHistory).
+        // EWMA must iterate oldest→newest ending at today, so reverse it.
+        let ascendingHistory = input.last28DaysDailyLoads.reversed()
+        let loadsIncludingToday = ascendingHistory + [dailyLoad]
         let atl = ewma(loadsIncludingToday, lambda: 2.0 / (7.0 + 1.0))
         let ctl28 = ewma(loadsIncludingToday, lambda: 2.0 / (28.0 + 1.0))
         let trainingLoadRatio = ctl28 > 0 ? atl / ctl28 : 1.0

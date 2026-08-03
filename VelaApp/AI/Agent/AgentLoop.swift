@@ -101,6 +101,12 @@ struct RetryingAgentChatProvider: AgentChatProvider {
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
+                // If the enclosing task was cancelled — including during the
+                // retry-backoff sleep — propagate cancellation rather than
+                // misclassifying it as a provider failure and looping uselessly.
+                if Task.isCancelled {
+                    throw CancellationError()
+                }
                 let providerError = LLMProviderError.classify(error)
                 guard shouldRetry(error: providerError, attempt: attempt) else {
                     throw providerError
@@ -191,6 +197,11 @@ struct AgentLoop {
         var duplicateToolTracker: Set<String> = []
         var toolCallBudget = maxToolCalls
         var executedToolCallIds: Set<String> = []
+        // Set when the loop exits early due to cancellation/deadline. When true,
+        // we must NOT make a final unbounded provider call (the deadline would be
+        // a lie, and the [CANCELLED]/[TIME EXCEEDED] injection strings must never
+        // be sent to the model). Instead we return an honest local message.
+        var didTerminateEarly = false
 
         for _ in 0..<maxIterations {
             // Honour user/outer cancellation between provider calls, and enforce
@@ -201,6 +212,7 @@ struct AgentLoop {
                     role: .system,
                     content: "[CANCELLED: The request was cancelled. Please acknowledge and stop.]"
                 ))
+                didTerminateEarly = true
                 break
             }
             if Date().timeIntervalSince(startedAt) > maxDuration {
@@ -208,6 +220,7 @@ struct AgentLoop {
                     role: .system,
                     content: "[TIME EXCEEDED: The agent exceeded the \(Int(maxDuration))s deadline. Please wrap up with a concise summary.]"
                 ))
+                didTerminateEarly = true
                 break
             }
             // ── Inject data-version notice if tools returned fresher data than the snapshot ──
@@ -360,7 +373,12 @@ struct AgentLoop {
         }
 
         if fullResponse.isEmpty {
-            if let onStreamDelta {
+            // If the loop ended early (cancellation/deadline), do NOT make a final
+            // unbounded provider call: it would extend past the deadline and would
+            // send the [CANCELLED]/[TIME EXCEEDED] injection strings to the model.
+            if didTerminateEarly {
+                fullResponse = "该请求已被中止，未能完成。你可以重试，或换个说法再问。"
+            } else if let onStreamDelta {
                 providerCallCount += 1
                 let finalResponse = try await provider.chat(messages: agentMessages, tools: nil)
                 fullResponse = finalResponse.content

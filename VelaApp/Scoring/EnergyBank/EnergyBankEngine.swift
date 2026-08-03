@@ -263,7 +263,9 @@ public struct EnergyBankEngine: ScoreEngine {
         todayStrain: Double
     ) -> (atl: Double, ctl: Double, tsb: Double, acwr: Double) {
         let history = strainHistory ?? []
-        let loadsIncludingToday = history + [todayStrain]
+        // `strainHistory` (from personalBaselineHistory) is newest-first; EWMA must
+        // iterate oldest→newest ending at today, so reverse before appending today.
+        let loadsIncludingToday = history.reversed() + [todayStrain]
 
         let atl = ewma(loadsIncludingToday, lambda: 2.0 / (7.0 + 1.0))
         let ctl = ewma(loadsIncludingToday, lambda: 2.0 / (42.0 + 1.0))

@@ -335,7 +335,7 @@ struct VelaJournalView: View {
         addedSugarState = 1
         ketoDietState = 1
         bedDeviceState = 1
-        customHabitStates = Dictionary(uniqueKeysWithValues: customHabits.map { ($0, 1) })
+        customHabitStates = Dictionary(customHabits.map { ($0, 1) }, uniquingKeysWith: { first, _ in first })
         
         caffeineValueText = "- mg"
         hydrationValueText = "- ml"

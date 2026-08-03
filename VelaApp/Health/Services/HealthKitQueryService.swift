@@ -271,7 +271,7 @@ final class HealthKitQueryService: HealthQueryService {
 
         // Cardiovascular
         m.walkingHeartRateAvg = try? await averageQuantity(.walkingHeartRate, unit: HKUnit.count().unitDivided(by: .minute()), range: range)
-        m.oxygenSaturation = (try? await mostRecentQuantity(.oxygenSaturation, unit: .percent(), range: range)).map { $0 * 100 }
+        m.oxygenSaturation = try? await mostRecentQuantity(.oxygenSaturation, unit: .percent(), range: range)
         m.bloodPressureSystolic = try? await mostRecentQuantity(.bloodPressureSystolic, unit: .millimeterOfMercury(), range: range)
         m.bloodPressureDiastolic = try? await mostRecentQuantity(.bloodPressureDiastolic, unit: .millimeterOfMercury(), range: range)
 
@@ -281,9 +281,9 @@ final class HealthKitQueryService: HealthQueryService {
         // Mobility & gait
         m.walkingSpeed = try? await averageQuantity(.walkingSpeed, unit: HKUnit.meter().unitDivided(by: .second()), range: range)
         m.walkingStepLength = try? await averageQuantity(.walkingStepLength, unit: .meter(), range: range)
-        m.walkingAsymmetry = (try? await averageQuantity(.walkingAsymmetry, unit: .percent(), range: range)).map { $0 * 100 }
-        m.walkingDoubleSupport = (try? await averageQuantity(.doubleSupport, unit: .percent(), range: range)).map { $0 * 100 }
-        m.walkingSteadiness = (try? await averageQuantity(.walkingSteadiness, unit: .percent(), range: range)).map { $0 * 100 }
+        m.walkingAsymmetry = try? await averageQuantity(.walkingAsymmetry, unit: .percent(), range: range)
+        m.walkingDoubleSupport = try? await averageQuantity(.doubleSupport, unit: .percent(), range: range)
+        m.walkingSteadiness = try? await averageQuantity(.walkingSteadiness, unit: .percent(), range: range)
         m.stairAscentSpeed = try? await averageQuantity(.stairAscentSpeed, unit: HKUnit.meter().unitDivided(by: .second()), range: range)
         m.stairDescentSpeed = try? await averageQuantity(.stairDescentSpeed, unit: HKUnit.meter().unitDivided(by: .second()), range: range)
         m.sixMinuteWalkDistance = try? await mostRecentQuantity(.sixMinuteWalkDistance, unit: .meter(), range: range)
