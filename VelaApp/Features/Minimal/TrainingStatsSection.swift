@@ -620,6 +620,9 @@ struct MuscleVolumeCard: View {
 
 struct RecentWorkoutsSection: View {
     let recentWorkouts: [WorkoutSummary]
+    /// Resolves a HealthKit/merged summary back to a locally-logged strength
+    /// workout record, if any, so strength workouts open the rich detail view.
+    var strengthWorkout: (WorkoutSummary) -> StrengthWorkoutRecord?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -642,12 +645,25 @@ struct RecentWorkoutsSection: View {
                     .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
             } else {
                 ForEach(recentWorkouts.prefix(12)) { workout in
-                    NavigationLink(destination: WorkoutDetailView(workout: workout)) {
+                    // Strength workouts that were logged locally open the rich
+                    // strength detail (PR trophies, muscle distribution, edit/delete).
+                    // Previously ALL workouts opened the generic HealthKit detail, so
+                    // this entire feature was unreachable.
+                    NavigationLink(destination: destination(for: workout)) {
                         workoutRow(workout)
                     }
                     .buttonStyle(.cardPress)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func destination(for workout: WorkoutSummary) -> some View {
+        if let strength = strengthWorkout(workout) {
+            StrengthWorkoutDetailView(workout: strength)
+        } else {
+            WorkoutDetailView(workout: workout)
         }
     }
 

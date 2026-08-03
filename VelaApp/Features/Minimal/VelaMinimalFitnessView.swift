@@ -103,7 +103,10 @@ struct VelaTrainingView: View {
                     )
                 )
 
-                RecentWorkoutsSection(recentWorkouts: recentWorkouts)
+                RecentWorkoutsSection(
+                    recentWorkouts: recentWorkouts,
+                    strengthWorkout: { workout in self.strengthWorkout(for: workout) }
+                )
 
                 MuscleVolumeCard(
                     summary: strengthSummary,
@@ -296,7 +299,14 @@ struct VelaTrainingView: View {
     }
 
     private var recentStrengthSummary: RecentTrainingSummary {
-        TrainingAnalyticsService().buildRecentSummary(workouts: strengthWorkouts, days: 7)
+        // Anchor to the browsed date, not real-world "today": otherwise browsing a
+        // historical date on the Training page still shows real-today muscle volume,
+        // PRs and fatigue.
+        TrainingAnalyticsService().buildRecentSummary(
+            workouts: strengthWorkouts,
+            days: 7,
+            endingAt: dashboardVM.selectedDate
+        )
     }
 
     private func startStrengthWorkout(templateID: UUID? = nil) {
