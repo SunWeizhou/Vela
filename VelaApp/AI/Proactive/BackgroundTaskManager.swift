@@ -110,15 +110,29 @@ enum BackgroundTaskManager {
                 modelContext.insert(bgRun)
                 try? modelContext.save()
 
-                // Build DashboardSummary from HealthKit
+                // Build DashboardSummary from HealthKit. Gate the expensive 7-day
+                // HealthKit sync behind the last-successful-sync cursor: if data was
+                // synced recently (within a few hours), skip the scan and recompute
+                // from the persisted cache instead. This saves battery on every
+                // background grant when HealthKit data hasn't changed.
                 let queryService = HealthKitQueryService()
                 VelaResolver.shared.register(HealthQueryService.self) { queryService }
                 let services = VelaServices()
 
+                let lastSync = HealthSyncCursorStore().load().lastSuccessfulSyncAt
+                let freshEnough = lastSync.map { Date().timeIntervalSince($0) < 4 * 3600 } ?? false
+                // Only run the expensive HealthKit sync when the cache is stale (or on
+                // first launch); otherwise recompute from persisted data.
+                let shouldSyncData = !freshEnough
 
                 let dashboard = try await DailySummaryUseCase(
                     queryService: queryService
-                ).loadDashboard(for: Date(), modelContext: modelContext, syncDays: 7)
+                ).loadDashboard(
+                    for: Date(),
+                    modelContext: modelContext,
+                    syncDays: shouldSyncData ? 7 : 0,
+                    shouldSyncHealthData: shouldSyncData
+                )
                 try? DailyLogService.refresh(dashboard: dashboard)
 
                 if config.autoEveningWikiSync, (hour >= 21 || hour < 4) {
