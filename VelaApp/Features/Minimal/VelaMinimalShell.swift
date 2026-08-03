@@ -231,25 +231,37 @@ struct VelaShell: View {
 
     private var parityTabNavigation: some View {
         TabView(selection: $paritySelectedTab) {
-            VelaTodayView(showCoach: $showCoach, showSettings: $appState.showSettings)
-                .environment(\.velaSurfaceIsActive, paritySelectedTab == ParityTab.home.rawValue)
-                .tabItem { Label(L10n.t("Home", "首页"), systemImage: "house.fill") }
-                .tag(ParityTab.home.rawValue)
+            // Each tab root needs its own NavigationStack so the NavigationLinks
+            // inside (signal grid, metric detail, journal detail, vitals metrics)
+            // get a back button. Without it, pushing a detail leaves no way to
+            // return — reported as "进入了之后就没办法返回了".
+            NavigationStack {
+                VelaTodayView(showCoach: $showCoach, showSettings: $appState.showSettings)
+            }
+            .environment(\.velaSurfaceIsActive, paritySelectedTab == ParityTab.home.rawValue)
+            .tabItem { Label(L10n.t("Home", "首页"), systemImage: "house.fill") }
+            .tag(ParityTab.home.rawValue)
 
-            VelaJournalView()
-                .environment(\.velaSurfaceIsActive, paritySelectedTab == ParityTab.journal.rawValue)
-                .tabItem { Label(L10n.t("Journal", "日志"), systemImage: "checklist") }
-                .tag(ParityTab.journal.rawValue)
+            NavigationStack {
+                VelaJournalView()
+            }
+            .environment(\.velaSurfaceIsActive, paritySelectedTab == ParityTab.journal.rawValue)
+            .tabItem { Label(L10n.t("Journal", "日志"), systemImage: "checklist") }
+            .tag(ParityTab.journal.rawValue)
 
-            VelaTrainingView()
-                .environment(\.velaSurfaceIsActive, paritySelectedTab == ParityTab.fitness.rawValue)
-                .tabItem { Label(L10n.t("Fitness", "健身"), systemImage: "figure.run") }
-                .tag(ParityTab.fitness.rawValue)
+            NavigationStack {
+                VelaTrainingView()
+            }
+            .environment(\.velaSurfaceIsActive, paritySelectedTab == ParityTab.fitness.rawValue)
+            .tabItem { Label(L10n.t("Fitness", "健身"), systemImage: "figure.run") }
+            .tag(ParityTab.fitness.rawValue)
 
-            VelaVitalsView()
-                .environment(\.velaSurfaceIsActive, paritySelectedTab == ParityTab.biology.rawValue)
-                .tabItem { Label(L10n.t("Biology", "生理"), systemImage: "waveform.path.ecg") }
-                .tag(ParityTab.biology.rawValue)
+            NavigationStack {
+                VelaVitalsView()
+            }
+            .environment(\.velaSurfaceIsActive, paritySelectedTab == ParityTab.biology.rawValue)
+            .tabItem { Label(L10n.t("Biology", "生理"), systemImage: "waveform.path.ecg") }
+            .tag(ParityTab.biology.rawValue)
 
             Color.clear
                 .tabItem { Label(L10n.t("Add", "添加"), systemImage: "plus.circle.fill") }
