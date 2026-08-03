@@ -1,6 +1,12 @@
 import Foundation
 
 enum SleepSampleNormalizer {
+    /// Total minutes in an episode that count toward sleep duration (excludes
+    /// awake / in-bed). Used to pick the main night sleep over a short nap.
+    static func sleepDuration(_ segments: [SleepStageSegment]) -> TimeInterval {
+        segments.reduce(0) { $0 + (($1.stage.countsTowardSleepDuration && $1.end > $1.start) ? $1.end.timeIntervalSince($1.start) : 0) }
+    }
+
     static func summary(
         for date: Date,
         segments: [SleepStageSegment],
@@ -57,12 +63,18 @@ enum SleepSampleNormalizer {
             episodes.append(currentEpisode)
         }
 
+        // Choose the LONGEST sleep episode as the night's main sleep, not the
+        // latest-ending one. A daytime nap can end after the previous night's sleep
+        // and, if chosen by latest-end, would replace the whole night as "today's
+        // sleep" (collapsing sleep duration ~0 and cratering the score). The main
+        // overnight sleep is always the longest continuous episode, so selecting by
+        // total sleep-duration duration excludes short naps correctly.
         guard let latestSleepEpisode = episodes
             .filter({ episode in
                 episode.contains { $0.stage.countsTowardSleepDuration }
             })
             .max(by: { lhs, rhs in
-                (lhs.last?.end ?? .distantPast) < (rhs.last?.end ?? .distantPast)
+                sleepDuration(lhs) < sleepDuration(rhs)
             })
         else {
             return nil

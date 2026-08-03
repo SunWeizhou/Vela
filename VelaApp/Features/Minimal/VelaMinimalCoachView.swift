@@ -298,6 +298,11 @@ enum PrivacyDataDeletionService {
             deleted += try deleteAll(XunjiDailyCacheRecord.self, in: modelContext)
             deleted += try deleteAll(XunjiWorkoutMirrorRecord.self, in: modelContext)
             deleted += try deleteAll(VelaEventRecord.self, in: modelContext)
+            // These two are in the container model list but were missing from
+            // delete-all — "clear all local data" left the raw intraday health
+            // buckets and every proactive insight behind, silently.
+            deleted += try deleteAll(IntradaySignalBucketRecord.self, in: modelContext)
+            deleted += try deleteAll(ProactiveInsightRecord.self, in: modelContext)
             deleted += try WikiFileService.deleteLocalDocuments(at: wikiDirectoryURL)
             WristSnapshotBridge.shared.clearCachedSnapshot()
         }
