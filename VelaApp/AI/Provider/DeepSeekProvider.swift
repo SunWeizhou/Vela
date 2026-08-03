@@ -70,6 +70,10 @@ enum DeepSeekStreamCompletion {
 }
 
 struct DeepSeekProvider: LLMProvider {
+    /// Cap generation length so a long-running/summarizing request can't
+    /// produce an unbounded response (cost + latency + provider context limits).
+    static let defaultMaxTokens = 2048
+
     var apiKey: String
     var model: String
     var endpoint: URL
@@ -124,7 +128,8 @@ struct DeepSeekProvider: LLMProvider {
             temperature: 0.4,
             stream: false,
             tools: tools?.map { ToolDef(from: $0) },
-            toolChoice: tools != nil ? "auto" : nil
+            toolChoice: tools != nil ? "auto" : nil,
+            maxTokens: Self.defaultMaxTokens
         )
         urlRequest.httpBody = try JSONEncoder().encode(body)
 
@@ -188,7 +193,8 @@ struct DeepSeekProvider: LLMProvider {
                             temperature: 0.4,
                             stream: true,
                             tools: nil,
-                            toolChoice: nil
+                            toolChoice: nil,
+                            maxTokens: Self.defaultMaxTokens
                         )
                     )
 
@@ -245,10 +251,12 @@ private struct DeepSeekChatRequest: Encodable {
     var stream: Bool
     var tools: [ToolDef]?
     var toolChoice: String?
+    var maxTokens: Int?
 
     enum CodingKeys: String, CodingKey {
         case model, messages, temperature, stream, tools
         case toolChoice = "tool_choice"
+        case maxTokens = "max_tokens"
     }
 
     struct Message: Encodable {

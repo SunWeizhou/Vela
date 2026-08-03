@@ -36,6 +36,8 @@
 	<string>AccentColor</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Vela 读取 Apple 健康中的必要汇总数据，用于在本机生成恢复、睡眠和训练趋势。</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>当你主动把训练记录写回 Apple 健康时，Vela 会保存对应的运动数据以保证数据一致。</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Vela 仅在应用打开时使用位置，用于显示当地天气并辅助安排当天训练。</string>
 	<key>NSMicrophoneUsageDescription</key>

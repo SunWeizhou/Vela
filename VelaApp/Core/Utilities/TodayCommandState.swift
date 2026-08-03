@@ -117,9 +117,14 @@ enum TodayCommandBuilder {
         let recConf = dashboard.recovery.hasData ? numericConfidence(dashboard.recovery.confidence) : 0.0
         let sleepConf = dashboard.sleepScore.hasData ? numericConfidence(dashboard.sleepScore.confidence) : 0.0
         let stressConf = dashboard.stress.hasData ? numericConfidence(dashboard.stress.confidence) : 0.0
-        
-        let computedConf = 0.50 * recConf + 0.30 * sleepConf + 0.20 * stressConf
-        let dynamicConfidence = max(0.3, min(1.0, computedConf))
+
+        // Weighted by per-source confidence, capped at 1.0, with no artificial
+        // floor: sparse or low-confidence data must surface as genuinely low
+        // readiness confidence rather than being coerced upward. Previously a
+        // `max(0.3, …)` floor hid missing/low data, presenting pseudo-calibrated
+        // certainty to the user.
+        let computedConf = min(1.0, 0.50 * recConf + 0.30 * sleepConf + 0.20 * stressConf)
+        let dynamicConfidence = computedConf
 
         if let first = dashboard.recovery.reasons.first {
             reasons.append(first)
@@ -138,7 +143,7 @@ enum TodayCommandBuilder {
             return (.recover, 0.74 * dynamicConfidence, reasons)
         }
         if let summary = recentStrengthSummary,
-           summary.localFatigue.values.contains(where: { $0.setsLast48h >= 15 || $0.setsLast7d >= 25 }) {
+           summary.localFatigue.values.contains(where: { $0.fatigueLevel == "high" }) {
             reasons.append("Local muscle fatigue is high from recent strength work.")
             return (.swap, 0.72 * dynamicConfidence, reasons)
         }

@@ -146,6 +146,9 @@ struct AgentLoop {
     let maxToolCalls: Int
     /// Timeout per individual tool execution in seconds.
     let toolTimeoutSeconds: Int
+    /// Upper bound for the entire loop run in seconds (including retries). Guards
+    /// against a slow/looping agent holding the Coach for an unbounded duration.
+    let maxDuration: TimeInterval
     /// Optional callback to confirm high-risk tool calls.
     var onConfirmToolCall: (@Sendable (ToolCallDescription) async -> Bool)? = nil
 
@@ -155,6 +158,7 @@ struct AgentLoop {
         maxIterations: Int = 3,
         maxToolCalls: Int = 15,
         toolTimeoutSeconds: Int = 20,
+        maxDuration: TimeInterval = 90,
         onConfirmToolCall: (@Sendable (ToolCallDescription) async -> Bool)? = nil
     ) {
         self.provider = provider
@@ -162,6 +166,7 @@ struct AgentLoop {
         self.maxIterations = maxIterations
         self.maxToolCalls = maxToolCalls
         self.toolTimeoutSeconds = toolTimeoutSeconds
+        self.maxDuration = maxDuration
         self.onConfirmToolCall = onConfirmToolCall
     }
 
@@ -188,6 +193,23 @@ struct AgentLoop {
         var executedToolCallIds: Set<String> = []
 
         for _ in 0..<maxIterations {
+            // Honour user/outer cancellation between provider calls, and enforce
+            // a whole-loop deadline so a slow/looping agent can't hold the Coach
+            // indefinitely. Both return a graceful, coherent stop for the user.
+            if Task.isCancelled {
+                agentMessages.append(ChatMessage(
+                    role: .system,
+                    content: "[CANCELLED: The request was cancelled. Please acknowledge and stop.]"
+                ))
+                break
+            }
+            if Date().timeIntervalSince(startedAt) > maxDuration {
+                agentMessages.append(ChatMessage(
+                    role: .system,
+                    content: "[TIME EXCEEDED: The agent exceeded the \(Int(maxDuration))s deadline. Please wrap up with a concise summary.]"
+                ))
+                break
+            }
             // ── Inject data-version notice if tools returned fresher data than the snapshot ──
             if let currentVersion = activeDataVersion, let initial = initialDataVersion, currentVersion != initial {
                 let notice = "[DATA VERSION CHANGE: tool-returned data (v:\(currentVersion)) is newer than the initial snapshot (v:\(initial)). Prefer the tool-fetched values over any inline snapshot for the rest of this response.]"

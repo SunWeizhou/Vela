@@ -287,46 +287,50 @@ public final class WorkoutAggregationService {
         modelContext: ModelContext,
         calendar: Calendar = .current
     ) throws {
-        let dayStart = calendar.startOfDay(for: date)
-        let identifier = DailyHealthSummaryRecord.dayIdentifier(for: dayStart, calendar: calendar)
-        let descriptor = FetchDescriptor<DailyHealthSummaryRecord>(
-            predicate: #Predicate<DailyHealthSummaryRecord> { $0.dayIdentifier == identifier }
-        )
-        let record: DailyHealthSummaryRecord
-        if let existing = try modelContext.fetch(descriptor).first {
-            record = existing
-        } else {
-            record = DailyHealthSummaryRecord(dayIdentifier: identifier, date: dayStart)
-            modelContext.insert(record)
-        }
+        try PersistenceWriteGate.shared.withSerializedWrite(
+            operation: "WorkoutAggregationService.aggregateDay"
+        ) {
+            let dayStart = calendar.startOfDay(for: date)
+            let identifier = DailyHealthSummaryRecord.dayIdentifier(for: dayStart, calendar: calendar)
+            let descriptor = FetchDescriptor<DailyHealthSummaryRecord>(
+                predicate: #Predicate<DailyHealthSummaryRecord> { $0.dayIdentifier == identifier }
+            )
+            let record: DailyHealthSummaryRecord
+            if let existing = try modelContext.fetch(descriptor).first {
+                record = existing
+            } else {
+                record = DailyHealthSummaryRecord(dayIdentifier: identifier, date: dayStart)
+                modelContext.insert(record)
+            }
 
-        let healthKitWorkouts = record.toSnapshot().workouts.filter { ($0.source ?? "healthKit") == "healthKit" }
-        let merged = aggregateWorkouts(
-            healthKitWorkouts: healthKitWorkouts,
-            for: dayStart,
-            modelContext: modelContext,
-            calendar: calendar
-        )
-        let duration = merged.reduce(0) { $0 + max(0, $1.end.timeIntervalSince($1.start) / 60) }
-        let energy = merged.compactMap(\.energyKilocalories).reduce(0, +)
-        let load = merged.reduce(0) { partial, workout in
-            partial + max(0, workout.end.timeIntervalSince(workout.start) / 60) * (workout.rpe ?? 5) * 0.3
+            let healthKitWorkouts = record.toSnapshot().workouts.filter { ($0.source ?? "healthKit") == "healthKit" }
+            let merged = aggregateWorkouts(
+                healthKitWorkouts: healthKitWorkouts,
+                for: dayStart,
+                modelContext: modelContext,
+                calendar: calendar
+            )
+            let duration = merged.reduce(0) { $0 + max(0, $1.end.timeIntervalSince($1.start) / 60) }
+            let energy = merged.compactMap(\.energyKilocalories).reduce(0, +)
+            let load = merged.reduce(0) { partial, workout in
+                partial + max(0, workout.end.timeIntervalSince(workout.start) / 60) * (workout.rpe ?? 5) * 0.3
+            }
+            // Algorithm v1/workoutAggregation: session-RPE fallback load.
+            // Source: WorkoutEventRecord + current day's HealthKit workoutsData.
+            // Confidence: medium for HR/RPE workouts, low for duration-only workouts.
+            let activityLoad = normalizedActivityLoad(record)
+            let dailyLoad = activityLoad + load
+            record.workoutsData = try JSONEncoder().encode(merged)
+            record.workoutCount = merged.count
+            record.workoutTypes = Set(merged.map(\.activityName)).sorted().joined(separator: ", ")
+            record.workoutDuration = duration
+            record.activeMinutes = max(record.activeMinutes ?? 0, duration)
+            record.activeCalories = max(record.activeCalories ?? 0, energy)
+            record.activityLoad = activityLoad
+            record.workoutLoad = load
+            record.dailyLoad = dailyLoad
+            record.updatedAt = Date()
         }
-        // Algorithm v1/workoutAggregation: session-RPE fallback load.
-        // Source: WorkoutEventRecord + current day's HealthKit workoutsData.
-        // Confidence: medium for HR/RPE workouts, low for duration-only workouts.
-        let activityLoad = normalizedActivityLoad(record)
-        let dailyLoad = activityLoad + load
-        record.workoutsData = try JSONEncoder().encode(merged)
-        record.workoutCount = merged.count
-        record.workoutTypes = Set(merged.map(\.activityName)).sorted().joined(separator: ", ")
-        record.workoutDuration = duration
-        record.activeMinutes = max(record.activeMinutes ?? 0, duration)
-        record.activeCalories = max(record.activeCalories ?? 0, energy)
-        record.activityLoad = activityLoad
-        record.workoutLoad = load
-        record.dailyLoad = dailyLoad
-        record.updatedAt = Date()
     }
 
     private func normalizedActivityLoad(_ record: DailyHealthSummaryRecord) -> Double {

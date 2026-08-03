@@ -1331,4 +1331,43 @@ final class PersistenceFoundationTests: XCTestCase {
         XCTAssertEqual(snapshots.count, 1, "Only the good today-record should survive the range filter")
         XCTAssertEqual(snapshots.first?.workouts.count, 1, "workoutsData blob must decode through toSnapshot")
     }
+
+    /// Regression guard for the concurrent-write race that produced the corrupted
+    /// rows behind the fetchSnapshots crash: multiple in-flight async writers
+    /// (foreground refresh, BGAppRefreshTask, Settings resync, workout save) all
+    /// performed fetch-then-insert on the same @Attribute(.unique) dayIdentifier.
+    ///
+    /// PersistenceWriteGate.withSerializedWrite now makes each upsert atomic.
+    /// This test hammers the same dayIdentifier with many concurrent writers and
+    /// asserts exactly one row survives (no unique-key conflict, no duplicate).
+    @MainActor
+    func testConcurrentUpsertsSameDayDoNotDuplicateRows() async throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let calendar = Calendar.current
+        let day = calendar.startOfDay(for: Date())
+        let snapshot = DailyHealthSnapshot(date: day)
+
+        let writers = 24
+        await withTaskGroup(of: Bool.self) { group in
+            for _ in 0..<writers {
+                group.addTask { @MainActor in
+                    let context = ModelContext(container)
+                    let repo = SwiftDataDailyHealthSummaryRepository(modelContext: context)
+                    do {
+                        try repo.upsert(snapshot, calendar: calendar)
+                        return true
+                    } catch {
+                        return false
+                    }
+                }
+            }
+            // Drain; each task either writes or fails (unique constraint).
+            for await _ in group {}
+        }
+
+        let context = ModelContext(container)
+        let all = try context.fetch(FetchDescriptor<DailyHealthSummaryRecord>())
+        XCTAssertEqual(all.count, 1, "Concurrent upserts to the same dayIdentifier must produce exactly one row, not \(all.count)")
+        XCTAssertEqual(all.first?.dayIdentifier, DailyHealthSummaryRecord.dayIdentifier(for: day, calendar: calendar))
+    }
 }
