@@ -429,6 +429,12 @@ final class CoachChatVM: ObservableObject {
         activeResponseTask?.cancel()
     }
 
+    /// Cancel the in-flight assistant response (user tapped "stop").
+    func cancelActiveResponse() {
+        guard activeResponseTask != nil else { return }
+        activeResponseTask?.cancel()
+    }
+
     func send(
         text: String,
         dashboard: DashboardSummary,

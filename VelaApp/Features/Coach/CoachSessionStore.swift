@@ -72,6 +72,10 @@ final class CoachSessionStore: ObservableObject {
     }
 
     func selectSession(_ session: CoachSessionRecord, modelContext: ModelContext, isStreaming: Bool, isAwaitingForegroundRetry: Bool, messagesHandler: ([CoachChatVM.ChatMsg]) -> Void) {
+        // Don't swap to another session while a reply is streaming: the messages
+        // array was already loaded and the in-flight stream writes to the old
+        // session's indices, so switching would orphan the completed response.
+        guard !isStreaming, !isAwaitingForegroundRetry else { return }
         self.currentSession = session
         if let data = session.serializedMessages.data(using: .utf8),
            let decoded = try? JSONDecoder().decode([CoachChatVM.ChatMsg].self, from: data) {

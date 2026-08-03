@@ -1015,22 +1015,31 @@ struct VelaCoachView: View {
                 .accessibilityLabel(dictation.isRecording ? "停止听写" : "开始听写")
 
                 Button {
+                    if vm.isStreaming {
+                        // Stop the in-flight reply instead of sending.
+                        vm.cancelActiveResponse()
+                        return
+                    }
                     guard !inputText.trimmingCharacters(in: .whitespaces).isEmpty else { return }
                     sendMessage(inputText)
                 } label: {
-                    Image(systemName: "arrow.up")
+                    Image(systemName: vm.isStreaming ? "stop.fill" : "arrow.up")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(width: 44, height: 44)
                         .background(
                             Circle()
-                                .fill(inputText.trimmingCharacters(in: .whitespaces).isEmpty
-                                    ? VelaTheme.border : VelaTheme.accent)
+                                .fill(vm.isStreaming
+                                    ? VelaTheme.strainColor
+                                    : (inputText.trimmingCharacters(in: .whitespaces).isEmpty
+                                        ? VelaTheme.border : VelaTheme.accent))
                         )
                 }
-                .disabled(inputText.trimmingCharacters(in: .whitespaces).isEmpty)
+                // The stop button must stay tappable while streaming, even when the
+                // input is empty (which it usually is right after sending).
+                .disabled(!vm.isStreaming && inputText.trimmingCharacters(in: .whitespaces).isEmpty)
                 .buttonStyle(.plusButton)
-                .accessibilityLabel("发送消息")
+                .accessibilityLabel(vm.isStreaming ? "停止回复" : "发送消息")
             }
         }
         .padding(.horizontal, 16)

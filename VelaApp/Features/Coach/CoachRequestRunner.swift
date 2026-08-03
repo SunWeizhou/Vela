@@ -15,7 +15,10 @@ final class CoachRequestRunner {
     ) async throws -> AgentLoopResult {
         let lang = AppLanguage.stored
         let policy = ResponseLengthPolicy.forQuery(userText, lang: lang)
-        let selectedModel = CoachReasoningMode.stored.model(for: policy).apiIdentifier
+        // Respect the user's explicit text-model picker (vela_coach_text_model,
+        // Flash/Pro). Previously the runner decided purely from CoachReasoningMode
+        // and never read the stored text model, making the Settings picker a no-op.
+        let selectedModel = DeepSeekTextModel.stored.apiIdentifier
         let baseProvider = services?.deepSeekProvider(apiKey: apiKey, model: selectedModel)
             ?? DeepSeekProvider(apiKey: apiKey, model: selectedModel)
         let provider = RetryingAgentChatProvider(base: baseProvider)
