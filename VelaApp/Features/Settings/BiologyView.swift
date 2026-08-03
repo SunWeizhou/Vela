@@ -1193,6 +1193,7 @@ private struct HealthRecordReviewSheet: View {
             guard let value = Double(candidate.valueText),
                   let minimum = Double(candidate.referenceMinText),
                   let maximum = Double(candidate.referenceMaxText),
+                  value.isFinite, minimum.isFinite, maximum.isFinite,
                   minimum <= maximum,
                   !candidate.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   !candidate.unit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -1428,12 +1429,13 @@ struct BloodLogSheetView: View {
             UINotificationFeedbackGenerator().notificationOccurred(.error)
             return
         }
-        guard let val = Double(valueString) else {
+        guard let val = Double(valueString), val.isFinite else {
             errorMsg = L10n.t("Invalid value format.", "请输入有效的数值。")
             UINotificationFeedbackGenerator().notificationOccurred(.error)
             return
         }
-        guard let rMin = Double(refMinString), let rMax = Double(refMaxString) else {
+        guard let rMin = Double(refMinString), let rMax = Double(refMaxString),
+              rMin.isFinite, rMax.isFinite else {
             errorMsg = L10n.t("Reference min and max are required.", "请输入标准上限和下限。")
             UINotificationFeedbackGenerator().notificationOccurred(.error)
             return
