@@ -24,24 +24,26 @@ struct PlusActionSheet: View {
                 ],
                 spacing: 16
             ) {
-                // Row 1
-                circleActionButton(icon: "square.and.pencil", label: "描述食物") {
-                    deferAction(.coach("描述我今天吃的中餐..."))
+                // Row 1 — Nutrition quick actions (hidden while VelaFeatureFlags.nutritionEnabled == false)
+                if VelaFeatureFlags.nutritionEnabled {
+                    circleActionButton(icon: "square.and.pencil", label: "描述食物") {
+                        deferAction(.coach("描述我今天吃的中餐..."))
+                    }
+
+                    circleActionButton(icon: "photo.badge.plus", label: "导入食物") {
+                        deferAction(.foodScanner("library"))
+                    }
+
+                    circleActionButton(icon: "camera.fill", label: "拍摄食物") {
+                        deferAction(.foodScanner("camera"))
+                    }
+
+                    // Row 2
+                    circleActionButton(icon: "barcode.viewfinder", label: "扫描食物") {
+                        deferAction(.foodScanner("barcode"))
+                    }
                 }
-                
-                circleActionButton(icon: "photo.badge.plus", label: "导入食物") {
-                    deferAction(.foodScanner("library"))
-                }
-                
-                circleActionButton(icon: "camera.fill", label: "拍摄食物") {
-                    deferAction(.foodScanner("camera"))
-                }
-                
-                // Row 2
-                circleActionButton(icon: "barcode.viewfinder", label: "扫描食物") {
-                    deferAction(.foodScanner("barcode"))
-                }
-                
+
                 // Center: Vela AI Mascot (Indigo Sparkles Gradient Circle) - now Coach
                 mascotCenterButton(label: "Coach") {
                     deferAction(.coach(nil))

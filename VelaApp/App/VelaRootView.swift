@@ -4,6 +4,14 @@ import UIKit
 enum VelaFeatureFlags {
     static let bevelParityInterfaceKey = "vela.feature.bevelParityInterface"
 
+    /// Product scope switches (2026-08): hide secondary feature entries while keeping
+    /// the underlying code in the repo. Flip back to `true` to re-enable instantly.
+    /// Nutrition (food log / photo / barcode) is hidden to narrow scope to the core
+    /// train–recover loop; Biological Age is hidden because it needs 9 blood-panel
+    /// inputs most users never have. Code paths stay intact behind these flags.
+    static let nutritionEnabled = false
+    static let biologicalAgeEnabled = false
+
     static func bevelParityInterfaceEnabled(
         defaults: UserDefaults = .standard,
         arguments: [String] = ProcessInfo.processInfo.arguments

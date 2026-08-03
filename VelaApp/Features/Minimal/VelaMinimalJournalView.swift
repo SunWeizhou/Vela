@@ -586,8 +586,10 @@ struct VelaMeView: View {
                 Divider().padding(.leading, 58)
                 hubActionCell(title: "健康档案", sub: wikiSub, icon: "doc.text.fill", color: VelaTheme.muted, destination: UserWikiArchiveView())
                 Divider().padding(.leading, 58)
-                hubActionCell(title: "生物资料", sub: bioSub, icon: "person.text.rectangle.fill", color: Color(hex: "#00A896"), destination: BiologyView())
-                Divider().padding(.leading, 58)
+                if VelaFeatureFlags.biologicalAgeEnabled {
+                    hubActionCell(title: "生物资料", sub: bioSub, icon: "person.text.rectangle.fill", color: Color(hex: "#00A896"), destination: BiologyView())
+                    Divider().padding(.leading, 58)
+                }
                 hubActionCell(title: "AI 增强", sub: aiModelSub, icon: "sparkles", color: VelaTheme.accent, destination: AIModelSettingsView())
                 Divider().padding(.leading, 58)
                 hubActionCell(title: "数据信号", sub: signalSub, icon: "waveform.path.ecg.rectangle.fill", color: Color(hex: "#30A2FF"), destination: DataCoverageView())

@@ -67,7 +67,10 @@ struct VelaVitalsView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 20) {
                 // 1. Health-signal reference or complete PhenoAge estimate
-                biologicalAgeHero
+                // (hidden while VelaFeatureFlags.biologicalAgeEnabled == false)
+                if VelaFeatureFlags.biologicalAgeEnabled {
+                    biologicalAgeHero
+                }
 
                 // 2. Other Biomarkers Section
                 otherBiomarkersSection
