@@ -184,12 +184,18 @@ private final class WatchSnapshotStore: NSObject, ObservableObject, WCSessionDel
         )
         guard let data = try? JSONEncoder().encode(edit) else { return }
         let message: [String: Any] = ["strengthSetEdit": data]
-        if WCSession.default.activationState == .activated, WCSession.default.isReachable {
-            WCSession.default.sendMessage(message, replyHandler: nil) { _ in
-                WCSession.default.transferUserInfo(message)
+        let session = WCSession.default
+        if session.activationState == .activated, session.isReachable {
+            session.sendMessage(message, replyHandler: nil) { _ in
+                session.transferUserInfo(message)
             }
-        } else if WCSession.default.activationState == .activated {
-            WCSession.default.transferUserInfo(message)
+        } else {
+            // Not reachable OR the session isn't activated yet (first seconds after
+            // launch). transferUserInfo() queues the transfer and Apple delivers it
+            // once the session becomes active+reachable — this must ALWAYS enqueue so
+            // an edit made before activation is not silently dropped (the old code
+            // had no branch for the not-yet-activated case and lost the edit).
+            session.transferUserInfo(message)
         }
     }
 

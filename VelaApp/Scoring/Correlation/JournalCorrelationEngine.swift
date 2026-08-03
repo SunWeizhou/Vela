@@ -142,8 +142,17 @@ struct JournalCorrelationEngine {
                         guard let targetDate = calendar.date(from: parseDateComponents(from: key)) else { continue }
                         guard let sampleDate = calendar.date(byAdding: .day, value: -lag, to: targetDate) else { continue }
                         
+                        // Only treat the habit as EXPOSED when it actually occurred.
+                        // value is the quick-entry state: 0 = ✕ "not done", 1 = "–"
+                        // neutral, 2 = ✓ "done", nil = tagged via a journal note.
+                        // Neutral (1) and not-done (0) must not be correlated as an
+                        // occurrence (previously any day containing the tag counted,
+                        // which let an explicit "neutral" bias the point-biserial r).
                         let isTagLogged = journalEntries.contains { entry in
-                            calendar.isDate(entry.createdAt, inSameDayAs: sampleDate) && entry.tags.contains(tag)
+                            calendar.isDate(entry.createdAt, inSameDayAs: sampleDate)
+                                && entry.tags.contains(tag)
+                                && entry.value != 0
+                                && entry.value != 1
                         }
 
                         if let outcomeVal = snapshotByDay[key].flatMap(outcome.1) {

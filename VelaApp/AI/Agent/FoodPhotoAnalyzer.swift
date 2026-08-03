@@ -136,6 +136,19 @@ final class FoodPhotoAnalyzer: Sendable {
     static let defaultModel = "kimi-k2.6"
     static let defaultEndpoint = URL(string: "https://api.moonshot.cn/v1/chat/completions")!
 
+    /// Robustly reads an integer from JSON that may decode as Int, Double, or
+    /// NSNumber (LLMs often emit e.g. 15.5 for grams/calories). `as? Int` alone
+    /// rejects Double-encoded numbers, silently zeroing macros/calories.
+    static func asInt(_ value: Any?) -> Int? {
+        switch value {
+        case let n as Int: return n
+        case let n as Double: return Int(n.rounded())
+        case let n as NSNumber: return Int(n.doubleValue.rounded())
+        case let s as String: return Int(s.trimmingCharacters(in: .whitespacesAndNewlines))
+        default: return nil
+        }
+    }
+
     private let apiKey: String
     private let model: String
     private let endpoint: URL
@@ -267,15 +280,17 @@ final class FoodPhotoAnalyzer: Sendable {
             }
         }
 
-        let totalCalories = json["total_calories"] as? Int ?? foods.reduce(0) { $0 + $1.calories }
+        // LLM JSON often emits numbers as Double/NSNumber (e.g. 15.5 g), which
+        // `as? Int` rejects; macros then silently became 0. Parse any numeric form.
+        let totalCalories = Self.asInt(json["total_calories"]) ?? foods.reduce(0) { $0 + $1.calories }
 
         // Parse macros
         let macrosJson = json["macros"] as? [String: Any]
         let macros = MacroBreakdown(
-            protein: macrosJson?["protein"] as? Int ?? 0,
-            carbs: macrosJson?["carbs"] as? Int ?? 0,
-            fat: macrosJson?["fat"] as? Int ?? 0,
-            fiber: macrosJson?["fiber"] as? Int ?? 0
+            protein: Self.asInt(macrosJson?["protein"]) ?? 0,
+            carbs: Self.asInt(macrosJson?["carbs"]) ?? 0,
+            fat: Self.asInt(macrosJson?["fat"]) ?? 0,
+            fiber: Self.asInt(macrosJson?["fiber"]) ?? 0
         )
 
         let healthScore = json["health_score"] as? String ?? "moderate"
