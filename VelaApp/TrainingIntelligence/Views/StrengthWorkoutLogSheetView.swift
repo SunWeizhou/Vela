@@ -25,6 +25,8 @@ struct StrengthWorkoutLogSheetView: View {
     @State private var closeAfterSummary = false
     @State private var now = Date()
     @State private var isLoaded = false
+    /// Guards against a fast double-tap on "完成" creating a duplicate workout.
+    @State private var isSaving = false
     @State private var showIgnoreUncompletedConfirmation = false
     @State private var showPlateCalculator = false
     @State private var showExerciseGrouping = false
@@ -48,7 +50,14 @@ struct StrengthWorkoutLogSheetView: View {
     }
 
     private var durationMinutes: Int {
-        max(1, Int(now.timeIntervalSince(startedAt) / 60))
+        // Editing an already-logged workout: its duration is a historical fact and
+        // `now` is meaningless here — `startedAt` was set to the original PAST date,
+        // so `now - startedAt` would inflate the duration to days and corrupt it.
+        // Keep the existing recorded duration instead.
+        if let editingWorkout {
+            return max(1, editingWorkout.durationMinutes)
+        }
+        return max(1, Int(now.timeIntervalSince(startedAt) / 60))
     }
 
     private var completedSetCount: Int {
@@ -111,7 +120,7 @@ struct StrengthWorkoutLogSheetView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完成") { requestSave() }
-                        .disabled(validExercises.isEmpty)
+                        .disabled(validExercises.isEmpty || isSaving)
                 }
             }
         }
@@ -498,6 +507,10 @@ struct StrengthWorkoutLogSheetView: View {
     }
 
     private func save(ignoringUncompletedSets: Bool) {
+        // Reject a fast double-tap so the same workout isn't committed twice.
+        guard !isSaving else { return }
+        isSaving = true
+        defer { isSaving = false }
         let validation = StrengthWorkoutSaveValidator.exercisesToSave(
             from: exercises,
             ignoringUncompletedSets: ignoringUncompletedSets

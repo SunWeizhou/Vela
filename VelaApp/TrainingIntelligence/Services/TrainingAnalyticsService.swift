@@ -560,7 +560,10 @@ struct XunjiTrainingImportService: Sendable {
         let start = train.startDate ?? dateFrom(datestr: trainDate, calendar: calendar)
         let end = train.endDate ?? start.addingTimeInterval(60 * 60)
         let durationMinutes = max(1, Int(end.timeIntervalSince(start) / 60))
-        let exercises = flattenExercises(from: train.movements)
+        let exercises = flattenExercises(
+            from: train.movements,
+            exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
+        )
         guard !exercises.isEmpty else { return nil }
         let externalID = train.localid.map(String.init) ?? "\(trainDate)-\(train.title ?? "workout")-\(Int(start.timeIntervalSince1970))"
         let metrics = train.movements.flatMap(\.sets).compactMap(\.metrics)
@@ -578,17 +581,27 @@ struct XunjiTrainingImportService: Sendable {
         )
     }
 
-    private func flattenExercises(from movements: [XunjiMovement]) -> [StrengthExerciseLog] {
+    private func flattenExercises(
+        from movements: [XunjiMovement],
+        exerciseLibrary: [ExerciseDefinitionRecord]
+    ) -> [StrengthExerciseLog] {
         var grouped: [String: StrengthExerciseLog] = [:]
         var order: [String] = []
 
         func appendSet(_ set: StrengthSetLog, movementName: String) {
             let name = movementName.trimmedNonEmpty ?? "未命名动作"
             if grouped[name] == nil {
+                // Resolve bodyweight equipment from the library so Xunji-imported
+                // bodyweight exercises (weight 0, unknown equipment) still count
+                // toward volume/fatigue via isEffective. Falls back to "其他".
+                let definition = exerciseLibrary.first {
+                    $0.canonicalKey == name.toCanonicalKey()
+                        || $0.name.caseInsensitiveCompare(name) == .orderedSame
+                }
                 grouped[name] = StrengthExerciseLog(
                     exerciseCanonicalKey: name.toCanonicalKey(),
                     name: name,
-                    equipment: "其他",
+                    equipment: definition?.equipment ?? "其他",
                     primaryMuscleGroup: nil,
                     sets: []
                 )
