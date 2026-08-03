@@ -478,10 +478,19 @@ struct VelaCoachView: View {
 
     @State private var inputText: String = ""
     @StateObject private var dictation = CoachDictationController()
+    /// What `inputText` held when the current dictation session began (or was last
+    /// overwritten by it). Used to avoid clobbering user keystrokes made while
+    /// dictating: only apply a new partial transcript if the field is unchanged
+    /// from the last value we dictated into it.
+    @State private var lastDictationApplied: String? = nil
     @FocusState private var isFocused: Bool
 
     // Keyboard tracking — only used for Tab Bar padding, not for manual layout shift
     @State private var isKeyboardVisible: Bool = false
+    /// Actual keyboard height (from keyboardWillShowFrameEnd). Used to lift the
+    /// composer above the software keyboard regardless of whether SwiftUI's
+    /// safeAreaInset auto-lift holds inside the ZStack of overlay layers.
+    @State private var keyboardHeight: CGFloat = 0
 
     // Drawer state management
     @State private var showHistoryDrawer = false
@@ -629,7 +638,12 @@ struct VelaCoachView: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 composerView
-                    .padding(.bottom, CoachChatLayout.bottomClearance(
+                    // Explicitly add the real keyboard height so the composer (and its
+                    // send button / TextField) clears the software keyboard even when
+                    // SwiftUI's safeAreaInset auto-lift is defeated by the ZStack of
+                    // surrounding overlay layers. bottomClearance covers the overlay-nav
+                    // (no-keyboard) case; keyboardHeight covers the keyboard case.
+                    .padding(.bottom, keyboardHeight + CoachChatLayout.bottomClearance(
                         presentation: presentation,
                         keyboardVisible: isKeyboardVisible,
                         usesOverlayNavigation: usesOverlayNavigation
@@ -680,14 +694,17 @@ struct VelaCoachView: View {
             await dashboardVM.refresh(modelContext: modelContext)
             await loadDataCoverageSummary()
         }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { note in
+            let height = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect)?.height ?? 0
             withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                 isKeyboardVisible = true
+                keyboardHeight = height
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                 isKeyboardVisible = false
+                keyboardHeight = 0
             }
         }
         .onChange(of: appState.coachRouteRevision) { _, _ in
@@ -751,6 +768,17 @@ struct VelaCoachView: View {
             }
             .interactiveDismissDisabled()
         }
+        .onChange(of: showOutboundConsent) { _, showing in
+            // If the sheet closed WITHOUT sending (user cancelled), the message was
+            // parked in pendingOutboundText while inputText was already cleared. Put
+            // it back so the user's text isn't silently lost or re-submitted later.
+            if !showing, let stranded = pendingOutboundText {
+                pendingOutboundText = nil
+                if inputText.isEmpty {
+                    inputText = stranded
+                }
+            }
+        }
         .sheet(isPresented: $showCalendarContext) {
             CoachCalendarContextSheet { context in
                 appendToDraft(context)
@@ -775,7 +803,13 @@ struct VelaCoachView: View {
         }
         .onChange(of: dictation.transcript) { _, transcript in
             guard !transcript.isEmpty else { return }
+            // Only overwrite if the field still holds what the last dictation update
+            // wrote (or is untouched at the session baseline). If the user has been
+            // typing/editing over the dictation, don't clobber their keystrokes.
+            let applied = lastDictationApplied ?? ""
+            guard inputText == applied else { return }
             inputText = transcript
+            lastDictationApplied = transcript
         }
         .onDisappear {
             dictation.stop()
@@ -968,6 +1002,7 @@ struct VelaCoachView: View {
                     if dictation.isRecording {
                         dictation.stop()
                     } else {
+                        lastDictationApplied = inputText
                         dictation.begin(existingText: inputText)
                     }
                 } label: {
@@ -1021,7 +1056,8 @@ struct VelaCoachView: View {
     private func appendToDraft(_ text: String) {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         inputText = trimmed.isEmpty ? text : trimmed + "\n" + text
-        isFocused = true
+        // Do not force keyboard focus here: the user may have dismissed the
+        // keyboard to read history, and summoning it unprompted is intrusive.
     }
 
     private func handleFileImport(_ result: Result<[URL], Error>) {
