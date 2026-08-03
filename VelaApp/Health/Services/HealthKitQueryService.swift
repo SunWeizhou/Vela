@@ -38,6 +38,25 @@ final class HealthKitQueryService: HealthQueryService {
         self.healthStore = healthStore
     }
 
+    /// HealthKit signals "this range simply has no samples" by throwing, not by
+    /// returning an empty result. Identify that benign condition by `HKError.Code`
+    /// only — never by `localizedDescription`, whose wording changes with the
+    /// system language and across iOS releases. Matching on localized text turned
+    /// a normal empty day into a thrown sync error on non-English devices.
+    nonisolated private static func isBenignHealthKitDataError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        guard nsError.domain == HKErrorDomain,
+              let code = HKError.Code(rawValue: nsError.code) else { return false }
+        switch code {
+        case .errorNoData,              // genuinely no samples in range
+             .errorInvalidArgument,     // predicate/type mismatch (preserved)
+             .errorAuthorizationDenied: // preserved existing swallow behavior
+            return true
+        default:
+            return false
+        }
+    }
+
     func sleepSummary(in range: DateRangeQuery) async throws -> SleepSummary? {
         guard let sleepType = HealthSignalCatalog.objectType(for: .sleepAnalysis) as? HKCategoryType else {
             return nil
@@ -114,10 +133,7 @@ final class HealthKitQueryService: HealthQueryService {
             let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
             let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, error in
                 if let error {
-                    let nsError = error as NSError
-                    if nsError.domain == HKErrorDomain && (nsError.code == 4 || nsError.code == 3) {
-                        continuation.resume(returning: [])
-                    } else if error.localizedDescription.contains("No data available") || error.localizedDescription.contains("predicate") {
+                    if Self.isBenignHealthKitDataError(error) {
                         continuation.resume(returning: [])
                     } else {
                         continuation.resume(throwing: error)
@@ -157,10 +173,7 @@ final class HealthKitQueryService: HealthQueryService {
             )
             let query = HKStatisticsQuery(quantityType: quantityType, quantitySamplePredicate: predicate, options: options) { _, statistics, error in
                 if let error {
-                    let nsError = error as NSError
-                    if nsError.domain == HKErrorDomain && (nsError.code == 4 || nsError.code == 3) {
-                        continuation.resume(returning: nil)
-                    } else if error.localizedDescription.contains("No data available") || error.localizedDescription.contains("predicate") {
+                    if Self.isBenignHealthKitDataError(error) {
                         continuation.resume(returning: nil)
                     } else {
                         continuation.resume(throwing: error)
@@ -189,10 +202,7 @@ final class HealthKitQueryService: HealthQueryService {
             let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
             let query = HKSampleQuery(sampleType: quantityType, predicate: predicate, limit: 1, sortDescriptors: [sort]) { _, samples, error in
                 if let error {
-                    let nsError = error as NSError
-                    if nsError.domain == HKErrorDomain && (nsError.code == 4 || nsError.code == 3) {
-                        continuation.resume(returning: nil)
-                    } else if error.localizedDescription.contains("No data available") || error.localizedDescription.contains("predicate") {
+                    if Self.isBenignHealthKitDataError(error) {
                         continuation.resume(returning: nil)
                     } else {
                         continuation.resume(throwing: error)
@@ -220,10 +230,7 @@ final class HealthKitQueryService: HealthQueryService {
             let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
             let query = HKSampleQuery(sampleType: workoutType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, error in
                 if let error {
-                    let nsError = error as NSError
-                    if nsError.domain == HKErrorDomain && (nsError.code == 4 || nsError.code == 3) {
-                        continuation.resume(returning: [])
-                    } else if error.localizedDescription.contains("No data available") || error.localizedDescription.contains("predicate") {
+                    if Self.isBenignHealthKitDataError(error) {
                         continuation.resume(returning: [])
                     } else {
                         continuation.resume(throwing: error)
@@ -655,10 +662,7 @@ final class HealthKitQueryService: HealthQueryService {
                 sortDescriptors: [sort]
             ) { _, samples, error in
                 if let error {
-                    let nsError = error as NSError
-                    if nsError.domain == HKErrorDomain && (nsError.code == 4 || nsError.code == 3) {
-                        continuation.resume(returning: [])
-                    } else if error.localizedDescription.contains("No data available") {
+                    if Self.isBenignHealthKitDataError(error) {
                         continuation.resume(returning: [])
                     } else {
                         continuation.resume(throwing: error)

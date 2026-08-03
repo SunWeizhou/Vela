@@ -240,6 +240,13 @@ final class HealthKitSyncEngine {
                 )
                 try modelContext.save()
             } catch {
+                // A failed score save must be retried. Mark the day dirty so the
+                // cursor reconciliation below keeps it in pendingDirtyDayIdentifiers
+                // instead of silently dropping it (which previously left the user
+                // stuck on a stale/empty score for that day forever).
+                failedDayIdentifiers.insert(
+                    DailyHealthSummaryRecord.dayIdentifier(for: dayStart, calendar: calendar)
+                )
                 PipelineDiagnosticsLogger.log(
                     modelContext: modelContext,
                     stage: "HealthKitSyncEngine.syncPastDays.saveComputedSnapshot",
