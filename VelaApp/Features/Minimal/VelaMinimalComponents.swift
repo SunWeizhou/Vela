@@ -87,7 +87,11 @@ struct VelaMetricDetailView: View {
     @State var heartRateZoneSummary: HeartRateZoneSummary?
     @State var isLoadingHeartRateZones = false
     
-    @State var selectedRange: DetailTimeRange = .day
+    // Default to a range that actually renders: `.day` returns an intentionally
+    // empty chart (the metric pages are daily snapshots), so every detail page
+    // opened showing "保持记录以显示趋势" even with months of history. Month (30d)
+    // shows a real trend immediately.
+    @State var selectedRange: DetailTimeRange = .month
     @State var rawSelectedDate: Date? = nil
 
     var dashboard: DashboardSummary { dashboardVM.dashboard }
