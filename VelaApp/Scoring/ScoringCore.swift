@@ -7,7 +7,7 @@ public protocol ScoreEngine {
     func calculate(from input: Input) -> Output
 }
 
-public enum MetricBand: String, Codable, Hashable {
+public enum MetricBand: String, Codable, Hashable, Sendable {
     case veryLow = "veryLow"
     case low = "low"
     case normal = "normal"
@@ -15,20 +15,20 @@ public enum MetricBand: String, Codable, Hashable {
     case veryHigh = "veryHigh"
 }
 
-public enum MetricConfidence: String, Codable, Hashable {
+public enum MetricConfidence: String, Codable, Hashable, Sendable {
     case low = "low"
     case medium = "medium"
     case high = "high"
 }
 
-public enum MetricSource: String, Codable, Hashable {
+public enum MetricSource: String, Codable, Hashable, Sendable {
     case healthKit = "healthKit"
     case userInput = "userInput"
     case derived = "derived"
     case mixed = "mixed"
 }
 
-public enum ScoredHealthDomain: String, Codable, Hashable, CaseIterable {
+public enum ScoredHealthDomain: String, Codable, Hashable, CaseIterable, Sendable {
     case recovery
     case sleep
     case strain
@@ -87,7 +87,7 @@ public enum TrainingLoadStatus: String, Codable, Hashable {
     case highRisk = "highRisk"
 }
 
-public struct MetricResult: Codable, Hashable {
+public struct MetricResult: Codable, Hashable, Sendable {
     public var domain: ScoredHealthDomain
     public var name: String
     public var value: Double?              // 0–100; nil if not computable

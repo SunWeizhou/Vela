@@ -33,7 +33,7 @@ struct BodyStateDriver: Codable, Hashable, Identifiable, Sendable {
     var source: String
 }
 
-struct BodyState: Codable, Hashable {
+struct BodyState: Codable, Hashable, Sendable {
     var date: Date
     var readiness: BodyReadiness
     var recovery: MetricResult

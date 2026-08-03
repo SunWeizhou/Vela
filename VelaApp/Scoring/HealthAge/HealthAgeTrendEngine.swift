@@ -32,7 +32,7 @@ enum HealthAgeTrendLabel: String, Codable, Hashable {
     case worsening = "Worsening"
 }
 
-struct HealthAgeTrendResult: Codable, Hashable {
+struct HealthAgeTrendResult: Codable, Hashable, Sendable {
     var trendScore: Double
     var label: HealthAgeTrendLabel
     var confidence: MetricConfidence

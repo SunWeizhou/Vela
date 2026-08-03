@@ -102,7 +102,7 @@ struct StrainActivitySummary: Codable, Hashable {
     var workouts: [WorkoutSummary]
 }
 
-public struct WorkoutSummary: Identifiable, Codable, Hashable {
+public struct WorkoutSummary: Identifiable, Codable, Hashable, Sendable {
     public var id: UUID
     public var start: Date
     public var end: Date

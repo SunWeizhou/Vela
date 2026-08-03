@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-struct DashboardSummary: Hashable, @unchecked Sendable {
+struct DashboardSummary: Hashable, Sendable {
     var date: Date
     var sleepSummary: SleepSummary
     var sleepScore: MetricResult
