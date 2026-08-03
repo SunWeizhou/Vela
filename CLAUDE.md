@@ -22,13 +22,19 @@ Vela 是一个 local-first 的 iOS 健康分析 App（SwiftUI + SwiftData + Heal
 
 - **Target**: `Vela`
 - **Scheme**: `Vela`
-- **Bundle ID**: `com.sunweizhou.Vela`
+- **Bundle ID**: `com.sunweizhou.Vela4`（Watch 为 `com.sunweizhou.Vela4.watchkitapp`）
 - **Deployment**: iPhone B1B2A1DB-2B5C-5C02-A222-B051240A22EA（`Weizhou的iPhone`，iPhone 16 Pro）
 - **Project**: `/Users/sunweizhou/Developer/Vela/Vela.xcodeproj`
 - **Backend**: `/Users/sunweizhou/Developer/Vela/VelaBackend` (Vapor 4, SQLite) — **当前未启用**，iOS 端直连 DeepSeek API
 - **LLM Provider**: DeepSeek (`deepseek-v4-flash` / `deepseek-v4-pro`)，API key 存在 iOS Keychain
 - **Current Branch**: `main`（构建与诊断均基于此；已推送至 origin 的 checkpoint `20b24c87`）
 - **GitHub**: `https://github.com/SunWeizhou/Vela`
+
+### 范围决策（2026-08，经用户确认）
+
+- **功能开关**：Nutrition（营养）与 Biological Age（生物年龄）的用户可见入口已通过 `VelaFeatureFlags.nutritionEnabled / biologicalAgeEnabled`（默认 `false`，见 `VelaApp/App/VelaRootView.swift`）隐藏，底层代码全部保留——改回 `true` 即恢复。入口消失是**有意为之**，勿当作 bug 或重新加回。
+- **Bevel parity 已冻结**：像素级 1:1 视觉对标停止，降级为信息架构参考，不再追 Bevel 版本。
+- **导航以代码为准**：顶层为 4 Tab（今日/训练/教练/我的）。仓库中的 5 Tab parity 模式（`ParityTab`）与旧设计稿（figma `today-os` 的单一 Readiness 总分）均已冻结/过时，勿以它们为准。
 
 ## 构建与推送
 
@@ -196,11 +202,12 @@ HealthKit → HealthKitSyncEngine (2-pass: raw snapshot → DailyHealthComputati
 
 ### 已知改进空间
 
-- **HRV 只用了 SDNN**：HealthKit 同时提供 RMSSD（更好的迷走神经代理）和 SDNN，RMSSD 未使用（`HealthKitQueryService` 只请求 `.heartRateVariabilitySDNN`）
-- **Readiness 置信度硬编码**：`TodayCommandState` 每场景硬编码 0.86/0.78/0.74/0.72 等，且 `dynamicConfidence` 有 `max(0.3, …)` 下限——数据全低时也会拔高，未以用户 adoption/accuracy feedback 校准（`DailyDecisionFeedbackRecord` 存在但未回灌）
-- **局部疲劳阈值双系统不一致**：`TodayCommandState` 用 `setsLast48h >= 15` 触发 swap，`TrainingIntelligenceModels` 用 `>= 14` 判高——两处阈值打架
-- **EnergyBankEngine 的 EWMA 用最旧值正向递推**（`ewma` 从 oldest 开始），非 Banister 的今天反向递归，数值略有差异（已确认是 EWMA 而非简单平均）
-- **训练数据无单一事实来源**：HealthKit `WorkoutEventRecord` + 本地 `StrengthWorkoutRecord` + XunJi `XunjiWorkoutMirrorRecord` 三条路径合并进 `RecentTrainingSummary`，可能重复计数
+- **HRV 只用了 SDNN**（仍属实）：HealthKit 同时提供 RMSSD（更好的迷走神经代理）和 SDNN，RMSSD 未使用（`HealthKitQueryService` 只请求 `.heartRateVariabilitySDNN`）
+- **Readiness 置信度硬编码**（部分已修）：`TodayCommandState` 仍按场景硬编码 0.86/0.78/0.74 等系数，但 `max(0.3, …)` 拔高下限已移除（现为 `0.50*recConf + 0.30*sleepConf + 0.20*stressConf` 加权）；`DailyDecisionFeedbackRecord` 存在但仍未回灌校准
+- **EnergyBankEngine 的 EWMA 用最旧值正向递推**：`ewma` 从 oldest 正向递推（标准 EWMA 本就正向计算），与 Banister 反向递归实现存在数值差异——属实现差异而非正确性 bug
+- **训练数据无单一事实来源**（仍属实）：HealthKit `WorkoutEventRecord` + 本地 `StrengthWorkoutRecord` + XunJi `XunjiWorkoutMirrorRecord` 三条路径合并进 `RecentTrainingSummary`，可能重复计数
+
+> ✅ 已修复并核实（2026-08）：「局部疲劳阈值 15 vs 14 双系统不一致」已统一为单一定义；「全链路无 retry/backoff」已由 `RetryingAgentChatProvider` 指数退避覆盖；「无 max_tokens 限制」不实（`DeepSeekProvider` 已传 `maxTokens: 2048`）。此外 Recovery 呼吸率 Z-score 的 SD 已统一为 `PersonalBaselineEngine.sampleStandardDeviation`（样本 SD, n-1）。
 
 ## VelaBackend（Vapor 4）— 当前未启用
 
