@@ -88,6 +88,12 @@ enum BackgroundTaskManager {
         schedule()
 
         let handle = Task { @MainActor in
+            // Always signal completion exactly once, even if the async work is
+            // cancelled (expirationHandler cancels this task). Failing to call
+            // setTaskCompleted lets the OS mark the app as failing background work
+            // and throttle future BGAppRefreshTask grants.
+            var succeeded = false
+            defer { task.setTaskCompleted(success: succeeded) }
             do {
                 let config = AutoAgentConfig.shared
                 let hour = Calendar.current.component(.hour, from: Date())
@@ -115,7 +121,7 @@ enum BackgroundTaskManager {
                 ).loadDashboard(for: Date(), modelContext: modelContext, syncDays: 7)
                 try? DailyLogService.refresh(dashboard: dashboard)
 
-                if config.autoEveningWikiSync, (hour >= 23 || hour < 4) {
+                if config.autoEveningWikiSync, (hour >= 21 || hour < 4) {
                     logger.info("Running daily profile sync in background.")
                     await EveningWikiSyncAgent.shared.runIfNeeded(
                         modelContext: modelContext,
@@ -137,7 +143,7 @@ enum BackgroundTaskManager {
                 bgRun.endedAt = Date()
                 bgRun.outputSummary = "Background refresh completed. HealthKit sync window: 7 days."
                 try? modelContext.save()
-                task.setTaskCompleted(success: true)
+                succeeded = true
             } catch {
                 logger.error("Background task failed: \(error.localizedDescription)")
                 if let modelContainer = try? VelaModelContainer.make() {
@@ -153,7 +159,6 @@ enum BackgroundTaskManager {
                     ))
                     try? modelContext.save()
                 }
-                task.setTaskCompleted(success: false)
             }
         }
 

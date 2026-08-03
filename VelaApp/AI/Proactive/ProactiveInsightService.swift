@@ -371,7 +371,9 @@ final class ProactiveIntelligenceOrchestrator: Sendable {
         content.sound = .default
         
         let request = UNNotificationRequest(
-            identifier: "vela_alert_\(insight.focus)",
+            // Unique per alert: focus alone (~7 values) reused the same identifier,
+            // so a new alert for the same focus silently replaced the previous one.
+            identifier: "vela_alert_\(insight.focus)_\(UUID().uuidString)",
             content: content,
             trigger: nil
         )
