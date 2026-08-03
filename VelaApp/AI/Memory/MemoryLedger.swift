@@ -83,7 +83,7 @@ final class MemoryLedger {
         record.previousContent = previousContent
         record.previousContentHash = ContentHash.hash(previousContent)
 
-        try WikiFileService.updateSection(
+        let wroteContent = try WikiFileService.updateSection(
             filename: record.targetFile,
             content: record.content,
             mode: .merge
@@ -93,8 +93,19 @@ final class MemoryLedger {
 
         let newContent = (try? String(contentsOf: WikiFileService.localURL(for: record.targetFile), encoding: .utf8)) ?? ""
         record.newContentHash = ContentHash.hash(newContent)
-        record.status = MemoryProposalStatus.accepted.rawValue
         record.operation = "apply"
+        if !wroteContent {
+            // The update did not actually change the wiki (unwritable file, or every
+            // paragraph was deduplicated out). Do NOT mark accepted — that would show
+            // the user a "saved" memory that never reached the wiki (silent data loss).
+            // Mark rejected so the user can recall/retry instead of believing it stuck.
+            record.status = MemoryProposalStatus.rejected.rawValue
+            record.userNote = "写入 wiki 未生效（目标文件不可写或内容为重复），已拒绝以便重试。"
+            logger.warning("Proposal \(proposalId) confirmed but wiki unchanged → marked rejected: \(record.targetFile)")
+            try modelContext.save()
+            return
+        }
+        record.status = MemoryProposalStatus.accepted.rawValue
         try modelContext.save()
 
         logger.info("Memory proposal confirmed and written: \(record.targetFile)")
@@ -235,7 +246,7 @@ final class AutomaticMemoryExtractor: Sendable {
         // 1. Injury / Pain signals
         if lower.contains("痛") || lower.contains("拉伤") || lower.contains("不适") || lower.contains("受伤") || lower.contains("pain") || lower.contains("injured") {
             let record = try ledger.createProposal(
-                targetFile: "user_profile.md",
+                targetFile: "profile.md",
                 memoryType: .constraint,
                 content: "- 【伤病/不适记录】: \(text)",
                 evidence: "从用户输入中自动提炼伤病不适信号: \"\(text)\"",
@@ -248,7 +259,7 @@ final class AutomaticMemoryExtractor: Sendable {
         // 2. Dietary preferences
         if lower.contains("咖啡因") || lower.contains("低碳水") || lower.contains("过敏") || lower.contains("caffeine") || lower.contains("allergic") {
             let record = try ledger.createProposal(
-                targetFile: "user_profile.md",
+                targetFile: "profile.md",
                 memoryType: .preference,
                 content: "- 【饮食偏好/禁忌】: \(text)",
                 evidence: "从用户输入中自动提炼饮食偏好信号: \"\(text)\"",

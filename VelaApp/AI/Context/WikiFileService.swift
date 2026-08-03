@@ -110,11 +110,17 @@ enum WikiFileService {
 
     // MARK: - Write (Agent-driven)
 
-    /// Agent calls this to update a specific wiki section
-    static func updateSection(filename: String, content: String, mode: WikiUpdateMode = .append) throws {
+    /// Agent calls this to update a specific wiki section.
+    /// - Returns: `true` if the file content actually changed; `false` if the
+    ///   target file is not allowed, every new paragraph was deduplicated out, or
+    ///   the new content equals the existing content. Callers (e.g. MemoryLedger)
+    ///   must NOT mark a write as successful when this returns `false` — otherwise
+    ///   a proposal would read as "accepted" while its content never reached the wiki.
+    @discardableResult
+    static func updateSection(filename: String, content: String, mode: WikiUpdateMode = .append) throws -> Bool {
         guard allowedFilenames.contains(filename) else {
             logger.warning("Wiki update rejected: unknown file '\(filename)'")
-            return
+            return false
         }
 
         let url = localURL(for: filename)
@@ -151,7 +157,7 @@ enum WikiFileService {
 
             guard !newDeduplicated.isEmpty else {
                 logger.info("Wiki merge skipped: all paragraphs are duplicates for '\(filename)'")
-                return
+                return false
             }
 
             let timestamp = ISO8601DateFormatter().string(from: Date())
@@ -160,6 +166,7 @@ enum WikiFileService {
         }
 
         try newContent.write(to: url, atomically: true, encoding: .utf8)
+        return true
     }
 
     static func replacingStructuredFields(
