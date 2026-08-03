@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-PROJECT_DIR="/Users/sunweizhou/Desktop/AI Project/Vela"
+PROJECT_DIR="/Users/sunweizhou/Developer/Vela"
 DEVICE_NAME="Weizhou的iPhone"
-DEVICE_ID="00008140-00164DE022C3801C"
+DEVICE_ID="B1B2A1DB-2B5C-5C02-A222-B051240A22EA"
 
 echo "🔨 Building Vela..."
 cd "$PROJECT_DIR"

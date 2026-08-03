@@ -23,28 +23,31 @@ Vela 是一个 local-first 的 iOS 健康分析 App（SwiftUI + SwiftData + Heal
 - **Target**: `Vela`
 - **Scheme**: `Vela`
 - **Bundle ID**: `com.sunweizhou.Vela`
-- **Deployment**: iPhone B1B2A1DB-2B5C-5C02-A222-B051240A22EA
-- **Project**: `/Users/sunweizhou/Desktop/AI Project/Vela/Vela.xcodeproj`
-- **Backend**: `/Users/sunweizhou/Desktop/AI Project/Vela/VelaBackend` (Vapor 4, SQLite) — **当前未启用**，iOS 端直连 DeepSeek API
+- **Deployment**: iPhone B1B2A1DB-2B5C-5C02-A222-B051240A22EA（`Weizhou的iPhone`，iPhone 16 Pro）
+- **Project**: `/Users/sunweizhou/Developer/Vela/Vela.xcodeproj`
+- **Backend**: `/Users/sunweizhou/Developer/Vela/VelaBackend` (Vapor 4, SQLite) — **当前未启用**，iOS 端直连 DeepSeek API
 - **LLM Provider**: DeepSeek (`deepseek-v4-flash` / `deepseek-v4-pro`)，API key 存在 iOS Keychain
-- **Current Branch**: `codex/vela-3-active-coach-os`
+- **Current Branch**: `main`（构建与诊断均基于此；已推送至 origin 的 checkpoint `20b24c87`）
 - **GitHub**: `https://github.com/SunWeizhou/Vela`
 
 ## 构建与推送
 
 ```bash
 # 构建到手机（先确认手机已连接）
-cd "/Users/sunweizhou/Desktop/AI Project/Vela"
+cd "/Users/sunweizhou/Developer/Vela"
 DEVICE="B1B2A1DB-2B5C-5C02-A222-B051240A22EA"
 xcodebuild -project Vela.xcodeproj -scheme Vela -destination "id=$DEVICE" -configuration Debug -allowProvisioningUpdates build
 
 # 推送已构建产物到手机（只改 Swift 代码时可直接执行）
+# 产物路径：~/Developer/Vela-DerivedData/Build/Products/Debug-iphoneos/Vela.app
 xcrun devicectl device install app --device "$DEVICE" \
-  "/Users/sunweizhou/Library/Developer/Xcode/DerivedData/Vela-ggnamhqobqcizngochzqdybdclxf/Build/Products/Debug-iphoneos/Vela.app"
+  ~/Developer/Vela-DerivedData/Build/Products/Debug-iphoneos/Vela.app
 
-# 仅检查编译（不连手机）
-xcodebuild -project Vela.xcodeproj -scheme Vela -sdk iphoneos -configuration Debug build
+# 仅检查编译（不连手机，建议 macOS 本机 Debug 仿真校验，避免写在 iCloud 同步目录）
+xcodebuild -project Vela.xcodeproj -scheme Vela -configuration Debug -derivedDataPath ~/Developer/Vela-DerivedData build
 ```
+
+> ⚠️ **工程必须放在非 iCloud 同步目录**（当前在 `~/Developer/Vela`）。若放回 iCloud 同步的桌面/文稿，xcodebuild 会在 `NSFileCoordinator _blockOnAccessClaim` 处死锁，无法解析工程。`DerivedData` 显式指到 `~/Developer/Vela-DerivedData`，避免默认走 iCloud。
 
 ## 前端架构：Apple Design System + Signal Intelligence（2026-07-13 更新）
 
@@ -135,7 +138,7 @@ HealthKit → HealthKitSyncEngine (2-pass: raw snapshot → DailyHealthComputati
 ### 历史数据组装
 
 - `hrvHistory` / `rhrHistory`: 从 SwiftData 42 天快照中 compactMap 提取，用于 Recovery 引擎 MAD 基线计算
-- `last28DaysDailyLoads`: 从快照 `dailyLoad` 字段提取，用于 Strain 引擎 ATL/CTL/ACWR（当前用简单平均，非 Banister EWMA）
+- `last28DaysDailyLoads`: 从快照 `dailyLoad` 字段提取，用于 Strain 引擎 ATL/CTL/ACWR（`StrainScoreEngine` 已用 EWMA `2.0/(28+1)`）
 - `strainHistory`: 从快照 `strainScore` 提取，用于 EnergyBank 引擎 ATL/CTL/TSB 计算
 
 关键类型：
@@ -184,7 +187,7 @@ HealthKit → HealthKitSyncEngine (2-pass: raw snapshot → DailyHealthComputati
 | `StressIndexEngine` | `Scoring/Stress/StressIndexEngine.swift` | 6 因子加权: RHR↑ (25%), HRV↓ (25%), RR↑ (15%), Temp (10%), SleepDebt (15%), Load (10%) + 运动窗口排除 | Thayer (2012) HRV-压力 meta-analysis，各单因子有文献 |
 | `EnergyBankEngine` | `Scoring/EnergyBank/EnergyBankEngine.swift` | Firstbeat-inspired charge/discharge + ATL(7d)/CTL(42d)/TSB + 正念/小憩充电 | Firstbeat 专有算法启发式还原 (Garmin) |
 | `HealthAgeTrendEngine` | `Scoring/HealthAge/HealthAgeTrendEngine.swift` | 多因子趋势方向评分 → improving/stable/worsening | 启发式，VO2Max/RHR/Sleep/Steps 等权重 |
-| `BiologicalAgeEngine` | `Scoring/Biology/BiologicalAgeEngine.swift` | Levine PhenoAge 临床化验模型（9 项血液指标 + 年龄）| Levine et al. (2018, *Aging*)，逐字实现论文回归系数，**当前闲置未接入** |
+| `BiologicalAgeEngine` | `Scoring/Biology/BiologicalAgeEngine.swift` | Levine PhenoAge 临床化验模型（9 项血液指标 + 年龄）| Levine et al. (2018, *Aging*)，逐字实现论文回归系数（**已接入**，见 `CoachContextAssembler`/`BiologyView`/`Vitals` 调用点） |
 | `BodyInterpreterEngine` | `Scoring/BodyInterpreter/BodyInterpreterEngine.swift` | 多系统疲劳分析 + 主要限制因子 + 训练窗口 + 风险标记 + 恢复任务 | 专家推理框架 |
 | `JournalCorrelationEngine` | `Scoring/Correlation/JournalCorrelationEngine.swift` | 行为标签 vs 次日体征滞后关联分析 | Spearman + 点二列相关，刚提高最低样本门槛 |
 | `DailyPlanLimiterEngine` | `Scoring/DailyPlan/DailyPlanLimiterEngine.swift` | 规则引擎: sleep/recovery/stress/load/temp/手记 → keep/reduce/swap/rest | 保守安全规则，任何 severity 3 → rest |
@@ -193,11 +196,11 @@ HealthKit → HealthKitSyncEngine (2-pass: raw snapshot → DailyHealthComputati
 
 ### 已知改进空间
 
-- **ATL/CTL 用简单平均而非 EWMA**：Banister 原模型要求指数加权衰减 τ=7/42 天，当前 `EnergyBankEngine` 用 `average()`
-- **HRV 只用了 SDNN**：HealthKit 同时提供 RMSSD（更好的迷走神经代理）和 SDNN，RMSSD 未使用
-- **Readiness 置信度硬编码**：0.32/0.86/0.78... 未基于用户数据统计校准
-- **BiologicalAgeEngine 闲置**：PhenoAge 公式完整实现但无生产调用路径
-- **局部疲劳阈值过敏感**：`setsLast48h >= 10` 触发 swap，一个 push session 即超过
+- **HRV 只用了 SDNN**：HealthKit 同时提供 RMSSD（更好的迷走神经代理）和 SDNN，RMSSD 未使用（`HealthKitQueryService` 只请求 `.heartRateVariabilitySDNN`）
+- **Readiness 置信度硬编码**：`TodayCommandState` 每场景硬编码 0.86/0.78/0.74/0.72 等，且 `dynamicConfidence` 有 `max(0.3, …)` 下限——数据全低时也会拔高，未以用户 adoption/accuracy feedback 校准（`DailyDecisionFeedbackRecord` 存在但未回灌）
+- **局部疲劳阈值双系统不一致**：`TodayCommandState` 用 `setsLast48h >= 15` 触发 swap，`TrainingIntelligenceModels` 用 `>= 14` 判高——两处阈值打架
+- **EnergyBankEngine 的 EWMA 用最旧值正向递推**（`ewma` 从 oldest 开始），非 Banister 的今天反向递归，数值略有差异（已确认是 EWMA 而非简单平均）
+- **训练数据无单一事实来源**：HealthKit `WorkoutEventRecord` + 本地 `StrengthWorkoutRecord` + XunJi `XunjiWorkoutMirrorRecord` 三条路径合并进 `RecentTrainingSummary`，可能重复计数
 
 ## VelaBackend（Vapor 4）— 当前未启用
 
@@ -255,12 +258,12 @@ iOS 端只发摘要 `HealthContext`，原始 HealthKit 数据永不离设备。�
 
 | 子模块 | 文件 | 职责 |
 |--------|------|------|
-| Provider | `DeepSeekProvider.swift` | DeepSeek API（`api.deepseek.com`），SSE streaming（60ms throttle），temperature 0.4，模型 `deepseek-v4-flash`/`deepseek-v4-pro`。**无 retry/backoff** |
+| Provider | `DeepSeekProvider.swift` | DeepSeek API（`api.deepseek.com`），SSE streaming（流式逐 delta 下发，**无 60ms throttle**——该说法不实），temperature 0.4，模型 `deepseek-v4-flash`/`deepseek-v4-pro`。**重试在 `AgentLoop.RetryingAgentChatProvider` 层，指数退避、retry 5xx/429/408/网络/超时** |
 | Provider | `LLMProvider.swift` | LLM Provider 协议 + ChatMessage/LLMResponse/Value 类型 |
 | Provider | `WebSearchService.swift` | DuckDuckGo HTML scraping — **dead code，实际使用 WebSearchHelper (Bing)** |
-| Agent | `AgentLoop.swift` | Agent 工具调用循环: 发送消息 → 检查 tool_calls → 执行工具 → 追加结果 → 循环（maxIterations=3）→ 流式最终响应。**无重试、无取消传播** |
+| Agent | `AgentLoop.swift` | Agent 工具调用循环: 发送消息 → 检查 tool_calls → 执行工具 → 追加结果 → 循环（maxIterations=3）→ 流式最终响应。**重试在 `RetryingAgentChatProvider`（外包一层）；无用户取消传播、整段无总超时（仅 per-tool 20s / per-request 120-180s）** |
 | Agent | `AgentTool.swift` | AgentTool 协议 + ToolRegistry + ToolExecutionContext |
-| Agent | `ToolFactory.swift` | 9 个 Tool 注册: WebSearch, UpdateWiki, HealthData, StrengthWorkoutHistory, JournalCorrelation(stub), FoodLog, TrainingPlan, CreateTrainingPlan, RenderCorrelationChart |
+| Agent | `ToolFactory.swift` | **14 个 Tool** 注册（`allTools`）: WebSearch, UpdateWiki, TodayHealth, HealthHistory, HealthTrend, UnifiedWorkoutHistory, StrengthWorkoutHistory, TrainingResponseHistory, JournalCorrelation, FoodLog, TrainingPlan, CreateTrainingPlan, DeleteTrainingPlan, RenderCorrelationChart |
 | Agent | `WebSearchHelper.swift` | Bing HTML scraping（活跃实现，但违反 ToS） |
 | Agent | `FoodPhotoAnalyzer.swift` | Kimi Vision API（Moonshot），`kimi-k2.6` 模型，JPEG 0.7 压缩 → base64 → 解析食物/json |
 
@@ -291,7 +294,7 @@ iOS 端只发摘要 `HealthContext`，原始 HealthKit 数据永不离设备。�
 - 新前端代码中 `body` 不能用作存储属性名（与 SwiftUI `body` 冲突），用 `bodyText` 替代
 - LocalizedStringKey 在 Swift 6 下有 Sendable 警告，用 computed property 而非 stored let
 - 设计 Token 使用新名称（`fg`/`bg`/`cardBg`），旧名称作为向后兼容别名保留
-- Coach streaming 使用 60ms throttle（`DeepSeekProvider`），防止 UI 闪烁
+- Coach streaming 使用 SSE 逐 delta 下发（`DeepSeekProvider`）；历史上 CLAUDE.md 曾写"60ms throttle"，但代码中不存在该节流——以实际实现为准。UI 层的滚动/动画节流在视图层处理。
 - Coach 键盘交互：通过 `NotificationCenter` 监听 `keyboardWillShow`/`keyboardWillHide`，使用 `isKeyboardVisible` 状态控制底部 padding
 - 根目录的 `Vela*.swift` 和 `VelaApple*.swift` 文件是 Stitch 设计参考，实际代码在 `VelaApp/` 中
 - **测试**: `xcodebuild test` 测试全部通过（100% pass rate）
