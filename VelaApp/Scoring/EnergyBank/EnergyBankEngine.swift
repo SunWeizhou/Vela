@@ -77,9 +77,9 @@ public struct EnergyBankEngine: ScoreEngine {
 
         // 1. Overnight Stability (100 base)
         var overnightStability = 100.0
-        if let bodyTempDelta = input.bodyTempDelta, bodyTempDelta > 0.5 {
+        if let bodyTempDelta = input.bodyTempDelta, bodyTempDelta > 1.0 {
             overnightStability -= 15.0
-            reasons.append("夜间体温升高，扣除稳定性基准分")
+            reasons.append("夜间体温明显升高，扣除稳定性基准分")
         }
         if let rrZ = input.respiratoryRateZ, rrZ > 1.5 {
             overnightStability -= 10.0

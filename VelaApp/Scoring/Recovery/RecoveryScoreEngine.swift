@@ -192,7 +192,7 @@ public struct RecoveryScoreEngine: ScoreEngine {
 
         // 5. Red Flag Modifiers
         var penalty = 0.0
-        if let bodyTempDelta = input.bodyTempDelta, bodyTempDelta >= 0.5 {
+        if let bodyTempDelta = input.bodyTempDelta, bodyTempDelta >= 1.0 {
             penalty += 8.0
             reasons.append("体温相对基线偏高 (\(String(format: "+%.1f", bodyTempDelta))°C)，恢复评分已保守下调")
         }

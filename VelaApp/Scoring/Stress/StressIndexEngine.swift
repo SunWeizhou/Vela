@@ -191,9 +191,13 @@ public struct StressIndexEngine: ScoreEngine {
         // 4. Temp Stress (10%)
         if let tempDelta = input.bodyTempDelta {
             let tempStress: Double
-            if abs(tempDelta) < 0.3 {
+            // Normal circadian/day-to-day body-temp variation spans ~±0.6°C, so only
+            // departures beyond that should raise stress. Was previously over-sensitive
+            // (flagged at ±0.3/0.5/0.6°C), which fired on healthy users every day and
+            // dragged Recovery/Energy/Stress low with normal raw signals.
+            if abs(tempDelta) < 0.6 {
                 tempStress = 20.0
-            } else if abs(tempDelta) < 0.6 {
+            } else if abs(tempDelta) < 1.0 {
                 tempStress = 50.0
                 reasons.append("夜间皮肤温度检测到轻微波动")
             } else {

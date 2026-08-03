@@ -227,7 +227,10 @@ final class ScoringEngineTests: XCTestCase {
         neutral.wristTemperature = 36.2
 
         var elevated = neutral
-        elevated.wristTemperature = 36.9
+        // +1.4°C — a genuinely elevated temp. Normal circadian/day-to-day body-temp
+        // variation spans ~±0.5–0.6°C and must NOT trigger the recovery penalty;
+        // only a clear fever-range departure (≥1.0°C) should.
+        elevated.wristTemperature = 37.6
 
         let computation = DailyHealthComputation(
             calendar: calendar,
@@ -243,8 +246,55 @@ final class ScoringEngineTests: XCTestCase {
 
         XCTAssertNotNil(neutralRecovery.value)
         XCTAssertNotNil(elevatedRecovery.value)
-        XCTAssertEqual(elevatedRecovery.components["body_temp_delta"] ?? 0, 0.7, accuracy: 0.01)
+        XCTAssertEqual(elevatedRecovery.components["body_temp_delta"] ?? 0, 1.4, accuracy: 0.01)
         XCTAssertLessThanOrEqual(elevatedRecovery.value ?? .infinity, (neutralRecovery.value ?? 0) - 7.9)
+    }
+
+    /// Regression guard: a NORMAL wrist-temp day-to-day drift (~0.5°C above the
+    /// personal baseline) must NOT trigger the recovery penalty. Previously the
+    /// threshold was 0.5°C, which fired on healthy users' normal variation every
+    /// day and dragged Recovery, Energy and Stress scores low with normal raw
+    /// signals (the reported "所有算法分都低但没做活动").
+    func testNormalBodyTempVariationDoesNotReduceRecoveryScore() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let history = (1...7).compactMap { offset -> DailyHealthSnapshot? in
+            guard let date = calendar.date(byAdding: .day, value: -offset, to: today) else { return nil }
+            var snapshot = DailyHealthSnapshot(date: date)
+            snapshot.hrvAverage = 50
+            snapshot.restingHeartRate = 60
+            snapshot.sleepHours = 7.5
+            snapshot.wristTemperature = 36.2
+            return snapshot
+        }
+
+        var neutral = DailyHealthSnapshot(date: today)
+        neutral.hrvAverage = 50
+        neutral.restingHeartRate = 60
+        neutral.sleepHours = 7.5
+        neutral.wristTemperature = 36.2
+
+        // +0.6°C — within normal circadian/day-to-day variation.
+        var drift = neutral
+        drift.wristTemperature = 36.8
+
+        let computation = DailyHealthComputation(
+            calendar: calendar,
+            now: today,
+            profile: DailyHealthComputationProfile(
+                sleepTargetMinutes: 450,
+                maxHeartRate: 190,
+                biologicalSex: "other"
+            )
+        )
+        let neutralRecovery = computation.compute(for: neutral, history: history).recovery
+        let driftedRecovery = computation.compute(for: drift, history: history).recovery
+
+        XCTAssertNotNil(neutralRecovery.value)
+        XCTAssertNotNil(driftedRecovery.value)
+        XCTAssertEqual(driftedRecovery.components["body_temp_delta"] ?? 0, 0.6, accuracy: 0.01)
+        // Normal drift must not drop recovery by the old 8-point penalty.
+        XCTAssertGreaterThan(driftedRecovery.value ?? 0, (neutralRecovery.value ?? 100) - 2.0)
     }
 
     func testDailyHealthComputationDoesNotInventBedtimeOrWakeTime() {
