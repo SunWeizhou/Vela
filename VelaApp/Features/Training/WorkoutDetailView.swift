@@ -323,7 +323,7 @@ struct WorkoutDetailView: View {
                 .chartYAxis {
                     AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { _ in
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6, dash: [2, 4]))
-                            .foregroundStyle(Color(hex: "#E5E5EA"))
+                            .foregroundStyle(VelaTheme.hairline)
                         AxisValueLabel()
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(VelaTheme.muted)

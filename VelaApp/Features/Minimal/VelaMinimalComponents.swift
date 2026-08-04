@@ -212,7 +212,7 @@ struct VelaMetricDetailView: View {
             VStack(spacing: 3) {
                 Text(navTitle)
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(isSleep ? Color(hex: "#F2EFE8") : VelaTheme.fg)
+                    .foregroundStyle(isSleep ? VelaTheme.sleepText : VelaTheme.fg)
 
                 Text(displayDateText)
                     .font(.system(size: 11, weight: .medium))
@@ -236,7 +236,7 @@ struct VelaMetricDetailView: View {
         ShareLink(item: metricShareText) {
             Image(systemName: "square.and.arrow.up")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(isSleep ? Color(hex: "#F2EFE8") : VelaTheme.accent)
+                .foregroundStyle(isSleep ? VelaTheme.sleepText : VelaTheme.accent)
                 .frame(width: VelaTheme.circularControlSize, height: VelaTheme.circularControlSize)
                 .background(VelaTheme.secondaryGroupedBackground, in: Circle())
         }
@@ -252,7 +252,7 @@ struct VelaMetricDetailView: View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(isSleep ? Color(hex: "#F2EFE8") : VelaTheme.accent)
+                .foregroundStyle(isSleep ? VelaTheme.sleepText : VelaTheme.accent)
                 .frame(width: VelaTheme.circularControlSize, height: VelaTheme.circularControlSize)
                 .background(VelaTheme.secondaryGroupedBackground, in: Circle())
         }
@@ -369,7 +369,7 @@ struct VelaMetricDetailView: View {
 
                                 Text(dynamicValueText)
                                     .font(.system(size: 17, weight: .bold, design: .rounded))
-                                    .foregroundStyle(isSleep ? Color(hex: "#F2EFE8") : VelaTheme.fg)
+                                    .foregroundStyle(isSleep ? VelaTheme.sleepText : VelaTheme.fg)
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.58)
                                     .frame(width: 96)

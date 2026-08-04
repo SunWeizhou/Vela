@@ -159,7 +159,7 @@ struct DailyStressChartView: View {
                         .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
                     Text(metric.emptyTitle)
                         .font(VelaTheme.subheadline().weight(.semibold))
-                        .foregroundStyle(isSleep ? Color(hex: "#F2EFE8") : VelaTheme.fg)
+                        .foregroundStyle(isSleep ? VelaTheme.sleepText : VelaTheme.fg)
                     Text("Apple 健康提供足够的逐点心率与活动数据后显示。")
                         .font(VelaTheme.caption2())
                         .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)

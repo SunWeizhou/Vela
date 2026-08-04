@@ -78,7 +78,7 @@ struct MetricChartSection: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(dynamicValueText)
                     .font(.largeTitle.weight(.bold).monospacedDigit())
-                    .foregroundStyle(isSleep ? Color(hex: "#F2EFE8") : VelaTheme.fg)
+                    .foregroundStyle(isSleep ? VelaTheme.sleepText : VelaTheme.fg)
                 
                 Text(rawSelectedDate != nil ? "选定读数" : metricSubtitle)
                     .font(.system(size: 12, weight: .medium))

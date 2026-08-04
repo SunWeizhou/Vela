@@ -476,7 +476,7 @@ struct VelaJournalView: View {
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
-                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color(hex: "#5B8C6F")))
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(VelaTheme.brandLeaf))
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("随手记一餐或一个行为")
@@ -557,7 +557,7 @@ struct VelaJournalView: View {
                         } else {
                             Image(systemName: "circle")
                                 .font(.system(size: 18))
-                                .foregroundStyle(Color(hex: "#E5E5EA"))
+                                .foregroundStyle(VelaTheme.hairline)
                         }
                     }
                     .frame(maxWidth: .infinity)

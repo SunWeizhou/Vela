@@ -170,12 +170,12 @@ struct VelaVitalsView: View {
 
         let deltaColor: Color = {
             guard let result, chronologicalAge != nil else { return VelaTheme.muted }
-            guard result.isPhenoAge else { return Color(hex: "#5B8C6F") }
+            guard result.isPhenoAge else { return VelaTheme.brandLeaf }
             let delta = result.biologicalAge - age
             if abs(delta) < 0.05 {
                 return VelaTheme.muted
             }
-            return delta < 0 ? Color(hex: "#5B8C6F") : VelaTheme.strainColor
+            return delta < 0 ? VelaTheme.brandLeaf : VelaTheme.strainColor
         }()
 
         return NavigationLink(destination: BiologyView()) {
@@ -616,7 +616,7 @@ struct VelaVitalsView: View {
             if diff > 0.2 {
                 return BiomarkerEvaluation(text: "呈上升趋势", icon: "arrow.up.forward", color: VelaTheme.fg)
             } else if diff < -0.2 {
-                return BiomarkerEvaluation(text: "呈下降趋势", icon: "arrow.down.forward", color: Color(hex: "#5B8C6F"))
+                return BiomarkerEvaluation(text: "呈下降趋势", icon: "arrow.down.forward", color: VelaTheme.brandLeaf)
             } else {
                 return BiomarkerEvaluation(text: "保持稳定", icon: "minus", color: VelaTheme.muted)
             }
@@ -624,7 +624,7 @@ struct VelaVitalsView: View {
         case .hrv:
             let diffPercent = avg > 0 ? (latestValue - avg) / avg : 0.0
             if diffPercent > 0.05 {
-                return BiomarkerEvaluation(text: "高于基线", icon: "arrow.up.forward", color: Color(hex: "#5B8C6F"))
+                return BiomarkerEvaluation(text: "高于基线", icon: "arrow.up.forward", color: VelaTheme.brandLeaf)
             } else if diffPercent < -0.05 {
                 return BiomarkerEvaluation(text: "低于基线", icon: "arrow.down.forward", color: VelaTheme.strainColor)
             } else {
@@ -636,9 +636,9 @@ struct VelaVitalsView: View {
             if diff > 2.0 {
                 return BiomarkerEvaluation(text: "偏高", icon: "arrow.up.forward", color: VelaTheme.strainColor)
             } else if diff < -2.0 {
-                return BiomarkerEvaluation(text: "优秀/偏低", icon: "arrow.down.forward", color: Color(hex: "#5B8C6F"))
+                return BiomarkerEvaluation(text: "优秀/偏低", icon: "arrow.down.forward", color: VelaTheme.brandLeaf)
             } else {
-                return BiomarkerEvaluation(text: "稳定", icon: "minus", color: Color(hex: "#5B8C6F"))
+                return BiomarkerEvaluation(text: "稳定", icon: "minus", color: VelaTheme.brandLeaf)
             }
             
         case .respiratoryRate:
@@ -648,12 +648,12 @@ struct VelaVitalsView: View {
             } else if diff < -1.0 {
                 return BiomarkerEvaluation(text: "偏慢", icon: "arrow.down.forward", color: VelaTheme.muted)
             } else {
-                return BiomarkerEvaluation(text: "正常", icon: "minus", color: Color(hex: "#5B8C6F"))
+                return BiomarkerEvaluation(text: "正常", icon: "minus", color: VelaTheme.brandLeaf)
             }
             
         case .bloodOxygen:
             if latestValue >= 95.0 {
-                return BiomarkerEvaluation(text: "正常", icon: "checkmark.circle.fill", color: Color(hex: "#5B8C6F"))
+                return BiomarkerEvaluation(text: "正常", icon: "checkmark.circle.fill", color: VelaTheme.brandLeaf)
             } else {
                 return BiomarkerEvaluation(text: "偏低", icon: "exclamationmark.triangle.fill", color: VelaTheme.strainColor)
             }
@@ -663,7 +663,7 @@ struct VelaVitalsView: View {
             if diff > 0.2 {
                 return BiomarkerEvaluation(text: "有所上升", icon: "arrow.up.forward", color: VelaTheme.fg)
             } else if diff < -0.2 {
-                return BiomarkerEvaluation(text: "有所下降", icon: "arrow.down.forward", color: Color(hex: "#5B8C6F"))
+                return BiomarkerEvaluation(text: "有所下降", icon: "arrow.down.forward", color: VelaTheme.brandLeaf)
             } else {
                 return BiomarkerEvaluation(text: "稳定", icon: "minus", color: VelaTheme.muted)
             }
@@ -684,7 +684,7 @@ struct GaugeScaleArcView: View {
             Circle()
                 .trim(from: 0.15, to: 0.85)
                 .stroke(
-                    Color(hex: "#E5E5EA"),
+                    VelaTheme.hairline,
                     style: StrokeStyle(lineWidth: 1.5, lineCap: .round)
                 )
                 .rotationEffect(.degrees(90))

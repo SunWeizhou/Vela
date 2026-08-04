@@ -33,7 +33,7 @@ struct HeartRateZoneRibbonView: View {
             HStack(spacing: 3) {
                 if visibleSegments.isEmpty {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color(hex: "#E5E5EA"))
+                        .fill(VelaTheme.hairline)
                 } else {
                     ForEach(visibleSegments) { segment in
                         RoundedRectangle(cornerRadius: 8, style: .continuous)

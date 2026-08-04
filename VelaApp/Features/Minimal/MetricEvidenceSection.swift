@@ -17,7 +17,7 @@ struct MetricEvidenceSection: View {
                 Text("数据依据")
                     .font(VelaTheme.footnote())
                     .fontWeight(.bold)
-                    .foregroundStyle(isSleep ? Color(hex: "#F2EFE8") : VelaTheme.fg)
+                    .foregroundStyle(isSleep ? VelaTheme.sleepText : VelaTheme.fg)
                     .padding(.leading, 4)
 
                 Text("用于解释当前指标的原始读数与评分组成")

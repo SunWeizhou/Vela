@@ -229,8 +229,8 @@ struct VelaMeView: View {
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 12).fill(cs == .dark ? Color(hex: "#73A385").opacity(0.08) : Color(hex: "#5B8C6F").opacity(0.06)))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(cs == .dark ? Color(hex: "#73A385").opacity(0.15) : Color(hex: "#5B8C6F").opacity(0.12), lineWidth: 0.5))
+                .background(RoundedRectangle(cornerRadius: 12).fill(cs == .dark ? VelaTheme.brandLeaf.opacity(0.08) : VelaTheme.brandLeaf.opacity(0.06)))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(cs == .dark ? VelaTheme.brandLeaf.opacity(0.15) : VelaTheme.brandLeaf.opacity(0.12), lineWidth: 0.5))
 
                 HStack(spacing: 12) {
                     HStack(spacing: 8) {

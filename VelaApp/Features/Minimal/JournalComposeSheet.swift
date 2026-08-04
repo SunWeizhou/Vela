@@ -248,7 +248,7 @@ struct WaterLoggerView: View {
     var body: some View {
         VStack(spacing: 24) {
             Capsule()
-                .fill(Color(hex: "#E5E5EA"))
+                .fill(VelaTheme.hairline)
                 .frame(width: 36, height: 5)
                 .padding(.top, 8)
             
@@ -423,7 +423,7 @@ struct MoodLoggerView: View {
                                 .frame(height: 80)
                                 .background(
                                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .fill(selectedScore == score ? Color.white : Color(hex: "#E5E5EA").opacity(0.2))
+                                        .fill(selectedScore == score ? Color.white : VelaTheme.hairline.opacity(0.2))
                                 )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -486,7 +486,7 @@ struct AlcoholLoggerView: View {
     var body: some View {
         VStack(spacing: 24) {
             Capsule()
-                .fill(Color(hex: "#E5E5EA"))
+                .fill(VelaTheme.hairline)
                 .frame(width: 36, height: 5)
                 .padding(.top, 8)
             

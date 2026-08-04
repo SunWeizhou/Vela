@@ -118,6 +118,12 @@ enum VelaTheme {
     static let infoBlue      = adaptive("#30A2FF", "#5AB0FF")
     /// 靛蓝(睡眠/深度)
     static let indigo        = adaptive("#5C6BC0", "#8B9BFF")
+    /// 品牌叶绿(徽章/状态)
+    static let brandLeaf     = adaptive("#5B8C6F", "#73A385")
+    /// 睡眠主题浅色文字(睡眠小部件专用)
+    static let sleepText     = adaptive("#F2EFE8", "#161512")
+    /// 发丝灰(描边/分隔)
+    static let hairline      = adaptive("#E5E5EA", "#3A4048")
 
     // MARK: - Borders
 

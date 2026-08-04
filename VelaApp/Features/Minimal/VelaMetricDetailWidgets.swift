@@ -116,7 +116,7 @@ struct MetricCustomWidgetsSection: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .stroke(isSleep ? Color.white.opacity(0.08) : Color(hex: "#E5E5EA"), lineWidth: 0.5)
+                        .stroke(isSleep ? Color.white.opacity(0.08) : VelaTheme.hairline, lineWidth: 0.5)
                 )
             }
 
@@ -139,7 +139,7 @@ struct MetricCustomWidgetsSection: View {
                                     .foregroundStyle(VelaTheme.inkGray)
                                 Text(bedtimeText)
                                     .font(.system(size: 20, weight: .bold, design: .rounded))
-                                    .foregroundStyle(Color(hex: "#F2EFE8"))
+                                    .foregroundStyle(VelaTheme.sleepText)
                             }
                             Spacer()
                             VStack(alignment: .trailing, spacing: 4) {
@@ -148,7 +148,7 @@ struct MetricCustomWidgetsSection: View {
                                     .foregroundStyle(VelaTheme.inkGray)
                                 Text(targetBedtimeText)
                                     .font(.system(size: 20, weight: .bold, design: .rounded))
-                                    .foregroundStyle(Color(hex: "#F2EFE8"))
+                                    .foregroundStyle(VelaTheme.sleepText)
                             }
                         }
                         
@@ -227,7 +227,7 @@ struct MetricCustomWidgetsSection: View {
                             Text("今天的压力")
                                 .font(VelaTheme.footnote())
                                 .fontWeight(.bold)
-                                .foregroundStyle(isSleep ? Color(hex: "#F2EFE8") : VelaTheme.fg)
+                                .foregroundStyle(isSleep ? VelaTheme.sleepText : VelaTheme.fg)
                         }
                         Spacer()
                         Image(systemName: "moon.fill")
@@ -255,7 +255,7 @@ struct MetricCustomWidgetsSection: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .stroke(isSleep ? Color.white.opacity(0.08) : Color(hex: "#E5E5EA"), lineWidth: 0.5)
+                        .stroke(isSleep ? Color.white.opacity(0.08) : VelaTheme.hairline, lineWidth: 0.5)
                 )
             }
 
@@ -332,7 +332,7 @@ struct MetricCustomWidgetsSection: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .stroke(isSleep ? Color.white.opacity(0.08) : Color(hex: "#E5E5EA"), lineWidth: 0.5)
+                        .stroke(isSleep ? Color.white.opacity(0.08) : VelaTheme.hairline, lineWidth: 0.5)
                 )
             }
         }
