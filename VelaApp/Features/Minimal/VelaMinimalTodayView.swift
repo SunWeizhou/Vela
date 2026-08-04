@@ -79,6 +79,51 @@ struct VelaTodayView: View {
         CGFloat(min(1.0, Double(todayCalories) / Double(max(dailyCalorieTarget, 1))))
     }
 
+    // MARK: - G1 重设计数据
+
+    private var vitalCards: [TodayVitalCardModel] {
+        let rm = dashboard.recoveryMetrics
+        let hrv = rm.hrvMilliseconds
+        let rhr = rm.restingHeartRate
+        let spo2 = dashboard.extendedMetrics.oxygenSaturation
+        let sleepMin = dashboard.sleepSummary.stageMinutes
+            .filter { $0.key != .awake }
+            .reduce(0) { $0 + $1.value }
+        return [
+            TodayVitalCardModel(
+                kind: .hrv, label: "心率变异性",
+                value: hrv.map { "\(Int($0.rounded()))" } ?? "--", unit: "ms",
+                status: "今早", isGood: true, trend: []
+            ),
+            TodayVitalCardModel(
+                kind: .rhr, label: "静息心率",
+                value: rhr.map { "\(Int($0.rounded()))" } ?? "--", unit: "bpm",
+                status: "今早", isGood: true, trend: []
+            ),
+            TodayVitalCardModel(
+                kind: .spo2, label: "血氧",
+                value: spo2.map { "\(Int($0.rounded()))" } ?? "--", unit: "%",
+                status: "今早", isGood: true, trend: []
+            ),
+            TodayVitalCardModel(
+                kind: .sleep, label: "睡眠",
+                value: sleepMin > 0 ? "\(sleepMin / 60):\(String(format: "%02d", sleepMin % 60))" : "--", unit: "时",
+                status: "今早", isGood: true, trend: []
+            )
+        ]
+    }
+
+    private var weeklyLoads: [Double] {
+        Array(dashboardVM.strainTrend.suffix(7).map { $0.value })
+    }
+
+    private var acwrText: String {
+        if let acwr = dashboard.energy.components["acwr"] {
+            return String(format: "ACWR %.2f", acwr)
+        }
+        return "本周"
+    }
+
     var coachMessage: String {
         dashboard.dailyInsight.isEmpty
             ? "正在等待足够的 Apple 健康数据，完成同步后会生成今日指导。"
@@ -109,16 +154,8 @@ struct VelaTodayView: View {
 
     @Query(sort: \ProactiveInsightRecord.priority) private var proactiveRecords: [ProactiveInsightRecord]
 
-    // Active Status Settings Toggles (Replicating Screenshot 2)
-    @AppStorage("vela_active_status") var activeStatusRaw = "active"
-    @AppStorage("vela_active_status_duration") var activeStatusDuration = "明天之前"
-    var resolvedActiveStatus: String {
-        ActiveStatusSettings.resolveCurrentStatus()
-    }
-
     // Sheets trigger states
     @State var showCalendarOverview = false
-    @State var showActiveStatus = false
     @State var selectedInsightIndex = 0
     @State var selectedInsight: ProactiveInsight?
     @State var showTodayEvidence = false
@@ -157,33 +194,6 @@ struct VelaTodayView: View {
         return adjusted
     }
 
-    var statusPillIcon: String {
-        switch resolvedActiveStatus {
-        case "active": return "figure.run"
-        case "sick": return "bed.double.fill"
-        case "injured": return "bandage.fill"
-        default: return "beach.umbrella.fill"
-        }
-    }
-
-    var statusPillColor: Color {
-        switch resolvedActiveStatus {
-        case "active": return VelaTheme.success
-        case "sick": return VelaTheme.warn
-        case "injured": return VelaTheme.danger
-        default: return VelaTheme.accent
-        }
-    }
-
-    var statusPillTitle: String {
-        switch resolvedActiveStatus {
-        case "active": return L10n.t("Active", "活跃")
-        case "sick": return L10n.t("Sick", "生病")
-        case "injured": return L10n.t("Injured", "受伤")
-        default: return L10n.t("Resting", "休息中")
-        }
-    }
-
     @ViewBuilder
     var errorMessageView: some View {
         if let errorMessage = dashboardVM.errorMessage {
@@ -212,38 +222,43 @@ struct VelaTodayView: View {
     }
 
     var body: some View {
-        let isStalePlan = persistedOperatingPlan == nil ? false : persistedOperatingPlan!.bodyStateHash != bodyState.hash
         let recoveryText = dashboard.recovery.hasData ? "\(Int(dashboard.recovery.score.rounded()))" : "--"
         let accentColor = accentColor(trainingDecision.accent)
-        let primaryIcon = primaryExperienceActionIcon(todayExperience)
-        let planGeneratedAt = persistedOperatingPlan?.generatedAt
         let planSafetyNotice = persistedOperatingPlan?.safetyNotice
 
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 14) {
                 errorMessageView
 
-                TodayHeroCard(
-                    model: todayExperience,
-                    recoveryScoreText: recoveryText,
-                    accent: accentColor,
-                    targetStrainRange: Double(dashboard.strain.recommendedRange.lowerBound)...Double(dashboard.strain.recommendedRange.upperBound),
-                    primaryActionIcon: primaryIcon,
-                    onPrimaryAction: {
-                        if let primary = todayExperience.actions.first(where: \.isPrimary) {
-                            performExperienceAction(primary)
-                        }
-                    },
-                    generatedAt: planGeneratedAt,
-                    safetyNotice: planSafetyNotice,
-                    isStale: isStalePlan
+                TodayReadinessHero(
+                    scoreText: recoveryText,
+                    stateText: todayExperience.hero.decisionTitle,
+                    state: dashboard.recovery.state,
+                    trend: todayExperience.signalCards.first(where: { $0.id == "recovery" })?.trend ?? []
                 )
 
-                TodaySignalGrid(
-                    model: todayExperience,
-                    freshness: dashboard.bodyState.freshness,
-                    accentColor: { self.accentColor($0) }
+                TodayStateRingsStrip(model: todayExperience)
+
+                TodayGuidanceCard(
+                    title: todayExperience.hero.decisionTitle,
+                    summary: todayExperience.hero.summary,
+                    onAskCoach: { showCoach = true }
                 )
+
+                if let planSafetyNotice, !planSafetyNotice.isEmpty {
+                    Text(planSafetyNotice)
+                        .font(.system(size: 10, weight: .regular))
+                        .foregroundStyle(VelaTheme.meta)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity)
+                }
+
+                TodayVitalsGrid(cards: vitalCards) { _ in
+                    showCoach = true
+                }
+
+                TodayWeeklyLoadCard(loads: weeklyLoads, acwrText: acwrText)
 
                 if decisionDataCoverageSummary.status != .high {
                     DataCoverageCompactCard(
@@ -320,14 +335,11 @@ struct VelaTodayView: View {
             VStack(spacing: 0) {
                 TodayDateAndStatusHeader(
                     selectedDate: dashboardVM.selectedDate,
-                    resolvedActiveStatus: resolvedActiveStatus,
-                    activeStatusDuration: activeStatusDuration,
                     todayShareText: todayShareText,
                     weatherTemp: weatherTemp,
                     weatherStatusText: weatherStatusText,
                     showSimulationLabel: dashboard.source == .preview,
                     showCalendarOverview: $showCalendarOverview,
-                    showActiveStatus: $showActiveStatus,
                     showSettings: $showSettings,
                     requestWeatherUpdate: { requestWeatherUpdate() }
                 )
@@ -389,13 +401,6 @@ struct VelaTodayView: View {
             loadRealNutritionData()
             loadDynamicData()
         }
-        .onChange(of: activeStatusRaw) {
-            let dateToRefresh = dashboardVM.selectedDate
-            let context = modelContext
-            Task {
-                await DailyPlanRefreshCoordinator.shared.refreshPlan(for: dateToRefresh, modelContext: context)
-            }
-        }
         .onChange(of: locationManager.location) {
             fetchLocalWeather()
         }
@@ -403,14 +408,6 @@ struct VelaTodayView: View {
             CalendarOverviewSheetView()
                 .presentationDetents([.medium, .large])
                 .velaSheetSurface()
-        }
-        .sheet(isPresented: $showActiveStatus) {
-            ActiveStatusSelectionSheetView(
-                activeStatusRaw: $activeStatusRaw,
-                activeStatusDuration: $activeStatusDuration
-            )
-            .presentationDetents([.medium])
-            .velaSheetSurface()
         }
         .sheet(item: $selectedInsight) { insight in
             ProactiveInsightDetailSheet(insight: insight) { question in
@@ -443,18 +440,6 @@ struct VelaTodayView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
-    }
-
-    func primaryExperienceActionIcon(_ model: TodayExperienceModel) -> String {
-        guard let action = model.actions.first(where: \.isPrimary) else { return "arrow.right" }
-        switch action.destination {
-        case "training": return "play.fill"
-        case "sync": return "arrow.triangle.2.circlepath"
-        case "recovery": return "heart.fill"
-        case "journal": return "square.and.pencil"
-        case "coach": return "sparkles"
-        default: return "arrow.right"
-        }
     }
 
     func performExperienceAction(_ action: TodayExperienceAction) {
@@ -555,15 +540,12 @@ struct VelaTodayView: View {
 // MARK: - TodayDateAndStatusHeader
 struct TodayDateAndStatusHeader: View {
     let selectedDate: Date
-    let resolvedActiveStatus: String
-    let activeStatusDuration: String
     let todayShareText: String
     let weatherTemp: String
     let weatherStatusText: String
     let showSimulationLabel: Bool
-    
+
     @Binding var showCalendarOverview: Bool
-    @Binding var showActiveStatus: Bool
     @Binding var showSettings: Bool
     var requestWeatherUpdate: () -> Void
     
@@ -590,9 +572,15 @@ struct TodayDateAndStatusHeader: View {
                 .buttonStyle(.cardPress)
                 .accessibilityLabel("选择日期")
                 .accessibilityValue(dateHeaderString(for: selectedDate))
-                
+
+                TodayWeatherBar(
+                    weatherTemp: weatherTemp,
+                    weatherStatusText: weatherStatusText,
+                    requestWeatherUpdate: requestWeatherUpdate
+                )
+
                 Spacer()
-                
+
                 HStack(spacing: 16) {
                     // Share button
                     ShareLink(item: todayShareText) {
@@ -603,109 +591,43 @@ struct TodayDateAndStatusHeader: View {
                     }
                     .buttonStyle(.cardPress)
                     .accessibilityLabel("分享今日摘要")
-                    
-                    // Profile Avatar
+
+                    // Profile Avatar(右下角小绿点 = 已同步)
                     Button {
                         showSettings = true
                     } label: {
-                        Image(systemName: "person.crop.circle.fill")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 36, height: 36)
-                            .frame(width: 44, height: 44)
-                            .foregroundStyle(VelaTheme.accent)
+                        ZStack(alignment: .bottomTrailing) {
+                            Image(systemName: "person.crop.circle.fill")
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 32, height: 32)
+                                .foregroundStyle(VelaTheme.brand)
+                            Circle()
+                                .fill(VelaTheme.brand)
+                                .frame(width: 9, height: 9)
+                                .overlay(Circle().stroke(VelaTheme.systemGroupedBackground, lineWidth: 2))
+                        }
+                        .frame(width: 44, height: 44)
                     }
                     .buttonStyle(.cardPress)
-                    .accessibilityLabel("个人设置")
+                    .accessibilityLabel("个人设置,数据已同步")
                 }
             }
-            
-            // Status & Weather Capsules
-            HStack(spacing: 8) {
-                // Active status pill
-                Button {
-                    showActiveStatus = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: statusPillIcon)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(statusPillColor)
-                        
-                        Text(statusPillTitle)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(VelaTheme.fg)
-                        
-                        if resolvedActiveStatus != "active" {
-                            Text(activeStatusDuration)
-                                .font(.system(size: 10))
-                                .foregroundStyle(VelaTheme.muted)
-                        }
-                        
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(VelaTheme.muted)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(VelaTheme.cardBg))
-                    .overlay(Capsule().stroke(VelaTheme.borderSoft, lineWidth: 0.5))
-                    .frame(minHeight: VelaTheme.minimumHitTarget)
-                }
-                .buttonStyle(.cardPress)
-                .accessibilityLabel("当前状态")
-                .accessibilityValue(resolvedActiveStatus == "active"
-                    ? statusPillTitle
-                    : statusPillTitle + "，" + activeStatusDuration)
-                .accessibilityHint("轻点更改状态")
-                
-                // Weather
-                TodayWeatherBar(
-                    weatherTemp: weatherTemp,
-                    weatherStatusText: weatherStatusText,
-                    requestWeatherUpdate: requestWeatherUpdate
-                )
-                
-                Spacer()
-                
-                if showSimulationLabel {
+
+            if showSimulationLabel {
+                HStack {
                     Text(L10n.t("Simulated", "模拟数据"))
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(Color.white)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(Capsule().fill(VelaTheme.accent))
+                    Spacer()
                 }
             }
         }
     }
-    
-    private var statusPillIcon: String {
-        switch resolvedActiveStatus {
-        case "active": return "figure.run"
-        case "sick": return "bed.double.fill"
-        case "injured": return "bandage.fill"
-        default: return "beach.umbrella.fill"
-        }
-    }
 
-    private var statusPillColor: Color {
-        switch resolvedActiveStatus {
-        case "active": return VelaTheme.success
-        case "sick": return VelaTheme.warn
-        case "injured": return VelaTheme.danger
-        default: return VelaTheme.accent
-        }
-    }
-
-    private var statusPillTitle: String {
-        switch resolvedActiveStatus {
-        case "active": return L10n.t("Active", "活跃")
-        case "sick": return L10n.t("Sick", "生病")
-        case "injured": return L10n.t("Injured", "受伤")
-        default: return L10n.t("Resting", "休息中")
-        }
-    }
-    
     private func dateHeaderString(for date: Date) -> String {
         let calendar = Calendar.current
         if calendar.isDateInToday(date) {
