@@ -189,7 +189,7 @@ struct VelaVitalsView: View {
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(VelaTheme.accent)
                             .frame(width: 36, height: 36)
-                            .background(RoundedRectangle(cornerRadius: 8).fill(VelaTheme.accent.opacity(0.12)))
+                            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(VelaTheme.accent.opacity(0.12)))
                         VStack(alignment: .leading, spacing: 3) {
                             Text(isPhenoAge ? "生物年龄估算" : "健康信号参考")
                                 .font(.system(size: 16, weight: .bold))

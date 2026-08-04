@@ -46,7 +46,7 @@ struct XunjiImportSheet: View {
                             .foregroundStyle(VelaTheme.fg)
                             .padding(14)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
+                            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.cardBg))
                     }
 
                     Button {
@@ -64,7 +64,7 @@ struct XunjiImportSheet: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .foregroundStyle(Color.white)
-                        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.fg))
+                        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.fg))
                     }
                     .disabled(isImporting)
                     .buttonStyle(.plain)

@@ -201,6 +201,6 @@ struct MetricTrustSection: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
-        .background(VelaTheme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(VelaTheme.surface, in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
     }
 }

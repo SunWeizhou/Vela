@@ -247,20 +247,20 @@ struct WorkoutDetailView: View {
             if isLoading {
                 VStack(spacing: 12) {
                     HStack(spacing: 10) {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
                             .fill(VelaTheme.borderSoft)
                             .frame(height: 60)
                             .shimmer()
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
                             .fill(VelaTheme.borderSoft)
                             .frame(height: 60)
                             .shimmer()
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
                             .fill(VelaTheme.borderSoft)
                             .frame(height: 60)
                             .shimmer()
                     }
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: VelaTheme.radiusSm, style: .continuous)
                         .fill(VelaTheme.borderSoft)
                         .frame(height: 28)
                         .shimmer()
@@ -367,7 +367,7 @@ struct WorkoutDetailView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.fg.opacity(0.05)))
+        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).fill(VelaTheme.fg.opacity(0.05)))
     }
     
     private var gpsRouteSection: some View {

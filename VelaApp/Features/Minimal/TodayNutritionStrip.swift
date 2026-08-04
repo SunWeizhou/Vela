@@ -50,9 +50,9 @@ struct TodayNutritionStrip: View {
             }
         }
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(VelaTheme.cardBg))
+        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm, style: .continuous).fill(VelaTheme.cardBg))
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: VelaTheme.radiusSm, style: .continuous)
                 .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
         )
     }

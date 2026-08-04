@@ -155,7 +155,7 @@ struct VelaOnboardingView: View {
                 .font(.system(size: 28, weight: .semibold))
                 .foregroundStyle(VelaTheme.recoveryColor)
                 .frame(width: 60, height: 60)
-                .background(VelaTheme.recoveryColor.opacity(0.11), in: RoundedRectangle(cornerRadius: 18))
+                .background(VelaTheme.recoveryColor.opacity(0.11), in: RoundedRectangle(cornerRadius: VelaTheme.radiusLg))
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("连接 Apple 健康")
@@ -546,7 +546,7 @@ struct VelaOnboardingView: View {
                     .foregroundStyle(fgColor)
                     .frame(width: 40, height: 40)
                     .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
                             .fill(bgColor)
                     )
 

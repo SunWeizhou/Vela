@@ -192,9 +192,9 @@ struct MiniBubble: View {
                       ))
                     : AnyShapeStyle(.ultraThinMaterial)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
                         .stroke(message.role == .user ? Color.clear : VelaTheme.borderSoft, lineWidth: 0.5)
                 )
                 .shadow(color: Color.black.opacity(message.role == .user ? 0.04 : 0.02), radius: 3, y: 1.5)
@@ -239,11 +239,11 @@ struct MiniStreamingBubble: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .background(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
                         .fill(VelaTheme.cardBg)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
                         .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
                 )
                 .shadow(color: Color.black.opacity(0.02), radius: 3, y: 1.5)

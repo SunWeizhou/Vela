@@ -341,7 +341,7 @@ struct BodyModelDetailView: View {
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(VelaTheme.accent)
                 .frame(width: 36, height: 36)
-                .background(RoundedRectangle(cornerRadius: 8).fill(VelaTheme.accent.opacity(0.12)))
+                .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(VelaTheme.accent.opacity(0.12)))
             VStack(alignment: .leading, spacing: 5) {
                 Text("身体模型校准状态")
                     .font(.system(size: 16, weight: .bold))
@@ -354,8 +354,8 @@ struct BodyModelDetailView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(VelaTheme.cardBg))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm, style: .continuous).fill(VelaTheme.cardBg))
+        .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusSm, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
     }
     
     private var staticParametersSection: some View {
@@ -387,8 +387,8 @@ struct BodyModelDetailView: View {
                 Divider().padding(.leading, 16)
                 detailRow(title: "教练指导风格", value: staticCoachStyleText)
             }
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.cardBg))
+            .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
         }
     }
     

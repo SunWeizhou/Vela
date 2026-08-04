@@ -64,7 +64,7 @@ struct CoachHistoryDrawer: View {
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
-                .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.accent))
+                .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).fill(VelaTheme.accent))
             }
             .buttonStyle(.cardPress)
             .padding(.horizontal, 20)
@@ -84,7 +84,7 @@ struct CoachHistoryDrawer: View {
                 }
             }
             .padding(10)
-            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
             .padding(.horizontal, 20)
             .padding(.bottom, 12)
             

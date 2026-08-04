@@ -177,7 +177,7 @@ struct JournalCorrelationSection: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
+        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
     }
 
     private func confidenceColor(_ conf: DataConfidence) -> Color {
@@ -241,8 +241,8 @@ struct PersonalExperimentCard: View {
                 }
             }
             .padding(14)
-            .background(RoundedRectangle(cornerRadius: 18).fill(VelaTheme.cardBg))
-            .overlay(RoundedRectangle(cornerRadius: 18).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg).fill(VelaTheme.cardBg))
+            .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusLg).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(experiment == nil ? "开始个人实验" : "查看个人实验")
@@ -333,7 +333,7 @@ struct PersonalExperimentHubSheet: View {
             }
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 18).fill(VelaTheme.cardBg))
+        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg).fill(VelaTheme.cardBg))
 
         previousOutcomeContent(experiment)
     }
@@ -399,7 +399,7 @@ struct PersonalExperimentHubSheet: View {
                 .foregroundStyle(VelaTheme.muted)
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 18).fill(VelaTheme.cardBg))
+        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg).fill(VelaTheme.cardBg))
     }
 
     private func checkInButton(_ title: String, followed: Bool, experiment: PersonalExperimentRecord, color: Color) -> some View {

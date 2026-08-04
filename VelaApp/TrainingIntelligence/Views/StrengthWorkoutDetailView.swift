@@ -435,7 +435,7 @@ struct StrengthWorkoutDetailView: View {
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(set.rpe != nil ? VelaTheme.accent : mutedColor)
                 .frame(width: 44, height: 26)
-                .background(RoundedRectangle(cornerRadius: 8).fill(VelaTheme.elevatedBg))
+                .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(VelaTheme.elevatedBg))
 
             // 状态
             Image(systemName: (set.isCompleted ?? true) ? "checkmark.circle.fill" : "circle")

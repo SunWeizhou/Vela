@@ -166,9 +166,9 @@ struct VelaSettingsView: View {
                 .padding(.leading, 12)
 
             content()
-                .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
                         .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
                 )
         }
@@ -182,7 +182,7 @@ struct VelaSettingsView: View {
     private func settingsRow(icon: String, iconBg: Color, title: String, value: String?) -> some View {
         HStack(spacing: 12) {
             ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: VelaTheme.radiusSm, style: .continuous)
                     .fill(iconBg)
                     .frame(width: 32, height: 32)
                 Image(systemName: icon)
@@ -236,8 +236,8 @@ struct VelaSettingsView: View {
             Spacer()
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
+        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.cardBg))
+        .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
         .padding(.horizontal, 16)
     }
 }

@@ -384,7 +384,7 @@ struct DailyDecisionFeedbackSheet: View {
                         TextField("例如：腿部仍然酸痛，所以改成低强度", text: $note, axis: .vertical)
                             .lineLimit(2...5)
                             .padding(12)
-                            .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.secondaryGroupedBackground))
+                            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).fill(VelaTheme.secondaryGroupedBackground))
                     }
                 }
                 .padding(20)

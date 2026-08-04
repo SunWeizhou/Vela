@@ -229,8 +229,8 @@ struct VelaMeView: View {
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 12).fill(cs == .dark ? VelaTheme.brandLeaf.opacity(0.08) : VelaTheme.brandLeaf.opacity(0.06)))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(cs == .dark ? VelaTheme.brandLeaf.opacity(0.15) : VelaTheme.brandLeaf.opacity(0.12), lineWidth: 0.5))
+                .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).fill(cs == .dark ? VelaTheme.brandLeaf.opacity(0.08) : VelaTheme.brandLeaf.opacity(0.06)))
+                .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).stroke(cs == .dark ? VelaTheme.brandLeaf.opacity(0.15) : VelaTheme.brandLeaf.opacity(0.12), lineWidth: 0.5))
 
                 HStack(spacing: 12) {
                     HStack(spacing: 8) {
@@ -252,8 +252,8 @@ struct VelaMeView: View {
                     }
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(cs == .dark ? Color(hex: "#D48463").opacity(0.08) : Color(hex: "#C56B4A").opacity(0.06)))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(cs == .dark ? Color(hex: "#D48463").opacity(0.15) : Color(hex: "#C56B4A").opacity(0.12), lineWidth: 0.5))
+                    .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).fill(cs == .dark ? Color(hex: "#D48463").opacity(0.08) : Color(hex: "#C56B4A").opacity(0.06)))
+                    .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).stroke(cs == .dark ? Color(hex: "#D48463").opacity(0.15) : Color(hex: "#C56B4A").opacity(0.12), lineWidth: 0.5))
 
                     HStack(spacing: 8) {
                         VStack(alignment: .leading, spacing: 4) {
@@ -274,8 +274,8 @@ struct VelaMeView: View {
                     }
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(cs == .dark ? Color(hex: "#D0A050").opacity(0.08) : Color(hex: "#B8843E").opacity(0.06)))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(cs == .dark ? Color(hex: "#D0A050").opacity(0.15) : Color(hex: "#B8843E").opacity(0.12), lineWidth: 0.5))
+                    .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).fill(cs == .dark ? Color(hex: "#D0A050").opacity(0.08) : Color(hex: "#B8843E").opacity(0.06)))
+                    .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).stroke(cs == .dark ? Color(hex: "#D0A050").opacity(0.15) : Color(hex: "#B8843E").opacity(0.12), lineWidth: 0.5))
                 }
 
                 Divider()
@@ -354,7 +354,7 @@ struct VelaMeView: View {
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(.white)
                             .frame(width: 30, height: 30)
-                            .background(RoundedRectangle(cornerRadius: 8).fill(VelaTheme.accent))
+                            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(VelaTheme.accent))
                         
                         Text("建议收件箱")
                             .font(VelaTheme.body())
@@ -390,7 +390,7 @@ struct VelaMeView: View {
                                     .font(.system(size: 13, weight: .bold))
                                     .foregroundStyle(.white)
                                     .frame(width: 30, height: 30)
-                                    .background(RoundedRectangle(cornerRadius: 8).fill(artifactColor(for: artifact.type)))
+                                    .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(artifactColor(for: artifact.type)))
                                 
                                 VStack(alignment: .leading, spacing: 2) {
                                     HStack(spacing: 6) {
@@ -436,7 +436,7 @@ struct VelaMeView: View {
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(VelaTheme.muted)
                             .frame(width: 30, height: 30)
-                            .background(RoundedRectangle(cornerRadius: 8).fill(Color(hex: cs == .dark ? "#2C2C2E" : "#F2F2F7")))
+                            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(Color(hex: cs == .dark ? "#2C2C2E" : "#F2F2F7")))
                         
                         VStack(alignment: .leading, spacing: 2) {
                             Text("暂无教练建议")
@@ -453,8 +453,8 @@ struct VelaMeView: View {
                     .padding(.vertical, 12)
                 }
             }
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.cardBg))
+            .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
         }
     }
 
@@ -596,9 +596,9 @@ struct VelaMeView: View {
                 Divider().padding(.leading, 58)
                 hubActionCell(title: "系统设置", sub: settingsSub, icon: "gearshape.fill", color: VelaTheme.indigo, destination: VelaSettingsView())
             }
-            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
                     .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
             )
         }
@@ -617,7 +617,7 @@ struct VelaMeView: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(width: 32, height: 32)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(color))
+                    .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(color))
                 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
@@ -663,7 +663,7 @@ struct VelaMeView: View {
             Spacer(minLength: 0)
         }
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.surface))
+        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).fill(VelaTheme.surface))
     }
 
     private var equipmentText: String {
@@ -682,7 +682,7 @@ struct VelaMeView: View {
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: 28, height: 28)
-                .background(RoundedRectangle(cornerRadius: 8).fill(color))
+                .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(color))
             Text(title)
                 .font(VelaTheme.subheadline())
                 .foregroundStyle(VelaTheme.fg)
@@ -708,7 +708,7 @@ struct VelaMeView: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(width: 30, height: 30)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(color))
+                    .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(color))
                 Text(title)
                     .font(VelaTheme.body())
                     .foregroundStyle(VelaTheme.fg)

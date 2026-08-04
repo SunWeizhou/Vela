@@ -148,7 +148,7 @@ struct AIModelSettingsView: View {
                 .foregroundStyle(Color.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
-                .background(RoundedRectangle(cornerRadius: 22).fill(VelaTheme.accent))
+                .background(RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge).fill(VelaTheme.accent))
                 .padding(.vertical, 4)
             }
         }
@@ -391,7 +391,7 @@ struct DataSourceSettingsView: View {
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
-                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(color))
+                    .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous).fill(color))
             }
             .buttonStyle(.plain)
         }

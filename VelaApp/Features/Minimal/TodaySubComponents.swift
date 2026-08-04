@@ -96,14 +96,14 @@ struct ProactiveGuidanceCard: View {
             .padding(14)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
                     .fill(VelaTheme.cardBg)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
                     .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
             )
-            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous))
         }
         .buttonStyle(.plain)
     }
@@ -376,12 +376,12 @@ struct TodayVitalCard: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
                 .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
         )
-        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous))
     }
 }
 

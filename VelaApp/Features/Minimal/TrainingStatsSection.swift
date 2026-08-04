@@ -709,7 +709,7 @@ struct RecentWorkoutsSection: View {
                 .foregroundStyle(VelaTheme.meta)
         }
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
+        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.cardBg))
     }
 
     private func workoutListIcon(_ name: String) -> String {
@@ -816,7 +816,7 @@ struct StrengthWorkoutsSection: View {
                                 .foregroundStyle(VelaTheme.meta)
                         }
                         .padding(14)
-                        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
+                        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.cardBg))
                     }
                     .buttonStyle(.plain)
                 }

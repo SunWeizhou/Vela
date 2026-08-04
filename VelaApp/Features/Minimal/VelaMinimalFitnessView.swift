@@ -252,7 +252,7 @@ struct VelaTrainingView: View {
                     .foregroundStyle(VelaTheme.fg)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
+                    .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.cardBg))
                     .shadow(color: Color.black.opacity(0.01), radius: 8, y: 2)
                 }
                 .buttonStyle(.plain)

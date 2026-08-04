@@ -255,9 +255,9 @@ struct CoachWelcomeWorkspace: View {
             }
             .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
             .padding(14)
-            .background(RoundedRectangle(cornerRadius: 18).fill(VelaTheme.cardBg))
+            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg).fill(VelaTheme.cardBg))
             .overlay(
-                RoundedRectangle(cornerRadius: 18)
+                RoundedRectangle(cornerRadius: VelaTheme.radiusLg)
                     .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
             )
             .appleIntelligenceGlow(isHighlighted: isAI, radius: 18)

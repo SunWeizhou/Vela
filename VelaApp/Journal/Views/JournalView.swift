@@ -620,7 +620,7 @@ struct JournalView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
                 .fill(tint.opacity(0.10))
         )
     }

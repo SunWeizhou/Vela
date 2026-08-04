@@ -96,11 +96,11 @@ struct TodayCoachPreview: View {
                                 .padding(.horizontal, 12)
                                 .frame(height: 38)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
                                         .fill(VelaTheme.surface)
                                 )
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
                                         .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
                                 )
                         }

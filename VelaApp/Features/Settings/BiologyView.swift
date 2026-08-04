@@ -405,11 +405,11 @@ struct BiologyView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
                     .fill(isPositive ? VelaTheme.recoveryColor.opacity(0.08) : VelaTheme.stressColor.opacity(0.08))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
                     .stroke(isPositive ? VelaTheme.recoveryColor.opacity(0.15) : VelaTheme.stressColor.opacity(0.15), lineWidth: 1)
             )
         }
@@ -609,7 +609,7 @@ struct BiologyView: View {
                     }
                 }
                 .padding(11)
-                .background(VelaTheme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(VelaTheme.surface, in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
 
                 // Grid of circular glowing badges
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 95))], spacing: 14) {
@@ -887,7 +887,7 @@ struct BiomarkerBadgeView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
                 .fill(Color.black.opacity(0.02))
         )
     }
@@ -1317,7 +1317,7 @@ struct BloodLogSheetView: View {
                             .foregroundStyle(VelaTheme.fg)
                             .padding(14)
                             .background(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
                                     .fill(VelaTheme.cardBg.opacity(0.6))
                             )
                         }
@@ -1490,11 +1490,11 @@ struct StyledTextField: View {
             TextField(placeholder, text: $text)
                 .padding(14)
                 .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
                         .fill(VelaTheme.cardBg.opacity(0.6))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
                         .stroke(VelaTheme.borderSoft, lineWidth: 1)
                 )
                 .foregroundStyle(VelaTheme.fg)

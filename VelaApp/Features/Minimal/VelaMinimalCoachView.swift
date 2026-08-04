@@ -464,7 +464,7 @@ struct ExportDataSettingsView: View {
                         .foregroundStyle(Color.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
-                        .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.accent))
+                        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).fill(VelaTheme.accent))
                 }
                 .buttonStyle(.plain)
                 

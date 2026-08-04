@@ -11,7 +11,7 @@ struct JournalTagInsights: View {
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(width: 28, height: 28)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(bodyModelMaturityColor(state.maturity.overall)))
+                    .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(bodyModelMaturityColor(state.maturity.overall)))
                 VStack(alignment: .leading, spacing: 2) {
                     Text("模型成熟度：\(bodyModelMaturityTitle(state.maturity.overall))")
                         .font(.system(size: 12, weight: .bold))
@@ -42,7 +42,7 @@ struct JournalTagInsights: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.secondaryGroupedBackground))
+        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).fill(VelaTheme.secondaryGroupedBackground))
     }
 
     private func bodyModelMaturityTitle(_ level: BodyModelMaturityLevel) -> String {

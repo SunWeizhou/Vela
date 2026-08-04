@@ -12,7 +12,7 @@ struct JournalEntryCard: View {
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: 28, height: 28)
-                .background(RoundedRectangle(cornerRadius: 8).fill(entry.uiColor))
+                .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(entry.uiColor))
             
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -51,9 +51,9 @@ struct JournalEntryCard: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(VelaTheme.cardBg)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
                 .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
         )
     }

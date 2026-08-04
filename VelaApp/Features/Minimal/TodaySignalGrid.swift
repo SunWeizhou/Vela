@@ -114,12 +114,12 @@ struct TodaySignalGrid: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, minHeight: 158, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
+        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.cardBg))
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
                 .stroke(accent.opacity(0.14), lineWidth: 0.75)
         )
-        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(card.title)，\(card.value)，\(card.directionLabel)，\(card.confidenceLabel)，\(card.coverageLabel)")
     }

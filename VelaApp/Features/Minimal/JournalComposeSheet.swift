@@ -84,7 +84,7 @@ struct BehaviorQuickNoteSheet: View {
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
-                            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.fg))
+                            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.fg))
                     }
                     .disabled(note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .buttonStyle(.plain)
@@ -197,7 +197,7 @@ struct CaffeineLoggerView: View {
                                         .frame(width: 90, height: 110)
                                         .velaNativeCard(radius: 16)
                                         .overlay(
-                                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                            RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
                                                 .stroke(customAmount == val ? VelaTheme.accent : Color.clear, lineWidth: 1.5)
                                         )
                                     }
@@ -326,7 +326,7 @@ struct WaterLoggerView: View {
                                         .frame(width: 90, height: 110)
                                         .velaNativeCard(radius: 16)
                                         .overlay(
-                                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                            RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
                                                 .stroke(customAmount == val ? VelaTheme.accent : Color.clear, lineWidth: 1.5)
                                         )
                                     }
@@ -564,7 +564,7 @@ struct AlcoholLoggerView: View {
                     .padding(18)
                     .velaNativeCard(radius: 16)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
                             .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
                     )
                     .padding(.horizontal, 20)

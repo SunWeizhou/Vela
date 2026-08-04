@@ -241,8 +241,8 @@ struct UserWikiArchiveView: View {
                                 }
                             }
                             .padding(16)
-                            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
-                            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
+                            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
+                            .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
                             .padding(.horizontal, 16)
                         }
                         .buttonStyle(.plain)
@@ -302,7 +302,7 @@ struct UserWikiArchiveView: View {
                                     }
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 30)
-                                    .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.secondaryGroupedBackground))
+                                    .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).fill(VelaTheme.secondaryGroupedBackground))
                                     .padding(.horizontal, 16)
                                 } else {
                                     VStack(alignment: .leading, spacing: 14) {
@@ -348,8 +348,8 @@ struct UserWikiArchiveView: View {
                                                     }
                                                 }
                                                 .padding(12)
-                                                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(VelaTheme.cardBg))
-                                                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
+                                                .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous).fill(VelaTheme.cardBg))
+                                                .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
                                             }
                                         }
                                     }
@@ -414,8 +414,8 @@ struct UserWikiArchiveView: View {
                         TextEditor(text: $editText)
                             .font(.system(size: 14, design: .monospaced))
                             .padding(8)
-                            .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.cardBg))
-                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
+                            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).fill(VelaTheme.cardBg))
+                            .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
                     }

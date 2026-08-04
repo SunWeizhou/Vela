@@ -32,11 +32,11 @@ struct HeartRateZoneRibbonView: View {
 
             HStack(spacing: 3) {
                 if visibleSegments.isEmpty {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: VelaTheme.radiusSm, style: .continuous)
                         .fill(VelaTheme.hairline)
                 } else {
                     ForEach(visibleSegments) { segment in
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        RoundedRectangle(cornerRadius: VelaTheme.radiusSm, style: .continuous)
                             .fill(segment.color)
                             .frame(width: max(12, availableWidth * CGFloat(segment.count) / CGFloat(total)))
                     }
@@ -284,7 +284,7 @@ struct WorkoutExerciseListView: View {
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(set.rpe != nil ? VelaTheme.accent : mutedColor)
                 .frame(width: 44, height: 26)
-                .background(RoundedRectangle(cornerRadius: 8).fill(VelaTheme.elevatedBg))
+                .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(VelaTheme.elevatedBg))
 
             Image(systemName: (set.isCompleted ?? true) ? "checkmark.circle.fill" : "circle")
                 .foregroundStyle((set.isCompleted ?? true) ? VelaTheme.success : mutedColor)

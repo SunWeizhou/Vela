@@ -418,10 +418,10 @@ struct ActiveStatusSelectionSheetView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
+            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.cardBg))
             .shadow(color: Color.black.opacity(tempStatus == id ? 0.02 : 0.0), radius: 6, y: 3)
             .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
                     .stroke(tempStatus == id ? VelaTheme.accent : Color.clear, lineWidth: 1.5)
             )
             .padding(.horizontal, 16)
@@ -611,7 +611,7 @@ struct CalendarOverviewSheetView: View {
                         .foregroundStyle(VelaTheme.accent)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 10)
-                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(VelaTheme.accent.opacity(0.12)))
+                        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous).fill(VelaTheme.accent.opacity(0.12)))
                 }
                 .buttonStyle(.plain)
 
@@ -841,7 +841,7 @@ struct PostWorkoutCheckInSheet: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
                             .background(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
                                     .fill(selectedTags.contains(option.key) ? VelaTheme.accent : VelaTheme.cardBg)
                             )
                     }
@@ -1875,9 +1875,9 @@ struct FoodScannerView: View {
             )
             .id(barcodeScannerID)
             .frame(height: 220)
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
                     .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
             }
             .padding(.horizontal, 20)
@@ -1927,8 +1927,8 @@ struct FoodScannerView: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.cardBg))
+            .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
             .padding(.horizontal, 20)
 
             Button("确认并记录") {

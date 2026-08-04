@@ -183,7 +183,7 @@ struct FitnessActivitySummaryDetailView: View {
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(color)
                 .frame(width: 32, height: 32)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(color.opacity(0.12)))
+                .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm, style: .continuous).fill(color.opacity(0.12)))
             Text(value)
                 .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundStyle(VelaTheme.fg)
@@ -374,7 +374,7 @@ struct WorkoutHeartRateRibbonView: View {
             let maxValue = max(minValue + 1, (values.max() ?? 120) + 8)
             let range = maxValue - minValue
             ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
                     .fill(VelaTheme.accent.opacity(0.06))
                     .frame(height: geo.size.height * 0.42)
                     .position(x: geo.size.width / 2, y: geo.size.height * 0.52)

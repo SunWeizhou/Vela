@@ -56,7 +56,7 @@ struct WeightLogSheetView: View {
                             .foregroundStyle(VelaTheme.fg)
                             .padding(14)
                             .background(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
                                     .fill(VelaTheme.cardBg.opacity(0.6))
                             )
                         }
