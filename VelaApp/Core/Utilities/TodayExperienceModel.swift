@@ -72,6 +72,7 @@ struct TodayExperienceSignalCard: Codable, Hashable, Identifiable {
     var subtitle: String
     var trend: [Double]
     var accent: DailyPlanAccent
+    var state: MetricState
 }
 
 struct TodayExperienceAction: Codable, Hashable, Identifiable {
@@ -277,7 +278,8 @@ struct TodayExperienceModel: Codable, Hashable {
             coverageLabel: coverageLabel(for: metric.dataCoverage),
             subtitle: subtitle,
             trend: trend,
-            accent: accent
+            accent: accent,
+            state: metric.state
         )
     }
 

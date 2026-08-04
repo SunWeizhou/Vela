@@ -87,6 +87,15 @@ enum VelaTheme {
     /// 状态:差(玫红)
     static let statePoor     = adaptive("#E2607A", "#FF8299")
 
+    /// 状态→颜色(G1)。视图统一经此取色,不要直接散落使用 stateGood/Moderate/Poor。
+    static func color(for state: MetricState) -> Color {
+        switch state {
+        case .good: return stateGood
+        case .moderate: return stateModerate
+        case .poor: return statePoor
+        }
+    }
+
     // MARK: - Borders
 
     static let border        = Color(uiColor: .separator)
