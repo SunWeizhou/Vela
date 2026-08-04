@@ -32,3 +32,4 @@ docs/reference/bevel-3.1.4/*.mov
 
 # SQLite databases
 *.sqlite
+.superpowers/
