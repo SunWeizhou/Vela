@@ -96,9 +96,10 @@ struct VelaMetricDetailView: View {
 
     var dashboard: DashboardSummary { dashboardVM.dashboard }
 
-    enum MetricType: String, CaseIterable {
+    enum MetricType: String, CaseIterable, Identifiable {
         case strain, recovery, sleep, stress, energy, hrv, rhr
         case weight, bodyFat, respiratoryRate, bloodOxygen, steps, activeCalories, activeMinutes
+        var id: String { rawValue }
     }
 
     var body: some View {

@@ -351,21 +351,24 @@ extension VelaMetricDetailView {
     }
 
     var metricColor: Color {
+        // G1 状态着色:颜色只表达「好不好」,与今日页五环一致。
         switch metric {
-        case .strain:   VelaTheme.strainColor
-        case .recovery: VelaTheme.recoveryColor
-        case .sleep:    VelaTheme.sleepColor
-        case .stress:   VelaTheme.stressColor
-        case .energy:   VelaTheme.energyColor
-        case .hrv:      VelaTheme.recoveryColor
-        case .rhr:      VelaTheme.accent
-        case .weight:           Color(hex: "#8E8A80")
-        case .bodyFat:          Color(hex: "#8E8A80")
-        case .respiratoryRate:  VelaTheme.recoveryColor
-        case .bloodOxygen:      VelaTheme.accent
-        case .steps:            Color(hex: "#E0A926")
-        case .activeCalories:   VelaTheme.strainColor
-        case .activeMinutes:    VelaTheme.sleepColor
+        case .strain, .recovery, .sleep, .stress, .energy:
+            return VelaTheme.color(for: dashboardResult(for: metric).state)
+        case .hrv, .rhr, .respiratoryRate, .bloodOxygen, .weight, .bodyFat,
+             .steps, .activeCalories, .activeMinutes:
+            return VelaTheme.brand
+        }
+    }
+
+    private func dashboardResult(for metric: MetricType) -> MetricResult {
+        switch metric {
+        case .strain: return dashboard.strain
+        case .recovery: return dashboard.recovery
+        case .sleep: return dashboard.sleepScore
+        case .stress: return dashboard.stress
+        case .energy: return dashboard.energy
+        default: return dashboard.recovery
         }
     }
 

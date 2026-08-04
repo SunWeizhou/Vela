@@ -159,6 +159,7 @@ struct VelaTodayView: View {
     @State var selectedInsightIndex = 0
     @State var selectedInsight: ProactiveInsight?
     @State var showTodayEvidence = false
+    @State var showMetricDetail: VelaMetricDetailView.MetricType?
     @State var animatedEnergyScore: Double = 0.0
     @State var experienceFeedbackTick = 0
     @State var dataCoverageSummary = DataCoverageSummaryModel.unknown
@@ -254,8 +255,13 @@ struct VelaTodayView: View {
                         .frame(maxWidth: .infinity)
                 }
 
-                TodayVitalsGrid(cards: vitalCards) { _ in
-                    showCoach = true
+                TodayVitalsGrid(cards: vitalCards) { kind in
+                    switch kind {
+                    case .hrv: showMetricDetail = .hrv
+                    case .rhr: showMetricDetail = .rhr
+                    case .spo2: showMetricDetail = .bloodOxygen
+                    case .sleep: showMetricDetail = .sleep
+                    }
                 }
 
                 TodayWeeklyLoadCard(loads: weeklyLoads, acwrText: acwrText)
@@ -408,6 +414,11 @@ struct VelaTodayView: View {
             CalendarOverviewSheetView()
                 .presentationDetents([.medium, .large])
                 .velaSheetSurface()
+        }
+        .sheet(item: $showMetricDetail) { metric in
+            NavigationStack {
+                VelaMetricDetailView(metric: metric)
+            }
         }
         .sheet(item: $selectedInsight) { insight in
             ProactiveInsightDetailSheet(insight: insight) { question in
