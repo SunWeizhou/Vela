@@ -357,7 +357,7 @@ struct VelaTodayView: View {
         .background(VelaTheme.systemGroupedBackground)
         .task(id: isActiveSurface) {
             guard isActiveSurface else { return }
-            Task { await dashboardVM.hydrateFromCache(modelContext: modelContext) }
+            await dashboardVM.hydrateFromCache(modelContext: modelContext)
             loadRealNutritionData()
             loadDynamicData()
             locationManager.startUpdating()
