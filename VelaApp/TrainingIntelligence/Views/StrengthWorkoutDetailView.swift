@@ -65,7 +65,7 @@ struct StrengthWorkoutDetailView: View {
                     } label: {
                         Image(systemName: "trash")
                             .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(Color.red)
+                            .foregroundStyle(VelaTheme.systemRed)
                     }
                     .buttonStyle(.cardPress)
                 }

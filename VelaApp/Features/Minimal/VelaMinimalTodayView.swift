@@ -201,7 +201,7 @@ struct VelaTodayView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Color.red)
+                        .foregroundStyle(VelaTheme.systemRed)
                     Text(errorMessage)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(VelaTheme.fg)
@@ -217,7 +217,7 @@ struct VelaTodayView: View {
             .background(RoundedRectangle(cornerRadius: 16).fill(VelaTheme.cardBg))
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.red.opacity(0.3), lineWidth: 1)
+                    .stroke(VelaTheme.systemRed.opacity(0.3), lineWidth: 1)
             )
         }
     }

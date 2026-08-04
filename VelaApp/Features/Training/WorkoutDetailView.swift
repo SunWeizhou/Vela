@@ -109,7 +109,7 @@ struct WorkoutDetailView: View {
                     } label: {
                         Image(systemName: "trash")
                             .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(Color.red)
+                            .foregroundStyle(VelaTheme.systemRed)
                     }
                 }
             }
@@ -405,7 +405,7 @@ struct WorkoutDetailView: View {
                     if let first = routeCoordinates.first {
                         Annotation(L10n.t("Start", "起点"), coordinate: first) {
                             Circle()
-                                .fill(Color.green)
+                                .fill(VelaTheme.systemGreen)
                                 .frame(width: 12, height: 12)
                                 .overlay(Circle().stroke(Color.white, lineWidth: 2))
                                 .shadow(radius: 2)
@@ -414,7 +414,7 @@ struct WorkoutDetailView: View {
                     if let last = routeCoordinates.last {
                         Annotation(L10n.t("End", "终点"), coordinate: last) {
                             Circle()
-                                .fill(Color.red)
+                                .fill(VelaTheme.systemRed)
                                 .frame(width: 12, height: 12)
                                 .overlay(Circle().stroke(Color.white, lineWidth: 2))
                                 .shadow(radius: 2)

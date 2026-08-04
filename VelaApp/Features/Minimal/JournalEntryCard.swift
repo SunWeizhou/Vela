@@ -73,9 +73,9 @@ extension JournalEntryRecord {
     }
 
     var uiColor: Color {
-        if tags.contains("低碳水化合物") { return Color.orange }
-        if tags.contains("添加糖") { return Color.purple }
-        if tags.contains("生酮饮食") { return Color.green }
+        if tags.contains("低碳水化合物") { return VelaTheme.systemOrange }
+        if tags.contains("添加糖") { return VelaTheme.indigo }
+        if tags.contains("生酮饮食") { return VelaTheme.systemGreen }
         if tags.contains("在床上使用设备") { return Color.blue }
         if tags.contains("caffeine") || tags.contains("咖啡因") { return Color(hex: "#8B5A2B") }
         if tags.contains("hydration") || tags.contains("补水") { return VelaTheme.accent }

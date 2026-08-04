@@ -286,7 +286,7 @@ struct StrengthWorkoutLogSheetView: View {
                         exercises.removeAll { $0.id == exerciseID }
                     } label: {
                         Image(systemName: "trash")
-                            .foregroundStyle(Color.red)
+                            .foregroundStyle(VelaTheme.systemRed)
                     }
                     .buttonStyle(.cardPress)
                 }

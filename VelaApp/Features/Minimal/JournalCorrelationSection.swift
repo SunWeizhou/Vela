@@ -184,7 +184,7 @@ struct JournalCorrelationSection: View {
         switch conf {
         case .high: return VelaTheme.success
         case .medium: return VelaTheme.accent
-        case .low: return Color.orange
+        case .low: return VelaTheme.systemOrange
         case .unavailable: return VelaTheme.muted
         }
     }

@@ -302,7 +302,7 @@ struct VelaMeView: View {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 11))
-                            .foregroundStyle(Color.orange)
+                            .foregroundStyle(VelaTheme.systemOrange)
                             .frame(width: 24, height: 24)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("待补充健康指标")
@@ -784,7 +784,7 @@ struct VelaMeView: View {
         switch confidence {
         case .high: return VelaTheme.success
         case .medium: return VelaTheme.accent
-        case .low: return Color.orange
+        case .low: return VelaTheme.systemOrange
         case .unavailable: return VelaTheme.muted
         }
     }

@@ -742,9 +742,9 @@ struct DigitalTwinSimulatorCard: View {
                     .padding(.vertical, 4)
                     .background(
                         Capsule()
-                            .fill(simulationResult.scenarioTag == "optimal" ? Color.green.opacity(0.18) : (simulationResult.scenarioTag == "suboptimal_timing" ? Color.orange.opacity(0.18) : Color.red.opacity(0.18)))
+                            .fill(simulationResult.scenarioTag == "optimal" ? VelaTheme.systemGreen.opacity(0.18) : (simulationResult.scenarioTag == "suboptimal_timing" ? VelaTheme.systemOrange.opacity(0.18) : VelaTheme.systemRed.opacity(0.18)))
                     )
-                    .foregroundStyle(simulationResult.scenarioTag == "optimal" ? Color.green : (simulationResult.scenarioTag == "suboptimal_timing" ? Color.orange : Color.red))
+                    .foregroundStyle(simulationResult.scenarioTag == "optimal" ? VelaTheme.systemGreen : (simulationResult.scenarioTag == "suboptimal_timing" ? VelaTheme.systemOrange : VelaTheme.systemRed))
             }
 
             // Results Display Grid
@@ -755,7 +755,7 @@ struct DigitalTwinSimulatorCard: View {
                         .foregroundStyle(VelaTheme.muted)
                     Text("\(Int(simulationResult.predictedNextDayRecovery.rounded()))%")
                         .font(.system(size: 26, weight: .black, design: .rounded))
-                        .foregroundStyle(simulationResult.predictedNextDayRecovery >= 66 ? Color.green : (simulationResult.predictedNextDayRecovery >= 34 ? Color.yellow : Color.red))
+                        .foregroundStyle(simulationResult.predictedNextDayRecovery >= 66 ? VelaTheme.systemGreen : (simulationResult.predictedNextDayRecovery >= 34 ? VelaTheme.systemYellow : VelaTheme.systemRed))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(10)

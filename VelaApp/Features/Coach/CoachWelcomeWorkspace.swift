@@ -191,7 +191,7 @@ struct CoachWelcomeWorkspace: View {
                             detail: "\(pendingMemoryProposals.count) 条候选内容，确认后才会写入你的档案。",
                             icon: "brain.head.profile",
                             footer: "点击进行归档确认",
-                            accentColor: Color.orange
+                            accentColor: VelaTheme.systemOrange
                         ) {
                             showWikiProfile = true
                         }
