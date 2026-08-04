@@ -35,9 +35,9 @@ struct VelaTrainingView: View {
     private var todaySession: TrainingDay? {
         guard let activePlan else { return nil }
         return TrainingScheduleResolver.resolve(
-            plan: activePlan,
+            plan: activePlan.dto,
             on: dashboardVM.selectedDate,
-            events: localWorkoutEvents
+            events: localWorkoutEvents.map { $0.dto }
         )
     }
     private var todayDecision: DailyTrainingDecision? {
@@ -289,7 +289,7 @@ struct VelaTrainingView: View {
         // historical date on the Training page still shows real-today muscle volume,
         // PRs and fatigue.
         TrainingAnalyticsService().buildRecentSummary(
-            workouts: strengthWorkouts,
+            workouts: strengthWorkouts.map { $0.dto },
             days: 7,
             endingAt: dashboardVM.selectedDate
         )

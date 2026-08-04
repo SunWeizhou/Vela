@@ -391,9 +391,9 @@ struct TrainingCalendarView: View {
 
     private func planReviewCard(_ plan: TrainingPlanRecord) -> some View {
         let review = TrainingPlanReviewService.review(
-            plan: plan,
-            events: workoutEvents,
-            responses: trainingResponses
+            plan: plan.dto,
+            events: workoutEvents.map { $0.dto },
+            responses: trainingResponses.map { $0.dto }
         )
         return VelaHeroSurface(tint: VelaTheme.recoveryColor) {
             VStack(alignment: .leading, spacing: 12) {

@@ -357,7 +357,7 @@ struct VelaTodayView: View {
         .background(VelaTheme.systemGroupedBackground)
         .task(id: isActiveSurface) {
             guard isActiveSurface else { return }
-            dashboardVM.hydrateFromCache(modelContext: modelContext)
+            Task { await dashboardVM.hydrateFromCache(modelContext: modelContext) }
             loadRealNutritionData()
             loadDynamicData()
             locationManager.startUpdating()
@@ -387,7 +387,7 @@ struct VelaTodayView: View {
         }
         .onChange(of: dashboardVM.selectedDate) {
             guard isActiveSurface else { return }
-            dashboardVM.hydrateFromCache(modelContext: modelContext)
+            Task { await dashboardVM.hydrateFromCache(modelContext: modelContext) }
             loadDynamicData()
             Task {
                 await refreshDashboard()
@@ -403,7 +403,7 @@ struct VelaTodayView: View {
         }
         .onChange(of: appState.localDataRevision) {
             guard isActiveSurface else { return }
-            dashboardVM.hydrateFromCache(modelContext: modelContext)
+            Task { await dashboardVM.hydrateFromCache(modelContext: modelContext) }
             loadRealNutritionData()
             loadDynamicData()
         }

@@ -52,25 +52,25 @@ struct BodyState: Codable, Hashable, Sendable {
 
 struct BodyStateInput {
     var dashboard: DashboardSummary
-    var dailySummary: DailyHealthSummaryRecord?
-    var workoutEvents: [WorkoutEventRecord]
-    var strengthWorkouts: [StrengthWorkoutRecord]
-    var trainingResponses: [TrainingResponseRecord]
-    var foodLogs: [FoodLogRecord]
-    var journalEntries: [JournalEntryRecord]
-    var activePlan: TrainingPlanRecord?
+    var dailySummary: DailyHealthSummaryDTO?
+    var workoutEvents: [WorkoutEventDTO]
+    var strengthWorkouts: [StrengthWorkoutDTO]
+    var trainingResponses: [TrainingResponseDTO]
+    var foodLogs: [FoodLogDTO]
+    var journalEntries: [JournalEntryDTO]
+    var activePlan: TrainingPlanDTO?
     var activeStatus: String
     var generatedAt: Date
 
     init(
         dashboard: DashboardSummary,
-        dailySummary: DailyHealthSummaryRecord? = nil,
-        workoutEvents: [WorkoutEventRecord] = [],
-        strengthWorkouts: [StrengthWorkoutRecord] = [],
-        trainingResponses: [TrainingResponseRecord] = [],
-        foodLogs: [FoodLogRecord] = [],
-        journalEntries: [JournalEntryRecord] = [],
-        activePlan: TrainingPlanRecord? = nil,
+        dailySummary: DailyHealthSummaryDTO? = nil,
+        workoutEvents: [WorkoutEventDTO] = [],
+        strengthWorkouts: [StrengthWorkoutDTO] = [],
+        trainingResponses: [TrainingResponseDTO] = [],
+        foodLogs: [FoodLogDTO] = [],
+        journalEntries: [JournalEntryDTO] = [],
+        activePlan: TrainingPlanDTO? = nil,
         activeStatus: String = "active",
         generatedAt: Date = Date()
     ) {
@@ -87,7 +87,7 @@ struct BodyStateInput {
     }
 }
 
-struct BodyStateKernel {
+struct BodyStateKernel: Sendable {
     func build(input: BodyStateInput) -> BodyState {
         let dashboard = input.dashboard
         let fatigue = TrainingAnalyticsService().computeLocalFatigue(

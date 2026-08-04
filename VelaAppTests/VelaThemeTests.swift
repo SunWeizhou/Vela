@@ -759,7 +759,7 @@ final class VelaThemeTests: XCTestCase {
                 sets: [warmup, drop, failure]
             )]
         )
-        let analysis = TrainingAnalyticsService().summarizeWorkout(workout)
+        let analysis = TrainingAnalyticsService().summarizeWorkout(workout.dto)
         XCTAssertEqual(analysis.completedSets, 3)
         XCTAssertEqual(analysis.effectiveSets, 2)
         XCTAssertEqual(analysis.totalVolumeKg, 900, accuracy: 0.001)

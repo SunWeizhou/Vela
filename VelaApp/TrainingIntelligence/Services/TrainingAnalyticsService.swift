@@ -2,13 +2,13 @@ import Foundation
 import SwiftData
 
 struct TrainingAnalyticsService: Sendable {
-    
+
     init() {}
 
     func summarizeWorkout(
-        _ workout: StrengthWorkoutRecord,
-        history: [StrengthWorkoutRecord] = [],
-        exerciseLibrary: [ExerciseDefinitionRecord] = ExerciseLibraryService.defaultDefinitions()
+        _ workout: StrengthWorkoutDTO,
+        history: [StrengthWorkoutDTO] = [],
+        exerciseLibrary: [ExerciseDefinition] = ExerciseLibraryService.defaultDefinitionsDTO()
     ) -> StrengthWorkoutAnalysis {
         var volume = 0.0
         var plannedSets = 0
@@ -72,7 +72,7 @@ struct TrainingAnalyticsService: Sendable {
         )
     }
 
-    func detectPersonalRecords(workout: StrengthWorkoutRecord, history: [StrengthWorkoutRecord]) -> [PersonalRecord] {
+    func detectPersonalRecords(workout: StrengthWorkoutDTO, history: [StrengthWorkoutDTO]) -> [PersonalRecord] {
         var records: [PersonalRecord] = []
         for exercise in workout.exercises {
             let workSets = exercise.sets.filter { !$0.isWarmup && $0.isCompleted == true }
@@ -99,10 +99,10 @@ struct TrainingAnalyticsService: Sendable {
     }
 
     func buildRecentSummary(
-        workouts: [StrengthWorkoutRecord],
+        workouts: [StrengthWorkoutDTO],
         days: Int,
         endingAt: Date = Date(),
-        exerciseLibrary: [ExerciseDefinitionRecord] = ExerciseLibraryService.defaultDefinitions()
+        exerciseLibrary: [ExerciseDefinition] = ExerciseLibraryService.defaultDefinitionsDTO()
     ) -> RecentTrainingSummary {
         let start = endingAt.addingTimeInterval(-Double(days) * 86_400)
         let recent = workouts.filter { $0.startedAt >= start && $0.startedAt <= endingAt }
@@ -141,9 +141,9 @@ struct TrainingAnalyticsService: Sendable {
     }
 
     func computeLocalFatigue(
-        workouts: [StrengthWorkoutRecord],
+        workouts: [StrengthWorkoutDTO],
         endingAt: Date = Date(),
-        exerciseLibrary: [ExerciseDefinitionRecord] = ExerciseLibraryService.defaultDefinitions()
+        exerciseLibrary: [ExerciseDefinition] = ExerciseLibraryService.defaultDefinitionsDTO()
     ) -> [String: LocalMuscleFatigue] {
         let start7d = endingAt.addingTimeInterval(-7 * 86_400)
         let start48h = endingAt.addingTimeInterval(-48 * 3_600)
@@ -228,7 +228,7 @@ struct TrainingAnalyticsService: Sendable {
         ][muscle] ?? muscle
     }
 
-    public func resolvedMuscleGroup(for exercise: StrengthExerciseLog, library: [ExerciseDefinitionRecord]) -> String {
+    public func resolvedMuscleGroup(for exercise: StrengthExerciseLog, library: [ExerciseDefinition]) -> String {
         if let explicit = exercise.primaryMuscleGroup, !explicit.isEmpty { return explicit }
         if let canonicalKey = exercise.exerciseCanonicalKey,
            let definition = library.first(where: { $0.canonicalKey == canonicalKey }) {
@@ -416,9 +416,9 @@ struct XunjiTrainingImportService: Sendable {
             markAffected(workout.startedAt)
 
             let analysis = TrainingAnalyticsService().summarizeWorkout(
-                workout,
-                history: existingWorkouts.filter { $0.id != workout.id },
-                exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
+                workout.dto,
+                history: existingWorkouts.filter { $0.id != workout.id }.map { $0.dto },
+                exerciseLibrary: ExerciseLibraryService.defaultDefinitionsDTO()
             )
             workout.analyticsJSON = (try? String(data: encoder.encode(analysis), encoding: .utf8)) ?? "{}"
             let artifactHash = ContentHash.hash("xunji-\(normalized.externalID)-\(workout.analyticsJSON ?? "")")
@@ -927,11 +927,11 @@ private extension KeyedDecodingContainer {
     }
 }
 
-enum TrainingScheduleResolver {
+enum TrainingScheduleResolver: Sendable {
     static func resolve(
-        plan: TrainingPlanRecord,
+        plan: TrainingPlanDTO,
         on date: Date,
-        events: [WorkoutEventRecord],
+        events: [WorkoutEventDTO],
         calendar: Calendar = .current
     ) -> TrainingDay? {
         let selectedDay = calendar.startOfDay(for: date)
@@ -1010,9 +1010,9 @@ struct TrainingPlanReview: Equatable, Sendable {
 
 enum TrainingPlanReviewService {
     static func review(
-        plan: TrainingPlanRecord,
-        events: [WorkoutEventRecord],
-        responses: [TrainingResponseRecord],
+        plan: TrainingPlanDTO,
+        events: [WorkoutEventDTO],
+        responses: [TrainingResponseDTO],
         through date: Date = Date(),
         calendar: Calendar = .current
     ) -> TrainingPlanReview {

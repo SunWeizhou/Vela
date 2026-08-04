@@ -148,7 +148,7 @@ final class DashboardViewModel: ObservableObject {
     }
 
     @discardableResult
-    func hydrateFromCache(modelContext: ModelContext) -> Bool {
+    func hydrateFromCache(modelContext: ModelContext) async -> Bool {
         do {
             guard let cached = try useCase.loadCachedDashboard(
                 for: selectedDate,
@@ -164,7 +164,7 @@ final class DashboardViewModel: ObservableObject {
             lastUpdated = cached.recovery.lastUpdated
             computeStreaK(modelContext: modelContext)
             computeWeeklyComparison(modelContext: modelContext)
-            loadSecondaryData(modelContext: modelContext)
+            await loadSecondaryData(modelContext: modelContext)
             return true
         } catch {
             return false
@@ -174,7 +174,7 @@ final class DashboardViewModel: ObservableObject {
     func refresh(modelContext: ModelContext? = nil, force: Bool = false) async {
         if let modelContext,
            dashboard.source == .empty || !Calendar.current.isDate(dashboard.date, inSameDayAs: selectedDate) {
-            hydrateFromCache(modelContext: modelContext)
+            await hydrateFromCache(modelContext: modelContext)
         }
 
         if let runningTask = refreshTask {
@@ -229,7 +229,7 @@ final class DashboardViewModel: ObservableObject {
             if let modelContext {
                 computeStreaK(modelContext: modelContext)
                 computeWeeklyComparison(modelContext: modelContext)
-                loadSecondaryData(modelContext: modelContext)
+                await loadSecondaryData(modelContext: modelContext)
             }
         } catch {
             let message = error.localizedDescription
@@ -414,18 +414,18 @@ final class DashboardViewModel: ObservableObject {
         self.heatmapPoints = points
     }
 
-    func loadSecondaryData(modelContext: ModelContext) {
+    func loadSecondaryData(modelContext: ModelContext) async {
         let calendar = Calendar.current
         let refDate = selectedDate
         let startOfDayRef = calendar.startOfDay(for: refDate)
-        
+
         let healthLookbackDays = 42
         let trainingLookbackDays = 30
-        
+
         let startLimit = calendar.startOfDay(for: calendar.date(byAdding: .day, value: -healthLookbackDays, to: startOfDayRef) ?? startOfDayRef)
         let trainingStartLimit = calendar.startOfDay(for: calendar.date(byAdding: .day, value: -trainingLookbackDays, to: startOfDayRef) ?? startOfDayRef)
         let endLimit = calendar.date(byAdding: .day, value: 1, to: startOfDayRef) ?? startOfDayRef
-        
+
         let artifactsDesc = FetchDescriptor<CoachArtifactRecord>(
             predicate: #Predicate<CoachArtifactRecord> { $0.createdAt >= trainingStartLimit && $0.createdAt <= endLimit },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
@@ -481,28 +481,43 @@ final class DashboardViewModel: ObservableObject {
         )
         opPlansDesc.fetchLimit = 1
         let operatingPlans = (try? modelContext.fetch(opPlansDesc)) ?? []
-        
+
         let activePlan = trainingPlans.first(where: \.isActive)
         let persistedPlan = operatingPlans.first
         self.persistedOperatingPlan = persistedPlan
 
         // Domain assembly (pure computation, no DB writes / Watch I/O) is extracted
-        // into SecondaryDataAssembler so it is unit-testable; the VM only fetches,
-        // assigns results, and coordinates side effects.
-        let assembly = SecondaryDataAssembler.assemble(
-            dashboard: dashboard,
-            refDate: refDate,
-            calendar: calendar,
-            dailySummaries: dailySummaries,
-            workoutEvents: workoutEvents,
-            strengthWorkouts: strengthWorkouts,
-            trainingResponses: trainingResponses,
-            foodLogs: foodLogs,
-            journalEntries: journalEntries,
-            coachArtifacts: coachArtifacts,
-            activePlan: activePlan,
-            persistedOperatingPlan: persistedPlan
-        )
+        // into SecondaryDataAssembler so it is unit-testable. The ViewModel converts
+        // its SwiftData @Model records to value-type DTOs on the main thread, then hops
+        // off the main actor to run the pure assembly, so the training kernels and score
+        // aggregation do not block the UI.
+        let dailySummaryDTOs = dailySummaries.map { $0.dto }
+        let eventDTOs = workoutEvents.map { $0.dto }
+        let strengthDTOs = strengthWorkouts.map { $0.dto }
+        let responseDTOs = trainingResponses.map { $0.dto }
+        let foodDTOs = foodLogs.map { $0.dto }
+        let journalDTOs = journalEntries.map { $0.dto }
+        let artifactValues = coachArtifacts.map(\.artifact)
+        let activePlanDTO = activePlan?.dto
+        let persistedDecision = persistedPlan?.trainingDecision
+        let dashboardSnapshot = dashboard
+
+        let assembly = await Task.detached {
+            SecondaryDataAssembler.assemble(
+                dashboard: dashboardSnapshot,
+                refDate: refDate,
+                calendar: calendar,
+                dailySummaries: dailySummaryDTOs,
+                workoutEvents: eventDTOs,
+                strengthWorkouts: strengthDTOs,
+                trainingResponses: responseDTOs,
+                foodLogs: foodDTOs,
+                journalEntries: journalDTOs,
+                coachArtifacts: artifactValues,
+                activePlan: activePlanDTO,
+                persistedDecision: persistedDecision
+            )
+        }.value
 
         self.dashboard = assembly.updatedDashboard
         self.todayCalories = assembly.todayCalories
@@ -513,7 +528,8 @@ final class DashboardViewModel: ObservableObject {
         self.latestTodayArtifact = assembly.latestTodayArtifact
         self.todayCommandState = assembly.todayCommandState
 
-        // Side effects stay in the VM (coordination, not pure assembly).
+        // Side effects stay in the VM (coordination, not pure assembly). They run on the
+        // main actor using the real SwiftData records fetched above.
         if calendar.isDateInToday(refDate), let activePlan {
             _ = try? AdaptiveTrainingManager().refreshDailyProposal(
                 plan: activePlan,
@@ -544,7 +560,7 @@ final class DashboardViewModel: ObservableObject {
 /// unit-testable function of the already-fetched records — the ViewModel keeps
 /// only fetching, property assignment, and side effects (Watch publish,
 /// adaptive-training write).
-struct SecondaryDataAssembly {
+struct SecondaryDataAssembly: Sendable {
     var bodyState: BodyState
     var dailyTrainingDecision: DailyTrainingDecision
     var updatedDashboard: DashboardSummary
@@ -558,21 +574,24 @@ struct SecondaryDataAssembly {
     var scheduledDay: TrainingDay?
 }
 
-@MainActor
 enum SecondaryDataAssembler {
-    static func assemble(
+    /// Pure, Sendable secondary-data computation over value-type DTOs. Runs off the
+    /// main actor (the ViewModel converts its SwiftData `@Model` records to DTOs on
+    /// the main thread first, then hops off to invoke this), so the training kernels
+    /// and score aggregation no longer block the UI.
+    static nonisolated func assemble(
         dashboard: DashboardSummary,
         refDate: Date,
         calendar: Calendar,
-        dailySummaries: [DailyHealthSummaryRecord],
-        workoutEvents: [WorkoutEventRecord],
-        strengthWorkouts: [StrengthWorkoutRecord],
-        trainingResponses: [TrainingResponseRecord],
-        foodLogs: [FoodLogRecord],
-        journalEntries: [JournalEntryRecord],
-        coachArtifacts: [CoachArtifactRecord],
-        activePlan: TrainingPlanRecord?,
-        persistedOperatingPlan: DailyOperatingPlanRecord?
+        dailySummaries: [DailyHealthSummaryDTO],
+        workoutEvents: [WorkoutEventDTO],
+        strengthWorkouts: [StrengthWorkoutDTO],
+        trainingResponses: [TrainingResponseDTO],
+        foodLogs: [FoodLogDTO],
+        journalEntries: [JournalEntryDTO],
+        coachArtifacts: [CoachArtifact],
+        activePlan: TrainingPlanDTO?,
+        persistedDecision: DailyTrainingDecision?
     ) -> SecondaryDataAssembly {
         let startOfDayRef = calendar.startOfDay(for: refDate)
 
@@ -600,9 +619,8 @@ enum SecondaryDataAssembler {
             endingAt: refDate
         )
         let dailyTrainingDecision: DailyTrainingDecision
-        if let persistedPlan = persistedOperatingPlan,
-           let decoded = persistedPlan.trainingDecision {
-            dailyTrainingDecision = decoded
+        if let persistedDecision {
+            dailyTrainingDecision = persistedDecision
         } else {
             dailyTrainingDecision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
                 bodyState: bodyState,
@@ -644,7 +662,6 @@ enum SecondaryDataAssembler {
 
         // 6. Latest today artifact
         let latestTodayArtifact = coachArtifacts
-            .map(\.artifact)
             .first { artifact in
                 guard let relatedDate = artifact.relatedDate else { return true }
                 return calendar.isDate(relatedDate, inSameDayAs: refDate)

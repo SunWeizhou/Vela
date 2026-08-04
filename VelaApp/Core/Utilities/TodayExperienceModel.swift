@@ -99,7 +99,7 @@ struct TodayExperienceModel: Codable, Hashable {
         trainingDecision: DailyTrainingDecision,
         generatedAt: Date = Date(),
         nutrition: TodayExperienceNutrition = .empty,
-        history: [DailyHealthSummaryRecord] = []
+        history: [DailyHealthSummaryDTO] = []
     ) -> TodayExperienceModel {
         let hasReadinessData = dashboard.recovery.hasData
         let confidenceDetail = hasReadinessData ? label(for: bodyState.confidence) : "数据不足"
@@ -287,7 +287,7 @@ struct TodayExperienceModel: Codable, Hashable {
         id: String,
         current: MetricResult,
         selectedDate: Date,
-        history: [DailyHealthSummaryRecord],
+        history: [DailyHealthSummaryDTO],
         calendar: Calendar = .current
     ) -> [Double] {
         let selectedDay = calendar.startOfDay(for: selectedDate)

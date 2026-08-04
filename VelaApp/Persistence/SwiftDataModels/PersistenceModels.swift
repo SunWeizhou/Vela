@@ -2222,3 +2222,182 @@ extension ProactiveInsightRecord {
         )
     }
 }
+
+// MARK: - Kernel Input Value DTOs (Sendable)
+//
+// The training kernels (BodyStateKernel / TrainingDecisionKernel / TrainingScheduleResolver)
+// and TrainingAnalyticsService previously read SwiftData @Model classes directly, which forced
+// the heavy secondary-data computation to stay on the main actor. These plain value-type DTOs
+// carry exactly the fields the kernels read, are Sendable, and let the same pure computation
+// run off the main thread. Conversion (dto) is cheap and must run on the main actor where the
+// model object lives; the kernels then operate only on the immutable value copies.
+
+struct WorkoutEventDTO: Sendable {
+    var id: UUID
+    var startedAt: Date
+    var durationMinutes: Double
+    var linkedTrainingPlanDayId: UUID?
+}
+
+extension WorkoutEventRecord {
+    var dto: WorkoutEventDTO {
+        WorkoutEventDTO(
+            id: id,
+            startedAt: startedAt,
+            durationMinutes: durationMinutes,
+            linkedTrainingPlanDayId: linkedTrainingPlanDayId
+        )
+    }
+}
+
+struct TrainingResponseDTO: Sendable {
+    var id: UUID
+    var date: Date
+    var workoutId: UUID
+    var primaryMuscleGroups: [String]
+    var totalEffectiveSets: Int
+    var totalVolumeKg: Double
+    var sessionRPE: Double?
+    var nextDayRecoveryDelta: Double?
+    var nextDayHRVDelta: Double?
+    var nextDayRHRDelta: Double?
+}
+
+extension TrainingResponseRecord {
+    var dto: TrainingResponseDTO {
+        TrainingResponseDTO(
+            id: id,
+            date: date,
+            workoutId: workoutId,
+            primaryMuscleGroups: primaryMuscleGroups,
+            totalEffectiveSets: totalEffectiveSets,
+            totalVolumeKg: totalVolumeKg,
+            sessionRPE: sessionRPE,
+            nextDayRecoveryDelta: nextDayRecoveryDelta,
+            nextDayHRVDelta: nextDayHRVDelta,
+            nextDayRHRDelta: nextDayRHRDelta
+        )
+    }
+}
+
+struct FoodLogDTO: Sendable {
+    var id: UUID
+    var createdAt: Date
+    var totalCalories: Int
+    var proteinGrams: Int
+    var carbsGrams: Int
+    var fatGrams: Int
+    var fiberGrams: Int
+}
+
+extension FoodLogRecord {
+    var dto: FoodLogDTO {
+        FoodLogDTO(
+            id: id,
+            createdAt: createdAt,
+            totalCalories: totalCalories,
+            proteinGrams: proteinGrams,
+            carbsGrams: carbsGrams,
+            fatGrams: fatGrams,
+            fiberGrams: fiberGrams
+        )
+    }
+}
+
+struct JournalEntryDTO: Sendable {
+    var createdAt: Date
+    var note: String
+    var tags: [String]
+    var value: Double?
+}
+
+extension JournalEntryRecord {
+    var dto: JournalEntryDTO {
+        JournalEntryDTO(
+            createdAt: createdAt,
+            note: note,
+            tags: tags,
+            value: value
+        )
+    }
+}
+
+struct TrainingPlanDTO: Codable, Hashable, Sendable {
+    var id: UUID
+    var title: String
+    var goalDescription: String
+    var startDate: Date
+    var weeksCount: Int
+    var isActive: Bool
+    var days: [TrainingDay]
+}
+
+extension TrainingPlanRecord {
+    var dto: TrainingPlanDTO {
+        TrainingPlanDTO(
+            id: id,
+            title: title,
+            goalDescription: goalDescription,
+            startDate: startDate,
+            weeksCount: weeksCount,
+            isActive: isActive,
+            days: days
+        )
+    }
+}
+
+struct DailyHealthSummaryDTO: Sendable {
+    var dayIdentifier: String
+    var date: Date
+    var updatedAt: Date
+    var recoveryScore: Double?
+    var sleepScore: Double?
+    var strainScore: Double?
+    var stressIndex: Double?
+    var currentEnergy: Double?
+    var morningEnergy: Double?
+    var energyBank: Double?
+}
+
+extension DailyHealthSummaryRecord {
+    var dto: DailyHealthSummaryDTO {
+        DailyHealthSummaryDTO(
+            dayIdentifier: dayIdentifier,
+            date: date,
+            updatedAt: updatedAt,
+            recoveryScore: recoveryScore,
+            sleepScore: sleepScore,
+            strainScore: strainScore,
+            stressIndex: stressIndex,
+            currentEnergy: currentEnergy,
+            morningEnergy: morningEnergy,
+            energyBank: energyBank
+        )
+    }
+}
+
+struct StrengthWorkoutDTO: Sendable {
+    var id: UUID
+    var title: String
+    var startedAt: Date
+    var durationMinutes: Int
+    var endedAt: Date
+    var sessionRPE: Double?
+    var exercises: [StrengthExerciseLog]
+
+    var exerciseCount: Int { exercises.count }
+}
+
+extension StrengthWorkoutRecord {
+    var dto: StrengthWorkoutDTO {
+        StrengthWorkoutDTO(
+            id: id,
+            title: title,
+            startedAt: startedAt,
+            durationMinutes: durationMinutes,
+            endedAt: endedAt,
+            sessionRPE: sessionRPE,
+            exercises: exercises
+        )
+    }
+}

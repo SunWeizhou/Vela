@@ -396,7 +396,7 @@ final class BodyStateKernelTests: XCTestCase {
         )
         let input = BodyStateInput(
             dashboard: .empty(date: Date()),
-            foodLogs: [food],
+            foodLogs: [food.dto],
             generatedAt: Date()
         )
         

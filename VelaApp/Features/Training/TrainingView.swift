@@ -19,7 +19,7 @@ struct TrainingView: View {
     private var trainingBodyState: BodyState {
         BodyStateKernel().build(input: BodyStateInput(
             dashboard: viewModel.dashboard,
-            activePlan: activePlan,
+            activePlan: activePlan?.dto,
             activeStatus: ActiveStatusSettings.resolveCurrentStatus(),
             generatedAt: viewModel.dashboard.date
         ))
@@ -36,7 +36,7 @@ struct TrainingView: View {
         }
         return TrainingDecisionKernel().decide(input: TrainingDecisionInput(
             bodyState: trainingBodyState,
-            activePlan: activePlan
+            activePlan: activePlan?.dto
         ))
     }
 

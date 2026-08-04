@@ -119,7 +119,7 @@ enum TrainingDecisionEngine {
         )
         
         let limiterResult = DailyPlanLimiterEngine().calculate(input: limiterInput)
-        let localFatigue = TrainingAnalyticsService().computeLocalFatigue(workouts: strengthWorkouts)
+        let localFatigue = TrainingAnalyticsService().computeLocalFatigue(workouts: strengthWorkouts.map { $0.dto })
         let adaptation = RecoveryTrainingAdapter().adapt(input: RecoveryTrainingInput(
             recoveryScore: dashboard.recovery.score,
             sleepScore: dashboard.sleepScore.score,

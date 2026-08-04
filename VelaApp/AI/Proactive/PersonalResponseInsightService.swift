@@ -138,7 +138,7 @@ struct TrainingResponseInsightService {
             let nextDayID = DailyHealthSummaryRecord.dayIdentifier(for: nextDay, calendar: calendar)
             guard let today = snapshotsByDay[todayID], let following = snapshotsByDay[nextDayID] else { continue }
 
-            let analysis = TrainingAnalyticsService().summarizeWorkout(workout)
+            let analysis = TrainingAnalyticsService().summarizeWorkout(workout.dto)
             let setRPEs = workout.exercises.flatMap(\.sets).compactMap(\.rpe)
             let sessionRPE = workout.sessionRPE ?? average(setRPEs)
             let response = TrainingResponseRecord(

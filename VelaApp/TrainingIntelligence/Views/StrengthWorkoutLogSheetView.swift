@@ -535,9 +535,9 @@ struct StrengthWorkoutLogSheetView: View {
             
             do {
                 let analysis = TrainingAnalyticsService().summarizeWorkout(
-                    editingWorkout,
-                    history: workoutHistory.filter { $0.id != editingWorkout.id },
-                    exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
+                    editingWorkout.dto,
+                    history: workoutHistory.filter { $0.id != editingWorkout.id }.map { $0.dto },
+                    exerciseLibrary: ExerciseLibraryService.defaultDefinitionsDTO()
                 )
                 editingWorkout.analyticsJSON = (try? String(data: JSONEncoder().encode(analysis), encoding: .utf8)) ?? "{}"
                 
@@ -568,9 +568,9 @@ struct StrengthWorkoutLogSheetView: View {
             record.planDayId = initialDraft?.planDayId
             do {
                 let analysis = TrainingAnalyticsService().summarizeWorkout(
-                    record,
-                    history: workoutHistory,
-                    exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
+                    record.dto,
+                    history: workoutHistory.map { $0.dto },
+                    exerciseLibrary: ExerciseLibraryService.defaultDefinitionsDTO()
                 )
                 record.analyticsJSON = (try? String(data: JSONEncoder().encode(analysis), encoding: .utf8)) ?? "{}"
                 let workoutIdStr = record.id.uuidString

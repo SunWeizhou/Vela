@@ -23,10 +23,10 @@ struct AIContextBuilder {
         let mergedUserWiki = Self.mergedUserWiki(userWiki, onboardingState: onboardingState, bodyModelState: bodyModelState)
         let resolvedBodyState = bodyState ?? BodyStateKernel().build(input: BodyStateInput(
             dashboard: dashboard,
-            workoutEvents: workoutEvents,
-            strengthWorkouts: strengthWorkouts,
-            trainingResponses: trainingResponses,
-            foodLogs: foodLogs,
+            workoutEvents: workoutEvents.map { $0.dto },
+            strengthWorkouts: strengthWorkouts.map { $0.dto },
+            trainingResponses: trainingResponses.map { $0.dto },
+            foodLogs: foodLogs.map { $0.dto },
             generatedAt: generatedAt
         ))
         let envelope = LegacyReportContextAdapter().render(
@@ -87,10 +87,10 @@ struct AIContextBuilder {
         let mergedUserWiki = Self.mergedUserWiki(userWiki, onboardingState: onboardingState, bodyModelState: bodyModelState)
         let resolvedBodyState = bodyState ?? BodyStateKernel().build(input: BodyStateInput(
             dashboard: dashboard,
-            workoutEvents: workoutEvents,
-            strengthWorkouts: strengthWorkouts,
-            trainingResponses: trainingResponses,
-            foodLogs: foodLogs,
+            workoutEvents: workoutEvents.map { $0.dto },
+            strengthWorkouts: strengthWorkouts.map { $0.dto },
+            trainingResponses: trainingResponses.map { $0.dto },
+            foodLogs: foodLogs.map { $0.dto },
             generatedAt: generatedAt
         ))
         let hrvMs = dashboard.recoveryMetrics.hrvMilliseconds
@@ -468,8 +468,9 @@ struct AIContextBuilder {
         // Algorithm v1/trainingAnalytics: strength context derives from TrainingAnalyticsService so
         // effective-set counting, muscle naming, fatigue and PR detection use one shared source of truth.
         let analytics = TrainingAnalyticsService()
-        let recent7d = analytics.buildRecentSummary(workouts: workouts, days: 7, endingAt: generatedAt)
-        let recent14d = analytics.buildRecentSummary(workouts: workouts, days: 14, endingAt: generatedAt)
+        let dtoWorkouts = workouts.map { $0.dto }
+        let recent7d = analytics.buildRecentSummary(workouts: dtoWorkouts, days: 7, endingAt: generatedAt)
+        let recent14d = analytics.buildRecentSummary(workouts: dtoWorkouts, days: 14, endingAt: generatedAt)
         let adaptation = trainingAdaptationSummary(dashboard: dashboard)
         let response = trainingResponseSummary(trainingResponses, generatedAt: generatedAt)
         let progressList = exerciseProgressSummaries(workouts: workouts, generatedAt: generatedAt)
@@ -511,8 +512,9 @@ struct AIContextBuilder {
         generatedAt: Date
     ) -> StrengthTrainingContext {
         let analytics = TrainingAnalyticsService()
-        let recent7d = analytics.buildRecentSummary(workouts: workouts, days: 7, endingAt: generatedAt)
-        let recent14d = analytics.buildRecentSummary(workouts: workouts, days: 14, endingAt: generatedAt)
+        let dtoWorkouts = workouts.map { $0.dto }
+        let recent7d = analytics.buildRecentSummary(workouts: dtoWorkouts, days: 7, endingAt: generatedAt)
+        let recent14d = analytics.buildRecentSummary(workouts: dtoWorkouts, days: 14, endingAt: generatedAt)
         let adaptation = trainingAdaptationSummary(dashboard: dashboard)
         let response = trainingResponseSummary(trainingResponses, generatedAt: generatedAt)
         return StrengthTrainingContext(
@@ -832,13 +834,13 @@ struct AgentFactInputLoader {
         func bodyState(dashboard: DashboardSummary) -> BodyState {
             BodyStateKernel().build(input: BodyStateInput(
                 dashboard: dashboard,
-                dailySummary: dailySummaries.first,
-                workoutEvents: workoutEvents,
-                strengthWorkouts: strengthWorkouts,
-                trainingResponses: trainingResponses,
-                foodLogs: foodLogs,
-                journalEntries: journalRecords,
-                activePlan: activePlan,
+                dailySummary: dailySummaries.first?.dto,
+                workoutEvents: workoutEvents.map { $0.dto },
+                strengthWorkouts: strengthWorkouts.map { $0.dto },
+                trainingResponses: trainingResponses.map { $0.dto },
+                foodLogs: foodLogs.map { $0.dto },
+                journalEntries: journalRecords.map { $0.dto },
+                activePlan: activePlan?.dto,
                 activeStatus: ActiveStatusSettings.resolveCurrentStatus(),
                 generatedAt: asOf
             ))

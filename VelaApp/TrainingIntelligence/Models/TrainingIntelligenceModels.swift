@@ -1,5 +1,20 @@
 import Foundation
 
+/// Sendable value-type mirror of `ExerciseDefinitionRecord`, used by the training
+/// kernels when they run off the main actor (a `@Model` class cannot cross the
+/// actor boundary). The default library is derived from the same spec as the
+/// SwiftData-backed `ExerciseLibraryService.defaultDefinitions()`.
+struct ExerciseDefinition: Codable, Hashable, Sendable {
+    var id: UUID
+    var canonicalKey: String
+    var name: String
+    var aliases: [String]
+    var primaryMuscleGroup: String
+    var secondaryMuscleGroups: [String]
+    var equipment: String
+    var movementPattern: String
+}
+
 struct PersonalRecord: Codable, Hashable, Identifiable, Sendable {
     var id = UUID()
     var exerciseName: String

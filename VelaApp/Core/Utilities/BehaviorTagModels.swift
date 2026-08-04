@@ -264,7 +264,7 @@ struct BodyModelBuilder {
             ))
         }
         if trainingSessions > 0 {
-            let analysis = TrainingAnalyticsService().buildRecentSummary(workouts: strengthWorkouts, days: 28, endingAt: asOf)
+            let analysis = TrainingAnalyticsService().buildRecentSummary(workouts: strengthWorkouts.map { $0.dto }, days: 28, endingAt: asOf)
             claims.append(BodyModelClaim(
                 id: "training_facts",
                 title: "训练事实正在积累",
@@ -328,7 +328,7 @@ struct BodyModelBuilder {
 
     private func trainingSummary(_ workouts: [StrengthWorkoutRecord], asOf: Date) -> String {
         guard !workouts.isEmpty else { return "尚无训练事实。训记或 Vela 训练记录同步后会开始学习训练反应。" }
-        let summary = TrainingAnalyticsService().buildRecentSummary(workouts: workouts, days: 28, endingAt: asOf)
+        let summary = TrainingAnalyticsService().buildRecentSummary(workouts: workouts.map { $0.dto }, days: 28, endingAt: asOf)
         return "近 28 天 \(summary.sessions) 次训练，\(summary.effectiveSets) 个有效组，容量 \(Int(summary.volumeKg.rounded())) kg。"
     }
 

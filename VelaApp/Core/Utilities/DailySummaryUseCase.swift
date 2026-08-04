@@ -423,13 +423,13 @@ final class DailySummaryUseCase {
         let activeStatus = ActiveStatusSettings.resolveCurrentStatus(now: now)
         let bodyState = BodyStateKernel().build(input: BodyStateInput(
             dashboard: dashboard,
-            dailySummary: currentDailySummary,
-            workoutEvents: recentWorkoutEvents,
-            strengthWorkouts: recentStrengthWorkouts,
-            trainingResponses: recentTrainingResponses,
-            foodLogs: todayFoodLogs,
-            journalEntries: recentJournalEntries,
-            activePlan: activePlan,
+            dailySummary: currentDailySummary?.dto,
+            workoutEvents: recentWorkoutEvents.map { $0.dto },
+            strengthWorkouts: recentStrengthWorkouts.map { $0.dto },
+            trainingResponses: recentTrainingResponses.map { $0.dto },
+            foodLogs: todayFoodLogs.map { $0.dto },
+            journalEntries: recentJournalEntries.map { $0.dto },
+            activePlan: activePlan?.dto,
             activeStatus: activeStatus,
             generatedAt: now
         ))
@@ -451,15 +451,15 @@ final class DailySummaryUseCase {
             dailyTrainingDecision = matched
         } else {
             let recentStrengthSummary = TrainingAnalyticsService().buildRecentSummary(
-                workouts: recentStrengthWorkouts,
+                workouts: recentStrengthWorkouts.map { $0.dto },
                 days: 28,
                 endingAt: now
             )
             dailyTrainingDecision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
                 bodyState: bodyState,
-                activePlan: activePlan,
+                activePlan: activePlan?.dto,
                 recentStrengthSummary: recentStrengthSummary,
-                trainingResponses: recentTrainingResponses
+                trainingResponses: recentTrainingResponses.map { $0.dto }
             ))
         }
         

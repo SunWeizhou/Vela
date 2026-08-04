@@ -608,9 +608,9 @@ final class ContextBuilderTests: XCTestCase {
         let generatedAt = makeDate()
         let workout = makeMixedCompletionWorkout(start: generatedAt.addingTimeInterval(-3600))
 
-        let analysis = TrainingAnalyticsService().summarizeWorkout(workout)
+        let analysis = TrainingAnalyticsService().summarizeWorkout(workout.dto)
         let recent = TrainingAnalyticsService().buildRecentSummary(
-            workouts: [workout],
+            workouts: [workout.dto],
             days: 7,
             endingAt: generatedAt
         )
@@ -627,7 +627,7 @@ final class ContextBuilderTests: XCTestCase {
         let generatedAt = makeDate()
         let workout = makeWorkout(start: generatedAt.addingTimeInterval(-3600))
 
-        let analysis = TrainingAnalyticsService().summarizeWorkout(workout)
+        let analysis = TrainingAnalyticsService().summarizeWorkout(workout.dto)
 
         XCTAssertEqual(analysis.plannedSets, 2)
         XCTAssertEqual(analysis.completedSets, 2)

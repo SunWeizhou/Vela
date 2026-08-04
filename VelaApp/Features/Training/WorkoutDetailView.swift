@@ -707,9 +707,9 @@ struct WorkoutDetailView: View {
 
     private func muscleDistribution(_ strength: StrengthWorkoutRecord) -> some View {
         let analysis = TrainingAnalyticsService().summarizeWorkout(
-            strength,
-            history: strengthWorkouts.filter { $0.startedAt < strength.startedAt },
-            exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
+            strength.dto,
+            history: strengthWorkouts.filter { $0.startedAt < strength.startedAt }.map { $0.dto },
+            exerciseLibrary: ExerciseLibraryService.defaultDefinitionsDTO()
         )
         return VelaGlassCard(padding: 16, cornerRadius: 20) {
           VStack(alignment: .leading, spacing: 12) {

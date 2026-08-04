@@ -650,29 +650,29 @@ final class PersistenceFoundationTests: XCTestCase {
         )
 
         let beforeStart = try XCTUnwrap(calendar.date(byAdding: .day, value: -1, to: start))
-        XCTAssertNil(TrainingScheduleResolver.resolve(plan: plan, on: beforeStart, events: [], calendar: calendar))
+        XCTAssertNil(TrainingScheduleResolver.resolve(plan: plan.dto, on: beforeStart, events: [], calendar: calendar))
 
         let week1WednesdayDate = try XCTUnwrap(calendar.date(byAdding: .day, value: 2, to: start))
         XCTAssertEqual(
-            TrainingScheduleResolver.resolve(plan: plan, on: week1WednesdayDate, events: [], calendar: calendar)?.id,
+            TrainingScheduleResolver.resolve(plan: plan.dto, on: week1WednesdayDate, events: [], calendar: calendar)?.id,
             week1Wednesday.id
         )
 
         let week2WednesdayDate = try XCTUnwrap(calendar.date(byAdding: .day, value: 9, to: start))
         XCTAssertEqual(
-            TrainingScheduleResolver.resolve(plan: plan, on: week2WednesdayDate, events: [], calendar: calendar)?.id,
+            TrainingScheduleResolver.resolve(plan: plan.dto, on: week2WednesdayDate, events: [], calendar: calendar)?.id,
             week2Wednesday.id
         )
 
         let week2ThursdayDate = try XCTUnwrap(calendar.date(byAdding: .day, value: 10, to: start))
         XCTAssertEqual(
-            TrainingScheduleResolver.resolve(plan: plan, on: week2ThursdayDate, events: [], calendar: calendar)?.id,
+            TrainingScheduleResolver.resolve(plan: plan.dto, on: week2ThursdayDate, events: [], calendar: calendar)?.id,
             restDay.id
         )
 
         let skippedDate = try XCTUnwrap(calendar.date(byAdding: .day, value: 7, to: start))
         XCTAssertEqual(
-            TrainingScheduleResolver.resolve(plan: plan, on: skippedDate, events: [], calendar: calendar)?.id,
+            TrainingScheduleResolver.resolve(plan: plan.dto, on: skippedDate, events: [], calendar: calendar)?.id,
             week1Wednesday.id
         )
     }
@@ -716,7 +716,7 @@ final class PersistenceFoundationTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            TrainingScheduleResolver.resolve(plan: plan, on: start, events: [event], calendar: calendar)?.id,
+            TrainingScheduleResolver.resolve(plan: plan.dto, on: start, events: [event.dto], calendar: calendar)?.id,
             next.id
         )
     }
@@ -857,9 +857,9 @@ final class PersistenceFoundationTests: XCTestCase {
         }
 
         let review = TrainingPlanReviewService.review(
-            plan: plan,
+            plan: plan.dto,
             events: [],
-            responses: responses,
+            responses: responses.map { $0.dto },
             through: start.addingTimeInterval(3 * 86_400),
             calendar: calendar
         )

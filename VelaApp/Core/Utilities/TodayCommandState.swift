@@ -7,7 +7,7 @@ enum ReadinessDecisionKind: String, Codable, Hashable, CaseIterable {
     case recover
 }
 
-struct TodayHealthSignal: Codable, Hashable, Identifiable {
+struct TodayHealthSignal: Codable, Hashable, Identifiable, Sendable {
     var id: String
     var title: String
     var value: String
@@ -18,7 +18,7 @@ struct TodayHealthSignal: Codable, Hashable, Identifiable {
     var metricKey: String
 }
 
-struct TodayAction: Codable, Hashable, Identifiable {
+struct TodayAction: Codable, Hashable, Identifiable, Sendable {
     enum Kind: String, Codable, Hashable, CaseIterable {
         case training
         case recovery
@@ -35,7 +35,7 @@ struct TodayAction: Codable, Hashable, Identifiable {
     var isPrimary: Bool
 }
 
-struct ReadinessDecision: Codable, Hashable {
+struct ReadinessDecision: Codable, Hashable, Sendable {
     var decision: ReadinessDecisionKind
     var confidence: Double
     var reasons: [String]
@@ -53,7 +53,7 @@ struct ReadinessDecision: Codable, Hashable {
     }
 }
 
-struct TodayCommandState: Codable, Hashable {
+struct TodayCommandState: Codable, Hashable, Sendable {
     var date: Date
     var bodyStateTitle: String
     var summary: String

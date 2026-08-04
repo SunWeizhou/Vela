@@ -55,7 +55,7 @@ enum CoachArtifactStatus: String, Codable, Hashable, CaseIterable {
     case dismissed
 }
 
-struct CoachArtifactReason: Codable, Hashable, Identifiable {
+struct CoachArtifactReason: Codable, Hashable, Identifiable, Sendable {
     var id = UUID()
     var signal: String
     var value: String
@@ -66,7 +66,7 @@ struct CoachArtifactReason: Codable, Hashable, Identifiable {
     }
 }
 
-struct CoachArtifactAction: Codable, Hashable, Identifiable {
+struct CoachArtifactAction: Codable, Hashable, Identifiable, Sendable {
     var id = UUID()
     var type: String
     var label: String
@@ -92,7 +92,7 @@ struct CoachArtifactAction: Codable, Hashable, Identifiable {
     }
 }
 
-struct CoachArtifact: Codable, Hashable, Identifiable {
+struct CoachArtifact: Codable, Hashable, Identifiable, Sendable {
     var id: UUID
     var type: CoachArtifactType
     var title: String

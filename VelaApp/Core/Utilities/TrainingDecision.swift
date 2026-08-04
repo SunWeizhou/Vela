@@ -38,16 +38,16 @@ enum TrainingDecisionFallback {
 
 struct TrainingDecisionInput {
     var bodyState: BodyState
-    var activePlan: TrainingPlanRecord?
+    var activePlan: TrainingPlanDTO?
     var recentStrengthSummary: RecentTrainingSummary?
-    var trainingResponses: [TrainingResponseRecord]
+    var trainingResponses: [TrainingResponseDTO]
     var userConstraints: [String]
 
     init(
         bodyState: BodyState,
-        activePlan: TrainingPlanRecord? = nil,
+        activePlan: TrainingPlanDTO? = nil,
         recentStrengthSummary: RecentTrainingSummary? = nil,
-        trainingResponses: [TrainingResponseRecord] = [],
+        trainingResponses: [TrainingResponseDTO] = [],
         userConstraints: [String] = []
     ) {
         self.bodyState = bodyState
@@ -58,7 +58,7 @@ struct TrainingDecisionInput {
     }
 }
 
-struct TrainingDecisionKernel {
+struct TrainingDecisionKernel: Sendable {
     func decide(input: TrainingDecisionInput) -> DailyTrainingDecision {
         let state = input.bodyState
         let activePlan = input.activePlan
@@ -77,7 +77,7 @@ struct TrainingDecisionKernel {
         if let todayScheduledDay {
             if let data = todayScheduledDay.plannedExercisesJSON.data(using: .utf8),
                let planned = try? JSONDecoder().decode([WorkoutTemplateExercise].self, from: data) {
-                let library = ExerciseLibraryService.defaultDefinitions()
+                let library = ExerciseLibraryService.defaultDefinitionsDTO()
                 for item in planned {
                     let definition = library.first { def in
                         if let key = item.exerciseCanonicalKey {
@@ -87,11 +87,8 @@ struct TrainingDecisionKernel {
                     }
                     if let definition {
                         targetMuscles.insert(definition.primaryMuscleGroup.lowercased())
-                        if let secondaryData = definition.secondaryMuscleGroupsJSON.data(using: .utf8),
-                           let secondary = try? JSONDecoder().decode([String].self, from: secondaryData) {
-                            for m in secondary {
-                                targetMuscles.insert(m.lowercased())
-                            }
+                        for m in definition.secondaryMuscleGroups {
+                            targetMuscles.insert(m.lowercased())
                         }
                     }
                 }

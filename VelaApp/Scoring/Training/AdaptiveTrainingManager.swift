@@ -73,9 +73,9 @@ struct AdaptiveTrainingManager {
         guard dashboard.source != .empty,
               dashboard.recovery.hasData,
               let day = TrainingScheduleResolver.resolve(
-                plan: plan,
+                plan: plan.dto,
                 on: date,
-                events: events,
+                events: events.map { $0.dto },
                 calendar: calendar
               ),
               day.focus != "rest" else {

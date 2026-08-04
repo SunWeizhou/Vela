@@ -42,7 +42,7 @@ final class TrainingPlanLinkingService: Sendable {
                 score += 15.0
                 // Additional +10 if we have a linked strength workout (verified via muscle/context)
                 if let sw = strengthWorkout, !sw.exercises.isEmpty {
-                    let library = ExerciseLibraryService.defaultDefinitions()
+                    let library = ExerciseLibraryService.defaultDefinitionsDTO()
                     let workoutMuscles = Set(sw.exercises.map { TrainingAnalyticsService().resolvedMuscleGroup(for: $0, library: library).lowercased() })
                     let planDayTitle = planDay.title.lowercased()
                     let planDayDesc = planDay.description.lowercased()
@@ -66,7 +66,7 @@ final class TrainingPlanLinkingService: Sendable {
 
         // 3. Muscle Group Match (up to 15 points)
         if focus == "strength", let strengthWorkout {
-            let library = ExerciseLibraryService.defaultDefinitions()
+            let library = ExerciseLibraryService.defaultDefinitionsDTO()
             let workoutMuscles = Set(strengthWorkout.exercises.map { TrainingAnalyticsService().resolvedMuscleGroup(for: $0, library: library).lowercased() })
             let planDayTitle = planDay.title.lowercased()
             let planDayDesc = planDay.description.lowercased()

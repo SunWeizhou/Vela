@@ -17,9 +17,9 @@ struct StrengthWorkoutDetailView: View {
 
     private var analysis: StrengthWorkoutAnalysis {
         TrainingAnalyticsService().summarizeWorkout(
-            workout,
-            history: allWorkouts.filter { $0.startedAt < workout.startedAt },
-            exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
+            workout.dto,
+            history: allWorkouts.filter { $0.startedAt < workout.startedAt }.map { $0.dto },
+            exerciseLibrary: ExerciseLibraryService.defaultDefinitionsDTO()
         )
     }
 

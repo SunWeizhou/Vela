@@ -81,9 +81,9 @@ final class WorkoutAggregationTests: XCTestCase {
         let workout = makeStrengthWorkout(start: makeDate(), title: "上肢训练")
 
         let analysis = TrainingAnalyticsService().summarizeWorkout(
-            workout,
+            workout.dto,
             history: [],
-            exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
+            exerciseLibrary: ExerciseLibraryService.defaultDefinitionsDTO()
         )
 
         XCTAssertTrue(analysis.summaryText.contains("已完成 2/2 组"))
@@ -134,9 +134,9 @@ final class WorkoutAggregationTests: XCTestCase {
         store.context.insert(draft)
         try store.context.save()
         let analysis = TrainingAnalyticsService().summarizeWorkout(
-            workout,
+            workout.dto,
             history: [],
-            exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
+            exerciseLibrary: ExerciseLibraryService.defaultDefinitionsDTO()
         )
         workout.analyticsJSON = try String(
             data: JSONEncoder().encode(analysis),
@@ -171,9 +171,9 @@ final class WorkoutAggregationTests: XCTestCase {
             store.context.insert(draft)
             try store.context.save()
             let analysis = TrainingAnalyticsService().summarizeWorkout(
-                workout,
+                workout.dto,
                 history: [],
-                exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
+                exerciseLibrary: ExerciseLibraryService.defaultDefinitionsDTO()
             )
             let artifact = makePostWorkoutArtifact(workout: workout, summary: analysis)
             let coordinator = WorkoutSaveCoordinator { currentStage in
@@ -775,7 +775,7 @@ final class WorkoutAggregationTests: XCTestCase {
         let start = makeDate(hour: 18)
         let previous = makeStrengthWorkout(start: start.addingTimeInterval(-7 * 86_400), title: "Prior Upper")
         let workout = makeStrengthWorkout(start: start, title: "Upper Strength")
-        let analysis = TrainingAnalyticsService().summarizeWorkout(workout, history: [previous])
+        let analysis = TrainingAnalyticsService().summarizeWorkout(workout.dto, history: [previous.dto])
 
         let artifact = CoachArtifact.postWorkoutReview(
             workout: workout,

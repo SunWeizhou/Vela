@@ -187,9 +187,9 @@ struct WorkoutExerciseListView: View {
 
     var body: some View {
         let analysis = TrainingAnalyticsService().summarizeWorkout(
-            strength,
-            history: strengthWorkouts.filter { $0.startedAt < strength.startedAt },
-            exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
+            strength.dto,
+            history: strengthWorkouts.filter { $0.startedAt < strength.startedAt }.map { $0.dto },
+            exerciseLibrary: ExerciseLibraryService.defaultDefinitionsDTO()
         )
         return VStack(alignment: .leading, spacing: 12) {
             Text("动作与组次")

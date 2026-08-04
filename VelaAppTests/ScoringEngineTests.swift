@@ -689,8 +689,8 @@ final class ScoringEngineTests: XCTestCase {
 
         let bodyState = BodyStateKernel().build(input: BodyStateInput(
             dashboard: .preview(date: now),
-            strengthWorkouts: [workout],
-            trainingResponses: [response],
+            strengthWorkouts: [workout.dto],
+            trainingResponses: [response.dto],
             activeStatus: "active",
             generatedAt: now
         ))
@@ -720,7 +720,7 @@ final class ScoringEngineTests: XCTestCase {
 
         let bodyState = BodyStateKernel().build(input: BodyStateInput(
             dashboard: .preview(date: now),
-            trainingResponses: [response],
+            trainingResponses: [response.dto],
             activeStatus: "active",
             generatedAt: now
         ))
@@ -896,14 +896,17 @@ final class ScoringEngineTests: XCTestCase {
         let decision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(bodyState: bodyState))
         let history = (1...8).map { offset in
             let date = calendar.date(byAdding: .day, value: -offset, to: now)!
-            return DailyHealthSummaryRecord(
+            return DailyHealthSummaryDTO(
                 dayIdentifier: "trend-\(offset)",
                 date: date,
-                sleepScore: Double(70 + offset),
+                updatedAt: date,
                 recoveryScore: Double(60 + offset),
+                sleepScore: Double(70 + offset),
                 strainScore: Double(30 + offset),
                 stressIndex: Double(40 + offset),
-                currentEnergy: Double(50 + offset)
+                currentEnergy: Double(50 + offset),
+                morningEnergy: nil,
+                energyBank: nil
             )
         }
 
