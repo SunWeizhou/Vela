@@ -136,7 +136,7 @@ public struct StressIndexEngine: ScoreEngine {
                 let rhrZ = (quietHR - baseline) / sd
                 let rhrStress = ScoringMath.clamp(50.0 + 18.0 * rhrZ, min: 0, max: 100)
                 components["rhr_stress"] = rhrStress
-                componentWeights["rhr_stress"] = weights["rhr_stress"]!
+                componentWeights["rhr_stress"] = weights["rhr_stress"] ?? 0
 
                 if rhrZ > 1.2 {
                     reasons.append("静息心率高于近期个人基线")
@@ -147,7 +147,7 @@ public struct StressIndexEngine: ScoreEngine {
         case .legacyComponentScores:
             if let rhrStress = input.heartRateElevationScore {
                 components["rhr_stress"] = ScoringMath.clamp(rhrStress)
-                componentWeights["rhr_stress"] = weights["rhr_stress"]!
+                componentWeights["rhr_stress"] = weights["rhr_stress"] ?? 0
             }
         }
 
@@ -163,7 +163,7 @@ public struct StressIndexEngine: ScoreEngine {
 
                 let hrvStress = ScoringMath.clamp(50.0 - 18.0 * hrvZ, min: 0, max: 100)
                 components["hrv_stress"] = hrvStress
-                componentWeights["hrv_stress"] = weights["hrv_stress"]!
+                componentWeights["hrv_stress"] = weights["hrv_stress"] ?? 0
 
                 if hrvZ < -1.2 {
                     reasons.append("今日 HRV 低于近期个人基线")
@@ -174,7 +174,7 @@ public struct StressIndexEngine: ScoreEngine {
         case .legacyComponentScores:
             if let hrvStress = input.hrvSuppressionScore {
                 components["hrv_stress"] = ScoringMath.clamp(hrvStress)
-                componentWeights["hrv_stress"] = weights["hrv_stress"]!
+                componentWeights["hrv_stress"] = weights["hrv_stress"] ?? 0
             }
         }
 
@@ -185,7 +185,7 @@ public struct StressIndexEngine: ScoreEngine {
             let respZ = (respToday - baseline) / sd
             let respStress = ScoringMath.clamp(50.0 + 15.0 * respZ, min: 0, max: 100)
             components["resp_stress"] = respStress
-            componentWeights["resp_stress"] = weights["resp_stress"]!
+            componentWeights["resp_stress"] = weights["resp_stress"] ?? 0
         }
 
         // 4. Temp Stress (10%)
@@ -205,7 +205,7 @@ public struct StressIndexEngine: ScoreEngine {
                 reasons.append("夜间皮肤温度偏离个人参考范围，已纳入压力评分")
             }
             components["temp_stress"] = tempStress
-            componentWeights["temp_stress"] = weights["temp_stress"]!
+            componentWeights["temp_stress"] = weights["temp_stress"] ?? 0
         } else {
             missingInputs.append("bodyTempDelta")
         }
@@ -221,7 +221,7 @@ public struct StressIndexEngine: ScoreEngine {
         }()
         if let debtStress {
             components["sleep_debt_stress"] = debtStress
-            componentWeights["sleep_debt_stress"] = weights["sleep_debt_stress"]!
+            componentWeights["sleep_debt_stress"] = weights["sleep_debt_stress"] ?? 0
             
             if debtStress > 40 {
                 reasons.append("昨晚睡眠评分偏低，已提高生理压力代理值")
@@ -232,7 +232,7 @@ public struct StressIndexEngine: ScoreEngine {
         let strain = input.mode == .rawVitals ? input.strainScoreToday : input.recentStrainStressScore
         if let strain {
             components["load_stress"] = strain
-            componentWeights["load_stress"] = weights["load_stress"]!
+            componentWeights["load_stress"] = weights["load_stress"] ?? 0
         }
 
         // Calculate Weighted Sum

@@ -519,6 +519,10 @@ final class DashboardViewModel: ObservableObject {
             )
         }.value
 
+        // The detached task ran off-main; the user may have selected a different day
+        // while it was in flight. Apply the result only if selection is unchanged.
+        guard Calendar.current.isDate(selectedDate, inSameDayAs: refDate) else { return }
+
         self.dashboard = assembly.updatedDashboard
         self.todayCalories = assembly.todayCalories
         self.todayProtein = assembly.todayProtein
