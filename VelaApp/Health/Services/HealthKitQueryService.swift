@@ -566,7 +566,9 @@ final class HealthKitQueryService: HealthQueryService {
                 let values = (samples as? [HKQuantitySample])?.map {
                     HeartRateRecoverySample(
                         date: $0.startDate,
-                        bpm: $0.quantity.doubleValue(for: .count())
+                        // Apple 的 heartRateRecoveryOneMinute 样本单位是 count/min。
+                        // 用 .count() 取值会抛 NSInvalidArgumentException(count/min, count 不兼容)。
+                        bpm: $0.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
                     )
                 } ?? []
                 continuation.resume(returning: values)
