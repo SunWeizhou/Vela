@@ -369,7 +369,7 @@ struct TrainingStatsSection: View {
                         
                         Text(summaryPeakStrainText)
                             .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .foregroundStyle(Color(hex: "#BFB9AC"))
+                            .foregroundStyle(VelaTheme.meta)
                             .offset(y: -4)
                         
                         HStack {
@@ -380,7 +380,7 @@ struct TrainingStatsSection: View {
                             Text("今天")
                         }
                         .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(Color(hex: "#BFB9AC"))
+                        .foregroundStyle(VelaTheme.meta)
                         .padding(.top, 114)
                     }
                     }
@@ -463,7 +463,7 @@ struct TrainingStatsSection: View {
                 ForEach(["日", "一", "二", "三", "四", "五", "六"], id: \.self) { d in
                     Text(d)
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Color(hex: "#BFB9AC"))
+                        .foregroundStyle(VelaTheme.meta)
                         .frame(width: 16)
                 }
             }
@@ -670,7 +670,9 @@ struct RecentWorkoutsSection: View {
     private func workoutRow(_ workout: WorkoutSummary) -> some View {
         HStack(spacing: 12) {
             Image(systemName: workoutListIcon(workout.activityName))
-                .foregroundStyle(VelaTheme.accent)
+                .foregroundStyle(VelaTheme.brand)
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(VelaTheme.brandSoft))
             VStack(alignment: .leading, spacing: 4) {
                 Text(workout.activityName)
                     .font(.system(size: 14, weight: .bold))
@@ -678,30 +680,33 @@ struct RecentWorkoutsSection: View {
                 Text(workout.start.formatted(date: .abbreviated, time: .shortened))
                     .font(.system(size: 11))
                     .foregroundStyle(VelaTheme.muted)
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     Text(sourceLabel(for: workout.source))
+                    Text("·")
+                    Text("\(Int(workout.end.timeIntervalSince(workout.start) / 60)) 分钟")
                     if let kcal = workout.energyKilocalories {
+                        Text("·")
                         Text("\(Int(kcal.rounded())) kcal")
                     }
                     if let hr = workout.averageHeartRate {
+                        Text("·")
                         Text("\(Int(hr.rounded())) bpm")
                     }
                     if let distance = workout.distanceMeters, distance > 0 {
+                        Text("·")
                         Text(distance >= 1_000
                              ? String(format: "%.1f km", distance / 1_000)
                              : "\(Int(distance.rounded())) m")
                     }
                 }
                 .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(Color(hex: "#B06A50"))
+                .foregroundStyle(VelaTheme.muted)
+                .lineLimit(1)
             }
             Spacer()
-            Text("\(Int(workout.end.timeIntervalSince(workout.start) / 60)) 分钟")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(VelaTheme.muted)
             Image(systemName: "chevron.right")
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(Color(hex: "#BFB9AC"))
+                .foregroundStyle(VelaTheme.meta)
         }
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
@@ -801,14 +806,14 @@ struct StrengthWorkoutsSection: View {
                                     .foregroundStyle(VelaTheme.muted)
                                 Text(workout.startedAt.formatted(date: .abbreviated, time: .shortened))
                                     .font(.system(size: 10))
-                                    .foregroundStyle(Color(hex: "#BFB9AC"))
+                                    .foregroundStyle(VelaTheme.meta)
                             }
 
                             Spacer()
 
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(Color(hex: "#BFB9AC"))
+                                .foregroundStyle(VelaTheme.meta)
                         }
                         .padding(14)
                         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.cardBg))
