@@ -61,11 +61,31 @@ enum VelaTheme {
 
     // MARK: - Accent
 
-    /// Vela Signal Blue: recognizable, calm, and separate from health states.
-    static let accent        = adaptive("#5664E8", "#7F8CFF")
+    /// Vela 品牌绿:可识别、代表健康,与健康状态色中的「好」一致。
+    static let accent        = adaptive("#17A35C", "#3FC97F")
     static let accentOn      = adaptive("#FFFFFF", "#FFFFFF")
-    static let accentHover   = adaptive("#4654D7", "#96A0FF")
-    static let accentActive  = adaptive("#3543C1", "#6573ED")
+    static let accentHover   = adaptive("#148F4F", "#5FD98F")
+    static let accentActive  = adaptive("#0C7A44", "#2FA96A")
+
+    // MARK: - Brand (Vela 活力绿)
+
+    /// 品牌主色:健康/恢复/活力,与警告色天然区分。
+    static let brand       = adaptive("#17A35C", "#3FC97F")
+    /// 渐变起点(品牌亮绿)
+    static let brandBright = adaptive("#46C87E", "#5FD98F")
+    /// 按压态/深色文字
+    static let brandDeep   = adaptive("#0C7A44", "#2FA96A")
+    /// 浅绿填充底(头像底/徽章/建议块)
+    static let brandSoft   = adaptive("#E3F2EA", "#16301F")
+
+    // MARK: - State Colors (G1: 颜色只表达「好不好」,不装饰)
+
+    /// 状态:好(=品牌绿)
+    static let stateGood     = adaptive("#17A35C", "#3FC97F")
+    /// 状态:注意(暖橙)
+    static let stateModerate = adaptive("#E8A23C", "#F2B45C")
+    /// 状态:差(玫红)
+    static let statePoor     = adaptive("#E2607A", "#FF8299")
 
     // MARK: - Borders
 
@@ -156,6 +176,14 @@ enum VelaTheme {
     }
     static func cardValue() -> Font {
         .system(size: 30, weight: .semibold, design: .rounded).monospacedDigit()
+    }
+    /// 旗舰大数字(就绪度等),SF Rounded,等宽。
+    static func displayValue() -> Font {
+        .system(size: 60, weight: .bold, design: .rounded).monospacedDigit()
+    }
+    /// 体征大卡数值。
+    static func vitalValue() -> Font {
+        .system(size: 24, weight: .bold, design: .rounded).monospacedDigit()
     }
 
     // MARK: - Shadow
