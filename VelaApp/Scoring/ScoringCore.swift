@@ -21,6 +21,14 @@ public enum MetricConfidence: String, Codable, Hashable, Sendable {
     case high = "high"
 }
 
+/// G1 状态着色:指标当前处于「好/注意/差」哪种状态。
+/// 颜色只表达状态,不表达指标身份。
+public enum MetricState: String, Codable, Hashable, Sendable {
+    case good
+    case moderate
+    case poor
+}
+
 public enum MetricSource: String, Codable, Hashable, Sendable {
     case healthKit = "healthKit"
     case userInput = "userInput"
@@ -150,6 +158,32 @@ public struct MetricResult: Codable, Hashable, Sendable {
             return .higherIsLoad
         case .physiologicalStress:
             return .higherNeedsAttention
+        }
+    }
+
+    /// G1 状态着色:颜色只表达「好不好」,由 direction + band 推导。
+    /// higherIsBetter(恢复/睡眠/能量):越高越好;higherNeedsAttention(压力):越低越好;
+    /// higherIsLoad(负荷):落在正常区间为最好。
+    public var state: MetricState {
+        switch direction {
+        case .higherIsBetter:
+            switch band {
+            case .high, .veryHigh: return .good
+            case .normal: return .moderate
+            case .low, .veryLow: return .poor
+            }
+        case .higherNeedsAttention:
+            switch band {
+            case .low, .veryLow: return .good
+            case .normal: return .moderate
+            case .high, .veryHigh: return .poor
+            }
+        case .higherIsLoad:
+            switch band {
+            case .normal: return .good
+            case .low, .high: return .moderate
+            case .veryLow, .veryHigh: return .poor
+            }
         }
     }
     public var dataCoverage: ScoreDataCoverage {

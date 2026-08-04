@@ -1399,4 +1399,48 @@ final class ScoringEngineTests: XCTestCase {
         let remainingResponses = try modelContext.fetch(responseDescriptor)
         XCTAssertEqual(remainingResponses.count, 0)
     }
+
+    // MARK: - MetricResult.state (G1 状态着色)
+
+    private func makeMetric(domain: ScoredHealthDomain, band: MetricBand) -> MetricResult {
+        MetricResult(
+            domain: domain,
+            name: domain.rawValue,
+            value: 50,
+            band: band,
+            confidence: .high,
+            components: [:],
+            componentWeights: [:],
+            reasons: [],
+            missingInputs: [],
+            dataWindow: DateInterval(start: Date(timeIntervalSince1970: 0), duration: 86400),
+            source: .healthKit,
+            algorithmVersion: "test",
+            lastUpdated: Date(timeIntervalSince1970: 0)
+        )
+    }
+
+    func testMetricStateHigherIsBetter() {
+        XCTAssertEqual(makeMetric(domain: .recovery, band: .high).state, .good)
+        XCTAssertEqual(makeMetric(domain: .sleep, band: .veryHigh).state, .good)
+        XCTAssertEqual(makeMetric(domain: .energy, band: .normal).state, .moderate)
+        XCTAssertEqual(makeMetric(domain: .recovery, band: .low).state, .poor)
+        XCTAssertEqual(makeMetric(domain: .sleep, band: .veryLow).state, .poor)
+    }
+
+    func testMetricStateHigherNeedsAttention() {
+        XCTAssertEqual(makeMetric(domain: .physiologicalStress, band: .low).state, .good)
+        XCTAssertEqual(makeMetric(domain: .physiologicalStress, band: .veryLow).state, .good)
+        XCTAssertEqual(makeMetric(domain: .physiologicalStress, band: .normal).state, .moderate)
+        XCTAssertEqual(makeMetric(domain: .physiologicalStress, band: .high).state, .poor)
+        XCTAssertEqual(makeMetric(domain: .physiologicalStress, band: .veryHigh).state, .poor)
+    }
+
+    func testMetricStateHigherIsLoad() {
+        XCTAssertEqual(makeMetric(domain: .strain, band: .normal).state, .good)
+        XCTAssertEqual(makeMetric(domain: .strain, band: .low).state, .moderate)
+        XCTAssertEqual(makeMetric(domain: .strain, band: .high).state, .moderate)
+        XCTAssertEqual(makeMetric(domain: .strain, band: .veryLow).state, .poor)
+        XCTAssertEqual(makeMetric(domain: .strain, band: .veryHigh).state, .poor)
+    }
 }
