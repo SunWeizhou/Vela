@@ -152,6 +152,24 @@ final class HealthFoundationTests: XCTestCase {
         XCTAssertTrue(advancedIdentifiers.contains(HealthSignal.daylight.objectType!.identifier))
     }
 
+    func testHeartRateRecoveryUnitMatchesAppleHealthSampleUnit() throws {
+        // Apple 的 heartRateRecoveryOneMinute 样本单位是 count/min。
+        // 若 unit 表写错(如 .count()),doubleValue(for:) 会在真机上抛
+        // NSInvalidArgumentException,App 启动即崩溃。
+        // 复现崩溃路径:用真实 Apple 单位创建一个样本,再用 unit 表单位取值,必须不抛异常。
+        let unit = try XCTUnwrap(
+            HealthSignalCatalog.unit(for: .heartRateRecoveryOneMinute)?.healthKitUnit
+        )
+        let sampleUnit = HKUnit.count().unitDivided(by: .minute())
+        let sample = HKQuantitySample(
+            type: try XCTUnwrap(HealthSignalCatalog.objectType(for: .heartRateRecoveryOneMinute) as? HKQuantityType),
+            quantity: HKQuantity(unit: sampleUnit, doubleValue: 12.0),
+            start: Date(timeIntervalSince1970: 0),
+            end: Date(timeIntervalSince1970: 60)
+        )
+        XCTAssertNoThrow(sample.quantity.doubleValue(for: unit))
+    }
+
     func testReadStateResolverNeverInfersReadDenialFromMissingSamples() {
         XCTAssertEqual(
             HealthReadStateResolver.resolve(

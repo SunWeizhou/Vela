@@ -209,7 +209,10 @@ enum HealthSignalCatalog {
         case .restingHR, .workoutHR, .walkingHeartRate:
             UnitDescriptor(healthKitUnit: HKUnit.count().unitDivided(by: .minute()), symbol: "bpm")
         case .heartRateRecoveryOneMinute:
-            UnitDescriptor(healthKitUnit: .count(), symbol: "bpm")
+            // Apple 的 heartRateRecoveryOneMinute 样本单位是 count/min(次/分钟)。
+            // 若写成 .count(),真机上 doubleValue(for:) 会抛
+            // NSInvalidArgumentException 导致 App 启动崩溃。
+            UnitDescriptor(healthKitUnit: HKUnit.count().unitDivided(by: .minute()), symbol: "bpm")
         case .respiratoryRate:
             UnitDescriptor(healthKitUnit: HKUnit.count().unitDivided(by: .minute()), symbol: "breaths/min")
         case .wristTemperature, .bodyTemperature:
