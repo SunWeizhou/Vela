@@ -96,6 +96,29 @@ enum VelaTheme {
         }
     }
 
+    // MARK: - Semantic Palette (硬编码收敛映射)
+
+    /// 系统绿(成功/达标态)
+    static let systemGreen   = adaptive("#34C759", "#30D158")
+    /// 系统橙(警示/需注意态)
+    static let systemOrange  = adaptive("#FF9F0A", "#FFB340")
+    /// 系统红(错误/差态)
+    static let systemRed     = adaptive("#FF3B30", "#FF453A")
+    /// 系统黄(提醒)
+    static let systemYellow  = adaptive("#FFB74D", "#FFD60A")
+    /// 系统粉(压力/标记)
+    static let systemPink    = adaptive("#FF2D55", "#FF375F")
+    /// 中性深灰(次级文字/图标)
+    static let inkGray       = adaptive("#7E7A70", "#9AA0A8")
+    /// 近黑文字(标题/正文)
+    static let inkDark       = adaptive("#161512", "#F2F4F8")
+    /// 浅灰(提示/分隔)
+    static let mistGray      = adaptive("#BFB9AC", "#6E766F")
+    /// 冷蓝(信息/链接)
+    static let infoBlue      = adaptive("#30A2FF", "#5AB0FF")
+    /// 靛蓝(睡眠/深度)
+    static let indigo        = adaptive("#5C6BC0", "#8B9BFF")
+
     // MARK: - Borders
 
     static let border        = Color(uiColor: .separator)

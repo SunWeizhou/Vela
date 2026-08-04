@@ -88,7 +88,7 @@ struct SleepClockWheelView: View {
             Text("今晚睡眠目标: \(VelaMinimalFormatting.duration(minutes: targetSleepMinutes))")
                 .font(VelaTheme.caption2())
                 .fontWeight(.bold)
-                .foregroundStyle(Color(hex: "#BFB9AC"))
+                .foregroundStyle(VelaTheme.mistGray)
                 .offset(y: 12)
         }
     }
@@ -96,7 +96,7 @@ struct SleepClockWheelView: View {
     private func dialHourText(_ label: String, angle: Double, radius: Double) -> some View {
         Text(label)
             .font(.system(size: 8, weight: .bold, design: .rounded))
-            .foregroundStyle(Color(hex: "#7E7A70"))
+            .foregroundStyle(VelaTheme.inkGray)
             .position(x: 85 + radius * cos(angle * .pi / 180), y: 85 + radius * sin(angle * .pi / 180))
     }
     

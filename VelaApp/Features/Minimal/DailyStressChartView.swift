@@ -156,13 +156,13 @@ struct DailyStressChartView: View {
                 VStack(spacing: 8) {
                     Image(systemName: "chart.line.uptrend.xyaxis")
                         .font(.system(size: 24, weight: .medium))
-                        .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                        .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
                     Text(metric.emptyTitle)
                         .font(VelaTheme.subheadline().weight(.semibold))
                         .foregroundStyle(isSleep ? Color(hex: "#F2EFE8") : VelaTheme.fg)
                     Text("Apple 健康提供足够的逐点心率与活动数据后显示。")
                         .font(VelaTheme.caption2())
-                        .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                        .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
                         .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

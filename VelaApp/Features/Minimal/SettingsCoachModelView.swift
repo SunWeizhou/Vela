@@ -138,7 +138,7 @@ struct AIModelSettingsView: View {
                 if !testResultText.isEmpty {
                     Text(testResultText)
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(testResultText.contains("成功") ? Color(hex: "#34C759") : Color(hex: "#FF3B30"))
+                        .foregroundStyle(testResultText.contains("成功") ? VelaTheme.systemGreen : VelaTheme.systemRed)
                 }
                 
                 Button("保存配置") {
@@ -256,7 +256,7 @@ struct DataSourceSettingsView: View {
                         desc: "睡眠、HRV、静息心率、日常心率、呼吸、步数和训练记录。",
                         impact: "用于判断今天是否适合训练，以及恢复分数是否可信。",
                         action: "授权基础数据",
-                        color: Color(hex: "#FF2D55")
+                        color: VelaTheme.systemPink
                     )
  
                     tierRequestCard(
@@ -274,7 +274,7 @@ struct DataSourceSettingsView: View {
                         desc: "血糖、血压、水分、膳食摄入、步态稳定性、正念和睡眠呼吸事件。",
                         impact: "用于解释能量、压力、睡眠质量和训练波动来源。",
                         action: "授权进阶数据",
-                        color: Color(hex: "#30A2FF")
+                        color: VelaTheme.infoBlue
                     )
                 }
                 .padding(.horizontal, 16)
@@ -289,7 +289,7 @@ struct DataSourceSettingsView: View {
                 if let successTier {
                     Text("已向系统请求\(authorizationTierTitle(successTier))。")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Color(hex: "#34C759"))
+                        .foregroundStyle(VelaTheme.systemGreen)
                         .padding(.horizontal, 16)
                 }
  
@@ -448,7 +448,7 @@ struct DataSourceSettingsView: View {
             Spacer()
             Text(status)
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(Color(hex: "#34C759"))
+                .foregroundStyle(VelaTheme.systemGreen)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
@@ -560,7 +560,7 @@ struct CGMSettingsView: View {
                         .frame(height: 46)
                         .background(
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Color(hex: "#30A2FF"))
+                                .fill(VelaTheme.infoBlue)
                         )
                 }
                 .buttonStyle(.plain)
@@ -579,11 +579,11 @@ struct CGMSettingsView: View {
         HStack(spacing: 14) {
             Image(systemName: "waveform.path.ecg.rectangle")
                 .font(.system(size: 30))
-                .foregroundStyle(Color(hex: "#30A2FF"))
+                .foregroundStyle(VelaTheme.infoBlue)
                 .frame(width: 54, height: 54)
                 .background(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color(hex: "#30A2FF").opacity(0.12))
+                        .fill(VelaTheme.infoBlue.opacity(0.12))
                 )
  
             VStack(alignment: .leading, spacing: 4) {
@@ -637,7 +637,7 @@ struct CGMSettingsView: View {
                     x: .value("时间", reading.date),
                     y: .value("血糖", reading.milligramsPerDeciliter)
                 )
-                .foregroundStyle(Color(hex: "#30A2FF"))
+                .foregroundStyle(VelaTheme.infoBlue)
                 .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
                 .interpolationMethod(.catmullRom)
  
@@ -645,7 +645,7 @@ struct CGMSettingsView: View {
                     x: .value("时间", reading.date),
                     y: .value("血糖", reading.milligramsPerDeciliter)
                 )
-                .foregroundStyle(Color(hex: "#30A2FF"))
+                .foregroundStyle(VelaTheme.infoBlue)
             }
             .chartXAxis(.hidden)
             .chartYAxis {
@@ -661,7 +661,7 @@ struct CGMSettingsView: View {
         VStack(spacing: 12) {
             Image(systemName: "drop.triangle")
                 .font(.system(size: 32))
-                .foregroundStyle(Color(hex: "#30A2FF"))
+                .foregroundStyle(VelaTheme.infoBlue)
             Text("等待血糖数据")
                 .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(VelaTheme.fg)

@@ -287,7 +287,7 @@ struct ActiveStatusSelectionSheetView: View {
                         title: "活跃",
                         desc: "保持忙碌和健康",
                         icon: "figure.run",
-                        colors: [Color(hex: "#34C759"), Color(hex: "#2ECC71")]
+                        colors: [VelaTheme.systemGreen, Color(hex: "#2ECC71")]
                     )
 
                     statusOptionCard(
@@ -295,7 +295,7 @@ struct ActiveStatusSelectionSheetView: View {
                         title: "生病",
                         desc: "因病休息",
                         icon: "bed.double.fill",
-                        colors: [Color(hex: "#FF9F0A"), Color(hex: "#F1C40F")]
+                        colors: [VelaTheme.systemOrange, Color(hex: "#F1C40F")]
                     )
 
                     statusOptionCard(
@@ -303,7 +303,7 @@ struct ActiveStatusSelectionSheetView: View {
                         title: "受伤",
                         desc: "从伤病中恢复",
                         icon: "bandage.fill",
-                        colors: [Color(hex: "#FF3B30"), Color(hex: "#E74C3C")]
+                        colors: [VelaTheme.systemRed, Color(hex: "#E74C3C")]
                     )
 
                     statusOptionCard(
@@ -742,9 +742,9 @@ struct CalendarOverviewSheetView: View {
         guard let score else { return nil }
         let color: Color
         switch score {
-        case ..<40: color = Color(hex: "#FF3B30")
-        case ..<70: color = Color(hex: "#FFB74D")
-        default: color = Color(hex: "#34C759")
+        case ..<40: color = VelaTheme.systemRed
+        case ..<70: color = VelaTheme.systemYellow
+        default: color = VelaTheme.systemGreen
         }
         return (score, color)
     }
@@ -1837,7 +1837,7 @@ struct FoodScannerView: View {
                 Text(errorMessage)
                     .font(.system(size: 13))
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(Color(hex: "#FF3B30"))
+                    .foregroundStyle(VelaTheme.systemRed)
                     .padding(.horizontal, 20)
             }
 
@@ -1908,7 +1908,7 @@ struct FoodScannerView: View {
         VStack(spacing: 14) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 44))
-                .foregroundStyle(Color(hex: "#34C759"))
+                .foregroundStyle(VelaTheme.systemGreen)
 
             Text("解析完成，请确认后记录")
                 .font(.system(size: 18, weight: .bold))
@@ -1938,7 +1938,7 @@ struct FoodScannerView: View {
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
             .frame(height: 50)
-            .background(RoundedRectangle(cornerRadius: 25, style: .continuous).fill(Color(hex: "#34C759")))
+            .background(RoundedRectangle(cornerRadius: 25, style: .continuous).fill(VelaTheme.systemGreen))
             .padding(.horizontal, 20)
             .buttonStyle(.plain)
 

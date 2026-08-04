@@ -451,7 +451,7 @@ struct StrengthWorkoutDetailView: View {
     private func detailSetKindColor(_ kind: StrengthSetKind) -> Color {
         switch kind {
         case .working: VelaTheme.accent
-        case .warmup: Color(hex: "#FF9500")
+        case .warmup: VelaTheme.systemOrange
         case .drop: VelaTheme.sleepColor
         case .backoff: VelaTheme.recoveryColor
         case .failure: VelaTheme.strainColor
@@ -509,7 +509,7 @@ struct StrengthWorkoutDetailView: View {
         case "chest": return Color(hex: "#FF8A65")
         case "back": return Color(hex: "#4DB6AC")
         case "quads", "hamstrings", "glutes": return Color(hex: "#66BB6A")
-        case "shoulders": return Color(hex: "#5C6BC0")
+        case "shoulders": return VelaTheme.indigo
         case "biceps", "triceps": return Color(hex: "#AB47BC")
         case "core": return Color(hex: "#FFCA28")
         default: return Color(hex: "#90A4AE")

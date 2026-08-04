@@ -216,7 +216,7 @@ struct VelaMetricDetailView: View {
 
                 Text(displayDateText)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                    .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
             }
 
             Spacer()
@@ -332,7 +332,7 @@ struct VelaMetricDetailView: View {
                         )
                         .background(
                             Circle()
-                                .fill(isSleep ? Color(hex: "#161512").opacity(0.85) : Color.white.opacity(0.85))
+                                .fill(isSleep ? VelaTheme.inkDark.opacity(0.85) : Color.white.opacity(0.85))
                                 .frame(width: 140, height: 140)
                                 .shadow(color: isSleep ? .clear : Color.black.opacity(0.012), radius: 10, x: 0, y: 3)
                         )
@@ -347,14 +347,14 @@ struct VelaMetricDetailView: View {
                         )
                         .background(
                             Circle()
-                                .fill(isSleep ? Color(hex: "#161512").opacity(0.85) : Color.white.opacity(0.85))
+                                .fill(isSleep ? VelaTheme.inkDark.opacity(0.85) : Color.white.opacity(0.85))
                                 .frame(width: 140, height: 140)
                                 .shadow(color: isSleep ? .clear : Color.black.opacity(0.012), radius: 10, x: 0, y: 3)
                         )
                     case .absoluteValue:
                         ZStack {
                             Circle()
-                                .fill(isSleep ? Color(hex: "#161512").opacity(0.85) : Color.white.opacity(0.85))
+                                .fill(isSleep ? VelaTheme.inkDark.opacity(0.85) : Color.white.opacity(0.85))
                                 .frame(width: 140, height: 140)
                                 .shadow(color: isSleep ? .clear : Color.black.opacity(0.012), radius: 10, x: 0, y: 3)
 
@@ -385,37 +385,37 @@ struct VelaMetricDetailView: View {
                     Text("目标耗力: \(range.lowerBound) - \(range.upperBound)%")
                         .font(VelaTheme.caption1())
                         .fontWeight(.semibold)
-                        .foregroundStyle(isSleep ? Color(hex: "#BFB9AC") : VelaTheme.fg2)
+                        .foregroundStyle(isSleep ? VelaTheme.mistGray : VelaTheme.fg2)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 4)
                         .background(
                             Capsule()
-                                .fill(isSleep ? Color(hex: "#161512").opacity(0.6) : Color.white.opacity(0.6))
+                                .fill(isSleep ? VelaTheme.inkDark.opacity(0.6) : Color.white.opacity(0.6))
                         )
                 } else if metric == .sleep {
                     Text("目标睡眠: \(VelaMinimalFormatting.duration(minutes: sleepTargetMinutes))")
                         .font(VelaTheme.caption1())
                         .fontWeight(.semibold)
-                        .foregroundStyle(Color(hex: "#BFB9AC"))
+                        .foregroundStyle(VelaTheme.mistGray)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 4)
-                        .background(Capsule().fill(Color(hex: "#161512").opacity(0.6)))
+                        .background(Capsule().fill(VelaTheme.inkDark.opacity(0.6)))
                 } else if metric == .stress {
                     Text("目标压力: 保持平静")
                         .font(VelaTheme.caption1())
                         .fontWeight(.semibold)
-                        .foregroundStyle(isSleep ? Color(hex: "#BFB9AC") : VelaTheme.fg2)
+                        .foregroundStyle(isSleep ? VelaTheme.mistGray : VelaTheme.fg2)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 4)
-                        .background(Capsule().fill(isSleep ? Color(hex: "#161512").opacity(0.6) : Color.white.opacity(0.6)))
+                        .background(Capsule().fill(isSleep ? VelaTheme.inkDark.opacity(0.6) : Color.white.opacity(0.6)))
                 } else {
                     Text(metricSubtitle)
                         .font(VelaTheme.caption1())
                         .fontWeight(.semibold)
-                        .foregroundStyle(isSleep ? Color(hex: "#BFB9AC") : VelaTheme.fg2)
+                        .foregroundStyle(isSleep ? VelaTheme.mistGray : VelaTheme.fg2)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 4)
-                        .background(Capsule().fill(isSleep ? Color(hex: "#161512").opacity(0.6) : Color.white.opacity(0.6)))
+                        .background(Capsule().fill(isSleep ? VelaTheme.inkDark.opacity(0.6) : Color.white.opacity(0.6)))
                 }
                 
                 Spacer()
@@ -508,7 +508,7 @@ struct VelaMetricDetailView: View {
             Text("时间线")
                 .font(VelaTheme.footnote())
                 .fontWeight(.bold)
-                .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
             Spacer()
         }
     }

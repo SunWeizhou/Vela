@@ -117,7 +117,7 @@ struct AppleIntelligenceLoaderDots: View {
                 .scaleEffect(reduceMotion ? 1 : (pulse ? 1.4 : 0.8))
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.6).repeatForever(autoreverses: true).delay(0.2), value: pulse)
             Circle()
-                .fill(Color(hex: "#FF2D55"))
+                .fill(VelaTheme.systemPink)
                 .frame(width: 6, height: 6)
                 .scaleEffect(reduceMotion ? 1 : (pulse ? 1.4 : 0.8))
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.6).repeatForever(autoreverses: true).delay(0.4), value: pulse)

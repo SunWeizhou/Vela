@@ -82,7 +82,7 @@ struct MetricChartSection: View {
                 
                 Text(rawSelectedDate != nil ? "选定读数" : metricSubtitle)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                    .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
             }
             .padding(.horizontal, 16)
             

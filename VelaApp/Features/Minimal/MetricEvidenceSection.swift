@@ -22,7 +22,7 @@ struct MetricEvidenceSection: View {
 
                 Text("用于解释当前指标的原始读数与评分组成")
                     .font(VelaTheme.caption2())
-                    .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                    .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
                     .padding(.leading, 4)
             }
 

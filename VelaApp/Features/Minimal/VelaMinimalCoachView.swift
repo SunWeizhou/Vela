@@ -49,7 +49,7 @@ struct WhatsNewSettingsView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Color(hex: "#34C759"))
+                    .foregroundStyle(VelaTheme.systemGreen)
                 Text(title)
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)

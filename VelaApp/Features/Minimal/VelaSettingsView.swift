@@ -39,7 +39,7 @@ struct VelaSettingsView: View {
                         }
                         settingsDivider
                         NavigationLink(destination: AIModelSettingsView()) {
-                            settingsRow(icon: "cpu.fill", iconBg: Color(hex: "#5C6BC0"), title: "AI 模型", value: textModel)
+                            settingsRow(icon: "cpu.fill", iconBg: VelaTheme.indigo, title: "AI 模型", value: textModel)
                         }
                         settingsDivider
                         NavigationLink(destination: CoachPersonalitySettingsView()) {
@@ -61,7 +61,7 @@ struct VelaSettingsView: View {
                         NavigationLink(destination: NotificationSettingsView()) {
                             settingsRow(
                                 icon: "bell.fill",
-                                iconBg: Color(hex: "#FF9F0A"),
+                                iconBg: VelaTheme.systemOrange,
                                 title: "通知",
                                 value: abnormalMetricAlertsOn || morningBriefOn || bedtimeRemindersOn ? "已配置" : "已关闭"
                             )
@@ -74,7 +74,7 @@ struct VelaSettingsView: View {
                         NavigationLink(destination: LanguageSettingsView()) {
                             settingsRow(
                                 icon: "globe",
-                                iconBg: Color(hex: "#34C759"),
+                                iconBg: VelaTheme.systemGreen,
                                 title: "语言",
                                 value: AppLanguage(rawValue: languageRaw)?.displayName ?? AppLanguage.simplifiedChinese.displayName
                             )
@@ -89,11 +89,11 @@ struct VelaSettingsView: View {
                 settingsGroup(title: "数据与隐私") {
                     VStack(spacing: 0) {
                         NavigationLink(destination: DataSourceSettingsView()) {
-                            settingsRow(icon: "applewatch", iconBg: Color(hex: "#FF2D55"), title: "数据源", value: "Apple 健康")
+                            settingsRow(icon: "applewatch", iconBg: VelaTheme.systemPink, title: "数据源", value: "Apple 健康")
                         }
                         settingsDivider
                         NavigationLink(destination: CGMSettingsView()) {
-                            settingsRow(icon: "scope", iconBg: Color(hex: "#30A2FF"), title: "管理 CGM", value: "Apple 健康")
+                            settingsRow(icon: "scope", iconBg: VelaTheme.infoBlue, title: "管理 CGM", value: "Apple 健康")
                         }
                         settingsDivider
                         NavigationLink(destination: DataCoverageView()) {
@@ -101,7 +101,7 @@ struct VelaSettingsView: View {
                         }
                         settingsDivider
                         NavigationLink(destination: HealthDataResyncSettingsView()) {
-                            settingsRow(icon: "arrow.clockwise.icloud.fill", iconBg: Color(hex: "#30A2FF"), title: "健康数据重同步", value: "最近 90 天")
+                            settingsRow(icon: "arrow.clockwise.icloud.fill", iconBg: VelaTheme.infoBlue, title: "健康数据重同步", value: "最近 90 天")
                         }
                         settingsDivider
                         NavigationLink(destination: TrustCenterView()) {

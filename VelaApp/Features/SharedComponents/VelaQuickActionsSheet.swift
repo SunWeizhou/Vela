@@ -133,14 +133,14 @@ struct PlusActionSheet: View {
                                 colors: [
                                     Color(hex: "#7986CB"), // Indigo
                                     Color(hex: "#42A5F5"), // Sky blue
-                                    Color(hex: "#5C6BC0")  // Deep indigo
+                                    VelaTheme.indigo  // Deep indigo
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
                         .frame(width: 60, height: 60)
-                        .shadow(color: Color(hex: "#5C6BC0").opacity(0.3), radius: 8, y: 4)
+                        .shadow(color: VelaTheme.indigo.opacity(0.3), radius: 8, y: 4)
                     
                     AlpacaView()
                         .offset(y: -1)

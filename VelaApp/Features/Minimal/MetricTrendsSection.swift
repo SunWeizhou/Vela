@@ -158,7 +158,7 @@ struct MetricTrendsSection: View {
             Text("趋势")
                 .font(VelaTheme.footnote())
                 .fontWeight(.bold)
-                .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
             
             VStack(spacing: 0) {
                 if items.isEmpty {

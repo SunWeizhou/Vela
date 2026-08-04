@@ -55,7 +55,7 @@ struct JournalTagInsights: View {
 
     private func bodyModelMaturityColor(_ level: BodyModelMaturityLevel) -> Color {
         switch level {
-        case .seed: return Color(hex: "#FF9F0A")
+        case .seed: return VelaTheme.systemOrange
         case .learning: return VelaTheme.accent
         case .stable: return VelaTheme.success
         }

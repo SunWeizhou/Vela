@@ -265,7 +265,7 @@ struct WorkoutExerciseListView: View {
                 .font(.system(size: 11, weight: .bold, design: .rounded))
                 .foregroundStyle(Color.white)
                 .frame(width: 24, height: 24)
-                .background(Circle().fill(set.isWarmup ? Color(hex: "#FF9500") : VelaTheme.accent))
+                .background(Circle().fill(set.isWarmup ? VelaTheme.systemOrange : VelaTheme.accent))
                 .frame(width: 32, alignment: .leading)
 
             Text("\(set.weightKilograms.formatted(.number.precision(.fractionLength(0...1)))) kg")

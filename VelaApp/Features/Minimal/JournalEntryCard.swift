@@ -79,7 +79,7 @@ extension JournalEntryRecord {
         if tags.contains("在床上使用设备") { return Color.blue }
         if tags.contains("caffeine") || tags.contains("咖啡因") { return Color(hex: "#8B5A2B") }
         if tags.contains("hydration") || tags.contains("补水") { return VelaTheme.accent }
-        if tags.contains("mood") || tags.contains("每日心情") { return Color(hex: "#FFB74D") }
+        if tags.contains("mood") || tags.contains("每日心情") { return VelaTheme.systemYellow }
         if tags.contains("alcohol") || tags.contains("酒") { return VelaTheme.stressColor }
         return VelaTheme.accent
     }

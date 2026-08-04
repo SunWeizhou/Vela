@@ -67,7 +67,7 @@ struct MetricCustomWidgetsSection: View {
                     Text("时间线")
                         .font(VelaTheme.footnote())
                         .fontWeight(.bold)
-                        .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                        .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
                     Spacer()
                 }
                 
@@ -91,7 +91,7 @@ struct MetricCustomWidgetsSection: View {
                     Text("心率区间")
                         .font(VelaTheme.footnote())
                         .fontWeight(.bold)
-                        .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                        .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
 
                     if isLoadingHeartRateZones {
                         ProgressView()
@@ -105,7 +105,7 @@ struct MetricCustomWidgetsSection: View {
                     } else {
                         Text("此期间没有可用的逐点心率，无法生成分区明细。")
                             .font(VelaTheme.caption1())
-                            .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                            .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
                     }
                 }
                 .padding(14)
@@ -128,7 +128,7 @@ struct MetricCustomWidgetsSection: View {
                     Text("分析")
                         .font(VelaTheme.footnote())
                         .fontWeight(.bold)
-                        .foregroundStyle(Color(hex: "#7E7A70"))
+                        .foregroundStyle(VelaTheme.inkGray)
                     
                     VStack(spacing: 16) {
                         // Bedtime target labels
@@ -136,7 +136,7 @@ struct MetricCustomWidgetsSection: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("卧床")
                                     .font(VelaTheme.caption2())
-                                    .foregroundStyle(Color(hex: "#7E7A70"))
+                                    .foregroundStyle(VelaTheme.inkGray)
                                 Text(bedtimeText)
                                     .font(.system(size: 20, weight: .bold, design: .rounded))
                                     .foregroundStyle(Color(hex: "#F2EFE8"))
@@ -145,7 +145,7 @@ struct MetricCustomWidgetsSection: View {
                             VStack(alignment: .trailing, spacing: 4) {
                                 Text("目标睡觉时间")
                                     .font(VelaTheme.caption2())
-                                    .foregroundStyle(Color(hex: "#7E7A70"))
+                                    .foregroundStyle(VelaTheme.inkGray)
                                 Text(targetBedtimeText)
                                     .font(.system(size: 20, weight: .bold, design: .rounded))
                                     .foregroundStyle(Color(hex: "#F2EFE8"))
@@ -164,7 +164,7 @@ struct MetricCustomWidgetsSection: View {
                         } else {
                             Text("暂无完整睡眠起止时间，无法绘制睡眠时钟。")
                                 .font(VelaTheme.caption1())
-                                .foregroundStyle(Color(hex: "#7E7A70"))
+                                .foregroundStyle(VelaTheme.inkGray)
                                 .frame(maxWidth: .infinity, minHeight: 100)
                         }
                         
@@ -173,13 +173,13 @@ struct MetricCustomWidgetsSection: View {
                         HStack {
                             Text("起床时间: \(wakeTimeText)")
                                 .font(VelaTheme.caption1())
-                                .foregroundStyle(Color(hex: "#BFB9AC"))
+                                .foregroundStyle(VelaTheme.mistGray)
                         }
                     }
                     .padding(16)
                     .background(
                         RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                            .fill(Color(hex: "#161512"))
+                            .fill(VelaTheme.inkDark)
                             .shadow(color: Color.black.opacity(0.0), radius: 10, y: 4)
                     )
                     .overlay(
@@ -194,7 +194,7 @@ struct MetricCustomWidgetsSection: View {
                         Text("时间线")
                             .font(VelaTheme.footnote())
                             .fontWeight(.bold)
-                            .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                            .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
                         Spacer()
                     }
                     
@@ -223,7 +223,7 @@ struct MetricCustomWidgetsSection: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(selectedFullDateText)
                                 .font(VelaTheme.caption2())
-                                .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                                .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
                             Text("今天的压力")
                                 .font(VelaTheme.footnote())
                                 .fontWeight(.bold)
@@ -232,7 +232,7 @@ struct MetricCustomWidgetsSection: View {
                         Spacer()
                         Image(systemName: "moon.fill")
                             .font(.system(size: 14))
-                            .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                            .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
                     }
 
                     DailyStressChartView(
@@ -309,7 +309,7 @@ struct MetricCustomWidgetsSection: View {
                 Text("主要限制因素")
                     .font(VelaTheme.footnote())
                     .fontWeight(.bold)
-                    .foregroundStyle(isSleep ? Color(hex: "#7E7A70") : VelaTheme.muted)
+                    .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
                 
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(limitingFactors, id: \.self) { factor in
@@ -319,7 +319,7 @@ struct MetricCustomWidgetsSection: View {
                                 .frame(width: 6, height: 6)
                             Text(factor)
                                 .font(VelaTheme.subheadline())
-                                .foregroundStyle(isSleep ? Color(hex: "#BFB9AC") : VelaTheme.fg2)
+                                .foregroundStyle(isSleep ? VelaTheme.mistGray : VelaTheme.fg2)
                         }
                     }
                 }

@@ -553,7 +553,7 @@ struct VelaJournalView: View {
                         if hasEntry {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.system(size: 18))
-                                .foregroundStyle(Color(hex: "#FFB74D"))
+                                .foregroundStyle(VelaTheme.systemYellow)
                         } else {
                             Image(systemName: "circle")
                                 .font(.system(size: 18))

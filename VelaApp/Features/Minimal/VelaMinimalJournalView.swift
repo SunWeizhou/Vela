@@ -287,13 +287,13 @@ struct VelaMeView: View {
                             ? displayTrainingStyle(onboarding?.trainingPreference.trainingStyle ?? "unknown")
                             : "待设置",
                         icon: "figure.run",
-                        color: Color(hex: "#FF9F0A")
+                        color: VelaTheme.systemOrange
                     )
                     profileGridItem(
                         title: "可用设备",
                         value: equipmentText,
                         icon: "dumbbell.fill",
-                        color: Color(hex: "#30A2FF")
+                        color: VelaTheme.infoBlue
                     )
                 }
                 .padding(.vertical, 6)
@@ -507,7 +507,7 @@ struct VelaMeView: View {
         switch type {
         case .postWorkoutReview, .trainingAdjustment, .workoutReadiness: return VelaTheme.strainColor
         case .eveningReview: return VelaTheme.sleepColor
-        case .wikiUpdateProposal: return Color(hex: "#FF9F0A")
+        case .wikiUpdateProposal: return VelaTheme.systemOrange
         default: return VelaTheme.accent
         }
     }
@@ -582,7 +582,7 @@ struct VelaMeView: View {
                 .padding(.leading, 2)
             
             VStack(spacing: 0) {
-                hubActionCell(title: "健康手记", sub: journalSub, icon: "book.pages.fill", color: Color(hex: "#FF9F0A"), destination: VelaJournalView())
+                hubActionCell(title: "健康手记", sub: journalSub, icon: "book.pages.fill", color: VelaTheme.systemOrange, destination: VelaJournalView())
                 Divider().padding(.leading, 58)
                 hubActionCell(title: "健康档案", sub: wikiSub, icon: "doc.text.fill", color: VelaTheme.muted, destination: UserWikiArchiveView())
                 Divider().padding(.leading, 58)
@@ -592,9 +592,9 @@ struct VelaMeView: View {
                 }
                 hubActionCell(title: "AI 增强", sub: aiModelSub, icon: "sparkles", color: VelaTheme.accent, destination: AIModelSettingsView())
                 Divider().padding(.leading, 58)
-                hubActionCell(title: "数据信号", sub: signalSub, icon: "waveform.path.ecg.rectangle.fill", color: Color(hex: "#30A2FF"), destination: DataCoverageView())
+                hubActionCell(title: "数据信号", sub: signalSub, icon: "waveform.path.ecg.rectangle.fill", color: VelaTheme.infoBlue, destination: DataCoverageView())
                 Divider().padding(.leading, 58)
-                hubActionCell(title: "系统设置", sub: settingsSub, icon: "gearshape.fill", color: Color(hex: "#5C6BC0"), destination: VelaSettingsView())
+                hubActionCell(title: "系统设置", sub: settingsSub, icon: "gearshape.fill", color: VelaTheme.indigo, destination: VelaSettingsView())
             }
             .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay(
@@ -774,7 +774,7 @@ struct VelaMeView: View {
 
     private func bodyModelMaturityColor(_ level: BodyModelMaturityLevel) -> Color {
         switch level {
-        case .seed: return Color(hex: "#FF9F0A")
+        case .seed: return VelaTheme.systemOrange
         case .learning: return VelaTheme.accent
         case .stable: return VelaTheme.success
         }

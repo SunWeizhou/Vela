@@ -115,8 +115,8 @@ struct TodayEvidenceSheet: View {
     private func readinessColor(_ decision: ReadinessDecisionKind) -> Color {
         switch decision {
         case .keep: return VelaTheme.success
-        case .reduce: return Color(hex: "#FF9F0A")
-        case .swap: return Color(hex: "#5C6BC0")
+        case .reduce: return VelaTheme.systemOrange
+        case .swap: return VelaTheme.indigo
         case .recover: return VelaTheme.sleepColor
         }
     }

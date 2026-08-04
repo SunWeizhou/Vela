@@ -539,9 +539,9 @@ struct WorkoutDetailView: View {
         guard !heartRates.isEmpty else { return [] }
         return [
             HeartRateZoneSegment(label: L10n.t("Easy", "轻松"), count: heartRates.filter { $0.bpm < 110 }.count, color: Color(hex: "#4DA3FF")),
-            HeartRateZoneSegment(label: L10n.t("Aerobic", "有氧"), count: heartRates.filter { $0.bpm >= 110 && $0.bpm < 140 }.count, color: Color(hex: "#34C759")),
-            HeartRateZoneSegment(label: L10n.t("Tempo", "节奏"), count: heartRates.filter { $0.bpm >= 140 && $0.bpm < 165 }.count, color: Color(hex: "#FF9500")),
-            HeartRateZoneSegment(label: L10n.t("Peak", "峰值"), count: heartRates.filter { $0.bpm >= 165 }.count, color: Color(hex: "#FF3B30"))
+            HeartRateZoneSegment(label: L10n.t("Aerobic", "有氧"), count: heartRates.filter { $0.bpm >= 110 && $0.bpm < 140 }.count, color: VelaTheme.systemGreen),
+            HeartRateZoneSegment(label: L10n.t("Tempo", "节奏"), count: heartRates.filter { $0.bpm >= 140 && $0.bpm < 165 }.count, color: VelaTheme.systemOrange),
+            HeartRateZoneSegment(label: L10n.t("Peak", "峰值"), count: heartRates.filter { $0.bpm >= 165 }.count, color: VelaTheme.systemRed)
         ]
     }
 
@@ -551,7 +551,7 @@ struct WorkoutDetailView: View {
             return Color(hex: "#FF6B35")
         }
         if lowName.contains("cycl") {
-            return Color(hex: "#34C759")
+            return VelaTheme.systemGreen
         }
         if lowName.contains("swim") {
             return Color(hex: "#1E88E5")
@@ -776,7 +776,7 @@ struct WorkoutDetailView: View {
         case "chest": return Color(hex: "#FF8A65")
         case "back": return Color(hex: "#4DB6AC")
         case "quads", "hamstrings", "glutes": return Color(hex: "#66BB6A")
-        case "shoulders": return Color(hex: "#5C6BC0")
+        case "shoulders": return VelaTheme.indigo
         case "biceps", "triceps": return Color(hex: "#AB47BC")
         case "core": return Color(hex: "#FFCA28")
         default: return Color(hex: "#90A4AE")
