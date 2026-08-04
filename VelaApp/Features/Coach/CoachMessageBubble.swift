@@ -150,7 +150,7 @@ struct MiniBubble: View {
                     ? (AppLanguage.stored.isChinese ? "你" : "You")
                     : "Vela")
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(message.role == .user ? VelaTheme.muted : VelaTheme.recoveryColor)
+                    .foregroundStyle(message.role == .user ? VelaTheme.muted : VelaTheme.brand)
 
                 VStack(alignment: .leading, spacing: 4) {
                     let segments = parseMessageContent(message.content)
@@ -216,7 +216,7 @@ struct MiniStreamingBubble: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Vela")
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(VelaTheme.recoveryColor)
+                    .foregroundStyle(VelaTheme.brand)
 
                 VStack(alignment: .leading, spacing: 4) {
                     if content.isEmpty {
