@@ -5,7 +5,7 @@ struct TrainingHeroSection: View {
     let todayPlan: DailyOperatingPlanRecord?
     let activePlan: TrainingPlanRecord?
     let lastWorkoutSummary: String?
-    let startStrengthWorkout: () -> Void
+    let onDiscussWithCoach: () -> Void
 
     var body: some View {
         let session = todaySession
@@ -44,7 +44,7 @@ struct TrainingHeroSection: View {
                 
                 Text(session?.description ?? (hasPlan
                     ? display.summary
-                    : "你仍然可以开始自由训练；同步健康数据后，Vela 会补充容量和强度建议。"))
+                    : "同步 Apple 健康训练数据后，Vela 会基于恢复与负荷给出今日建议，并可与 Coach 讨论训练安排。"))
                     .font(VelaTheme.subheadline())
                     .foregroundStyle(VelaTheme.fg2)
                     .lineSpacing(4)
@@ -82,11 +82,11 @@ struct TrainingHeroSection: View {
             }
 
             Button {
-                startStrengthWorkout()
+                onDiscussWithCoach()
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: "play.fill")
-                    Text(hasPlan ? "执行建议并记录训练" : "开始自由训练")
+                    Image(systemName: "sparkles")
+                    Text("和 Coach 讨论今日训练")
                 }
                 .font(VelaTheme.headline())
                 .frame(maxWidth: .infinity)
@@ -94,10 +94,11 @@ struct TrainingHeroSection: View {
                 .foregroundStyle(.white)
                 .background(
                     RoundedRectangle(cornerRadius: 15)
-                        .fill(VelaTheme.accent)
+                        .fill(VelaTheme.brand)
                 )
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("和 Coach 讨论今日训练")
 
             if hasPlan {
                 HStack {

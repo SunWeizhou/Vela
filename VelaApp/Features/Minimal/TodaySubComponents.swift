@@ -125,6 +125,26 @@ extension View {
     }
 }
 
+// MARK: - VelaHealthSyncNote(训练数据来源说明)
+struct VelaHealthSyncNote: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "heart.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(VelaTheme.brand)
+            Text("训练记录自动同步自 Apple 健康 / Fitness，可作为与 Coach 讨论的依据")
+                .font(VelaTheme.caption2())
+                .foregroundStyle(VelaTheme.muted)
+                .lineLimit(2)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+    }
+}
+
 // MARK: - G1 重设计 · 今日页展示组件
 // 统一品牌绿 + 状态色 + SF Rounded 大数字。全部为无副作用纯展示组件,数据由调用方传入。
 

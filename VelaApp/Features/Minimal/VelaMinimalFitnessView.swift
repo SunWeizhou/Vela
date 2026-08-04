@@ -81,7 +81,9 @@ struct VelaTrainingView: View {
                     todayPlan: todayPlan,
                     activePlan: activePlan,
                     lastWorkoutSummary: strengthSummary.lastWorkoutSummary,
-                    startStrengthWorkout: { startStrengthWorkout() }
+                    onDiscussWithCoach: {
+                        VelaAppState.shared.routeToCoach(question: trainingAnalysisQuestion)
+                    }
                 )
 
                 TrainingStatsSection(
@@ -113,12 +115,7 @@ struct VelaTrainingView: View {
                     exerciseProgressLines: exerciseProgressLines
                 )
 
-                WorkoutTemplateGrid(
-                    workoutTemplates: workoutTemplates,
-                    templatePendingDeletion: $templatePendingDeletion,
-                    startStrengthWorkout: { startStrengthWorkout() },
-                    startStrengthWorkoutWithID: { startStrengthWorkout(templateID: $0) }
-                )
+                VelaHealthSyncNote()
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
@@ -273,17 +270,6 @@ struct VelaTrainingView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("导入寻迹训练")
-
-                Button {
-                    startStrengthWorkout()
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundStyle(VelaTheme.muted)
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("开始力量训练")
             }
         }
     }
@@ -357,7 +343,8 @@ struct VelaTrainingView: View {
         guard request > handledAdaptiveTrainingStartRequest else { return }
         handledAdaptiveTrainingStartRequest = request
         loadDynamicData()
-        startStrengthWorkout()
+        // 训练数据来自 Apple 健康:从训练页/今日页发起的「开始训练」改为与 Coach 讨论。
+        VelaAppState.shared.routeToCoach(question: trainingAnalysisQuestion)
     }
 
     private func deleteTemplate(_ template: WorkoutTemplateRecord) {
