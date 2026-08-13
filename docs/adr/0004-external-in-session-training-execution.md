@@ -1,0 +1,3 @@
+# Keep in-session training execution outside Vela
+
+Vela owns the Training Decision before a workout and the Training Observation, interpretation, and calibration after it, but it does not require the user to operate the iPhone during a Training Session. The user normally records the session with Apple Watch/Fitness and manages sets, rest, and pacing by feel and watch heart rate; Vela imports the resulting activity evidence and may request an optional low-friction Post-Training Check-in. Phone-based exercise, set, repetition, and rest-timer logging may remain in the codebase for compatibility or experiments, but it is not part of the primary product journey and must not reappear as a primary action without revisiting this decision.

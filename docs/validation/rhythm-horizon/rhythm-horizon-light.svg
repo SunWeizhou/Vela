@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1179" height="2556" viewBox="0 0 393 852">
+  <defs>
+    <linearGradient id="capacity" x1="0" x2="1">
+      <stop offset="0" stop-color="#75D6A7" stop-opacity="0.04"/>
+      <stop offset="0.50" stop-color="#75D6A7" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#75D6A7" stop-opacity="0.07"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="86%" cy="2%" r="62%">
+      <stop offset="0" stop-color="#75D6A7" stop-opacity="0.28"/>
+      <stop offset="0.54" stop-color="#75D6A7" stop-opacity="0.07"/>
+      <stop offset="1" stop-color="#75D6A7" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="10" stdDeviation="11" flood-color="#10201C" flood-opacity="0.10"/>
+    </filter>
+    <filter id="dotGlow" x="-300%" y="-300%" width="700%" height="700%">
+      <feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="#52E0A2" flood-opacity="0.9"/>
+    </filter>
+    <clipPath id="screen"><rect width="393" height="852" rx="47"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#screen)">
+    <rect width="393" height="852" fill="#F2F5F1"/>
+    <rect width="393" height="510" fill="url(#glow)"/>
+
+    <!-- status + top chrome -->
+    <text x="28" y="26" fill="#10201C" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="11" font-weight="650">9:41</text>
+    <g fill="none" stroke="#10201C" stroke-width="1.5" stroke-linecap="round">
+      <path d="M329 19 h2 M334 17.5 h2 v3 M339 16 h2 v4.5"/>
+      <path d="M348 20 q5-6 10 0 M351 20 q2-3 5 0"/>
+      <rect x="365" y="16" width="15" height="7" rx="2"/><path d="M381.5 18.3v2.4"/>
+    </g>
+
+    <text x="20" y="70" fill="#10201C" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="17" font-weight="650">今天</text>
+    <path d="M63 62 l4 4 4-4" fill="none" stroke="#53655F" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="87" y="69" fill="#53655F" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="11" font-weight="520">24° · 上海</text>
+    <g transform="translate(321 49)" fill="none" stroke="#53655F" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10 18v-13 M6 9l4-4 4 4 M4 13h-1v10h14V13h-1"/>
+    </g>
+    <circle cx="365" cy="61" r="15" fill="#D8E7DF"/>
+    <circle cx="365" cy="57" r="4" fill="#0D6B50"/><path d="M358 67q7-9 14 0" fill="#0D6B50"/>
+    <circle cx="375" cy="70" r="4" fill="#75D6A7" stroke="#F2F5F1" stroke-width="2"/>
+
+    <!-- identity -->
+    <circle cx="24" cy="112" r="3.5" fill="#0D6B50"/>
+    <text x="36" y="116" fill="#53655F" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="10.5" font-weight="650" letter-spacing="1.15">今日节律 · 判断依据部分</text>
+    <circle cx="352" cy="112" r="20" fill="#F8FAF7" fill-opacity="0.72"/>
+    <path d="M352 102l1.7 5.2 5.3 1.8-5.3 1.7-1.7 5.3-1.8-5.3-5.2-1.7 5.2-1.8z" fill="none" stroke="#10201C" stroke-width="1.1"/>
+
+    <!-- rhythm horizon -->
+    <g opacity="0.55" stroke="#53655F" stroke-opacity="0.16" stroke-width="0.5">
+      <path d="M20 144v155 M108 144v155 M196 144v155 M284 144v155 M373 144v155"/>
+    </g>
+    <path d="M20 238 C59 238 68 199 108 197 C148 195 160 228 196 226 C236 224 246 205 284 210 C324 216 336 228 373 225 L373 260 C335 263 322 250 284 246 C246 242 236 257 196 261 C158 264 148 233 108 234 C67 236 59 275 20 275 Z" fill="url(#capacity)"/>
+    <path d="M20 256 C59 256 68 216 108 215 C148 213 159 246 196 244 C236 242 246 223 284 228 C323 233 336 246 373 243" fill="none" stroke="#0D6B50" stroke-width="1.5" stroke-linecap="round"/>
+    <circle cx="149" cy="230" r="8" fill="#F8FAF7" filter="url(#dotGlow)"/>
+    <circle cx="149" cy="230" r="3.5" fill="#0D6B50"/>
+    <text x="134" y="207" fill="#53655F" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9.5" font-weight="650">09:41</text>
+    <g fill="#53655F" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="9.5" font-weight="520" opacity="0.75">
+      <text x="20" y="298">早</text><text x="192" y="298">午</text><text x="363" y="298">晚</text>
+    </g>
+
+    <!-- editorial decision -->
+    <text x="20" y="350" fill="#10201C" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="36" font-weight="630" letter-spacing="-1.1">给身体留一点余量</text>
+    <text x="20" y="382" fill="#53655F" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="14.5" font-weight="420">恢复处于中等水平。今天不需要完全休息，</text>
+    <text x="20" y="404" fill="#53655F" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="14.5" font-weight="420">但应降低训练容量，并把睡眠留在优先级里。</text>
+
+    <!-- evidence anchors -->
+    <g font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="10.5" font-weight="540" fill="#53655F">
+      <path d="M20 435v13" stroke="#0D6B50"/><text x="28" y="446">训练容量 80%</text>
+      <path d="M135 435v13" stroke="#53655F" opacity="0.5"/><text x="143" y="446">恢复信号</text>
+      <path d="M227 435v13" stroke="#53655F" opacity="0.5"/><text x="235" y="446">HRV 42ms</text>
+    </g>
+
+    <!-- action dock -->
+    <g filter="url(#softShadow)">
+      <rect x="20" y="474" width="353" height="66" rx="24" fill="#F8FAF7" fill-opacity="0.88" stroke="#FFFFFF" stroke-opacity="0.75" stroke-width="0.75"/>
+    </g>
+    <circle cx="53" cy="507" r="19" fill="#0D6B50"/>
+    <path d="M45 508h16 M53 500v16" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round"/>
+    <text x="82" y="502" fill="#10201C" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="650">查看今日安排</text>
+    <text x="82" y="521" fill="#53655F" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="11" font-weight="520">查看减量建议</text>
+    <path d="M338 510l10-10 M341 500h7v7" fill="none" stroke="#0D6B50" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- second surface hint -->
+    <text x="20" y="593" fill="#53655F" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="9.5" font-weight="650" letter-spacing="1.2">TODAY</text>
+    <text x="20" y="620" fill="#10201C" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="21" font-weight="640" letter-spacing="-0.4">今天只做这几件事</text>
+    <text x="319" y="615" fill="#0D6B50" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="11" font-weight="600">查看依据</text>
+    <text x="20" y="662" fill="#0D6B50" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10" font-weight="650">01</text>
+    <text x="55" y="663" fill="#10201C" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="650">训练时控制容量</text>
+    <text x="55" y="684" fill="#53655F" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="11.5">在 Apple Watch 开始训练；容量 80%，RPE 上限 7。</text>
+    <path d="M55 707h318" stroke="#D8E7DF" stroke-width="0.7"/>
+    <text x="20" y="741" fill="#53655F" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10" font-weight="650">02</text>
+    <text x="55" y="742" fill="#10201C" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="650">记录疲劳</text>
+    <text x="55" y="763" fill="#53655F" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="11.5">只在它可能改变明天判断时补充主观状态。</text>
+
+    <!-- home indicator -->
+    <rect x="133" y="831" width="127" height="5" rx="2.5" fill="#10201C" opacity="0.84"/>
+  </g>
+</svg>

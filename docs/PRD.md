@@ -1,6 +1,8 @@
 # PRD.md
 # Project Vela — Local-first AI Health Coach for Apple Health
 
+> ⚠️ **2026-08-13 方向更新**：Vela 已进入 **Personal Edition 阶段**（只为产品作者本人服务的主动式健康调节教练）。本文档的历史主线和 Bevel 对标策略已冻结，产品方向以 `docs/VELA_PERSONAL_PRODUCT_DIRECTION.md`、`CONTEXT.md` 领域语言与 `docs/adr/0004-0009` 为准。以下内容保留作为功能与架构的历史记录。
+
 > Updated: 2026-07-13
 > Current product target: Vela 4.0 Active Coach OS, a closed-loop local-first body intelligence and training execution system.
 
@@ -21,10 +23,10 @@
 - 用户界面将 Data Coverage（采集完整度）与判断依据强弱分开表达，不再把内部权重伪装成概率式“置信度”；
 - 原始 HealthKit 数据永不离开设备；仅向用户选择的模型服务发送经过裁剪的结构化摘要；
 - **Training Intelligence v3** 模块已落地：TrainingAnalyticsService、RecoveryTrainingAdapter、ExerciseLibraryService、TrainingPlanLinkingService、力量训练视图；
-- 真机 UI 采用冷中性 `#F4F6FA` 画布、Signal Blue 品牌色、深色 Daily Focus 卡和原生 Liquid Glass 导航；
+- 真机 UI 已切换为 Rhythm 视觉：暖灰绿画布（`rhythmCanvas` `#F2F5F1`）、节律绿品牌色（`accent` `#17A35C`）、深墨文字（`rhythmInk`）和原生 Liquid Glass 导航（2026-08-13 起，Signal Blue 已废弃）；
 - 键盘交互已优化为微信式体验：点空白区/下滑收起键盘，键盘弹出时聊天区整体上移。
 
-本 PRD 已从”从零开发”阶段过渡到”持续打磨完整产品”阶段。未来的产品边界和优先级以 `docs/VELA_FULL_STRENGTH_PRODUCT_BLUEPRINT.md` 和 `docs/VELA_TRAINING_INTELLIGENCE_V3.md` 为准。
+本 PRD 已从”从零开发”阶段过渡到”持续打磨完整产品”阶段。2026-08-13 起产品边界和优先级以 `docs/VELA_PERSONAL_PRODUCT_DIRECTION.md` 与 `docs/adr/0004-0009` 为准；`VELA_FULL_STRENGTH_PRODUCT_BLUEPRINT.md` 与 `VELA_TRAINING_INTELLIGENCE_V3.md` 降级为历史参考。
 
 ## 1. 产品概述
 
@@ -32,7 +34,7 @@
 Vela
 
 ### 1.2 一句话定位
-一个 local-first、Bevel-inspired 的 iOS 健康分析 App：读取 Apple Health / Apple Watch 数据，复刻 Recovery、Sleep、Strain 等核心健康体验，并以内置 AI Health Coach 提供个性化解释与建议。
+一个只为一个人服务的主动式健康调节教练（Personal Edition）：结合 Apple 健康、训练事实与生活上下文，每天给出一个明确、可执行、可解释的决定，帮助维持可持续的训练、睡眠、饮食与工作恢复节奏。（2026-08-13 更新；早期“复刻 Bevel 核心体验”的阶段已结束）
 
 ### 1.3 产品愿景
 让用户拥有一个真正理解自己身体数据的私人 AI 健康教练。
@@ -45,6 +47,8 @@ Vela 不只是展示健康数据，而是要完成三件事：
 ---
 
 ## 2. 竞品参考与产品策略
+
+> **2026-08-13 注**：Bevel 对标已整体冻结（像素级 1:1 停止、版本追踪停止），本节保留为历史策略记录；当前信息架构以 `docs/VELA_PERSONAL_PRODUCT_DIRECTION.md` 的四工作区（Today / Training / Vela / Me）为准。
 
 ### 2.1 主要参考产品
 - Bevel Health / Bevel 3.0
@@ -85,10 +89,8 @@ Vela 的策略从“复刻 Bevel 核心结构”升级为“学习 Bevel 3.0 的
 ## 3. 目标用户
 
 ### 3.1 第一阶段目标用户
-- 产品作者本人；
-- 少量愿意测试的朋友；
-- 使用 iPhone + Apple Watch；
-- 对睡眠、恢复、运动负荷、健康趋势感兴趣；
+> **2026-08-13 更新（ADR 0009）**：当前阶段只为产品作者本人（Primary User）优化，28 天 Daily Driver 验证完成前不为通用用户扩张范围。
+- 产品作者本人（使用 iPhone + Apple Watch；五分化力量训练轮转；长期减脂目标）；
 - 愿意通过 API Key 配置 AI。
 
 ### 3.2 非目标用户

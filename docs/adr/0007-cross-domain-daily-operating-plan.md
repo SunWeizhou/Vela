@@ -1,0 +1,3 @@
+# Make the Daily Operating Plan cross-domain but bounded
+
+Vela's Daily Operating Plan will coordinate training, movement, Eating Rhythm, stress recovery, and sleep through one primary action and at most two supporting actions. It may recommend a bounded evening adjustment—such as replacing intense training with light movement, returning to a normal meal, and ending the day earlier—but it will not schedule or manage the user's research work and full calendar. This keeps Vela responsible for Health Rhythm without turning it into a general productivity assistant or a dashboard of independent health modules.

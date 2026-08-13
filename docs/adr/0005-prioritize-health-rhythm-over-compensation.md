@@ -1,0 +1,3 @@
+# Prioritize Health Rhythm over compensatory optimization
+
+When recovery, training continuity, and short-term fat-loss impulses conflict, Vela will prioritize restoring a sustainable Health Rhythm. It may recommend proportionate low-intensity movement, normal eating, stress reduction, or earlier sleep, but it will not prescribe punitive cardio or restrictive eating to compensate for overeating. This priority governs deterministic Daily Operating Plans, Coach explanations, and proactive prompts so that the product does not turn isolated disruption into a cycle of overtraining and further dietary instability.

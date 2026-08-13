@@ -1,0 +1,3 @@
+# Let AI propose plan changes but require user confirmation
+
+Deterministic local evidence and rules produce the canonical Daily Operating Plan. AI may interpret free-form life context, explain the current plan, identify candidate patterns, compare alternatives, and create a Plan Proposal, but it may not silently override scored evidence, safety boundaries, or the persisted plan. A material AI-suggested change becomes canonical only after explicit user confirmation; this preserves local availability, auditability, and user agency while still using AI for the ambiguous reasoning it handles well.

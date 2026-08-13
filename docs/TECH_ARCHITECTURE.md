@@ -1,8 +1,8 @@
 # TECH_ARCHITECTURE.md
 # Project Vela — Technical Architecture
 
-> Updated: 2026-06-09
-> This document reflects the current build. Product context: `docs/VELA_FULL_STRENGTH_PRODUCT_BLUEPRINT.md`.
+> Updated: 2026-08-13
+> This document reflects the current build. Product context: `docs/VELA_PERSONAL_PRODUCT_DIRECTION.md`（Personal Edition，2026-08-13 起）。
 
 ## 0. 当前技术状态
 
@@ -12,7 +12,7 @@
 - `xcodebuild test -project Vela.xcodeproj -scheme Vela -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -configuration Debug` succeeds (100% pass rate).
 - 真机 iPhone 16 Pro 可通过 `devicectl` 构建、安装和启动。
 - 项目包含 HealthKit、SwiftData、评分引擎、AI Agent、Wiki、Training Intelligence、Biology、食物分析、通知等模块。
-- App shell 使用 Apple Design System + Bevel Parity 视觉体系：`VelaTheme` 设计令牌、`VelaDesignSystem` 复用组件、毛玻璃胶囊底栏、白卡驾驶舱。
+- App shell 使用 Apple Design System + Rhythm 视觉体系：`VelaTheme` 设计令牌（暖灰绿画布 `rhythmCanvas` + 节律绿 `accent`）、`VelaDesignSystem` 复用组件、四工作区导航（今日 / 训练 / Vela / 个人）。
 - **VelaBackend** (Vapor 4) 存在但 **当前未启用** — iOS 端直连 DeepSeek API (`api.deepseek.com`)。
 - **Training Intelligence v3** 模块已落地：模型层、分析服务、恢复联动适配器、计划关联、力量训练视图。
 - **Vela 4.0 Active Coach OS** 核心闭环已实施：统一 WorkoutEvent 汇总、BodyStateKernel、TrainingDecisionKernel、DailyOperatingPlan、Agent artifacts、可审计 AgentRun trace。
@@ -175,8 +175,8 @@
 ### 4.7 UI Shell / Design System
 - VelaTheme（设计令牌）
 - VelaDesignSystem（复用组件 + Modifiers）
-- GlassTabBar 胶囊底栏 + 圆形 `+` 动作按钮
-- Bevel Parity 视觉标准：#F5F3F0 暖白画布 / 白卡 / 三环仪表
+- GlassTabBar 胶囊底栏 + 圆形 `+` 动作按钮（parity 模式残留，已冻结；生产导航为 4 Tab `VelaTab`）
+- Rhythm 视觉标准：`rhythmCanvas` #F2F5F1 暖灰绿画布 / `rhythmInk` 深墨 / `accent` #17A35C 节律绿；Rhythm Horizon 为品牌主对象（Bevel Parity 视觉已冻结）
 
 ## 5. 数据流（当前架构）
 

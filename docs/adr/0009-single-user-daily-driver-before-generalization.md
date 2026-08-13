@@ -1,0 +1,3 @@
+# Optimize for one Primary User before generalizing
+
+The next Vela product phase will optimize exclusively for the owner-developer as the Primary User and must survive 28 days of real Daily Driver use before broader personas, testers, or commercialization influence scope. Product decisions may therefore specialize around the Primary User's Apple Watch workflow, five-part Training Rotation, research-work pressure, fat-loss goal, optional self-reports, and preference not to use the phone during training. General-purpose capabilities that do not improve this lived loop may be hidden, archived, or removed even if they are technically complete.

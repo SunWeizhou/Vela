@@ -2,38 +2,36 @@
 
 This directory is the source of truth for product, architecture, scoring, AI, reuse, and design decisions.
 
-Current build direction as of 2026-05-30:
-- The current frontend direction is frozen. Future UI work is limited to incremental fixes and refinements while backend data contracts are aligned. See `FRONTEND_FREEZE_AND_BACKEND_ALIGNMENT.md`.
-- Personal Bevel-like adaptive UI across Home, Journal, Fitness, Vitals, Sleep, and `+` Intelligence.
-- Vela differentiates through local-first data, transparent scoring, and an agent-maintained user Wiki.
-- The bottom shell now uses an Apple-like glass navigation bar: Home, Journal, Fitness, and Vitals sit in one material capsule, while the right-side circular `+` is separate and opens Vela Intelligence.
-- Navigation rule: bottom tabs are aggregate workspaces, while Home score cards and metric rows open single-metric drilldowns.
-- Journal now starts with a Bevel-style daily entry board while preserving Vela's note/Wiki context layer.
-- Journal recent records now group by day and show daily summaries instead of listing every raw conversation/note.
-- Home now keeps Nutrition as a compact summary before Today's AI Insights, so the section no longer collapses into an empty heading.
-- Fitness now starts with a 30-day activity heatmap, activity summary, strain performance, and training readiness.
-- Fitness Activity Summary now opens a real 30-day Activity detail page with activity load, chart, factors, and Vela analysis.
-- Vitals now starts as a Health Monitor surface, with Recovery as one card and Biology/body metrics exposed from the first screen.
-- Strain and Recovery now have first-pass Bevel-like metric detail pages with large values, 7D/30D trend charts, baseline/target context, driver cards, and action guidance.
-- Vitals metric rows now navigate into single-metric detail pages for HRV, resting heart rate, sleep heart rate, respiratory rate, blood oxygen, and weight.
-- Metric detail pages now include a live AI analysis strip before opening Vela Intelligence with current metric context.
-- Sleep now uses a dedicated sleep panel with score, time asleep, sleep debt, efficiency, stage composition/timeline, and 7-day trend instead of the old generic metric scaffold.
-- Training now opens as an adaptive plan workspace with readiness, plan generation/adjustment actions, and native training calendar cards instead of duplicating the old Strain page.
-- `+` now opens as a full-screen Vela Intelligence action hub with Ask, Analyze Today, Update Wiki, Generate Plan, Wiki status, artifacts, check-ins, and quick prompts before chat.
-- Nutrition image recognition foundation exists through Kimi Vision, but full Nutrition productization is paused while the main UI and non-nutrition flows are brought to parity.
+## Current build direction (2026-08-13)
 
-Required documents:
-- `PRD.md`
-- `MVP_EXECUTION_PLAN.md`
-- `AI_AGENT_SPEC.md`
-- `TECH_ARCHITECTURE.md`
-- `OPEN_SOURCE_REUSE_PLAN.md`
-- `SCORING_SYSTEM_V1_0.md`
-- `STITCH_DESIGN_BRIEF.md`
-- `FRONTEND_FREEZE_AND_BACKEND_ALIGNMENT.md`
+Vela 进入 **Personal Edition 阶段**：只为产品作者本人服务的主动式健康调节教练。28 天 Daily Driver 验证期的北极星是 `Trusted Decision Day`；Daily Operating Plan 跨域但有界（一个主行动 + 最多两个支持行动）；AI 提议计划变更、用户显式确认；Health Rhythm 优先，不处方代偿行为。Bevel parity 已冻结，仅保留为内部视觉回归开关。
 
-Current product strategy documents:
-- `BEVEL_3_RESEARCH.md` — public Bevel 3.0 research, iPhone mirror observations, forum feedback, and implications for Vela.
-- `BEVEL_PARITY_GAP_TRACKER.md` — live page-by-page gap tracker for Bevel parity, bugs, and verification checkpoints.
-- `VELA_FULL_STRENGTH_PRODUCT_BLUEPRINT.md` — full product, design, engineering, AI, and roadmap blueprint for taking the current build to a Bevel 3.0-class Vela.
-- `GAP_ANALYSIS.md` — updated gap analysis against Bevel 3.0 and current Vela phone experience.
+**方向以以下文档为准**（均为 2026-08-13 更新）：
+
+- `VELA_PERSONAL_PRODUCT_DIRECTION.md` — 产品方向总纲（定位、北极星、四个工作区、视觉方向、部署优先级）。
+- `../CONTEXT.md` — 领域语言规范（Primary User、Trusted Decision Day、Health Rhythm、Eating Rhythm、Lived State、Plan Proposal 等）。
+- `adr/0004-0009` — 方向性决策：训练执行留在 Apple Watch（0004）、Health Rhythm 优先于代偿（0005）、饮食行为优先（0006）、跨域 Daily Operating Plan（0007）、AI 提议用户确认（0008）、单用户优先（0009）。
+
+## 当前文档
+
+- `PRD.md` — 产品需求文档（历史主线，2026-08-13 起以 Personal Edition 方向为准）。
+- `TECH_ARCHITECTURE.md` — 技术架构（模块、数据流、评分引擎、AI Agent）。
+- `AI_AGENT_SPEC.md` — AI Agent / Coach / Wiki 记忆系统规格。
+- `SCORING_SYSTEM_V1_0.md` — 评分系统 V1.0 规格。
+- `VELA_TRAINING_INTELLIGENCE_V3.md` — Training Intelligence v3 模块设计。
+- `VELA_DESIGN_LANGUAGE.md` — 视觉设计语言（Rhythm：暖灰绿画布 + 节律绿）。
+- `STITCH_DESIGN_BRIEF.md` — Stitch 设计参考简报（历史）。
+- `agents/` — Agent 工作流文档（issue-tracker / triage-labels / domain）。
+- `validation/` — 视觉验证与 rhythm-horizon 素材。
+
+## 已冻结 / 历史文档
+
+Bevel parity 阶段文档已冻结，仅作历史参考，不作为方向依据：
+
+- `BEVEL_3_1_4_PARITY_EXECUTION_PLAN_2026-07-31.md` — Bevel 3.1.4 parity 执行计划（已停止）。
+- `BEVEL_PARITY_GAP_TRACKER.md` — Bevel parity 差距追踪（已冻结）。
+- `FRONTEND_FREEZE_AND_BACKEND_ALIGNMENT.md` — 前端冻结与后端对齐（已过时）。
+- `VELA_FULL_STRENGTH_PRODUCT_BLUEPRINT.md` — Bevel 3.0 级产品蓝图（已由 Personal Edition 方向取代）。
+- `VELA_3_AUDIT.md` / `VELA_4_STABILIZATION_REPORT.md` / `VELA_UI_AUDIT.md` — 历史审计与稳定化报告。
+- `archive/` — Vela 2.0 时代文档。
+- `reference/bevel-3.1.4` — Bevel 参考素材。

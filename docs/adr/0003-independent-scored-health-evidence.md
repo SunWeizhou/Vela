@@ -17,7 +17,7 @@ Each `MetricResult` is typed with a `ScoredHealthDomain` and exposes its `ScoreD
 
 ## Consequences
 
-- The Today interface presents five independent scorecards with direction and evidence quality.
+- Today may visualize the five results as one non-numeric capacity landscape for orientation, but it must keep each scored result independent in the signal/evidence layer with its direction and evidence quality. The landscape cannot be labeled or interpreted as an aggregate score.
 - Consumers can no longer infer score meaning from a display name alone.
 - Legacy cached `MetricResult` payloads are decoded through a name-based compatibility adapter, while new results persist an explicit domain.
 - Missing evidence remains unavailable, reducing visual completeness but preserving trust.

@@ -18,7 +18,7 @@ This is a single-context repository: read `CONTEXT.md` and relevant decisions in
 
 ## 项目概述
 
-Vela 是一个 local-first 的 iOS 健康分析 App（SwiftUI + SwiftData + HealthKit），对标 Bevel Health。原始健康数据留在设备本地，只有结构化摘要通过 DeepSeek API 直接发送给 LLM（不经过中间服务器）。
+Vela 是一个 local-first 的 iOS 健康 App（SwiftUI + SwiftData + HealthKit），当前处于 **Personal Edition 阶段**：只为产品作者本人服务的主动式健康调节教练——结合 Apple 健康、训练事实与生活上下文，每天给出一个明确、可执行、可解释的决定，帮助维持可持续的训练、睡眠、饮食与工作恢复节奏。产品方向以 `docs/VELA_PERSONAL_PRODUCT_DIRECTION.md`（2026-08-13）与 `docs/adr/0004-0009` 为准。原始健康数据留在设备本地，只有结构化摘要通过 DeepSeek API 直接发送给 LLM（不经过中间服务器）。
 
 - **Target**: `Vela`
 - **Scheme**: `Vela`
@@ -27,14 +27,24 @@ Vela 是一个 local-first 的 iOS 健康分析 App（SwiftUI + SwiftData + Heal
 - **Project**: `/Users/sunweizhou/Developer/Vela/Vela.xcodeproj`
 - **Backend**: `/Users/sunweizhou/Developer/Vela/VelaBackend` (Vapor 4, SQLite) — **当前未启用**，iOS 端直连 DeepSeek API
 - **LLM Provider**: DeepSeek (`deepseek-v4-flash` / `deepseek-v4-pro`)，API key 存在 iOS Keychain
-- **Current Branch**: `main`（构建与诊断均基于此；已推送至 origin 的 checkpoint `20b24c87`）
+- **Current Branch**: `main`（构建与诊断均基于此；已推送至 origin 的 checkpoint `bd7785c2`）
 - **GitHub**: `https://github.com/SunWeizhou/Vela`
 
 ### 范围决策（2026-08，经用户确认）
 
 - **功能开关**：Nutrition（营养）与 Biological Age（生物年龄）的用户可见入口已通过 `VelaFeatureFlags.nutritionEnabled / biologicalAgeEnabled`（默认 `false`，见 `VelaApp/App/VelaRootView.swift`）隐藏，底层代码全部保留——改回 `true` 即恢复。入口消失是**有意为之**，勿当作 bug 或重新加回。
 - **Bevel parity 已冻结**：像素级 1:1 视觉对标停止，降级为信息架构参考，不再追 Bevel 版本。
-- **导航以代码为准**：顶层为 4 Tab（今日/训练/教练/我的）。仓库中的 5 Tab parity 模式（`ParityTab`）与旧设计稿（figma `today-os` 的单一 Readiness 总分）均已冻结/过时，勿以它们为准。
+- **导航以代码为准**：顶层为 4 Tab（今日 / 训练 / Vela / 个人，`VelaTab` 枚举见 `VelaMinimalShell.swift`；Tab 2 标签为 "Vela"，即原教练）。仓库中的 5 Tab parity 模式（`ParityTab`）与旧设计稿（figma `today-os` 的单一 Readiness 总分）均已冻结/过时，勿以它们为准。
+
+### 产品方向（2026-08-13，以工作区文档为准）
+
+- **单人 Daily Driver 阶段**（ADR 0009）：只为产品作者本人优化，28 天验证期的北极星是 `Trusted Decision Day`（计划确认或改变一个有意义的健康选择，事后判断建议准确或基本合适），不以打开率/聊天条数/分数变化为北极星。
+- **Daily Operating Plan 跨域但有界**（ADR 0007）：一个主行动 + 最多两个支持行动，覆盖训练/活动/饮食节奏/压力恢复/睡眠；不管科研工作日程。
+- **AI 提议、用户确认**（ADR 0008）：本机规则生成正式计划，AI 只能提出 `Plan Proposal`，重要变更必须用户显式确认后才生效；AI 不能静默覆盖分数、安全边界或正式计划。
+- **Health Rhythm 优先**（ADR 0005）：不处方代偿行为（惩罚性有氧/极端节食抵消暴食）；饮食按行为节奏理解，不做强制卡路里记账（ADR 0006）。
+- **训练执行留在 Apple Watch**（ADR 0004）：Vela 负责训练前决定与训练后观察/校准，不要求训练中操作手机。
+- **主观与客观并立**：`Lived State`（每日自评，可跳过）与 `Body State` 不一致时记录差异、降低确定性；未填写不能解释为状态正常。
+- 方向文档：`docs/VELA_PERSONAL_PRODUCT_DIRECTION.md`（2026-08-13）、`CONTEXT.md` 领域语言、`docs/adr/0004-0009`。
 
 ## 构建与推送
 
@@ -55,7 +65,7 @@ xcodebuild -project Vela.xcodeproj -scheme Vela -configuration Debug -derivedDat
 
 > ⚠️ **工程必须放在非 iCloud 同步目录**（当前在 `~/Developer/Vela`）。若放回 iCloud 同步的桌面/文稿，xcodebuild 会在 `NSFileCoordinator _blockOnAccessClaim` 处死锁，无法解析工程。`DerivedData` 显式指到 `~/Developer/Vela-DerivedData`，避免默认走 iCloud。
 
-## 前端架构：Apple Design System + Signal Intelligence（2026-07-13 更新）
+## 前端架构：Apple Design System + Rhythm Tokens（2026-08-13 更新）
 
 所有视图使用统一的 VelaTheme 和 VelaDesignSystem 组件。
 
@@ -64,7 +74,8 @@ xcodebuild -project Vela.xcodeproj -scheme Vela -configuration Debug -derivedDat
 **VelaTheme** (`VelaApp/Core/Theme/VelaTheme.swift`) — 设计 Token 唯一入口：
 - Surface: `bg`, `surface`, `cardBg`, `elevatedBg`, `groupedBg`
 - Text: `fg`, `fg2`, `muted`, `meta`
-- Accent: `accent` (Signal Blue `#5664E8` / dark `#7F8CFF`)
+- Accent: `accent` (节律绿 `#17A35C` / dark `#3FC97F`)
+- Rhythm: `rhythmCanvas` 暖灰绿画布 `#F2F5F1`、`rhythmInk` 深墨 `#10201C`、`rhythmInkSecondary`、`rhythmGlow`/`rhythmDeep`/`rhythmWarm`；旧 Signal Blue `#5664E8` 仅残留于 `glassAccentGlow`，不再作为品牌色
 - Semantic: `strainColor`, `recoveryColor`, `sleepColor`, `stressColor`, `energyColor`
 - Typography: `largeTitle()`, `title1()`-`title3()`, `headline()`, `body()`, `callout()`, `subheadline()`, `footnote()`, `caption1()`-`caption2()`
 - Spacing: `space1`-`space12` (4-48px, 8px grid), `pagePadding` (20px), `cardGap` (14px)
@@ -82,7 +93,7 @@ xcodebuild -project Vela.xcodeproj -scheme Vela -configuration Debug -derivedDat
 ### Shell 与页面（4-Tab）
 
 **VelaShell** (`VelaApp/Features/Minimal/VelaMinimalShell.swift`) — 根导航：
-- 4 tabs: 今日 / 训练 / 教练 / 我的
+- 4 tabs: 今日 / 训练 / Vela / 个人（Tab 2 标签为 "Vela"，即原教练）
 - iOS 26 使用系统 Liquid Glass Tab Bar，早期系统使用自定义浮动玻璃导航
 - 快速记录与设置由页面内入口和全局 AppState sheet 触发
 
@@ -90,8 +101,8 @@ xcodebuild -project Vela.xcodeproj -scheme Vela -configuration Debug -derivedDat
 |-----|------|------|--------|
 | Tab 0 | TodayView | `VelaMinimalTodayView.swift` | `@EnvironmentObject dashboardVM` |
 | Tab 1 | TrainingView | `VelaMinimalFitnessView.swift` | `@EnvironmentObject dashboardVM` + TrainingIntelligence |
-| Tab 2 | CoachView | `CoachView.swift` | `@StateObject vm: CoachChatVM`（本机建议 + 可选 streaming） |
-| Tab 3 | MeView | `VelaMinimalJournalView.swift` | `@AppStorage` + `@Query coachArtifacts` |
+| Tab 2 | VelaView（原教练） | `CoachView.swift` | `@StateObject vm: CoachChatVM`（本机建议 + 可选 streaming） |
+| Tab 3 | MeView（个人） | `VelaMinimalJournalView.swift` | `@AppStorage` + `@Query coachArtifacts` |
 | — | SettingsView | `VelaMinimalCoachView.swift` | 手记/Journal 页面 |
 | — | MetricDetailView | `VelaMinimalComponents.swift` | 各页面 onTap 导航进入 |
 | — | PlusActionSheet | `VelaQuickActionsSheet.swift` | 快速添加动作面板 |
@@ -123,7 +134,7 @@ xcodebuild -project Vela.xcodeproj -scheme Vela -configuration Debug -derivedDat
 - **DashboardViewModel** (`VelaApp/Features/SharedComponents/DashboardViewModel.swift`) — ObservableObject，持有 DashboardSummary
 - **MetricCoachCard** (`VelaApp/Features/SharedComponents/MetricCoachCard.swift`) — Apple Intelligence 风格的指标分析入口卡片
 
-## 数据流（当前架构，Vela 3.0 Active Coach OS）
+## 数据流（当前架构，Vela Personal Edition）
 
 ```
 HealthKit → HealthKitSyncEngine (2-pass: raw snapshot → DailyHealthComputation)
@@ -202,7 +213,7 @@ HealthKit → HealthKitSyncEngine (2-pass: raw snapshot → DailyHealthComputati
 
 ### 已知改进空间
 
-- **HRV 只用了 SDNN**（仍属实）：HealthKit 同时提供 RMSSD（更好的迷走神经代理）和 SDNN，RMSSD 未使用（`HealthKitQueryService` 只请求 `.heartRateVariabilitySDNN`）
+- **HRV 只用了 SDNN**（按平台能力已收敛）：HealthKit 仅暴露 `.heartRateVariabilitySDNN`，**不存在 RMSSD 采样标识符**（任务书 R1.3 的字面要求不可实现）。RMSSD 作为派生模型输入：Recovery 引擎 PSTI 管道已就绪，RMSSD 缺失时回退 SDNN（`RecoveryScoreEngine`，测试 `testPSTIFallbackWhenRMSSDIsNilButHRVIsPresent` 覆盖）
 - **Readiness 置信度硬编码**（部分已修）：`TodayCommandState` 仍按场景硬编码 0.86/0.78/0.74 等系数，但 `max(0.3, …)` 拔高下限已移除（现为 `0.50*recConf + 0.30*sleepConf + 0.20*stressConf` 加权）；`DailyDecisionFeedbackRecord` 存在但仍未回灌校准
 - **EnergyBankEngine 的 EWMA 用最旧值正向递推**：`ewma` 从 oldest 正向递推（标准 EWMA 本就正向计算），与 Banister 反向递归实现存在数值差异——属实现差异而非正确性 bug
 - **训练数据无单一事实来源**（仍属实）：HealthKit `WorkoutEventRecord` + 本地 `StrengthWorkoutRecord` + XunJi `XunjiWorkoutMirrorRecord` 三条路径合并进 `RecentTrainingSummary`，可能重复计数
@@ -288,14 +299,14 @@ iOS 端只发摘要 `HealthContext`，原始 HealthKit 数据永不离设备。�
 
 ## 注意事项
 
-- **🔥 [CRITICAL] 前端视觉标准 (Signal Intelligence)**: 2026-07-13 起采用冷中性画布 `#F4F6FA`、Signal Blue 品牌色、深色 Daily Focus 卡、克制的健康语义色和原生 Liquid Glass 导航。页面必须优先呈现“一个今日重点 → 判断依据 → 下一步行动”，避免暖纸张、陶土色、装饰性仪表堆叠和无意义渐变。允许持续优化结构，但必须保持语义 Token、动态字体和可访问性。
+- **🔥 [CRITICAL] 前端视觉标准 (Rhythm)**: 2026-08-13 起采用暖灰绿画布（`rhythmCanvas` `#F2F5F1`）、深墨文字（`rhythmInk`）、节律绿品牌色（`accent` `#17A35C`）和原生 Liquid Glass 导航；Today 的品牌主对象是 `Rhythm Horizon（健康地平线）`——表达趋势与可承受范围的容量窗口，不是总分。页面必须优先呈现“一个今日节奏决定 → 最多 3 个证据锚点 → 最多两个辅助行动”，内容优先于容器，避免装饰性仪表堆叠、卡片叠卡片和无意义渐变。半透明材质只用于导航、底部行动入口和可展开证据 Sheet；同一层级不超过三个视觉重点，状态色只用于有意义的变化。允许持续优化结构，但必须保持语义 Token、动态字体和可访问性。
 - **📁 [Minimal Shell 文件映射说明]**: 为了在不损坏 Xcode `.pbxproj` 索引引用的前提下实现最清晰的文件逻辑，前端文件内容与 Tab 映射如下：
-    - `VelaMinimalShell.swift` ➡️ 底栏 Tab 胶囊容器 `VelaShell`
-    - `VelaMinimalTodayView.swift` ➡️ Tab 1 今日主页 `VelaTodayView`
-    - `VelaMinimalJournalView.swift` ➡️ Tab 2 习惯手记 `VelaJournalView`
-    - `VelaMinimalFitnessView.swift` ➡️ Tab 3 训练主页 `VelaTrainingView`
-    - `VelaMinimalVitalsView.swift` ➡️ Tab 4 体征主页 `VelaVitalsView`
+    - `VelaMinimalShell.swift` ➡️ 底栏 Tab 容器 `VelaShell`（`VelaTab`：today/training/coach/me）
+    - `VelaMinimalTodayView.swift` ➡️ Tab 0 今日主页 `VelaTodayView`
+    - `VelaMinimalFitnessView.swift` ➡️ Tab 1 训练主页 `VelaTrainingView`
+    - `VelaMinimalJournalView.swift` ➡️ Tab 3 个人页 `VelaMeView`
     - `VelaMinimalCoachView.swift` ➡️ "我的"设置页面 `VelaSettingsView`
+    - `VelaMinimalVitalsView.swift` ➡️ 体征二级页容器（由今日页接入，不再作为独立 Tab）
     - `VelaMinimalComponents.swift` ➡️ 耗力/睡眠/压力等全量指标高保真详情页 `VelaMetricDetailView`
 - **pbxproj 规则**: 不直接修改 pbxproj，推荐用文件覆盖方式添加新代码；但 TrainingIntelligence 模块的新文件已通过手动编辑 pbxproj 注册成功。
 - 新前端代码中 `body` 不能用作存储属性名（与 SwiftUI `body` 冲突），用 `bodyText` 替代
