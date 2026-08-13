@@ -207,6 +207,40 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertTrue(result.reasons.contains { $0.contains("才会给出恢复评分") })
     }
 
+    func testRecoveryScoreEngineCalculatesParasympatheticToneIndexFromRMSSD() {
+        let engine = RecoveryScoreEngine()
+        let input = RecoveryScoreInput(
+            asOf: Date(timeIntervalSince1970: 1_700_000_000),
+            hrvToday: 50,
+            hrvBaseline: 50,
+            hrvHistory: [48, 50, 52, 49, 51, 50, 48],
+            hrvRmssdToday: 55,
+            hrvRmssdBaseline: 50,
+            hrvRmssdHistory: [48, 50, 52, 49, 51, 50, 48],
+            restingHeartRateToday: 58,
+            restingHeartRateBaseline: 58,
+            rhrHistory: [58, 59, 57, 58, 58, 59, 58],
+            sleepScoreLastNight: 80,
+            strainScoreYesterday: 40
+        )
+        let result = engine.calculate(from: input)
+        XCTAssertNotNil(result.components["parasympathetic_tone_index"])
+        XCTAssertNotNil(result.components["psti_z_score"])
+        let psti = result.components["parasympathetic_tone_index"]!
+        XCTAssertGreaterThanOrEqual(psti, 0.0)
+        XCTAssertLessThanOrEqual(psti, 100.0)
+    }
+
+    func testHealthSignalCatalogTreatsRMSSDAsDerivedFromSDNN() {
+        XCTAssertEqual(HealthSignal.heartRateVariabilityRMSSD.rawValue, "hrv_rmssd")
+        XCTAssertEqual(
+            HealthSignalCatalog.objectType(for: .heartRateVariabilityRMSSD)?.identifier,
+            HealthSignal.hrvSDNN.objectType?.identifier
+        )
+        XCTAssertFalse(HealthSignalCatalog.coreSignals.contains(.heartRateVariabilityRMSSD))
+        XCTAssertEqual(HealthSignalCatalog.unit(for: .heartRateVariabilityRMSSD)?.symbol, "ms")
+    }
+
     func testWristTemperatureAbovePersonalBaselineReducesRecoveryScore() {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
@@ -426,8 +460,12 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertEqual(evidence.sleep.value ?? -1, 77.43, accuracy: 0.01)
         XCTAssertEqual(evidence.recovery.value ?? -1, 60.70, accuracy: 0.01)
         XCTAssertEqual(evidence.strain.value ?? -1, 63.67, accuracy: 0.01)
-        XCTAssertEqual(evidence.physiologicalStress.value ?? -1, 33.15, accuracy: 0.01)
-        XCTAssertEqual(evidence.energy.value ?? -1, 39.29, accuracy: 0.01)
+        // 2026-08-13 有意重定标：HRV 因子单位修复（log 域 SD）使生理压力正确反映
+        // HRV 高于基线的低压力（见 testStressEngineHRVFactorRespondsToRealisticHRVDecline）
+        XCTAssertEqual(evidence.physiologicalStress.value ?? -1, 21.08, accuracy: 0.01)
+        // 2026-08-13 有意重定标：ATL/CTL/TSB 改用 TRIMP 域 todayLoad
+        // （见 testEnergyBankTrainingLoadUsesTRIMPScaleTodayLoad）
+        XCTAssertEqual(evidence.energy.value ?? -1, 42.31, accuracy: 0.01)
         XCTAssertEqual(evidence.sleep.algorithmVersion, ScoringAlgorithmVersions.sleep)
         XCTAssertEqual(evidence.recovery.algorithmVersion, ScoringAlgorithmVersions.recovery)
         XCTAssertEqual(evidence.strain.algorithmVersion, ScoringAlgorithmVersions.strain)
@@ -483,6 +521,44 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertFalse(interpretation.recommendedAction.evidenceChain.contains { $0.metricName == "Sleep Score" })
     }
 
+    func testBodyInterpreterSingleMildStressSignalDoesNotProduceSevereFatigue() {
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        var dashboard = DashboardSummary.empty(date: date)
+
+        func healthyMetric(_ name: String, domain: ScoredHealthDomain, value: Double) -> MetricResult {
+            MetricResult(
+                domain: domain,
+                name: name,
+                value: value,
+                band: .high,
+                confidence: .high,
+                components: [:],
+                componentWeights: [:],
+                reasons: [],
+                missingInputs: [],
+                dataWindow: DateInterval(start: date, duration: 86400),
+                source: .healthKit,
+                algorithmVersion: "1.0.0",
+                lastUpdated: date
+            )
+        }
+
+        // 唯一疲劳信号：stress = 55（轻度心理压力）；其余指标全部健康
+        dashboard.sleepScore = healthyMetric("Sleep Score", domain: .sleep, value: 90)
+        dashboard.recovery = healthyMetric("Recovery Score", domain: .recovery, value: 85)
+        dashboard.strain = healthyMetric("Strain Score", domain: .strain, value: 40)
+        dashboard.stress = healthyMetric("Stress Index", domain: .physiologicalStress, value: 55)
+
+        let interpretation = BodyInterpreterEngine().interpret(
+            dashboard: dashboard,
+            wiki: [:],
+            activePlan: nil
+        )
+
+        // 单个轻度信号应判 .mild，不得因归一化失真升级为 .severe
+        XCTAssertEqual(interpretation.fatigueLevel, .mild)
+    }
+
     func testRecoveryReasonsDescribeMeasuredSignalsWithoutPhysiologicalClaims() {
         let result = RecoveryScoreEngine().calculate(from: RecoveryScoreInput(
             asOf: Date(timeIntervalSince1970: 1_700_000_000),
@@ -516,6 +592,38 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertTrue(reasons.contains("睡眠评分偏低"))
         XCTAssertFalse(reasons.contains("皮质醇"))
         XCTAssertFalse(reasons.contains("自主神经平衡"))
+    }
+
+    func testEnergyBankTrainingLoadUsesTRIMPScaleTodayLoad() {
+        // 今日真实训练负荷 120 TRIMP，strain 评分 85（0-100 域）。
+        // ATL/CTL/TSB 必须使用 TRIMP 域的 todayLoad 参与 EWMA；
+        // 旧实现把 0-100 评分当 TRIMP 加入，ATL 被系统性拉低，深度负 TSB 被掩盖。
+        let input = EnergyBankInput(
+            asOf: Date(timeIntervalSince1970: 1_700_000_000),
+            recoveryScore: 75,
+            sleepScore: 75,
+            strainScore: 85,
+            stressIndex: 50,
+            strainHistory: [100, 95, 90, 85, 80, 75, 70], // newest-first TRIMP
+            todayLoad: 120
+        )
+        let result = EnergyBankEngine().calculate(from: input)
+        let tsb = result.components["tsb"] ?? 0
+        XCTAssertLessThan(tsb, -15, "今日高负荷（120 TRIMP）应产生深度负 TSB，实际 \(tsb)")
+    }
+
+    func testStressEngineHRVFactorRespondsToRealisticHRVDecline() {
+        // HRV 从基线 40ms 暴跌至 20ms（-50%），raw SD 10ms。
+        // hrvSD 语义为原始 ms 域标准差；hrvZ 在 log 域计算，引擎须换算单位，
+        // 否则 Z ≈ -0.07，HRV 压力因子被 25% 权重完全稀释。
+        let result = StressIndexEngine().calculate(from: StressIndexInput(
+            asOf: Date(timeIntervalSince1970: 1_700_000_000),
+            hrvToday: 20,
+            hrvBaseline: 40,
+            hrvSD: 10
+        ))
+        let hrvStress = result.components["hrv_stress"] ?? 0
+        XCTAssertGreaterThan(hrvStress, 60, "HRV -50% 暴跌应产生显著压力信号，实际 \(hrvStress)")
     }
 
     func testBodyLimiterFramesLowHRVAsSignalNotPhysiologicalDiagnosis() {
@@ -862,7 +970,7 @@ final class ScoringEngineTests: XCTestCase {
 
         XCTAssertEqual(model.hero.scoreTitle, "恢复 82")
         XCTAssertEqual(model.hero.decisionTitle, "按计划训练")
-        XCTAssertEqual(model.hero.primaryActionTitle, "开始今日训练")
+        XCTAssertEqual(model.hero.primaryActionTitle, "查看今日训练建议")
         XCTAssertEqual(model.signalCards.map(\.id), ["recovery", "sleep", "strain", "stress", "energy"])
         XCTAssertEqual(
             model.signalCards.map(\.directionLabel),
@@ -1042,8 +1150,8 @@ final class ScoringEngineTests: XCTestCase {
         ))
 
         let expectations: [(DailyTrainingDecisionType, String, String, String)] = [
-            (.keep, "开始今日训练", "start_training", "training"),
-            (.reduce, "减量训练", "reduce_training", "training"),
+            (.keep, "查看训练边界", "review_training", "training"),
+            (.reduce, "训练时控制容量", "reduce_training", "training"),
             (.swap, "替换训练内容", "swap_session", "training"),
             (.rest, "执行恢复日", "recovery_day", "recovery")
         ]
@@ -1072,6 +1180,44 @@ final class ScoringEngineTests: XCTestCase {
             XCTAssertEqual(primary.id, actionID)
             XCTAssertEqual(primary.destination, destination)
         }
+    }
+
+    func testActionPlanFollowsReadinessWhenKernelDisagrees() {
+        // 压力 85：CommandBuilder 判 recover（Kernel 无压力分支，仍判 keep）。
+        // 行动列表与标题必须跟随 readiness，否则同屏「标题说恢复、行动说训练」。
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+        var dashboard = DashboardSummary.preview(date: now)
+        dashboard.recovery.value = 72
+        dashboard.sleepScore.value = 80
+        dashboard.strain.value = 44
+        dashboard.stress.value = 85
+        dashboard.energy.value = 70
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: dashboard,
+            activeStatus: "active",
+            generatedAt: now
+        ))
+        let kernelDecision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
+            bodyState: bodyState
+        ))
+        let commandState = TodayCommandBuilder.build(
+            from: dashboard,
+            recentStrengthSummary: nil,
+            coachArtifact: nil
+        )
+        let readiness = commandState.readinessDecision.decision
+
+        let model = TodayExperienceModel.build(
+            dashboard: dashboard,
+            bodyState: bodyState,
+            trainingDecision: kernelDecision,
+            readiness: readiness
+        )
+
+        XCTAssertEqual(readiness, .recover)
+        XCTAssertEqual(model.hero.decisionTitle, "恢复优先")
+        let primary = model.actions.first(where: \.isPrimary)
+        XCTAssertEqual(primary?.id, "recovery_day")
     }
 
     func testTrainingSurfaceSummaryPrefersOperatingPlanPayload() {
@@ -1328,7 +1474,7 @@ final class ScoringEngineTests: XCTestCase {
     }
 
     @MainActor
-    func testWorkoutSaveCoordinatorCreatesTrainingResponseRecordAndArtifact() throws {
+    func testWorkoutSaveCoordinatorCreatesTrainingResponseRecordAndArtifact() async throws {
         let container = try VelaModelContainer.make(inMemory: true)
         let modelContext = container.mainContext
 
@@ -1401,6 +1547,155 @@ final class ScoringEngineTests: XCTestCase {
         try WorkoutAggregationService.shared.deleteStrengthWorkout(workout, modelContext: modelContext)
         let remainingResponses = try modelContext.fetch(responseDescriptor)
         XCTAssertEqual(remainingResponses.count, 0)
+
+        // join 保存与删除调度的计划刷新任务，避免 fire-and-forget 任务越过测试存活
+        await DailyPlanRefreshCoordinator.shared.latestTask?.value
+    }
+
+    @MainActor
+    func testCommitNewWorkoutExposesAwaitablePlanRefreshIndependentOfCallerContext() async throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let revisionBefore = VelaAppState.shared.localDataRevision
+
+        let workout = StrengthWorkoutRecord(
+            title: "计划刷新测试",
+            startedAt: Date(),
+            durationMinutes: 45,
+            notes: "",
+            exercises: []
+        )
+        workout.sessionRPE = 8.0
+        let artifact = CoachArtifactRecord(artifact: CoachArtifact(
+            type: .askCoachAnswer,
+            title: "训练总结",
+            summary: "刷新测试",
+            confidence: 1,
+            reasons: [],
+            actions: [],
+            sourceContextHash: "refresh-hash"
+        ))
+
+        let coordinator = WorkoutSaveCoordinator()
+        var capturedContext: ModelContext? = container.mainContext
+        _ = try coordinator.commitNewWorkout(
+            workout: workout,
+            artifact: artifact,
+            sessionRPE: 8.0,
+            modelContext: capturedContext!
+        )
+        // 调用方不再持有 context：刷新任务必须自持 container 完成，不得依赖调用方 context
+        capturedContext = nil
+
+        await DailyPlanRefreshCoordinator.shared.latestTask?.value
+
+        XCTAssertGreaterThan(VelaAppState.shared.localDataRevision, revisionBefore)
+    }
+
+    @MainActor
+    func testDictationControllerStopWithoutInstalledTapDoesNotCrash() {
+        // 从未安装 tap 时调用 stop()（或连续两次 stop()）不得触发
+        // AVAudioNode.removeTap(onBus:) 的无 tap ObjC 异常（Swift 不可捕获 → 直接崩溃）。
+        let controller = CoachDictationController()
+        controller.stop()
+        controller.stop()
+        XCTAssertFalse(controller.isRecording)
+    }
+
+    @MainActor
+    func testRecoveryImpactDataHonorsMissingRPEInsteadOfAssumingMedium() {
+        // 用户跳过训练后自评：workout/event 均无 RPE。
+        // 展示层不得把缺失解释为中等强度（旧实现 rpe ?? 6），应显示无法估算。
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let workout = StrengthWorkoutRecord(
+            title: "无自评训练",
+            startedAt: start,
+            durationMinutes: 45,
+            notes: "",
+            exercises: []
+        )
+        let event = WorkoutEventRecord(
+            source: "strengthLog",
+            startedAt: start,
+            endedAt: start.addingTimeInterval(2700),
+            activityType: "无自评训练",
+            energyKilocalories: 300,
+            rpe: nil,
+            linkedStrengthWorkoutId: workout.id,
+            calendar: .current
+        )
+        let impact = PostWorkoutImpact(
+            workout: workout,
+            event: event,
+            response: nil,
+            todaySummary: nil,
+            nextDaySummary: nil,
+            postWorkoutStart: start,
+            postWorkoutHeartRates: []
+        )
+        XCTAssertNil(impact.strainCost)
+        XCTAssertTrue(impact.strainSourceText.contains("未填写"))
+    }
+
+    func testOutboundRevokeClosesBackgroundNetworkAIChannel() {
+        // 「撤销全部联网数据授权」必须同时关闭后台自动化的独立 consent 体系，
+        // 否则晚间 Wiki 同步/晨间简报仍会向网络 AI 发送完整健康事实集。
+        let previousConsent = AutoAgentConfig.shared.backgroundNetworkAIConsent
+        let previousPolicy = CoachOutboundDataPolicy.stored
+        let hadExplicitConsent = CoachOutboundDataPolicy.hasExplicitConsent
+        defer {
+            AutoAgentConfig.shared.backgroundNetworkAIConsent = previousConsent
+            if hadExplicitConsent {
+                previousPolicy.saveExplicitConsent()
+            } else {
+                CoachOutboundDataPolicy.revoke()
+            }
+        }
+
+        AutoAgentConfig.shared.backgroundNetworkAIConsent = true
+        CoachOutboundDataPolicy.revoke()
+
+        XCTAssertFalse(AutoAgentConfig.shared.backgroundNetworkAIConsent)
+        XCTAssertFalse(AutoAgentConfig.shared.canSendHealthContextToNetworkAI)
+    }
+
+    @MainActor
+    func testCoachRetryTargetsTheFailedQuestionNotTheLastMessage() {
+        // Q1 失败（重试气泡）→ Q2 成功。点 Q1 的重试必须重发 Q1，
+        // 旧实现取「最后一条用户消息」会重复回答 Q2。
+        let q1 = CoachChatVM.ChatMsg(role: .user, content: "Q1 我的恢复怎么样？")
+        let q1Error = CoachChatVM.ChatMsg(
+            role: .assistant,
+            content: "AI 服务暂时不可用",
+            recoveryAction: LLMErrorRecoveryAction(title: "重试", systemImage: "arrow.clockwise", destination: .retry)
+        )
+        let q2 = CoachChatVM.ChatMsg(role: .user, content: "Q2 今晚睡眠建议？")
+        let a2 = CoachChatVM.ChatMsg(role: .assistant, content: "A2")
+
+        let target = CoachChatVM.userMessageForRetry(in: [q1, q1Error, q2, a2])
+
+        XCTAssertEqual(target?.text, "Q1 我的恢复怎么样？")
+        XCTAssertEqual(target?.retryBubbleId, q1Error.id)
+    }
+
+    @MainActor
+    func testTodayHealthToolSerializesReasonsWithoutCrash() async throws {
+        // 真实设备场景：dashboard 带 reasons 时，prefix(3) 产生 ArraySlice（Swift 结构体），
+        // JSONSerialization 会抛不可捕获的 NSException「Invalid type in JSON write (__SwiftValue)」。
+        let container = try VelaModelContainer.make(inMemory: true)
+        var dashboard = DashboardSummary.preview()
+        dashboard.recovery.reasons = ["HRV 低于基线", "睡眠不足", "负荷偏高", "第四条"]
+        dashboard.sleepScore.reasons = ["睡眠时长不足", "深睡偏少"]
+        let context = ToolExecutionContext(modelContext: container.mainContext, dashboard: dashboard)
+        let tool = TodayHealthTool(executionContext: context)
+
+        let result = try await tool.execute(arguments: #"{"sections": ["autonomic", "sleep"]}"#)
+
+        let obj = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any],
+            "工具返回必须是合法 JSON"
+        )
+        XCTAssertNotNil(obj["autonomic"])
+        XCTAssertNotNil(obj["sleep"])
     }
 
     // MARK: - MetricResult.state (G1 状态着色)

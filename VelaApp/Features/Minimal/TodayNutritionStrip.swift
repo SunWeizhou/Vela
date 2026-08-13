@@ -957,6 +957,8 @@ private struct NutritionGoalsSheet: View {
                     .foregroundStyle(VelaTheme.muted)
             }
             .navigationTitle("营养目标")
+            .velaRhythmFormSurface()
+            .velaRhythmDetailChrome()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完成") { dismiss() }
@@ -1046,6 +1048,8 @@ private struct NutritionRecordDetailSheet: View {
                 }
             }
             .navigationTitle(record.mealName)
+            .velaRhythmFormSurface()
+            .velaRhythmDetailChrome()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { dismiss() }
@@ -1186,6 +1190,8 @@ private struct NutritionPlanningSheet: View {
                 }
             }
             .navigationTitle("营养计划")
+            .velaRhythmFormSurface()
+            .velaRhythmDetailChrome()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完成") {
@@ -1326,6 +1332,8 @@ private struct NutritionRecipeImportSheet: View {
                 }
             }
             .navigationTitle("导入配方")
+            .velaRhythmFormSurface()
+            .velaRhythmDetailChrome()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { dismiss() }

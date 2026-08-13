@@ -112,9 +112,9 @@ final class PersistenceFoundationTests: XCTestCase {
     }
 
     @MainActor
-    func testV1StoreMigratesToV2WithoutLosingDailyScores() throws {
+    func testV1StoreMigratesToCurrentSchemaWithoutLosingDailyScores() throws {
         let root = FileManager.default.temporaryDirectory
-            .appending(path: "VelaV2Migration-\(UUID().uuidString)", directoryHint: .isDirectory)
+            .appending(path: "VelaV1Migration-\(UUID().uuidString)", directoryHint: .isDirectory)
         let storeURL = root.appending(path: "Vela.store")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -148,6 +148,45 @@ final class PersistenceFoundationTests: XCTestCase {
         XCTAssertEqual(migrated.recoveryScore, 74)
         XCTAssertEqual(migrated.configVersion, "legacy.fixture.v1")
         XCTAssertNil(migrated.scoreEvidenceData)
+    }
+
+    @MainActor
+    func testFrozenV2StoreMigratesToV3WithoutLosingDailyScores() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "VelaV3Migration-\(UUID().uuidString)", directoryHint: .isDirectory)
+        let storeURL = root.appending(path: "Vela.store")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        func createV2Store() throws {
+            let sourceSchema = Schema(VelaSchemaV2.models)
+            let sourceConfig = ModelConfiguration(schema: sourceSchema, url: storeURL)
+            let sourceContainer = try ModelContainer(
+                for: sourceSchema,
+                configurations: [sourceConfig]
+            )
+            sourceContainer.mainContext.insert(VelaSchemaV2.DailyHealthSummaryRecord(
+                dayIdentifier: "2026-08-12",
+                date: Date(timeIntervalSince1970: 1_786_464_000),
+                sleepScore: 79,
+                recoveryScore: 68,
+                configVersion: "device.fixture.v2"
+            ))
+            try sourceContainer.mainContext.save()
+        }
+
+        try createV2Store()
+        let migratedContainer = try VelaModelContainer.make(at: storeURL)
+        let records = try migratedContainer.mainContext.fetch(
+            FetchDescriptor<DailyHealthSummaryRecord>()
+        )
+        let migrated = try XCTUnwrap(records.first)
+
+        XCTAssertEqual(migrated.dayIdentifier, "2026-08-12")
+        XCTAssertEqual(migrated.sleepScore, 79)
+        XCTAssertEqual(migrated.recoveryScore, 68)
+        XCTAssertEqual(migrated.configVersion, "device.fixture.v2")
+        XCTAssertNil(migrated.hrvRmssdMilliseconds)
     }
 
     @MainActor
@@ -1369,5 +1408,59 @@ final class PersistenceFoundationTests: XCTestCase {
         let all = try context.fetch(FetchDescriptor<DailyHealthSummaryRecord>())
         XCTAssertEqual(all.count, 1, "Concurrent upserts to the same dayIdentifier must produce exactly one row, not \(all.count)")
         XCTAssertEqual(all.first?.dayIdentifier, DailyHealthSummaryRecord.dayIdentifier(for: day, calendar: calendar))
+    }
+}
+
+@MainActor
+final class CoachSessionStoreTests: XCTestCase {
+    private func makeStoreWithSessions() throws -> (ModelContainer, CoachSessionStore) {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let first = CoachSessionRecord(
+            id: UUID(),
+            title: "会话一",
+            createdAt: Date(),
+            updatedAt: Date(),
+            serializedMessages: "[]"
+        )
+        let second = CoachSessionRecord(
+            id: UUID(),
+            title: "会话二",
+            createdAt: Date(),
+            updatedAt: Date().addingTimeInterval(-60),
+            serializedMessages: "[]"
+        )
+        context.insert(first)
+        context.insert(second)
+        try context.save()
+        let store = CoachSessionStore()
+        store.loadSessions(modelContext: context, isStreaming: false, isAwaitingForegroundRetry: false, messagesHandler: { _ in })
+        return (container, store)
+    }
+
+    func testDeleteSessionIsRejectedWhileStreaming() throws {
+        let (container, store) = try makeStoreWithSessions()
+        let context = container.mainContext
+        let target = try XCTUnwrap(store.currentSession)
+
+        // 流式中删除当前会话：完成时的 persistThread 会把整段对话写进
+        // 另一个会话并覆盖其历史——必须在 store 层拒绝该操作
+        store.deleteSession(target, modelContext: context, isStreaming: true, isAwaitingForegroundRetry: false, messagesHandler: { _ in })
+
+        let remaining = try context.fetch(FetchDescriptor<CoachSessionRecord>())
+        XCTAssertEqual(remaining.count, 2)
+        XCTAssertEqual(store.currentSession?.id, target.id)
+    }
+
+    func testCreateNewSessionIsRejectedWhileStreaming() throws {
+        let (container, store) = try makeStoreWithSessions()
+        let context = container.mainContext
+        let previous = store.currentSession
+
+        store.createNewSession(modelContext: context, isStreaming: true, isAwaitingForegroundRetry: false, messagesHandler: { _ in })
+
+        let sessions = try context.fetch(FetchDescriptor<CoachSessionRecord>())
+        XCTAssertEqual(sessions.count, 2)
+        XCTAssertEqual(store.currentSession?.id, previous?.id)
     }
 }

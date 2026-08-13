@@ -15,7 +15,7 @@ struct TrustCenterView: View {
 
     var body: some View {
         ZStack {
-            VelaBackground()
+            VelaTheme.rhythmCanvas.ignoresSafeArea()
 
             if runRecords.isEmpty {
                 VelaEmptyState(
@@ -42,31 +42,8 @@ struct TrustCenterView: View {
                 }
             }
         }
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .top) {
-            VStack(spacing: 0) {
-                HStack(alignment: .center) {
-                    VelaDetailBackButton(label: AppLanguage.stored.isChinese ? "返回设置" : "Back to Settings")
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(AppLanguage.stored.isChinese ? "信任中心" : "Trust Center")
-                            .font(VelaTheme.title2())
-                            .foregroundStyle(VelaTheme.fg)
-                        Text(AppLanguage.stored.isChinese ? "AI 运行记录" : "AI Run History")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(VelaTheme.fg2)
-                    }
-                    Spacer()
-                    Image(systemName: "checkmark.shield.fill")
-                        .font(.system(size: 22))
-                        .foregroundStyle(VelaTheme.accent)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(VelaTheme.bg.opacity(0.97))
-                Divider().opacity(0.4)
-            }
-        }
+        .navigationTitle(AppLanguage.stored.isChinese ? "信任中心" : "Trust Center")
+        .velaRhythmDetailChrome()
         .sheet(item: $selectedRun) { run in
             runDetailSheet(run)
         }
@@ -91,12 +68,6 @@ struct TrustCenterView: View {
                         Text(AppLanguage.stored.isChinese ? "Agent 审计日志" : "Agent Audit Log")
                             .font(.headline.weight(.semibold))
                             .foregroundStyle(VelaTheme.fg)
-                        Text(AppLanguage.stored.isChinese
-                             ? "查看 Vela 何时运行、使用了哪些上下文、产生了什么输出，以及是否调用了工具。"
-                             : "Review when Vela ran, which context it used, what it produced, and whether it called tools."
-                        )
-                        .font(.subheadline)
-                        .foregroundStyle(VelaTheme.fg2)
                     }
                     Spacer()
                 }

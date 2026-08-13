@@ -3,6 +3,7 @@ import HealthKit
 
 public enum HealthSignal: String, Codable, CaseIterable, Sendable {
     case hrvSDNN = "hrv_sdnn"
+    case heartRateVariabilityRMSSD = "hrv_rmssd"
     case restingHR = "resting_hr"
     case respiratoryRate = "respiratory_rate"
     case sleepAnalysis = "sleep_analysis"
@@ -53,6 +54,7 @@ public enum HealthSignal: String, Codable, CaseIterable, Sendable {
     public var name: String {
         switch self {
         case .hrvSDNN: return "HRV (SDNN)"
+        case .heartRateVariabilityRMSSD: return "HRV (RMSSD)"
         case .restingHR: return AppLanguage.stored.isChinese ? "静息心率" : "Resting HR"
         case .respiratoryRate: return AppLanguage.stored.isChinese ? "呼吸率" : "Respiratory Rate"
         case .sleepAnalysis: return AppLanguage.stored.isChinese ? "睡眠分析" : "Sleep Analysis"
@@ -146,65 +148,116 @@ enum HealthSignalCatalog {
     }
 
     static func objectType(for signal: HealthSignal) -> HKObjectType? {
-        return switch signal {
-        case .hrvSDNN: HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN)
-        case .restingHR: HKObjectType.quantityType(forIdentifier: .restingHeartRate)
-        case .respiratoryRate: HKObjectType.quantityType(forIdentifier: .respiratoryRate)
-        case .sleepAnalysis: HKObjectType.categoryType(forIdentifier: .sleepAnalysis)
-        case .wristTemperature: HKObjectType.quantityType(forIdentifier: .appleSleepingWristTemperature)
-        case .oxygenSaturation: HKObjectType.quantityType(forIdentifier: .oxygenSaturation)
-        case .workouts: HKObjectType.workoutType()
-        case .activeEnergy: HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)
-        case .exerciseTime: HKObjectType.quantityType(forIdentifier: .appleExerciseTime)
-        case .stepCount: HKObjectType.quantityType(forIdentifier: .stepCount)
-        case .workoutHR: HKObjectType.quantityType(forIdentifier: .heartRate)
-        case .heartRateRecoveryOneMinute: HKObjectType.quantityType(forIdentifier: .heartRateRecoveryOneMinute)
-        case .walkingSpeed: HKObjectType.quantityType(forIdentifier: .walkingSpeed)
-        case .walkingAsymmetry: HKObjectType.quantityType(forIdentifier: .walkingAsymmetryPercentage)
-        case .doubleSupport: HKObjectType.quantityType(forIdentifier: .walkingDoubleSupportPercentage)
-        case .walkingStepLength: HKObjectType.quantityType(forIdentifier: .walkingStepLength)
-        case .walkingHeartRate: HKObjectType.quantityType(forIdentifier: .walkingHeartRateAverage)
-        case .walkingSteadiness: HKObjectType.quantityType(forIdentifier: .appleWalkingSteadiness)
-        case .stairAscentSpeed: HKObjectType.quantityType(forIdentifier: .stairAscentSpeed)
-        case .stairDescentSpeed: HKObjectType.quantityType(forIdentifier: .stairDescentSpeed)
-        case .sixMinuteWalkDistance: HKObjectType.quantityType(forIdentifier: .sixMinuteWalkTestDistance)
-        case .vo2Max: HKObjectType.quantityType(forIdentifier: .vo2Max)
-        case .height: HKObjectType.quantityType(forIdentifier: .height)
-        case .bodyMassIndex: HKObjectType.quantityType(forIdentifier: .bodyMassIndex)
-        case .bodyMass: HKObjectType.quantityType(forIdentifier: .bodyMass)
-        case .bodyFatPercentage: HKObjectType.quantityType(forIdentifier: .bodyFatPercentage)
-        case .leanBodyMass: HKObjectType.quantityType(forIdentifier: .leanBodyMass)
-        case .bodyTemperature: HKObjectType.quantityType(forIdentifier: .bodyTemperature)
-        case .bloodPressureSystolic: HKObjectType.quantityType(forIdentifier: .bloodPressureSystolic)
-        case .bloodPressureDiastolic: HKObjectType.quantityType(forIdentifier: .bloodPressureDiastolic)
-        case .bloodGlucose: HKObjectType.quantityType(forIdentifier: .bloodGlucose)
-        case .dietaryEnergy: HKObjectType.quantityType(forIdentifier: .dietaryEnergyConsumed)
-        case .water: HKObjectType.quantityType(forIdentifier: .dietaryWater)
-        case .caffeine: HKObjectType.quantityType(forIdentifier: .dietaryCaffeine)
-        case .dietaryProtein: HKObjectType.quantityType(forIdentifier: .dietaryProtein)
-        case .dietaryCarbohydrates: HKObjectType.quantityType(forIdentifier: .dietaryCarbohydrates)
-        case .dietaryFat: HKObjectType.quantityType(forIdentifier: .dietaryFatTotal)
-        case .envNoise: HKObjectType.quantityType(forIdentifier: .environmentalAudioExposure)
-        case .headphoneNoise: HKObjectType.quantityType(forIdentifier: .headphoneAudioExposure)
-        case .daylight: HKObjectType.quantityType(forIdentifier: .timeInDaylight)
-        case .standTime: HKObjectType.quantityType(forIdentifier: .appleStandTime)
-        case .flightsClimbed: HKObjectType.quantityType(forIdentifier: .flightsClimbed)
-        case .walkingRunningDistance: HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)
-        case .cyclingDistance: HKObjectType.quantityType(forIdentifier: .distanceCycling)
-        case .mindfulSession: HKObjectType.categoryType(forIdentifier: .mindfulSession)
+        switch signal {
+        case .hrvSDNN:
+            return HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN)
+        case .heartRateVariabilityRMSSD:
+            // HealthKit publicly exposes HRV as SDNN. RMSSD remains a derived
+            // model input and must not be represented as an independently
+            // readable HealthKit signal.
+            return HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN)
+        case .restingHR:
+            return HKObjectType.quantityType(forIdentifier: .restingHeartRate)
+        case .respiratoryRate:
+            return HKObjectType.quantityType(forIdentifier: .respiratoryRate)
+        case .sleepAnalysis:
+            return HKObjectType.categoryType(forIdentifier: .sleepAnalysis)
+        case .wristTemperature:
+            return HKObjectType.quantityType(forIdentifier: .appleSleepingWristTemperature)
+        case .oxygenSaturation:
+            return HKObjectType.quantityType(forIdentifier: .oxygenSaturation)
+        case .workouts:
+            return HKObjectType.workoutType()
+        case .activeEnergy:
+            return HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)
+        case .exerciseTime:
+            return HKObjectType.quantityType(forIdentifier: .appleExerciseTime)
+        case .stepCount:
+            return HKObjectType.quantityType(forIdentifier: .stepCount)
+        case .workoutHR:
+            return HKObjectType.quantityType(forIdentifier: .heartRate)
+        case .heartRateRecoveryOneMinute:
+            return HKObjectType.quantityType(forIdentifier: .heartRateRecoveryOneMinute)
+        case .walkingSpeed:
+            return HKObjectType.quantityType(forIdentifier: .walkingSpeed)
+        case .walkingAsymmetry:
+            return HKObjectType.quantityType(forIdentifier: .walkingAsymmetryPercentage)
+        case .doubleSupport:
+            return HKObjectType.quantityType(forIdentifier: .walkingDoubleSupportPercentage)
+        case .walkingStepLength:
+            return HKObjectType.quantityType(forIdentifier: .walkingStepLength)
+        case .walkingHeartRate:
+            return HKObjectType.quantityType(forIdentifier: .walkingHeartRateAverage)
+        case .walkingSteadiness:
+            return HKObjectType.quantityType(forIdentifier: .appleWalkingSteadiness)
+        case .stairAscentSpeed:
+            return HKObjectType.quantityType(forIdentifier: .stairAscentSpeed)
+        case .stairDescentSpeed:
+            return HKObjectType.quantityType(forIdentifier: .stairDescentSpeed)
+        case .sixMinuteWalkDistance:
+            return HKObjectType.quantityType(forIdentifier: .sixMinuteWalkTestDistance)
+        case .vo2Max:
+            return HKObjectType.quantityType(forIdentifier: .vo2Max)
+        case .height:
+            return HKObjectType.quantityType(forIdentifier: .height)
+        case .bodyMassIndex:
+            return HKObjectType.quantityType(forIdentifier: .bodyMassIndex)
+        case .bodyMass:
+            return HKObjectType.quantityType(forIdentifier: .bodyMass)
+        case .bodyFatPercentage:
+            return HKObjectType.quantityType(forIdentifier: .bodyFatPercentage)
+        case .leanBodyMass:
+            return HKObjectType.quantityType(forIdentifier: .leanBodyMass)
+        case .bodyTemperature:
+            return HKObjectType.quantityType(forIdentifier: .bodyTemperature)
+        case .bloodPressureSystolic:
+            return HKObjectType.quantityType(forIdentifier: .bloodPressureSystolic)
+        case .bloodPressureDiastolic:
+            return HKObjectType.quantityType(forIdentifier: .bloodPressureDiastolic)
+        case .bloodGlucose:
+            return HKObjectType.quantityType(forIdentifier: .bloodGlucose)
+        case .dietaryEnergy:
+            return HKObjectType.quantityType(forIdentifier: .dietaryEnergyConsumed)
+        case .water:
+            return HKObjectType.quantityType(forIdentifier: .dietaryWater)
+        case .caffeine:
+            return HKObjectType.quantityType(forIdentifier: .dietaryCaffeine)
+        case .dietaryProtein:
+            return HKObjectType.quantityType(forIdentifier: .dietaryProtein)
+        case .dietaryCarbohydrates:
+            return HKObjectType.quantityType(forIdentifier: .dietaryCarbohydrates)
+        case .dietaryFat:
+            return HKObjectType.quantityType(forIdentifier: .dietaryFatTotal)
+        case .envNoise:
+            return HKObjectType.quantityType(forIdentifier: .environmentalAudioExposure)
+        case .headphoneNoise:
+            return HKObjectType.quantityType(forIdentifier: .headphoneAudioExposure)
+        case .daylight:
+            return HKObjectType.quantityType(forIdentifier: .timeInDaylight)
+        case .standTime:
+            return HKObjectType.quantityType(forIdentifier: .appleStandTime)
+        case .flightsClimbed:
+            return HKObjectType.quantityType(forIdentifier: .flightsClimbed)
+        case .walkingRunningDistance:
+            return HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)
+        case .cyclingDistance:
+            return HKObjectType.quantityType(forIdentifier: .distanceCycling)
+        case .mindfulSession:
+            return HKObjectType.categoryType(forIdentifier: .mindfulSession)
         case .sleepBreathingDisturbances:
             if #available(iOS 18.0, *) {
-                HKObjectType.quantityType(forIdentifier: .appleSleepingBreathingDisturbances)
+                return HKObjectType.quantityType(forIdentifier: .appleSleepingBreathingDisturbances)
             } else {
-                nil
+                return nil
             }
-        case .workoutRoute: HKSeriesType.workoutRoute()
+        case .workoutRoute:
+            return HKSeriesType.workoutRoute()
         }
     }
 
     static func unit(for signal: HealthSignal) -> UnitDescriptor? {
         switch signal {
-        case .hrvSDNN:
+        case .hrvSDNN, .heartRateVariabilityRMSSD:
             UnitDescriptor(healthKitUnit: .secondUnit(with: .milli), symbol: "ms")
         case .restingHR, .workoutHR, .walkingHeartRate:
             UnitDescriptor(healthKitUnit: HKUnit.count().unitDivided(by: .minute()), symbol: "bpm")
@@ -266,6 +319,7 @@ public enum HealthSignalAuthorizationState: String, Codable, Sendable {
     case noReadableSamples
     case readableSamplesStale
     case unavailable
+    case denied
 }
 
 public struct HealthSignalCoverage: Identifiable, Codable, Hashable, Sendable {
@@ -311,6 +365,10 @@ public struct HealthSignalCoverage: Identifiable, Codable, Hashable, Sendable {
             return AppLanguage.stored.isChinese
                 ? "未读取到近期数据；可能是暂无样本或读取范围受限"
                 : "No recent data was readable; samples may be absent or read access may be limited"
+        case .denied:
+            return AppLanguage.stored.isChinese
+                ? "权限已被拒绝——去系统设置开启后才能读取该数据"
+                : "Permission was denied — enable it in system settings to read this data"
         case .notRequested:
             return AppLanguage.stored.isChinese ? "尚未请求权限，相关判断不可用" : "Permission not requested; related judgments are unavailable"
         case .unavailable:
@@ -322,11 +380,15 @@ public struct HealthSignalCoverage: Identifiable, Codable, Hashable, Sendable {
 enum HealthReadStateResolver {
     static func resolve(
         requestStatus: HKAuthorizationRequestStatus,
+        sharingStatus: HKAuthorizationStatus,
         sampleCount7d: Int,
         sampleCount30d: Int
     ) -> HealthSignalAuthorizationState {
         if sampleCount30d > 0 {
             return sampleCount7d > 0 ? .readableSamples : .readableSamplesStale
+        }
+        if sharingStatus == .sharingDenied {
+            return .denied
         }
         return requestStatus == .shouldRequest ? .notRequested : .noReadableSamples
     }
@@ -361,8 +423,10 @@ public final class HealthSignalCoverageService {
 
         let (count7d, count30d, latestSampleDate) = await fetchSampleStats(for: objectType, start7d: d7, start30d: d30)
         let requestStatus = await authorizationRequestStatus(for: objectType)
+        let sharingStatus = store.authorizationStatus(for: objectType)
         let authState = HealthReadStateResolver.resolve(
             requestStatus: requestStatus,
+            sharingStatus: sharingStatus,
             sampleCount7d: count7d,
             sampleCount30d: count30d
         )

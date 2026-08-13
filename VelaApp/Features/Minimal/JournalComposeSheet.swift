@@ -91,9 +91,9 @@ struct BehaviorQuickNoteSheet: View {
                 }
                 .padding(16)
             }
-            .background(VelaTheme.systemGroupedBackground)
+            .background(VelaTheme.rhythmCanvas)
             .navigationTitle("随手记")
-            .navigationBarTitleDisplayMode(.inline)
+            .velaRhythmDetailChrome()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("关闭") { dismiss() }

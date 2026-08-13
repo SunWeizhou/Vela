@@ -129,19 +129,19 @@ extension View {
 struct VelaHealthSyncNote: View {
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "heart.fill")
+            Image(systemName: "heart")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(VelaTheme.brand)
+                .foregroundStyle(VelaTheme.rhythmDeep)
             Text("训练记录自动同步自 Apple 健康 / Fitness，可作为与 Coach 讨论的依据")
-                .font(VelaTheme.caption2())
-                .foregroundStyle(VelaTheme.muted)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 .lineLimit(2)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
     }
 }
 
@@ -157,21 +157,32 @@ struct TodayStateRingsStrip: View {
         return order.compactMap { id in model.signalCards.first(where: { $0.id == id }) }
     }
 
+    private func detailMetric(for id: String) -> VelaMetricDetailView.MetricType? {
+        switch id {
+        case "recovery": return .recovery
+        case "sleep": return .sleep
+        case "strain": return .strain
+        case "stress": return .stress
+        case "energy": return .energy
+        default: return nil
+        }
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             ForEach(ordered) { card in
-                VStack(spacing: 6) {
-                    VelaMetricScoreRing(
-                        score: Double(card.value),
-                        label: card.title,
-                        domain: .neutral,
-                        size: 44,
-                        accent: VelaTheme.color(for: card.state),
-                        showsLabel: false
-                    )
-                    Text(card.title)
-                        .font(VelaTheme.caption2().weight(.semibold))
-                        .foregroundStyle(VelaTheme.fg2)
+                let metricType = detailMetric(for: card.id)
+                Group {
+                    if let metricType {
+                        NavigationLink {
+                            VelaMetricDetailView(metric: metricType)
+                        } label: {
+                            ringContent(card: card)
+                        }
+                        .buttonStyle(.cardPress)
+                    } else {
+                        ringContent(card: card)
+                    }
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -183,6 +194,22 @@ struct TodayStateRingsStrip: View {
                 .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
         )
         .accessibilityElement(children: .contain)
+    }
+
+    private func ringContent(card: TodayExperienceSignalCard) -> some View {
+        VStack(spacing: 6) {
+            VelaMetricScoreRing(
+                score: Double(card.value) ?? 0,
+                label: card.title,
+                domain: .neutral,
+                size: 44,
+                accent: VelaTheme.color(for: card.state),
+                showsLabel: false
+            )
+            Text(card.title)
+                .font(VelaTheme.caption2().weight(.semibold))
+                .foregroundStyle(VelaTheme.fg2)
+        }
     }
 }
 
@@ -390,40 +417,62 @@ struct TodayWeeklyLoadCard: View {
     let loads: [Double]          // 最近 7 天负荷
     let acwrText: String
 
-    private var maxLoad: Double { max(loads.max() ?? 1, 1) }
+    private var displayLoads: [Double] {
+        if loads.isEmpty {
+            return [0, 0, 0, 0, 0, 0, 0]
+        }
+        if loads.count < 7 {
+            return Array(repeating: 0.0, count: 7 - loads.count) + loads
+        }
+        return Array(loads.suffix(7))
+    }
+
+    private var maxLoad: Double { max(displayLoads.max() ?? 1, 1) }
+    private let dayLabels = ["一", "二", "三", "四", "五", "六", "日"]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("本周负荷")
-                    .font(VelaTheme.subheadline().weight(.bold))
-                    .foregroundStyle(VelaTheme.fg)
-                Spacer()
-                Text(acwrText)
-                    .font(VelaTheme.caption2().weight(.semibold))
-                    .foregroundStyle(VelaTheme.muted)
-            }
-            HStack(alignment: .bottom, spacing: 6) {
-                ForEach(Array(loads.enumerated()), id: \.offset) { index, load in
-                    VStack(spacing: 5) {
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(index == loads.count - 1 ? VelaTheme.brand : VelaTheme.fillSoft)
-                            .frame(height: max(6, 52 * CGFloat(load / maxLoad)))
-                        Text("\(index + 1)")
-                            .font(.system(size: 8, weight: .semibold))
+        NavigationLink {
+            VelaMetricDetailView(metric: .strain)
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    HStack(spacing: 4) {
+                        Text("本周负荷")
+                            .font(VelaTheme.subheadline().weight(.bold))
+                            .foregroundStyle(VelaTheme.fg)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(VelaTheme.meta)
                     }
-                    .frame(maxWidth: .infinity)
+                    Spacer()
+                    Text(acwrText.isEmpty ? "ACWR 稳定" : acwrText)
+                        .font(VelaTheme.caption2().weight(.semibold))
+                        .foregroundStyle(VelaTheme.muted)
                 }
+                HStack(alignment: .bottom, spacing: 6) {
+                    ForEach(Array(displayLoads.enumerated()), id: \.offset) { index, load in
+                        VStack(spacing: 5) {
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(load > 0 ? (index == displayLoads.count - 1 ? VelaTheme.brand : VelaTheme.brand.opacity(0.65)) : VelaTheme.fillSoft)
+                                .frame(height: max(6, 52 * CGFloat(load / maxLoad)))
+                            Text(index < dayLabels.count ? dayLabels[index] : "\(index + 1)")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(VelaTheme.meta)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+                .frame(height: 64)
             }
-            .frame(height: 64)
+            .padding(14)
+            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+            )
         }
-        .padding(14)
-        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
-        )
-        .accessibilityElement(children: .contain)
+        .buttonStyle(.cardPress)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("本周负荷，\(acwrText)")
     }
 }

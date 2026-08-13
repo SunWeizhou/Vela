@@ -68,6 +68,40 @@ struct VelaDetailBackButton: View {
     }
 }
 
+// MARK: - Rhythm detail-page contract
+
+/// Shared chrome for every pushed Vela destination. Detail screens use the
+/// system navigation model and one quiet material hierarchy, so moving between
+/// evidence, training and personal context never feels like changing apps.
+private struct VelaRhythmDetailChromeModifier: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    func body(content: Content) -> some View {
+        content
+            .tint(VelaTheme.rhythmDeep)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(
+                reduceTransparency
+                    ? VelaTheme.rhythmCanvas
+                    : VelaTheme.rhythmCanvas.opacity(0.94),
+                for: .navigationBar
+            )
+            .toolbarBackground(.visible, for: .navigationBar)
+    }
+}
+
+extension View {
+    func velaRhythmDetailChrome() -> some View {
+        modifier(VelaRhythmDetailChromeModifier())
+    }
+
+    func velaRhythmFormSurface() -> some View {
+        scrollContentBackground(.hidden)
+            .background(VelaTheme.rhythmCanvas)
+            .tint(VelaTheme.rhythmDeep)
+    }
+}
+
 // MARK: - VelaMetricDetailView — calm, evidence-first metric detail
 
 
@@ -75,7 +109,6 @@ struct VelaDetailBackButton: View {
 struct VelaMetricDetailView: View {
     let metric: MetricType
     @Environment(\.colorScheme) private var cs
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var dashboardVM: DashboardViewModel
     @ObservedObject var appState = VelaAppState.shared
@@ -108,26 +141,10 @@ struct VelaMetricDetailView: View {
         let isSleep = false
         
         ZStack {
-            VelaTheme.systemGroupedBackground.ignoresSafeArea()
+            VelaTheme.rhythmCanvas.ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                metricNavigationBar(isSleep: isSleep)
-                    .padding(.horizontal, VelaTheme.pagePadding)
-                    .padding(.vertical, 8)
-                    .background(VelaTheme.cardBg.opacity(0.96))
-                    .overlay(alignment: .bottom) {
-                        LinearGradient(
-                            colors: [VelaTheme.borderSoft.opacity(0.35), .clear],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                        .frame(height: 5)
-                        .offset(y: 5)
-                        .allowsHitTesting(false)
-                    }
-
-                ScrollView {
-                    VStack(spacing: 16) {
+            ScrollView {
+                VStack(spacing: 16) {
                         // 1. Procedural Chart Header Card (Apple Style)
                         chartHeaderSection(isSleep: isSleep)
                             .padding(.top, 8)
@@ -153,15 +170,29 @@ struct VelaMetricDetailView: View {
 
                         // 8. Trend Sparkline Cards List
                         trendsSection(isSleep: isSleep)
-                    }
-                    .padding(.horizontal, VelaTheme.pagePadding)
-                    .padding(.bottom, 56)
                 }
-                .scrollIndicators(.hidden)
+                .padding(.horizontal, VelaTheme.pagePadding)
+                .padding(.bottom, 56)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .navigationTitle(navTitle)
+        .velaRhythmDetailChrome()
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                ShareLink(item: metricShareText) {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .accessibilityLabel("分享\(navTitle)")
+
+                Button {
+                    showMetricInfo = true
+                } label: {
+                    Image(systemName: "info.circle")
+                }
+                .accessibilityLabel("关于\(navTitle)")
             }
         }
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
         .alert("关于\(navTitle)", isPresented: $showMetricInfo) {
             Button("知道了", role: .cancel) {}
         } message: {
@@ -197,75 +228,6 @@ struct VelaMetricDetailView: View {
             self.dailyRecords = fetched
         }
     }
-
-    private func metricNavigationBar(isSleep: Bool) -> some View {
-        HStack {
-            metricNavigationButton(
-                systemName: "chevron.left",
-                isSleep: isSleep,
-                action: { dismiss() }
-            )
-            .accessibilityLabel("返回")
-
-            Spacer()
-
-            VStack(spacing: 3) {
-                Text(navTitle)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(isSleep ? VelaTheme.sleepText : VelaTheme.fg)
-
-                Text(displayDateText)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
-            }
-
-            Spacer()
-
-            HStack(spacing: 8) {
-                metricShareButton(isSleep: isSleep)
-                metricNavigationButton(
-                    systemName: "info.circle",
-                    isSleep: isSleep,
-                    action: { showMetricInfo = true }
-                )
-            }
-        }
-    }
-
-    private func metricShareButton(isSleep: Bool) -> some View {
-        ShareLink(item: metricShareText) {
-            Image(systemName: "square.and.arrow.up")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(isSleep ? VelaTheme.sleepText : VelaTheme.accent)
-                .frame(width: VelaTheme.circularControlSize, height: VelaTheme.circularControlSize)
-                .background(VelaTheme.secondaryGroupedBackground, in: Circle())
-        }
-        .buttonStyle(.cardPress)
-        .accessibilityLabel("分享\(navTitle)")
-    }
-
-    private func metricNavigationButton(
-        systemName: String,
-        isSleep: Bool,
-        action: @escaping () -> Void = {}
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(isSleep ? VelaTheme.sleepText : VelaTheme.accent)
-                .frame(width: VelaTheme.circularControlSize, height: VelaTheme.circularControlSize)
-                .background(VelaTheme.secondaryGroupedBackground, in: Circle())
-        }
-        .buttonStyle(.cardPress)
-    }
-
-
-
-
-
-
-
-
 
 
 
@@ -726,25 +688,31 @@ struct DigitalTwinSimulatorCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             // Header
-            HStack {
-                HStack(spacing: 6) {
-                    Image(systemName: "sparkles.tv")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(VelaTheme.accent)
-                    Text("数字双胞胎前瞻模拟")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(VelaTheme.fg)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack {
+                    HStack(spacing: 6) {
+                        Image(systemName: "sparkles.tv")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(VelaTheme.accent)
+                        Text("明日恢复预测器")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(VelaTheme.fg)
+                    }
+                    Spacer()
+                    Text(simulationResult.scenarioTag == "optimal" ? "最佳节奏" : (simulationResult.scenarioTag == "suboptimal_timing" ? "时机风险" : "负荷偏高"))
+                        .font(.caption2.weight(.bold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule()
+                                .fill(simulationResult.scenarioTag == "optimal" ? VelaTheme.systemGreen.opacity(0.18) : (simulationResult.scenarioTag == "suboptimal_timing" ? VelaTheme.systemOrange.opacity(0.18) : VelaTheme.systemRed.opacity(0.18)))
+                        )
+                        .foregroundStyle(simulationResult.scenarioTag == "optimal" ? VelaTheme.systemGreen : (simulationResult.scenarioTag == "suboptimal_timing" ? VelaTheme.systemOrange : VelaTheme.systemRed))
                 }
-                Spacer()
-                Text(simulationResult.scenarioTag == "optimal" ? "最佳节奏" : (simulationResult.scenarioTag == "suboptimal_timing" ? "时机风险" : "负荷偏高"))
-                    .font(.caption2.weight(.bold))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule()
-                            .fill(simulationResult.scenarioTag == "optimal" ? VelaTheme.systemGreen.opacity(0.18) : (simulationResult.scenarioTag == "suboptimal_timing" ? VelaTheme.systemOrange.opacity(0.18) : VelaTheme.systemRed.opacity(0.18)))
-                    )
-                    .foregroundStyle(simulationResult.scenarioTag == "optimal" ? VelaTheme.systemGreen : (simulationResult.scenarioTag == "suboptimal_timing" ? VelaTheme.systemOrange : VelaTheme.systemRed))
+
+                Text("滑动调整计划训练与睡眠，实时推演明早的身体恢复分")
+                    .font(VelaTheme.caption2())
+                    .foregroundStyle(VelaTheme.muted)
             }
 
             // Results Display Grid

@@ -289,9 +289,9 @@ struct PersonalExperimentHubSheet: View {
                 }
                 .padding(20)
             }
-            .background(VelaTheme.systemGroupedBackground)
+            .background(VelaTheme.rhythmCanvas)
             .navigationTitle("个人实验")
-            .navigationBarTitleDisplayMode(.inline)
+            .velaRhythmDetailChrome()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("关闭") { dismiss() }

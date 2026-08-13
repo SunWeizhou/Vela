@@ -9,7 +9,7 @@ struct DataCoverageView: View {
 
     var body: some View {
         ZStack {
-            VelaBackground()
+            VelaTheme.rhythmCanvas.ignoresSafeArea()
 
             if isLoading {
                 VelaEmptyState(
@@ -20,40 +20,28 @@ struct DataCoverageView: View {
                 )
             } else {
                 ScrollView {
-                    VStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 24) {
+                        VelaRhythmSectionHeader(
+                            eyebrow: "EVIDENCE",
+                            title: AppLanguage.stored.isChinese ? "数据覆盖" : "Data Coverage",
+                            actionTitle: nil,
+                            action: {}
+                        )
                         overallScoreCard
 
                         ForEach(coverageGroups) { group in
                             coverageGroupCard(group)
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
+                    .padding(.horizontal, VelaTheme.pagePadding)
+                    .padding(.top, 18)
                     .padding(.bottom, 112)
                 }
                 .scrollIndicators(.hidden)
             }
         }
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .top) {
-            VStack(spacing: 0) {
-                HStack {
-                    VelaDetailBackButton(label: AppLanguage.stored.isChinese ? "返回设置" : "Back to Settings")
-
-                    Text(AppLanguage.stored.isChinese ? "数据覆盖" : "Data Coverage")
-                        .font(VelaTheme.title2())
-                        .foregroundStyle(VelaTheme.fg)
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(VelaTheme.bg.opacity(0.97))
-
-                Divider()
-                    .opacity(0.4)
-            }
-        }
+        .navigationTitle(AppLanguage.stored.isChinese ? "数据覆盖" : "Data Coverage")
+        .velaRhythmDetailChrome()
         .task {
             await loadCoverage()
         }
@@ -87,7 +75,7 @@ struct DataCoverageView: View {
                     .accessibilityLabel(AppLanguage.stored.isChinese ? "数据覆盖 \(pct)%" : "Data coverage \(pct)%")
 
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(AppLanguage.stored.isChinese ? "今天哪些判断有足够数据？" : "Which judgments have enough data today?")
+                        Text(AppLanguage.stored.isChinese ? "今日可用信号" : "Usable Today")
                             .font(.headline.weight(.semibold))
                             .foregroundStyle(VelaTheme.fg)
                         Text(AppLanguage.stored.isChinese
@@ -115,14 +103,6 @@ struct DataCoverageView: View {
                     )
                 }
 
-                VelaInlineAlert(
-                    title: AppLanguage.stored.isChinese ? "覆盖影响" : "Coverage impact",
-                    message: AppLanguage.stored.isChinese
-                    ? "缺失或陈旧的数据会减少恢复、睡眠、训练负荷和风险判断的可用证据。"
-                    : "Missing or stale data reduces the usable evidence for recovery, sleep, training load, and risk judgments.",
-                    systemImage: "slider.horizontal.3",
-                    tint: coverageColor(pct)
-                )
             }
         }
         .appleIntelligenceGlow(isHighlighted: pct >= 85, radius: 24)

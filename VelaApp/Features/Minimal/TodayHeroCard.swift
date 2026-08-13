@@ -149,8 +149,39 @@ struct TodayHeroCard: View {
         horizontal: Bool
     ) -> some View {
         let color = scoreColor(for: signal.id)
+        let metricType: VelaMetricDetailView.MetricType? = {
+            switch signal.id {
+            case "recovery": return .recovery
+            case "sleep": return .sleep
+            case "strain": return .strain
+            default: return nil
+            }
+        }()
 
         return Group {
+            if let metricType {
+                NavigationLink {
+                    VelaMetricDetailView(metric: metricType)
+                } label: {
+                    metricContent(signal: signal, color: color, horizontal: horizontal)
+                }
+                .buttonStyle(.cardPress)
+            } else {
+                metricContent(signal: signal, color: color, horizontal: horizontal)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "\(signal.title)，\(signal.value == "--" ? "待同步" : "\(signal.value)分")，\(signal.directionLabel)，\(signal.confidenceLabel)"
+        )
+    }
+
+    private func metricContent(
+        signal: TodayExperienceSignalCard,
+        color: Color,
+        horizontal: Bool
+    ) -> some View {
+        Group {
             if horizontal {
                 HStack(spacing: 12) {
                     metricRing(signal, color: color, size: 62)
@@ -167,10 +198,6 @@ struct TodayHeroCard: View {
         .padding(.horizontal, horizontal ? 8 : 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, minHeight: horizontal ? 68 : 104)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            "\(signal.title)，\(signal.value == "--" ? "待同步" : "\(signal.value)分")，\(signal.directionLabel)，\(signal.confidenceLabel)"
-        )
     }
 
     private func metricRing(
@@ -389,9 +416,9 @@ struct DailyDecisionFeedbackSheet: View {
                 }
                 .padding(20)
             }
-            .background(VelaTheme.systemGroupedBackground)
+            .background(VelaTheme.rhythmCanvas)
             .navigationTitle("今日反馈")
-            .navigationBarTitleDisplayMode(.inline)
+            .velaRhythmDetailChrome()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { dismiss() }
@@ -478,6 +505,623 @@ private struct DecisionRatingRow: View {
                     .accessibilityLabel("\(title) \(rating)，\(rating == 1 ? lowLabel : rating == 5 ? highLabel : "")")
                     .accessibilityAddTraits(value == rating ? .isSelected : [])
                 }
+            }
+        }
+    }
+}
+
+// MARK: - Vela Rhythm Horizon
+
+/// The Today surface's primary visual object. It intentionally avoids an
+/// aggregate readiness number: the band communicates a changing capacity
+/// window, while the copy owns the actual decision.
+struct VelaRhythmHorizonHero: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    let model: TodayExperienceModel
+    let state: TodayCommandState
+    let selectedDate: Date
+    let isToday: Bool
+    let onOpenPlan: () -> Void
+    let onAskCoach: () -> Void
+
+    @State private var isRevealed = false
+
+    private var decision: ReadinessDecisionKind {
+        state.readinessDecision.decision
+    }
+
+    private var headline: String {
+        switch decision {
+        case .keep: return "保持今天的节奏"
+        case .reduce: return "给身体留一点余量"
+        case .swap: return "换一条更合适的路径"
+        case .recover: return "先把状态收回来"
+        }
+    }
+
+    private var eyebrow: String {
+        if state.dataConfidence == .unavailable { return "正在建立你的节律" }
+        return "今日节律 · \(model.hero.confidenceLabel)"
+    }
+
+    private var primaryAction: TodayExperienceAction? {
+        model.actions.first(where: \.isPrimary) ?? model.actions.first
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(VelaTheme.rhythmDeep)
+                    .frame(width: 7, height: 7)
+                    .shadow(color: VelaTheme.rhythmGlow.opacity(0.55), radius: 6)
+
+                Text(eyebrow.uppercased())
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(1.15)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+
+                Spacer(minLength: 8)
+
+                Button(action: onAskCoach) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                        .frame(width: 42, height: 42)
+                        .background(VelaTheme.rhythmCanvasRaised.opacity(0.68), in: Circle())
+                }
+                .buttonStyle(.cardPress)
+                .accessibilityLabel("询问 Vela")
+            }
+
+            RhythmHorizonVisualization(
+                signals: model.signalCards,
+                decision: decision,
+                selectedDate: selectedDate,
+                isToday: isToday,
+                revealProgress: isRevealed ? 1 : 0
+            )
+            .frame(height: dynamicTypeSize.isAccessibilitySize ? 176 : 206)
+            .padding(.top, 4)
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text(headline)
+                    .font(.system(size: dynamicTypeSize.isAccessibilitySize ? 34 : 42, weight: .semibold, design: .default))
+                    .tracking(-1.2)
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                    .fixedSize(horizontal: false, vertical: true)
+
+            }
+
+            Button(action: onOpenPlan) {
+                HStack(spacing: 13) {
+                    ZStack {
+                        Circle()
+                            .fill(VelaTheme.rhythmDeep)
+                        Image(systemName: actionIcon)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.white)
+                    }
+                    .frame(width: 38, height: 38)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(primaryAction?.title ?? "查看今日安排")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(VelaTheme.rhythmInk)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                }
+                .padding(.horizontal, 13)
+                .padding(.vertical, 11)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(Color.white.opacity(0.42), lineWidth: 0.75)
+                }
+                .shadow(color: Color.black.opacity(0.08), radius: 24, y: 12)
+                .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            }
+            .buttonStyle(.cardPress)
+            .padding(.top, 18)
+        }
+        .padding(.horizontal, VelaTheme.pagePadding)
+        .padding(.top, 4)
+        .padding(.bottom, 22)
+        .background(alignment: .top) {
+            RhythmAmbientField(decision: decision)
+                .frame(height: 480)
+                .allowsHitTesting(false)
+        }
+        .accessibilityElement(children: .contain)
+        .onAppear {
+            guard !isRevealed else { return }
+            if reduceMotion {
+                isRevealed = true
+            } else {
+                withAnimation(.spring(response: 0.52, dampingFraction: 1.0)) {
+                    isRevealed = true
+                }
+            }
+        }
+    }
+
+    private var actionIcon: String {
+        switch decision {
+        case .keep: return "figure.strengthtraining.traditional"
+        case .reduce: return "dial.low"
+        case .swap: return "arrow.triangle.swap"
+        case .recover: return "wind"
+        }
+    }
+}
+
+private struct RhythmAmbientField: View {
+    let decision: ReadinessDecisionKind
+
+    private var glow: Color {
+        switch decision {
+        case .keep: VelaTheme.rhythmGlow
+        case .reduce: VelaTheme.rhythmWarm
+        case .swap: VelaTheme.rhythmMist
+        case .recover: VelaTheme.sleepColor
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            VelaTheme.rhythmCanvas
+
+            RadialGradient(
+                colors: [glow.opacity(0.24), glow.opacity(0.06), .clear],
+                center: .topTrailing,
+                startRadius: 4,
+                endRadius: 270
+            )
+
+            RadialGradient(
+                colors: [VelaTheme.rhythmGlow.opacity(0.13), .clear],
+                center: UnitPoint(x: 0.08, y: 0.58),
+                startRadius: 0,
+                endRadius: 220
+            )
+        }
+    }
+}
+
+private struct RhythmEvidenceAnchors: View {
+    let items: [String]
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 0) {
+                anchors
+            }
+
+            VStack(alignment: .leading, spacing: 9) {
+                anchors
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("主要依据：\(items.joined(separator: "，"))")
+    }
+
+    @ViewBuilder
+    private var anchors: some View {
+        ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+            HStack(spacing: 7) {
+                Rectangle()
+                    .fill(index == 0 ? VelaTheme.rhythmDeep : VelaTheme.rhythmInkSecondary.opacity(0.45))
+                    .frame(width: 1, height: 13)
+                Text(item)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .lineLimit(1)
+            }
+
+            if index < items.count - 1 {
+                Spacer(minLength: 12)
+            }
+        }
+    }
+}
+
+private struct RhythmHorizonVisualization: View {
+    let signals: [TodayExperienceSignalCard]
+    let decision: ReadinessDecisionKind
+    let selectedDate: Date
+    let isToday: Bool
+    let revealProgress: CGFloat
+
+    private var timeProgress: CGFloat {
+        guard isToday else { return 0.88 }
+        let components = Calendar.current.dateComponents([.hour, .minute], from: Date())
+        let minutes = CGFloat((components.hour ?? 12) * 60 + (components.minute ?? 0))
+        return min(0.96, max(0.04, minutes / 1_440))
+    }
+
+    private func score(_ id: String) -> Double? {
+        guard let value = signals.first(where: { $0.id == id }).flatMap({ Double($0.value) }) else {
+            return nil
+        }
+        return min(100, max(0, value))
+    }
+
+    /// 是否存在任何真实信号值；全缺时画占位虚线，不伪造曲线。
+    private var hasSignals: Bool {
+        signals.contains { Double($0.value) != nil }
+    }
+
+    private var samples: [CGFloat] {
+        // 缺失通道落回中性 50（视觉中位），不使用伪造健康数值
+        let sleep = score("sleep") ?? 50
+        let recovery = score("recovery") ?? 50
+        let energy = score("energy") ?? 50
+        let stress = score("stress") ?? 50
+        let load = score("strain") ?? 50
+
+        return [
+            CGFloat(0.56 - (sleep - 50) / 500),
+            CGFloat(0.48 - (recovery - 50) / 430),
+            CGFloat(0.52 + (stress - 50) / 520),
+            CGFloat(0.46 + (load - 50) / 560),
+            CGFloat(0.52 - (energy - 50) / 460)
+        ].map { min(0.74, max(0.28, $0)) }
+    }
+
+    private var bandWidth: CGFloat {
+        switch decision {
+        case .keep: return 0.18
+        case .reduce: return 0.13
+        case .swap: return 0.11
+        case .recover: return 0.085
+        }
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            let point = RhythmCurve.point(at: timeProgress, samples: samples, size: size)
+
+            ZStack(alignment: .topLeading) {
+                Canvas { context, canvasSize in
+                    for fraction in [CGFloat(0.0), 0.25, 0.5, 0.75, 1.0] {
+                        var guide = Path()
+                        let x = fraction * canvasSize.width
+                        guide.move(to: CGPoint(x: x, y: 28))
+                        guide.addLine(to: CGPoint(x: x, y: canvasSize.height - 28))
+                        context.stroke(guide, with: .color(VelaTheme.rhythmInkSecondary.opacity(0.10)), lineWidth: 0.5)
+                    }
+
+                    let band = RhythmCurve.bandPath(samples: samples, width: bandWidth, size: canvasSize)
+                    let center = RhythmCurve.centerPath(samples: samples, size: canvasSize)
+                    if hasSignals {
+                        context.fill(
+                            band,
+                            with: .linearGradient(
+                                Gradient(colors: [
+                                    VelaTheme.rhythmGlow.opacity(0.04),
+                                    VelaTheme.rhythmGlow.opacity(0.32),
+                                    VelaTheme.rhythmGlow.opacity(0.08)
+                                ]),
+                                startPoint: CGPoint(x: 0, y: canvasSize.height * 0.5),
+                                endPoint: CGPoint(x: canvasSize.width, y: canvasSize.height * 0.5)
+                            )
+                        )
+
+                        context.stroke(
+                            center,
+                            with: .linearGradient(
+                                Gradient(colors: [
+                                    VelaTheme.rhythmDeep.opacity(0.18),
+                                    VelaTheme.rhythmDeep,
+                                    VelaTheme.rhythmDeep.opacity(0.35)
+                                ]),
+                                startPoint: .zero,
+                                endPoint: CGPoint(x: canvasSize.width, y: 0)
+                            ),
+                            style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round)
+                        )
+                    } else {
+                        // 无健康数据：虚线中位占位，不伪造曲线
+                        var pending = Path()
+                        pending.move(to: CGPoint(x: 0, y: canvasSize.height * 0.5))
+                        pending.addLine(to: CGPoint(x: canvasSize.width, y: canvasSize.height * 0.5))
+                        context.stroke(
+                            pending,
+                            with: .color(VelaTheme.rhythmInkSecondary.opacity(0.25)),
+                            style: StrokeStyle(lineWidth: 1.2, dash: [5, 5])
+                        )
+                    }
+                }
+                .opacity(revealProgress)
+                .scaleEffect(x: revealProgress, y: 1, anchor: .leading)
+
+                if hasSignals {
+                    Circle()
+                        .fill(VelaTheme.rhythmCanvasRaised)
+                        .frame(width: 15, height: 15)
+                        .overlay(Circle().fill(VelaTheme.rhythmDeep).frame(width: 7, height: 7))
+                        .shadow(color: VelaTheme.rhythmGlow.opacity(0.9), radius: 10)
+                        .position(point)
+                        .opacity(revealProgress)
+
+                    Text(timeLabel)
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        .position(x: min(size.width - 24, max(24, point.x)), y: max(13, point.y - 23))
+                        .opacity(revealProgress)
+                }
+
+                HStack {
+                    Text("早")
+                    Spacer()
+                    Text("午")
+                    Spacer()
+                    Text("晚")
+                }
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.7))
+                .frame(width: size.width)
+                .offset(y: size.height - 19)
+            }
+        }
+    }
+
+    private var timeLabel: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "HH:mm"
+        return isToday ? formatter.string(from: Date()) : "已完成"
+    }
+}
+
+private enum RhythmCurve {
+    static func centerPath(samples: [CGFloat], size: CGSize) -> Path {
+        sampledPath(samples: samples, size: size, offset: 0)
+    }
+
+    static func bandPath(samples: [CGFloat], width: CGFloat, size: CGSize) -> Path {
+        var path = sampledPath(samples: samples, size: size, offset: -width / 2)
+        let lower = sampledPoints(samples: samples, size: size, offset: width / 2).reversed()
+        for point in lower { path.addLine(to: point) }
+        path.closeSubpath()
+        return path
+    }
+
+    static func point(at progress: CGFloat, samples: [CGFloat], size: CGSize) -> CGPoint {
+        CGPoint(
+            x: progress * size.width,
+            y: interpolatedY(at: progress, samples: samples) * size.height
+        )
+    }
+
+    private static func sampledPath(samples: [CGFloat], size: CGSize, offset: CGFloat) -> Path {
+        let points = sampledPoints(samples: samples, size: size, offset: offset)
+        var path = Path()
+        guard let first = points.first else { return path }
+        path.move(to: first)
+        for point in points.dropFirst() { path.addLine(to: point) }
+        return path
+    }
+
+    private static func sampledPoints(samples: [CGFloat], size: CGSize, offset: CGFloat) -> [CGPoint] {
+        (0...80).map { index in
+            let progress = CGFloat(index) / 80
+            return CGPoint(
+                x: progress * size.width,
+                y: (interpolatedY(at: progress, samples: samples) + offset) * size.height
+            )
+        }
+    }
+
+    private static func interpolatedY(at progress: CGFloat, samples: [CGFloat]) -> CGFloat {
+        guard samples.count > 1 else { return samples.first ?? 0.5 }
+        let scaled = progress * CGFloat(samples.count - 1)
+        let lower = min(samples.count - 2, max(0, Int(floor(scaled))))
+        let local = scaled - CGFloat(lower)
+        let eased = local * local * (3 - 2 * local)
+        return samples[lower] + (samples[lower + 1] - samples[lower]) * eased
+    }
+}
+
+// MARK: - Rhythm secondary surfaces
+
+struct VelaRhythmActionSequence: View {
+    let actions: [TodayExperienceAction]
+    let onAction: (TodayExperienceAction) -> Void
+    let onEvidence: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VelaRhythmSectionHeader(
+                eyebrow: "TODAY",
+                title: "今天只做这几件事",
+                actionTitle: "查看依据",
+                action: onEvidence
+            )
+            .padding(.bottom, 12)
+
+            ForEach(Array(actions.prefix(3).enumerated()), id: \.element.id) { index, action in
+                Button { onAction(action) } label: {
+                    HStack(alignment: .center, spacing: 14) {
+                        Text(String(format: "%02d", index + 1))
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(index == 0 ? VelaTheme.rhythmDeep : VelaTheme.rhythmInkSecondary)
+                            .padding(.top, 4)
+
+                        Text(action.title)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(VelaTheme.rhythmInk)
+
+                        Spacer(minLength: 8)
+
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    }
+                    .padding(.vertical, 13)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.cardPress)
+
+                if index < min(actions.count, 3) - 1 {
+                    Divider()
+                        .overlay(VelaTheme.rhythmMist)
+                        .padding(.leading, 35)
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+}
+
+struct VelaRhythmSignalLandscape: View {
+    let signals: [TodayExperienceSignalCard]
+    let onSignal: (TodayExperienceSignalCard) -> Void
+
+    private var ordered: [TodayExperienceSignalCard] {
+        ["recovery", "sleep", "strain", "stress", "energy"].compactMap { id in
+            signals.first(where: { $0.id == id })
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VelaRhythmSectionHeader(
+                eyebrow: "SIGNALS",
+                title: "身体信号",
+                actionTitle: nil,
+                action: {}
+            )
+
+            VStack(spacing: 12) {
+                ForEach(ordered) { signal in
+                    Button { onSignal(signal) } label: {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(signal.title)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(VelaTheme.rhythmInk)
+                                Text(signal.subtitle)
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                                    .lineLimit(1)
+                            }
+                            .frame(width: 92, alignment: .leading)
+
+                            RhythmSparkline(values: signal.trend, state: signal.state)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 30)
+
+                            Text(signal.value)
+                                .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(VelaTheme.rhythmInk)
+                                .frame(width: 28, alignment: .trailing)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.cardPress)
+                    .accessibilityLabel("\(signal.title)，\(signal.value)，\(signal.subtitle)")
+                }
+            }
+            .padding(16)
+            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(VelaTheme.rhythmMist.opacity(0.85), lineWidth: 0.75)
+            }
+        }
+    }
+}
+
+private struct RhythmSparkline: View {
+    let values: [Double]
+    let state: MetricState
+
+    private var color: Color {
+        switch state {
+        case .good: VelaTheme.rhythmDeep
+        case .moderate: VelaTheme.rhythmWarm
+        case .poor: VelaTheme.statePoor
+        }
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let points = normalizedPoints(in: proxy.size)
+            ZStack {
+                Rectangle()
+                    .fill(VelaTheme.rhythmMist)
+                    .frame(height: 1)
+                Path { path in
+                    guard let first = points.first else { return }
+                    path.move(to: first)
+                    for point in points.dropFirst() { path.addLine(to: point) }
+                }
+                .stroke(color, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+
+                if let last = points.last {
+                    Circle()
+                        .fill(color)
+                        .frame(width: 5, height: 5)
+                        .position(last)
+                }
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func normalizedPoints(in size: CGSize) -> [CGPoint] {
+        // 空数据直接不画（不伪造 sparkline）；单点退化为一点
+        let source = values
+        guard !source.isEmpty else { return [] }
+        let low = source.min() ?? 0
+        let high = source.max() ?? 1
+        let span = max(8, high - low)
+        return source.enumerated().map { index, value in
+            let x = source.count == 1 ? size.width : CGFloat(index) / CGFloat(source.count - 1) * size.width
+            let normalized = (value - low) / span
+            return CGPoint(x: x, y: size.height - CGFloat(normalized) * (size.height - 6) - 3)
+        }
+    }
+}
+
+struct VelaRhythmSectionHeader: View {
+    let eyebrow: String
+    let title: String
+    let actionTitle: String?
+    let action: () -> Void
+
+    var body: some View {
+        HStack(alignment: .lastTextBaseline) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(eyebrow)
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(1.3)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                Text(title)
+                    .font(.system(size: 21, weight: .semibold))
+                    .tracking(-0.35)
+                    .foregroundStyle(VelaTheme.rhythmInk)
+            }
+
+            Spacer(minLength: 12)
+
+            if let actionTitle {
+                Button(actionTitle, action: action)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmDeep)
+                    .buttonStyle(.plain)
+                    .frame(minHeight: 44)
             }
         }
     }

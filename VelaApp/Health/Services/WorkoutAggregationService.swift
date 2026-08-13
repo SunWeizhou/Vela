@@ -4,6 +4,11 @@ import SwiftData
 @MainActor
 public final class WorkoutAggregationService {
     public static let shared = WorkoutAggregationService()
+
+    /// 未填写 RPE 时的保守负荷系数（轻强度下限）。
+    /// 方向要求：跳过的自评不能被解释为“中等强度”，因此缺省按轻强度估算，
+    /// 而不是按 RPE 5-6 的中等强度捏造负荷。
+    public static let missingRPELoadFactor: Double = 3.0
     private static let duplicateTimeTolerance: TimeInterval = 120
     
     private init() {}
@@ -313,7 +318,7 @@ public final class WorkoutAggregationService {
             let duration = merged.reduce(0) { $0 + max(0, $1.end.timeIntervalSince($1.start) / 60) }
             let energy = merged.compactMap(\.energyKilocalories).reduce(0, +)
             let load = merged.reduce(0) { partial, workout in
-                partial + max(0, workout.end.timeIntervalSince(workout.start) / 60) * (workout.rpe ?? 5) * 0.3
+                partial + max(0, workout.end.timeIntervalSince(workout.start) / 60) * (workout.rpe ?? Self.missingRPELoadFactor) * 0.3
             }
             // Algorithm v1/workoutAggregation: session-RPE fallback load.
             // Source: WorkoutEventRecord + current day's HealthKit workoutsData.
@@ -605,7 +610,14 @@ public final class WorkoutAggregationService {
             var bestMatchScore = 0.0
             
             for (index, day) in plan.days.enumerated() {
-                let expectedDate = calendar.date(byAdding: .day, value: (day.weekNumber - 1) * 7 + (day.dayNumber - 1), to: planStart) ?? planStart
+                // 与 TrainingScheduleResolver 同一锚点（planStart 所在周的周一），
+                // 否则非周一起始的计划「展示的日期」与「完成标记的日期」错位，
+                // 周三的计划日永远无法被周三的训练完成。
+                let expectedDate = TrainingScheduleResolver.scheduledDate(
+                    for: day,
+                    planStart: plan.startDate,
+                    calendar: calendar
+                ) ?? planStart
                 let score = linker.calculateMatchScore(
                     event: event,
                     planDay: day,
@@ -626,7 +638,7 @@ public final class WorkoutAggregationService {
                 }
                 day.isCompleted = true
                 day.completedAt = event.endedAt
-                day.loggedStrain = event.durationMinutes * (event.rpe ?? 5) * 0.3
+                day.loggedStrain = event.durationMinutes * (event.rpe ?? Self.missingRPELoadFactor) * 0.3
                 day.adherenceScore = day.durationMinutes > 0
                     ? min(1.5, event.durationMinutes / Double(day.durationMinutes))
                     : 1
@@ -748,9 +760,10 @@ public final class WorkoutAggregationService {
         
         // Trigger DailyPlanRefreshCoordinator
         let dateToRefresh = workoutDate
-        Task { @MainActor in
-            await DailyPlanRefreshCoordinator.shared.refreshPlan(for: dateToRefresh, modelContext: modelContext)
-        }
+        DailyPlanRefreshCoordinator.shared.schedulePlanRefresh(
+            for: [dateToRefresh],
+            container: modelContext.container
+        )
     }
 }
 
@@ -838,12 +851,12 @@ struct WorkoutSaveCoordinator {
 
             try failureInjector(.save)
             try modelContext.save()
-            
-            let dateToRefresh = workout.startedAt
-            Task { @MainActor in
-                await DailyPlanRefreshCoordinator.shared.refreshPlan(for: dateToRefresh, modelContext: modelContext)
-            }
-            
+
+            DailyPlanRefreshCoordinator.shared.schedulePlanRefresh(
+                for: [workout.startedAt],
+                container: modelContext.container
+            )
+
             return CommitResult(workout: workout, event: event)
         } catch {
             modelContext.rollback()
@@ -893,16 +906,16 @@ struct WorkoutSaveCoordinator {
 
             try failureInjector(.save)
             try modelContext.save()
-            
-            let dateToRefresh = workout.startedAt
+
             let prevDate = previousStartDate
-            Task { @MainActor in
-                await DailyPlanRefreshCoordinator.shared.refreshPlan(for: dateToRefresh, modelContext: modelContext)
-                if !Calendar.current.isDate(prevDate, inSameDayAs: dateToRefresh) {
-                    await DailyPlanRefreshCoordinator.shared.refreshPlan(for: prevDate, modelContext: modelContext)
-                }
-            }
-            
+            let refreshDates = Calendar.current.isDate(prevDate, inSameDayAs: workout.startedAt)
+                ? [workout.startedAt]
+                : [workout.startedAt, prevDate]
+            DailyPlanRefreshCoordinator.shared.schedulePlanRefresh(
+                for: refreshDates,
+                container: modelContext.container
+            )
+
             return CommitResult(workout: workout, event: event)
         } catch {
             modelContext.rollback()

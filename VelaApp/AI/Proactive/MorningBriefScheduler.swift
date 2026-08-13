@@ -23,7 +23,7 @@ final class MorningBriefScheduler: ObservableObject {
     func runIfNeeded(modelContext: ModelContext, dashboard: DashboardSummary, force: Bool = false, services: VelaServices? = nil) async {
         logger.info("runIfNeeded called (force: \(force))")
 
-        guard force || (AutoAgentConfig.shared.backgroundNetworkAIConsent && AutoAgentConfig.shared.autoMorningBrief) else {
+        guard force || (AutoAgentConfig.shared.canSendHealthContextToNetworkAI && AutoAgentConfig.shared.autoMorningBrief) else {
             logger.info("Automated morning brief is not enabled by the user. Skipping.")
             return
         }

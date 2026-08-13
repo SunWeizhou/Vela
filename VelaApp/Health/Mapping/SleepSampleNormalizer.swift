@@ -40,47 +40,45 @@ enum SleepSampleNormalizer {
         sleepScore: Double? = nil,
         maximumGapMinutes: Int = 120
     ) -> SleepSummary? {
-        let sortedSegments = segments
-            .filter { $0.end > $0.start }
-            .sorted { $0.start < $1.start }
-        guard !sortedSegments.isEmpty else { return nil }
+        let allSummaries = allNightlyEpisodes(segments: segments, maximumGapMinutes: maximumGapMinutes)
+        guard !allSummaries.isEmpty else { return nil }
 
-        let maximumGap = TimeInterval(maximumGapMinutes * 60)
-        var episodes: [[SleepStageSegment]] = []
-        var currentEpisode: [SleepStageSegment] = []
+        let calendar = Calendar.current
+        let targetDay = calendar.startOfDay(for: date)
 
-        for segment in sortedSegments {
-            if let previous = currentEpisode.last,
-               segment.start.timeIntervalSince(previous.end) > maximumGap {
-                episodes.append(currentEpisode)
-                currentEpisode = [segment]
-            } else {
-                currentEpisode.append(segment)
+        // 1. Look for an episode assigned to the target health day
+        if let match = allSummaries.filter({ calendar.isDate($0.date, inSameDayAs: targetDay) }).max(by: { $0.totalSleepMinutes < $1.totalSleepMinutes }) {
+            return match
+        }
+
+        // 2. Otherwise pick the most recent episode on or before targetDay
+        if let priorMatch = allSummaries.filter({ $0.date <= targetDay }).max(by: { $0.date < $1.date }) {
+            return priorMatch
+        }
+
+        // 3. Fallback to the latest available episode
+        return allSummaries.last
+    }
+
+    /// 主睡眠段归属：返回「结束时刻落在查询窗内」且时长 ≥ minimumNightMinutes 的主睡眠段。
+    /// 查询调用方负责把窗口向前扩展（主睡眠段按 startDate 匹配），否则跨 04:00 健康日
+    /// 边界的夜晚会被截断拆进两天。多个候选（如夜晚 + 午后小睡）取总时长最大者。
+    static func mainNightSummary(
+        in range: DateRangeQuery,
+        segments: [SleepStageSegment],
+        sleepScore: Double? = nil,
+        maximumGapMinutes: Int = 120,
+        minimumNightMinutes: Int = 60
+    ) -> SleepSummary? {
+        let episodes = allNightlyEpisodes(segments: segments, maximumGapMinutes: maximumGapMinutes)
+        return episodes
+            .filter { episode in
+                guard let wake = episode.wakeTime else { return false }
+                return wake >= range.start
+                    && wake < range.end
+                    && episode.totalSleepMinutes >= minimumNightMinutes
             }
-        }
-
-        if !currentEpisode.isEmpty {
-            episodes.append(currentEpisode)
-        }
-
-        // Choose the LONGEST sleep episode as the night's main sleep, not the
-        // latest-ending one. A daytime nap can end after the previous night's sleep
-        // and, if chosen by latest-end, would replace the whole night as "today's
-        // sleep" (collapsing sleep duration ~0 and cratering the score). The main
-        // overnight sleep is always the longest continuous episode, so selecting by
-        // total sleep-duration duration excludes short naps correctly.
-        guard let latestSleepEpisode = episodes
-            .filter({ episode in
-                episode.contains { $0.stage.countsTowardSleepDuration }
-            })
-            .max(by: { lhs, rhs in
-                sleepDuration(lhs) < sleepDuration(rhs)
-            })
-        else {
-            return nil
-        }
-
-        return summary(for: date, segments: latestSleepEpisode, sleepScore: sleepScore)
+            .max { $0.totalSleepMinutes < $1.totalSleepMinutes }
     }
 
     static func allNightlyEpisodes(

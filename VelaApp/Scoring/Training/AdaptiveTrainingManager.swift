@@ -314,8 +314,26 @@ struct WorkoutAdaptationService: Sendable {
             return nil
         }
 
-        // 2. Refresh raw health snapshot & dashboard
-        let dashboard = (try? await DailySummaryUseCase().loadDashboard(for: now, modelContext: modelContext)) ?? DashboardSummary.empty(date: today)
+        // Completion is a canonical product fact even when the current body
+        // snapshot cannot produce a new plan proposal. Persist it before the
+        // optional adaptation pass so a transient HealthKit failure never
+        // erases the completed-workout event.
+        VelaEventService.shared.log(
+            modelContext: modelContext,
+            type: VelaProductEventType.workoutCompleted,
+            title: "完成训练记录打卡",
+            detail: "训练事实已保存；Vela 会在可用信号足够时更新下一次训练边界。",
+            metadata: ["workout_id": workoutID?.uuidString ?? ""]
+        )
+        try modelContext.save()
+
+        // 2. Re-evaluate from the latest local evidence. Completing a workout
+        // must stay fast and deterministic; the normal dashboard refresh owns
+        // HealthKit synchronization and can retry independently.
+        let dashboard = (try? DailySummaryUseCase().loadCachedDashboard(
+            for: now,
+            modelContext: modelContext
+        )) ?? DashboardSummary.empty(date: today)
 
         let events = (try? modelContext.fetch(FetchDescriptor<WorkoutEventRecord>())) ?? []
         let foods = (try? modelContext.fetch(FetchDescriptor<FoodLogRecord>())) ?? []
@@ -323,28 +341,24 @@ struct WorkoutAdaptationService: Sendable {
 
         // 3. Trigger AdaptiveTrainingManager refreshDailyProposal
         let manager = AdaptiveTrainingManager()
-        let proposal = try manager.refreshDailyProposal(
-            plan: activePlan,
-            dashboard: dashboard,
-            events: events,
-            foodLogs: foods,
-            journalEntries: journals,
-            modelContext: modelContext,
-            date: now,
-            calendar: calendar
-        )
-
-        // 4. Log event in Event Service
-        VelaEventService.shared.log(
-            modelContext: modelContext,
-            type: VelaProductEventType.workoutCompleted,
-            title: "完成训练记录打卡",
-            detail: "系统已自动联动肌肉疲劳与身体状态生成最新调整方案。",
-            metadata: [
-                "workout_id": workoutID?.uuidString ?? "",
-                "has_proposal": proposal != nil
-            ]
-        )
+        let proposal: TrainingPlanAdaptationRecord?
+        do {
+            proposal = try manager.refreshDailyProposal(
+                plan: activePlan,
+                dashboard: dashboard,
+                events: events,
+                foodLogs: foods,
+                journalEntries: journals,
+                modelContext: modelContext,
+                date: now,
+                calendar: calendar
+            )
+        } catch {
+            // A training fact is more durable than an optional proposal. Keep
+            // the saved completion and let a later refresh retry adaptation.
+            VelaAppState.shared.markLocalDataChanged()
+            return nil
+        }
 
         if let proposal {
             VelaEventService.shared.log(
@@ -365,4 +379,3 @@ struct WorkoutAdaptationService: Sendable {
         return proposal
     }
 }
-

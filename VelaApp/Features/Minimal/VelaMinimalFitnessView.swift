@@ -2,8 +2,8 @@ import SwiftUI
 import SwiftData
 import Combine
 
-// MARK: - VelaTrainingView — Bevel Replica Fitness Tab
-// Double-Month thinned activity heatmaps × Area workouts summary × Target safe-zone Exertion workload chart
+// MARK: - VelaTrainingView
+// The phone decides and explains. Apple Watch records the training itself.
 
 struct VelaTrainingView: View {
     @Environment(\.velaSurfaceIsActive) private var isActiveSurface
@@ -23,6 +23,7 @@ struct VelaTrainingView: View {
     @State private var workoutTemplates: [WorkoutTemplateRecord] = []
     @State private var trainingPlans: [TrainingPlanRecord] = []
     @State private var operatingPlans: [DailyOperatingPlanRecord] = []
+    @State private var trainingResponses: [TrainingResponseRecord] = []
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
     private var activePlan: TrainingPlanRecord? {
@@ -73,67 +74,102 @@ struct VelaTrainingView: View {
 
     var body: some View {
         let strengthSummary = recentStrengthSummary
+        let cardioSnapshot = CardioTrainingAnalyzer.analyze(
+            workouts: recentWorkouts,
+            endingAt: dashboardVM.selectedDate
+        )
 
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
+            LazyVStack(alignment: .leading, spacing: 0) {
                 TrainingHeroSection(
                     todaySession: todaySession,
                     todayPlan: todayPlan,
                     activePlan: activePlan,
-                    lastWorkoutSummary: strengthSummary.lastWorkoutSummary,
+                    summary: strengthSummary,
                     onDiscussWithCoach: {
                         VelaAppState.shared.routeToCoach(question: trainingAnalysisQuestion)
                     }
                 )
 
-                TrainingStatsSection(
-                    selectedAnalyticsTab: $selectedAnalyticsTab,
-                    targetComparison: targetComparison,
-                    dynamicExertionWorkload: dynamicExertionWorkload,
-                    totalWorkoutDurationText: totalWorkoutDurationText,
-                    summaryWorkPathPoints: summaryWorkPathPoints,
-                    summaryPeakStrainText: summaryPeakStrainText,
-                    selectedDate: dashboardVM.selectedDate,
-                    previousMonthActiveTiers: previousMonthActiveTiers,
-                    currentMonthActiveTiers: currentMonthActiveTiers
-                )
+                VStack(alignment: .leading, spacing: 34) {
+                    if let workout = postWorkoutPromptWorkout {
+                        TrainingPostWorkoutPrompt(workout: workout) {
+                            appState.routeToPostWorkoutCheckIn(
+                                workoutID: strengthWorkout(for: workout)?.id ?? workout.id
+                            )
+                        }
+                    }
 
-                CardioStatusCard(
-                    snapshot: CardioTrainingAnalyzer.analyze(
-                        workouts: recentWorkouts,
-                        endingAt: dashboardVM.selectedDate
-                    )
-                )
+                    TrainingMuscleLandscape(summary: strengthSummary)
 
-                RecentWorkoutsSection(
-                    recentWorkouts: recentWorkouts,
-                    strengthWorkout: { workout in self.strengthWorkout(for: workout) }
-                )
+                    VStack(alignment: .leading, spacing: 14) {
+                        VelaRhythmSectionHeader(
+                            eyebrow: "ROTATION",
+                            title: "计划与轮转",
+                            actionTitle: nil,
+                            action: {}
+                        )
 
-                MuscleVolumeCard(
-                    summary: strengthSummary,
-                    exerciseProgressLines: exerciseProgressLines
-                )
+                        NavigationLink {
+                            VelaTrainingPlanView()
+                        } label: {
+                            TrainingPlanPortal(
+                                planTitle: activePlan?.title,
+                                nextFocus: todaySession?.title,
+                                completedDays: activePlan?.days.filter(\.isCompleted).count ?? 0,
+                                totalDays: activePlan?.days.count ?? 0
+                            )
+                        }
+                        .buttonStyle(.cardPress)
+                    }
 
-                VelaHealthSyncNote()
+                    VStack(alignment: .leading, spacing: 14) {
+                        VelaRhythmSectionHeader(
+                            eyebrow: "TRAINING FACTS",
+                            title: "趋势与记录",
+                            actionTitle: nil,
+                            action: {}
+                        )
+
+                        NavigationLink {
+                            TrainingDeepAnalysisView(
+                                selectedAnalyticsTab: $selectedAnalyticsTab,
+                                targetComparison: targetComparison,
+                                dynamicExertionWorkload: dynamicExertionWorkload,
+                                totalWorkoutDurationText: totalWorkoutDurationText,
+                                summaryWorkPathPoints: summaryWorkPathPoints,
+                                summaryPeakStrainText: summaryPeakStrainText,
+                                selectedDate: dashboardVM.selectedDate,
+                                previousMonthActiveTiers: previousMonthActiveTiers,
+                                currentMonthActiveTiers: currentMonthActiveTiers,
+                                cardioSnapshot: cardioSnapshot,
+                                recentWorkouts: recentWorkouts,
+                                strengthSummary: strengthSummary,
+                                exerciseProgressLines: exerciseProgressLines,
+                                strengthWorkout: { workout in self.strengthWorkout(for: workout) }
+                            )
+                        } label: {
+                            TrainingAnalysisPortal(
+                                sessions: strengthSummary.sessions,
+                                totalDuration: totalWorkoutDurationText,
+                                cardioStatus: cardioSnapshot.status?.title ?? (cardioSnapshot.acuteMinutes > 0 ? "已记录" : "待建立")
+                            )
+                        }
+                        .buttonStyle(.cardPress)
+                    }
+                }
+                .padding(.horizontal, VelaTheme.pagePadding)
+                .padding(.bottom, VelaFloatingNavigationMetrics.contentBottomPadding)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, VelaFloatingNavigationMetrics.contentBottomPadding)
         }
         .scrollIndicators(.hidden)
         .safeAreaInset(edge: .top) {
-            VStack(spacing: 0) {
-                fitnessHeader
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 12)
-                    .background(VelaTheme.bg.opacity(0.98))
-                
-                Divider()
-                    .opacity(0.4)
-            }
+            fitnessHeader
+                .padding(.horizontal, VelaTheme.pagePadding)
+                .padding(.vertical, 10)
+                .background(VelaTheme.rhythmCanvas.opacity(0.94))
         }
-        .background(VelaTheme.systemGroupedBackground)
+        .background(VelaTheme.rhythmCanvas)
         .task(id: isActiveSurface) {
             guard isActiveSurface else { return }
             loadRealFitnessData()
@@ -225,16 +261,17 @@ struct VelaTrainingView: View {
 
 
 
-    // MARK: - Fitness Title Header
+    // MARK: - Training Title Header
     private var fitnessHeader: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text("训练")
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(VelaTheme.fg)
-                Text("今日安排与训练趋势")
-                    .font(.system(size: 12))
-                    .foregroundStyle(VelaTheme.muted)
+                    .font(.system(size: 24, weight: .semibold))
+                    .tracking(-0.4)
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                Text("轮转、边界与训练事实")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
             
             Spacer()
@@ -243,34 +280,62 @@ struct VelaTrainingView: View {
                 Button {
                     VelaAppState.shared.routeToCoach(question: trainingAnalysisQuestion)
                 } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 12, weight: .bold))
-                        Text("分析")
-                            .font(.system(size: 13, weight: .bold))
-                    }
-                    .foregroundStyle(VelaTheme.fg)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.cardBg))
-                    .shadow(color: Color.black.opacity(0.01), radius: 8, y: 2)
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("让 Coach 分析训练")
 
-                Button {
-                    xunjiImportDate = dashboardVM.selectedDate
-                    xunjiImportMessage = nil
-                    showXunjiImport = true
+                Menu {
+                    Button {
+                        // Detailed logging is an optional post-workout action. It
+                        // should never inherit today's recommendation or block on
+                        // an incomplete plan.
+                        selectedTemplateID = nil
+                        selectedSessionDraft = nil
+                        showStrengthWorkoutLog = true
+                    } label: {
+                        Label("补录动作与组数", systemImage: "square.and.pencil")
+                    }
+
+                    Button {
+                        xunjiImportDate = dashboardVM.selectedDate
+                        xunjiImportMessage = nil
+                        showXunjiImport = true
+                    } label: {
+                        Label("导入训记", systemImage: "tray.and.arrow.down")
+                    }
                 } label: {
-                    Image(systemName: "tray.and.arrow.down")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(VelaTheme.muted)
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .frame(width: 44, height: 44)
+                        .contentShape(Circle())
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("导入寻迹训练")
+                .accessibilityLabel("更多训练操作")
             }
+        }
+    }
+
+    private var postWorkoutPromptWorkout: WorkoutSummary? {
+        let calendar = Calendar.current
+        let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: dashboardVM.selectedDate))
+            ?? dashboardVM.selectedDate
+        let start = end.addingTimeInterval(-36 * 60 * 60)
+        let responseWorkoutIDs = Set(trainingResponses.map(\.workoutId))
+        let annotatedWorkoutIDs = Set(localWorkoutEvents.compactMap { event -> UUID? in
+            if responseWorkoutIDs.contains(event.id) { return event.id }
+            if let strengthID = event.linkedStrengthWorkoutId,
+               responseWorkoutIDs.contains(strengthID) {
+                return event.id
+            }
+            return nil
+        }).union(responseWorkoutIDs)
+        return recentWorkouts.first {
+            $0.start >= start && $0.start < end && !annotatedWorkoutIDs.contains($0.id)
         }
     }
 
@@ -739,6 +804,12 @@ struct VelaTrainingView: View {
         )
         opPlansDesc.fetchLimit = 1
         self.operatingPlans = (try? modelContext.fetch(opPlansDesc)) ?? []
+
+        let responseDesc = FetchDescriptor<TrainingResponseRecord>(
+            predicate: #Predicate<TrainingResponseRecord> { $0.date >= startLimit && $0.date <= endLimit },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        self.trainingResponses = (try? modelContext.fetch(responseDesc)) ?? []
     }
     
     private func useEmptyFitnessDefaults() {
@@ -754,6 +825,76 @@ struct VelaTrainingView: View {
     private func monthStart(for date: Date) -> Date {
         let components = Calendar.current.dateComponents([.year, .month], from: date)
         return Calendar.current.date(from: components) ?? date
+    }
+}
+
+// MARK: - Secondary analysis
+
+private struct TrainingDeepAnalysisView: View {
+    @Binding var selectedAnalyticsTab: Int
+    let targetComparison: TrainingTargetComparison
+    let dynamicExertionWorkload: [Double]
+    let totalWorkoutDurationText: String
+    let summaryWorkPathPoints: [CGPoint]
+    let summaryPeakStrainText: String
+    let selectedDate: Date
+    let previousMonthActiveTiers: [Int: Int]
+    let currentMonthActiveTiers: [Int: Int]
+    let cardioSnapshot: CardioTrainingSnapshot
+    let recentWorkouts: [WorkoutSummary]
+    let strengthSummary: RecentTrainingSummary
+    let exerciseProgressLines: [String]
+    let strengthWorkout: (WorkoutSummary) -> StrengthWorkoutRecord?
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("DEEP ANALYSIS")
+                        .font(.system(size: 10, weight: .semibold))
+                        .tracking(1.4)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    Text("训练事实，而不是评分")
+                        .font(.system(size: 28, weight: .semibold))
+                        .tracking(-0.65)
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                }
+                .padding(.bottom, 6)
+
+                TrainingStatsSection(
+                    selectedAnalyticsTab: $selectedAnalyticsTab,
+                    targetComparison: targetComparison,
+                    dynamicExertionWorkload: dynamicExertionWorkload,
+                    totalWorkoutDurationText: totalWorkoutDurationText,
+                    summaryWorkPathPoints: summaryWorkPathPoints,
+                    summaryPeakStrainText: summaryPeakStrainText,
+                    selectedDate: selectedDate,
+                    previousMonthActiveTiers: previousMonthActiveTiers,
+                    currentMonthActiveTiers: currentMonthActiveTiers
+                )
+
+                CardioStatusCard(snapshot: cardioSnapshot)
+
+                MuscleVolumeCard(
+                    summary: strengthSummary,
+                    exerciseProgressLines: exerciseProgressLines
+                )
+
+                RecentWorkoutsSection(
+                    recentWorkouts: recentWorkouts,
+                    strengthWorkout: strengthWorkout
+                )
+
+                VelaHealthSyncNote()
+            }
+            .padding(.horizontal, VelaTheme.pagePadding)
+            .padding(.top, 18)
+            .padding(.bottom, 44)
+        }
+        .scrollIndicators(.hidden)
+        .background(VelaTheme.rhythmCanvas)
+        .navigationTitle("深入分析")
+        .velaRhythmDetailChrome()
     }
 }
 

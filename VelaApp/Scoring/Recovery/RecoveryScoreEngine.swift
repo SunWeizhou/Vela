@@ -5,18 +5,22 @@ public struct RecoveryScoreInput: Hashable {
     public var hrvToday: Double?
     public var hrvBaseline: Double?
     public var hrvHistory: [Double] = []
-    
+
+    public var hrvRmssdToday: Double?
+    public var hrvRmssdBaseline: Double?
+    public var hrvRmssdHistory: [Double] = []
+
     public var restingHeartRateToday: Double?
     public var restingHeartRateBaseline: Double?
     public var rhrHistory: [Double] = []
-    
+
     public var sleepScoreLastNight: Double?
     public var strainScoreYesterday: Double?
-    
+
     public var respiratoryRateToday: Double?
     public var respiratoryRateBaseline: Double?
     public var respiratoryRateHistory: [Double] = []
-    
+
     public var bodyTempDelta: Double?
     public var SpO2: Double?
 
@@ -25,6 +29,9 @@ public struct RecoveryScoreInput: Hashable {
         hrvToday: Double?,
         hrvBaseline: Double?,
         hrvHistory: [Double] = [],
+        hrvRmssdToday: Double? = nil,
+        hrvRmssdBaseline: Double? = nil,
+        hrvRmssdHistory: [Double] = [],
         restingHeartRateToday: Double?,
         restingHeartRateBaseline: Double?,
         rhrHistory: [Double] = [],
@@ -40,6 +47,9 @@ public struct RecoveryScoreInput: Hashable {
         self.hrvToday = hrvToday
         self.hrvBaseline = hrvBaseline
         self.hrvHistory = hrvHistory
+        self.hrvRmssdToday = hrvRmssdToday
+        self.hrvRmssdBaseline = hrvRmssdBaseline
+        self.hrvRmssdHistory = hrvRmssdHistory
         self.restingHeartRateToday = restingHeartRateToday
         self.restingHeartRateBaseline = restingHeartRateBaseline
         self.rhrHistory = rhrHistory
@@ -78,11 +88,11 @@ public struct RecoveryScoreEngine: ScoreEngine {
         // 1. HRV Component (35%) - Log-transformed SDNN
         if let hrvToday = input.hrvToday {
             let lnToday = log(max(hrvToday, 1.0))
-            
+
             // Build baseline using history (21 to 42 days), fallback to baseline if history too short
             let hrvHistoryToUse = input.hrvHistory.count >= 5 ? input.hrvHistory : [input.hrvBaseline ?? hrvToday]
             let lnHistory = hrvHistoryToUse.map { log(max($0, 1.0)) }
-            
+
             if let lnBaseline = PersonalBaselineEngine.median(lnHistory) {
                 var lnSD = PersonalBaselineEngine.robustStandardDeviation(
                     lnHistory,
@@ -92,11 +102,11 @@ public struct RecoveryScoreEngine: ScoreEngine {
                 if lnSD < 0.01 {
                     lnSD = fallbackSD > 0.01 ? fallbackSD : 0.05
                 }
-                
+
                 hrvZ = (lnToday - lnBaseline) / lnSD
                 let sigmoidHRV = (2.0 / (1.0 + exp(-0.45 * hrvZ))) - 1.0
                 var hrvComponent = ScoringMath.clamp(50.0 + 48.0 * sigmoidHRV, min: 0, max: 100)
-                
+
                 if hrvZ > 2.2 && (input.strainScoreYesterday ?? 0) > 75 {
                     hrvComponent = min(hrvComponent, 65.0)
                     reasons.append("高负荷后 HRV 明显高于个人基线，恢复评分已按保守规则下调")
@@ -105,7 +115,7 @@ public struct RecoveryScoreEngine: ScoreEngine {
                 } else if hrvZ > 1.0 {
                     reasons.append("HRV 高于近期个人基线")
                 }
-                
+
                 components["hrv"] = hrvComponent
                 componentWeights["hrv"] = weights["hrv"]
             }
@@ -126,17 +136,17 @@ public struct RecoveryScoreEngine: ScoreEngine {
                 if rhrSD < 0.5 {
                     rhrSD = fallbackSD
                 }
-                
+
                 rhrZ = (rhrToday - rhrBaseline) / rhrSD
                 let sigmoidRHR = (2.0 / (1.0 + exp(0.45 * rhrZ))) - 1.0
                 let rhrComponent = ScoringMath.clamp(50.0 + 48.0 * sigmoidRHR, min: 0, max: 100)
-                
+
                 if rhrZ > 1.5 {
                     reasons.append("静息心率高于近期个人基线（\(Int(rhrToday)) bpm）")
                 } else if rhrZ < -1.0 {
                     reasons.append("静息心率低于近期个人基线")
                 }
-                
+
                 components["rhr"] = rhrComponent
                 componentWeights["rhr"] = weights["rhr"]
             }
@@ -164,7 +174,7 @@ public struct RecoveryScoreEngine: ScoreEngine {
             let priorStrainComponent = ScoringMath.clamp(100.0 - priorStrain, min: 0, max: 100)
             components["prior_strain"] = priorStrainComponent
             componentWeights["prior_strain"] = weights["prior_strain"]
-            
+
             if priorStrain > 75 {
                 reasons.append("昨日训练负荷评分偏高")
             }
@@ -205,7 +215,7 @@ public struct RecoveryScoreEngine: ScoreEngine {
             // inline population SD (÷n) diverged from PersonalBaselineEngine.
             let sd = max(0.5, PersonalBaselineEngine.sampleStandardDeviation(respHistoryToUse) ?? 0.5)
             respiratoryRateZ = (respToday - respBaseline) / sd
-            
+
             if respiratoryRateZ >= 1.5 {
                 penalty += 5.0
                 reasons.append("呼吸频率高于近期个人基线 (\(Int(respToday)) 次/分)，恢复评分已保守下调")
@@ -220,6 +230,34 @@ public struct RecoveryScoreEngine: ScoreEngine {
         if input.hrvToday != nil {
             components["hrv_z_score"] = hrvZ
         }
+
+        // Parasympathetic Tone Index (PSTI) based on normalized log-transformed RMSSD values
+        let rmssdToday = input.hrvRmssdToday ?? input.hrvToday
+        if let rmssdToday {
+            let lnToday = log(max(rmssdToday, 1.0))
+            let rmssdHistoryToUse = !input.hrvRmssdHistory.isEmpty
+                ? input.hrvRmssdHistory
+                : (input.hrvRmssdBaseline != nil ? [input.hrvRmssdBaseline!] : (input.hrvHistory.count >= 5 ? input.hrvHistory : [input.hrvBaseline ?? rmssdToday]))
+            let lnHistory = rmssdHistoryToUse.map { log(max($0, 1.0)) }
+
+            if let lnBaseline = PersonalBaselineEngine.median(lnHistory) {
+                var lnSD = PersonalBaselineEngine.robustStandardDeviation(
+                    lnHistory,
+                    around: lnBaseline
+                ) ?? 0
+                let fallbackSD = lnBaseline * 0.12
+                if lnSD < 0.01 {
+                    lnSD = fallbackSD > 0.01 ? fallbackSD : 0.05
+                }
+
+                let pstiZ = (lnToday - lnBaseline) / lnSD
+                let pstiScore = ScoringMath.clamp(50.0 + 25.0 * pstiZ, min: 0, max: 100)
+
+                components["parasympathetic_tone_index"] = pstiScore
+                components["psti_z_score"] = pstiZ
+            }
+        }
+
         if input.restingHeartRateToday != nil {
             components["rhr_z_score"] = rhrZ
         }
@@ -253,7 +291,7 @@ public struct RecoveryScoreEngine: ScoreEngine {
         // Mapped Confidence
         let confidence: MetricConfidence
         let totalHistoryDays = max(input.hrvHistory.count, input.rhrHistory.count)
-        
+
         let hasCoreInputs = input.hrvToday != nil && input.restingHeartRateToday != nil && input.sleepScoreLastNight != nil
         if hasCoreInputs && totalHistoryDays >= 14 {
             confidence = .high

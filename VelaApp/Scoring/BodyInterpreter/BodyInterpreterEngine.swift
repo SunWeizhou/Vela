@@ -22,8 +22,9 @@ struct BodyInterpreterEngine {
         var confidence: [String: DataConfidence] = [:]
 
         // ── 1. Analyze fatigue sources ──
-        let fatigueSources = analyzeFatigue(dashboard: dashboard, confidence: &confidence)
-        let totalFatigue = fatigueSources.map(\.contribution).reduce(0, +)
+        let fatigueResult = analyzeFatigue(dashboard: dashboard, confidence: &confidence)
+        let fatigueSources = fatigueResult.sources
+        let totalFatigue = fatigueResult.rawTotal
         let fatigueLevel = classifyFatigueLevel(totalFatigue)
 
         // ── 2. Identify primary limiter ──
@@ -124,7 +125,7 @@ struct BodyInterpreterEngine {
     private func analyzeFatigue(
         dashboard: DashboardSummary,
         confidence: inout [String: DataConfidence]
-    ) -> [FatigueSource] {
+    ) -> (sources: [FatigueSource], rawTotal: Double) {
         var sources: [FatigueSource] = []
 
         let hrvMs = dashboard.recoveryMetrics.hrvMilliseconds
@@ -220,15 +221,18 @@ struct BodyInterpreterEngine {
             ))
         }
 
-        // Normalize contributions
-        let total = sources.map(\.contribution).reduce(0, +)
-        if total > 0 {
+        // 疲劳等级分类使用归一化前的原始总贡献（阈值 0.1/0.3/0.5/0.7 按原始量级设计）；
+        // 归一化后的值仅用于展示层相对权重，归一化本身会令总和恒为 1，不能参与阈值判定。
+        let rawTotal = sources.map(\.contribution).reduce(0, +)
+
+        // Normalize contributions for relative display weights
+        if rawTotal > 0 {
             sources = sources.map { src in
                 var s = src
                 s = FatigueSource(
                     id: s.id,
                     category: s.category,
-                    contribution: s.contribution / total,
+                    contribution: s.contribution / rawTotal,
                     evidence: s.evidence,
                     metrics: s.metrics
                 )
@@ -236,7 +240,7 @@ struct BodyInterpreterEngine {
             }
         }
 
-        return sources
+        return (sources, rawTotal)
     }
 
     private func classifyFatigueLevel(_ totalFatigue: Double) -> FatigueLevel {

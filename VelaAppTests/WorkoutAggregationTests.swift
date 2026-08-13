@@ -255,6 +255,60 @@ final class WorkoutAggregationTests: XCTestCase {
         try testStrengthWorkoutUpsertIsIdempotent()
     }
 
+    func testLinkActivePlanDayUsesMondayAnchoredScheduledDate() throws {
+        let store = try makeStore()
+        // 2026-04-01 是周三（04-02 是周四）。计划从周三开始，week1/day3 = 本周三。
+        let planStart = makeDate(month: 4, day: 1, hour: 9)
+        let day3 = TrainingDay(
+            weekNumber: 1,
+            dayNumber: 3,
+            title: "Chest Day",
+            description: "Focus on chest",
+            focus: "strength",
+            durationMinutes: 60,
+            intensity: "moderate"
+        )
+        let plan = TrainingPlanRecord(
+            title: "Wednesday Start Plan",
+            goalDescription: "",
+            startDate: planStart,
+            weeksCount: 1,
+            isActive: true,
+            days: [day3]
+        )
+        store.context.insert(plan)
+        let workout = makeStrengthWorkout(start: planStart)
+        store.context.insert(workout)
+
+        _ = try WorkoutAggregationService.shared.prepareWorkoutEvent(
+            from: workout,
+            modelContext: store.context,
+            sessionRPE: 8
+        )
+
+        // 完成标记的期望日期必须与 TrainingScheduleResolver 同锚
+        // （planStart 所在周的周一）：day3 = 周三。旧实现锚定 planStart 本身
+        // （day3 → 周五），周三的训练永远完不成周三的计划日。
+        XCTAssertTrue(plan.days.first?.isCompleted ?? false, "周三的计划日应被周三的训练完成")
+        XCTAssertEqual(workout.planDayId, day3.id)
+    }
+
+    func testAggregateDayUsesConservativeLoadFactorWhenRPEMissing() throws {
+        let store = try makeStore()
+        let start = makeDate()
+        let workout = makeStrengthWorkout(start: start)
+        store.context.insert(workout)
+
+        // sessionRPE 与 workout.sessionRPE 均缺失（用户跳过自评）
+        try WorkoutAggregationService.shared.upsertWorkoutEvent(from: workout, modelContext: store.context, sessionRPE: nil)
+        try WorkoutAggregationService.shared.aggregateDay(date: start, modelContext: store.context)
+
+        let summary = try XCTUnwrap(fetchDailySummary(store.context, date: start))
+        // 60min × 保守轻强度系数 3.0 × 0.3 = 54；
+        // 旧实现默认中等强度 5 → 90，把“跳过自评”解释为“中等强度训练”
+        XCTAssertEqual(summary.workoutLoad ?? -1, 54, accuracy: 0.1)
+    }
+
     func testAggregateDayDoesNotDuplicateHealthKitWorkout() throws {
         let store = try makeStore()
         let start = makeDate(hour: 7)

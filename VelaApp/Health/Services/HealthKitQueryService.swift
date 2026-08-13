@@ -62,7 +62,14 @@ final class HealthKitQueryService: HealthQueryService {
             return nil
         }
 
-        let samples = try await categorySamples(type: sleepType, range: range)
+        // 主睡眠段按样本 startDate 匹配查询窗：把窗口向前扩展 12 小时以捕获
+        // 前夜入睡段（如 23:00 入睡、次日 07:00 醒），归属由 mainNightSummary
+        // 按「主睡眠段结束时刻落在目标窗口内」判定，避免夜晚被 04:00 边界截断拆进两天。
+        let extended = DateRangeQuery(
+            start: range.start.addingTimeInterval(-12 * 3_600),
+            end: range.end
+        )
+        let samples = try await categorySamples(type: sleepType, range: extended)
         let segments = samples.map {
             SleepStageSegment(
                 stage: HealthKitSleepStageMapper.map($0.value),
@@ -71,7 +78,7 @@ final class HealthKitQueryService: HealthQueryService {
             )
         }
 
-        return SleepSampleNormalizer.mostRecentEpisodeSummary(for: range.start, segments: segments)
+        return SleepSampleNormalizer.mainNightSummary(in: range, segments: segments)
     }
 
     func sleepEpisodes(in range: DateRangeQuery) async throws -> [SleepSummary] {
@@ -99,6 +106,10 @@ final class HealthKitQueryService: HealthQueryService {
 
         return try await RecoveryMetricSummary(
             hrvMilliseconds: hrv,
+            // HealthKit 仅暴露 SDNN（heartRateVariabilitySDNN），不存在 RMSSD 采样标识符。
+            // RMSSD 是派生模型输入：PSTI 管道在 RMSSD 缺失时回退 SDNN（见 RecoveryScoreEngine），
+            // 此处保持 nil 是有意为之，勿改为伪造采样。
+            hrvRmssdMilliseconds: nil,
             restingHeartRate: rhr,
             sleepHeartRate: sleepHR,
             respiratoryRate: respiratoryRate
@@ -115,11 +126,15 @@ final class HealthKitQueryService: HealthQueryService {
     }
 
     func bodyMetrics(in range: DateRangeQuery) async throws -> BodyMetricsSummary {
-        try await BodyMetricsSummary(
-            vo2Max: mostRecentQuantity(.vo2Max, unit: HKUnit(from: "ml/kg*min"), range: range),
-            weightKilograms: mostRecentQuantity(.bodyMass, unit: .gramUnit(with: .kilo), range: range),
-            bodyFatPercentage: mostRecentQuantity(.bodyFatPercentage, unit: .percent(), range: range),
-            leanBodyMassKilograms: mostRecentQuantity(.leanBodyMass, unit: .gramUnit(with: .kilo), range: range)
+        let bodyRange = DateRangeQuery(
+            start: Calendar.current.date(byAdding: .day, value: -60, to: range.end) ?? range.start,
+            end: range.end
+        )
+        return try await BodyMetricsSummary(
+            vo2Max: mostRecentQuantity(.vo2Max, unit: HKUnit(from: "ml/kg*min"), range: bodyRange),
+            weightKilograms: mostRecentQuantity(.bodyMass, unit: .gramUnit(with: .kilo), range: bodyRange),
+            bodyFatPercentage: mostRecentQuantity(.bodyFatPercentage, unit: .percent(), range: bodyRange),
+            leanBodyMassKilograms: mostRecentQuantity(.leanBodyMass, unit: .gramUnit(with: .kilo), range: bodyRange)
         )
     }
 
@@ -222,10 +237,13 @@ final class HealthKitQueryService: HealthQueryService {
             return []
         }
         let rawWorkouts: [HKWorkout] = try await withCheckedThrowingContinuation { continuation in
+            // strictStartDate：训练按 startDate 归属健康日（与 dayIdentifier/聚合语义一致）。
+            // 默认 overlap 谓词会让跨午夜训练（23:30–00:30）同时落入两天查询，
+            // 在次日聚合时被当作独立 HK 摘要追加 → 时长/负荷双计。
             let predicate = HKQuery.predicateForSamples(
                 withStart: range.start,
                 end: range.end,
-                options: []
+                options: [.strictStartDate]
             )
             let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
             let query = HKSampleQuery(sampleType: workoutType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, error in
@@ -272,9 +290,15 @@ final class HealthKitQueryService: HealthQueryService {
         m.age = chars.age
         m.biologicalSex = chars.biologicalSex
 
-        // Body
-        m.heightCm = try? await mostRecentQuantity(.height, unit: .meterUnit(with: .centi), range: range)
-        m.bmi = try? await mostRecentQuantity(.bodyMassIndex, unit: .count(), range: range)
+        // Body (use 60-day lookback for body measurements)
+        let bodyRange = DateRangeQuery(
+            start: Calendar.current.date(byAdding: .day, value: -60, to: range.end) ?? range.start,
+            end: range.end
+        )
+        m.heightCm = try? await mostRecentQuantity(.height, unit: .meterUnit(with: .centi), range: bodyRange)
+        m.bmi = try? await mostRecentQuantity(.bodyMassIndex, unit: .count(), range: bodyRange)
+        m.bodyWeightKg = try? await mostRecentQuantity(.bodyMass, unit: .gramUnit(with: .kilo), range: bodyRange)
+        m.bodyFatPercent = try? await mostRecentQuantity(.bodyFatPercentage, unit: .percent(), range: bodyRange)
 
         // Cardiovascular
         m.walkingHeartRateAvg = try? await averageQuantity(.walkingHeartRate, unit: HKUnit.count().unitDivided(by: .minute()), range: range)

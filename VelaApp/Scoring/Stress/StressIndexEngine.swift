@@ -156,9 +156,17 @@ public struct StressIndexEngine: ScoreEngine {
         case .rawVitals:
             if let hrvToday = input.hrvToday {
                 let baseline = input.hrvBaseline ?? hrvToday
-                let sd = input.hrvSD ?? max(0.01, log(max(baseline, 1.0)) * 0.12)
                 let lnToday = log(max(hrvToday, 1.0))
                 let lnBaseline = log(max(baseline, 1.0))
+                // hrvSD 语义为原始 ms 域标准差，而 hrvZ 在 log 域计算。
+                // 用 delta 方法换算：sd(log X) ≈ sd(X) / mean(X)；
+                // 缺失时退回基线比例启发式（log 域），两者单位一致。
+                let sd: Double
+                if let rawSD = input.hrvSD, rawSD > 0, baseline > 1 {
+                    sd = max(rawSD / baseline, 0.01)
+                } else {
+                    sd = max(0.01, lnBaseline * 0.12)
+                }
                 let hrvZ = (lnToday - lnBaseline) / sd
 
                 let hrvStress = ScoringMath.clamp(50.0 - 18.0 * hrvZ, min: 0, max: 100)

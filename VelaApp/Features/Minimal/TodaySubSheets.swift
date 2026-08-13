@@ -162,7 +162,7 @@ struct ProactiveInsightDetailSheet: View {
                 .background(.ultraThinMaterial)
             }
             .navigationTitle("智能建议")
-            .navigationBarTitleDisplayMode(.inline)
+            .velaRhythmDetailChrome()
         }
     }
 }
@@ -760,8 +760,10 @@ struct PostWorkoutCheckInSheet: View {
     let workoutID: UUID?
 
     @State private var workout: StrengthWorkoutRecord?
+    @State private var workoutEvent: WorkoutEventRecord?
     @State private var selectedTags: Set<String> = []
-    @State private var rpe: Double = 7
+    @State private var selectedMuscleGroups: Set<String> = []
+    @State private var rpe: Double?
     @State private var note = ""
     @State private var saveError: String?
 
@@ -776,11 +778,21 @@ struct PostWorkoutCheckInSheet: View {
         ("low_motivation", "动力不足")
     ]
 
+    private let muscleOptions: [(key: String, label: String)] = [
+        ("back", "背部"),
+        ("chest", "胸部"),
+        ("shoulders", "肩部"),
+        ("legs", "腿部"),
+        ("arms", "手臂"),
+        ("core", "核心")
+    ]
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
                 tagGrid
+                muscleGroupGrid
                 rpeSection
                 noteSection
                 if let saveError {
@@ -792,9 +804,9 @@ struct PostWorkoutCheckInSheet: View {
             }
             .padding(16)
         }
-        .background(VelaTheme.systemGroupedBackground)
+        .background(VelaTheme.rhythmCanvas)
         .navigationTitle("训练后感受")
-        .navigationBarTitleDisplayMode(.inline)
+        .velaRhythmDetailChrome()
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("关闭") { dismiss() }
@@ -807,24 +819,27 @@ struct PostWorkoutCheckInSheet: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(workout?.title ?? "训练后复盘")
-                .font(VelaTheme.title2())
-                .fontWeight(.bold)
-                .foregroundStyle(VelaTheme.fg)
-            Text("这些反馈会进入训练响应模型，用来判断不同训练对恢复、HRV 和次日状态的代价。")
-                .font(VelaTheme.subheadline())
-                .foregroundStyle(VelaTheme.muted)
+            Text("OPTIONAL REFLECTION")
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(1.35)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            Text(workout?.title ?? workoutEvent?.title ?? "训练后复盘")
+                .font(.system(size: 28, weight: .semibold))
+                .tracking(-0.6)
+                .foregroundStyle(VelaTheme.rhythmInk)
+            Text("全部选填。你的体感会与 Apple Watch 训练事实一起进入个人响应模型；没有精力时直接关闭即可。")
+                .font(.system(size: 13))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 .lineSpacing(3)
         }
-        .padding(16)
-        .velaNativeCard(radius: 18)
+        .padding(.bottom, 8)
     }
 
     private var tagGrid: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("主观感受")
-                .font(VelaTheme.headline())
-                .foregroundStyle(VelaTheme.fg)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(VelaTheme.rhythmInk)
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 8)], spacing: 8) {
                 ForEach(tagOptions, id: \.key) { option in
@@ -837,13 +852,58 @@ struct PostWorkoutCheckInSheet: View {
                     } label: {
                         Text(option.label)
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(selectedTags.contains(option.key) ? .white : VelaTheme.fg)
+                            .foregroundStyle(selectedTags.contains(option.key) ? VelaTheme.rhythmDeepOn : VelaTheme.rhythmInk)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
                             .background(
                                 RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                                    .fill(selectedTags.contains(option.key) ? VelaTheme.accent : VelaTheme.cardBg)
+                                    .fill(selectedTags.contains(option.key) ? VelaTheme.rhythmDeep : VelaTheme.rhythmCanvasRaised)
                             )
+                            .overlay {
+                                RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
+                                    .stroke(selectedTags.contains(option.key) ? .clear : VelaTheme.rhythmMist, lineWidth: 0.75)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var muscleGroupGrid: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("这次练了哪里")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                Spacer()
+                Text("选填")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            }
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 86), spacing: 8)], spacing: 8) {
+                ForEach(muscleOptions, id: \.key) { option in
+                    Button {
+                        if selectedMuscleGroups.contains(option.key) {
+                            selectedMuscleGroups.remove(option.key)
+                        } else {
+                            selectedMuscleGroups.insert(option.key)
+                        }
+                    } label: {
+                        Text(option.label)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(selectedMuscleGroups.contains(option.key) ? VelaTheme.rhythmDeepOn : VelaTheme.rhythmInk)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
+                                    .fill(selectedMuscleGroups.contains(option.key) ? VelaTheme.rhythmDeep : VelaTheme.rhythmCanvasRaised)
+                            )
+                            .overlay {
+                                RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
+                                    .stroke(selectedMuscleGroups.contains(option.key) ? .clear : VelaTheme.rhythmMist, lineWidth: 0.75)
+                            }
                     }
                     .buttonStyle(.plain)
                 }
@@ -855,27 +915,54 @@ struct PostWorkoutCheckInSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("整体用力程度")
-                    .font(VelaTheme.headline())
+                    .font(.system(size: 15, weight: .semibold))
                 Spacer()
-                Text("\(Int(rpe.rounded())) / 10")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(VelaTheme.accent)
+                if let rpe {
+                    Button {
+                        self.rpe = nil
+                    } label: {
+                        Text("\(Int(rpe.rounded())) / 10 · 清除")
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(VelaTheme.rhythmDeep)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Text("选填")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                }
             }
-            Slider(value: $rpe, in: 1...10, step: 1)
+            Slider(
+                value: Binding(
+                    get: { rpe ?? 7 },
+                    set: { rpe = $0 }
+                ),
+                in: 1...10,
+                step: 1
+            )
+                .tint(VelaTheme.rhythmDeep)
         }
         .padding(16)
-        .velaNativeCard(radius: 18)
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+        }
     }
 
     private var noteSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("补充说明")
-                .font(VelaTheme.headline())
+                .font(.system(size: 15, weight: .semibold))
             TextField("例如：深蹲最后两组腰背紧张，整体还可以。", text: $note, axis: .vertical)
                 .lineLimit(3...5)
                 .textFieldStyle(.plain)
                 .padding(12)
-                .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.cardBg))
+                .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+                }
         }
     }
 
@@ -884,11 +971,11 @@ struct PostWorkoutCheckInSheet: View {
             save()
         } label: {
             Text("保存训练反馈")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(.white)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(VelaTheme.rhythmDeepOn)
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
-                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.accent))
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.rhythmDeep))
         }
         .buttonStyle(.plain)
     }
@@ -900,6 +987,13 @@ struct PostWorkoutCheckInSheet: View {
         )
         workout = try? modelContext.fetch(workoutDescriptor).first
 
+        let eventDescriptor = FetchDescriptor<WorkoutEventRecord>(
+            predicate: #Predicate<WorkoutEventRecord> {
+                $0.id == workoutID || $0.linkedHealthKitWorkoutId == workoutID || $0.linkedStrengthWorkoutId == workoutID
+            }
+        )
+        workoutEvent = try? modelContext.fetch(eventDescriptor).first
+
         let responseDescriptor = FetchDescriptor<TrainingResponseRecord>(
             predicate: #Predicate<TrainingResponseRecord> { $0.workoutId == workoutID }
         )
@@ -910,9 +1004,10 @@ struct PostWorkoutCheckInSheet: View {
             return
         }
 
-        rpe = response.sessionRPE ?? workout?.sessionRPE ?? 7
+        rpe = response.sessionRPE ?? workout?.sessionRPE
         let tags = response.subjectiveTags
         selectedTags = Set(tags.filter { !$0.hasPrefix("note:") })
+        selectedMuscleGroups = Set(response.primaryMuscleGroups)
         note = tags.first(where: { $0.hasPrefix("note:") })?
             .replacingOccurrences(of: "note:", with: "") ?? ""
     }
@@ -937,12 +1032,16 @@ struct PostWorkoutCheckInSheet: View {
             if let existing = try modelContext.fetch(responseDescriptor).first {
                 existing.sessionRPE = rpe
                 existing.subjectiveTags = tags
+                if !selectedMuscleGroups.isEmpty {
+                    existing.primaryMuscleGroups = Array(selectedMuscleGroups).sorted()
+                }
             } else if let workout {
                 let completedSets = workout.exercises
                     .flatMap(\.sets)
                     .filter { $0.isCompleted != false && !$0.isWarmup }
                     .count
-                let muscles = Set(workout.exercises.compactMap(\.primaryMuscleGroup).filter { !$0.isEmpty })
+                let loggedMuscles = Set(workout.exercises.compactMap(\.primaryMuscleGroup).filter { !$0.isEmpty })
+                let muscles = loggedMuscles.union(selectedMuscleGroups)
                 modelContext.insert(TrainingResponseRecord(
                     workoutId: workout.id,
                     date: workout.startedAt,
@@ -953,18 +1052,37 @@ struct PostWorkoutCheckInSheet: View {
                     sessionRPE: rpe,
                     subjectiveTags: tags
                 ))
+            } else if let event = workoutEvent {
+                // Apple Watch / HealthKit is a complete training source. A local
+                // set-by-set strength log is optional, so subjective feedback must
+                // remain saveable even when no StrengthWorkoutRecord exists.
+                let response = TrainingResponseRecord(
+                    workoutId: workoutID,
+                    date: event.startedAt,
+                    nextDayDate: Calendar.current.date(byAdding: .day, value: 1, to: event.startedAt) ?? event.startedAt,
+                    primaryMuscleGroups: Array(selectedMuscleGroups).sorted(),
+                    totalEffectiveSets: 0,
+                    totalVolumeKg: 0,
+                    sessionRPE: rpe,
+                    subjectiveTags: tags
+                )
+                modelContext.insert(response)
+                if let rpe { event.rpe = rpe }
+                event.updatedAt = Date()
             } else {
                 saveError = "没有找到关联训练，无法保存训练反馈。"
                 return
             }
 
-            workout?.sessionRPE = rpe
+            if let rpe { workout?.sessionRPE = rpe }
             try modelContext.save()
             VelaAppState.shared.markLocalDataChanged()
             let wID = workoutID
             let ctx = modelContext
-            Task { @MainActor in
-                try? await WorkoutAdaptationService().processWorkoutCompletion(workoutID: wID, modelContext: ctx)
+            if workout != nil {
+                Task { @MainActor in
+                    _ = try? await WorkoutAdaptationService().processWorkoutCompletion(workoutID: wID, modelContext: ctx)
+                }
             }
             dismiss()
         } catch {
@@ -1019,9 +1137,9 @@ struct PostWorkoutImpactSheet: View {
             .padding(16)
             .padding(.bottom, 24)
         }
-        .background(VelaTheme.systemGroupedBackground)
+        .background(VelaTheme.rhythmCanvas)
         .navigationTitle("恢复影响")
-        .navigationBarTitleDisplayMode(.inline)
+        .velaRhythmDetailChrome()
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("关闭") { dismiss() }
@@ -1277,7 +1395,7 @@ struct PostWorkoutImpactSheet: View {
     }
 }
 
-private struct PostWorkoutImpact {
+struct PostWorkoutImpact {
     let title: String
     let strainCost: Double?
     let strainSourceText: String
@@ -1305,11 +1423,21 @@ private struct PostWorkoutImpact {
         let rpe = response?.sessionRPE ?? workout?.sessionRPE ?? event?.rpe
         let duration = Double(workout?.durationMinutes ?? Int(event?.durationMinutes ?? 0))
         if let response {
-            strainCost = Double(response.totalEffectiveSets) * (response.sessionRPE ?? rpe ?? 6)
-            strainSourceText = "按有效组 x RPE 估算"
-        } else if duration > 0 {
-            strainCost = duration * (rpe ?? 6) / 10
+            if let responseRPE = response.sessionRPE ?? rpe {
+                strainCost = Double(response.totalEffectiveSets) * responseRPE
+                strainSourceText = "按有效组 x RPE 估算"
+            } else {
+                // 未填写 RPE：不得解释为中等强度
+                strainCost = nil
+                strainSourceText = "未填写 RPE，无法估算训练强度"
+            }
+        } else if duration > 0, let rpe {
+            strainCost = duration * rpe / 10
             strainSourceText = "按时长 x RPE 估算"
+        } else if duration > 0 {
+            // 未填写 RPE：不得解释为中等强度
+            strainCost = nil
+            strainSourceText = "未填写 RPE，无法估算训练强度"
         } else {
             strainCost = nil
             strainSourceText = "待同步"
@@ -1392,7 +1520,7 @@ private struct PostWorkoutImpact {
 
 }
 
-private struct PostWorkoutTrendPoint: Identifiable, Hashable {
+struct PostWorkoutTrendPoint: Identifiable, Hashable {
     var id: Double { minute }
     let minute: Double
     let value: Double

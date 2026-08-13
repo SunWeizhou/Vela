@@ -143,6 +143,10 @@ struct CoachOutboundDataPolicy: Equatable {
         defaults.removeObject(forKey: consentVersionKey)
         [healthKey, trainingKey, nutritionKey, journalKey, wikiKey, reportsKey, conversationHistoryKey, webSearchKey, filesKey]
             .forEach(defaults.removeObject(forKey:))
+        // 后台自动化 Agent 使用独立的 consent 键（AutoAgentConfig）。「撤销全部
+        // 联网数据授权」必须同步关闭它，否则晚间 Wiki 同步与晨间简报仍会静默
+        // 向网络 AI 发送完整健康事实集（双 consent 体系不可脱节）。
+        AutoAgentConfig.shared.backgroundNetworkAIConsent = false
     }
 
     var enabledLabels: [String] {
@@ -319,13 +323,15 @@ struct CoachContextAssembler {
             snapshot: canonical,
             language: lang,
             maxCharacters: 800,
-            healthReferenceLine: buildHealthReferenceLine(
-                dashboard: outboundDashboard,
-                biomarkers: biomarkers,
-                chronologicalAge: canonical.extendedMetrics.age,
-                asOf: contextAsOf,
-                language: lang
-            )
+            healthReferenceLine: VelaFeatureFlags.biologicalAgeEnabled
+                ? buildHealthReferenceLine(
+                    dashboard: outboundDashboard,
+                    biomarkers: biomarkers,
+                    chronologicalAge: canonical.extendedMetrics.age,
+                    asOf: contextAsOf,
+                    language: lang
+                )
+                : nil
         )
 
         let composer = CoachPromptComposer(

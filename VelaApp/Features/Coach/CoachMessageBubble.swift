@@ -52,19 +52,19 @@ struct CoachDataCoverageStrip: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(accent)
                     .frame(width: 28, height: 28)
-                    .background(Circle().fill(accent.opacity(0.12)))
+                    .background(Circle().fill(VelaTheme.rhythmMist))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(model.compactDisplayTitle)
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(model.status == .unknown ? VelaTheme.fg : accent)
+                        .foregroundStyle(VelaTheme.rhythmInk)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
                     Text(model.status == .low
                          ? "低覆盖时 Coach 会保守回答"
                          : model.topBlockers.isEmpty ? "关键数据可用于本轮判断" : "缺口：\(model.topBlockers.joined(separator: "、"))")
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .lineLimit(1)
                 }
 
@@ -72,17 +72,17 @@ struct CoachDataCoverageStrip: View {
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(VelaTheme.surface)
+                    .fill(VelaTheme.rhythmCanvasRaised)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(accent.opacity(0.18), lineWidth: 0.7)
+                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
             )
         }
         .buttonStyle(.cardPress)

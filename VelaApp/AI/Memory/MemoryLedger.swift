@@ -4,6 +4,17 @@ import os.log
 
 private let logger = Logger(subsystem: "com.sunweizhou.Vela", category: "MemoryLedger")
 
+enum MemoryLedgerError: LocalizedError {
+    case invalidTargetFile(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidTargetFile(let file):
+            return "Memory proposal rejected: '\(file)' is not an allowed wiki file."
+        }
+    }
+}
+
 /// Manages the memory proposal lifecycle: create, confirm, reject, rollback.
 /// Stores proposals as MemoryEventRecord in SwiftData and writes confirmed
 /// entries to wiki markdown files.
@@ -27,6 +38,12 @@ final class MemoryLedger {
         source: String,
         linkedAgentRunId: String? = nil
     ) throws -> MemoryEventRecord {
+        // 文件名必须命中 Wiki 白名单：LLM 提供的任意文件名会在用户确认提案时
+        // 被拼进 user_wiki 目录读取（previousContent），未校验的 "../" 可穿越
+        // 目录读取应用容器内其它文件。写入侧已有同款白名单，提案入口补齐。
+        guard WikiFileService.allowedFilenames.contains(targetFile) else {
+            throw MemoryLedgerError.invalidTargetFile(targetFile)
+        }
         try PersistenceWriteGate.shared.assertWritable(operation: "MemoryLedger: createProposal", modelContext: modelContext)
         let record = MemoryEventRecord(
             source: source,

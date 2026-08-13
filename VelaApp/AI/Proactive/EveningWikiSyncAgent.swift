@@ -97,7 +97,7 @@ final class EveningWikiSyncAgent: ObservableObject {
             let contextJSON = (try? encoder.encode(context))
                 .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
 
-            let networkAIAllowed = force || AutoAgentConfig.shared.backgroundNetworkAIConsent
+            let networkAIAllowed = force || AutoAgentConfig.shared.canSendHealthContextToNetworkAI
             guard networkAIAllowed,
                   let apiKey = try? keychain.read(account: apiKeyAccount),
                   !apiKey.isEmpty else {

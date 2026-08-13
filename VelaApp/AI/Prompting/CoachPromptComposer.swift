@@ -259,6 +259,19 @@ enum ResponseLengthPolicy {
 
     static func needsWebSearch(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        // 隐私优先：自报具体健康数值的消息即使含新鲜度词也不走联网搜索——
+        // 否则整条原文（含健康数值）会作为搜索词发送给第三方。
+        // 该判定必须先于新鲜度词。
+        let personalMetricWords = [
+            "hrv", "rhr", "bpm", "heart rate", "resting heart",
+            "blood pressure", "心率", "血压", "血氧", "体重", "血糖", "静息心率"
+        ]
+        let containsDigits = trimmed.range(of: "[0-9]", options: .regularExpression) != nil
+        for metric in personalMetricWords where trimmed.contains(metric) && containsDigits {
+            return false
+        }
+
         let explicitFreshnessPatterns = [
             "研究", "最新", "新研究", "文献", "论文", "指南", "医学指南",
             "research", "study", "studies", "latest", "recent",

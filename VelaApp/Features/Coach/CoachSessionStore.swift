@@ -52,6 +52,9 @@ final class CoachSessionStore: ObservableObject {
     }
 
     func createNewSession(modelContext: ModelContext, isStreaming: Bool, isAwaitingForegroundRetry: Bool, messagesHandler: ([CoachChatVM.ChatMsg]) -> Void) {
+        // 流式中新建会话会导致完成时的 persistThread 把在途问答写进新会话、
+        // 或清空 UI 后回复凭空消失——与 selectSession 同一守卫，拒绝切换。
+        guard !isStreaming, !isAwaitingForegroundRetry else { return }
         let newSession = CoachSessionRecord(
             id: UUID(),
             title: "新对话",
@@ -87,6 +90,9 @@ final class CoachSessionStore: ObservableObject {
     }
 
     func deleteSession(_ session: CoachSessionRecord, modelContext: ModelContext, isStreaming: Bool, isAwaitingForegroundRetry: Bool, messagesHandler: ([CoachChatVM.ChatMsg]) -> Void) {
+        // 流式中删除当前会话：完成后 persistThread 会写进 loadSessions 自动选中的
+        // 另一个会话并覆盖其历史（旧历史全部丢失）——与 selectSession 同一守卫。
+        guard !isStreaming, !isAwaitingForegroundRetry else { return }
         modelContext.delete(session)
         do {
             try modelContext.save()

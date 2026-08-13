@@ -13,6 +13,9 @@ public struct EnergyBankInput: Hashable {
     public var rhrBaseline: Double?
     public var sleepHours: Double?
     public var strainHistory: [Double]?
+    /// 今日真实训练负荷（TRIMP 域，与 strainHistory 同单位）。
+    /// ATL/CTL/TSB 计算必须使用该值；strainScore 是 0-100 评分域，只用于能量消耗 drain。
+    public var todayLoad: Double?
     public var bodyTempDelta: Double?
     
     // New fields for Core Metrics v1
@@ -35,6 +38,7 @@ public struct EnergyBankInput: Hashable {
         rhrBaseline: Double? = nil,
         sleepHours: Double? = nil,
         strainHistory: [Double]? = nil,
+        todayLoad: Double? = nil,
         bodyTempDelta: Double? = nil,
         hoursSinceWake: Double? = nil,
         respiratoryRateZ: Double? = nil,
@@ -54,6 +58,7 @@ public struct EnergyBankInput: Hashable {
         self.rhrBaseline = rhrBaseline
         self.sleepHours = sleepHours
         self.strainHistory = strainHistory
+        self.todayLoad = todayLoad
         self.bodyTempDelta = bodyTempDelta
         self.hoursSinceWake = hoursSinceWake
         self.respiratoryRateZ = respiratoryRateZ
@@ -129,7 +134,7 @@ public struct EnergyBankEngine: ScoreEngine {
 
         let trainingLoad = calculateTrainingLoad(
             strainHistory: input.strainHistory,
-            todayStrain: input.strainScore ?? 0.0
+            todayStrain: input.todayLoad ?? input.strainScore ?? 0.0
         )
         components["atl"] = trainingLoad.atl
         components["ctl"] = trainingLoad.ctl

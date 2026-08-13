@@ -249,7 +249,9 @@ final class DailySummaryUseCase {
             )
         }
         
-        let resolvedSleep = try? await queryService.sleepSummary(in: DateRangeQuery.recentDays(2, endingAt: now, calendar: calendar))
+        // 「昨夜」= 主睡眠段结束时刻落在今天健康日窗口内的夜晚；
+        // sleepSummary 内部会向前扩展查询窗以捕获前夜入睡段。
+        let resolvedSleep = try? await queryService.sleepSummary(in: DateRangeQuery.today(containing: now, calendar: calendar))
         let profileWeight = UserProfileSettings.weightKilograms()
         let profileHeight = UserProfileSettings.heightCentimeters()
         UserProfileSettings.hydrateMissingValuesFromHealth(
@@ -273,6 +275,7 @@ final class DailySummaryUseCase {
         
         let recoveryMetrics = RecoveryMetricSummary(
             hrvMilliseconds: snapshot.hrvAverage,
+            hrvRmssdMilliseconds: snapshot.hrvRmssdMilliseconds,
             restingHeartRate: snapshot.restingHeartRate,
             sleepHeartRate: nil,
             respiratoryRate: snapshot.respiratoryRate
@@ -686,6 +689,7 @@ final class DailySummaryUseCase {
             energyBank: nil,
             healthAge: dashboard.healthAge.trendScore,
             hrvAverage: dashboard.recoveryMetrics.hrvMilliseconds,
+            hrvRmssdMilliseconds: dashboard.recoveryMetrics.hrvRmssdMilliseconds,
             restingHeartRate: dashboard.recoveryMetrics.restingHeartRate,
             sleepHours: context.sleepSummary.map { Double($0.totalSleepMinutes) / 60.0 },
             deepSleepPercent: sleepMetrics["deep_pct"].map { HealthUnitNormalizer.normalizeSleepStagePercent($0 / 100.0) },
@@ -906,6 +910,7 @@ final class DailySummaryUseCase {
             recovery: recovery,
             recoveryMetrics: RecoveryMetricSummary(
                 hrvMilliseconds: record.hrvAverage,
+                hrvRmssdMilliseconds: record.hrvRmssdMilliseconds,
                 restingHeartRate: record.restingHeartRate,
                 sleepHeartRate: nil,
                 respiratoryRate: record.respiratoryRate
@@ -1021,11 +1026,28 @@ final class DailyPlanRefreshCoordinator {
 
     private init() {}
 
-    func refreshPlan(for date: Date = Date(), modelContext: ModelContext) async {
+    /// 最近一次被调度的计划刷新任务，供调用方 join，避免 fire-and-forget 任务越过调用帧存活。
+    private(set) var latestTask: Task<Void, Never>?
+
+    /// 调度计划刷新。刷新在 MainActor 上使用 `container.mainContext` 执行，
+    /// 不持有调用方的 ModelContext——调用方 context 的生命周期与隔离域不影响刷新安全。
+    @discardableResult
+    func schedulePlanRefresh(for dates: [Date], container: ModelContainer) -> Task<Void, Never> {
+        let task = Task { @MainActor in
+            for date in dates {
+                await refreshPlan(for: date, container: container)
+            }
+        }
+        latestTask = task
+        return task
+    }
+
+    func refreshPlan(for date: Date = Date(), container: ModelContainer) async {
         let useCase = DailySummaryUseCase()
+        let context = container.mainContext
         _ = try? await useCase.loadDashboard(
             for: date,
-            modelContext: modelContext,
+            modelContext: context,
             shouldSyncHealthData: false
         )
         VelaAppState.shared.markLocalDataChanged()

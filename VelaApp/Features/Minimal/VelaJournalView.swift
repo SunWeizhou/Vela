@@ -916,6 +916,8 @@ private struct CustomJournalHabitSheet: View {
                 }
             }
             .navigationTitle("自定义习惯")
+            .velaRhythmFormSurface()
+            .velaRhythmDetailChrome()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完成") { dismiss() }

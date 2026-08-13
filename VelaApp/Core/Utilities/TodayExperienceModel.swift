@@ -97,16 +97,21 @@ struct TodayExperienceModel: Codable, Hashable {
         dashboard: DashboardSummary,
         bodyState: BodyState,
         trainingDecision: DailyTrainingDecision,
+        readiness: ReadinessDecisionKind? = nil,
         generatedAt: Date = Date(),
         nutrition: TodayExperienceNutrition = .empty,
         history: [DailyHealthSummaryDTO] = []
     ) -> TodayExperienceModel {
         let hasReadinessData = dashboard.recovery.hasData
         let confidenceDetail = hasReadinessData ? label(for: bodyState.confidence) : "数据不足"
+        // 行动列表与 Hero 标题统一跟随 readiness（CommandBuilder，输入覆盖压力/负荷/
+        // 睡眠/恢复/局部疲劳），Kernel 只提供量化细节（容量/RPE）。四套引擎共用同一
+        // 结论，避免「标题说恢复、行动说训练」的同屏矛盾。
+        let effectiveReadiness = readiness ?? Self.readinessMapping(for: trainingDecision)
         let hero = TodayExperienceHero(
             scoreTitle: scoreTitle(dashboard),
             decisionTitle: decisionTitle(
-                trainingDecision,
+                effectiveReadiness,
                 hasReadinessData: hasReadinessData
             ),
             summary: summary(
@@ -117,7 +122,7 @@ struct TodayExperienceModel: Codable, Hashable {
             ),
             confidenceLabel: confidenceDetail,
             primaryActionTitle: primaryActionTitle(
-                trainingDecision,
+                effectiveReadiness,
                 hasReadinessData: hasReadinessData
             )
         )
@@ -204,6 +209,7 @@ struct TodayExperienceModel: Codable, Hashable {
                 dashboard: dashboard,
                 bodyState: bodyState,
                 decision: trainingDecision,
+                readiness: effectiveReadiness,
                 hasReadinessData: hasReadinessData
             ),
             nutrition: nutrition,
@@ -221,26 +227,37 @@ struct TodayExperienceModel: Codable, Hashable {
     }
 
     private static func decisionTitle(
-        _ decision: DailyTrainingDecision,
+        _ readiness: ReadinessDecisionKind,
         hasReadinessData: Bool
     ) -> String {
         guard hasReadinessData else { return "先建立身体基线" }
-        switch decision.decision {
+        switch readiness {
         case .keep: return "按计划训练"
         case .reduce: return "控制训练量"
         case .swap: return "换练其他部位"
-        case .rest: return "恢复优先"
+        case .recover: return "恢复优先"
         }
     }
 
     private static func primaryActionTitle(
-        _ decision: DailyTrainingDecision,
+        _ readiness: ReadinessDecisionKind,
         hasReadinessData: Bool
     ) -> String {
         guard hasReadinessData else { return "同步健康数据" }
+        switch readiness {
+        case .keep: return "查看今日训练建议"
+        case .reduce: return "查看减量建议"
+        case .swap: return "查看替代建议"
+        case .recover: return "执行恢复计划"
+        }
+    }
+
+    private static func readinessMapping(for decision: DailyTrainingDecision) -> ReadinessDecisionKind {
         switch decision.decision {
-        case .keep, .reduce, .swap: return "开始今日训练"
-        case .rest: return "执行恢复计划"
+        case .keep: return .keep
+        case .reduce: return .reduce
+        case .swap: return .swap
+        case .rest: return .recover
         }
     }
 
@@ -392,6 +409,7 @@ struct TodayExperienceModel: Codable, Hashable {
         dashboard: DashboardSummary,
         bodyState: BodyState,
         decision: DailyTrainingDecision,
+        readiness: ReadinessDecisionKind,
         hasReadinessData: Bool
     ) -> [TodayExperienceAction] {
         guard hasReadinessData else {
@@ -406,26 +424,30 @@ struct TodayExperienceModel: Codable, Hashable {
             bodyState: bodyState,
             decision: decision
         )
-        switch decision.decision {
+        // 量化细节（容量/RPE）仅在 Kernel 与 readiness 同向时采用，
+        // 否则使用保守默认值，避免「标题恢复、行动带训练数字」的矛盾。
+        let volume = decision.decision == .reduce ? decision.volumeMultiplier : 0.75
+        let cap = decision.decision == .reduce ? decision.intensityCap : 7
+        switch readiness {
         case .keep:
             return [
-                .init(id: "start_training", title: "开始今日训练", detail: "正常执行计划，保留 1–2 次余力；动作质量下降时停止加量。", destination: "training", isPrimary: true, evidence: evidence),
+                .init(id: "review_training", title: "查看训练边界", detail: "在 Apple Watch 开始训练；今天正常执行计划，保留 1–2 次余力。", destination: "training", isPrimary: true, evidence: evidence),
                 .init(id: "protect_sleep", title: "保护今晚睡眠", detail: "固定入睡时间，避免训练后过晚进食。", destination: "journal", isPrimary: false),
                 .init(id: "ask_coach", title: "问 Vela 调整细节", detail: "根据动作、RPE 和肌群疲劳微调。", destination: "coach", isPrimary: false)
             ]
         case .reduce:
             return [
-                .init(id: "reduce_training", title: "减量训练", detail: "容量 \(Int((decision.volumeMultiplier * 100).rounded()))%，RPE 上限 \(decision.intensityCap)；热身状态差时继续下调。", destination: "training", isPrimary: true, evidence: evidence),
+                .init(id: "reduce_training", title: "训练时控制容量", detail: "在 Apple Watch 开始训练；容量 \(Int((volume * 100).rounded()))%，RPE 上限 \(cap)。", destination: "training", isPrimary: true, evidence: evidence),
                 .init(id: "check_in", title: "记录疲劳", detail: "把酸痛、精神状态和压力写入上下文。", destination: "journal", isPrimary: false),
                 .init(id: "recovery_block", title: "安排恢复块", detail: "补水、低强度步行和提前睡眠。", destination: "recovery", isPrimary: false)
             ]
         case .swap:
             return [
-                .init(id: "swap_session", title: "替换训练内容", detail: "避开高疲劳肌群，保留训练节奏，RPE 不超过 \(decision.intensityCap)。", destination: "training", isPrimary: true, evidence: evidence),
+                .init(id: "swap_session", title: "替换训练内容", detail: "避开高疲劳肌群，保留训练节奏，RPE 不超过 \(cap)。", destination: "training", isPrimary: true, evidence: evidence),
                 .init(id: "mobility", title: "增加活动度", detail: "优先低冲击和技术练习。", destination: "recovery", isPrimary: false),
                 .init(id: "ask_coach", title: "让 Vela 改计划", detail: "生成替代动作与组数。", destination: "coach", isPrimary: false)
             ]
-        case .rest:
+        case .recover:
             return [
                 .init(id: "recovery_day", title: "执行恢复日", detail: "停止高强度训练，只做能轻松交谈的低强度活动。", destination: "recovery", isPrimary: true, evidence: evidence),
                 .init(id: "symptom_check", title: "记录异常信号", detail: "如果有不适，记录并考虑专业意见。", destination: "journal", isPrimary: false),

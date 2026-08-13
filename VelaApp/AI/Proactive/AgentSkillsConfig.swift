@@ -13,6 +13,12 @@ final class AutoAgentConfig: ObservableObject, @unchecked Sendable {
         didSet { defaults.set(backgroundNetworkAIConsent, forKey: "agent_background_network_ai_consent") }
     }
 
+    /// 后台联网 AI 的双重要件：后台自动化 consent + 手动出站类别 consent
+    /// （CoachOutboundDataPolicy）。任一被撤销，后台任务都不得向网络 AI 发送健康数据。
+    var canSendHealthContextToNetworkAI: Bool {
+        backgroundNetworkAIConsent && CoachOutboundDataPolicy.hasExplicitConsent
+    }
+
     // ── Skill Toggles ──
     @Published var autoEveningWikiSync: Bool {
         didSet { defaults.set(autoEveningWikiSync, forKey: "agent_auto_evening_wiki_sync") }

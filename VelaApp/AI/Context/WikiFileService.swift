@@ -30,7 +30,9 @@ enum WikiFileService {
         ("sleep.md", "睡眠卫生与环境")
     ]
 
-    private static let allowedFilenames = Set(filenames.map(\.filename))
+    /// Wiki 合法文件名白名单。写入（updateSection）与提案入口（MemoryLedger.createProposal）
+    /// 共用同一集合，防止 LLM 提供的文件名逃逸 user_wiki 目录（路径穿越）。
+    static let allowedFilenames = Set(filenames.map(\.filename))
 
     private static func levenshteinDistance(_ s1: String, _ s2: String) -> Int {
         let empty = [Int](repeating: 0, count: s2.count + 1)

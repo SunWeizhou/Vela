@@ -250,6 +250,20 @@ struct VelaApp: App {
     private let modelContainer: ModelContainer
 
     init() {
+        // 诊断用：未捕获 NSException（如 JSONSerialization 的 __SwiftValue 崩溃）
+        // 记录完整符号化调用栈——NSLog 会进控制台（devicectl --console 可捕获），
+        // 同时落盘到 Application Support/Vela/crash_diagnostic.log 便于事后分析。
+        NSSetUncaughtExceptionHandler { exception in
+            let symbols = Thread.callStackSymbols.joined(separator: "\n")
+            let message = "VELA_UNCAUGHT_EXCEPTION reason=\(exception.reason ?? "nil")\n\(symbols)"
+            NSLog("%@", message)
+            if let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+                let url = dir.appendingPathComponent("Vela/crash_diagnostic.log")
+                try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? message.write(to: url, atomically: true, encoding: .utf8)
+            }
+        }
+
         do {
             modelContainer = try VelaModelContainer.make()
         } catch {

@@ -48,6 +48,7 @@ final class HealthDataRefreshService {
         }
         
         snapshot.hrvAverage = context.recoveryMetrics.hrvMilliseconds
+        snapshot.hrvRmssdMilliseconds = context.recoveryMetrics.hrvRmssdMilliseconds
         snapshot.restingHeartRate = context.recoveryMetrics.restingHeartRate
         snapshot.respiratoryRate = context.recoveryMetrics.respiratoryRate
         

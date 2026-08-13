@@ -41,10 +41,10 @@ struct CoachArtifactInboxView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .background(VelaTheme.systemGroupedBackground)
+        .background(VelaTheme.rhythmCanvas)
         .scrollContentBackground(.hidden)
         .navigationTitle("AI 建议收件箱")
-        .navigationBarTitleDisplayMode(.inline)
+        .velaRhythmDetailChrome()
         .sheet(item: $selectedWorkoutForDetail) { summary in
             NavigationStack {
                 WorkoutDetailView(workout: summary)
@@ -166,9 +166,9 @@ struct CoachArtifactDetailWrapper: View {
                 .padding(16)
             }
         }
-        .background(VelaTheme.systemGroupedBackground)
+        .background(VelaTheme.rhythmCanvas)
         .navigationTitle(artifact.title)
-        .navigationBarTitleDisplayMode(.inline)
+        .velaRhythmDetailChrome()
         .sheet(item: $selectedWorkoutForDetail) { summary in
             NavigationStack {
                 WorkoutDetailView(workout: summary)

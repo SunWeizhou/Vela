@@ -4,6 +4,24 @@ import SwiftData
 
 @MainActor
 final class MemoryLedgerTests: XCTestCase {
+    func testCreateProposalRejectsNonWhitelistedTargetFile() throws {
+        // LLM 提供的文件名未经白名单校验时，确认提案会触发对
+        // user_wiki 目录外的路径穿越读取（如 "../../Vela.store"）。
+        // 提案入口必须复用 WikiFileService 白名单，一处拦截全部三个调用源。
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let ledger = MemoryLedger(modelContext: context)
+
+        XCTAssertThrowsError(try ledger.createProposal(
+            targetFile: "../../Vela.store",
+            memoryType: .observation,
+            content: "Path traversal probe.",
+            evidence: "Security regression test.",
+            confidence: 0.5,
+            source: "test"
+        ))
+    }
+
     func testCreateProposalClampsConfidenceIntoDisplayableRange() throws {
         let container = try VelaModelContainer.make(inMemory: true)
         let context = container.mainContext

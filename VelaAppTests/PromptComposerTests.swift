@@ -9,6 +9,14 @@ final class PromptComposerTests: XCTestCase {
         XCTAssertFalse(ResponseLengthPolicy.needsWebSearch("帮我看看今天睡眠和恢复怎么样？"))
     }
 
+    func testSelfReportedMetricValuesNeverTriggerWebSearch() {
+        // 自报具体健康数值 + 新鲜度词混合的消息，不得把健康数值作为搜索词
+        // 发送给第三方（新鲜度词判定必须先让位于个人数据保护）。
+        XCTAssertFalse(ResponseLengthPolicy.needsWebSearch("我的 HRV 只有 42ms，最新研究怎么说？"))
+        XCTAssertFalse(ResponseLengthPolicy.needsWebSearch("血压 150/95 的最新医学指南是什么"))
+        XCTAssertTrue(ResponseLengthPolicy.needsWebSearch("最新的睡眠研究有哪些发现"))
+    }
+
     func testCurrentResearchAndSupplementQuestionsTriggerWebSearch() {
         XCTAssertTrue(ResponseLengthPolicy.needsWebSearch("What does the latest research say about creatine and strength?"))
         XCTAssertTrue(ResponseLengthPolicy.needsWebSearch("最新肌酸研究对力量训练有什么建议？"))

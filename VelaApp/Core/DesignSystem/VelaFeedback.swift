@@ -167,7 +167,7 @@ struct MessageBubble: View {
                 MarkdownText(
                     markdown: text,
                     font: VelaTheme.subheadline(),
-                    color: isUser ? .white : VelaTheme.fg,
+                    color: isUser ? VelaTheme.rhythmDeepOn : VelaTheme.rhythmInk,
                     isStreaming: isStreaming
                 )
                     .lineSpacing(4)
@@ -176,13 +176,9 @@ struct MessageBubble: View {
                     .background(
                         Group {
                             if isUser {
-                                LinearGradient(
-                                    colors: [VelaTheme.accent, Color(hex: "#00A2FF")],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
+                                VelaTheme.rhythmDeep
                             } else {
-                                VelaTheme.cardBg
+                                VelaTheme.rhythmCanvasRaised
                             }
                         }
                     )
@@ -203,15 +199,15 @@ struct MessageBubble: View {
                             topTrailingRadius: isUser ? 4 : VelaTheme.radiusLg,
                             style: .continuous
                         )
-                        .stroke(isUser ? Color.clear : VelaTheme.borderSoft, lineWidth: 0.8)
+                        .stroke(isUser ? Color.clear : VelaTheme.rhythmMist, lineWidth: 0.75)
                     )
-                    .shadow(color: isUser ? VelaTheme.accent.opacity(0.1) : Color.black.opacity(0.015), radius: 5, y: 2)
+                    .shadow(color: .clear, radius: 0)
                     .frame(maxWidth: 285, alignment: isUser ? .trailing : .leading)
 
                 if !time.isEmpty {
                     Text(time)
                         .font(VelaTheme.caption2())
-                        .foregroundStyle(VelaTheme.meta)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .padding(.horizontal, 8)
                 }
             }
@@ -243,7 +239,7 @@ struct TypingIndicator: View {
         HStack(spacing: 6) {
             ForEach(0..<3) { i in
                 Circle()
-                    .fill(VelaTheme.meta)
+                    .fill(VelaTheme.rhythmInkSecondary)
                     .frame(width: 7, height: 7)
                     .scaleEffect(reduceMotion ? 1 : (animate ? 1.0 : 0.4))
                     .opacity(reduceMotion ? 0.65 : (animate ? 1.0 : 0.3))
@@ -267,8 +263,18 @@ struct TypingIndicator: View {
                 topTrailingRadius: VelaTheme.radiusLg,
                 style: .continuous
             )
-            .fill(VelaTheme.surface)
+            .fill(VelaTheme.rhythmCanvasRaised)
         )
+        .overlay {
+            UnevenRoundedRectangle(
+                topLeadingRadius: 4,
+                bottomLeadingRadius: VelaTheme.radiusLg,
+                bottomTrailingRadius: VelaTheme.radiusLg,
+                topTrailingRadius: VelaTheme.radiusLg,
+                style: .continuous
+            )
+            .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+        }
         .onAppear {
             animate = !reduceMotion
         }

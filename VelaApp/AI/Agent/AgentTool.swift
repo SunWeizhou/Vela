@@ -326,7 +326,9 @@ struct TodayHealthTool: AgentTool {
                 ]
                 if let z = dashboard.recovery.metrics["hrv_z_score"] { auto["hrv_z_score"] = (z * 100).rounded() / 100 }
                 if let z = dashboard.recovery.metrics["rhr_z_score"] { auto["rhr_z_score"] = (z * 100).rounded() / 100 }
-                if !dashboard.recovery.reasons.isEmpty { auto["recovery_key_factors"] = dashboard.recovery.reasons.prefix(3) }
+                // prefix(3) 返回 ArraySlice（Swift 结构体），必须转 Array——
+                // 否则 JSONSerialization 抛不可捕获的 NSException (__SwiftValue)
+                if !dashboard.recovery.reasons.isEmpty { auto["recovery_key_factors"] = Array(dashboard.recovery.reasons.prefix(3)) }
                 result["autonomic"] = auto
             }
 
@@ -345,7 +347,8 @@ struct TodayHealthTool: AgentTool {
                 if let wt = todayRecord?.wakeTime ?? dashboard.sleepSummary.wakeTime {
                     let f = DateFormatter(); f.dateFormat = "HH:mm"; slp["wake_time"] = f.string(from: wt)
                 }
-                if !dashboard.sleepScore.reasons.isEmpty { slp["key_factors"] = dashboard.sleepScore.reasons.prefix(3) }
+                // 同上：ArraySlice 必须转 Array 才能进 JSONSerialization
+                if !dashboard.sleepScore.reasons.isEmpty { slp["key_factors"] = Array(dashboard.sleepScore.reasons.prefix(3)) }
                 result["sleep"] = slp
             }
 
@@ -413,7 +416,10 @@ struct TodayHealthTool: AgentTool {
                 ]
             }
 
-            guard let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]),
+            // isValidJSONObject 防御：阻止任何 Swift 值（如 ArraySlice/结构体）
+            // 混入 payload 时触发不可捕获的 NSException
+            guard JSONSerialization.isValidJSONObject(result),
+                  let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]),
                   let json = String(data: data, encoding: .utf8) else {
                 return "Error: failed to encode health data."
             }
@@ -525,7 +531,8 @@ struct HealthTrendTool: AgentTool {
                 "safety": "General wellness guidance only; not a medical diagnosis.",
                 "points": points
             ]
-            guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]) else {
+            guard JSONSerialization.isValidJSONObject(payload),
+                  let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]) else {
                 return "{}"
             }
             return String(data: data, encoding: .utf8) ?? "{}"

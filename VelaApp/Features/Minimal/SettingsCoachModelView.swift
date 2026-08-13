@@ -47,15 +47,8 @@ struct AIModelSettingsView: View {
             }
             
             Section(header: Text("大语言模型选择")) {
-                Picker("响应模式", selection: $reasoningMode) {
-                    ForEach(CoachReasoningMode.allCases, id: \.rawValue) { mode in
-                        Text(mode.displayName).tag(mode.rawValue)
-                    }
-                }
-                Text((CoachReasoningMode(rawValue: reasoningMode) ?? .adaptive).detail)
-                    .font(.caption)
-                    .foregroundStyle(VelaTheme.muted)
-
+                // 响应模式（CoachReasoningMode）当前无消费者，已隐藏：
+                // 模型选择以「对话文本模型」Picker 为准。恢复推理模式时在此重新挂载。
                 Picker("对话文本模型", selection: $textModel) {
                     ForEach(textModels, id: \.self) { m in
                         Text(m).tag(m)
@@ -161,6 +154,8 @@ struct AIModelSettingsView: View {
             Text("模型密钥已写入系统钥匙串，模型选择已保存在本机设置。")
         }
         .navigationTitle("AI 模型设置")
+        .velaRhythmFormSurface()
+        .velaRhythmDetailChrome()
     }
     
     private func loadKeysFromKeychain() {
@@ -337,8 +332,9 @@ struct DataSourceSettingsView: View {
                 .padding(.bottom, 30)
             }
         }
-        .background(VelaTheme.systemGroupedBackground)
+        .background(VelaTheme.rhythmCanvas)
         .navigationTitle("健康数据源")
+        .velaRhythmDetailChrome()
     }
  
     private func tierRequestCard(
@@ -488,6 +484,8 @@ struct HealthDataResyncSettingsView: View {
             }
         }
         .navigationTitle("健康数据重同步")
+        .velaRhythmFormSurface()
+        .velaRhythmDetailChrome()
     }
  
     private func resync() {
@@ -568,8 +566,9 @@ struct CGMSettingsView: View {
             }
             .padding(20)
         }
-        .background(VelaTheme.systemGroupedBackground)
+        .background(VelaTheme.rhythmCanvas)
         .navigationTitle("连续血糖监测 (CGM)")
+        .velaRhythmDetailChrome()
         .task {
             await reload()
         }
@@ -756,8 +755,9 @@ struct CoachPersonalitySettingsView: View {
                 }
             }
         }
-        .background(VelaTheme.systemGroupedBackground)
+        .background(VelaTheme.rhythmCanvas)
         .navigationTitle("AI 教练风格")
+        .velaRhythmDetailChrome()
         .onAppear {
             selectedPersonality = CoachPersonality(rawValue: coachPersonalityRaw) ?? .guardian
         }
@@ -903,6 +903,8 @@ struct AgentAutomationSettingsView: View {
             }
         }
         .navigationTitle("Agent 自动化技能")
+        .velaRhythmFormSurface()
+        .velaRhythmDetailChrome()
         .onChange(of: checkInSignature) { _, _ in
             Task { await CoachCheckInScheduler.reschedule(config: agentConfig) }
         }

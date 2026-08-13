@@ -342,6 +342,15 @@ final class DailySnapshotBuilder {
         let extended = (try? await hkQueryService?.extendedMetrics(in: range)) ?? ExtendedHealthMetrics()
 
         var snapshot = DailyHealthSnapshot(date: dayStart)
+        if let modelContext {
+            let dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: dayStart, calendar: calendar)
+            let descriptor = FetchDescriptor<DailyHealthSummaryRecord>(
+                predicate: #Predicate<DailyHealthSummaryRecord> { $0.dayIdentifier == dayIdentifier }
+            )
+            if let existing = (try? modelContext.fetch(descriptor))?.first {
+                snapshot = existing.toSnapshot()
+            }
+        }
         
         // Populate sleep
         if let sleep = sleep {
@@ -358,28 +367,30 @@ final class DailySnapshotBuilder {
                 snapshot.deepSleepPercent = HealthUnitNormalizer.normalizeSleepStagePercent(rawDeep)
                 snapshot.remSleepPercent = HealthUnitNormalizer.normalizeSleepStagePercent(rawRem)
             }
-            snapshot.bedtime = sleep.bedtime
-            snapshot.wakeTime = sleep.wakeTime
+            if let bedtime = sleep.bedtime { snapshot.bedtime = bedtime }
+            if let wakeTime = sleep.wakeTime { snapshot.wakeTime = wakeTime }
             
             // Core Metrics v1.3 sub-metrics
-            snapshot.awakeMinutes = sleep.stageMinutes[.awake].map { Double($0) }
-            snapshot.awakeEpisodeCount = sleep.segments.filter { $0.stage == .awake && $0.end.timeIntervalSince($0.start) >= 120 }.count
-            snapshot.deepSleepMinutes = sleep.stageMinutes[.deep].map { Double($0) }
-            snapshot.remSleepMinutes = sleep.stageMinutes[.rem].map { Double($0) }
+            if let awake = sleep.stageMinutes[.awake].map({ Double($0) }) { snapshot.awakeMinutes = awake }
+            let awakeEpisodes = sleep.segments.filter { $0.stage == .awake && $0.end.timeIntervalSince($0.start) >= 120 }.count
+            if awakeEpisodes > 0 || snapshot.awakeEpisodeCount == nil { snapshot.awakeEpisodeCount = awakeEpisodes }
+            if let deep = sleep.stageMinutes[.deep].map({ Double($0) }) { snapshot.deepSleepMinutes = deep }
+            if let rem = sleep.stageMinutes[.rem].map({ Double($0) }) { snapshot.remSleepMinutes = rem }
         }
 
         // Populate recovery
         if let recovery = recovery {
-            snapshot.hrvAverage = recovery.hrvMilliseconds
-            snapshot.restingHeartRate = recovery.restingHeartRate
-            snapshot.respiratoryRate = recovery.respiratoryRate
+            if let hrv = recovery.hrvMilliseconds { snapshot.hrvAverage = hrv }
+            if let hrvRmssd = recovery.hrvRmssdMilliseconds { snapshot.hrvRmssdMilliseconds = hrvRmssd }
+            if let rhr = recovery.restingHeartRate { snapshot.restingHeartRate = rhr }
+            if let rr = recovery.respiratoryRate { snapshot.respiratoryRate = rr }
         }
 
         // Populate strain
         if let strain = strain {
-            snapshot.steps = strain.stepCount
-            snapshot.activeCalories = strain.activeEnergyKilocalories
-            snapshot.activeMinutes = strain.exerciseMinutes
+            if let steps = strain.stepCount { snapshot.steps = steps }
+            if let cal = strain.activeEnergyKilocalories { snapshot.activeCalories = cal }
+            if let min = strain.exerciseMinutes { snapshot.activeMinutes = min }
             
             // Consolidate workouts using WorkoutAggregationService
             let aggregated: [WorkoutSummary]
@@ -412,14 +423,14 @@ final class DailySnapshotBuilder {
 
         // Populate body
         if let body = body {
-            snapshot.bodyWeight = body.weightKilograms
-            snapshot.bodyFatPercent = body.bodyFatPercentage.map { HealthUnitNormalizer.normalizeBodyFatPercentage($0) }
-            snapshot.bmi = extended.bmi
+            if let w = body.weightKilograms { snapshot.bodyWeight = w }
+            if let fat = body.bodyFatPercentage { snapshot.bodyFatPercent = HealthUnitNormalizer.normalizeBodyFatPercentage(fat) }
+            if let bmi = extended.bmi { snapshot.bmi = bmi }
         }
 
         // Populate extended
-        snapshot.oxygenSaturation = extended.oxygenSaturation.map { HealthUnitNormalizer.normalizeOxygenSaturation($0) }
-        snapshot.wristTemperature = extended.bodyTemperature
+        if let spo2 = extended.oxygenSaturation { snapshot.oxygenSaturation = HealthUnitNormalizer.normalizeOxygenSaturation(spo2) }
+        if let temp = extended.bodyTemperature { snapshot.wristTemperature = temp }
 
         return snapshot
     }

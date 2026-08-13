@@ -228,6 +228,7 @@ final class DailyHealthComputation {
         let asOf = evaluationDate(for: snapshot)
         let baselineHistory = personalBaselineHistory(for: snapshot, from: history)
         let hrvHistory = baselineHistory.compactMap(\.hrvAverage)
+        let hrvRmssdHistory = baselineHistory.compactMap(\.hrvRmssdMilliseconds)
         let rhrHistory = baselineHistory.compactMap(\.restingHeartRate)
         let respiratoryHistory = baselineHistory.compactMap(\.respiratoryRate)
         let dailyLoadHistory = baselineHistory.compactMap(\.dailyLoad)
@@ -257,6 +258,9 @@ final class DailyHealthComputation {
             hrvToday: snapshot.hrvAverage,
             hrvBaseline: PersonalBaselineEngine.median(hrvHistory),
             hrvHistory: hrvHistory,
+            hrvRmssdToday: snapshot.hrvRmssdMilliseconds,
+            hrvRmssdBaseline: PersonalBaselineEngine.median(hrvRmssdHistory),
+            hrvRmssdHistory: hrvRmssdHistory,
             restingHeartRateToday: snapshot.restingHeartRate,
             restingHeartRateBaseline: PersonalBaselineEngine.median(rhrHistory),
             rhrHistory: rhrHistory,
@@ -328,6 +332,7 @@ final class DailyHealthComputation {
             rhrBaseline: PersonalBaselineEngine.median(rhrHistory),
             sleepHours: snapshot.sleepHours,
             strainHistory: dailyLoadHistory,
+            todayLoad: strain.components["daily_load"],
             bodyTempDelta: temperatureDelta,
             hoursSinceWake: hoursSinceWake(snapshot: snapshot, asOf: asOf),
             respiratoryRateZ: respiratoryRateZ,

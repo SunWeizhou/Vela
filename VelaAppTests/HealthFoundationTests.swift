@@ -171,9 +171,11 @@ final class HealthFoundationTests: XCTestCase {
     }
 
     func testReadStateResolverNeverInfersReadDenialFromMissingSamples() {
+        // 缺失样本 + 已授权 → 仍判「暂无样本」，denied 只来自显式的 sharingStatus
         XCTAssertEqual(
             HealthReadStateResolver.resolve(
                 requestStatus: .unnecessary,
+                sharingStatus: .sharingAuthorized,
                 sampleCount7d: 0,
                 sampleCount30d: 0
             ),
@@ -182,6 +184,7 @@ final class HealthFoundationTests: XCTestCase {
         XCTAssertEqual(
             HealthReadStateResolver.resolve(
                 requestStatus: .shouldRequest,
+                sharingStatus: .sharingAuthorized,
                 sampleCount7d: 0,
                 sampleCount30d: 0
             ),
@@ -190,6 +193,7 @@ final class HealthFoundationTests: XCTestCase {
         XCTAssertEqual(
             HealthReadStateResolver.resolve(
                 requestStatus: .unnecessary,
+                sharingStatus: .sharingAuthorized,
                 sampleCount7d: 0,
                 sampleCount30d: 12
             ),
@@ -256,6 +260,38 @@ final class HealthFoundationTests: XCTestCase {
         XCTAssertEqual(store.load().pendingDirtyDayIdentifiers.count, 1)
     }
 
+    func testHealthReadStateResolverDistinguishesDeniedPermission() {
+        // 用户拒绝权限后不得被归入「暂无样本」——必须有独立的 denied 状态，
+        // 供 Onboarding/今日页给出「去系统设置开启」的恢复路径。
+        XCTAssertEqual(
+            HealthReadStateResolver.resolve(
+                requestStatus: .unnecessary,
+                sharingStatus: .sharingDenied,
+                sampleCount7d: 0,
+                sampleCount30d: 0
+            ),
+            .denied
+        )
+        XCTAssertEqual(
+            HealthReadStateResolver.resolve(
+                requestStatus: .unnecessary,
+                sharingStatus: .sharingAuthorized,
+                sampleCount7d: 0,
+                sampleCount30d: 0
+            ),
+            .noReadableSamples
+        )
+        XCTAssertEqual(
+            HealthReadStateResolver.resolve(
+                requestStatus: .unnecessary,
+                sharingStatus: .sharingAuthorized,
+                sampleCount7d: 5,
+                sampleCount30d: 10
+            ),
+            .readableSamples
+        )
+    }
+
     func testHealthDayBoundaryAssignsAfterMidnightSamplesToPreviousHealthDay() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
@@ -281,6 +317,60 @@ final class HealthFoundationTests: XCTestCase {
             ),
             "2026-07-31"
         )
+    }
+
+    func testMainNightSummaryAttributesFullNightCrossingHealthDayBoundary() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let day = try XCTUnwrap(calendar.date(from: DateComponents(
+            year: 2026, month: 8, day: 13
+        )))
+        // 目标健康日窗口 [04:00 D, 04:00 D+1)
+        let range = DateRangeQuery.singleDay(day, calendar: calendar)
+
+        // 昨夜 23:00 D-1 入睡、07:00 D 醒，跨 04:00 边界的两个睡眠阶段段。
+        // 查询调用方会把窗口向前扩展以捕获前夜入睡段（段按 startDate 匹配），
+        // 归属必须按“主睡眠段结束时刻”落在目标窗口内 → 完整 8 小时夜晚。
+        let segments = [
+            SleepStageSegment(
+                stage: .deep,
+                start: day.addingTimeInterval(-1 * 3_600),
+                end: day.addingTimeInterval(2 * 3_600)
+            ),
+            SleepStageSegment(
+                stage: .rem,
+                start: day.addingTimeInterval(2 * 3_600),
+                end: day.addingTimeInterval(7 * 3_600)
+            )
+        ]
+
+        let summary = SleepSampleNormalizer.mainNightSummary(in: range, segments: segments)
+
+        XCTAssertEqual(summary?.totalSleepMinutes ?? -1, 480)
+        XCTAssertEqual(summary?.bedtime, day.addingTimeInterval(-1 * 3_600))
+        XCTAssertEqual(summary?.wakeTime, day.addingTimeInterval(7 * 3_600))
+    }
+
+    func testMainNightSummaryIgnoresNapsWhenNightEndsInWindow() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let day = try XCTUnwrap(calendar.date(from: DateComponents(
+            year: 2026, month: 8, day: 13
+        )))
+        let range = DateRangeQuery.singleDay(day, calendar: calendar)
+
+        // 主睡眠 23:00→06:00（7h）+ 午后小睡 13:00→14:30（1.5h，也结束在窗口内）
+        let night = [
+            SleepStageSegment(stage: .deep, start: day.addingTimeInterval(-1 * 3_600), end: day.addingTimeInterval(6 * 3_600))
+        ]
+        let nap = [
+            SleepStageSegment(stage: .core, start: day.addingTimeInterval(13 * 3_600), end: day.addingTimeInterval(14.5 * 3_600))
+        ]
+
+        let summary = SleepSampleNormalizer.mainNightSummary(in: range, segments: night + nap)
+
+        XCTAssertEqual(summary?.totalSleepMinutes ?? -1, 420)
+        XCTAssertEqual(summary?.wakeTime, day.addingTimeInterval(6 * 3_600))
     }
 
     func testHealthDayBoundaryUsesCalendarDaysAcrossDSTAndTravelTimeZones() throws {
@@ -552,6 +642,85 @@ final class BiologicalAgeEngineTests: XCTestCase {
 
         XCTAssertTrue(result.factors.contains(where: { $0.name.contains("心率恢复") || $0.name.contains("Heart Rate Recovery") }))
         XCTAssertEqual(result.healthAgeTrend, "improving")
+    }
+
+    private static func biomarker(_ name: String, _ value: Double, _ unit: String) -> BiomarkerRecord {
+        BiomarkerRecord(name: name, value: value, unit: unit, referenceMin: 0, referenceMax: 100)
+    }
+
+    private static var healthyBiomarkers: [BiomarkerRecord] {
+        [
+            biomarker("Albumin", 4.5, "g/dL"),
+            biomarker("Creatinine", 0.9, "mg/dL"),
+            biomarker("Glucose", 85, "mg/dL"),
+            biomarker("C-Reactive Protein", 0.5, "mg/L"),
+            biomarker("Lymphocyte", 35, "%"),
+            biomarker("MCV", 90, "fL"),
+            biomarker("RDW", 12.5, "%"),
+            biomarker("Alkaline Phosphatase", 60, "U/L"),
+            biomarker("WBC", 5.5, "10^3/uL")
+        ]
+    }
+
+    private static var abnormalBiomarkers: [BiomarkerRecord] {
+        [
+            biomarker("Albumin", 3.8, "g/dL"),
+            biomarker("Creatinine", 1.3, "mg/dL"),
+            biomarker("Glucose", 110, "mg/dL"),
+            biomarker("C-Reactive Protein", 3.0, "mg/L"),
+            biomarker("Lymphocyte", 25, "%"),
+            biomarker("MCV", 88, "fL"),
+            biomarker("RDW", 14.5, "%"),
+            biomarker("Alkaline Phosphatase", 90, "U/L"),
+            biomarker("WBC", 7.0, "10^3/uL")
+        ]
+    }
+
+    func testBiologicalAgeEnginePhenoAgeCanonicalFormulaForHealthy30() {
+        // Levine 2018 规范公式（BioAge 包确认常数）实算 ≈ 22.9 岁；
+        // 旧实现 hazard 缩小 25,637 倍，同输入输出约 −64 岁。
+        let result = BiologicalAgeEngine().calculate(input: BiologicalAgeInput(
+            chronologicalAge: 30.0,
+            biomarkers: Self.healthyBiomarkers
+        ))
+        XCTAssertEqual(result.biologicalAge, 22.9, accuracy: 3.0)
+    }
+
+    func testBiologicalAgeEnginePhenoAgeCanonicalFormulaForNormal50() {
+        let result = BiologicalAgeEngine().calculate(input: BiologicalAgeInput(
+            chronologicalAge: 50.0,
+            biomarkers: Self.healthyBiomarkers
+        ))
+        XCTAssertEqual(result.biologicalAge, 40.7, accuracy: 3.0)
+    }
+
+    func testBiologicalAgeEnginePhenoAgeCanonicalFormulaForAbnormal50() {
+        let result = BiologicalAgeEngine().calculate(input: BiologicalAgeInput(
+            chronologicalAge: 50.0,
+            biomarkers: Self.abnormalBiomarkers
+        ))
+        XCTAssertEqual(result.biologicalAge, 59.9, accuracy: 3.0)
+    }
+
+    func testBiologicalAgeEngineClampsPhenoAgeToPlausibleRange() {
+        // 高龄 + 极差化验：M→1 时 log 发散，必须有下界护栏且输出钳制在 0...150
+        let extreme = BiologicalAgeInput(
+            chronologicalAge: 90.0,
+            biomarkers: [
+                Self.biomarker("Albumin", 2.5, "g/dL"),
+                Self.biomarker("Creatinine", 5.0, "mg/dL"),
+                Self.biomarker("Glucose", 300, "mg/dL"),
+                Self.biomarker("C-Reactive Protein", 50, "mg/L"),
+                Self.biomarker("Lymphocyte", 8, "%"),
+                Self.biomarker("MCV", 70, "fL"),
+                Self.biomarker("RDW", 25, "%"),
+                Self.biomarker("Alkaline Phosphatase", 500, "U/L"),
+                Self.biomarker("WBC", 25, "10^3/uL")
+            ]
+        )
+        let result = BiologicalAgeEngine().calculate(input: extreme)
+        XCTAssertGreaterThanOrEqual(result.biologicalAge, 0)
+        XCTAssertLessThanOrEqual(result.biologicalAge, 150)
     }
 }
 

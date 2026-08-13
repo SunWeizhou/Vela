@@ -89,10 +89,9 @@ struct BodyModelEditView: View {
                 .pickerStyle(.segmented)
             }
         }
-        .background(VelaTheme.systemGroupedBackground)
-        .scrollContentBackground(.hidden)
+        .velaRhythmFormSurface()
         .navigationTitle("编辑身体模型")
-        .navigationBarTitleDisplayMode(.inline)
+        .velaRhythmDetailChrome()
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("保存") {
@@ -101,7 +100,7 @@ struct BodyModelEditView: View {
                     }
                 }
                 .bold()
-                .foregroundStyle(VelaTheme.accent)
+                .foregroundStyle(VelaTheme.rhythmDeep)
             }
         }
         .onAppear {
@@ -310,6 +309,14 @@ struct BodyModelDetailView: View {
     
     @State private var healthSnapshots: [DailyHealthSnapshot] = []
     @State private var insights: [HabitCorrelationInsight] = []
+
+    private var maturityTitle: String {
+        switch bodyModelState.maturity.overall {
+        case .seed: "种子期"
+        case .learning: "学习期"
+        case .stable: "稳定期"
+        }
+    }
     
     var body: some View {
         ScrollView {
@@ -324,9 +331,9 @@ struct BodyModelDetailView: View {
             .padding(.bottom, 40)
         }
         .scrollIndicators(.hidden)
-        .background(VelaTheme.systemGroupedBackground)
+        .background(VelaTheme.rhythmCanvas)
         .navigationTitle("身体模型")
-        .navigationBarTitleDisplayMode(.inline)
+        .velaRhythmDetailChrome()
         .onAppear {
             loadModelData()
         }
@@ -339,23 +346,22 @@ struct BodyModelDetailView: View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: "bolt.heart.fill")
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(VelaTheme.accent)
+                .foregroundStyle(VelaTheme.rhythmDeep)
                 .frame(width: 36, height: 36)
-                .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(VelaTheme.accent.opacity(0.12)))
+                .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.rhythmMist.opacity(0.72)))
             VStack(alignment: .leading, spacing: 5) {
                 Text("身体模型校准状态")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
-                Text("整合目标、训练事实、健康基线和随手记信号；样本不足时仅标记待学习区域。")
-                    .font(.system(size: 12))
-                    .foregroundStyle(VelaTheme.muted)
-                    .lineSpacing(3)
+                Text(maturityTitle)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
         }
         .padding(14)
         .frame(maxWidth: .infinity)
-        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm, style: .continuous).fill(VelaTheme.cardBg))
-        .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusSm, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
     }
     
     private var staticParametersSection: some View {
@@ -371,7 +377,7 @@ struct BodyModelDetailView: View {
                         Text("修改设定")
                     }
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(VelaTheme.accent)
+                    .foregroundStyle(VelaTheme.rhythmDeep)
                 }
                 .buttonStyle(.plain)
             }
@@ -387,8 +393,8 @@ struct BodyModelDetailView: View {
                 Divider().padding(.leading, 16)
                 detailRow(title: "教练指导风格", value: staticCoachStyleText)
             }
-            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.cardBg))
-            .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+            .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
         }
     }
     

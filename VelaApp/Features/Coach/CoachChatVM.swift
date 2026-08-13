@@ -129,6 +129,18 @@ final class CoachChatVM: ObservableObject {
         }
     }
 
+    /// 重试目标：最近一次失败气泡对应的用户消息（而非「最后一条」用户消息——
+    /// 用户在 Q1 失败后又问了 Q2 时，点 Q1 的重试必须重发 Q1）。
+    static func userMessageForRetry(in messages: [ChatMsg]) -> (text: String, retryBubbleId: UUID)? {
+        guard let retryIndex = messages.lastIndex(where: {
+            $0.role == .assistant && $0.recoveryAction?.destination == .retry
+        }),
+        let userIndex = messages[..<retryIndex].lastIndex(where: { $0.role == .user }) else {
+            return nil
+        }
+        return (messages[userIndex].content, messages[retryIndex].id)
+    }
+
     @Published var messages: [ChatMsg] = []
     @Published var draft = ""
     @Published var isStreaming = false
@@ -343,8 +355,27 @@ final class CoachChatVM: ObservableObject {
 
     // MARK: - Send request flow
 
+    @discardableResult
+    func ensureActiveSession(modelContext: ModelContext) -> CoachSessionRecord {
+        if let current = currentSession { return current }
+        let session = CoachSessionRecord(
+            id: UUID(),
+            title: "新对话",
+            createdAt: Date(),
+            updatedAt: Date(),
+            serializedMessages: "[]"
+        )
+        modelContext.insert(session)
+        try? modelContext.save()
+        sessionStore.currentSession = session
+        if !sessionStore.sessions.contains(where: { $0.id == session.id }) {
+            sessionStore.sessions.append(session)
+        }
+        return session
+    }
+
     func submit(
-        text: String,
+        text: String? = nil,
         dashboard: DashboardSummary,
         modelContext: ModelContext,
         journalEntries: [JournalEntryRecord],
@@ -353,9 +384,13 @@ final class CoachChatVM: ObservableObject {
         services: VelaServices? = nil
     ) {
         guard activeResponseTask == nil else { return }
+        let targetText = (text ?? draft).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !targetText.isEmpty else { return }
+        draft = ""
+        ensureActiveSession(modelContext: modelContext)
         serviceHost = services
         pendingRequest = PendingRequest(
-            text: text,
+            text: targetText,
             dashboard: dashboard,
             modelContext: modelContext,
             journalEntries: journalEntries,
@@ -380,14 +415,14 @@ final class CoachChatVM: ObservableObject {
         services: VelaServices? = nil
     ) {
         guard activeResponseTask == nil,
-              let lastUserText = messages.last(where: { $0.role == .user })?.content else {
+              let retryTarget = Self.userMessageForRetry(in: messages) else {
             return
         }
 
-        messages.removeAll { $0.role == .assistant && $0.recoveryAction?.destination == .retry }
+        messages.removeAll { $0.id == retryTarget.retryBubbleId }
         serviceHost = services
         pendingRequest = PendingRequest(
-            text: lastUserText,
+            text: retryTarget.text,
             dashboard: dashboard,
             modelContext: modelContext,
             journalEntries: journalEntries,
@@ -613,21 +648,28 @@ final class CoachChatVM: ObservableObject {
             isReady = true
             isAwaitingForegroundRetry = false
         } catch {
-            streamingContent = ""
-            messages.removeAll { $0.id == assistantId }
-            let shouldRetry = pendingRequest != nil
-                && (isAwaitingForegroundRetry
-                    || CoachRequestContinuity.shouldRetryAfterInterruption(isAppActive: isAppActive))
-            if shouldRetry {
-                isAwaitingForegroundRetry = true
+            let isUserCancellation = error is CancellationError
+                || (error as? URLError)?.code == .cancelled
+            if isUserCancellation {
+                // 用户主动停止：保留已流出的部分内容，不追加伪造的「服务不可用」错误气泡
+                streamingContent = ""
             } else {
-                let providerError = LLMProviderError.classify(error)
-                messages.append(ChatMsg(
-                    id: assistantId,
-                    role: .assistant,
-                    content: providerError.userFacingMessage(isChinese: AppLanguage.stored.isChinese),
-                    recoveryAction: providerError.recoveryAction(isChinese: AppLanguage.stored.isChinese)
-                ))
+                streamingContent = ""
+                messages.removeAll { $0.id == assistantId }
+                let shouldRetry = pendingRequest != nil
+                    && (isAwaitingForegroundRetry
+                        || CoachRequestContinuity.shouldRetryAfterInterruption(isAppActive: isAppActive))
+                if shouldRetry {
+                    isAwaitingForegroundRetry = true
+                } else {
+                    let providerError = LLMProviderError.classify(error)
+                    messages.append(ChatMsg(
+                        id: assistantId,
+                        role: .assistant,
+                        content: providerError.userFacingMessage(isChinese: AppLanguage.stored.isChinese),
+                        recoveryAction: providerError.recoveryAction(isChinese: AppLanguage.stored.isChinese)
+                    ))
+                }
             }
             persistThread(modelContext: modelContext)
         }

@@ -192,9 +192,17 @@ extension VelaTodayView {
     }
 
     // MARK: - SwiftData nutrition sync
-    func loadRealNutritionData() {}
+    func loadRealNutritionData() {
+        Task { @MainActor in
+            await dashboardVM.loadSecondaryData(modelContext: modelContext)
+        }
+    }
 
-    func loadDynamicData() {}
+    func loadDynamicData() {
+        Task { @MainActor in
+            await dashboardVM.loadSecondaryData(modelContext: modelContext)
+        }
+    }
 
     func refreshDashboard(force: Bool = false) async {
         await dashboardVM.refresh(modelContext: modelContext, force: force)

@@ -92,6 +92,9 @@ final class CoachDictationController: ObservableObject {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var initialText = ""
+    /// 是否已安装 audio tap。removeTap(onBus:) 在无 tap 时会抛不可捕获的 ObjC 异常，
+    /// 因此必须在安装与移除处严格配对。
+    private var hasTapInstalled = false
 
     func begin(existingText: String) {
         guard !isRecording else { return }
@@ -101,7 +104,10 @@ final class CoachDictationController: ObservableObject {
 
     func stop() {
         if audioEngine.isRunning { audioEngine.stop() }
-        audioEngine.inputNode.removeTap(onBus: 0)
+        if hasTapInstalled {
+            audioEngine.inputNode.removeTap(onBus: 0)
+            hasTapInstalled = false
+        }
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
         recognitionTask = nil
@@ -144,23 +150,32 @@ final class CoachDictationController: ObservableObject {
 
     private func startAudioRecognition() throws {
         stop()
-        guard let recognizer = SFSpeechRecognizer(locale: Locale.current), recognizer.isAvailable else {
+        let locale = Locale.current
+        guard let recognizer = SFSpeechRecognizer(locale: locale) ?? SFSpeechRecognizer(locale: Locale(identifier: "zh_CN")),
+              recognizer.isAvailable else {
             throw CoachDictationError.recognizerUnavailable
         }
+
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(.record, mode: .measurement, options: [.duckOthers, .defaultToSpeaker])
+        try session.setActive(true, options: .notifyOthersOnDeactivation)
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         recognitionRequest = request
 
-        let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.record, mode: .measurement, options: .duckOthers)
-        try session.setActive(true, options: .notifyOthersOnDeactivation)
-
         let inputNode = audioEngine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1_024, format: format) { buffer, _ in
-            request.append(buffer)
+
+        let format = inputNode.inputFormat(forBus: 0)
+        guard format.sampleRate > 0 && format.channelCount > 0 else {
+            throw CoachDictationError.recognizerUnavailable
         }
+
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak request] buffer, _ in
+            request?.append(buffer)
+        }
+        hasTapInstalled = true
+
         audioEngine.prepare()
         try audioEngine.start()
         isRecording = true
@@ -551,7 +566,7 @@ struct VelaCoachView: View {
             // Main Chat Panel
             VStack(spacing: 0) {
                 headerView
-                    .background(VelaTheme.bg.opacity(0.98))
+                    .background(VelaTheme.rhythmCanvas.opacity(0.94))
 
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -643,14 +658,14 @@ struct VelaCoachView: View {
                     // SwiftUI's safeAreaInset auto-lift is defeated by the ZStack of
                     // surrounding overlay layers. bottomClearance covers the overlay-nav
                     // (no-keyboard) case; keyboardHeight covers the keyboard case.
-                    .padding(.bottom, keyboardHeight + CoachChatLayout.bottomClearance(
+                    .padding(.bottom, CoachChatLayout.bottomClearance(
                         presentation: presentation,
                         keyboardVisible: isKeyboardVisible,
                         usesOverlayNavigation: usesOverlayNavigation
                     ))
-                    .background(VelaTheme.bg)
+                    .background(VelaTheme.rhythmCanvas)
             }
-            .background(VelaTheme.bg)
+            .background(VelaTheme.rhythmCanvas)
             .blur(radius: showHistoryDrawer && !reduceMotion ? 3 : 0)
             .disabled(showHistoryDrawer)
 
@@ -803,11 +818,8 @@ struct VelaCoachView: View {
         }
         .onChange(of: dictation.transcript) { _, transcript in
             guard !transcript.isEmpty else { return }
-            // Only overwrite if the field still holds what the last dictation update
-            // wrote (or is untouched at the session baseline). If the user has been
-            // typing/editing over the dictation, don't clobber their keystrokes.
             let applied = lastDictationApplied ?? ""
-            guard inputText == applied else { return }
+            guard inputText == applied || inputText.isEmpty else { return }
             inputText = transcript
             lastDictationApplied = transcript
         }
@@ -838,35 +850,34 @@ struct VelaCoachView: View {
     // MARK: - Header
 
     private var headerView: some View {
-        HStack {
+        HStack(spacing: 8) {
             Button {
                 withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                     showHistoryDrawer = true
                 }
             } label: {
                 Image(systemName: "sidebar.left")
-                    .font(.system(size: 18))
-                    .foregroundStyle(VelaTheme.accent)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .frame(width: 44, height: 44)
-                    .background(
-                        Circle().fill(VelaTheme.surface)
-                    )
+                    .contentShape(Circle())
             }
             .buttonStyle(.cardPress)
             .accessibilityLabel("对话历史")
             .accessibilityHint("打开历史对话列表")
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(vm.isGhostMode ? "Ghost 对话" : (vm.currentSession?.title.isEmpty != false ? "Vela 教练" : vm.currentSession!.title))
-                    .font(VelaTheme.headline())
-                    .foregroundStyle(VelaTheme.fg)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(vm.isGhostMode ? "私密对话" : ((vm.currentSession?.title.isEmpty ?? true) ? "Vela" : (vm.currentSession?.title ?? "Vela")))
+                    .font(.system(size: 18, weight: .semibold))
+                    .tracking(-0.25)
+                    .foregroundStyle(VelaTheme.rhythmInk)
                     .lineLimit(1)
 
                 HStack(spacing: 4) {
-                    Circle().fill(vm.isReady ? VelaTheme.success : VelaTheme.accent).frame(width: 6, height: 6)
-                    Text(vm.isGhostMode ? "不保存历史 · 仅只读工具" : (vm.isReady ? "AI 增强已开启" : "本机建议可用"))
-                        .font(VelaTheme.caption2())
-                        .foregroundStyle(vm.isReady ? VelaTheme.success : VelaTheme.accent)
+                    Circle().fill(VelaTheme.rhythmDeep).frame(width: 5, height: 5)
+                    Text(vm.isGhostMode ? "不保存 · 只读" : (vm.isReady ? "解释与调整工作台" : "本机解释可用"))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .lineLimit(1)
                 }
             }
@@ -874,47 +885,45 @@ struct VelaCoachView: View {
             Spacer()
 
             Button {
-                vm.setGhostMode(!vm.isGhostMode, modelContext: modelContext)
-            } label: {
-                Image(systemName: vm.isGhostMode ? "eye.slash.fill" : "eye.slash")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(vm.isGhostMode ? Color.white : VelaTheme.accent)
-                    .frame(width: 44, height: 44)
-                    .background(Circle().fill(vm.isGhostMode ? VelaTheme.accent : VelaTheme.surface))
-            }
-            .buttonStyle(.cardPress)
-            .disabled(vm.isStreaming)
-            .accessibilityLabel(vm.isGhostMode ? "关闭 Ghost 模式" : "开启 Ghost 模式")
-            .accessibilityHint("Ghost 模式不保存对话、交互、记忆、Artifact 或 Agent 运行记录，并禁用写入工具")
-
-            Button {
                 vm.createNewSession(modelContext: modelContext)
             } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(VelaTheme.accent)
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmDeep)
                     .frame(width: 44, height: 44)
-                    .background(
-                        Circle().fill(VelaTheme.surface)
-                    )
+                    .contentShape(Circle())
             }
             .buttonStyle(.cardPress)
             .disabled(vm.isGhostMode)
             .accessibilityLabel("新建对话")
 
-            Button {
-                showModelSettings = true
+            Menu {
+                Button {
+                    vm.setGhostMode(!vm.isGhostMode, modelContext: modelContext)
+                } label: {
+                    Label(vm.isGhostMode ? "关闭私密模式" : "开启私密模式", systemImage: "eye.slash")
+                }
+                .disabled(vm.isStreaming)
+
+                Button {
+                    showWikiProfile = true
+                } label: {
+                    Label("健康档案", systemImage: "books.vertical")
+                }
+
+                Button {
+                    showModelSettings = true
+                } label: {
+                    Label("模型与联网设置", systemImage: "gearshape")
+                }
             } label: {
-                Image(systemName: "gearshape.fill")
+                Image(systemName: "ellipsis")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(VelaTheme.accent)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .frame(width: 44, height: 44)
-                    .background(
-                        Circle().fill(VelaTheme.surface)
-                    )
+                    .contentShape(Circle())
             }
-            .buttonStyle(.cardPress)
-            .accessibilityLabel("Coach 模型设置")
+            .accessibilityLabel("Vela 选项")
 
             if presentation == .quickCover {
                 Button {
@@ -922,19 +931,16 @@ struct VelaCoachView: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(VelaTheme.accent)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .frame(width: 44, height: 44)
-                        .background(
-                            Circle().fill(VelaTheme.surface)
-                        )
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.cardPress)
                 .accessibilityLabel("关闭 Coach")
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
+        .padding(.horizontal, VelaTheme.pagePadding)
+        .padding(.vertical, 8)
     }
 
 
@@ -942,11 +948,7 @@ struct VelaCoachView: View {
     // MARK: - Composer
 
     private var composerView: some View {
-        VStack(spacing: 8) {
-            CoachDataCoverageStrip(model: dataCoverageSummary) {
-                appState.showSettings = true
-            }
-
+        VStack(spacing: 0) {
             HStack(alignment: .bottom, spacing: 8) {
                 Menu {
                     Button {
@@ -972,25 +974,25 @@ struct VelaCoachView: View {
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(VelaTheme.accent)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .frame(width: 44, height: 44)
-                        .background(Circle().fill(VelaTheme.surface))
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plusButton)
                 .accessibilityLabel("添加 Coach 上下文")
 
-                TextField(vm.isReady ? "询问你的健康与训练…" : "询问今日状态（本机分析）…", text: $inputText, axis: .vertical)
-                    .font(VelaTheme.callout())
+                TextField(vm.isReady ? "解释、质疑或调整今天的决定…" : "请 Vela 解释本机建议…", text: $inputText, axis: .vertical)
+                    .font(.system(size: 14))
                     .lineLimit(1...5)
                     .focused($isFocused)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(
                         RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .fill(VelaTheme.surface)
+                            .fill(VelaTheme.rhythmCanvasRaised)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                                    .stroke(isFocused ? VelaTheme.accent : VelaTheme.border, lineWidth: 0.5)
+                                    .stroke(isFocused ? VelaTheme.rhythmDeep : VelaTheme.rhythmMist, lineWidth: isFocused ? 1 : 0.75)
                             )
                     )
                     .onSubmit {
@@ -1008,7 +1010,7 @@ struct VelaCoachView: View {
                 } label: {
                     Image(systemName: dictation.isRecording ? "waveform.circle.fill" : "mic.circle.fill")
                         .font(.system(size: 28, weight: .semibold))
-                        .foregroundStyle(dictation.isRecording ? VelaTheme.strainColor : VelaTheme.accent)
+                        .foregroundStyle(dictation.isRecording ? VelaTheme.statePoor : VelaTheme.rhythmInkSecondary)
                         .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
@@ -1025,14 +1027,14 @@ struct VelaCoachView: View {
                 } label: {
                     Image(systemName: vm.isStreaming ? "stop.fill" : "arrow.up")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(VelaTheme.rhythmDeepOn)
                         .frame(width: 44, height: 44)
                         .background(
                             Circle()
                                 .fill(vm.isStreaming
-                                    ? VelaTheme.strainColor
+                                    ? VelaTheme.statePoor
                                     : (inputText.trimmingCharacters(in: .whitespaces).isEmpty
-                                        ? VelaTheme.border : VelaTheme.accent))
+                                        ? VelaTheme.rhythmMist : VelaTheme.rhythmDeep))
                         )
                 }
                 // The stop button must stay tappable while streaming, even when the
@@ -1044,7 +1046,7 @@ struct VelaCoachView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(.bar)
+        .background(.ultraThinMaterial)
     }
 
     // MARK: - Actions
@@ -1065,8 +1067,6 @@ struct VelaCoachView: View {
     private func appendToDraft(_ text: String) {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         inputText = trimmed.isEmpty ? text : trimmed + "\n" + text
-        // Do not force keyboard focus here: the user may have dismissed the
-        // keyboard to read history, and summoning it unprompted is intrusive.
     }
 
     private func handleFileImport(_ result: Result<[URL], Error>) {

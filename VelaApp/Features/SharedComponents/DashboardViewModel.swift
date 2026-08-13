@@ -345,11 +345,16 @@ final class DashboardViewModel: ObservableObject {
 
     func loadStrainTrend(modelContext: ModelContext) async {
         let repository = SwiftDataDailyHealthSummaryRepository(modelContext: modelContext)
-        let range = DateRangeQuery.recentDays(30, endingAt: selectedDate, calendar: .current)
+        let calendar = Calendar.current
+        let range = DateRangeQuery.recentDays(30, endingAt: selectedDate, calendar: calendar)
         let records = (try? repository.fetch(in: range)) ?? []
-        strainTrend = records.compactMap { record -> TrendPoint? in
-            guard let score = record.strainScore, score > 0 else { return nil }
-            return TrendPoint(date: record.date, value: score)
+        let recordMap = Dictionary(uniqueKeysWithValues: records.map { ($0.dayIdentifier, $0) })
+
+        strainTrend = (0..<30).reversed().compactMap { offset -> TrendPoint? in
+            guard let date = calendar.date(byAdding: .day, value: -offset, to: selectedDate) else { return nil }
+            let dayId = DailyHealthSummaryRecord.dayIdentifier(for: date, calendar: calendar)
+            let score = recordMap[dayId]?.strainScore ?? 0.0
+            return TrendPoint(date: date, value: max(0.0, score))
         }
     }
 
@@ -399,10 +404,10 @@ final class DashboardViewModel: ObservableObject {
         let endDate = selectedDate
         let range = DateRangeQuery.recentDays(15, endingAt: endDate, calendar: .current)
         let records = (try? repository.fetch(in: range)) ?? []
-        
+
         let calendar = Calendar.current
         var points: [HeatmapPoint] = []
-        
+
         for i in (0..<15).reversed() {
             let day = calendar.date(byAdding: .day, value: -i, to: endDate) ?? endDate
             let id = DailyHealthSummaryRecord.dayIdentifier(for: day, calendar: calendar)
@@ -410,7 +415,7 @@ final class DashboardViewModel: ObservableObject {
             let score = record?.recoveryScore
             points.append(HeatmapPoint(date: day, dayIdentifier: id, score: score))
         }
-        
+
         self.heatmapPoints = points
     }
 
@@ -642,7 +647,14 @@ enum SecondaryDataAssembler {
             bodyState: bodyState
         )
 
-        // 5. Today nutrition aggregates + experience model
+        // 5. Latest today artifact（提前计算：CommandState 构建需要）
+        let latestTodayArtifact = coachArtifacts
+            .first { artifact in
+                guard let relatedDate = artifact.relatedDate else { return true }
+                return calendar.isDate(relatedDate, inSameDayAs: refDate)
+            }
+
+        // 6. Today nutrition aggregates + experience model
         let todayLogs = foodLogs.filter { calendar.isDate($0.createdAt, inSameDayAs: startOfDayRef) }
         let cals = todayLogs.map(\.totalCalories).reduce(0, +)
         let prot = todayLogs.map(\.proteinGrams).reduce(0, +)
@@ -650,10 +662,18 @@ enum SecondaryDataAssembler {
         let fat = todayLogs.map(\.fatGrams).reduce(0, +)
         let targetCalorieTarget = UserDefaults.standard.integer(forKey: "vela_daily_calorie_target")
         let dailyTarget = targetCalorieTarget > 0 ? targetCalorieTarget : 2000
+        // 先构建 CommandState：今日页行动列表与 Hero 标题统一跟随 readiness 结论
+        let todayCommandState = TodayCommandBuilder.build(
+            from: updatedDashboard,
+            recentStrengthSummary: recentStrengthSummary,
+            coachArtifact: latestTodayArtifact,
+            generatedAt: Date()
+        )
         let todayExperience = TodayExperienceModel.build(
             dashboard: updatedDashboard,
             bodyState: bodyState,
             trainingDecision: dailyTrainingDecision,
+            readiness: todayCommandState.readinessDecision.decision,
             nutrition: TodayExperienceNutrition(
                 calories: cals,
                 calorieTarget: dailyTarget,
@@ -664,20 +684,7 @@ enum SecondaryDataAssembler {
             history: dailySummaries
         )
 
-        // 6. Latest today artifact
-        let latestTodayArtifact = coachArtifacts
-            .first { artifact in
-                guard let relatedDate = artifact.relatedDate else { return true }
-                return calendar.isDate(relatedDate, inSameDayAs: refDate)
-            }
-
-        // 7. TodayCommandState + scheduled day
-        let todayCommandState = TodayCommandBuilder.build(
-            from: updatedDashboard,
-            recentStrengthSummary: recentStrengthSummary,
-            coachArtifact: latestTodayArtifact,
-            generatedAt: Date()
-        )
+        // 7. scheduled day（CommandState 已在第 6 步提前构建，供行动列表统一结论）
         let scheduledDay = activePlan.flatMap {
             TrainingScheduleResolver.resolve(
                 plan: $0,

@@ -68,6 +68,7 @@ enum PreviewDataFactory {
             rhrBaseline: 60,
             sleepHours: 7.2,
             strainHistory: [45, 52, 58, 55, 48, 60, 58],
+            todayLoad: strain.components["daily_load"],
             bodyTempDelta: 0.0
         )
         let energy = EnergyBankEngine().calculate(from: energyInput)

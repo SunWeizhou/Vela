@@ -29,14 +29,6 @@ struct VelaMeView: View {
     private var onboarding: OnboardingState? { onboardingStates.first }
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
     private var hasCompletedOnboardingProfile: Bool { onboarding?.isCompleted == true }
-    private var profileSummary: String {
-        guard hasCompletedOnboardingProfile else {
-            return "完善训练目标、偏好和设备后，Coach 会将这些信息纳入个人上下文。"
-        }
-        return onboarding?.firstBrief.isEmpty == false
-            ? onboarding!.firstBrief
-            : "训练目标、偏好、设备和健康数据会共同构成 Coach 的个人上下文。"
-    }
     private var profileGoalText: String {
         guard hasCompletedOnboardingProfile else { return "尚未设置" }
         return displayGoal(onboarding?.goalProfile.primaryGoal ?? "unknown")
@@ -70,20 +62,19 @@ struct VelaMeView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
+            LazyVStack(alignment: .leading, spacing: 32) {
                 profileHeader
                 bodyModelOverviewCard
                 coachMemoryCard
                 actionSettingsHub
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
+            .padding(.horizontal, VelaTheme.pagePadding)
+            .padding(.top, 18)
             .padding(.bottom, VelaFloatingNavigationMetrics.contentBottomPadding)
         }
         .scrollIndicators(.hidden)
-        .background(VelaTheme.systemGroupedBackground)
-        .navigationTitle(L10n.t("Me", "个人中心"))
-        .navigationBarTitleDisplayMode(.inline)
+        .background(VelaTheme.rhythmCanvas)
+        .toolbar(.hidden, for: .navigationBar)
         .sheet(item: $selectedWorkoutForDetail) { summary in
             NavigationStack {
                 WorkoutDetailView(workout: summary)
@@ -104,89 +95,93 @@ struct VelaMeView: View {
     }
 
     private var bodyModelOverviewCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("身体数据模型")
-                    .font(VelaTheme.caption1().weight(.semibold))
-                    .foregroundStyle(VelaTheme.muted)
-
-                Spacer()
-
-                NavigationLink(destination: BodyModelDetailView()) {
-                    HStack(spacing: 4) {
-                        Text("分析与校准")
-                        Image(systemName: "chevron.right")
-                    }
-                        .font(VelaTheme.caption1().weight(.semibold))
-                        .foregroundStyle(VelaTheme.accent)
-                }
-                .buttonStyle(.plain)
-            }
-
-            VStack(alignment: .leading, spacing: 14) {
-                Text(profileSummary)
-                    .font(VelaTheme.subheadline())
-                    .foregroundStyle(VelaTheme.fg2)
-                    .lineSpacing(3)
-                    .lineLimit(3)
-
-                Divider()
-
-                HStack(spacing: 0) {
-                    modelFact(title: "训练目标", value: profileGoalText, detail: profileExperienceText)
-                    Divider().frame(height: 48).padding(.horizontal, 14)
-                    modelFact(title: "训练节奏", value: profileFrequencyText, detail: profileDurationText)
-                }
-
-                Divider()
-
-                HStack(spacing: 12) {
-                    Image(systemName: "brain.head.profile")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(VelaTheme.accent)
-                        .frame(width: 36, height: 36)
-                        .background(VelaTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("模型成熟度 · \(bodyModelMaturityTitle(bodyModelState.maturity.overall))")
-                            .font(VelaTheme.subheadline().weight(.semibold))
-                            .foregroundStyle(VelaTheme.fg)
-                        Text("\(bodyModelState.maturity.behaviorPairs) 个行为信号 · \(bodyModelState.maturity.trainingSessions) 次训练事实")
-                            .font(VelaTheme.caption1())
-                            .foregroundStyle(VelaTheme.muted)
-                    }
-
-                    Spacer(minLength: 0)
-                }
-
-                if let missing = onboarding?.missingData, !missing.isEmpty {
-                    Label("还有 \(missing.count) 项资料可补充", systemImage: "info.circle")
-                        .font(VelaTheme.caption1())
-                        .foregroundStyle(VelaTheme.warn)
-                }
-            }
-            .padding(16)
-            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
+        VStack(alignment: .leading, spacing: 12) {
+            VelaRhythmSectionHeader(
+                eyebrow: "PERSONAL CONTEXT",
+                title: "Vela 如何认识你",
+                actionTitle: nil,
+                action: {}
             )
+
+            NavigationLink(destination: BodyModelDetailView()) {
+                bodyModelOverviewContent
+            }
+            .buttonStyle(.cardPress)
         }
+    }
+
+    private var bodyModelOverviewContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "waveform.path.ecg")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmDeep)
+                    .frame(width: 38, height: 38)
+                    .background(VelaTheme.rhythmMist.opacity(0.76), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("个人上下文 · \(bodyModelMaturityTitle(bodyModelState.maturity.overall))")
+                        .font(.system(.headline, design: .default, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                }
+
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.6))
+                    .padding(.top, 12)
+            }
+
+            Divider().overlay(VelaTheme.rhythmMist)
+
+            HStack(spacing: 0) {
+                modelFact(title: "长期目标", value: profileGoalText, detail: profileExperienceText)
+                Rectangle()
+                    .fill(VelaTheme.rhythmMist)
+                    .frame(width: 1, height: 54)
+                    .padding(.horizontal, 16)
+                modelFact(title: "训练节奏", value: profileFrequencyText, detail: profileDurationText)
+            }
+
+            HStack(spacing: 8) {
+                contextPill("\(bodyModelState.maturity.behaviorPairs) 个行为信号", icon: "circle.hexagongrid")
+                contextPill("\(bodyModelState.maturity.trainingSessions) 次训练事实", icon: "figure.strengthtraining.traditional")
+            }
+
+        }
+        .padding(16)
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+    }
+
+    private func contextPill(_ title: String, icon: String) -> some View {
+        Label(title, systemImage: icon)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+            .padding(.horizontal, 9)
+            .frame(minHeight: 30)
+            .background(VelaTheme.rhythmMist.opacity(0.62), in: Capsule())
     }
 
     private func modelFact(title: String, value: String, detail: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
                 .font(VelaTheme.caption2())
-                .foregroundStyle(VelaTheme.muted)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
             Text(value)
                 .font(VelaTheme.headline())
-                .foregroundStyle(VelaTheme.fg)
+                .foregroundStyle(VelaTheme.rhythmInk)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
             Text(detail)
                 .font(VelaTheme.caption1())
-                .foregroundStyle(VelaTheme.muted)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -222,7 +217,7 @@ struct VelaMeView: View {
                         .font(.system(size: 14))
                         .foregroundStyle(Color(hex: "#FFCC00"))
                         .padding(.top, 2)
-                    Text(profileSummary)
+                    Text(hasCompletedOnboardingProfile ? "目标与训练偏好已建立" : "个人资料待设置")
                         .font(.system(size: 13, weight: .regular))
                         .foregroundStyle(VelaTheme.fg2)
                         .lineSpacing(4)
@@ -339,37 +334,37 @@ struct VelaMeView: View {
     }
 
     private var coachMemoryCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(L10n.t("Coach Memory", "教练建议与记忆"))
-                .font(VelaTheme.caption1())
-                .fontWeight(.bold)
-                .foregroundStyle(VelaTheme.muted)
-                .textCase(.uppercase)
-                .padding(.leading, 2)
+        VStack(alignment: .leading, spacing: 12) {
+            VelaRhythmSectionHeader(
+                eyebrow: "DECISION HISTORY",
+                title: "建议与记忆",
+                actionTitle: nil,
+                action: {}
+            )
 
             VStack(spacing: 0) {
                 NavigationLink(destination: CoachArtifactInboxView()) {
                     HStack(spacing: 12) {
                         Image(systemName: "tray.full.fill")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 30, height: 30)
-                            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(VelaTheme.accent))
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(VelaTheme.rhythmDeep)
+                            .frame(width: 32, height: 32)
+                            .background(RoundedRectangle(cornerRadius: 10).fill(VelaTheme.rhythmMist.opacity(0.72)))
                         
                         Text("建议收件箱")
                             .font(VelaTheme.body())
-                            .foregroundStyle(VelaTheme.fg)
+                            .foregroundStyle(VelaTheme.rhythmInk)
                         
                         Spacer()
                         
                         HStack(spacing: 6) {
                             Text("\(coachArtifacts.count) 条历史")
                                 .font(VelaTheme.subheadline())
-                                .foregroundStyle(VelaTheme.muted)
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(VelaTheme.meta)
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.6))
                         }
                     }
                     .padding(.horizontal, 14)
@@ -453,8 +448,8 @@ struct VelaMeView: View {
                     .padding(.vertical, 12)
                 }
             }
-            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.cardBg))
-            .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+            .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
         }
     }
 
@@ -526,35 +521,23 @@ struct VelaMeView: View {
     }
 
     private var profileHeader: some View {
-        HStack(spacing: 16) {
-            ZStack {
+        VStack(alignment: .leading, spacing: 13) {
+            HStack(spacing: 8) {
                 Circle()
-                    .fill(VelaTheme.accent.opacity(0.12))
-                    .frame(width: 56, height: 56)
-                
-                Image(systemName: "person.fill")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(VelaTheme.accent)
+                    .fill(VelaTheme.rhythmDeep)
+                    .frame(width: 6, height: 6)
+                Text("PRIVATE HEALTH CONTEXT")
+                    .font(.system(size: 10, weight: .bold))
+                    .tracking(1.45)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.t("\(timeGreeting), Weizhou", "\(timeGreeting)，Weizhou"))
-                    .font(VelaTheme.title2())
-                    .foregroundStyle(VelaTheme.fg)
-                
-                Text(bodyModelMaturityTitle(bodyModelState.maturity.overall))
-                    .font(VelaTheme.caption2().weight(.semibold))
-                    .foregroundStyle(bodyModelMaturityColor(bodyModelState.maturity.overall))
 
-                Text("\(bodyModelState.maturity.behaviorPairs) 个行为信号 · \(bodyModelState.maturity.trainingSessions) 次训练事实")
-                    .font(VelaTheme.caption1())
-                    .foregroundStyle(VelaTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer()
+            Text(L10n.t("\(timeGreeting), Weizhou", "\(timeGreeting)，Weizhou"))
+                .font(.system(size: 34, weight: .semibold, design: .default))
+                .tracking(-0.8)
+                .foregroundStyle(VelaTheme.rhythmInk)
+
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 4)
     }
 
     private var actionSettingsHub: some View {
@@ -574,12 +557,13 @@ struct VelaMeView: View {
         
         let settingsSub = "\(dailyCalorieTarget) kcal 目标"
 
-        return VStack(alignment: .leading, spacing: 10) {
-            Text(L10n.t("Tools & Settings", "工具与设置"))
-                .font(VelaTheme.caption1())
-                .fontWeight(.semibold)
-                .foregroundStyle(VelaTheme.muted)
-                .padding(.leading, 2)
+        return VStack(alignment: .leading, spacing: 12) {
+            VelaRhythmSectionHeader(
+                eyebrow: "LIBRARY & CONTROL",
+                title: "资料与设置",
+                actionTitle: nil,
+                action: {}
+            )
             
             VStack(spacing: 0) {
                 hubActionCell(title: "健康手记", sub: journalSub, icon: "book.pages.fill", color: VelaTheme.systemOrange, destination: VelaJournalView())
@@ -596,10 +580,10 @@ struct VelaMeView: View {
                 Divider().padding(.leading, 58)
                 hubActionCell(title: "系统设置", sub: settingsSub, icon: "gearshape.fill", color: VelaTheme.indigo, destination: VelaSettingsView())
             }
-            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous))
+            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
-                    .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
             )
         }
     }
@@ -614,18 +598,18 @@ struct VelaMeView: View {
         NavigationLink(destination: destination) {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: icon)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmDeep)
                     .frame(width: 32, height: 32)
-                    .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(color))
+                    .background(RoundedRectangle(cornerRadius: 10).fill(VelaTheme.rhythmMist.opacity(0.72)))
                 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(VelaTheme.subheadline().weight(.semibold))
-                        .foregroundStyle(VelaTheme.fg)
+                        .foregroundStyle(VelaTheme.rhythmInk)
                     Text(sub)
                         .font(VelaTheme.caption2())
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -634,7 +618,7 @@ struct VelaMeView: View {
                 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(VelaTheme.meta)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.6))
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)

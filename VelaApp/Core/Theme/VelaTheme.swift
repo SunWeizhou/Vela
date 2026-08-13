@@ -42,6 +42,25 @@ enum VelaTheme {
     static let elevatedBg    = adaptive("#E9EDF5", "#1B2230")
     static let groupedBg     = bg
 
+    // MARK: - Vela Rhythm Identity
+
+    /// A warmer, quieter canvas for Vela's decision surfaces. The product uses
+    /// this instead of generic grouped gray so health guidance reads as one
+    /// continuous environment rather than a dashboard made of cards.
+    static let rhythmCanvas       = adaptive("#F2F5F1", "#07100E")
+    static let rhythmCanvasRaised = adaptive("#F8FAF7", "#0D1815")
+    static let rhythmInk          = adaptive("#10201C", "#EDF7F2")
+    static let rhythmInkSecondary = adaptive("#53655F", "#9DB0A9")
+    static let rhythmMist         = adaptive("#D8E7DF", "#19352C")
+    static let rhythmGlow         = adaptive("#75D6A7", "#52E0A2")
+    static let rhythmDeepUIColor = adaptiveUIColor("#0D6B50", "#65E6B2")
+    static let rhythmDeep         = Color(rhythmDeepUIColor)
+    /// rhythmDeep 实底上的文字色：浅色模式白字（#0D6B50 上 ≈5.4:1）；
+    /// 深色模式 rhythmDeep 是亮薄荷绿，白字对比度仅 ~1.7:1，改用深墨字（≈7:1）。
+    static let rhythmDeepOnUIColor = adaptiveUIColor("#FFFFFF", "#10201C")
+    static let rhythmDeepOn        = Color(rhythmDeepOnUIColor)
+    static let rhythmWarm         = adaptive("#E6C98A", "#C9A85F")
+
     // MARK: - iOS 26 Glassmorphic Tokens
     static let glassCardBgAdaptive   = adaptive("#FFFFFF", "#121620")
     static let glassCardStrokeColor  = adaptive("#FFFFFF", "#FFFFFF")

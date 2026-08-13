@@ -166,12 +166,13 @@ struct CardioStatusCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Label("有氧状态", systemImage: "heart.circle.fill")
-                    .font(VelaTheme.headline())
+                Label("有氧状态", systemImage: "heart.circle")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Text("最近 7 天")
-                    .font(VelaTheme.caption2())
-                    .foregroundStyle(VelaTheme.muted)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
 
             HStack(spacing: 8) {
@@ -190,8 +191,8 @@ struct CardioStatusCard: View {
             }
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(VelaTheme.cardBg))
-        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
     }
 
     private var baselineDetail: String {
@@ -213,19 +214,19 @@ struct CardioStatusCard: View {
     private func cardioMetric(_ title: String, _ value: String, detail: String) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(title)
-                .font(VelaTheme.caption2().weight(.semibold))
-                .foregroundStyle(VelaTheme.muted)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
             Text(value)
-                .font(VelaTheme.subheadline().weight(.bold).monospacedDigit())
-                .foregroundStyle(VelaTheme.fg)
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(VelaTheme.rhythmInk)
             Text(detail)
                 .font(.system(size: 9))
-                .foregroundStyle(VelaTheme.muted)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 .lineLimit(2)
         }
         .padding(11)
         .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
-        .background(VelaTheme.secondaryGroupedBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(VelaTheme.rhythmMist.opacity(0.62), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .accessibilityElement(children: .combine)
     }
 }
@@ -277,8 +278,8 @@ struct TrainingStatsSection: View {
                         .font(.system(size: 14))
                         .foregroundStyle(VelaTheme.muted)
                     Text("表现与分析")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(VelaTheme.fg)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
                 }
                 Spacer()
                 
@@ -415,12 +416,11 @@ struct TrainingStatsSection: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(VelaTheme.cardBg)
-                .shadow(color: Color.black.opacity(0.012), radius: 10, y: 3)
+                .fill(VelaTheme.rhythmCanvasRaised)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         )
     }
 
@@ -608,12 +608,11 @@ struct MuscleVolumeCard: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(VelaTheme.cardBg)
-                .shadow(color: Color.black.opacity(0.012), radius: 10, y: 3)
+                .fill(VelaTheme.rhythmCanvasRaised)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         )
     }
 }
@@ -628,21 +627,21 @@ struct RecentWorkoutsSection: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("训练记录")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(VelaTheme.fg)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Text("Apple + 训记自动合并")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
 
             if recentWorkouts.isEmpty {
                 Text("暂无可读取的训练记录")
                     .font(.system(size: 13))
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
+                    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
             } else {
                 ForEach(recentWorkouts.prefix(12)) { workout in
                     // Strength workouts that were logged locally open the rich
@@ -670,16 +669,16 @@ struct RecentWorkoutsSection: View {
     private func workoutRow(_ workout: WorkoutSummary) -> some View {
         HStack(spacing: 12) {
             Image(systemName: workoutListIcon(workout.activityName))
-                .foregroundStyle(VelaTheme.brand)
+                .foregroundStyle(VelaTheme.rhythmDeep)
                 .frame(width: 36, height: 36)
-                .background(Circle().fill(VelaTheme.brandSoft))
+                .background(Circle().fill(VelaTheme.rhythmMist))
             VStack(alignment: .leading, spacing: 4) {
                 Text(workout.activityName)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(VelaTheme.fg)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Text(workout.start.formatted(date: .abbreviated, time: .shortened))
                     .font(.system(size: 11))
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 HStack(spacing: 6) {
                     Text(sourceLabel(for: workout.source))
                     Text("·")
@@ -700,16 +699,20 @@ struct RecentWorkoutsSection: View {
                     }
                 }
                 .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(VelaTheme.muted)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 .lineLimit(1)
             }
             Spacer()
             Image(systemName: "chevron.right")
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(VelaTheme.meta)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
         }
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.cardBg))
+        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+        .overlay {
+            RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+        }
     }
 
     private func workoutListIcon(_ name: String) -> String {

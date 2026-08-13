@@ -228,12 +228,12 @@ public final class BiologicalAgeEngine {
             let modelAlbumin = alb * 10.0 // g/dL -> g/L
             let modelCreatinine = cre * 88.4 // mg/dL -> umol/L
             let modelGlucose = glu / 18.0182 // mg/dL -> mmol/L
-            // Levine PhenoAge's ln(CRP) coefficient was fit on CRP in mg/L (NHANES).
-            // The app's crp input is already mg/L (normal range 0-3 mg/L), so it must
-            // be logged directly — dividing by 10 (mg/L -> mg/dL) shifted ln by
-            // ln(1/10) ≈ -2.303 and muted the inflammation term.
-            let modelCRP = cReactive
-            let lnCRP = log(max(modelCRP, 0.001))
+            // Levine PhenoAge 的 ln(CRP) 系数拟合自 NHANES 的 mg/dL 单位且取
+            // ln(1 + CRP_mg/dL) 变换（BioAge 包确认）。canonicalValue 输出的
+            // crp 恒为 mg/L，须先换算 mg/dL 再做 +1 偏移；直接 ln(mg/L) 会
+            // 系统性 +ln(10) ≈ +2.303，使 PhenoAge 高估约 +2.4 岁。
+            let modelCRP = cReactive / 10.0 // mg/L -> mg/dL
+            let lnCRP = log(max(modelCRP + 1.0, 0.001))
 
             // Liu et al. PhenoAge model, using the paper's canonical units.
             let xb = -19.907
@@ -247,16 +247,17 @@ public final class BiologicalAgeEngine {
                 + 0.00188 * alp
                 + 0.0554 * wb
                 + 0.0804 * age
-            // Levine et al. (2018) PhenoAge, canonical mortality + transformation.
-            // The previous code used a non-canonical 1.51714 constant and DIVIDED the
-            // hazard coefficient 0.0076927 instead of multiplying, inflating the
-            // exponent ~2564x and making biological age unreliable for older/less-fit
-            // profiles. Canonical form (from Levine 2018 / reference impl):
-            //   q10 = 1 - exp(-0.0076927 * exp(xb))
-            //   PhenoAge = 141.50225 + ln(-0.00553 * ln(1 - q10)) / 0.090165
-            let mortality = 1.0 - exp(-0.0076927 * exp(xb))
+            // Levine et al. (2018) PhenoAge 规范 mortality 公式（BioAge 包
+            // commit 7e7764f 确认常数）：
+            //   M = 1 − exp(−1.51714 × exp(xb) / 0.0076927)
+            //   PhenoAge = 141.50225 + ln(−0.00553 × ln(1 − M)) / 0.090165
+            // 旧实现丢掉了 1.51714 并把 ÷0.0076927 反成 ×0.0076927，hazard
+            // 缩小 25,637 倍，健康 30 岁输出约 −64 岁；修复后 ≈ +23 岁。
+            let mortality = 1.0 - exp(-1.51714 * exp(xb) / 0.0076927)
             let survival = max(1.0 - mortality, Double.leastNonzeroMagnitude)
-            let phenoAge = 141.50225 + log(-0.00553 * log(survival)) / 0.090165
+            let rawPhenoAge = 141.50225 + log(-0.00553 * log(survival)) / 0.090165
+            // 论文验证人群为 20–84 岁，钳制到可展示区间，避免极端化验输出负值/巨值
+            let phenoAge = min(max(rawPhenoAge, 0.0), 150.0)
             
             // Map factors for display
             let bms = [

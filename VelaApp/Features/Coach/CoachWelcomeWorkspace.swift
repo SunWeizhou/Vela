@@ -14,19 +14,18 @@ struct CoachWelcomeWorkspace: View {
     @ObservedObject private var appState = VelaAppState.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 26) {
             welcomeHeader
 
             workspaceCarousel
 
-            if !vm.isReady {
-                localModeCard
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("你可以这样问")
-                    .font(VelaTheme.caption1().weight(.semibold))
-                    .foregroundStyle(VelaTheme.muted)
+            VStack(alignment: .leading, spacing: 12) {
+                VelaRhythmSectionHeader(
+                    eyebrow: "DIALOGUE STARTERS",
+                    title: "从当前决定继续",
+                    actionTitle: nil,
+                    action: {}
+                )
 
                 VStack(spacing: 0) {
                     ForEach(Array(vm.quickQuestions.prefix(4).enumerated()), id: \.offset) { index, text in
@@ -35,13 +34,13 @@ struct CoachWelcomeWorkspace: View {
                         } label: {
                             HStack(spacing: 12) {
                                 Text(text)
-                                    .font(VelaTheme.body())
-                                    .foregroundStyle(VelaTheme.fg)
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundStyle(VelaTheme.rhythmInk)
                                     .multilineTextAlignment(.leading)
                                 Spacer(minLength: 8)
                                 Image(systemName: "arrow.up.right")
                                     .font(.caption.weight(.semibold))
-                                    .foregroundStyle(VelaTheme.meta)
+                                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             }
                             .padding(.horizontal, 16)
                             .padding(.vertical, 14)
@@ -50,18 +49,21 @@ struct CoachWelcomeWorkspace: View {
                         .buttonStyle(.plain)
 
                         if index < min(vm.quickQuestions.count, 4) - 1 {
-                            Divider().padding(.leading, 16)
+                            Rectangle()
+                                .fill(VelaTheme.rhythmMist)
+                                .frame(height: 0.75)
+                                .padding(.leading, 16)
                         }
                     }
                 }
-                .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
+                .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
-                        .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
                 )
             }
 
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 Button {
                     showWikiProfile = true
                 } label: {
@@ -78,53 +80,60 @@ struct CoachWelcomeWorkspace: View {
     }
 
     private var welcomeHeader: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            ZStack {
-                Circle().fill(VelaTheme.accent.opacity(0.11))
-                Image(systemName: "sparkles")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(VelaTheme.accent)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(VelaTheme.rhythmDeep)
+                    .frame(width: 7, height: 7)
+                Text("DECISION STUDIO")
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(1.35)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
-            .frame(width: 52, height: 52)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("今天想聊什么？")
-                    .font(VelaTheme.title1())
-                    .foregroundStyle(VelaTheme.fg)
-                Text("我会结合你的健康数据，帮助你理解状态并决定下一步。")
-                    .font(VelaTheme.body())
-                    .foregroundStyle(VelaTheme.muted)
-                    .lineSpacing(3)
-            }
+            Text("把决定讲清楚")
+                .font(.system(size: 36, weight: .semibold))
+                .tracking(-1)
+                .foregroundStyle(VelaTheme.rhythmInk)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 4)
         .padding(.top, 8)
+        .background(alignment: .topTrailing) {
+            RadialGradient(
+                colors: [VelaTheme.rhythmGlow.opacity(0.22), .clear],
+                center: .topTrailing,
+                startRadius: 0,
+                endRadius: 150
+            )
+            .frame(width: 190, height: 170)
+            .offset(x: 30, y: -30)
+        }
     }
 
     private var localModeCard: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: "iphone.gen3.radiowaves.left.and.right")
                 .font(VelaTheme.headline())
-                .foregroundStyle(VelaTheme.accent)
+                .foregroundStyle(VelaTheme.rhythmDeep)
                 .frame(width: 36, height: 36)
-                .background(VelaTheme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd))
+                .background(VelaTheme.rhythmMist, in: Circle())
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("本机建议已经可用")
                     .font(VelaTheme.subheadline().weight(.semibold))
-                    .foregroundStyle(VelaTheme.fg)
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Text("即使不连接 AI，Vela 仍会根据已同步信号解释今日计划。连接 AI 只用于更深入的追问。")
                     .font(VelaTheme.footnote())
-                    .foregroundStyle(VelaTheme.fg2)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(VelaTheme.accent.opacity(0.06), in: RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
+        .background(VelaTheme.rhythmMist.opacity(0.62), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
-                .stroke(VelaTheme.accent.opacity(0.18), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         )
         .accessibilityElement(children: .combine)
     }
@@ -133,53 +142,57 @@ struct CoachWelcomeWorkspace: View {
         HStack(spacing: 10) {
             Image(systemName: icon)
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(VelaTheme.accent)
+                .foregroundStyle(VelaTheme.rhythmDeep)
                 .frame(width: 32, height: 32)
-                .background(VelaTheme.accent.opacity(0.09), in: RoundedRectangle(cornerRadius: 10))
+                .background(VelaTheme.rhythmMist, in: Circle())
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(VelaTheme.fg)
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Text(subtitle)
                     .font(VelaTheme.caption2())
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
             Spacer(minLength: 0)
             Image(systemName: "chevron.right")
                 .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(VelaTheme.meta)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
         }
         .padding(12)
         .frame(maxWidth: .infinity, minHeight: 60)
-        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(VelaTheme.borderSoft.opacity(0.6), lineWidth: 0.5)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         )
     }
 
     private var workspaceCarousel: some View {
         VStack(alignment: .leading, spacing: 10) {
-            workspaceSectionTitle(L10n.t("TODAY", "今天"), L10n.t("Your current recommendation", "当前最重要的建议"))
-                .padding(.horizontal, 4)
+            VelaRhythmSectionHeader(
+                eyebrow: "TODAY'S DECISION",
+                title: "当前建议",
+                actionTitle: nil,
+                action: {}
+            )
 
-            LazyVStack(spacing: 12) {
+            LazyVStack(spacing: 8) {
                     if let plan = todayOperatingPlan {
                         let display = displayModel(for: plan)
                         carouselCard(
                             title: display.statusTitle,
                             detail: display.summary,
                             icon: "sparkles",
-                            footer: "\(display.confidenceLabel) · 训练建议"
+                            footer: "\(display.confidenceLabel) · 查看训练边界"
                         ) {
                             appState.routeToTraining()
                         }
                     } else {
                         carouselCard(
                             title: "今日计划待数据",
-                            detail: "同步健康数据后，Vela 会生成与训练页一致的建议；也可以先按当前有限信息生成保守方案。",
+                            detail: "可先生成保守建议",
                             icon: "waveform.path.ecg",
-                            footer: "数据不足 · 可生成保守建议"
+                            footer: "依据有限"
                         ) {
                             onSendMessage("请根据当前可用数据生成保守的今日训练建议。")
                         }
@@ -218,47 +231,44 @@ struct CoachWelcomeWorkspace: View {
         detail: String,
         icon: String,
         footer: String,
-        accentColor: Color = VelaTheme.accent,
+        accentColor: Color = VelaTheme.rhythmDeep,
         isAI: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: icon)
                         .foregroundStyle(accentColor)
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 14, weight: .semibold))
                         .frame(width: 30, height: 30)
                         .background(Circle().fill(accentColor.opacity(0.12)))
                     
                     Text(title)
-                        .font(VelaTheme.subheadline().weight(.bold))
-                        .foregroundStyle(VelaTheme.fg)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
                         .lineLimit(2)
                     
                     Spacer()
                 }
-                
-                Text(detail)
-                    .font(VelaTheme.footnote())
-                    .foregroundStyle(VelaTheme.fg2)
-                    .lineLimit(4)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .multilineTextAlignment(.leading)
-                
-                Spacer(minLength: 0)
-                
+
                 Text(footer)
                     .font(VelaTheme.caption2().weight(.semibold))
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmDeep)
                     .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
-            .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
-            .padding(14)
-            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg).fill(VelaTheme.cardBg))
+            .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .background(RoundedRectangle(cornerRadius: 20).fill(VelaTheme.rhythmCanvasRaised))
             .overlay(
-                RoundedRectangle(cornerRadius: VelaTheme.radiusLg)
-                    .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
             )
             .appleIntelligenceGlow(isHighlighted: isAI, radius: 18)
         }
@@ -363,9 +373,9 @@ struct VelaReportsView: View {
             .padding(16)
             .padding(.bottom, 30)
         }
-        .background(VelaTheme.systemGroupedBackground)
+        .background(VelaTheme.rhythmCanvas)
         .navigationTitle("历史报告")
-        .navigationBarTitleDisplayMode(.inline)
+        .velaRhythmDetailChrome()
         .confirmationDialog(
             "删除这个生成物？",
             isPresented: Binding(
@@ -731,8 +741,10 @@ struct AgentArtifactLibraryView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(VelaTheme.rhythmCanvas)
         .navigationTitle("生成物")
-        .navigationBarTitleDisplayMode(.inline)
+        .velaRhythmDetailChrome()
         .searchable(text: $searchText, prompt: "搜索计划、报告或分析")
         .confirmationDialog(
             "删除这个生成物？",
@@ -878,9 +890,9 @@ struct AgentArtifactDetailView: View {
             .padding(16)
             .padding(.bottom, 24)
         }
-        .background(VelaTheme.systemGroupedBackground)
+        .background(VelaTheme.rhythmCanvas)
         .navigationTitle("生成物详情")
-        .navigationBarTitleDisplayMode(.inline)
+        .velaRhythmDetailChrome()
     }
 
     private func artifactSection<Content: View>(

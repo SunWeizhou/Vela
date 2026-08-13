@@ -174,6 +174,7 @@ final class DailyHealthSummaryRecord {
     // Raw metrics for historical trend analysis
     var healthAge: Double?
     var hrvAverage: Double?
+    var hrvRmssdMilliseconds: Double?
     var restingHeartRate: Double?
     var sleepHours: Double?
     var deepSleepPercent: Double?
@@ -224,6 +225,7 @@ final class DailyHealthSummaryRecord {
         energyBank: Double? = nil,
         healthAge: Double? = nil,
         hrvAverage: Double? = nil,
+        hrvRmssdMilliseconds: Double? = nil,
         restingHeartRate: Double? = nil,
         sleepHours: Double? = nil,
         deepSleepPercent: Double? = nil,
@@ -273,6 +275,7 @@ final class DailyHealthSummaryRecord {
         self.energyBank = energyBank
         self.healthAge = healthAge
         self.hrvAverage = hrvAverage
+        self.hrvRmssdMilliseconds = hrvRmssdMilliseconds
         self.restingHeartRate = restingHeartRate
         self.sleepHours = sleepHours
         self.deepSleepPercent = deepSleepPercent
@@ -326,6 +329,7 @@ final class DailyHealthSummaryRecord {
             energyBank: snapshot.energyBank,
             healthAge: snapshot.healthAge,
             hrvAverage: snapshot.hrvAverage,
+            hrvRmssdMilliseconds: snapshot.hrvRmssdMilliseconds,
             restingHeartRate: snapshot.restingHeartRate,
             sleepHours: snapshot.sleepHours,
             deepSleepPercent: snapshot.deepSleepPercent,
@@ -373,6 +377,7 @@ final class DailyHealthSummaryRecord {
         energyBank = snapshot.energyBank
         healthAge = snapshot.healthAge
         hrvAverage = snapshot.hrvAverage
+        hrvRmssdMilliseconds = snapshot.hrvRmssdMilliseconds
         restingHeartRate = snapshot.restingHeartRate
         sleepHours = snapshot.sleepHours
         deepSleepPercent = snapshot.deepSleepPercent
@@ -460,6 +465,7 @@ final class DailyHealthSummaryRecord {
             energyBank: energyBank,
             healthAge: healthAge,
             hrvAverage: hrvAverage,
+            hrvRmssdMilliseconds: hrvRmssdMilliseconds,
             restingHeartRate: restingHeartRate,
             sleepHours: sleepHours,
             deepSleepPercent: deepSleepPercent,

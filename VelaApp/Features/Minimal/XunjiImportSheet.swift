@@ -71,9 +71,9 @@ struct XunjiImportSheet: View {
                 }
                 .padding(16)
             }
-            .background(VelaTheme.systemGroupedBackground)
+            .background(VelaTheme.rhythmCanvas)
             .navigationTitle("导入训记")
-            .navigationBarTitleDisplayMode(.inline)
+            .velaRhythmDetailChrome()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("关闭") { dismiss() }

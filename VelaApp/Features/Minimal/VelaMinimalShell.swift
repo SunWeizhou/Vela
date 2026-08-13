@@ -298,9 +298,7 @@ struct VelaShell: View {
             .tag(2)
 
             nativeTabSurface(.me) {
-                NavigationStack {
-                    VelaMeView()
-                }
+                VelaMeView()
             }
             .tabItem {
                 Label(label(for: .me), systemImage: iconName(for: .me))
@@ -443,7 +441,7 @@ struct VelaShell: View {
         switch tab {
         case .today:    L10n.t("Today", "今日")
         case .training: L10n.t("Training", "训练")
-        case .coach:    L10n.t("Coach", "教练")
+        case .coach:    "Vela"
         case .me:       L10n.t("Me", "个人")
         }
     }
@@ -457,8 +455,10 @@ struct VelaShell: View {
         _ tab: VelaTab,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        content()
-            .environment(\.velaSurfaceIsActive, appState.selectedTab == tab.rawValue)
+        NavigationStack {
+            content()
+        }
+        .environment(\.velaSurfaceIsActive, appState.selectedTab == tab.rawValue)
     }
 }
 

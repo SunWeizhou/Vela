@@ -91,6 +91,8 @@ struct AccountSettingsView: View {
             }
         }
         .navigationTitle("账户与特征基准")
+        .velaRhythmFormSurface()
+        .velaRhythmDetailChrome()
         .onAppear {
             populateProfileDrafts()
         }
@@ -250,9 +252,9 @@ struct UserWikiArchiveView: View {
                 }
             }
         }
-        .background(VelaTheme.systemGroupedBackground)
+        .background(VelaTheme.rhythmCanvas)
         .navigationTitle("健康档案")
-        .navigationBarTitleDisplayMode(.inline)
+        .velaRhythmDetailChrome()
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button {

@@ -19,86 +19,109 @@ struct CoachInputBar: View {
 
     @FocusState private var inputFocused: Bool
 
+    private var canSubmit: Bool {
+        !vm.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(spacing: 8) {
+        VStack(spacing: 8) {
+            // Optional Data Coverage Banner
+            if dataCoverageSummary.status != .high && dataCoverageSummary.status != .unknown {
                 CoachDataCoverageStrip(model: dataCoverageSummary) {
                     VelaAppState.shared.showSettings = true
                 }
-
-                HStack(spacing: 10) {
-                    Menu {
-                        Button {
-                            showCameraPicker = true
-                        } label: {
-                            Label(L10n.t("Take Photo", "拍照"), systemImage: "camera.fill")
-                        }
-                        Button {
-                            showPhotoLibraryPicker = true
-                        } label: {
-                            Label(L10n.t("Choose from Library", "从相册选择"), systemImage: "photo.on.rectangle")
-                        }
-                    } label: {
-                        Image(systemName: "camera.fill")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(vm.isStreaming || vm.isAnalyzingFood ? VelaTheme.muted : VelaTheme.accent)
-                            .frame(width: 32, height: 32)
-                            .background(Circle().fill(VelaTheme.borderSoft.opacity(0.5)))
-                    }
-                    .disabled(vm.isStreaming || vm.isAnalyzingFood)
-                    .buttonStyle(.plusButton)
-
-                    TextField(L10n.t("Ask...", "提问..."), text: $vm.draft, axis: .vertical)
-                        .lineLimit(1...4)
-                        .focused($inputFocused)
-                        .font(.system(size: 14))
-                        .foregroundStyle(VelaTheme.fg)
-                        .padding(.vertical, 8)
-
-                    Button {
-                        if !vm.isStreaming {
-                            inputFocused = false
-                            vm.submit(
-                                text: vm.draft,
-                                dashboard: dashboard,
-                                modelContext: modelContext,
-                                journalEntries: journalEntries,
-                                savedReports: savedReports,
-                                focus: focus,
-                                services: services
-                            )
-                        }
-                    } label: {
-                        Image(systemName: vm.isStreaming ? "stop.circle.fill" : "arrow.up.circle.fill")
-                            .resizable()
-                            .frame(width: 28, height: 28)
-                            .foregroundStyle(
-                                vm.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !vm.isStreaming
-                                ? VelaTheme.muted
-                                : VelaTheme.accent
-                            )
-                    }
-                    .disabled(vm.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !vm.isStreaming)
-                    .buttonStyle(.plain)
-                }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(VelaTheme.cardBg)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(
-                        inputFocused ? VelaTheme.accent : VelaTheme.borderSoft,
-                        lineWidth: inputFocused ? 1.5 : 0.8
+
+            HStack(alignment: .bottom, spacing: 8) {
+                // Media / Attachment Menu
+                Menu {
+                    Button {
+                        showCameraPicker = true
+                    } label: {
+                        Label(L10n.t("Take Photo", "拍照分析餐食"), systemImage: "camera.fill")
+                    }
+                    Button {
+                        showPhotoLibraryPicker = true
+                    } label: {
+                        Label(L10n.t("Choose from Library", "从相册选择照片"), systemImage: "photo.on.rectangle")
+                    }
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 24, weight: .medium))
+                        .foregroundStyle(vm.isStreaming || vm.isAnalyzingFood ? VelaTheme.muted : VelaTheme.accent)
+                        .frame(width: 36, height: 36)
+                }
+                .disabled(vm.isStreaming || vm.isAnalyzingFood)
+                .buttonStyle(.plain)
+                .accessibilityLabel("添加附件或图片")
+
+                // Multi-line Input Field Container
+                HStack(alignment: .center, spacing: 8) {
+                    TextField(
+                        L10n.t("Ask anything about your health, recovery or workouts...", "询问任何关于健康、恢复、训练或营养的问题..."),
+                        text: $vm.draft,
+                        axis: .vertical
                     )
-            )
-            .animation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion), value: inputFocused)
+                    .lineLimit(1...5)
+                    .focused($inputFocused)
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundStyle(VelaTheme.fg)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(VelaTheme.surface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(
+                            inputFocused ? VelaTheme.accent.opacity(0.8) : VelaTheme.borderSoft,
+                            lineWidth: inputFocused ? 1.5 : 0.8
+                        )
+                )
+
+                // Send / Stop Action Button
+                Button {
+                    if vm.isStreaming {
+                        vm.cancelActiveResponse()
+                    } else if canSubmit {
+                        inputFocused = false
+                        vm.submit(
+                            dashboard: dashboard,
+                            modelContext: modelContext,
+                            journalEntries: journalEntries,
+                            savedReports: savedReports,
+                            focus: focus,
+                            services: services
+                        )
+                    }
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(
+                                vm.isStreaming
+                                ? VelaTheme.strainColor
+                                : (canSubmit ? VelaTheme.accent : VelaTheme.borderSoft.opacity(0.6))
+                            )
+                            .frame(width: 36, height: 36)
+
+                        Image(systemName: vm.isStreaming ? "stop.fill" : "arrow.up")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(
+                                vm.isStreaming || canSubmit ? Color.white : VelaTheme.muted
+                            )
+                    }
+                }
+                .disabled(!vm.isStreaming && !canSubmit)
+                .buttonStyle(.cardPress)
+                .accessibilityLabel(vm.isStreaming ? "停止生成" : "发送消息")
+            }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 12)
         .background(.ultraThinMaterial)
+        .animation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion), value: inputFocused)
     }
 }

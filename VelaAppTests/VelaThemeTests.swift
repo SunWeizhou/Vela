@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 @testable import Vela
 
 final class VelaThemeTests: XCTestCase {
@@ -175,12 +176,12 @@ final class VelaThemeTests: XCTestCase {
         XCTAssertFalse(registry.allowedToolNames.contains("delete_plan"))
     }
 
-    func testBevelParityInterfaceFeatureFlagDefaultsOnAndSupportsRollback() {
+    func testRhythmInterfaceDefaultsOnAndSupportsBevelRegressionOptIn() {
         let suiteName = "VelaFeatureFlags-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        XCTAssertTrue(
+        XCTAssertFalse(
             VelaFeatureFlags.bevelParityInterfaceEnabled(defaults: defaults, arguments: [])
         )
         defaults.set(false, forKey: VelaFeatureFlags.bevelParityInterfaceKey)
@@ -259,6 +260,37 @@ final class VelaThemeTests: XCTestCase {
         XCTAssertNotEqual(String(describing: bg), "")
         XCTAssertNotEqual(String(describing: fg), "")
         XCTAssertNotEqual(String(describing: cardBg), "")
+    }
+
+    func testRhythmDeepOnMeetsWCAGContrastInBothModes() {
+        // rhythmDeep 实底（按钮/气泡/选中标签）上的文字必须 ≥ 4.5:1。
+        // 深色模式下 rhythmDeep 是亮薄荷绿 #65E6B2，白字对比度仅 ~1.7:1，
+        // rhythmDeepOn 在深色模式必须改用深墨字。
+        let lightBase = VelaTheme.rhythmDeepUIColor
+            .resolvedColor(with: UITraitCollection(userInterfaceStyle: .light))
+        let lightOn = VelaTheme.rhythmDeepOnUIColor
+            .resolvedColor(with: UITraitCollection(userInterfaceStyle: .light))
+        let darkBase = VelaTheme.rhythmDeepUIColor
+            .resolvedColor(with: UITraitCollection(userInterfaceStyle: .dark))
+        let darkOn = VelaTheme.rhythmDeepOnUIColor
+            .resolvedColor(with: UITraitCollection(userInterfaceStyle: .dark))
+
+        XCTAssertGreaterThanOrEqual(Self.contrastRatio(lightOn, lightBase), 4.5)
+        XCTAssertGreaterThanOrEqual(Self.contrastRatio(darkOn, darkBase), 4.5)
+    }
+
+    private static func contrastRatio(_ a: UIColor, _ b: UIColor) -> Double {
+        func luminance(_ color: UIColor) -> Double {
+            var r: CGFloat = 0, g: CGFloat = 0, bl: CGFloat = 0, alpha: CGFloat = 0
+            color.getRed(&r, green: &g, blue: &bl, alpha: &alpha)
+            func linear(_ v: CGFloat) -> Double {
+                v <= 0.03928 ? Double(v) / 12.92 : pow((Double(v) + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(bl)
+        }
+        let l1 = luminance(a)
+        let l2 = luminance(b)
+        return (max(l1, l2) + 0.05) / (min(l1, l2) + 0.05)
     }
 
     func testParityGeometryTokensMeetFrozenVisualContract() {

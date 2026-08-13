@@ -39,7 +39,7 @@ enum VelaModelContainer {
         VelaEventRecord.self,
         ProactiveInsightRecord.self
     ]
-    static let schema = Schema(VelaSchemaV2.models)
+    static let schema = Schema(VelaSchemaV3.models)
 
     private static let storeURL: URL = {
         let base = URL.applicationSupportDirectory
@@ -251,6 +251,92 @@ enum VelaSchemaV1: VersionedSchema {
 
 enum VelaSchemaV2: VersionedSchema {
     static let versionIdentifier = Schema.Version(2, 0, 0)
+
+    /// Frozen representation of the production V2 daily summary. Versioned
+    /// schemas must never point at the mutable current model type: doing so
+    /// changes the historical checksum whenever a field is added and makes an
+    /// existing on-device store appear to have an unknown model version.
+    @Model
+    final class DailyHealthSummaryRecord {
+        @Attribute(.unique) var dayIdentifier: String
+        var date: Date
+        var sleepScore: Double?
+        var recoveryScore: Double?
+        var strainScore: Double?
+        var stressIndex: Double?
+        var morningEnergy: Double?
+        var currentEnergy: Double?
+        var energyBank: Double?
+        var configVersion: String
+        var schemaVersion: Int
+        var updatedAt: Date
+        var createdAt: Date
+        var healthAge: Double?
+        var hrvAverage: Double?
+        var restingHeartRate: Double?
+        var sleepHours: Double?
+        var deepSleepPercent: Double?
+        var remSleepPercent: Double?
+        var sleepEfficiency: Double?
+        var steps: Double?
+        var activeCalories: Double?
+        var activeMinutes: Double?
+        var workoutCount: Int?
+        var workoutTypes: String?
+        var workoutDuration: Double?
+        var bodyWeight: Double?
+        var bodyFatPercent: Double?
+        var bmi: Double?
+        var oxygenSaturation: Double?
+        var respiratoryRate: Double?
+        var wristTemperature: Double?
+        var dailyLoad: Double?
+        var workoutLoad: Double?
+        var activityLoad: Double?
+        var trainingLoadRatio: Double?
+        var atl: Double?
+        var ctl: Double?
+        var tsb: Double?
+        var acwr: Double?
+        var bedtime: Date?
+        var wakeTime: Date?
+        var awakeMinutes: Double?
+        var awakeEpisodeCount: Int?
+        var deepSleepMinutes: Double?
+        var remSleepMinutes: Double?
+        @Attribute(.externalStorage) var workoutsData: Data?
+        @Attribute(.externalStorage) var scoreEvidenceData: Data?
+
+        init(
+            dayIdentifier: String,
+            date: Date,
+            sleepScore: Double? = nil,
+            recoveryScore: Double? = nil,
+            configVersion: String = VelaAppMetadata.configVersion,
+            schemaVersion: Int = 2,
+            updatedAt: Date = Date(),
+            createdAt: Date = Date()
+        ) {
+            self.dayIdentifier = dayIdentifier
+            self.date = date
+            self.sleepScore = sleepScore
+            self.recoveryScore = recoveryScore
+            self.configVersion = configVersion
+            self.schemaVersion = schemaVersion
+            self.updatedAt = updatedAt
+            self.createdAt = createdAt
+        }
+    }
+
+    static var models: [any PersistentModel.Type] {
+        var models = VelaModelContainer.modelTypes
+        models[0] = DailyHealthSummaryRecord.self
+        return models
+    }
+}
+
+enum VelaSchemaV3: VersionedSchema {
+    static let versionIdentifier = Schema.Version(3, 0, 0)
     static var models: [any PersistentModel.Type] {
         VelaModelContainer.modelTypes
     }
@@ -258,12 +344,13 @@ enum VelaSchemaV2: VersionedSchema {
 
 enum VelaMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [VelaSchemaV1.self, VelaSchemaV2.self]
+        [VelaSchemaV1.self, VelaSchemaV2.self, VelaSchemaV3.self]
     }
 
     static var stages: [MigrationStage] {
         [
-            .lightweight(fromVersion: VelaSchemaV1.self, toVersion: VelaSchemaV2.self)
+            .lightweight(fromVersion: VelaSchemaV1.self, toVersion: VelaSchemaV2.self),
+            .lightweight(fromVersion: VelaSchemaV2.self, toVersion: VelaSchemaV3.self)
         ]
     }
 }

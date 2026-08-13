@@ -14,6 +14,7 @@ struct DailyHealthSnapshot: Identifiable, Hashable {
     // Raw metrics for historical trend analysis
     var healthAge: Double?
     var hrvAverage: Double?
+    var hrvRmssdMilliseconds: Double?
     var restingHeartRate: Double?
     var sleepHours: Double?
     var deepSleepPercent: Double?
@@ -90,6 +91,7 @@ struct SleepSummary: Identifiable, Codable, Hashable {
 
 struct RecoveryMetricSummary: Codable, Hashable {
     var hrvMilliseconds: Double?
+    var hrvRmssdMilliseconds: Double?
     var restingHeartRate: Double?
     var sleepHeartRate: Double?
     var respiratoryRate: Double?
@@ -153,6 +155,8 @@ struct ExtendedHealthMetrics: Codable, Hashable {
     var biologicalSex: String?         // "male" / "female" / "other"
     var heightCm: Double?
     var bmi: Double?
+    var bodyWeightKg: Double?
+    var bodyFatPercent: Double?
 
     // Cardiovascular advanced
     var walkingHeartRateAvg: Double?    // bpm
