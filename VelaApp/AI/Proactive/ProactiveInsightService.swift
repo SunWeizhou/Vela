@@ -252,6 +252,46 @@ enum ProactiveInsightService {
                     : "My stress is elevated today. How should I adjust training and recovery?"
             ))
         }
+
+        // 深度专项批次 3：三年轨迹脱轨检测（近 30 天变化速度显著快于三年轨迹）。
+        if let signal = dashboard.longTermBaselines?.derailmentRHR {
+            insights.append(ProactiveInsight(
+                focus: .recovery,
+                severity: .alert,
+                title: isChinese ? "静息心率近期上升过快" : "Resting heart rate is rising fast",
+                body: isChinese
+                    ? "近 30 天静息心率的变化速度明显快于三年轨迹。优先确认睡眠、训练负荷与压力，再决定是否维持当前节奏。"
+                    : "Your resting heart rate is drifting faster than its three-year trajectory. Check sleep, training load, and stress before keeping the current rhythm.",
+                suggestedAction: isChinese
+                    ? "今天以恢复优先：核对近期训练量、保证睡眠，必要时安排 1-2 天轻量活动。"
+                    : "Prioritize recovery today: review recent training volume, protect sleep, and consider 1-2 light days.",
+                relatedMetrics: ["resting_heart_rate"],
+                evidence: [signal.summary],
+                priority: 6,
+                coachPresetQuestion: isChinese
+                    ? "我的静息心率近 30 天上升明显快于三年轨迹，可能是什么原因？"
+                    : "My resting heart rate has risen much faster than its three-year trajectory. What could cause this?"
+            ))
+        }
+        if let signal = dashboard.longTermBaselines?.derailmentHRV {
+            insights.append(ProactiveInsight(
+                focus: .recovery,
+                severity: .alert,
+                title: isChinese ? "HRV 近期下降过快" : "HRV is declining fast",
+                body: isChinese
+                    ? "近 30 天 HRV 的下降速度明显快于三年轨迹。优先确认恢复与睡眠，再决定是否维持当前节奏。"
+                    : "Your HRV is declining faster than its three-year trajectory. Check recovery and sleep before keeping the current rhythm.",
+                suggestedAction: isChinese
+                    ? "今天以恢复优先：核对近期训练量、保护睡眠，避免叠加高强度训练。"
+                    : "Prioritize recovery today: review training volume, protect sleep, and avoid stacking high-intensity work.",
+                relatedMetrics: ["hrv"],
+                evidence: [signal.summary],
+                priority: 7,
+                coachPresetQuestion: isChinese
+                    ? "我的 HRV 近 30 天下降明显快于三年轨迹，可能是什么原因？"
+                    : "My HRV has declined much faster than its three-year trajectory. What could cause this?"
+            ))
+        }
         
         if insights.isEmpty {
             let hasReadinessData = dashboard.recovery.hasData || dashboard.sleepScore.hasData || dashboard.strain.hasData

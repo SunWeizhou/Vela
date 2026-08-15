@@ -2413,4 +2413,159 @@ final class VelaThemeTests: XCTestCase {
         XCTAssertTrue(zh500.contains("500"), "5xx 应提示服务端故障")
         XCTAssertNotEqual(zh400, zh429)
     }
+
+
+    // MARK: - 深度专项批次 3 回归（三年建模）
+
+    func testMonthlyMADBaselineBucketsByMonthWithGuards() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let jan = calendar.date(from: DateComponents(year: 2024, month: 1, day: 1))!
+        let jul = calendar.date(from: DateComponents(year: 2024, month: 7, day: 1))!
+        var points: [LongTermBaselinePoint] = []
+        for i in 0..<30 {
+            points.append(LongTermBaselinePoint(
+                date: calendar.date(byAdding: .day, value: i, to: jan)!,
+                hrvAverage: 60 + Double(i % 5)
+            ))
+            points.append(LongTermBaselinePoint(
+                date: calendar.date(byAdding: .day, value: i, to: jul)!,
+                hrvAverage: 40 + Double(i % 5)
+            ))
+        }
+        let today = calendar.date(byAdding: .day, value: 29, to: jul)!
+        let baseline = MonthlyMADBaseline.compute(points: points, metric: .hrv, today: today, calendar: calendar)
+        XCTAssertNotNil(baseline)
+        XCTAssertEqual(baseline?.bands.count, 2, "1 月与 7 月各成一条月度带")
+        let julyBand = baseline?.band(for: 7)
+        XCTAssertEqual(julyBand?.median ?? 0, 42, accuracy: 0.5)
+        let z = baseline?.zScore(for: 36, month: 7)
+        XCTAssertNotNil(z)
+        XCTAssertLessThan(z ?? 0, -1, "低于同月带中位 6ms 应显著为负")
+        // 护栏：总样本 < 60 天不发布。
+        let sparse = MonthlyMADBaseline.compute(points: Array(points.prefix(40)), metric: .hrv, today: today, calendar: calendar)
+        XCTAssertNil(sparse)
+    }
+
+    func testDerailmentDetectsAcceleratedRecentRHRRise() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let start = calendar.date(from: DateComponents(year: 2023, month: 8, day: 1))!
+        var points: [LongTermBaselinePoint] = []
+        for i in 0..<400 {
+            let day = calendar.date(byAdding: .day, value: i, to: start)!
+            // 前 370 天平稳 58；近 30 天加速上升 58 → 62.5（0.15/天）。
+            let value = i >= 370 ? 58 + Double(i - 370) * 0.15 : 58
+            points.append(LongTermBaselinePoint(date: day, restingHeartRate: value))
+        }
+        let today = calendar.date(byAdding: .day, value: 400, to: start)!
+        let signal = DerailmentSignal.detect(points: points, metric: .restingHeartRate, today: today, calendar: calendar)
+        XCTAssertNotNil(signal, "近 30 天 RHR 加速上升应触发脱轨信号")
+        XCTAssertTrue(signal?.summary.contains("静息心率") == true)
+        // 对照：全程平稳 → 不触发。
+        var flat = points
+        for i in 370..<400 {
+            flat[i].restingHeartRate = 58
+        }
+        XCTAssertNil(DerailmentSignal.detect(points: flat, metric: .restingHeartRate, today: today, calendar: calendar))
+    }
+
+    func testSeasonalProfileDetectsAnnualCycle() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let start = calendar.date(from: DateComponents(year: 2023, month: 1, day: 1))!
+        var points: [LongTermBaselinePoint] = []
+        for i in 0..<730 {
+            let day = calendar.date(byAdding: .day, value: i, to: start)!
+            let dayOfYear = Double(calendar.ordinality(of: .day, in: .year, for: day) ?? 1)
+            let rhr = 60 + 4 * sin(2 * .pi * dayOfYear / 365.0)
+            points.append(LongTermBaselinePoint(date: day, restingHeartRate: rhr))
+        }
+        let today = calendar.date(byAdding: .day, value: 730, to: start)!
+        let profile = SeasonalProfile.detect(points: points, metric: .restingHeartRate, today: today, calendar: calendar)
+        XCTAssertNotNil(profile)
+        XCTAssertEqual(profile?.hasSeasonality, true, "±13% 的年度波动应判定为有季节性")
+        XCTAssertGreaterThan(profile?.amplitudePercent ?? 0, 5)
+        // 护栏：不足两年不发布。
+        let oneYear = SeasonalProfile.detect(points: Array(points.prefix(365)), metric: .restingHeartRate, today: today, calendar: calendar)
+        XCTAssertNil(oneYear)
+    }
+
+    func testDoseResponseCurvePublishesHighDoseEffect() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let base = calendar.date(from: DateComponents(year: 2025, month: 1, day: 1))!
+        var records: [DailyHealthSummaryRecord] = []
+        for i in 0..<90 {
+            let day = calendar.date(byAdding: .day, value: i * 2, to: base)!
+            let next = calendar.date(byAdding: .day, value: 1, to: day)!
+            let highDose = i % 2 == 0
+            records.append(DailyHealthSummaryRecord(
+                dayIdentifier: DailyHealthSummaryRecord.dayIdentifier(for: day, calendar: calendar),
+                date: day,
+                hrvAverage: 50,
+                workoutCount: 1,
+                workoutDuration: highDose ? 90 : 20
+            ))
+            records.append(DailyHealthSummaryRecord(
+                dayIdentifier: DailyHealthSummaryRecord.dayIdentifier(for: next, calendar: calendar),
+                date: next,
+                hrvAverage: highDose ? 44 : 49
+            ))
+        }
+        let asOf = calendar.date(byAdding: .day, value: 180, to: base)!
+        let curve = BodyModelBuilder.doseResponseCurve(dailySummaries: records, calendar: calendar, asOf: asOf)
+        XCTAssertNotNil(curve)
+        XCTAssertTrue(curve?.summary.contains("多降") == true, "高剂量日次日 HRV 多降 5ms 应成结论")
+        XCTAssertEqual(curve?.samplePairs, 90)
+        // 护栏：总对 < 60 不发布。
+        XCTAssertNil(BodyModelBuilder.doseResponseCurve(dailySummaries: Array(records.prefix(40)), calendar: calendar, asOf: asOf))
+    }
+
+    func testRecoveryMonthlyGateOnlyLowersScore() {
+        var input = RecoveryScoreInput(
+            asOf: Date(),
+            hrvToday: 40,
+            hrvBaseline: 45,
+            hrvHistory: [45, 46, 44, 47, 45],
+            restingHeartRateToday: 60,
+            restingHeartRateBaseline: 60,
+            rhrHistory: [60, 61, 59, 60, 62],
+            sleepScoreLastNight: 80,
+            strainScoreYesterday: 50
+        )
+        let base = RecoveryScoreEngine().calculate(from: input)
+        let monthlyContext = RecoveryLongTermContext(
+            hrvPercentile10: 20,
+            hrvPercentile90: 80,
+            hrvSampleCount: 60,
+            hrvMonthlyGateThreshold: 45
+        )
+        input.longTermContext = monthlyContext
+        let gated = RecoveryScoreEngine().calculate(from: input)
+        XCTAssertEqual((base.value ?? 0) - (gated.value ?? 0), 2, accuracy: 0.001, "低于同月带下限应 -2")
+        XCTAssertTrue(gated.reasons.contains { $0.contains("月度带") })
+        // 高于下限 → 不修正（对照：同 hrv=50、无上下文的基线）。
+        input.hrvToday = 50
+        input.longTermContext = nil
+        let base50 = RecoveryScoreEngine().calculate(from: input)
+        input.longTermContext = monthlyContext
+        let above = RecoveryScoreEngine().calculate(from: input)
+        XCTAssertEqual((base50.value ?? 0) - (above.value ?? 0), 0, accuracy: 0.001, "高于月度带下限不得修正")
+    }
+
+    func testProactiveInsightFlagsDerailmentSignals() {
+        var dashboard = DashboardSummary.preview(date: Date())
+        var report = LongTermBaselineEngine.compute(points: [], today: Date(), calendar: Calendar.current)
+        report.derailmentRHR = DerailmentSignal(
+            metric: .restingHeartRate,
+            longTermSlopePerDay: 0.001,
+            recentSlopePerDay: 0.15,
+            recentSampleDays: 30
+        )
+        dashboard.longTermBaselines = report
+        let insights = ProactiveInsightService.evaluate(dashboard: dashboard)
+        XCTAssertTrue(insights.contains { $0.title.contains("静息心率") && $0.severity == .alert },
+                      "脱轨信号应生成高优先级主动洞察")
+    }
 }

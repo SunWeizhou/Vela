@@ -267,7 +267,7 @@ final class DailyHealthComputation {
             respiratoryRateHistory: respiratoryHistory,
             bodyTempDelta: temperatureDelta,
             SpO2: snapshot.oxygenSaturation,
-            longTermContext: recoveryLongTermContext(from: longTermBaselines)
+            longTermContext: recoveryLongTermContext(from: longTermBaselines, asOf: asOf)
         ))
 
         let strain = StrainScoreEngine().calculate(from: StrainScoreInput(
@@ -359,14 +359,24 @@ final class DailyHealthComputation {
     }
 
     /// Layer 3：从三年长线报告提取 HRV 分布上下文（样本不足 60 天时返回 nil，不启用修正）。
-    private func recoveryLongTermContext(from report: LongTermBaselineReport?) -> RecoveryLongTermContext? {
+    /// 深度专项批次 3：同时提取「同月三年 MAD 带」的保守下限（median − 1.5×MAD）。
+    private func recoveryLongTermContext(
+        from report: LongTermBaselineReport?,
+        asOf date: Date
+    ) -> RecoveryLongTermContext? {
         guard let report,
               let hrvBaseline = report.baselines[.hrv],
               hrvBaseline.sampleCount >= 60 else { return nil }
+        let month = calendar.component(.month, from: date)
+        var gate: Double?
+        if let band = report.monthlyHRV?.band(for: month), band.mad > 0 {
+            gate = band.median - 1.5 * band.mad
+        }
         return RecoveryLongTermContext(
             hrvPercentile10: hrvBaseline.percentile10,
             hrvPercentile90: hrvBaseline.percentile90,
-            hrvSampleCount: hrvBaseline.sampleCount
+            hrvSampleCount: hrvBaseline.sampleCount,
+            hrvMonthlyGateThreshold: gate
         )
     }
 

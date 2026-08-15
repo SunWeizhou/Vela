@@ -238,6 +238,13 @@ enum TodayCommandBuilder {
             for line in lines {
                 reasons.append("长线参照：\(line)")
             }
+            // 深度专项批次 3：同月三年 MAD 带（只报低于下限的保守信号）。
+            if let hrv = dashboard.recoveryMetrics.hrvMilliseconds,
+               let band = report.monthlyHRV?.band(for: Calendar.current.component(.month, from: dashboard.date)),
+               band.mad > 0,
+               hrv < band.median - 1.5 * band.mad {
+                reasons.append("长线参照：HRV \(Int(hrv.rounded())) ms 低于同期三年 \(band.month) 月带下限（约 \(Int((band.median - 1.5 * band.mad).rounded())) ms）")
+            }
         }
         let thresholds = PersonalBaselineEngine.resolveThresholds()
         if dashboard.recovery.score < thresholds.recoveryRest {

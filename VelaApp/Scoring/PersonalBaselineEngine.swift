@@ -606,6 +606,208 @@ struct LongTermBaselineReport: Hashable, Sendable {
     var latestDate: Date?
     var baselines: [LongTermBaselineMetric: LongTermMetricBaseline] = [:]
     var trainingVolume: TrainingVolumeLongTerm?
+    // 深度专项批次 3：同期三年月度 MAD 带（今天 vs 同月三年）。
+    var monthlyHRV: MonthlyMADBaseline? = nil
+    var monthlyRHR: MonthlyMADBaseline? = nil
+    // 深度专项批次 3：近 30 天 vs 三年轨迹的脱轨信号。
+    var derailmentHRV: DerailmentSignal? = nil
+    var derailmentRHR: DerailmentSignal? = nil
+    // 深度专项批次 3：月历节律（季节性剖面）。
+    var seasonalHRV: SeasonalProfile? = nil
+    var seasonalRHR: SeasonalProfile? = nil
+}
+
+// MARK: - 深度专项批次 3：三年建模（月度 MAD 带 / 脱轨 / 季节性）
+
+/// 某个月份的稳健基线（同月三年内逐日值）。
+struct MonthlyBaselineBand: Hashable, Sendable {
+    var month: Int            // 1-12
+    var sampleCount: Int
+    var median: Double
+    var mad: Double           // 1.4826 × 绝对中位差
+}
+
+/// 同期三年月度 MAD 基线：吸收冬夏节律，避免「夏天 HRV 被当成冬天的异常」。
+struct MonthlyMADBaseline: Hashable, Sendable {
+    var metric: LongTermBaselineMetric
+    var bands: [MonthlyBaselineBand] = []
+
+    static let minimumMonthSamples = 20
+    static let minimumTotalSamples = 60
+
+    static func compute(
+        points: [LongTermBaselinePoint],
+        metric: LongTermBaselineMetric,
+        today: Date,
+        calendar: Calendar
+    ) -> MonthlyMADBaseline? {
+        let endOfToday = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: today)) ?? today
+        let ordered = points.filter { $0.date < endOfToday }
+        var byMonth: [Int: [Double]] = [:]
+        for point in ordered {
+            guard let value = point.value(for: metric), value.isFinite, value > 0 else { continue }
+            if metric == .restingHeartRate, value <= 20 { continue }
+            if metric == .bodyWeight, value <= 30 { continue }
+            byMonth[calendar.component(.month, from: point.date), default: []].append(value)
+        }
+        var bands: [MonthlyBaselineBand] = []
+        for (month, values) in byMonth.sorted(by: { $0.key < $1.key }) {
+            guard values.count >= minimumMonthSamples,
+                  let med = PersonalBaselineEngine.median(values) else { continue }
+            let mad = PersonalBaselineEngine.median(values.map { abs($0 - med) }) ?? 0
+            let scaledMAD = mad * 1.4826
+            bands.append(MonthlyBaselineBand(month: month, sampleCount: values.count, median: med, mad: scaledMAD))
+        }
+        let total = bands.reduce(0) { $0 + $1.sampleCount }
+        guard total >= minimumTotalSamples else { return nil }
+        return MonthlyMADBaseline(metric: metric, bands: bands)
+    }
+
+    /// 今日值在「同月三年带」里的 z 值；带不存在或 MAD 为 0 时返回 nil。
+    func zScore(for value: Double, month: Int) -> Double? {
+        guard let band = bands.first(where: { $0.month == month }), band.mad > 0 else { return nil }
+        return (value - band.median) / band.mad
+    }
+
+    /// 同月带的中位/MAD（供决策理由展示）。
+    func band(for month: Int) -> MonthlyBaselineBand? {
+        bands.first { $0.month == month }
+    }
+}
+
+/// 近 30 天轨迹 vs 三年轨迹的脱轨信号（只报不利方向）。
+struct DerailmentSignal: Hashable, Sendable {
+    var metric: LongTermBaselineMetric
+    var longTermSlopePerDay: Double
+    var recentSlopePerDay: Double
+    var recentSampleDays: Int
+
+    var summary: String {
+        let unit = metric.unit
+        return "近 30 天 \(metric.title) 变化速度（\(String(format: "%+.2f", recentSlopePerDay)) \(unit)/天）明显快于三年轨迹（\(String(format: "%+.3f", longTermSlopePerDay)) \(unit)/天）"
+    }
+
+    /// 方向不利（RHR 上升 / HRV 下降）且近期速度显著快于长期轨迹时触发。
+    static func detect(
+        points: [LongTermBaselinePoint],
+        metric: LongTermBaselineMetric,
+        today: Date,
+        calendar: Calendar
+    ) -> DerailmentSignal? {
+        let endOfToday = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: today)) ?? today
+        let ordered = points
+            .filter { $0.date < endOfToday }
+            .sorted { $0.date < $1.date }
+        guard ordered.count >= 180 else { return nil }
+        let recentStart = calendar.date(byAdding: .day, value: -30, to: today) ?? today
+        let recent = ordered.filter { $0.date >= recentStart }
+        guard recent.count >= 20 else { return nil }
+
+        // 三年月均值最小二乘斜率（天）。
+        func monthStartDate(_ date: Date) -> Date {
+            calendar.date(from: calendar.dateComponents([.year, .month], from: date)) ?? date
+        }
+        var monthly: [(x: Double, y: Double)] = []
+        let groupedByMonth = Dictionary(grouping: ordered) { monthStartDate($0.date) }
+        for (monthStart, pointsInMonth) in groupedByMonth {
+            let valid = pointsInMonth.compactMap { $0.value(for: metric) }.filter { $0 > 0 && $0.isFinite }
+            guard valid.count >= 5, let med = PersonalBaselineEngine.median(valid) else { continue }
+            monthly.append((x: monthStart.timeIntervalSince1970 / 86_400, y: med))
+        }
+        guard monthly.count >= 6 else { return nil }
+        let longSlope = leastSquaresSlope(monthly)
+        // 近 30 天逐日最小二乘斜率（天）。
+        var daily: [(x: Double, y: Double)] = []
+        for point in recent {
+            guard let value = point.value(for: metric), value > 0, value.isFinite else { continue }
+            daily.append((x: point.date.timeIntervalSince1970 / 86_400, y: value))
+        }
+        guard daily.count >= 20 else { return nil }
+        let recentSlope = leastSquaresSlope(daily)
+        // 方向判定：RHR 上升不利、HRV 下降不利。
+        let unfavorable: Bool
+        switch metric {
+        case .restingHeartRate: unfavorable = recentSlope > 0
+        case .hrv: unfavorable = recentSlope < 0
+        default: unfavorable = false
+        }
+        guard unfavorable else { return nil }
+        // 触发：近期速度 ≥ 长期速度的 5 倍（且长期接近 0 时给最小绝对速度地板）。
+        let floor: Double = metric == .restingHeartRate ? 0.02 : 0.05
+        let threshold = max(5 * abs(longSlope), floor)
+        guard abs(recentSlope) >= threshold else { return nil }
+        return DerailmentSignal(
+            metric: metric,
+            longTermSlopePerDay: longSlope,
+            recentSlopePerDay: recentSlope,
+            recentSampleDays: daily.count
+        )
+    }
+
+    private static func leastSquaresSlope(_ samples: [(x: Double, y: Double)]) -> Double {
+        guard samples.count >= 2 else { return 0 }
+        let n = Double(samples.count)
+        let meanX = samples.reduce(0) { $0 + $1.x } / n
+        let meanY = samples.reduce(0) { $0 + $1.y } / n
+        let sxx = samples.reduce(0) { $0 + ($1.x - meanX) * ($1.x - meanX) }
+        let sxy = samples.reduce(0) { $0 + ($1.x - meanX) * ($1.y - meanY) }
+        guard sxx > 0 else { return 0 }
+        return sxy / sxx
+    }
+}
+
+/// 12 个月份均值剖面与季节幅度（≥2 年数据才发布）。
+struct SeasonalProfile: Hashable, Sendable {
+    var metric: LongTermBaselineMetric
+    var monthlyMeans: [Int: Double] = [:]
+    var amplitudePercent: Double?     // (max-min)/三年中位 × 100
+    var hasSeasonality: Bool
+    var peakMonth: Int?
+    var troughMonth: Int?
+
+    var summary: String? {
+        guard hasSeasonality, let amplitudePercent else { return nil }
+        return "\(metric.title)存在约 ±\(String(format: "%.0f", amplitudePercent))% 的季节波动（峰值 \(peakMonth ?? 0) 月）"
+    }
+
+    static func detect(
+        points: [LongTermBaselinePoint],
+        metric: LongTermBaselineMetric,
+        today: Date,
+        calendar: Calendar
+    ) -> SeasonalProfile? {
+        let endOfToday = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: today)) ?? today
+        let ordered = points.filter { $0.date < endOfToday }
+        var byMonth: [Int: [Double]] = [:]
+        for point in ordered {
+            guard let value = point.value(for: metric), value > 0, value.isFinite else { continue }
+            byMonth[calendar.component(.month, from: point.date), default: []].append(value)
+        }
+        let monthsPresent = byMonth.filter { $0.value.count >= 15 }
+        guard monthsPresent.count >= 8, ordered.count >= 730 else { return nil }
+        var means: [Int: Double] = [:]
+        var allValues: [Double] = []
+        for (month, values) in monthsPresent {
+            let mean = values.reduce(0, +) / Double(values.count)
+            means[month] = mean
+            allValues.append(contentsOf: values)
+        }
+        guard let median = PersonalBaselineEngine.median(allValues), median > 0 else { return nil }
+        let sortedMeans = means.sorted { $0.value < $1.value }
+        let minMean = sortedMeans.first
+        let maxMean = sortedMeans.last
+        let amplitude = ((maxMean?.value ?? 0) - (minMean?.value ?? 0)) / median * 100
+        let threshold = metric == .restingHeartRate ? 3.0 : 8.0
+        let hasSeasonality = amplitude > threshold
+        return SeasonalProfile(
+            metric: metric,
+            monthlyMeans: means,
+            amplitudePercent: hasSeasonality ? amplitude : nil,
+            hasSeasonality: hasSeasonality,
+            peakMonth: hasSeasonality ? maxMean?.key : nil,
+            troughMonth: hasSeasonality ? minMean?.key : nil
+        )
+    }
 }
 
 enum LongTermBaselineEngine {
@@ -662,13 +864,27 @@ enum LongTermBaselineEngine {
 
         let volume = trainingVolume(of: ordered, calendar: calendar, today: today)
 
+        // 深度专项批次 3：三年建模（月度 MAD 带 / 脱轨 / 季节性）。
+        let monthlyHRV = MonthlyMADBaseline.compute(points: ordered, metric: .hrv, today: today, calendar: calendar)
+        let monthlyRHR = MonthlyMADBaseline.compute(points: ordered, metric: .restingHeartRate, today: today, calendar: calendar)
+        let derailmentHRV = DerailmentSignal.detect(points: ordered, metric: .hrv, today: today, calendar: calendar)
+        let derailmentRHR = DerailmentSignal.detect(points: ordered, metric: .restingHeartRate, today: today, calendar: calendar)
+        let seasonalHRV = SeasonalProfile.detect(points: ordered, metric: .hrv, today: today, calendar: calendar)
+        let seasonalRHR = SeasonalProfile.detect(points: ordered, metric: .restingHeartRate, today: today, calendar: calendar)
+
         return LongTermBaselineReport(
             calculatedAt: today,
             daysOfData: ordered.count,
             earliestDate: ordered.first?.date,
             latestDate: ordered.last?.date,
             baselines: baselines,
-            trainingVolume: volume
+            trainingVolume: volume,
+            monthlyHRV: monthlyHRV,
+            monthlyRHR: monthlyRHR,
+            derailmentHRV: derailmentHRV,
+            derailmentRHR: derailmentRHR,
+            seasonalHRV: seasonalHRV,
+            seasonalRHR: seasonalRHR
         )
     }
 

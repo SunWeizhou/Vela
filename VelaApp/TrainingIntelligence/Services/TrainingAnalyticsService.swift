@@ -1440,3 +1440,89 @@ extension TrainingAnalyticsService {
         return result
     }
 }
+
+// MARK: - 深度专项批次 3：训记历史批量回填
+
+/// 逐日拉取训记训练并导入（默认近 90 天，游标存 UserDefaults 可断点续传）。
+/// 三年 e1RM/容量/肌群频率轨迹的前置条件：训记组次数据目前只有最近 3 天自动导入。
+@MainActor
+final class XunjiHistoryBackfillService: ObservableObject {
+    static let shared = XunjiHistoryBackfillService()
+
+    private static let cursorKey = "vela.xunji.backfill.next_offset"
+    private static let totalDaysKey = "vela.xunji.backfill.total_days"
+
+    @Published private(set) var isRunning = false
+    @Published private(set) var completedDays = 0
+    @Published private(set) var importedCount = 0
+    @Published private(set) var errorMessage: String?
+    @Published var totalDays: Int {
+        didSet { UserDefaults.standard.set(totalDays, forKey: Self.totalDaysKey) }
+    }
+
+    private init() {
+        let stored = UserDefaults.standard.integer(forKey: Self.totalDaysKey)
+        totalDays = stored > 0 ? stored : 90
+        completedDays = UserDefaults.standard.integer(forKey: Self.cursorKey)
+    }
+
+    static func dateString(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+
+    /// 从游标处继续：逐日导入，单日失败不中断；连续 5 天失败暂停并报错。
+    func run(
+        modelContext: ModelContext,
+        apiKey: String,
+        calendar: Calendar = .current
+    ) async {
+        guard !isRunning else { return }
+        isRunning = true
+        errorMessage = nil
+        defer { isRunning = false }
+
+        let start = UserDefaults.standard.integer(forKey: Self.cursorKey)
+        var consecutiveFailures = 0
+        for offset in start..<totalDays {
+            guard let date = calendar.date(byAdding: .day, value: -offset, to: Date()) else { break }
+            let datestr = Self.dateString(date)
+            do {
+                let data = try await XunjiTrainingAPIClient().fetchTraining(
+                    apiKey: apiKey,
+                    datestr: datestr,
+                    includeFullData: true
+                )
+                let summary = try XunjiTrainingImportService().importResponseData(
+                    data,
+                    datestr: datestr,
+                    modelContext: modelContext
+                )
+                importedCount += summary.importedCount
+                consecutiveFailures = 0
+            } catch {
+                consecutiveFailures += 1
+                if consecutiveFailures >= 5 {
+                    errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    UserDefaults.standard.set(offset, forKey: Self.cursorKey)
+                    return
+                }
+            }
+            completedDays = offset + 1
+            UserDefaults.standard.set(offset + 1, forKey: Self.cursorKey)
+        }
+        if completedDays >= totalDays {
+            UserDefaults.standard.removeObject(forKey: Self.cursorKey)
+        }
+    }
+
+    func reset() {
+        UserDefaults.standard.removeObject(forKey: Self.cursorKey)
+        completedDays = 0
+        importedCount = 0
+        errorMessage = nil
+    }
+}

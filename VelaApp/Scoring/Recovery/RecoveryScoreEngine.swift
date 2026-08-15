@@ -6,11 +6,20 @@ public struct RecoveryLongTermContext: Hashable, Sendable {
     public var hrvPercentile10: Double?
     public var hrvPercentile90: Double?
     public var hrvSampleCount: Int
+    /// 深度专项批次 3：同月三年 MAD 带的保守下限（median − 1.5×MAD）；
+    /// 今日 HRV 低于它时 -2（只向保守收紧，绝不上调）。
+    public var hrvMonthlyGateThreshold: Double?
 
-    public init(hrvPercentile10: Double? = nil, hrvPercentile90: Double? = nil, hrvSampleCount: Int = 0) {
+    public init(
+        hrvPercentile10: Double? = nil,
+        hrvPercentile90: Double? = nil,
+        hrvSampleCount: Int = 0,
+        hrvMonthlyGateThreshold: Double? = nil
+    ) {
         self.hrvPercentile10 = hrvPercentile10
         self.hrvPercentile90 = hrvPercentile90
         self.hrvSampleCount = hrvSampleCount
+        self.hrvMonthlyGateThreshold = hrvMonthlyGateThreshold
     }
 
     var isValid: Bool {
@@ -317,6 +326,14 @@ public struct RecoveryScoreEngine: ScoreEngine {
                     recoveryValue = ScoringMath.clamp(val + 3, min: 0, max: 100)
                 }
                 reasons.append("HRV 高于三年分布 P90（长期视角同样偏高），恢复评分小幅上调")
+            }
+            // 深度专项批次 3：同期三年月度 MAD 带（第二门控，只向保守收紧——
+            // 低于同月带下限 -2，绝不据月度偏高上调）。
+            if let gate = longTerm.hrvMonthlyGateThreshold, hrvToday < gate {
+                if let val = recoveryValue {
+                    recoveryValue = ScoringMath.clamp(val - 2, min: 0, max: 100)
+                }
+                reasons.append("HRV 低于同期三年月度带下限（同月 MAD 带），恢复评分小幅下调")
             }
         }
 

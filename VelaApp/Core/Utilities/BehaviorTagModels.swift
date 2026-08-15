@@ -323,6 +323,16 @@ struct BodyModelBuilder {
                 evidenceCount: pairing.sampleCount
             ))
         }
+        // 深度专项批次 3：长线剂量-反应曲线（只作参考/收紧，不据良好反应加量）。
+        if let dose = Self.doseResponseCurve(dailySummaries: dailySummaries, calendar: calendar, asOf: asOf) {
+            claims.append(BodyModelClaim(
+                id: "dose_response_curve",
+                title: "训练剂量-反应曲线",
+                summary: dose.summary,
+                confidence: dose.samplePairs >= 120 ? .high : .medium,
+                evidenceCount: dose.samplePairs
+            ))
+        }
         if behaviorPairs >= 6 {
             let grouped = Dictionary(grouping: behaviorSignals, by: \.tag)
             if let top = grouped.max(by: { $0.value.count < $1.value.count }) {
@@ -466,6 +476,80 @@ struct BodyModelBuilder {
         return TrainingOutcomePairing(
             sampleCount: sampleCount,
             summary: "三年配对（n=\(sampleCount) 个训练日）：\(parts.joined(separator: "；"))"
+        )
+    }
+
+    /// 深度专项批次 3：长线剂量-反应曲线（训练时长剂量 → 次日 HRV/RHR）。
+    /// 三分位稳健对照（低/中/高剂量各 ≥8 对、总 ≥60 对），只作参考/收紧信号，
+    /// 绝不据良好反应建议加量（ADR 0005 保守原则）。
+    struct DoseResponseCurve: Equatable {
+        var samplePairs: Int
+        var summary: String
+    }
+
+    static func doseResponseCurve(
+        dailySummaries: [DailyHealthSummaryRecord],
+        calendar: Calendar = .current,
+        asOf: Date = Date()
+    ) -> DoseResponseCurve? {
+        let byDay = Dictionary(uniqueKeysWithValues: dailySummaries.map { (calendar.startOfDay(for: $0.date), $0) })
+        let sortedDays = byDay.keys.filter { $0 <= calendar.startOfDay(for: asOf) }.sorted()
+        var pairs: [(dose: Double, hrvDelta: Double?, rhrDelta: Double?)] = []
+        for day in sortedDays {
+            guard let record = byDay[day],
+                  let duration = record.workoutDuration, duration >= 15,
+                  let next = calendar.date(byAdding: .day, value: 1, to: day),
+                  let nextRecord = byDay[next] else { continue }
+            let hrvDelta: Double?
+            if let today = record.hrvAverage, let tomorrow = nextRecord.hrvAverage {
+                hrvDelta = tomorrow - today
+            } else {
+                hrvDelta = nil
+            }
+            let rhrDelta: Double?
+            if let today = record.restingHeartRate, let tomorrow = nextRecord.restingHeartRate {
+                rhrDelta = tomorrow - today
+            } else {
+                rhrDelta = nil
+            }
+            guard hrvDelta != nil || rhrDelta != nil else { continue }
+            pairs.append((dose: duration, hrvDelta: hrvDelta, rhrDelta: rhrDelta))
+        }
+        guard pairs.count >= 60 else { return nil }
+        let sorted = pairs.sorted { $0.dose < $1.dose }
+        let n = sorted.count
+        let low = sorted[0..<(n / 3)]
+        let high = sorted[((2 * n) / 3)...]
+        guard low.count >= 8, high.count >= 8 else { return nil }
+
+        func meanHRV(_ slice: ArraySlice<(dose: Double, hrvDelta: Double?, rhrDelta: Double?)>) -> Double? {
+            let values = slice.compactMap(\.hrvDelta)
+            guard !values.isEmpty else { return nil }
+            return values.reduce(0, +) / Double(values.count)
+        }
+        func meanRHR(_ slice: ArraySlice<(dose: Double, hrvDelta: Double?, rhrDelta: Double?)>) -> Double? {
+            let values = slice.compactMap(\.rhrDelta)
+            guard !values.isEmpty else { return nil }
+            return values.reduce(0, +) / Double(values.count)
+        }
+
+        var parts: [String] = []
+        if let lowH = meanHRV(low), let highH = meanHRV(high) {
+            let effect = highH - lowH
+            if abs(effect) >= 2 {
+                parts.append("高剂量训练日次日 HRV 比低剂量日\(effect < 0 ? "多降" : "少降") \(String(format: "%.0f", abs(effect))) ms")
+            }
+        }
+        if let lowR = meanRHR(low), let highR = meanRHR(high) {
+            let effect = highR - lowR
+            if abs(effect) >= 1 {
+                parts.append("高剂量训练日次日静息心率比低剂量日\(effect > 0 ? "多升" : "少升") \(String(format: "%.1f", abs(effect))) bpm")
+            }
+        }
+        guard !parts.isEmpty else { return nil }
+        return DoseResponseCurve(
+            samplePairs: pairs.count,
+            summary: "剂量-反应（n=\(pairs.count) 个训练日）：\(parts.joined(separator: "；"))"
         )
     }
 

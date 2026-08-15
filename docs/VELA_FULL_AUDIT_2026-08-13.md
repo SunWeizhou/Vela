@@ -556,3 +556,16 @@ P1-1 工具回调、P1-2 VO2max、41/42 天窗口、睡眠缺失误判 reduce、
 **测试**：+11 回归（年度聚合口径×2、训记去重判定、aggregateDay 保留回填、热力图 tier、LongTermMetric 新指标、长线参照两行、AgentLoop deadline/取消传播、LLMProviderDeadline、状态码文案），全量 **397/397** 绿；已推送到 iPhone（databaseSequenceNumber 2884）。
 
 **遗留（下批）**：批次 3 三年建模（月度 MAD 基线/剂量-反应/脱轨/季节性/训记批量回填）、批次 4 Agent 管线 A+C、批次 5 VelaDailyOrchestrator、批次 6 Agent 管线 B；Coach 覆盖摘要外的相关性/快照 memo、BGTask 拆分为独立授予。
+
+## 深度专项批次 3（2026-08-15 · 三年数据建模落地）✅ 已修并推送
+
+用户确认「三年建模落地」范围。四个纯函数模型挂进三年长线报告 + 三个消费点 + 训记批量回填入口：
+
+- **同期三年月度 MAD 基线**（`MonthlyMADBaseline`，`PersonalBaselineEngine.swift`）：每个日历月取三年内同月逐日值 → 稳健中位 + 1.4826×MAD 波动带（单月 ≥20 天、总 ≥60 天才发布）。消费点：① Recovery 引擎第二门控——今日 HRV 低于「同月带下限（median − 1.5×MAD）」时 -2（只向保守收紧，`RecoveryLongTermContext.hrvMonthlyGateThreshold`）；② 今日决策理由追加「HRV 低于同期三年 X 月带下限」行（`TodayCommandState`）。
+- **长线剂量-反应回归**（`BodyModelBuilder.doseResponseCurve`）：训练时长剂量三分位 × 次日 HRV/RHR（各 ≥8 对、总 ≥60 对）；高剂量档次日 HRV 多降 ≥2ms / RHR 多升 ≥1bpm 才成结论，进身体模型断言卡「训练剂量-反应曲线」。只作参考/收紧，绝不据良好反应加量（ADR 0005）。
+- **三年轨迹脱轨检测**（`DerailmentSignal`）：三年月均值最小二乘斜率 vs 近 30 天逐日斜率；方向不利（RHR 升/HRV 降）且近期速度 ≥ max(5×长期斜率, 地板) 时触发；挂进 `ProactiveInsightService` 两条 alert 规则（静息心率上升过快 / HRV 下降过快），走现有主动洞察管线（开关门控 + 日级去重）。
+- **季节性剖面**（`SeasonalProfile`）：12 个月均值剖面，幅度 >3%（RHR）/>8%（HRV）且 ≥730 天、≥8 个月有样本才判季节性；报告字段就绪（`seasonalHRV/seasonalRHR`），趋势页展示后续接。
+- **训记历史批量回填**（`XunjiHistoryBackfillService` + 个人页入口「回填训记训练历史」）：逐日拉取训记（动作/组数/重量，默认近 90 天），UserDefaults 游标断点续传，连续 5 天失败暂停报错；三年 e1RM/容量/肌群频率轨迹的前置条件。
+- 全部新字段挂在 `LongTermBaselineReport`（纯结构体，零 schema 变更），`compute()` 一次算齐；`loadDashboard`/缓存路径/个人页沿用同一条链自动生效。
+
+**测试**：+6 回归（月度 MAD 分桶与护栏、脱轨触发与平稳对照、季节性周期与不足两年护栏、剂量-反应高剂量效应与样本护栏、Recovery 月度门控只降不升、脱轨主动洞察），全量 **403/403** 绿；已推送到 iPhone（databaseSequenceNumber 2892）。

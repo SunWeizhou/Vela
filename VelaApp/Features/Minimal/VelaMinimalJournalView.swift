@@ -9,6 +9,7 @@ struct VelaMeView: View {
     @EnvironmentObject private var services: VelaServices
     @ObservedObject private var appState = VelaAppState.shared
     @ObservedObject private var backfill = HistoricalBackfillCoordinator.shared
+    @ObservedObject private var xunjiBackfill = XunjiHistoryBackfillService.shared
 
     /// 身体模型与行为配对使用三年窗口（回填后立即拟合，而非等 42 天慢慢积累）。
     private static let lookbackDays = 1100
@@ -183,6 +184,42 @@ struct VelaMeView: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
                     .contentShape(Rectangle())
+                }
+                .buttonStyle(.cardPress)
+
+                Divider().padding(.leading, 54)
+
+                // 深度专项批次 3：训记历史批量回填（三年 e1RM/容量/肌群轨迹的前置）。
+                NavigationLink(destination: XunjiHistoryBackfillView()) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "arrow.triangle.2.circlepath.icloud")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(VelaTheme.rhythmDeep)
+                            .frame(width: 32, height: 32)
+                            .background(RoundedRectangle(cornerRadius: 10).fill(VelaTheme.rhythmMist.opacity(0.72)))
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("回填训记训练历史")
+                                .font(VelaTheme.body())
+                                .foregroundStyle(VelaTheme.rhythmInk)
+                            Text("补全动作、组数与重量历史")
+                                .font(.system(size: 11))
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        }
+
+                        Spacer()
+
+                        if xunjiBackfill.isRunning {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.6))
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
                 }
                 .buttonStyle(.cardPress)
             }
@@ -854,5 +891,128 @@ struct HistoricalBackfillView: View {
         .onAppear {
             coordinator.refreshState()
         }
+    }
+}
+
+/// 深度专项批次 3：训记历史批量回填页——逐日拉取训记训练（动作/组数/重量），
+/// 断点续传。三年 e1RM/容量/肌群频率轨迹的前置条件。
+struct XunjiHistoryBackfillView: View {
+    @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var service = XunjiHistoryBackfillService.shared
+    @State private var apiKey = ""
+    @State private var loadKeyFailed = false
+
+    private var progressPercent: Double {
+        guard service.totalDays > 0 else { return 0 }
+        return min(1, Double(service.completedDays) / Double(service.totalDays))
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(spacing: 12) {
+                    Image(systemName: "arrow.triangle.2.circlepath.icloud")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                        .frame(width: 42, height: 42)
+                        .background(VelaTheme.rhythmMist, in: Circle())
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("回填训记训练历史")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(VelaTheme.rhythmInk)
+                        Text("逐日补全动作、组数与重量")
+                            .font(.system(size: 12))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    }
+                    Spacer()
+                }
+                .padding(.bottom, 2)
+
+                Text("把训记里的历史训练（动作、组数、重量、时长）逐日读入 Vela，用于个人纪录、容量轨迹与肌群疲劳的长期分析。原始数据只留在本机；进度会保存，可随时停止续传。")
+                    .font(.system(size: 13))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if loadKeyFailed {
+                    Text("未找到训记密钥。请先在训练页填写训记 API Key。")
+                        .font(.system(size: 12))
+                        .foregroundStyle(VelaTheme.statePoor)
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    ProgressView(value: progressPercent)
+                        .tint(VelaTheme.rhythmDeep)
+
+                    HStack {
+                        Text("\(service.completedDays) / \(service.totalDays) 天 · 已导入 \(service.importedCount) 条")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        Spacer()
+                        Text("可随时停止，进度已保存")
+                            .font(.system(size: 10))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.8))
+                    }
+                }
+                .padding(16)
+                .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+                }
+
+                if let error = service.errorMessage {
+                    Text("回填暂停：\(error)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(VelaTheme.statePoor)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Button {
+                    Task { await startOrStop() }
+                } label: {
+                    Text(service.isRunning ? "停止回填" : "开始回填")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeepOn)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(VelaTheme.rhythmDeep, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
+                .buttonStyle(.cardPress)
+
+                if service.completedDays >= service.totalDays, service.totalDays > 0 {
+                    Text("回填已完成。历史动作、组数与重量已可用于长期分析。")
+                        .font(.system(size: 11))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(.horizontal, VelaTheme.pagePadding)
+            .padding(.top, 18)
+            .padding(.bottom, 44)
+        }
+        .scrollIndicators(.hidden)
+        .background(VelaTheme.rhythmCanvas)
+        .navigationTitle("训记历史回填")
+        .velaRhythmDetailChrome()
+        .onAppear {
+            if let saved = try? KeychainService.shared.read(account: "xunji_open_api_key") {
+                apiKey = saved.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+    }
+
+    @MainActor
+    private func startOrStop() async {
+        if service.isRunning { return }
+        guard !apiKey.isEmpty else {
+            loadKeyFailed = true
+            return
+        }
+        loadKeyFailed = false
+        try? KeychainService.shared.save(apiKey, account: "xunji_open_api_key")
+        await service.run(modelContext: modelContext, apiKey: apiKey)
+        VelaAppState.shared.markLocalDataChanged()
     }
 }
