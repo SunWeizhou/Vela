@@ -569,3 +569,20 @@ P1-1 工具回调、P1-2 VO2max、41/42 天窗口、睡眠缺失误判 reduce、
 - 全部新字段挂在 `LongTermBaselineReport`（纯结构体，零 schema 变更），`compute()` 一次算齐；`loadDashboard`/缓存路径/个人页沿用同一条链自动生效。
 
 **测试**：+6 回归（月度 MAD 分桶与护栏、脱轨触发与平稳对照、季节性周期与不足两年护栏、剂量-反应高剂量效应与样本护栏、Recovery 月度门控只降不升、脱轨主动洞察），全量 **403/403** 绿；已推送到 iPhone（databaseSequenceNumber 2892）。
+
+## 深度专项批次 4（2026-08-15 · Agent 管线 A+C：agent 主动参与）✅ 已修并推送
+
+用户确认的「Agent 管线 A+C」落地。agent 从此不再只在对话里出现：
+
+**管线 A — 每日 AI 解读进今日页**：
+- `ReportGenerator.generateDailyInsight`：晨报生成后附带一次严格 JSON 调用（20s deadline），产出 `DailyAIInsight { interpretation/evidence(≤3)/risks/decisionHint/conflictsWithLocal }`；本地决定（DailyOperatingPlanPayload）作为锚注入提示词，硬规则「不得给出相反结论；矛盾只标注不改写」（ADR 0008）。
+- 落 `AIReportRecord(type=daily_ai_insight)`（零 schema），`MorningBriefScheduler` 内嵌生成，解读失败不影响晨报。
+- 今日页 Hero 下方新增「AI 增强 · 今日解读」卡：正常时显示解读+证据锚点；`conflictsWithLocal` 时整卡降级灰色并标注「以本机今日决定为准」。本机 `localMorningBrief` 永远是缺省，AI 解读永不替换本机结论；AI 不可用时今日页照常。
+
+**管线 C — 练后 AI 复盘**：
+- `WorkoutAdaptationService.processWorkoutCompletion` 在本机提案落库后异步触发 AI 分支（consent 门控 + 20s deadline + 失败静默，训练事实与本地流程不受影响）。
+- `PostWorkoutAIBoundary` 严格 JSON（observation/nextVolumeMultiplier/nextIntensityCap/nextSuggestedFocus/rationale），解析时钳制容量 [0.3, 1.0]、RPE [1, 10] 防模型异常输出。
+- 产出两路：① 观察性复盘 → `CoachArtifactRecord`（postWorkoutReview，「AI 练后复盘」标注，进个人页历史建议）；② 下次训练边界建议 → `TrainingPlanAdaptationRecord`（proposed 提案状态机，用户确认才生效）。
+- 计划页提案区扩展为「今日 + 未来未完成训练日」，AI 的下次边界建议可被看到并确认/拒绝（`VelaTrainingPlanView.planAdaptations`）。
+
+**测试**：+3 回归（DailyAIInsight markdown 包裹解析与拒收、PostWorkoutAIBoundary 钳制护栏、AI 复盘事实文本携带本机决定锚），全量 **406/406** 绿；已推送到 iPhone（databaseSequenceNumber 2900）。

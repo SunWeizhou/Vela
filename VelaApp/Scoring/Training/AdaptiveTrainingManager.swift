@@ -294,6 +294,179 @@ struct WorkoutAdaptationService: Sendable {
         try modelContext.save()
         VelaAppState.shared.markLocalDataChanged()
 
+        // 深度专项批次 4（管线 C）：练后 AI 复盘——异步、失败静默；
+        // 本机训练事实与提案已落库，AI 只追加观察 + 待确认边界建议。
+        if AutoAgentConfig.shared.canSendHealthContextToNetworkAI,
+           let aiKey = try? KeychainService.shared.read(account: "deepseek_api_key"),
+           !aiKey.isEmpty {
+            let facts = PostWorkoutAIGenerator.factsText(
+                dashboard: dashboard,
+                events: events,
+                activePlan: activePlan,
+                workoutID: workoutID
+            )
+            let ctx = modelContext
+            let plan = activePlan
+            let completedAt = now
+            let completedWorkoutID = workoutID
+            Task { @MainActor in
+                do {
+                    let boundary = try await PostWorkoutAIGenerator.generate(
+                        apiKey: aiKey,
+                        factsText: facts
+                    )
+                    // ① 观察性复盘 → CoachArtifactRecord（AI 标注）。
+                    let artifact = CoachArtifact(
+                        type: .postWorkoutReview,
+                        title: "AI 练后复盘",
+                        summary: boundary.observation,
+                        createdAt: Date(),
+                        relatedDate: completedAt,
+                        decision: nil,
+                        confidence: 0.6,
+                        reasons: [
+                            CoachArtifactReason(
+                                signal: "ai_review",
+                                value: boundary.rationale,
+                                explanation: "AI 复盘基于本机训练事实；训练事实为唯一真值，边界建议需用户确认。"
+                            )
+                        ],
+                        actions: [],
+                        sourceContextHash: "ai-post-workout-\(completedWorkoutID?.uuidString ?? "unknown")",
+                        followUpQuestion: nil
+                    )
+                    ctx.insert(CoachArtifactRecord(artifact: artifact))
+                    // ② 下次训练边界建议 → 提案状态机（proposed，用户确认才生效）。
+                    if let nextDay = plan.days
+                        .filter({ !$0.isCompleted && $0.focus.lowercased() != "rest" })
+                        .sorted(by: { $0.dayNumber < $1.dayNumber })
+                        .first {
+                        ctx.insert(TrainingPlanAdaptationRecord(
+                            planId: plan.id,
+                            dayId: nextDay.id,
+                            adjustment: .keep,
+                            reason: "AI 建议：容量 \(Int((boundary.nextVolumeMultiplier * 100).rounded()))% · RPE ≤ \(boundary.nextIntensityCap)"
+                                + (boundary.nextSuggestedFocus.map { " · 建议部位 \($0)" } ?? "")
+                                + "。依据：\(boundary.rationale)",
+                            suggestedAlternative: nil,
+                            status: .proposed,
+                            originalDayTitle: nextDay.title,
+                            agentRunId: "ai-post-workout-\(completedWorkoutID?.uuidString ?? "unknown")"
+                        ))
+                    }
+                    try ctx.save()
+                } catch {
+                    // 静默：本机复盘与提案不受影响。
+                }
+            }
+        }
+
         return proposal
+    }
+}
+
+// MARK: - 深度专项批次 4：练后 AI 复盘（管线 C）
+// 训练完成后异步生成：① 观察性复盘（CoachArtifactRecord，AI 标注）
+// ② 下次训练边界建议（TrainingPlanAdaptationRecord，proposed，用户确认才生效）。
+// 本机训练事实是唯一真值；AI 失败静默回退本机流程（ADR 0008）。
+
+struct PostWorkoutAIBoundary: Codable, Hashable, Sendable {
+    var observation: String
+    var nextVolumeMultiplier: Double
+    var nextIntensityCap: Int
+    var nextSuggestedFocus: String?
+    var rationale: String
+
+    static func parse(from text: String) -> PostWorkoutAIBoundary? {
+        var cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.hasPrefix("```") {
+            cleaned = cleaned
+                .replacingOccurrences(of: "```json", with: "")
+                .replacingOccurrences(of: "```", with: "")
+        }
+        guard let start = cleaned.firstIndex(of: "{"),
+              let end = cleaned.lastIndex(of: "}"),
+              start < end else { return nil }
+        guard let data = String(cleaned[start...end]).data(using: .utf8) else { return nil }
+        guard var boundary = try? JSONDecoder().decode(PostWorkoutAIBoundary.self, from: data) else {
+            return nil
+        }
+        // 护栏：容量/RPE 钳制在保守区间，防止模型输出异常值。
+        boundary.nextVolumeMultiplier = min(1.0, max(0.3, boundary.nextVolumeMultiplier))
+        boundary.nextIntensityCap = min(10, max(1, boundary.nextIntensityCap))
+        return boundary
+    }
+}
+
+enum PostWorkoutAIGenerator {
+    static func factsText(
+        dashboard: DashboardSummary,
+        events: [WorkoutEventRecord],
+        activePlan: TrainingPlanRecord?,
+        workoutID: UUID?,
+        isChinese: Bool = AppLanguage.stored.isChinese
+    ) -> String {
+        let todayEvents = events.filter { Calendar.current.isDateInToday($0.startedAt) }
+        let minutes = todayEvents.reduce(0) { $0 + $1.durationMinutes }
+        let energy = todayEvents.compactMap(\.energyKilocalories).reduce(0, +)
+        let titles = todayEvents.map(\.title).joined(separator: "、")
+        let planLine = activePlan.map { "活跃计划：\($0.title)（\($0.days.count) 天）" } ?? "无活跃计划"
+        let decisionLine = dashboard.trainingDecision.body
+        if isChinese {
+            return """
+            刚完成的训练：\(titles.isEmpty ? "未知训练" : titles)（合计 \(Int(minutes.rounded())) 分钟，\(Int(energy.rounded())) kcal，workout_id=\(workoutID?.uuidString ?? "-")）。
+            当前身体评分：恢复 \(Int(dashboard.recovery.score.rounded()))、睡眠 \(Int(dashboard.sleepScore.score.rounded()))、负荷 \(Int(dashboard.strain.score.rounded()))、压力 \(Int(dashboard.stress.stressIndex.rounded()))、能量 \(Int(dashboard.energy.currentEnergy.rounded()))。
+            本机今日决定：\(decisionLine)
+            \(planLine)
+            """
+        }
+        return """
+        Just completed: \(titles.isEmpty ? "unknown workout" : titles) (total \(Int(minutes.rounded())) min, \(Int(energy.rounded())) kcal, workout_id=\(workoutID?.uuidString ?? "-")).
+        Current scores: Recovery \(Int(dashboard.recovery.score.rounded())), Sleep \(Int(dashboard.sleepScore.score.rounded())), Strain \(Int(dashboard.strain.score.rounded())), Stress \(Int(dashboard.stress.stressIndex.rounded())), Energy \(Int(dashboard.energy.currentEnergy.rounded())).
+        Local decision: \(decisionLine)
+        \(planLine)
+        """
+    }
+
+    static func generate(
+        apiKey: String,
+        factsText: String,
+        language: AppLanguage = .stored
+    ) async throws -> PostWorkoutAIBoundary {
+        let provider = RetryingLLMProvider(base: DeepSeekProvider(apiKey: apiKey))
+        let systemPrompt = language.isChinese ? """
+        你是 Vela 的训练后复盘助手。基于本机训练事实输出严格 JSON，不要输出任何其他文字。
+
+        输出格式：
+        {"observation":"一句练后观察（人话）","nextVolumeMultiplier":0.0到1.0,"nextIntensityCap":1到10,"nextSuggestedFocus":"建议下次训练部位或 null","rationale":"一句依据，引用具体数值"}
+
+        硬性规则：
+        1. 训练事实是唯一真值；你只解释与提议，不改写事实。
+        2. 边界建议必须保守：恢复/睡眠/压力差时容量≤0.7、RPE≤7。
+        3. 你的建议只是提案，用户确认后才生效。
+        4. 只输出 JSON 本身。
+        """ : """
+        You are Vela's post-workout review assistant. Output strict JSON only, nothing else.
+
+        Format:
+        {"observation":"one-sentence review","nextVolumeMultiplier":0.0-1.0,"nextIntensityCap":1-10,"nextSuggestedFocus":"suggested muscle group or null","rationale":"one reason citing numbers"}
+
+        Rules:
+        1. Training facts are the single source of truth; interpret and propose, never rewrite facts.
+        2. Boundaries must be conservative: volume<=0.7 and RPE<=7 when recovery/sleep/stress are poor.
+        3. Your output is a proposal only; it takes effect after user confirmation.
+        4. Output JSON only.
+        """
+        let response = try await LLMProviderDeadline.withTimeout(seconds: 20) {
+            try await provider.complete(request: LLMRequest(
+                systemPrompt: systemPrompt,
+                userPrompt: factsText,
+                contextJSON: ""
+            ))
+        }
+        guard let boundary = PostWorkoutAIBoundary.parse(from: response.content) else {
+            throw LLMProviderError.invalidResponse
+        }
+        return boundary
     }
 }

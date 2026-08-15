@@ -2568,4 +2568,44 @@ final class VelaThemeTests: XCTestCase {
         XCTAssertTrue(insights.contains { $0.title.contains("静息心率") && $0.severity == .alert },
                       "脱轨信号应生成高优先级主动洞察")
     }
+
+
+    // MARK: - 深度专项批次 4 回归（AI 管线 A+C 解析与护栏）
+
+    func testParseDailyInsightFromMarkdownWrappedJSON() {
+        let wrapped = """
+        好的，以下是今日解读：
+        ```json
+        {"interpretation":"恢复一般，适合按计划训练。","evidence":["HRV 45ms 接近基线","睡眠 6.8 小时"],"risks":[],"decisionHint":"按计划训练","conflictsWithLocal":false}
+        ```
+        """
+        let insight = ReportGenerator.parseDailyInsight(from: wrapped)
+        XCTAssertNotNil(insight)
+        XCTAssertEqual(insight?.interpretation, "恢复一般，适合按计划训练。")
+        XCTAssertEqual(insight?.evidence.count, 2)
+        XCTAssertEqual(insight?.conflictsWithLocal, false)
+        XCTAssertNil(ReportGenerator.parseDailyInsight(from: "这不是 JSON"))
+    }
+
+    func testParsePostWorkoutBoundaryClampsUnsafeValues() {
+        let raw = #"{"observation":"容量偏高","nextVolumeMultiplier":2.5,"nextIntensityCap":15,"nextSuggestedFocus":"legs","rationale":"恢复 40"}"#
+        let boundary = PostWorkoutAIBoundary.parse(from: raw)
+        XCTAssertNotNil(boundary)
+        XCTAssertEqual(boundary?.nextVolumeMultiplier ?? 0, 1.0, accuracy: 0.001, "容量必须钳到 ≤1.0")
+        XCTAssertEqual(boundary?.nextIntensityCap, 10, "RPE 必须钳到 ≤10")
+        XCTAssertNil(PostWorkoutAIBoundary.parse(from: "随便说说"))
+    }
+
+    func testPostWorkoutAIFactsTextCarriesLocalDecision() {
+        let dashboard = DashboardSummary.preview(date: Date())
+        let text = PostWorkoutAIGenerator.factsText(
+            dashboard: dashboard,
+            events: [],
+            activePlan: nil,
+            workoutID: UUID(),
+            isChinese: true
+        )
+        XCTAssertTrue(text.contains("本机今日决定"), "AI 复盘的事实文本必须携带本机决定锚")
+        XCTAssertTrue(text.contains("当前身体评分"))
+    }
 }

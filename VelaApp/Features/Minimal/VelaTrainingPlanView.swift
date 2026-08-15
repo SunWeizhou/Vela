@@ -24,18 +24,13 @@ struct VelaTrainingPlanView: View {
         plans.first(where: \.isActive) ?? plans.first
     }
 
-    /// 今日计划日（与 TrainingDecisionKernel 同一解析规则：周几 → dayNumber、未完成）。
-    private var todayDay: TrainingDay? {
-        guard let activePlan else { return nil }
-        let weekday = Calendar.current.component(.weekday, from: Date())
-        let dayNumber = weekday == 1 ? 7 : weekday - 1
-        return activePlan.days.first { !$0.isCompleted && $0.dayNumber == dayNumber }
-    }
-
-    private var todayAdaptations: [TrainingPlanAdaptationRecord] {
-        guard let activePlan, let todayDay else { return [] }
+    /// 深度专项批次 4：提案区覆盖今日 + 未来未完成训练日——
+    /// 本机提案（今日）与 AI 练后边界建议（下次训练日）都能被看到并确认。
+    private var planAdaptations: [TrainingPlanAdaptationRecord] {
+        guard let activePlan else { return [] }
+        let upcomingDayIds = Set(activePlan.days.filter { !$0.isCompleted }.map(\.id))
         return pendingAdaptations.filter {
-            $0.planId == activePlan.id && $0.dayId == todayDay.id
+            $0.planId == activePlan.id && upcomingDayIds.contains($0.dayId)
         }
     }
 
@@ -55,7 +50,7 @@ struct VelaTrainingPlanView: View {
                 }
 
                 todayDecisionSection
-                if !todayAdaptations.isEmpty {
+                if !planAdaptations.isEmpty {
                     adaptationProposalsSection
                 }
                 coachActions
@@ -233,7 +228,7 @@ struct VelaTrainingPlanView: View {
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmInk)
             }
-            ForEach(todayAdaptations) { adaptation in
+            ForEach(planAdaptations) { adaptation in
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
                         Text(adaptationLabel(adaptation.adjustment))

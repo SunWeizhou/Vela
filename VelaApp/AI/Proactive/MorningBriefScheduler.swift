@@ -155,6 +155,34 @@ final class MorningBriefScheduler: ObservableObject {
             try modelContext.save()
             logger.info("Successfully generated and saved Morning Brief report!")
 
+            // 深度专项批次 4（管线 A）：附带生成「AI 今日解读」——严格 JSON、以本地
+            // 决策为锚，落 AIReportRecord(type=daily_ai_insight) 供今日页展示；
+            // 失败不影响晨报本身。
+            do {
+                let planPayload = input.dailyOperatingPlan?.operatingPlanPayload
+                let decisionText = planPayload?.decision.rawValue ?? "keep"
+                let summaryText = planPayload?.summary ?? ""
+                let insight = try await generator.generateDailyInsight(
+                    context: context,
+                    localDecision: decisionText,
+                    localSummary: summaryText
+                )
+                let insightJSON = (try? JSONEncoder().encode(insight))
+                    .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+                modelContext.insert(AIReportRecord(
+                    createdAt: Date(),
+                    type: ReportGenerator.dailyInsightReportType,
+                    title: "今日 AI 解读",
+                    markdownContent: insight.interpretation,
+                    serializedContextSnapshot: insightJSON,
+                    tags: ["daily_ai_insight", "automated"]
+                ))
+                try modelContext.save()
+                logger.info("Daily AI insight generated and saved.")
+            } catch {
+                logger.warning("Daily AI insight generation failed (non-fatal): \(error.localizedDescription)")
+            }
+
             // Update the run record
             runRecord.endedAt = Date()
             runRecord.status = AgentRunStatus.success.rawValue

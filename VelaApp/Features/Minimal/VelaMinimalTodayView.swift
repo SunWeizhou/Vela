@@ -33,6 +33,23 @@ struct VelaTodayView: View {
         )
     }
 
+    // 深度专项批次 4（管线 A）：晨报附带生成的「AI 今日解读」。
+    // #Predicate 宏要求字面量，不能引用 ReportGenerator.dailyInsightReportType。
+    @Query(
+        filter: #Predicate<AIReportRecord> { $0.type == "daily_ai_insight" },
+        sort: \AIReportRecord.createdAt,
+        order: .reverse
+    )
+    private var dailyAIInsights: [AIReportRecord]
+
+    private var todayAIInsight: DailyAIInsight? {
+        guard let record = dailyAIInsights.first(where: { Calendar.current.isDateInToday($0.createdAt) }) else {
+            return nil
+        }
+        guard let data = record.serializedContextSnapshot.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(DailyAIInsight.self, from: data)
+    }
+
     var todayExperience: TodayExperienceModel {
         dashboardVM.todayExperience ?? makeTodayExperience()
     }
@@ -60,6 +77,54 @@ struct VelaTodayView: View {
                 fat: todayFat
             )
         )
+    }
+
+    /// 深度专项批次 4（管线 A）：AI 今日解读卡——本机结论永远优先；
+    /// 冲突时整卡降级为灰色参考并标注「以本机今日决定为准」（ADR 0008）。
+    private func aiInsightCard(_ insight: DailyAIInsight) -> some View {
+        let conflicted = insight.conflictsWithLocal
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(conflicted ? VelaTheme.rhythmInkSecondary : VelaTheme.rhythmDeep)
+                Text("AI 增强 · 今日解读")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(conflicted ? VelaTheme.rhythmInkSecondary : VelaTheme.rhythmDeep)
+                Spacer()
+            }
+            Text(insight.interpretation)
+                .font(.system(size: 13))
+                .foregroundStyle(conflicted ? VelaTheme.rhythmInkSecondary.opacity(0.8) : VelaTheme.rhythmInk)
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+            if conflicted {
+                Label("AI 与本机判断不一致，以本机今日决定为准", systemImage: "exclamationmark.triangle")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(VelaTheme.stressColor)
+            } else if !insight.evidence.isEmpty {
+                ForEach(insight.evidence.prefix(3), id: \.self) { line in
+                    HStack(alignment: .top, spacing: 7) {
+                        Circle()
+                            .fill(VelaTheme.rhythmDeep.opacity(0.6))
+                            .frame(width: 5, height: 5)
+                            .padding(.top, 5)
+                        Text(line)
+                            .font(.system(size: 12))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                            .lineSpacing(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+        }
     }
 
     // Real scores mapped to 0...1 for BevelScoreRing
@@ -276,6 +341,14 @@ struct VelaTodayView: View {
                     onOpenPlan: { showTodayEvidence = true },
                     onAskCoach: { showCoach = true }
                 )
+
+                // 深度专项批次 4（管线 A）：AI 今日解读——本机结论永远优先；
+                // AI 与本机不一致时整卡降级并标注。
+                if dashboardVM.isToday, let insight = todayAIInsight {
+                    aiInsightCard(insight)
+                        .padding(.horizontal, VelaTheme.pagePadding)
+                        .padding(.top, 14)
+                }
 
                 VStack(alignment: .leading, spacing: 34) {
                     VelaRhythmActionSequence(
