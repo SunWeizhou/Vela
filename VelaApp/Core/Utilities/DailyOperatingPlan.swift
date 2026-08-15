@@ -162,6 +162,15 @@ enum DailyOperatingPlanCoordinator {
         )
         let payloadJSON = Self.json(payload)
         let reasonsJSON = Self.json(decision.reasons)
+        // 算法打通（批次 C）：计划置信度与今日页 readiness 吃同一份反馈校准
+        // （DecisionFeedbackCalibrator，rest↔recover 已归一）。每次 upsert 从
+        // kernel 原始置信度重新校准，不会因历史记录累积缩放。
+        let feedbackRecords = (try? modelContext.fetch(FetchDescriptor<DailyDecisionFeedbackRecord>())) ?? []
+        let storedConfidence = DecisionFeedbackCalibrator.calibratedPlanConfidence(
+            base: decision.confidence,
+            decision: decision.decision,
+            records: feedbackRecords
+        )
         let descriptor = FetchDescriptor<DailyOperatingPlanRecord>(
             predicate: #Predicate<DailyOperatingPlanRecord> { $0.dayIdentifier == dayIdentifier }
         )
@@ -174,7 +183,7 @@ enum DailyOperatingPlanCoordinator {
             record.title = title(for: decision.decision)
             record.payloadJSON = payloadJSON
             record.reasonsJSON = reasonsJSON
-            record.confidence = decision.confidence
+            record.confidence = storedConfidence
             record.status = "active"
             record.source = decision.source
             record.safetyNotice = decision.safetyNotice
@@ -186,7 +195,7 @@ enum DailyOperatingPlanCoordinator {
                 title: title(for: decision.decision),
                 payloadJSON: payloadJSON,
                 reasonsJSON: reasonsJSON,
-                confidence: decision.confidence,
+                confidence: storedConfidence,
                 status: "active",
                 source: decision.source,
                 safetyNotice: decision.safetyNotice
@@ -204,7 +213,7 @@ enum DailyOperatingPlanCoordinator {
         if let artifact = try modelContext.fetch(artifactDescriptor).first {
             artifact.title = record.title
             artifact.payloadJSON = payloadJSON
-            artifact.confidence = decision.confidence
+            artifact.confidence = storedConfidence
             artifact.status = "active"
             artifact.source = decision.source
             artifact.safetyNotice = record.safetyNotice
@@ -214,7 +223,7 @@ enum DailyOperatingPlanCoordinator {
                 title: record.title,
                 payloadJSON: payloadJSON,
                 sourceContextHash: bodyState.hash,
-                confidence: decision.confidence,
+                confidence: storedConfidence,
                 source: decision.source,
                 safetyNotice: decision.safetyNotice
             ))

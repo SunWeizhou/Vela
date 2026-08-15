@@ -39,7 +39,6 @@ enum TrainingDecisionFallback {
 struct TrainingDecisionInput {
     var bodyState: BodyState
     var activePlan: TrainingPlanDTO?
-    var recentStrengthSummary: RecentTrainingSummary?
     var trainingResponses: [TrainingResponseDTO]
     var userConstraints: [String]
     /// 三年训练量长线统计（Layer 2：本月训练量三年百分位信号；nil = 不启用）。
@@ -48,14 +47,12 @@ struct TrainingDecisionInput {
     init(
         bodyState: BodyState,
         activePlan: TrainingPlanDTO? = nil,
-        recentStrengthSummary: RecentTrainingSummary? = nil,
         trainingResponses: [TrainingResponseDTO] = [],
         userConstraints: [String] = [],
         longTermTrainingVolume: TrainingVolumeLongTerm? = nil
     ) {
         self.bodyState = bodyState
         self.activePlan = activePlan
-        self.recentStrengthSummary = recentStrengthSummary
         self.trainingResponses = trainingResponses
         self.userConstraints = userConstraints
         self.longTermTrainingVolume = longTermTrainingVolume
@@ -135,31 +132,75 @@ struct TrainingDecisionKernel: Sendable {
         }
         
         // 5. Decision logic tree
+        // 算法打通（批次 A）：本决策树是「今日/训练/计划」三处的唯一结论源。
+        // 睡眠/压力/能量/TSB/当日负荷门控此前只存在于 TodayCommandBuilder 或死代码
+        // （TrainingDecisionEngine / AdaptiveTrainingEngine.adjustToday），现统一在此，
+        // 且只向保守方向收紧（keep → reduce/rest；不新增激进分支）。
+        let thresholds = PersonalBaselineEngine.resolveThresholds()
+        let stressIndex = state.stress.stressIndex
+        let energyLevel = state.energy.currentEnergy
+        let tsb = state.energy.metrics["tsb"]
+        let strainUpper = state.strain.recommendedRange.upperBound
         var type: DailyTrainingDecisionType = .keep
         var multiplier = 1.0
         var cap = 9
         var summary = ""
         var reasons: [String] = []
         
-        if ["sick", "injured", "resting"].contains(state.activeStatus)
-            || state.readiness == .recovering {
+        if ["sick", "injured", "resting"].contains(state.activeStatus) {
+            // 用户显式标记的身体状态是硬约束，先于一切数据判定。
             type = .rest
             multiplier = 0.0
             cap = 2
             summary = "状态受限，今天优先恢复与休息。"
-            reasons.append("活动状态: 标记为\(Self.localizedActiveStatus(state.activeStatus))或生理处于恢复期。")
+            reasons.append("活动状态: 标记为\(Self.localizedActiveStatus(state.activeStatus))，今天自动降低训练冒险度。")
+        } else if !state.recovery.hasData {
+            type = .reduce
+            multiplier = 0.60
+            cap = 7
+            summary = "恢复基线数据不足，先按保守方案执行。"
+            reasons.append("数据状态: 恢复基线数据不足，按保守方案执行。")
+        } else if state.readiness == .recovering {
+            type = .rest
+            multiplier = 0.0
+            cap = 2
+            summary = "状态受限，今天优先恢复与休息。"
+            reasons.append("生理状态: 恢复分数低于休息阈值，处于恢复期。")
         } else if todayScheduledDay?.focus.lowercased() == "rest" {
             type = .rest
             multiplier = 0.0
             cap = 2
             summary = "今天是计划内的休息日，建议做好恢复工作。"
             reasons.append("日程安排: 计划内休息。")
+        } else if state.sleep.hasData, state.sleep.score < thresholds.sleepRest {
+            type = .rest
+            multiplier = 0.0
+            cap = 2
+            summary = "睡眠明显不足，今天优先恢复与补觉，避免高强度训练。"
+            reasons.append("睡眠不足: 睡眠分数 \(Int(state.sleep.score.rounded())) 低于休息阈值 \(Int(thresholds.sleepRest.rounded()))。")
+        } else if state.stress.hasData, stressIndex > 75 {
+            type = .rest
+            multiplier = 0.0
+            cap = 2
+            summary = "生理压力偏高，今天优先减压与恢复，避免叠加训练负荷。"
+            reasons.append("压力偏高: 压力指数 \(Int(stressIndex.rounded()))（>75），先降压力再考虑负荷。")
         } else if !highFatigueTargetMuscles.isEmpty {
             type = .swap
             multiplier = 0.65
             cap = 7
             summary = "避开高疲劳肌群 \(Self.localizedMuscleGroups(highFatigueTargetMuscles))，改做低风险替代训练。"
             reasons.append("局部疲劳: 目标肌群处于高疲劳状态。")
+        } else if targetMuscles.isEmpty,
+                  let worstFatigue = state.localFatigue.values
+                      .filter({ $0.fatigueLevel == "high" })
+                      .sorted(by: { $0.setsLast48h > $1.setsLast48h })
+                      .first {
+            // 无计划日：任一肌群高疲劳即建议换部位（与今日页此前的「任一高疲劳 → 换练」语义对齐）。
+            type = .swap
+            multiplier = 0.65
+            cap = 7
+            summary = "\(Self.localizedMuscleGroup(worstFatigue.muscleGroup))局部疲劳偏高，建议换练其他部位。"
+            reasons.append("局部疲劳: \(Self.localizedMuscleGroup(worstFatigue.muscleGroup))处于高疲劳状态（48 小时 \(worstFatigue.setsLast48h) 组）。")
         } else if severeResponseCrash {
             type = .swap
             multiplier = 0.65
@@ -172,12 +213,30 @@ struct TrainingDecisionKernel: Sendable {
             cap = 7
             summary = "近期对 \(Self.localizedMuscleGroups(poorResponseTargetMuscles)) 训练的恢复响应欠佳，建议减量训练。"
             reasons.append("训练响应: 该肌群近期训练后次日恢复有下降趋势。")
+        } else if state.energy.hasData, energyLevel < 30 {
+            type = .reduce
+            multiplier = 0.70
+            cap = 7
+            summary = "身体储备偏低，建议减量训练，并保证正常进食与睡眠。"
+            reasons.append("能量储备: 当前能量 \(Int(energyLevel.rounded()))/100 偏低，不宜硬扛。")
+        } else if let tsb, tsb <= -15 {
+            type = .reduce
+            multiplier = 0.70
+            cap = 7
+            summary = "累积训练负荷偏高，建议今天降低容量。"
+            reasons.append("训练压力平衡: TSB \(String(format: "%+.0f", tsb)) 深度为负（≤-15），累积负荷偏高。")
         } else if state.readiness == .caution {
             type = .reduce
             multiplier = 0.75
             cap = 7
             summary = "身体评分偏低，建议将今天训练容量减少至 75%，限制负荷上限。"
             reasons.append("生理评级: 恢复或睡眠分数偏低。")
+        } else if state.strain.hasData, state.strain.score > Double(strainUpper) {
+            type = .reduce
+            multiplier = 0.75
+            cap = 7
+            summary = "当日负荷已高于目标区间，建议减量。"
+            reasons.append("当日负荷: 负荷 \(Int(state.strain.score.rounded())) 已超过今日目标上限 \(strainUpper)。")
         } else if state.readiness == .unknown {
             type = .reduce
             multiplier = 0.60

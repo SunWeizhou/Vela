@@ -28,73 +28,8 @@ enum AdaptiveTrainingEngine {
         }
     }
 
-    /// Computes the appropriate adjustment for today's training step
-    /// based on the user's physiological readiness.
-    static func adjustToday(
-        plan: TrainingPlanRecord,
-        recoveryScore: Double,
-        energyScore: Double,
-        tsb: Double,
-        sleepScore: Double,
-        stressIndex: Double
-    ) -> AdjustedDay? {
-        let calendar = Calendar.current
-        let weekday = calendar.component(.weekday, from: Date())
-        let dayNumber = weekday == 1 ? 7 : weekday - 1
-
-        guard let todayStep = plan.days.first(where: {
-            !$0.isCompleted && $0.dayNumber == dayNumber
-        }) else {
-            return nil
-        }
-
-        let adjustment: Adjustment
-        let reason: String
-        let alternative: String?
-
-        // Recovery-gated decision tree
-        if recoveryScore > 75 && energyScore > 60 && tsb > 5 && sleepScore > 80 {
-            adjustment = .keep
-            reason = AppLanguage.stored.isChinese ? "当前恢复与睡眠信号支持按计划训练；训练中仍以动作质量和主观用力为准。" : "Current recovery and sleep signals support the planned session; keep technique and perceived effort in check."
-            alternative = nil
-        } else if recoveryScore > 50 && energyScore > 40 && tsb > -5 {
-            adjustment = .reduce
-            reason = AppLanguage.stored.isChinese ? "恢复状态中等。建议将训练容量减少 30-40%。" : "Recovery is moderate. Reduce intensity by 30-40%."
-            alternative = buildReducedVersion(of: todayStep)
-        } else if recoveryScore > 30 {
-            adjustment = .swap
-            reason = AppLanguage.stored.isChinese ? "恢复状态较低。建议今天进行低强度的恢复性训练。" : "Recovery is low. Swap to active recovery today."
-            alternative = buildRecoveryAlternative(for: todayStep)
-        } else {
-            adjustment = .rest
-            reason = AppLanguage.stored.isChinese ? "当前恢复信号较低。建议暂停计划训练，以休息或温和活动为主。" : "Current recovery signals are low. Pause planned training and prioritize rest or gentle movement."
-            alternative = nil
-        }
-
-        // TSB override: if TSB < -15, always reduce regardless of recovery
-        let finalAdjustment: Adjustment
-        let finalReason: String
-        if tsb < -15 && adjustment == .keep {
-            finalAdjustment = .reduce
-            finalReason = AppLanguage.stored.isChinese ? "体能负荷（TSB）处于深度负值（-\(Int(abs(tsb)))）。累积疲劳较高，建议降低训练容量。" : "TSB is deeply negative (-\(Int(abs(tsb)))). High accumulated fatigue requires reduced load."
-        } else if tsb > 10 && adjustment == .reduce {
-            finalAdjustment = .reduce
-            finalReason = AppLanguage.stored.isChinese ? "长期负荷状态较好，但即时恢复仍未达到满量训练条件；今天继续按减量方案执行。" : "Long-term load is favorable, but current recovery still supports a reduced session today."
-        } else {
-            finalAdjustment = adjustment
-            finalReason = reason
-        }
-
-        return AdjustedDay(
-            originalDay: todayStep,
-            adjustment: finalAdjustment,
-            reason: finalReason,
-            suggestedAlternative: finalAdjustment == .keep ? nil : alternative
-        )
-    }
-
-    /// Per-day adjustment using BodyInterpretation. Used by generateWeekAdjustments
-    /// to evaluate each future day independently against the body's current state.
+    /// Per-day adjustment using BodyInterpretation（refreshDailyProposal 使用）。
+    
     static func adjust(
         day: TrainingDay,
         interpretation: BodyInterpretation

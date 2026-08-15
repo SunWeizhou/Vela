@@ -428,6 +428,27 @@ struct CoachContextAssembler {
             result.append(ChatMessage(role: .system, content: biomarkerContext))
         }
 
+        // 算法打通（批次 B）：BodyInterpreterEngine 的富输出（疲劳等级/主要限制因素/
+        // 训练窗口/风险标记/恢复任务）进入 Coach 上下文——此前唯一消费方是
+        // 用户不可见的计划提案表，这个最重的分析引擎等于白算。
+        if outboundPolicy.health, outboundPolicy.training {
+            let allFoods = (try? modelContext.fetch(FetchDescriptor<FoodLogRecord>())) ?? []
+            let recentFoods = allFoods.filter {
+                $0.createdAt >= contextAsOf.addingTimeInterval(-36 * 3_600)
+            }
+            let interpretation = BodyInterpreterEngine().interpret(
+                dashboard: outboundDashboard,
+                wiki: wiki,
+                activePlan: activePlan,
+                foodLogs: outboundPolicy.nutrition ? recentFoods : [],
+                journalEntries: outboundPolicy.journal ? Array(journalEntries) : []
+            )
+            result.append(ChatMessage(
+                role: .system,
+                content: Self.bodyInterpreterContext(interpretation, language: lang)
+            ))
+        }
+
         if outboundPolicy.webSearch, policy != .casual, ResponseLengthPolicy.needsWebSearch(userText) {
             let webResults = await WebSearchHelper.shared.search(userText)
             if !webResults.isEmpty {
@@ -465,6 +486,41 @@ struct CoachContextAssembler {
 
         result.append(ChatMessage(role: .user, content: userText))
         return result
+    }
+
+    /// BodyInterpreterEngine 输出的 Coach 上下文渲染（双语、≤3 条/类）。
+    /// 声明为本机规则引擎分析：与 TrainingDecisionKernel 冲突时 kernel 优先。
+    private static func bodyInterpreterContext(
+        _ interpretation: BodyInterpretation,
+        language: AppLanguage
+    ) -> String {
+        let isChinese = language.isChinese
+        let limiter = interpretation.primaryLimiter
+        var lines: [String] = []
+        lines.append(isChinese ? "疲劳等级：\(interpretation.fatigueLevel.label)" : "Fatigue level: \(interpretation.fatigueLevel.label)")
+        lines.append(isChinese
+            ? "主要限制因素：\(limiter.system)（\(limiter.metricName) \(limiter.currentValue.formatted())）——\(limiter.interpretation)"
+            : "Primary limiter: \(limiter.system) (\(limiter.metricName) \(limiter.currentValue.formatted())) — \(limiter.interpretation)")
+        lines.append(isChinese
+            ? "训练窗口：\(interpretation.trainingWindow.isOpen ? "开放" : "关闭") · 建议强度 \(interpretation.trainingWindow.recommendedIntensity) · 上限 \(interpretation.trainingWindow.maxDurationMinutes) 分钟。\(interpretation.trainingWindow.narrative)"
+            : "Training window: \(interpretation.trainingWindow.isOpen ? "open" : "closed") · recommended intensity \(interpretation.trainingWindow.recommendedIntensity) · max \(interpretation.trainingWindow.maxDurationMinutes) min. \(interpretation.trainingWindow.narrative)")
+        let flags = interpretation.riskFlags.prefix(3).map {
+            "[\($0.level.rawValue)] \($0.message)"
+        }
+        if !flags.isEmpty {
+            lines.append(isChinese ? "风险标记：\(flags.joined(separator: "；"))" : "Risk flags: \(flags.joined(separator: "; "))")
+        }
+        let tasks = interpretation.recoveryTasks
+            .sorted { $0.priority < $1.priority }
+            .prefix(3)
+            .map { isChinese ? "\($0.title)：\($0.description)" : "\($0.title): \($0.description)" }
+        if !tasks.isEmpty {
+            lines.append(isChinese ? "建议恢复任务：\(tasks.joined(separator: "；"))" : "Suggested recovery tasks: \(tasks.joined(separator: "; "))")
+        }
+        let guardrail = isChinese
+            ? "以上是本机规则引擎（BodyInterpreterEngine）的分析，非医学诊断；若与本地 TrainingDecisionKernel 的结论冲突，以 kernel 为准并向用户说明冲突。"
+            : "The above is a local rule-engine analysis (BodyInterpreterEngine), not a medical diagnosis. If it conflicts with the local TrainingDecisionKernel, follow the kernel and explain the conflict to the user."
+        return "## Body Interpretation (local rule engine)\n" + lines.joined(separator: "\n") + "\n" + guardrail
     }
 
     private func buildHealthReferenceLine(

@@ -496,3 +496,39 @@ P1-1 工具回调、P1-2 VO2max、41/42 天窗口、睡眠缺失误判 reduce、
 全量 **373/373** 绿；已推送到 iPhone（databaseSequenceNumber 2860）。
 
 **成熟度规则修正（2868）**：用户实测 0 条手记行为、744 次训练事实仍显示学习期——根因是稳定期门槛要求 6 对手记行为，不写手记就永远稳定不了。修正：整体成熟度以生理拟合为准（三年 ≥180 天 + 训练事实 ≥8 次即稳定期）；手记行为降为独立轨道，「行为-结果配对不足」继续在待验证区域诚实提示，不再阻塞稳定期。+1 回归（零手记 + 三年拟合 → 稳定期），全量 **374/374** 绿；已推送到 iPhone（databaseSequenceNumber 2868）。
+
+## 算法打通专项（2026-08-15，四批次 A→D）✅ 已修并推送
+
+用户方向：算法与数据展示很多但彼此独立，没有真正打通。先做接线全景审计（每引擎输出→消费点，grep 逐条核实），发现并修复：
+
+**审计核心发现（接线图）**：
+- 三条活决策链互不相通：`TodayCommandBuilder`（压力>75→recover、任一肌群高疲劳→swap）、`BodyStateKernel`（压力/能量/负荷不进 readiness）、`TrainingDecisionKernel`（无压力/能量/TSB/负荷分支）各吃各的输入子集，同屏可给出「标题说恢复、细节说 100%」的矛盾。
+- 最重的分析引擎 BodyInterpreterEngine 唯一生产路径（AdaptiveTrainingManager.refreshDailyProposal）写出的 `TrainingPlanAdaptationRecord` 提案，消费 UI 只有挂在死导航下的旧 TrainingCalendarView → 提案写了没人看得见。
+- EnergyBank 的 TSB/ACWR/能量值进 Coach 上下文与详情页，但三个决策层全都不用；「TSB≤-15 减量」只存在于死代码。
+- Lived State 未接线：今日手记在 BodyStateKernel 里 impact=0；「主观与客观并立、分歧降置信度」无实现。
+- 反馈闭环只校准一半：计划置信度（kernel 档位）不吃 DecisionFeedbackCalibrator。
+
+**批次 A — 单一决策结论源**：
+- `TrainingDecisionKernel` 新增门控（只向保守方向收紧）：sick/injured/resting 硬约束最先；恢复缺数据→reduce 0.6；睡眠<休息阈值→rest；压力>75→rest；无计划日任一肌群高疲劳→swap；能量<30→reduce 0.7；TSB≤-15→reduce 0.7（从死代码 AdaptiveTrainingEngine.adjustToday 移植）；负荷>目标上限→reduce 0.75。
+- `TodayCommandBuilder.build` 新增 `trainingDecision` 参数：提供时 readiness 结论投影自 kernel（rest↔recover 归一），置信度仍用 rec/sleep/stress 加权公式 + 反馈校准；旧判定树保留为无 kernel 输入时的兜底。生产两处（SecondaryDataAssembler、今日页兜底）均已传 kernel 决策。
+- ProactiveInsightService 压力阈值 70→75（与引擎/决策统一）。
+
+**批次 B — BodyInterpreter 接活**：
+- 训练计划页（`VelaTrainingPlanView`）新增「Vela 的调整提案」区：今日 pending 提案（BodyInterpreterEngine + AdaptiveTrainingEngine 产出）展示调整类型/理由/替代方案，采纳（applyAdaptation，ADR 0008 确认）或拒绝；此前提案表只写不读。
+- `CoachContextAssembler` 全量上下文新增「Body Interpretation」系统消息：疲劳等级/主要限制因素/训练窗口/风险标记（≤3）/恢复任务（≤3）+ 与 kernel 冲突时以 kernel 为准的护栏；按 health+training 授权门控。
+
+**批次 C — 反馈校准补全 + Lived State**：
+- `DecisionFeedbackCalibrator.calibratedPlanConfidence` 重载：`DailyOperatingPlanCoordinator.upsert` 持久化时对 kernel 置信度校准（每次从原始基数重算，不累积缩放）——计划/工件/Coach 展示面自动一致。
+- `BodyStateKernel` 接入 Lived State：36h 内手记（note+标签）中英关键词→保守严重度（疼痛/生病 1.0、很累/酸痛/睡不好 0.8、压力/疲劳 0.5）；自评严重负面且客观信号良好时 readiness ready→caution；自评与身体状态相悖（severity≥0.5 且恢复/睡眠良好）时置信度→low。中性/积极自评不改判定。
+
+**批次 D — 死代码收敛**（全部零引用核实后删除）：
+- `TrainingDecisionEngine` enum（405 行，含体温/咖啡因规则；保留 `TrainingDecision` struct + compatibilityView）。
+- `DailyPlanBuilder` 及其 WhyThisItem/DailyAction/TodayPlan（保留 BodyInterpretation 依赖的 DailyState/DailyActionType）。
+- `LocalDailyPlanLimiterEngine`（BehaviorTagModels）。
+- `RecoveryTrainingAdapter.adapt` + `RecoveryTrainingInput`/`TrainingAdaptationRecommendation`（保留 TrainingResponseCalibrator）。
+- `AdaptiveTrainingManager.generateWeekAdjustments` 两个重载 + `AdaptiveTrainingEngine.adjustToday`（保留 adjust(day:interpretation:) 与提案管线）。
+- `DailyPlanLimiterEngine` + Input/Result + PlanAction（保留 PlanLimiter）。
+- `TrainingDecisionInput.recentStrengthSummary` 死参数（kernel 从不读）及全部调用点。
+- 附注：`VelaAppTests/StabilizationTests.swift` 为孤儿文件（未注册 pbxproj、引用了旧 API 不参与编译），已记录在案，未动。
+
+**测试**：+12 回归（kernel 六门控、投影四映射与加权置信度、Lived State 三用例、计划反馈校准、压力投影一致性测试改写），全量 **386/386** 绿；已推送到 iPhone（databaseSequenceNumber 2876）。

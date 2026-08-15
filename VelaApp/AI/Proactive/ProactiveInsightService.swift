@@ -231,7 +231,8 @@ enum ProactiveInsightService {
             ))
         }
 
-        if dashboard.stress.hasData, dashboard.stress.stressIndex > 70 {
+        // 压力阈值与评分引擎/TodayCommandBuilder/TrainingDecisionKernel 统一为 75。
+        if dashboard.stress.hasData, dashboard.stress.stressIndex > 75 {
             insights.append(ProactiveInsight(
                 focus: .stress,
                 severity: .warning,

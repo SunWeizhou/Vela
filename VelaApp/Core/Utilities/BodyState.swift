@@ -153,16 +153,22 @@ struct BodyStateKernel: Sendable {
                 source: "FoodLogRecord"
             ))
         }
-        if let latestJournal = input.journalEntries
-            .filter({ $0.createdAt >= input.generatedAt.addingTimeInterval(-36 * 3_600) })
-            .max(by: { $0.createdAt < $1.createdAt }) {
+        // 算法打通（批次 C）：Lived State（当日自评）接线——此前手记对今日决策
+        // 只有 impact 0 的中性展示。现在：负面自评保守方向参与判定，与 Body State
+        // 相悖时降低确定性；绝不静默覆盖客观评分（产品方向「主观与客观并立」）。
+        let lived = Self.livedStateSignal(
+            entries: input.journalEntries.filter {
+                $0.createdAt >= input.generatedAt.addingTimeInterval(-36 * 3_600)
+            }
+        )
+        if lived.hasEntry {
             drivers.append(BodyStateDriver(
-                id: "journal-\(Int(latestJournal.createdAt.timeIntervalSince1970))",
+                id: "lived-state",
                 kind: .journal,
-                title: "近期主观记录",
-                detail: latestJournal.note.isEmpty ? latestJournal.tags.joined(separator: ", ") : latestJournal.note,
-                impact: 0,
-                source: "JournalEntryRecord"
+                title: lived.severity > 0 ? "今日自评" : "近期主观记录",
+                detail: lived.evidence,
+                impact: lived.severity > 0 ? -lived.severity : 0,
+                source: "JournalEntryRecord (Lived State)"
             ))
         }
         if let activePlan = input.activePlan {
@@ -196,9 +202,13 @@ struct BodyStateKernel: Sendable {
             generatedAt: input.generatedAt,
             hasData: dashboard.source != .empty
         )
-        let confidence = Self.confidence(for: dashboard, freshness: freshness)
+        // Lived State 与 Body State 相悖（自评负面但客观信号良好）→ 确定性降级。
+        let livedConflict = lived.severity >= 0.5
+            && dashboard.recovery.hasData && dashboard.recovery.score >= 70
+            && dashboard.sleepScore.hasData && dashboard.sleepScore.score >= 70
+        let confidence = Self.confidence(for: dashboard, freshness: freshness, livedConflict: livedConflict)
         let thresholds = PersonalBaselineEngine.resolveThresholds()
-        let readiness: BodyReadiness
+        var readiness: BodyReadiness
         if dashboard.source == .empty {
             readiness = .unknown
             drivers.append(BodyStateDriver(
@@ -219,6 +229,10 @@ struct BodyStateKernel: Sendable {
             readiness = .caution
         } else {
             readiness = .ready
+        }
+        // 自评严重负面（疼痛/生病/很累）时，即使客观信号良好也至少进入 caution。
+        if readiness == .ready, lived.severity >= 0.8 {
+            readiness = .caution
         }
 
         let fatigueHash = fatigue.values
@@ -310,8 +324,13 @@ struct BodyStateKernel: Sendable {
         return drivers
     }
 
-    private static func confidence(for dashboard: DashboardSummary, freshness: DataFreshness) -> DataConfidence {
+    private static func confidence(
+        for dashboard: DashboardSummary,
+        freshness: DataFreshness,
+        livedConflict: Bool = false
+    ) -> DataConfidence {
         guard dashboard.source != .empty, freshness != .missing else { return .low }
+        if livedConflict { return .low }
         let values = [
             dashboard.recovery.confidence,
             dashboard.sleepScore.confidence,
@@ -320,6 +339,29 @@ struct BodyStateKernel: Sendable {
         if freshness == .stale || values.contains(.low) { return .low }
         if values.allSatisfy({ $0 == .high }) { return .high }
         return .medium
+    }
+
+    /// 当日自评（Lived State）信号：note + 标签的中英关键词 → 保守严重度 0...1。
+    /// 不区分真伪，只按「负面自评」的保守方向使用；中性/积极自评不改判定。
+    private static func livedStateSignal(entries: [JournalEntryDTO]) -> (hasEntry: Bool, severity: Double, evidence: String) {
+        guard let latest = entries.max(by: { $0.createdAt < $1.createdAt }) else {
+            return (false, 0, "")
+        }
+        let text = (latest.note + " " + latest.tags.joined(separator: " ")).lowercased()
+        let strong = ["疼痛", "剧痛", "受伤", "生病", "pain", "injur", "sick"]
+        let medium = ["很累", "非常累", "疲劳", "酸痛", "睡不好", "失眠", "熬夜", "压力大",
+                      "stressed", "sore", "exhaust", "poor sleep"]
+        let weak = ["睡眠差", "压力", "tired", "fatigue"]
+        var severity: Double = 0
+        if strong.contains(where: { text.contains($0) }) {
+            severity = 1.0
+        } else if medium.contains(where: { text.contains($0) }) {
+            severity = 0.8
+        } else if weak.contains(where: { text.contains($0) }), !text.contains("不累") {
+            severity = 0.5
+        }
+        let evidence = latest.note.isEmpty ? latest.tags.joined(separator: "、") : latest.note
+        return (true, severity, evidence.isEmpty ? "已记录主观状态" : evidence)
     }
 
     private static func freshness(referenceDate: Date, generatedAt: Date, hasData: Bool) -> DataFreshness {

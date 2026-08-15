@@ -689,7 +689,6 @@ enum SecondaryDataAssembler {
             dailyTrainingDecision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
                 bodyState: bodyState,
                 activePlan: activePlan,
-                recentStrengthSummary: recentStrengthSummary,
                 trainingResponses: trainingResponses,
                 longTermTrainingVolume: dashboard.longTermBaselines?.trainingVolume
             ))
@@ -718,13 +717,15 @@ enum SecondaryDataAssembler {
         let fat = todayLogs.map(\.fatGrams).reduce(0, +)
         let targetCalorieTarget = UserDefaults.standard.integer(forKey: "vela_daily_calorie_target")
         let dailyTarget = targetCalorieTarget > 0 ? targetCalorieTarget : 2000
-        // 先构建 CommandState：今日页行动列表与 Hero 标题统一跟随 readiness 结论
+        // 先构建 CommandState：今日页行动列表与 Hero 标题统一跟随 readiness 结论。
+        // 算法打通（批次 A）：readiness 投影自 TrainingDecisionKernel 的同一结论。
         let todayCommandState = TodayCommandBuilder.build(
             from: updatedDashboard,
             recentStrengthSummary: recentStrengthSummary,
             coachArtifact: latestTodayArtifact,
             generatedAt: Date(),
-            confirmedObservations: confirmedObservations
+            confirmedObservations: confirmedObservations,
+            trainingDecision: dailyTrainingDecision
         )
         let todayExperience = TodayExperienceModel.build(
             dashboard: updatedDashboard,

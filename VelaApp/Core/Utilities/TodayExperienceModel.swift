@@ -104,9 +104,9 @@ struct TodayExperienceModel: Codable, Hashable {
     ) -> TodayExperienceModel {
         let hasReadinessData = dashboard.recovery.hasData
         let confidenceDetail = hasReadinessData ? label(for: bodyState.confidence) : "数据不足"
-        // 行动列表与 Hero 标题统一跟随 readiness（CommandBuilder，输入覆盖压力/负荷/
-        // 睡眠/恢复/局部疲劳），Kernel 只提供量化细节（容量/RPE）。四套引擎共用同一
-        // 结论，避免「标题说恢复、行动说训练」的同屏矛盾。
+        // 算法打通（批次 A）：行动列表与 Hero 标题统一跟随 readiness（TodayCommandBuilder），
+        // 而 readiness 投影自 TrainingDecisionKernel 的同一结论（rest↔recover 归一）；
+        // Kernel 提供量化细节（容量/RPE）。同屏不再出现「标题说恢复、细节说 100%」的矛盾。
         let effectiveReadiness = readiness ?? Self.readinessMapping(for: trainingDecision)
         let hero = TodayExperienceHero(
             scoreTitle: scoreTitle(dashboard),

@@ -541,7 +541,7 @@ final class TrainingDecisionKernelTests: XCTestCase {
         let input = TrainingDecisionInput(
             bodyState: state,
             activePlan: nil,
-            recentStrengthSummary: nil,
+
             trainingResponses: []
         )
         

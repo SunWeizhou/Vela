@@ -55,7 +55,7 @@ final class StabilizationTests: XCTestCase {
         let input = TrainingDecisionInput(
             bodyState: bodyState,
             activePlan: plan,
-            recentStrengthSummary: nil,
+
             trainingResponses: []
         )
         
@@ -111,7 +111,7 @@ final class StabilizationTests: XCTestCase {
         let input = TrainingDecisionInput(
             bodyState: bodyState,
             activePlan: plan,
-            recentStrengthSummary: nil,
+
             trainingResponses: [response]
         )
         

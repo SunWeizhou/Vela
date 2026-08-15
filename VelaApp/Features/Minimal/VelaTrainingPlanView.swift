@@ -6,6 +6,14 @@ struct VelaTrainingPlanView: View {
     private var plans: [TrainingPlanRecord]
     @Query(sort: \WorkoutEventRecord.startedAt, order: .reverse)
     private var events: [WorkoutEventRecord]
+    // 算法打通（批次 B）：BodyInterpreterEngine + AdaptiveTrainingEngine 产出的
+    // 计划调整提案（TrainingPlanAdaptationRecord）此前写在库里但没有任何页面读取——
+    // 旧日历页挂在死导航下。这里接上：今日提案展示 + 用户确认（ADR 0008）。
+    @Query(
+        filter: #Predicate<TrainingPlanAdaptationRecord> { $0.status == "proposed" },
+        sort: \TrainingPlanAdaptationRecord.createdAt
+    )
+    private var pendingAdaptations: [TrainingPlanAdaptationRecord]
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     @Environment(\.modelContext) private var modelContext
 
@@ -14,6 +22,21 @@ struct VelaTrainingPlanView: View {
 
     private var activePlan: TrainingPlanRecord? {
         plans.first(where: \.isActive) ?? plans.first
+    }
+
+    /// 今日计划日（与 TrainingDecisionKernel 同一解析规则：周几 → dayNumber、未完成）。
+    private var todayDay: TrainingDay? {
+        guard let activePlan else { return nil }
+        let weekday = Calendar.current.component(.weekday, from: Date())
+        let dayNumber = weekday == 1 ? 7 : weekday - 1
+        return activePlan.days.first { !$0.isCompleted && $0.dayNumber == dayNumber }
+    }
+
+    private var todayAdaptations: [TrainingPlanAdaptationRecord] {
+        guard let activePlan, let todayDay else { return [] }
+        return pendingAdaptations.filter {
+            $0.planId == activePlan.id && $0.dayId == todayDay.id
+        }
     }
 
     var body: some View {
@@ -32,6 +55,9 @@ struct VelaTrainingPlanView: View {
                 }
 
                 todayDecisionSection
+                if !todayAdaptations.isEmpty {
+                    adaptationProposalsSection
+                }
                 coachActions
             }
             .padding(.horizontal, VelaTheme.pagePadding)
@@ -194,6 +220,111 @@ struct VelaTrainingPlanView: View {
     private func boundaryText(_ payload: DailyOperatingPlanPayload) -> String {
         guard payload.decision != .rest else { return "优先恢复 · 轻活动" }
         return "容量 \(Int((payload.volumeMultiplier * 100).rounded()))% · RPE ≤ \(payload.intensityCap)"
+    }
+
+    /// 算法打通（批次 B）：今日的 Vela 调整提案（BodyInterpreterEngine 产出）。
+    /// 采纳 → 应用到计划；拒绝 → 标记 rejected。ADR 0008：任何计划修改由用户确认。
+    private var adaptationProposalsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(VelaTheme.rhythmDeep)
+                Text("Vela 的调整提案")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+            }
+            ForEach(todayAdaptations) { adaptation in
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Text(adaptationLabel(adaptation.adjustment))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(VelaTheme.rhythmDeepOn)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 4)
+                            .background(VelaTheme.rhythmDeep, in: Capsule())
+                        Text(adaptation.originalDayTitle)
+                            .font(.system(size: 12))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                            .lineLimit(1)
+                    }
+                    Text(adaptation.reason)
+                        .font(.system(size: 13))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        .lineSpacing(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let alternative = adaptation.suggestedAlternative, !alternative.isEmpty {
+                        Text(alternative)
+                            .font(.system(size: 12))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                            .lineSpacing(3)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    HStack(spacing: 10) {
+                        Button {
+                            acceptAdaptation(adaptation)
+                        } label: {
+                            Label("采纳", systemImage: "checkmark")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(VelaTheme.rhythmDeepOn)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(VelaTheme.rhythmDeep, in: Capsule())
+                        }
+                        .buttonStyle(.cardPress)
+                        Button {
+                            rejectAdaptation(adaptation)
+                        } label: {
+                            Label("拒绝", systemImage: "xmark")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(VelaTheme.rhythmMist, in: Capsule())
+                        }
+                        .buttonStyle(.cardPress)
+                        Spacer()
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+                }
+            }
+            Text("采纳后计划即时更新，今日决策面板将在下次刷新时重算。")
+                .font(.system(size: 10))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+        }
+    }
+
+    private func acceptAdaptation(_ adaptation: TrainingPlanAdaptationRecord) {
+        guard let activePlan else { return }
+        if AdaptiveTrainingManager().applyAdaptation(adaptation, to: activePlan) {
+            adaptation.status = AdaptationStatus.accepted.rawValue
+            adaptation.acceptedAt = Date()
+            try? modelContext.save()
+            VelaAppState.shared.markLocalDataChanged()
+        }
+    }
+
+    private func rejectAdaptation(_ adaptation: TrainingPlanAdaptationRecord) {
+        adaptation.status = AdaptationStatus.rejected.rawValue
+        adaptation.rejectedAt = Date()
+        try? modelContext.save()
+    }
+
+    private func adaptationLabel(_ adjustment: String) -> String {
+        switch adjustment {
+        case "keep": return "保持"
+        case "reduce": return "减量"
+        case "swap": return "替换"
+        case "rest": return "休息"
+        case "reschedule": return "改期"
+        case "deloadWeek": return "减载周"
+        default: return adjustment
+        }
     }
 
     private var coachActions: some View {

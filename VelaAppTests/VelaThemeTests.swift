@@ -1,5 +1,6 @@
 import XCTest
 import UIKit
+import SwiftData
 @testable import Vela
 
 final class VelaThemeTests: XCTestCase {
@@ -1745,6 +1746,246 @@ final class VelaThemeTests: XCTestCase {
         ))
         XCTAssertEqual(with.decision, .reduce, "本月训练量处于三年 P95 应建议减量")
         XCTAssertTrue(with.reasons.contains { $0.contains("长线训练量") })
+    }
+
+    // MARK: - 算法打通批次 A：Kernel 单一结论源
+
+    /// 构造一个受控 BodyState：默认是「健康可训练」的五维分数，测试里改单个维度。
+    private func controlledBodyState(
+        recovery: Double? = 82,
+        sleep: Double? = 86,
+        strain: Double? = 44,
+        stress: Double? = 32,
+        energy: Double? = 76,
+        tsb: Double? = 2
+    ) -> BodyState {
+        var dashboard = DashboardSummary.preview(date: Date())
+        dashboard.recovery.value = recovery
+        dashboard.sleepScore.value = sleep
+        dashboard.strain.value = strain
+        dashboard.stress.value = stress
+        dashboard.energy.value = energy
+        dashboard.energy.components["tsb"] = tsb
+        return BodyStateKernel().build(input: BodyStateInput(
+            dashboard: dashboard,
+            activeStatus: "active",
+            generatedAt: Date()
+        ))
+    }
+
+    func testKernelRestsWhenStressElevatedDespiteGoodRecovery() {
+        let decision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
+            bodyState: controlledBodyState(stress: 90)
+        ))
+        XCTAssertEqual(decision.decision, .rest, "压力 >75 应优先恢复（此前 Kernel 无压力分支）")
+        XCTAssertEqual(decision.volumeMultiplier, 0)
+        XCTAssertTrue(decision.reasons.contains { $0.contains("压力偏高") })
+    }
+
+    func testKernelRestsWhenSleepBelowRestThreshold() {
+        let decision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
+            bodyState: controlledBodyState(sleep: 30)
+        ))
+        XCTAssertEqual(decision.decision, .rest, "睡眠低于休息阈值应建议恢复")
+        XCTAssertTrue(decision.reasons.contains { $0.contains("睡眠不足") })
+    }
+
+    func testKernelReducesWhenEnergyLow() {
+        let decision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
+            bodyState: controlledBodyState(energy: 22)
+        ))
+        XCTAssertEqual(decision.decision, .reduce, "能量储备 <30 应减量（与主动洞察阈值一致）")
+        XCTAssertLessThanOrEqual(decision.volumeMultiplier, 0.7)
+        XCTAssertTrue(decision.reasons.contains { $0.contains("能量储备") })
+    }
+
+    func testKernelReducesWhenTSBDeeplyNegative() {
+        let decision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
+            bodyState: controlledBodyState(tsb: -18)
+        ))
+        XCTAssertEqual(decision.decision, .reduce, "TSB ≤ -15 应减量（从死代码 AdaptiveTrainingEngine 移植）")
+        XCTAssertTrue(decision.reasons.contains { $0.contains("TSB") })
+    }
+
+    func testKernelReducesWhenStrainAboveTargetRange() {
+        let decision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
+            bodyState: controlledBodyState(strain: 88)
+        ))
+        XCTAssertEqual(decision.decision, .reduce, "当日负荷高于目标上限应减量")
+        XCTAssertTrue(decision.reasons.contains { $0.contains("当日负荷") })
+    }
+
+    func testKernelReducesWhenRecoveryMissingData() {
+        let decision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
+            bodyState: controlledBodyState(recovery: nil)
+        ))
+        XCTAssertEqual(decision.decision, .reduce, "恢复数据缺失应保守减量而非误判恢复")
+        XCTAssertEqual(decision.volumeMultiplier, 0.6, accuracy: 0.001)
+        XCTAssertTrue(decision.reasons.contains { $0.contains("恢复基线数据不足") })
+    }
+
+    func testTodayCommandProjectsAllFourKernelDecisionKinds() {
+        let dashboard = DashboardSummary.preview(date: Date())
+        let cases: [(DailyTrainingDecisionType, ReadinessDecisionKind)] = [
+            (.rest, .recover), (.keep, .keep), (.reduce, .reduce), (.swap, .swap)
+        ]
+        for (kind, expected) in cases {
+            let kernelDecision = DailyTrainingDecision(
+                decision: kind,
+                targetSessionTitle: nil,
+                volumeMultiplier: 0.7,
+                intensityCap: 7,
+                reasons: ["kernel-reason-\(kind.rawValue)"],
+                userFacingSummary: "kernel-summary",
+                confidence: 0.75,
+                source: "test",
+                safetyNotice: "安全提示"
+            )
+            let state = TodayCommandBuilder.build(
+                from: dashboard,
+                trainingDecision: kernelDecision
+            )
+            XCTAssertEqual(state.readinessDecision.decision, expected, "kernel \(kind.rawValue) 应投影为 \(expected.rawValue)")
+            XCTAssertEqual(state.readinessDecision.reasons, ["kernel-reason-\(kind.rawValue)"])
+            XCTAssertEqual(state.summary, "kernel-summary")
+        }
+    }
+
+    func testTodayCommandProjectionKeepsWeightedConfidence() {
+        let dashboard = DashboardSummary.preview(date: Date())
+        let kernelDecision = DailyTrainingDecision(
+            decision: .keep,
+            targetSessionTitle: nil,
+            volumeMultiplier: 1.0,
+            intensityCap: 9,
+            reasons: ["r"],
+            userFacingSummary: "s",
+            confidence: 0.75,
+            source: "test",
+            safetyNotice: "安全提示"
+        )
+        let state = TodayCommandBuilder.build(from: dashboard, trainingDecision: kernelDecision)
+        func numeric(_ confidence: MetricConfidence) -> Double {
+            switch confidence {
+            case .high: return 1.0
+            case .medium: return 0.7
+            case .low: return 0.4
+            }
+        }
+        let expected = min(1.0,
+            0.50 * numeric(dashboard.recovery.confidence)
+            + 0.30 * numeric(dashboard.sleepScore.confidence)
+            + 0.20 * numeric(dashboard.stress.confidence))
+        XCTAssertEqual(state.readinessDecision.confidence, expected, accuracy: 0.0001,
+                       "投影后置信度仍用数据加权公式，由 DecisionFeedbackCalibrator 校准")
+    }
+
+    // MARK: - 算法打通批次 C：Lived State 接线 + 计划反馈校准
+
+    func testLivedStateNegativeJournalEscalatesReadinessToCaution() {
+        let now = Date()
+        var dashboard = DashboardSummary.preview(date: now)
+        dashboard.recovery.value = 82
+        dashboard.sleepScore.value = 86
+        dashboard.stress.value = 32
+        dashboard.strain.value = 44
+        dashboard.energy.value = 76
+        let state = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: dashboard,
+            journalEntries: [JournalEntryRecord(createdAt: now, tags: [], note: "今天很累，肌肉酸痛").dto],
+            activeStatus: "active",
+            generatedAt: now
+        ))
+        XCTAssertEqual(state.readiness, .caution, "自评严重负面时即使客观信号良好也应保守")
+        XCTAssertTrue(state.drivers.contains { $0.kind == .journal && $0.impact < 0 })
+        let decision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(bodyState: state))
+        XCTAssertEqual(decision.decision, .reduce)
+    }
+
+    func testLivedStateConflictLowersConfidence() {
+        let now = Date()
+        var dashboard = DashboardSummary.preview(date: now)
+        dashboard.recovery.value = 85
+        dashboard.sleepScore.value = 88
+        dashboard.stress.value = 25
+        dashboard.strain.value = 40
+        dashboard.energy.value = 80
+        dashboard.recovery.confidence = .high
+        dashboard.sleepScore.confidence = .high
+        dashboard.strain.confidence = .high
+        dashboard.stress.confidence = .high
+        dashboard.energy.confidence = .high
+        let controlHigh = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: dashboard,
+            activeStatus: "active",
+            generatedAt: now
+        ))
+        XCTAssertEqual(controlHigh.confidence, .high, "无自评且信号高置信时应为 high")
+        let conflict = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: dashboard,
+            journalEntries: [JournalEntryRecord(createdAt: now, tags: ["压力大"], note: "睡不好").dto],
+            activeStatus: "active",
+            generatedAt: now
+        ))
+        XCTAssertEqual(conflict.confidence, .low, "自评与身体状态相悖应降低确定性")
+    }
+
+    func testLivedStateNeutralJournalKeepsReadiness() {
+        let now = Date()
+        var dashboard = DashboardSummary.preview(date: now)
+        dashboard.recovery.value = 82
+        dashboard.sleepScore.value = 86
+        dashboard.stress.value = 32
+        dashboard.strain.value = 44
+        dashboard.energy.value = 76
+        let state = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: dashboard,
+            journalEntries: [JournalEntryRecord(createdAt: now, tags: [], note: "今天状态不错").dto],
+            activeStatus: "active",
+            generatedAt: now
+        ))
+        XCTAssertEqual(state.readiness, .ready, "中性自评不应改变判定")
+    }
+
+    @MainActor
+    func testOperatingPlanConfidenceIsCalibratedByFeedback() throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let now = Date()
+        var dashboard = DashboardSummary.preview(date: now)
+        dashboard.recovery.value = 82
+        dashboard.sleepScore.value = 86
+        dashboard.stress.value = 90
+        dashboard.strain.value = 44
+        dashboard.energy.value = 76
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: dashboard,
+            activeStatus: "active",
+            generatedAt: now
+        ))
+        let decision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(bodyState: bodyState))
+        XCTAssertEqual(decision.decision, .rest)
+        for i in 0..<3 {
+            context.insert(DailyDecisionFeedbackRecord(
+                dayIdentifier: "day-\(i)",
+                bodyStateHash: "hash-\(i)",
+                decisionType: "rest",
+                decisionTitle: "恢复",
+                accuracyRating: "inaccurate",
+                createdAt: now
+            ))
+        }
+        try context.save()
+
+        try DailyOperatingPlanCoordinator.upsert(
+            bodyState: bodyState,
+            decision: decision,
+            modelContext: context
+        )
+        let record = try XCTUnwrap(context.fetch(FetchDescriptor<DailyOperatingPlanRecord>()).first)
+        // 3 条「不准确」→ 准确率 0 → 乘数 0.6（只降不升），基数来自 kernel 置信度。
+        XCTAssertEqual(record.confidence, decision.confidence * 0.6, accuracy: 0.0001,
+                       "计划置信度应吃与今日页同一份反馈校准")
     }
 
 

@@ -26,27 +26,28 @@ struct VelaTodayView: View {
     var latestTodayArtifact: CoachArtifact? { dashboardVM.latestTodayArtifact }
     
     var todayCommandState: TodayCommandState {
-        dashboardVM.todayCommandState ?? TodayCommandBuilder.build(from: dashboard)
+        // 兜底路径同样投影 kernel 结论（算法打通批次 A：今日页不再跑第二套判定树）。
+        dashboardVM.todayCommandState ?? TodayCommandBuilder.build(
+            from: dashboard,
+            trainingDecision: fallbackKernelDecision()
+        )
     }
-    
+
     var todayExperience: TodayExperienceModel {
         dashboardVM.todayExperience ?? makeTodayExperience()
     }
 
-    func makeTodayExperience() -> TodayExperienceModel {
-        // 兜底路径也要用真实力量训练数据，避免今日决策与训练页不一致。
-        let recentRecords = (try? modelContext.fetch(FetchDescriptor<StrengthWorkoutRecord>())) ?? []
-        let recentStrengthSummary = TrainingAnalyticsService().buildRecentSummary(
-            workouts: recentRecords.map { $0.dto },
-            days: 7,
-            endingAt: dashboardVM.selectedDate
-        )
-        let dailyTrainingDecision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
+    /// 兜底路径也要用真实力量训练数据，避免今日决策与训练页不一致。
+    func fallbackKernelDecision() -> DailyTrainingDecision {
+        return TrainingDecisionKernel().decide(input: TrainingDecisionInput(
             bodyState: bodyState,
             activePlan: nil,
-            recentStrengthSummary: recentStrengthSummary,
             trainingResponses: []
         ))
+    }
+
+    func makeTodayExperience() -> TodayExperienceModel {
+        let dailyTrainingDecision = fallbackKernelDecision()
         return TodayExperienceModel.build(
             dashboard: dashboard,
             bodyState: bodyState,

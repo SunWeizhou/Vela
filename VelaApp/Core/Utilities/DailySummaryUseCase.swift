@@ -488,15 +488,9 @@ final class DailySummaryUseCase {
         if let matched = matchedExistingDecision {
             dailyTrainingDecision = matched
         } else {
-            let recentStrengthSummary = TrainingAnalyticsService().buildRecentSummary(
-                workouts: recentStrengthWorkouts.map { $0.dto },
-                days: 28,
-                endingAt: now
-            )
             dailyTrainingDecision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
                 bodyState: bodyState,
                 activePlan: activePlan?.dto,
-                recentStrengthSummary: recentStrengthSummary,
                 trainingResponses: recentTrainingResponses.map { $0.dto }
             ))
         }

@@ -101,23 +101,56 @@ enum DecisionFeedbackCalibrator {
         let normalized = recordDecisionType == "rest" ? "recover" : recordDecisionType
         return normalized == decision.rawValue
     }
+
+    /// 算法打通（批次 C）：正式计划（DailyTrainingDecisionType）也吃同一份反馈校准，
+    /// 在 DailyOperatingPlanCoordinator.upsert 持久化时应用——所有展示面自动一致。
+    static func calibratedPlanConfidence(
+        base: Double,
+        decision: DailyTrainingDecisionType,
+        records: [DailyDecisionFeedbackRecord],
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Double {
+        let kind: ReadinessDecisionKind
+        switch decision {
+        case .rest: kind = .recover
+        case .keep: kind = .keep
+        case .reduce: kind = .reduce
+        case .swap: kind = .swap
+        }
+        return calibratedConfidence(base: base, decision: kind, records: records, now: now, calendar: calendar)
+    }
 }
 
 enum TodayCommandBuilder {
+    /// 算法打通（批次 A）：`trainingDecision`（TrainingDecisionKernel 输出）提供时，
+    /// 今日页的 readiness 结论直接投影自它——今日页/训练页/计划页共用同一结论源，
+    /// 不再各自跑一套判定树。未提供时保留旧判定树作为兜底（缓存首帧等边界场景）。
     static func build(
         from dashboard: DashboardSummary,
         recentStrengthSummary: RecentTrainingSummary? = nil,
         coachArtifact: CoachArtifact? = nil,
         generatedAt: Date = Date(),
-        confirmedObservations: [String] = []
+        confirmedObservations: [String] = [],
+        trainingDecision: DailyTrainingDecision? = nil
     ) -> TodayCommandState {
         let signals = keySignals(from: dashboard, recentStrengthSummary: recentStrengthSummary)
-        let decision = readinessDecision(from: dashboard, signals: signals, recentStrengthSummary: recentStrengthSummary)
+        let decision: (decision: ReadinessDecisionKind, confidence: Double, reasons: [String])
+        if let trainingDecision {
+            decision = projectedDecision(from: trainingDecision, dashboard: dashboard)
+        } else {
+            decision = readinessDecision(from: dashboard, signals: signals, recentStrengthSummary: recentStrengthSummary)
+        }
         let actions = actions(for: decision.decision, dashboard: dashboard)
         let artifact = coachArtifact ?? localMorningBrief(from: dashboard, decision: decision, generatedAt: generatedAt)
         let confidence = aggregateConfidence(dashboard: dashboard, signals: signals)
 
-        var summaryText = summary(for: decision.decision, dashboard: dashboard)
+        var summaryText: String
+        if let trainingDecision, !trainingDecision.userFacingSummary.isEmpty {
+            summaryText = trainingDecision.userFacingSummary
+        } else {
+            summaryText = summary(for: decision.decision, dashboard: dashboard)
+        }
         // C2：已确认的个人反应规律直接进入今日计划文案（本地规则引擎也能用，不只 AI 知道）。
         if !confirmedObservations.isEmpty {
             let compact = confirmedObservations.prefix(2).joined(separator: "；")
@@ -139,6 +172,29 @@ enum TodayCommandBuilder {
             coachArtifact: artifact,
             dataConfidence: confidence
         )
+    }
+
+    /// kernel 决策 → readiness 结论（rest ↔ recover 归一）。
+    /// 置信度仍用数据驱动的加权公式（rec/sleep/stress），由 DecisionFeedbackCalibrator 校准。
+    private static func projectedDecision(
+        from trainingDecision: DailyTrainingDecision,
+        dashboard: DashboardSummary
+    ) -> (decision: ReadinessDecisionKind, confidence: Double, reasons: [String]) {
+        let kind: ReadinessDecisionKind
+        switch trainingDecision.decision {
+        case .rest: kind = .recover
+        case .keep: kind = .keep
+        case .reduce: kind = .reduce
+        case .swap: kind = .swap
+        }
+        let recConf = dashboard.recovery.hasData ? numericConfidence(dashboard.recovery.confidence) : 0.0
+        let sleepConf = dashboard.sleepScore.hasData ? numericConfidence(dashboard.sleepScore.confidence) : 0.0
+        let stressConf = dashboard.stress.hasData ? numericConfidence(dashboard.stress.confidence) : 0.0
+        let weighted = min(1.0, 0.50 * recConf + 0.30 * sleepConf + 0.20 * stressConf)
+        let reasons = trainingDecision.reasons.isEmpty
+            ? ["按今日身体信号给出的训练决策。"]
+            : trainingDecision.reasons
+        return (kind, weighted, reasons)
     }
 
     private static func numericConfidence(_ confidence: MetricConfidence) -> Double {

@@ -1199,9 +1199,9 @@ final class ScoringEngineTests: XCTestCase {
         }
     }
 
-    func testActionPlanFollowsReadinessWhenKernelDisagrees() {
-        // 压力 85：CommandBuilder 判 recover（Kernel 无压力分支，仍判 keep）。
-        // 行动列表与标题必须跟随 readiness，否则同屏「标题说恢复、行动说训练」。
+    func testActionPlanFollowsKernelConclusionForElevatedStress() {
+        // 压力 85：算法打通批次 A 后 Kernel 有压力分支（rest），
+        // TodayCommandBuilder 投影为 recover——标题与行动与 Kernel 同源，不再同屏矛盾。
         let now = Date(timeIntervalSince1970: 1_780_000_000)
         var dashboard = DashboardSummary.preview(date: now)
         dashboard.recovery.value = 72
@@ -1219,8 +1219,9 @@ final class ScoringEngineTests: XCTestCase {
         ))
         let commandState = TodayCommandBuilder.build(
             from: dashboard,
-            recentStrengthSummary: nil,
-            coachArtifact: nil
+
+            coachArtifact: nil,
+            trainingDecision: kernelDecision
         )
         let readiness = commandState.readinessDecision.decision
 
@@ -1231,6 +1232,7 @@ final class ScoringEngineTests: XCTestCase {
             readiness: readiness
         )
 
+        XCTAssertEqual(kernelDecision.decision, .rest, "Kernel 应识别压力偏高并建议恢复")
         XCTAssertEqual(readiness, .recover)
         XCTAssertEqual(model.hero.decisionTitle, "恢复优先")
         let primary = model.actions.first(where: \.isPrimary)
