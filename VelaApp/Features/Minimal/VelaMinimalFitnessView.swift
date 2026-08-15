@@ -470,64 +470,48 @@ struct VelaTrainingView: View {
         return result
     }
 
-    /// 给 Coach 的未来三天规划上下文（真实数据，脱敏为结构化摘要）。
+    /// 给 Coach 的未来两天规划上下文——联通专项批次 4：改走 AgentFactSnapshot
+    /// 共享边界（ADR 0002），健康事实不再手工拼装。
     private var aiPlanContextText: String {
+        let input = AgentFactInputLoader().load(modelContext: modelContext, asOf: Date())
         let dashboard = dashboardVM.dashboard
-        let fatigueLines = recentStrengthSummary.localFatigue
-            .map { key, fatigue in
-                "\(key): 48h \(fatigue.setsLast48h) 组, 7天 \(fatigue.setsLast7d) 组, \(fatigue.fatigueLevel)"
-            }
-            .joined(separator: "\n")
+        let bodyState = input.bodyState(dashboard: dashboard)
+        let snapshot = AIContextBuilder().buildFacts(
+            dashboard: dashboard,
+            journalEntries: input.journalContext,
+            historicalReports: input.reportContext,
+            userWiki: WikiFileService.loadPopulatedDictionary(),
+            weeklyTrends: input.weeklyTrends,
+            foodLogs: input.foodLogs,
+            workoutEvents: input.workoutEvents,
+            strengthWorkouts: input.strengthWorkouts,
+            trainingResponses: input.trainingResponses,
+            onboardingState: input.onboardingState,
+            bodyState: bodyState,
+            trainingDecision: input.canonicalTrainingDecision(for: bodyState),
+            dataCoverage: nil,
+            profileAge: nil,
+            dailyOperatingPlan: AIContextBuilder.compactDailyOperatingPlan(input.dailyOperatingPlan),
+            activePlan: input.activePlan?.dto,
+            generatedAt: Date()
+        ).snapshot
         let recentLines = recentTrainedDays.map { entry in
             let groups = entry.groups.isEmpty ? "休息" : entry.groups.joined(separator: "+")
             let formatter = DateFormatter()
             formatter.locale = Locale(identifier: "zh_CN")
             formatter.dateFormat = "M/d"
             return "\(formatter.string(from: entry.date)): \(groups)"
-        }.joined(separator: "\n")
+        }
         let localPlan = rotationFutureDays.map {
             "第\($0.dayOffset)天: \($0.groups.isEmpty ? "休息" : $0.groups.joined(separator: "+")) (\($0.note))"
-        }.joined(separator: "\n")
-        var longTermParts: [String] = []
-        if let rhr = memoLongTermRHRMedian {
-            longTermParts.append("静息心率中位 \(Int(rhr.rounded())) bpm")
         }
-        if let hrv = memoLongTermHRVMedian {
-            longTermParts.append("HRV 中位 \(Int(hrv.rounded())) ms")
-        }
-        let longTermLine = longTermParts.isEmpty
-            ? ""
-            : "三年历史基线(不含近90天):\n\(longTermParts.joined(separator: "，"))\n"
-        // 联通专项批次 1：档案与目标/风格补进 AI 规划上下文（此前规划看不到用户是谁）。
-        let onboarding = (try? modelContext.fetch(FetchDescriptor<OnboardingState>()))?.first
-        var profileParts: [String] = []
-        if let age = dashboard.extendedMetrics.age { profileParts.append("年龄 \(age)") }
-        if let sex = dashboard.extendedMetrics.biologicalSex {
-            profileParts.append(sex == "male" ? "男" : sex == "female" ? "女" : "性别其他")
-        }
-        if let height = dashboard.extendedMetrics.heightCm { profileParts.append("身高 \(Int(height))cm") }
-        if let weight = dashboard.bodyMetrics.weightKilograms { profileParts.append("体重 \(String(format: "%.1f", weight))kg") }
-        if let onboarding {
-            var goalParts: [String] = []
-            if !onboarding.goalProfile.primaryGoal.isEmpty { goalParts.append("目标 \(onboarding.goalProfile.primaryGoal)") }
-            if !onboarding.trainingPreference.trainingStyle.isEmpty { goalParts.append("训练风格 \(onboarding.trainingPreference.trainingStyle)") }
-            if onboarding.trainingPreference.weeklyTrainingDays > 0 { goalParts.append("每周 \(onboarding.trainingPreference.weeklyTrainingDays) 次") }
-            if !goalParts.isEmpty { profileParts.append(goalParts.joined(separator: "，")) }
-        }
-        let profileLine = profileParts.isEmpty ? "暂无" : profileParts.joined(separator: "，")
-        return """
-        生理档案: \(profileLine)
-        恢复评分: \(dashboard.recovery.hasData ? "\(Int(dashboard.recovery.score.rounded()))" : "暂无")
-        睡眠评分: \(dashboard.sleepScore.hasData ? "\(Int(dashboard.sleepScore.score.rounded()))" : "暂无")
-        压力指数: \(dashboard.stress.hasData ? "\(Int(dashboard.stress.stressIndex.rounded()))" : "暂无")
-        负荷评分: \(dashboard.strain.hasData ? "\(Int(dashboard.strain.score.rounded()))" : "暂无")
-        \(longTermLine)肌群疲劳(48h组数/7天组数/等级):
-        \(fatigueLines.isEmpty ? "暂无力量训练数据" : fatigueLines)
-        最近训练(过去3天):
-        \(recentLines.isEmpty ? "无" : recentLines)
-        本地轮转建议:
-        \(localPlan.isEmpty ? "无" : localPlan)
-        """
+        return AgentFactAdapters.trainingPlanningFacts(
+            snapshot: snapshot,
+            longTermRHRMedian: memoLongTermRHRMedian,
+            longTermHRVMedian: memoLongTermHRVMedian,
+            recentTrainedDays: recentLines,
+            localPlanLines: localPlan
+        )
     }
 
     /// 让 Coach（DeepSeek）结合数据复核并给出未来三天规划；失败回退本地建议。

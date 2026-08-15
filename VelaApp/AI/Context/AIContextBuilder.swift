@@ -1227,3 +1227,95 @@ public struct FoodVisionIntelligenceEngine: Sendable {
     }
 }
 
+
+// MARK: - 联通专项批次 4：ADR 0002 收敛——共享 adapter
+// TrainingPlanAdvisor 与 PostWorkoutAIGenerator 此前自拼 contextText/factsText，
+// 绕过 AgentFactSnapshot 共享边界。现统一为「buildFacts → 快照 → adapter 渲染」：
+// 健康事实（档案/五维评分/负荷分解/局部疲劳/训练）全部来自规范快照。
+
+enum AgentFactAdapters {
+    /// 训练规划上下文（生理档案/五维评分/局部疲劳来自快照；三年基线、近 3 天
+    /// 训练与本地轮转建议属视图层实时量，由调用方传入）。
+    static func trainingPlanningFacts(
+        snapshot: AgentFactSnapshot,
+        longTermRHRMedian: Double?,
+        longTermHRVMedian: Double?,
+        recentTrainedDays: [String],
+        localPlanLines: [String],
+        isChinese: Bool = AppLanguage.stored.isChinese
+    ) -> String {
+        var profileParts: [String] = []
+        if let age = snapshot.extendedMetrics.age { profileParts.append("年龄 \(age)") }
+        if let sex = snapshot.extendedMetrics.biologicalSex {
+            profileParts.append(sex == "male" ? "男" : sex == "female" ? "女" : "性别其他")
+        }
+        if let height = snapshot.extendedMetrics.heightCm.value { profileParts.append("身高 \(Int(height))cm") }
+        if let weight = snapshot.extendedMetrics.weightKg.value { profileParts.append("体重 \(String(format: "%.1f", weight))kg") }
+        if let goal = snapshot.userWiki["body_model.primary_goal"], !goal.isEmpty { profileParts.append("目标 \(goal)") }
+        if let style = snapshot.userWiki["body_model.training_style"], !style.isEmpty { profileParts.append("训练风格 \(style)") }
+        if let weekly = snapshot.userWiki["body_model.weekly_training_days"], !weekly.isEmpty { profileParts.append("每周 \(weekly) 次") }
+        let profileLine = profileParts.isEmpty ? "暂无" : profileParts.joined(separator: "，")
+
+        func scoreText(_ value: MetricValue<Double>, unavailable: String = "暂无") -> String {
+            value.value.map { "\(Int($0.rounded()))" } ?? unavailable
+        }
+
+        var fatigueLines: [String] = []
+        if let strength = snapshot.strengthTraining {
+            fatigueLines = strength.localFatigue
+                .map { key, fatigue in
+                    "\(key): 48h \(fatigue.setsLast48h) 组, 7天 \(fatigue.setsLast7d) 组, \(fatigue.fatigueLevel)"
+                }
+                .sorted()
+        }
+        var longTermParts: [String] = []
+        if let rhr = longTermRHRMedian { longTermParts.append("静息心率中位 \(Int(rhr.rounded())) bpm") }
+        if let hrv = longTermHRVMedian { longTermParts.append("HRV 中位 \(Int(hrv.rounded())) ms") }
+        let longTermLine = longTermParts.isEmpty
+            ? ""
+            : "三年历史基线(不含近90天):\n\(longTermParts.joined(separator: "，"))\n"
+        return """
+        生理档案: \(profileLine)
+        恢复评分: \(scoreText(snapshot.recovery.score))
+        睡眠评分: \(scoreText(snapshot.sleep.score))
+        压力指数: \(scoreText(snapshot.stress.stressIndex))
+        负荷评分: \(scoreText(snapshot.strain.score))
+        \(longTermLine)肌群疲劳(48h组数/7天组数/等级):
+        \(fatigueLines.isEmpty ? "暂无力量训练数据" : fatigueLines.joined(separator: "\n"))
+        最近训练(过去3天):
+        \(recentTrainedDays.isEmpty ? "无" : recentTrainedDays.joined(separator: "\n"))
+        本地轮转建议:
+        \(localPlanLines.isEmpty ? "无" : localPlanLines.joined(separator: "\n"))
+        """
+    }
+
+    /// 练后复盘上下文（本机训练事实 = 快照里的训练/负荷/评分；训练事实为唯一真值）。
+    static func postWorkoutFacts(
+        snapshot: AgentFactSnapshot,
+        workoutID: UUID?,
+        isChinese: Bool = AppLanguage.stored.isChinese
+    ) -> String {
+        func scoreText(_ value: MetricValue<Double>) -> String {
+            value.value.map { "\(Int($0.rounded()))" } ?? "N/A"
+        }
+        let decisionLine = snapshot.dailyOperatingPlan?["summary"]
+            ?? snapshot.trainingDecision.reasons
+        let planLine = snapshot.training.activePlan.map {
+            "活跃计划：\($0.title)（\($0.totalDays) 天）"
+        } ?? "无活跃计划"
+        if isChinese {
+            return """
+            刚完成的训练：workout_id=\(workoutID?.uuidString ?? "-")（训练事实以本机记录为准）。
+            当前身体评分：恢复 \(scoreText(snapshot.recovery.score))、睡眠 \(scoreText(snapshot.sleep.score))、负荷 \(scoreText(snapshot.strain.score))、压力 \(scoreText(snapshot.stress.stressIndex))、能量 \(scoreText(snapshot.energyBank.currentEnergy))。
+            本机今日决定：\(decisionLine)
+            \(planLine)
+            """
+        }
+        return """
+        Just completed: workout_id=\(workoutID?.uuidString ?? "-") (training facts are authoritative locally).
+        Current scores: Recovery \(scoreText(snapshot.recovery.score)), Sleep \(scoreText(snapshot.sleep.score)), Strain \(scoreText(snapshot.strain.score)), Stress \(scoreText(snapshot.stress.stressIndex)), Energy \(scoreText(snapshot.energyBank.currentEnergy)).
+        Local decision: \(decisionLine)
+        \(planLine)
+        """
+    }
+}

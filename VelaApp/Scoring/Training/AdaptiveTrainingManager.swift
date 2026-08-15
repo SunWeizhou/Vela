@@ -300,9 +300,8 @@ struct WorkoutAdaptationService: Sendable {
            let aiKey = try? KeychainService.shared.read(account: "deepseek_api_key"),
            !aiKey.isEmpty {
             let facts = PostWorkoutAIGenerator.factsText(
+                modelContext: modelContext,
                 dashboard: dashboard,
-                events: events,
-                activePlan: activePlan,
                 workoutID: workoutID
             )
             let ctx = modelContext
@@ -399,33 +398,41 @@ struct PostWorkoutAIBoundary: Codable, Hashable, Sendable {
 }
 
 enum PostWorkoutAIGenerator {
+    /// 联通专项批次 4：练后复盘事实改走 AgentFactSnapshot（ADR 0002），
+    /// 不再自拼 contextText。
+    @MainActor
     static func factsText(
+        modelContext: ModelContext,
         dashboard: DashboardSummary,
-        events: [WorkoutEventRecord],
-        activePlan: TrainingPlanRecord?,
         workoutID: UUID?,
         isChinese: Bool = AppLanguage.stored.isChinese
     ) -> String {
-        let todayEvents = events.filter { Calendar.current.isDateInToday($0.startedAt) }
-        let minutes = todayEvents.reduce(0) { $0 + $1.durationMinutes }
-        let energy = todayEvents.compactMap(\.energyKilocalories).reduce(0, +)
-        let titles = todayEvents.map(\.title).joined(separator: "、")
-        let planLine = activePlan.map { "活跃计划：\($0.title)（\($0.days.count) 天）" } ?? "无活跃计划"
-        let decisionLine = dashboard.trainingDecision.body
-        if isChinese {
-            return """
-            刚完成的训练：\(titles.isEmpty ? "未知训练" : titles)（合计 \(Int(minutes.rounded())) 分钟，\(Int(energy.rounded())) kcal，workout_id=\(workoutID?.uuidString ?? "-")）。
-            当前身体评分：恢复 \(Int(dashboard.recovery.score.rounded()))、睡眠 \(Int(dashboard.sleepScore.score.rounded()))、负荷 \(Int(dashboard.strain.score.rounded()))、压力 \(Int(dashboard.stress.stressIndex.rounded()))、能量 \(Int(dashboard.energy.currentEnergy.rounded()))。
-            本机今日决定：\(decisionLine)
-            \(planLine)
-            """
-        }
-        return """
-        Just completed: \(titles.isEmpty ? "unknown workout" : titles) (total \(Int(minutes.rounded())) min, \(Int(energy.rounded())) kcal, workout_id=\(workoutID?.uuidString ?? "-")).
-        Current scores: Recovery \(Int(dashboard.recovery.score.rounded())), Sleep \(Int(dashboard.sleepScore.score.rounded())), Strain \(Int(dashboard.strain.score.rounded())), Stress \(Int(dashboard.stress.stressIndex.rounded())), Energy \(Int(dashboard.energy.currentEnergy.rounded())).
-        Local decision: \(decisionLine)
-        \(planLine)
-        """
+        let input = AgentFactInputLoader().load(modelContext: modelContext, asOf: Date())
+        let bodyState = input.bodyState(dashboard: dashboard)
+        let snapshot = AIContextBuilder().buildFacts(
+            dashboard: dashboard,
+            journalEntries: input.journalContext,
+            historicalReports: input.reportContext,
+            userWiki: WikiFileService.loadPopulatedDictionary(),
+            weeklyTrends: input.weeklyTrends,
+            foodLogs: input.foodLogs,
+            workoutEvents: input.workoutEvents,
+            strengthWorkouts: input.strengthWorkouts,
+            trainingResponses: input.trainingResponses,
+            onboardingState: input.onboardingState,
+            bodyState: bodyState,
+            trainingDecision: input.canonicalTrainingDecision(for: bodyState),
+            dataCoverage: nil,
+            profileAge: nil,
+            dailyOperatingPlan: AIContextBuilder.compactDailyOperatingPlan(input.dailyOperatingPlan),
+            activePlan: input.activePlan?.dto,
+            generatedAt: Date()
+        ).snapshot
+        return AgentFactAdapters.postWorkoutFacts(
+            snapshot: snapshot,
+            workoutID: workoutID,
+            isChinese: isChinese
+        )
     }
 
     static func generate(

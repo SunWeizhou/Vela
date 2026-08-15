@@ -2596,12 +2596,14 @@ final class VelaThemeTests: XCTestCase {
         XCTAssertNil(PostWorkoutAIBoundary.parse(from: "随便说说"))
     }
 
-    func testPostWorkoutAIFactsTextCarriesLocalDecision() {
+    @MainActor
+    func testPostWorkoutAIFactsTextCarriesLocalDecision() throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
         let dashboard = DashboardSummary.preview(date: Date())
         let text = PostWorkoutAIGenerator.factsText(
+            modelContext: context,
             dashboard: dashboard,
-            events: [],
-            activePlan: nil,
             workoutID: UUID(),
             isChinese: true
         )

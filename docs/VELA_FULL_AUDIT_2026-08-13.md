@@ -658,3 +658,16 @@ P1-1 工具回调、P1-2 VO2max、41/42 天窗口、睡眠缺失误判 reduce、
 - 复核确认：活动摘要入口文案已是「过去 30 天」（此前报告的 30/35 口径偏差不存在，未改）。
 
 **测试**：全量 **410/410** 绿；已推送到 iPhone（databaseSequenceNumber 2940）。
+
+## 联通性专项批次 4（2026-08-15 · ADR 0002 收敛）✅ 已修并推送
+
+- **`AgentFactAdapters`（共享 adapter）**：`trainingPlanningFacts` 与 `postWorkoutFacts` 两个渲染函数，从规范 `AgentFactSnapshot` 渲染两条 AI 管线的上下文——健康事实（生理档案/目标风格/五维评分/负荷分解/局部疲劳/训练事实/本机决定）全部来自快照，不再手工拼装。
+- **TrainingPlanAdvisor 收敛**：`VelaMinimalFitnessView.aiPlanContextText` 改为 `AgentFactInputLoader.load + buildFacts + adapter`（视图层只传入三年基线中位、近 3 天训练与本地轮转建议这三个实时量）；此前在 View 层手工拼装、绕过共享边界（ADR 0002 违例）。
+- **PostWorkoutAIGenerator 收敛**：`factsText` 同样改走快照 + adapter（练后复盘的训练事实/评分/本机决定与 Coach 同源同口径）。
+- 至此全部 AI 工作流（Coach/晨报/晚间/规划/练后复盘）都消费 `AgentFactSnapshot`（ADR 0002 全量合规）。
+
+**测试**：`testPostWorkoutAIFactsTextCarriesLocalDecision` 按新签名更新（in-memory store），全量 **410/410** 绿；已推送到 iPhone（databaseSequenceNumber 2948）。
+
+## 联通性专项总收尾
+
+四批（接线与口径 / 个人模型三段式 / v2 上下文与历史补齐 / ADR 0002 收敛）全部落地：身体模型与健康档案首次真正进入今日页/训练页/AI 管线；三指标成分层补齐展示与 agent 可见性；训练页五模块与 agent、身体模型、档案的断链全部接通；两条 AI 管线回归共享事实边界。装机序列 2924 → 2932 → 2940 → 本批。
