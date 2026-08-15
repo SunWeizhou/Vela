@@ -1104,13 +1104,61 @@ final class DailyPlanRefreshCoordinator {
     }
 
     func refreshPlan(for date: Date = Date(), container: ModelContainer) async {
-        let useCase = DailySummaryUseCase()
+        // 深度专项批次 5：计划刷新同样收口到统一调度层（不同步、只重算+落计划）。
         let context = container.mainContext
-        _ = try? await useCase.loadDashboard(
+        _ = try? await VelaDailyOrchestrator.refresh(
             for: date,
             modelContext: context,
+            syncDays: 0,
             shouldSyncHealthData: false
         )
         VelaAppState.shared.markLocalDataChanged()
+    }
+}
+
+// MARK: - 深度专项批次 5：统一调度层
+
+/// 所有「同步 → 评分 → 计划」触发源的唯一入口：
+/// ① 共享 AppSyncCoordinator（同步去重 + 30s 节流）；
+/// ② 同一天的同 key 并发触发共享同一次计算（回前台双链不再跑两遍全量管线）；
+/// ③ 历史日由调用方传 shouldSyncHealthData=false（不再对历史日跑 HealthKit 同步）。
+/// 幂等原语全部沿用既有机制：HealthCachePolicy TTL / 脏标记 / bodyStateHash。
+@MainActor
+enum VelaDailyOrchestrator {
+    private static var inFlight: [String: Task<DashboardSummary, Error>] = [:]
+
+    static func dayKey(for date: Date, calendar: Calendar = .current) -> String {
+        DailyHealthSummaryRecord.dayIdentifier(for: date, calendar: calendar)
+    }
+
+    @discardableResult
+    static func refresh(
+        for date: Date,
+        modelContext: ModelContext,
+        queryService: HealthKitQueryService = HealthKitQueryService(),
+        syncDays: Int = 3,
+        shouldSyncHealthData: Bool = true,
+        calendar: Calendar = .current
+    ) async throws -> DashboardSummary {
+        let key = dayKey(for: date, calendar: calendar)
+        if let running = inFlight[key] {
+            // 同日并发触发（回前台 TodayView + 主动洞察、后台投递补跑等）共享同一结果。
+            return try await running.value
+        }
+        let task = Task<DashboardSummary, Error> { @MainActor in
+            try await DailySummaryUseCase(
+                queryService: queryService,
+                calendar: calendar,
+                syncCoordinator: AppSyncCoordinator.shared
+            ).loadDashboard(
+                for: date,
+                modelContext: modelContext,
+                syncDays: syncDays,
+                shouldSyncHealthData: shouldSyncHealthData
+            )
+        }
+        inFlight[key] = task
+        defer { inFlight[key] = nil }
+        return try await task.value
     }
 }

@@ -586,3 +586,13 @@ P1-1 工具回调、P1-2 VO2max、41/42 天窗口、睡眠缺失误判 reduce、
 - 计划页提案区扩展为「今日 + 未来未完成训练日」，AI 的下次边界建议可被看到并确认/拒绝（`VelaTrainingPlanView.planAdaptations`）。
 
 **测试**：+3 回归（DailyAIInsight markdown 包裹解析与拒收、PostWorkoutAIBoundary 钳制护栏、AI 复盘事实文本携带本机决定锚），全量 **406/406** 绿；已推送到 iPhone（databaseSequenceNumber 2900）。
+
+## 深度专项批次 5（2026-08-15 · VelaDailyOrchestrator 统一调度层）✅ 已修并推送
+
+用户确认的「统一调度层」最小方案落地（零 schema、零 pbxproj，追加在 `DailySummaryUseCase.swift`）：
+
+- **`VelaDailyOrchestrator.refresh`**：所有「同步 → 评分 → 计划」触发源的唯一入口。三层幂等：① 内部统一走 `AppSyncCoordinator.shared`（同步 inFlight 去重 + 30s 节流）；② 同一天（dayIdentifier key）的并发触发共享同一次全量计算——回前台 TodayView + 主动洞察双链不再各跑一遍；③ 历史日由调用方传 `shouldSyncHealthData:false`。
+- **触发源全部收口**：前台刷新（`DashboardViewModel.performRefresh`，历史日 0 同步）、主动洞察（`ProactiveIntelligenceOrchestrator.runAsyncCheck`）、后台 BGTask（`BackgroundTaskManager.handleRefreshTask`，按 4h TTL + 后台投递脏标记决定 syncDays 0/7）、训练增删触发的计划刷新（`DailyPlanRefreshCoordinator.refreshPlan`，不同步只重算）。全仓不再有裸 `DailySummaryUseCase().loadDashboard` 构造点。
+- 幂等原语沿用既有机制（HealthCachePolicy TTL / 脏标记 / bodyStateHash），不新增持久化字段；`DailyHealthComputation.compute` 仍是唯一评分入口，调度层不触碰评分语义。
+
+**测试**：全量 **406/406** 绿（本批为结构性收口，全部既有回归覆盖四条触发源路径）；已推送到 iPhone（databaseSequenceNumber 2908）。

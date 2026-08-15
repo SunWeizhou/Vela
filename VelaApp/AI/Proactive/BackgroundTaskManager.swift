@@ -133,12 +133,11 @@ enum BackgroundTaskManager {
                 // recompute from persisted data.
                 let shouldSyncData = !freshEnough || pendingDelivery
 
-                let dashboard = try await DailySummaryUseCase(
-                    queryService: queryService,
-                    syncCoordinator: AppSyncCoordinator.shared
-                ).loadDashboard(
+                // 深度专项批次 5：统一调度层收口后台触发源。
+                let dashboard = try await VelaDailyOrchestrator.refresh(
                     for: Date(),
                     modelContext: modelContext,
+                    queryService: queryService,
                     syncDays: shouldSyncData ? 7 : 0,
                     shouldSyncHealthData: shouldSyncData
                 )

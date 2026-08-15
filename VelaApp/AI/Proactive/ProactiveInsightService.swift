@@ -355,11 +355,12 @@ final class ProactiveIntelligenceOrchestrator: Sendable {
         
         do {
             // 1. Build current DashboardSummary
-            // 算法打通（深度专项批次 1）：共享 AppSyncCoordinator——此前新实例绕过
-            // inFlight/30s 节流，回前台与 TodayView 的刷新并发拉起两条全量管线。
-            let dashboard = (try? await DailySummaryUseCase(
-                syncCoordinator: AppSyncCoordinator.shared
-            ).loadDashboard(for: date, modelContext: modelContext)) ?? DashboardSummary.empty(date: date)
+            // 深度专项批次 5：统一调度层——与 TodayView/后台任务共享同一次计算
+            //（同 key 并发触发只跑一遍全量管线）。
+            let dashboard = (try? await VelaDailyOrchestrator.refresh(
+                for: date,
+                modelContext: modelContext
+            )) ?? DashboardSummary.empty(date: date)
             
             // 2. Evaluate Proactive Insights via ProactiveInsightService
             let evaluatedInsights = ProactiveInsightService.evaluate(dashboard: dashboard)

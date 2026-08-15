@@ -254,15 +254,25 @@ final class DashboardViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            // 算法打通（深度专项批次 1）：浏览历史日期只读缓存+重算，
+            // 深度专项批次 5：统一调度层收口前台触发源；浏览历史日期只读缓存+重算，
             // 不再对历史日跑一遍 HealthKit 2-pass 同步。
             let isToday = Calendar.current.isDateInToday(requestedDate)
-            let refreshedDashboard = try await useCase.loadDashboard(
-                for: requestedDate,
-                modelContext: modelContext,
-                syncDays: isToday ? 3 : 0,
-                shouldSyncHealthData: isToday
-            )
+            let refreshedDashboard: DashboardSummary
+            if let modelContext {
+                refreshedDashboard = try await VelaDailyOrchestrator.refresh(
+                    for: requestedDate,
+                    modelContext: modelContext,
+                    syncDays: isToday ? 3 : 0,
+                    shouldSyncHealthData: isToday
+                )
+            } else {
+                refreshedDashboard = try await useCase.loadDashboard(
+                    for: requestedDate,
+                    modelContext: nil,
+                    syncDays: isToday ? 3 : 0,
+                    shouldSyncHealthData: isToday
+                )
+            }
             guard Calendar.current.isDate(selectedDate, inSameDayAs: requestedDate) else { return }
             // F9 修复：只有数据实际变化（或用户显式强制刷新）才推进「上次更新」。
             // 此前任何一次 load 都把墙钟时间当新鲜度，no-op 刷新也被标记为新鲜。
