@@ -596,3 +596,27 @@ P1-1 工具回调、P1-2 VO2max、41/42 天窗口、睡眠缺失误判 reduce、
 - 幂等原语沿用既有机制（HealthCachePolicy TTL / 脏标记 / bodyStateHash），不新增持久化字段；`DailyHealthComputation.compute` 仍是唯一评分入口，调度层不触碰评分语义。
 
 **测试**：全量 **406/406** 绿（本批为结构性收口，全部既有回归覆盖四条触发源路径）；已推送到 iPhone（databaseSequenceNumber 2908）。
+
+## 深度专项批次 6（2026-08-15 · Agent 管线 B + 收尾）✅ 已修并推送
+
+用户确认的最后一批：
+
+**管线 B — AI 个性化阈值提议（闭环：提议 → 确认 → 生效）**：
+- `ThresholdProposalPayload`（严格 JSON，恢复/睡眠四阈值 + 理由）+ `ThresholdProposalGenerator`：每 7 天一次挂到晚间同步（consent 门控、20s deadline、失败静默），输入当前阈值 + 近 28 天决策反馈摘要，输出经范围钳制（recoveryRest 30-50 / recoveryCaution 50-70 / sleepRest 45-60 / sleepCaution 55-75）。
+- 落 `MemoryLedger.createProposal(targetFile: strategies.md, memoryType: .baselineUpdate)` → 用户 Memory Inbox 确认 → 写入 wiki → **`PersonalBaselineEngine.resolveThresholds()` 读取 strategies.md 覆盖值生效**（`applyThresholdOverrides` 纯函数，钳制 + 来源标注 "user-confirmed strategies.md"）。确认前评分路径零影响（ADR 0008）；反馈显示多数准确时提示词要求不改动。
+
+**收尾三项**：
+- 反馈 push：Coach 系统提示注入「近期决策反馈」摘要（此前模型需自行调 get_decision_feedback 工具，pull 变 push），冲突时以本地决策为准。
+- Coach 相关性 memo：`calculateInsights` + 1100 天快照会话内缓存（key = 手记数 + 最后手记时间 + 最新快照日期，≤5 条自动淘汰）——每条消息此前都全表 fetch + Spearman/BH-FDR 重算一遍。
+- 反馈摘要函数收敛到 `DecisionFeedbackCalibrator.feedbackSummary`（AI 阈值审阅与 Coach 共用）。
+
+**测试**：+4 回归（阈值覆盖钳制与来源、提案解析与 wiki 行、反馈摘要分组、周级到期门控），全量 **410/410** 绿；已推送到 iPhone（databaseSequenceNumber 2916）。
+
+## 深度专项最终遗留（已文档化，非阻塞）
+
+1. **BGTask 30s 预算与 LLM 拆分**：同步与 LLM 仍在同一个 BGAppRefreshTask 内（已有 20s deadline 缓解但未根治）；彻底方案需拆独立任务授予或 BGProcessingTask（审计 PR7 延续）。
+2. **管线 B 的 EWMA 系数等结构性参数**：默认只提议不改（避免破坏 Banister/EWMA 学术口径），需单独设计白名单。
+3. **训记三年批量回填后续**：三年 e1RM/容量/肌群频率轨迹需在回填后接入 TrainingAnalyticsService 历史视图（入口已就绪，轨迹视图下一轮）。
+4. **季节性剖面展示**：`seasonalHRV/seasonalRHR` 报告字段已就绪，趋势页「月历节律」条未接。
+5. **孤儿测试文件**：`VelaAppTests/StabilizationTests.swift` 未注册 pbxproj（引用旧 API 不参与编译），建议下轮修复注册或删除。
+6. **Watch 侧**：WristSnapshotBridge 已推送 command+plan，Watch 端展示未纳入本轮范围。

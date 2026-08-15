@@ -120,6 +120,24 @@ enum DecisionFeedbackCalibrator {
         }
         return calibratedConfidence(base: base, decision: kind, records: records, now: now, calendar: calendar)
     }
+
+    /// 深度专项批次 6：近 28 天反馈的中文摘要（AI 阈值审阅与 Coach 提示词共用）。
+    static func feedbackSummary(
+        records: [DailyDecisionFeedbackRecord],
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> String {
+        let cutoff = now.addingTimeInterval(-Double(recencyWindowDays) * 86_400)
+        let recent = records.filter { $0.accuracyRating != nil && $0.createdAt >= cutoff }
+        let byDecision = Dictionary(grouping: recent, by: \.decisionType)
+        var lines: [String] = []
+        for (decision, group) in byDecision.sorted(by: { $0.key < $1.key }) {
+            let accurate = group.filter { $0.accuracyRating == "accurate" }.count
+            let partly = group.filter { $0.accuracyRating == "partly" }.count
+            lines.append("\(decision): \(group.count) 条反馈（准确 \(accurate)、部分准确 \(partly)）")
+        }
+        return lines.isEmpty ? "近 28 天暂无决策反馈。" : lines.joined(separator: "；")
+    }
 }
 
 enum TodayCommandBuilder {

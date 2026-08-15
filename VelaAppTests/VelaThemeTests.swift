@@ -2608,4 +2608,75 @@ final class VelaThemeTests: XCTestCase {
         XCTAssertTrue(text.contains("本机今日决定"), "AI 复盘的事实文本必须携带本机决定锚")
         XCTAssertTrue(text.contains("当前身体评分"))
     }
+
+
+    // MARK: - 深度专项批次 6 回归（阈值提议管线 B + 收尾）
+
+    func testApplyThresholdOverridesClampsToSafeRanges() {
+        let base = PersonalBaselineThresholds(
+            recoveryRest: 40, recoveryCaution: 62, recoveryHigh: 70,
+            sleepCaution: 68, sleepRest: 55, source: "using default conservative threshold"
+        )
+        let lines = [
+            "- recovery_rest: 20",      // 低于下限 → 钳 30
+            "- sleep_caution: 99",      // 高于上限 → 钳 75
+            "- recovery_caution: 55",   // 范围内 → 55
+            "随便一行没有冒号",
+            "- 理由：用户确认的调整"
+        ]
+        let resolved = PersonalBaselineEngine.applyThresholdOverrides(lines, to: base)
+        XCTAssertEqual(resolved.recoveryRest, 30)
+        XCTAssertEqual(resolved.sleepCaution, 75)
+        XCTAssertEqual(resolved.recoveryCaution, 55)
+        XCTAssertEqual(resolved.source, "user-confirmed strategies.md")
+        // 无覆盖行 → 源不变。
+        let untouched = PersonalBaselineEngine.applyThresholdOverrides(["空行"], to: base)
+        XCTAssertEqual(untouched.source, "using default conservative threshold")
+    }
+
+    func testThresholdProposalPayloadParseAndWikiLines() {
+        let wrapped = """
+        ```json
+        {"recoveryRest":28,"sleepRest":null,"recoveryCaution":null,"sleepCaution":60,"rationale":"恢复阈值略高"}
+        ```
+        """
+        let payload = ThresholdProposalPayload.parse(from: wrapped)
+        XCTAssertNotNil(payload)
+        let lines = payload?.wikiLines ?? []
+        XCTAssertTrue(lines.contains("- recovery_rest: 30"), "恢复阈值低于下限应钳到 30")
+        XCTAssertTrue(lines.contains("- sleep_caution: 60"))
+        XCTAssertTrue(lines.contains { $0.contains("理由") })
+        XCTAssertNil(ThresholdProposalPayload.parse(from: "不是 JSON"))
+    }
+
+    func testFeedbackSummaryGroupsByDecision() {
+        let now = Date()
+        let records: [DailyDecisionFeedbackRecord] = (0..<6).map { i in
+            let rating = i < 3 ? "accurate" : (i < 4 ? "partly" : "inaccurate")
+            return DailyDecisionFeedbackRecord(
+                dayIdentifier: "fb-\(i)",
+                bodyStateHash: "h",
+                decisionType: i < 4 ? "keep" : "reduce",
+                decisionTitle: "t",
+                accuracyRating: rating,
+                createdAt: now
+            )
+        }
+        let summary = DecisionFeedbackCalibrator.feedbackSummary(records: records, now: now)
+        XCTAssertTrue(summary.contains("keep: 4 条反馈（准确 3、部分准确 1）"))
+        XCTAssertTrue(summary.contains("reduce: 2 条反馈（准确 0、部分准确 0）"))
+        XCTAssertTrue(DecisionFeedbackCalibrator.feedbackSummary(records: [], now: now).contains("暂无"))
+    }
+
+    func testThresholdProposalWeeklyGate() {
+        let suiteName = "threshold-gate-test-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let now = Date()
+        XCTAssertTrue(ThresholdProposalGenerator.isDue(now: now, defaults: defaults), "无记录时首次应到期")
+        ThresholdProposalGenerator.markProposed(date: now, defaults: defaults)
+        XCTAssertFalse(ThresholdProposalGenerator.isDue(now: now, defaults: defaults))
+        ThresholdProposalGenerator.markProposed(date: now.addingTimeInterval(-8 * 86_400), defaults: defaults)
+        XCTAssertTrue(ThresholdProposalGenerator.isDue(now: now, defaults: defaults), "8 天后应再次到期")
+    }
 }

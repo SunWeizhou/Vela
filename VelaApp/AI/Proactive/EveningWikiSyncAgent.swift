@@ -90,6 +90,38 @@ final class EveningWikiSyncAgent: ObservableObject {
                 modelContext: modelContext,
                 input: input
             )
+            // 深度专项批次 6（管线 B）：每 7 天一次的 AI 阈值审阅提议——
+            // consent 门控、20s deadline、失败静默；确认前评分路径零影响（ADR 0008）。
+            if ThresholdProposalGenerator.isDue(),
+               AutoAgentConfig.shared.canSendHealthContextToNetworkAI,
+               let thresholdKey = try? keychain.read(account: apiKeyAccount),
+               !thresholdKey.isEmpty {
+                do {
+                    let feedbackRecords = (try? modelContext.fetch(FetchDescriptor<DailyDecisionFeedbackRecord>())) ?? []
+                    let feedbackText = ThresholdProposalGenerator.feedbackSummary(records: feedbackRecords)
+                    let payload = try await ThresholdProposalGenerator.generate(
+                        apiKey: thresholdKey,
+                        currentThresholds: PersonalBaselineEngine.resolveThresholds(),
+                        feedbackText: feedbackText
+                    )
+                    let lines = payload.wikiLines
+                    if lines.count > 1 {
+                        let ledger = MemoryLedger(modelContext: modelContext)
+                        _ = try? ledger.createProposal(
+                            targetFile: "strategies.md",
+                            memoryType: .baselineUpdate,
+                            content: lines.joined(separator: "\n"),
+                            evidence: feedbackText,
+                            confidence: 0.6,
+                            source: "threshold_review_agent",
+                            linkedAgentRunId: runRecord.id.uuidString
+                        )
+                    }
+                    ThresholdProposalGenerator.markProposed()
+                } catch {
+                    logger.warning("Threshold review proposal failed (non-fatal): \(error.localizedDescription)")
+                }
+            }
             let wiki = WikiFileService.loadPopulatedDictionary()
             let canonicalBodyState = input.bodyState(dashboard: dashboard)
             let coverageSummary = DataCoverageSummaryModel.build(
@@ -345,5 +377,113 @@ final class EveningWikiSyncAgent: ObservableObject {
 
         The complete metrics, evidence states, and current wiki are in the AgentFactSnapshot JSON. Use only metrics whose availability is available. Summarize today and create confirmation-required proposals only for stable patterns.
         """
+    }
+}
+
+// MARK: - 深度专项批次 6：AI 个性化阈值提议（管线 B）
+// 每 7 天一次：agent 审阅当前阈值 + 近 28 天决策反馈 → 严格 JSON 提议 →
+// MemoryProposal(strategies.md) → 用户确认后写入 wiki → resolveThresholds 生效。
+// 绝不静默覆盖：确认前评分路径零影响（ADR 0008）。
+
+struct ThresholdProposalPayload: Codable, Hashable, Sendable {
+    var recoveryRest: Double?
+    var recoveryCaution: Double?
+    var sleepRest: Double?
+    var sleepCaution: Double?
+    var rationale: String
+
+    static func parse(from text: String) -> ThresholdProposalPayload? {
+        var cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.hasPrefix("```") {
+            cleaned = cleaned
+                .replacingOccurrences(of: "```json", with: "")
+                .replacingOccurrences(of: "```", with: "")
+        }
+        guard let start = cleaned.firstIndex(of: "{"),
+              let end = cleaned.lastIndex(of: "}"),
+              start < end,
+              let data = String(cleaned[start...end]).data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(ThresholdProposalPayload.self, from: data)
+    }
+
+    /// 提案 → strategies.md 内容行（resolveThresholds 可解析；带钳制）。
+    var wikiLines: [String] {
+        var lines: [String] = []
+        if let value = recoveryRest { lines.append("- recovery_rest: \(Int(min(50, max(30, value)).rounded()))") }
+        if let value = recoveryCaution { lines.append("- recovery_caution: \(Int(min(70, max(50, value)).rounded()))") }
+        if let value = sleepRest { lines.append("- sleep_rest: \(Int(min(60, max(45, value)).rounded()))") }
+        if let value = sleepCaution { lines.append("- sleep_caution: \(Int(min(75, max(55, value)).rounded()))") }
+        if !rationale.isEmpty { lines.append("- 理由：\(rationale)") }
+        return lines
+    }
+}
+
+enum ThresholdProposalGenerator {
+    static let lastProposalKey = "vela.threshold_review.last_proposal_date"
+    static let minimumIntervalDays = 7
+
+    static func isDue(now: Date = Date(), defaults: UserDefaults = .standard) -> Bool {
+        guard let last = defaults.object(forKey: lastProposalKey) as? Date else { return true }
+        return now.timeIntervalSince(last) >= Double(minimumIntervalDays) * 86_400
+    }
+
+    static func markProposed(date: Date = Date(), defaults: UserDefaults = .standard) {
+        defaults.set(date, forKey: lastProposalKey)
+    }
+
+    static func feedbackSummary(
+        records: [DailyDecisionFeedbackRecord],
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> String {
+        DecisionFeedbackCalibrator.feedbackSummary(records: records, now: now, calendar: calendar)
+    }
+
+    static func generate(
+        apiKey: String,
+        currentThresholds: PersonalBaselineThresholds,
+        feedbackText: String,
+        language: AppLanguage = .stored
+    ) async throws -> ThresholdProposalPayload {
+        let provider = RetryingLLMProvider(base: DeepSeekProvider(apiKey: apiKey))
+        let systemPrompt = language.isChinese ? """
+        你是 Vela 的个人阈值审阅引擎。基于当前阈值与近 28 天决策反馈，输出严格 JSON，不要输出任何其他文字。
+
+        输出格式：
+        {"recoveryRest":null,"recoveryCaution":null,"sleepRest":null,"sleepCaution":null,"rationale":"一句依据"}
+
+        硬性规则：
+        1. 只在你确信调整能减少明显误判时才提出数值（其余保持 null）。
+        2. 范围约束：recoveryRest 30-50、recoveryCaution 50-70、sleepRest 45-60、sleepCaution 55-75。
+        3. 反馈显示多数决策准确时不要改动阈值。
+        4. 你的输出只是提议，用户确认后才生效。
+        5. 只输出 JSON 本身。
+        """ : """
+        You are Vela's personal threshold reviewer. Based on current thresholds and the last 28 days of decision feedback, output strict JSON only.
+
+        Format:
+        {"recoveryRest":null,"recoveryCaution":null,"sleepRest":null,"sleepCaution":null,"rationale":"one-line reasoning"}
+
+        Rules:
+        1. Propose values only when confident they reduce clear misjudgments (otherwise keep null).
+        2. Ranges: recoveryRest 30-50, recoveryCaution 50-70, sleepRest 45-60, sleepCaution 55-75.
+        3. Do not change thresholds when feedback shows most decisions were accurate.
+        4. Your output is a proposal; it takes effect only after user confirmation.
+        5. Output JSON only.
+        """
+        let userPrompt = language.isChinese
+            ? "当前阈值：recoveryRest \(Int(currentThresholds.recoveryRest))、recoveryCaution \(Int(currentThresholds.recoveryCaution))、sleepRest \(Int(currentThresholds.sleepRest))、sleepCaution \(Int(currentThresholds.sleepCaution))（来源：\(currentThresholds.source)）。\n\(feedbackText)"
+            : "Current thresholds: recoveryRest \(Int(currentThresholds.recoveryRest)), recoveryCaution \(Int(currentThresholds.recoveryCaution)), sleepRest \(Int(currentThresholds.sleepRest)), sleepCaution \(Int(currentThresholds.sleepCaution)) (source: \(currentThresholds.source)).\n\(feedbackText)"
+        let response = try await LLMProviderDeadline.withTimeout(seconds: 20) {
+            try await provider.complete(request: LLMRequest(
+                systemPrompt: systemPrompt,
+                userPrompt: userPrompt,
+                contextJSON: ""
+            ))
+        }
+        guard let payload = ThresholdProposalPayload.parse(from: response.content) else {
+            throw LLMProviderError.invalidResponse
+        }
+        return payload
     }
 }

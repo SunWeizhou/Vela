@@ -166,6 +166,9 @@ struct CoachOutboundDataPolicy: Equatable {
 
 @MainActor
 struct CoachContextAssembler {
+    /// 深度专项批次 6：相关性结果会话内 memo（≤5 条，快照日期/手记变化自动失效）。
+    private static var correlationMemo: [String: String] = [:]
+    private static var latestSnapshotEpoch: Int = 0
     func buildChatMessages(
         userText: String,
         dashboard: DashboardSummary,
@@ -333,17 +336,37 @@ struct CoachContextAssembler {
             activePlanPrompt += "\n- 计划执行复盘：\(review.completedSessions)/\(review.scheduledSessions) 完成（完成率 \(Int((review.completionRate * 100).rounded()))%）· \(review.statusTitle)。\(review.recommendation)"
         }
         // 行为-结果配对用三年窗口：回填后旧手记也能对上次日体征。
-        let snapshots = outboundPolicy.journal && outboundPolicy.health
-            ? ((try? HealthSnapshotRepository(modelContext: modelContext).fetchSnapshots(days: 1100)) ?? [])
-            : []
-        // T6：Coach 上下文统一到 calculateInsights（点二列 + BH-FDR），
-        // 与身体模型页同口径，避免同一标签两处结论矛盾。
-        let correlationText = JournalCorrelationEngine().formatInsightsForAI(
-            JournalCorrelationEngine().calculateInsights(
-                journalEntries: outboundPolicy.journal ? Array(journalEntries) : [],
-                snapshots: snapshots
+        // 深度专项批次 6：相关性结果 + 1100 天快照做会话内 memo——每条消息此前都
+        // 全表 fetch + Spearman/BH-FDR 重算一遍；快照日期/手记数变化自动失效。
+        let correlationCacheKey: String?
+        if outboundPolicy.journal, outboundPolicy.health {
+            let latestJournalUpdate = journalEntries.max(by: { $0.createdAt < $1.createdAt })?.createdAt
+                ?? .distantPast
+            correlationCacheKey = "\(journalEntries.count)-\(Int(latestJournalUpdate.timeIntervalSince1970))-\(Self.latestSnapshotEpoch)"
+        } else {
+            correlationCacheKey = nil
+        }
+        let correlationText: String
+        if let correlationCacheKey, let cached = Self.correlationMemo[correlationCacheKey] {
+            correlationText = cached
+        } else {
+            let snapshots = outboundPolicy.journal && outboundPolicy.health
+                ? ((try? HealthSnapshotRepository(modelContext: modelContext).fetchSnapshots(days: 1100)) ?? [])
+                : []
+            Self.latestSnapshotEpoch = Int(snapshots.max(by: { $0.date < $1.date })?.date.timeIntervalSince1970 ?? 0)
+            // T6：Coach 上下文统一到 calculateInsights（点二列 + BH-FDR），
+            // 与身体模型页同口径，避免同一标签两处结论矛盾。
+            correlationText = JournalCorrelationEngine().formatInsightsForAI(
+                JournalCorrelationEngine().calculateInsights(
+                    journalEntries: outboundPolicy.journal ? Array(journalEntries) : [],
+                    snapshots: snapshots
+                )
             )
-        )
+            if let correlationCacheKey {
+                if Self.correlationMemo.count > 4 { Self.correlationMemo.removeAll() }
+                Self.correlationMemo[correlationCacheKey] = correlationText
+            }
+        }
         let biomarkers = outboundPolicy.health
             ? ((try? modelContext.fetch(
                 FetchDescriptor<BiomarkerRecord>(
@@ -457,6 +480,20 @@ struct CoachContextAssembler {
                 role: .system,
                 content: Self.bodyInterpreterContext(interpretation, language: lang)
             ))
+        }
+
+        // 深度专项批次 6：决策反馈 push 进 Coach 系统提示——
+        // 此前模型需自行调用 get_decision_feedback 工具才可见（pull）。
+        if outboundPolicy.health {
+            let feedbackRecords = (try? modelContext.fetch(FetchDescriptor<DailyDecisionFeedbackRecord>())) ?? []
+            let feedbackText = DecisionFeedbackCalibrator.feedbackSummary(records: feedbackRecords, now: contextAsOf)
+            if !feedbackText.contains("暂无") {
+                result.append(ChatMessage(role: .system, content: """
+                ## 近期决策反馈
+                \(feedbackText)
+                这是用户对你过去建议准确性的反馈。给出今日建议时参考它；若与本地决策冲突，以本地决策为准。
+                """))
+            }
         }
 
         if outboundPolicy.webSearch, policy != .casual, ResponseLengthPolicy.needsWebSearch(userText) {

@@ -387,6 +387,7 @@ enum PersonalBaselineEngine {
     }
 
     static func resolveThresholds() -> PersonalBaselineThresholds {
+        var base: PersonalBaselineThresholds
         if let loaded = loadBaselinesFromWiki(),
            loaded.baselines.daysOfData >= 7,
            let recMean = loaded.baselines.recoveryBaselineMean,
@@ -398,7 +399,7 @@ enum PersonalBaselineEngine {
             let recHigh = min(80, max(60, recMean))
             let sleepCaution = min(75, max(55, sleepMean - 0.8 * sleepSD))
             let sleepRest = min(60, max(45, sleepMean - 1.5 * sleepSD))
-            return PersonalBaselineThresholds(
+            base = PersonalBaselineThresholds(
                 recoveryRest: recRest,
                 recoveryCaution: recCaution,
                 recoveryHigh: recHigh,
@@ -407,7 +408,7 @@ enum PersonalBaselineEngine {
                 source: "using personal baseline"
             )
         } else {
-            return PersonalBaselineThresholds(
+            base = PersonalBaselineThresholds(
                 recoveryRest: 40,
                 recoveryCaution: 62,
                 recoveryHigh: 70,
@@ -416,6 +417,51 @@ enum PersonalBaselineEngine {
                 source: "using default conservative threshold"
             )
         }
+        // 深度专项批次 6（管线 B）：strategies.md 的用户确认阈值覆盖——
+        // AI 提议 → MemoryProposal → 用户确认写入 wiki → 此处生效（ADR 0008）。
+        let strategiesLines = WikiFileService.loadPopulatedDictionary()["strategies.md"]?
+            .components(separatedBy: "\n") ?? []
+        let overridden = applyThresholdOverrides(strategiesLines, to: base)
+        return overridden
+    }
+
+    /// 纯函数：从 strategies.md 行文本解析用户确认的阈值覆盖。
+    /// 格式：`- recovery_rest: 45`（每项钳制在保守范围内，非法值忽略）。
+    static func applyThresholdOverrides(
+        _ lines: [String],
+        to thresholds: PersonalBaselineThresholds
+    ) -> PersonalBaselineThresholds {
+        var resolved = thresholds
+        var applied = false
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") else { continue }
+            let body = String(trimmed.dropFirst(2))
+            guard let colon = body.firstIndex(of: ":") else { continue }
+            let key = String(body[..<colon]).trimmingCharacters(in: .whitespaces).lowercased()
+            let rawValue = String(body[body.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+            guard let value = Double(rawValue), value.isFinite else { continue }
+            switch key {
+            case "recovery_rest":
+                resolved.recoveryRest = min(50, max(30, value))
+                applied = true
+            case "recovery_caution":
+                resolved.recoveryCaution = min(70, max(50, value))
+                applied = true
+            case "sleep_rest":
+                resolved.sleepRest = min(60, max(45, value))
+                applied = true
+            case "sleep_caution":
+                resolved.sleepCaution = min(75, max(55, value))
+                applied = true
+            default:
+                break
+            }
+        }
+        if applied {
+            resolved.source = "user-confirmed strategies.md"
+        }
+        return resolved
     }
 
     // MARK: - Huber Loss Robust Estimator (Vertical Deep Optimization)
