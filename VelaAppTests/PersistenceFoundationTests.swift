@@ -976,8 +976,65 @@ final class PersistenceFoundationTests: XCTestCase {
         XCTAssertEqual(draft.planDayId, day.id)
         XCTAssertEqual(draft.exercises.first?.sets.count, 3)
         XCTAssertEqual(draft.exercises.first?.sets.first?.repetitions, 8)
-        XCTAssertEqual(draft.exercises.first?.sets.first?.weightKilograms, 80)
+        // T5：80kg×5 的 e1RM = 80*(1+5/30) = 93.33；按 8 次反推 = 73.68 kg（不再直接复制 80kg）。
+        XCTAssertEqual(draft.exercises.first?.sets.first?.weightKilograms ?? 0, 73.68, accuracy: 0.01)
         XCTAssertEqual(draft.exercises.first?.sets.first?.rpe, 7)
+    }
+
+    func testTrainingSessionDraftBuilderPrescribesE1RMBasedProgressionWithCap() {
+        // T5 回归：同次数处方保持原重量；低次数（大重量日）处方 e1RM 反推值且增幅封顶 +2.5%。
+        func makeHistory(reps: Int, weight: Double) -> StrengthWorkoutRecord {
+            StrengthWorkoutRecord(
+                title: "Previous",
+                startedAt: Date(timeIntervalSince1970: 1_780_000_000),
+                durationMinutes: 55,
+                exercises: [
+                    StrengthExerciseLog(
+                        name: "Bench Press",
+                        equipment: "barbell",
+                        primaryMuscleGroup: "chest",
+                        sets: [
+                            StrengthSetLog(repetitions: reps, weightKilograms: weight, rpe: 8, isCompleted: true)
+                        ]
+                    )
+                ]
+            )
+        }
+
+        func draftWeight(history: StrengthWorkoutRecord, targetReps: String) -> Double? {
+            let exercises = [
+                WorkoutTemplateExercise(
+                    name: "Bench Press",
+                    targetSets: 1,
+                    targetReps: targetReps,
+                    targetRPE: 8,
+                    restSeconds: 120,
+                    notes: nil
+                )
+            ]
+            let exerciseJSON = (try? String(data: JSONEncoder().encode(exercises), encoding: .utf8)) ?? "[]"
+            let day = TrainingDay(
+                weekNumber: 1, dayNumber: 1, title: "Push", description: "",
+                focus: "strength", durationMinutes: 60, intensity: "high",
+                plannedExercisesJSON: exerciseJSON
+            )
+            let decision = DailyTrainingDecision(
+                decision: .keep, targetSessionTitle: "Push",
+                volumeMultiplier: 1.0, intensityCap: 8,
+                reasons: [], userFacingSummary: "Keep.",
+                confidence: 0.9, source: "test", safetyNotice: "General guidance only."
+            )
+            return TrainingSessionDraftBuilder().build(
+                day: day, decision: decision, history: [history], scheduledAt: Date()
+            ).exercises.first?.sets.first?.weightKilograms
+        }
+
+        // 同次数（5→5）：处方 ≈ 80（e1RM 反推回到原重量）。
+        XCTAssertEqual(draftWeight(history: makeHistory(reps: 5, weight: 80), targetReps: "5") ?? 0, 80, accuracy: 0.01)
+        // 低次数（5→3）：e1RM = 93.33 → 反推 84.85，但增幅封顶 82（80×1.025）。
+        XCTAssertEqual(draftWeight(history: makeHistory(reps: 5, weight: 80), targetReps: "3") ?? 0, 82, accuracy: 0.01)
+        // 高次数（5→10）：e1RM = 93.33 → 反推 70.0（减重，不做 +2.5% 封顶）。
+        XCTAssertEqual(draftWeight(history: makeHistory(reps: 5, weight: 80), targetReps: "10") ?? 0, 70, accuracy: 0.01)
     }
 
     @MainActor
@@ -1344,12 +1401,14 @@ final class PersistenceFoundationTests: XCTestCase {
         let container = try VelaModelContainer.make(at: storeURL)
         let context = container.mainContext
         let calendar = Calendar.current
-        let todayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: Date(), calendar: calendar)
+        // 锚定正午：00:00-04:00 时健康日边界会把「今天」归到前一日，使测试随墙钟波动。
+        let now = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: Date()) ?? Date()
+        let todayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: now, calendar: calendar)
 
         // Good record carrying an external-storage workoutsData blob (emulating aggregateDay).
-        let good = DailyHealthSummaryRecord(dayIdentifier: todayIdentifier, date: Date())
+        let good = DailyHealthSummaryRecord(dayIdentifier: todayIdentifier, date: now)
         good.workoutsData = try JSONEncoder().encode(
-            [WorkoutSummary(start: Date(), end: Date().addingTimeInterval(3600), activityName: "测试力量")]
+            [WorkoutSummary(start: now, end: now.addingTimeInterval(3600), activityName: "测试力量")]
         )
         context.insert(good)
 
@@ -1365,7 +1424,7 @@ final class PersistenceFoundationTests: XCTestCase {
 
         // The crash path: fetch snapshots (round-trips good, excludes bad).
         let repository = HealthSnapshotRepository(modelContext: context, calendar: calendar)
-        let snapshots = try repository.fetchSnapshots(days: 7, endingAt: Date())
+        let snapshots = try repository.fetchSnapshots(days: 7, endingAt: now)
 
         XCTAssertEqual(snapshots.count, 1, "Only the good today-record should survive the range filter")
         XCTAssertEqual(snapshots.first?.workouts.count, 1, "workoutsData blob must decode through toSnapshot")
@@ -1408,6 +1467,114 @@ final class PersistenceFoundationTests: XCTestCase {
         let all = try context.fetch(FetchDescriptor<DailyHealthSummaryRecord>())
         XCTAssertEqual(all.count, 1, "Concurrent upserts to the same dayIdentifier must produce exactly one row, not \(all.count)")
         XCTAssertEqual(all.first?.dayIdentifier, DailyHealthSummaryRecord.dayIdentifier(for: day, calendar: calendar))
+    }
+
+    /// 回归：力量训练响应存 StrengthWorkoutRecord.id，计划日关联事件 ID——
+    /// review 必须合并两种 ID 空间，否则力量驱动的响应永远匹配不上。
+    func testTrainingPlanReviewMatchesStrengthResponsesByLinkedID() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let monday = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 8, day: 10)))
+        let dayID = UUID()
+        let eventID = UUID()
+        let strengthID = UUID()
+        let day = TrainingDay(
+            id: dayID,
+            weekNumber: 1, dayNumber: 1, title: "S1", description: "",
+            focus: "strength", durationMinutes: 45, intensity: "moderate",
+            isCompleted: true, linkedWorkoutEventIds: [eventID], adherenceScore: 0.9
+        )
+        let plan = TrainingPlanDTO(
+            id: UUID(), title: "P", goalDescription: "", startDate: monday,
+            weeksCount: 1, isActive: true, days: [day]
+        )
+        let event = WorkoutEventDTO(
+            id: eventID, startedAt: monday, durationMinutes: 45,
+            linkedTrainingPlanDayId: dayID, linkedStrengthWorkoutId: strengthID
+        )
+        let response = TrainingResponseDTO(
+            id: UUID(), date: monday, workoutId: strengthID,
+            primaryMuscleGroups: ["legs"], totalEffectiveSets: 10, totalVolumeKg: 4000,
+            sessionRPE: 8, nextDayRecoveryDelta: -10, nextDayHRVDelta: nil, nextDayRHRDelta: nil
+        )
+        let review = TrainingPlanReviewService.review(
+            plan: plan, events: [event], responses: [response],
+            through: monday.addingTimeInterval(6 * 3600), calendar: calendar
+        )
+        XCTAssertEqual(review.measuredResponses, 1, "力量训练响应必须匹配上，实际 \(review.measuredResponses)")
+        XCTAssertEqual(review.scheduledSessions, 1, "计划开始于周一时只应排 1 场，实际 \(review.scheduledSessions)")
+    }
+
+    /// 回归：周中建计划时，起始周早于计划日的「幽灵日」不得遮蔽真正错过的训练。
+    func testTrainingScheduleResolverSkipsGhostDaysBeforePlanStart() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let wednesday = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 8, day: 12)))
+        let thursday = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 8, day: 13)))
+        let ghostMonday = TrainingDay(
+            weekNumber: 1, dayNumber: 1, title: "Mon", description: "",
+            focus: "strength", durationMinutes: 45, intensity: "moderate", isCompleted: false
+        )
+        let realWednesday = TrainingDay(
+            weekNumber: 1, dayNumber: 3, title: "Wed", description: "",
+            focus: "strength", durationMinutes: 45, intensity: "moderate", isCompleted: false
+        )
+        let plan = TrainingPlanDTO(
+            id: UUID(), title: "P", goalDescription: "", startDate: wednesday,
+            weeksCount: 1, isActive: true, days: [ghostMonday, realWednesday]
+        )
+        let resolved = TrainingScheduleResolver.resolve(
+            plan: plan, on: thursday, events: [], calendar: calendar
+        )
+        XCTAssertEqual(resolved?.dayNumber, 3, "周四应回落到周三（真实错过日），而非周一幽灵日：实际 dayNumber=\(resolved?.dayNumber ?? -1)")
+
+        let review = TrainingPlanReviewService.review(
+            plan: plan, events: [], responses: [],
+            through: wednesday.addingTimeInterval(6 * 3600), calendar: calendar
+        )
+        XCTAssertEqual(review.scheduledSessions, 1, "幽灵日不得计入 scheduled，实际 \(review.scheduledSessions)")
+    }
+
+    /// 回归：apply(snapshot:) 必须保留引擎写入的 dailyLoad/workoutLoad（TRIMP 域），
+    /// 否则 aggregateDay 会用 session-RPE 域覆盖，历史与当日量纲混用。
+    @MainActor
+    func testApplySnapshotPreservesEngineDailyLoad() {
+        var snapshot = DailyHealthSnapshot(date: Date())
+        snapshot.dailyLoad = 103.5
+        snapshot.workoutLoad = 88.0
+        snapshot.activityLoad = 15.5
+
+        let record = DailyHealthSummaryRecord(dayIdentifier: "engine-load", date: Date())
+        record.apply(snapshot: snapshot)
+
+        XCTAssertEqual(record.dailyLoad, 103.5, "apply 必须保留引擎 TRIMP 域 dailyLoad")
+        XCTAssertEqual(record.workoutLoad, 88.0, "apply 必须保留引擎 workoutLoad")
+    }
+
+    /// 回归：fetchSnapshots 的 04:00 健康日窗口与记录层日历午夜 date 错位，
+    /// 曾导致 42 天请求恒只返回 41 条（滚动基线缺最老一天）。
+    @MainActor
+    func testFetchSnapshotsReturnsAll42Days() throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let calendar = Calendar.current
+        // 锚定正午：00:00-04:00 时健康日边界会把「今天」归到前一日，使测试随墙钟波动。
+        let now = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: Date()) ?? Date()
+        let todayStart = calendar.startOfDay(for: now)
+        for k in 0..<42 {
+            let day = calendar.date(byAdding: .day, value: -k, to: todayStart)!
+            let record = DailyHealthSummaryRecord(
+                dayIdentifier: DailyHealthSummaryRecord.dayIdentifier(for: day, calendar: calendar),
+                date: day
+            )
+            record.hrvAverage = 50
+            context.insert(record)
+        }
+        try context.save()
+
+        let repo = HealthSnapshotRepository(modelContext: context, calendar: calendar)
+        let snapshots = try repo.fetchSnapshots(days: 42, endingAt: now)
+        XCTAssertEqual(snapshots.count, 42, "42 天请求必须返回 42 条，实际 \(snapshots.count)")
     }
 }
 

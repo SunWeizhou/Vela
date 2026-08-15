@@ -59,6 +59,39 @@ final class HealthFoundationTests: XCTestCase {
         XCTAssertNil(snapshot.currentEnergy)
     }
 
+    @MainActor
+    func testMakeSnapshotPersistsEnergyBankMatchingEngineValue() throws {
+        // F3 回归：makeSnapshot 之前硬编码 energyBank: nil，
+        // 前台重存会抹掉引擎 applying(to:) 写入的能量银行字段。
+        let date = Date()
+        let dashboard = PreviewDataFactory.makeDashboard(date: date)
+        let context = DailyHealthContext(
+            date: date,
+            sleepSummary: nil,
+            recoveryMetrics: RecoveryMetricSummary(),
+            recoveryBaseline: RecoveryMetricSummary(),
+            strainToday: StrainActivitySummary(workouts: []),
+            strainBaselineDaily: StrainActivitySummary(workouts: []),
+            bodyMetrics: BodyMetricsSummary()
+        )
+
+        let snapshot = DailySummaryUseCase().makeSnapshot(
+            from: dashboard,
+            context: context,
+            date: date
+        )
+
+        XCTAssertEqual(
+            snapshot.energyBank,
+            dashboard.energy.hasData ? dashboard.energy.value : nil,
+            "energyBank 必须与引擎写入值一致，不得恒为 nil"
+        )
+        XCTAssertEqual(
+            snapshot.currentEnergy,
+            dashboard.energy.hasData ? dashboard.energy.value : nil
+        )
+    }
+
     func testDataCoverageSummaryBuildsDomainScoresAndTopBlockers() {
         let groups = [
             CoverageGroup(
@@ -523,15 +556,21 @@ final class ProactiveIntelligenceOrchestratorTests: XCTestCase {
     func testProactiveIntelligenceOrchestratorRunAsyncCheck() async throws {
         let container = try VelaModelContainer.make(inMemory: true)
         let context = container.mainContext
-        
+
+        // 主动洞察是 opt-in 开关（默认关）；开关必须被尊重（此前无效的 bug 已修）。
+        AutoAgentConfig.shared.proactiveInsights = true
+        // 日级去重 key 会跨测试进程残留，先清除确保本次检查执行。
+        UserDefaults.standard.removeObject(forKey: "vela.proactive.last_async_check_day")
+
         let orchestrator = ProactiveIntelligenceOrchestrator()
         let insights = await orchestrator.runAsyncCheck(modelContext: context)
         
         XCTAssertFalse(insights.isEmpty)
-        
+
+        // D3 修复：ProactiveInsightRecord 不再落库（UI 实时重算为唯一事实来源）。
         let records = (try? context.fetch(FetchDescriptor<ProactiveInsightRecord>())) ?? []
-        XCTAssertEqual(records.count, insights.count)
-        
+        XCTAssertTrue(records.isEmpty, "主动洞察不再持久化，落库记录此前只写不读")
+
         let events = (try? context.fetch(FetchDescriptor<VelaEventRecord>())) ?? []
         XCTAssertTrue(events.contains(where: { $0.eventType == VelaProductEventType.proactiveInsightGenerated }))
     }

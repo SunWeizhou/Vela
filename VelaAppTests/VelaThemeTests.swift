@@ -3,6 +3,410 @@ import UIKit
 @testable import Vela
 
 final class VelaThemeTests: XCTestCase {
+    func testRhythmTrendSourceUsesRealHistoricalTrendNotFabricatedSeries() {
+        // 节律曲线回归：数据源必须是 signal card 自带的真实历史趋势，
+        // 而不是把 5 个截面分数平铺到假时间轴。
+        func card(trend: [Double], value: String = "78") -> TodayExperienceSignalCard {
+            TodayExperienceSignalCard(
+                id: "recovery",
+                title: "恢复",
+                value: value,
+                directionLabel: "",
+                confidenceLabel: "",
+                coverageLabel: "",
+                subtitle: "",
+                trend: trend,
+                accent: .recovery,
+                state: .good
+            )
+        }
+
+        let full = RhythmTrendSource.series(for: card(trend: [66, 70, 72, 69, 74, 71, 78]))
+        XCTAssertEqual(full, [66, 70, 72, 69, 74, 71, 78])
+
+        // 历史不足时不伪造曲线
+        XCTAssertTrue(RhythmTrendSource.series(for: card(trend: [78])).isEmpty)
+        XCTAssertTrue(RhythmTrendSource.series(for: card(trend: [])).isEmpty)
+
+        // 越界值钳制到 0-100
+        XCTAssertEqual(RhythmTrendSource.series(for: card(trend: [-10, 150])), [0, 100])
+    }
+
+    func testRhythmHourlyHeartRateAggregatesRealSamplesByHour() {
+        // 按小时模式回归：逐小时曲线必须来自当日真实心率样本的均值聚合。
+        let calendar = Calendar.current
+        let day = calendar.startOfDay(for: Date(timeIntervalSince1970: 1_700_000_000))
+        let samples = [
+            HeartRateSample(date: day.addingTimeInterval(3_600), bpm: 60),
+            HeartRateSample(date: day.addingTimeInterval(3_660), bpm: 64),
+            HeartRateSample(date: day.addingTimeInterval(7_200), bpm: 80),
+            HeartRateSample(date: day.addingTimeInterval(-500), bpm: 200), // 前一天，忽略
+        ]
+
+        let points = RhythmTrendSource.hourlyHeartRate(samples: samples, day: day, calendar: calendar)
+
+        XCTAssertEqual(points.map(\.hour), [1, 2])
+        XCTAssertEqual(points[0].value, 62, accuracy: 0.001, "同小时多样本应取均值")
+        XCTAssertEqual(points[1].value, 80, accuracy: 0.001)
+    }
+
+    func testTrainingPlanAdvisorParsesJSONAndIgnoresGarbage() {
+        // Coach 规划解析回归：容忍 markdown 包裹、过滤非法肌群与越界天数。
+        let markdownWrapped = """
+        好的，以下是建议：
+        ```json
+        [{"day":1,"groups":["legs","chest"],"note":"依据：48h 0 组"},{"day":2,"groups":[],"note":"恢复偏低"},{"day":3,"groups":["bogus_group"],"note":"x"},{"day":9,"groups":["back"],"note":"x"}]
+        ```
+        """
+        let plan = TrainingPlanAdvisor.parsePlan(from: markdownWrapped)
+        XCTAssertEqual(plan.count, 3)
+        XCTAssertEqual(plan[0].dayOffset, 1)
+        XCTAssertEqual(plan[0].groups, ["legs", "chest"])
+        XCTAssertEqual(plan[0].source, "ai")
+        XCTAssertEqual(plan[1].groups, [], "休息日 groups 为空")
+        XCTAssertEqual(plan[2].groups, [], "非法肌群应被过滤")
+        XCTAssertFalse(plan.contains { $0.dayOffset == 9 }, "越界天数应被丢弃")
+    }
+
+    func testTrainingRotationRecommenderAvoidsHighFatigueAndAlternates() {
+        // 轮转时间轴回归：未来推荐必须避开高疲劳肌群，并按 48h 组数轮转交替。
+        let fatigue = [
+            "chest": LocalMuscleFatigue(muscleGroup: "chest", setsLast48h: 14, setsLast7d: 24, volumeLast7d: 8000),
+            "back": LocalMuscleFatigue(muscleGroup: "back", setsLast48h: 2, setsLast7d: 6, volumeLast7d: 2000),
+            "legs": LocalMuscleFatigue(muscleGroup: "legs", setsLast48h: 0, setsLast7d: 3, volumeLast7d: 1200),
+        ]
+        let recommendations = TrainingRotationRecommender.upcomingDays(
+            localFatigue: fatigue,
+            decision: .keep,
+            recoveryScore: 70,
+            days: 3
+        )
+        XCTAssertEqual(recommendations.count, 3)
+        XCTAssertEqual(recommendations[0].groups, ["legs"])
+        XCTAssertEqual(recommendations[1].groups, ["back"])
+        XCTAssertEqual(recommendations[2].groups, ["legs"])
+        XCTAssertFalse(
+            recommendations.contains { $0.groups.contains("chest") },
+            "高疲劳肌群不应出现在未来推荐里"
+        )
+    }
+
+    func testTrainingRotationRecommenderInsertsRecoveryDayWhenRecoveryLow() {
+        let fatigue = [
+            "chest": LocalMuscleFatigue(muscleGroup: "chest", setsLast48h: 0, setsLast7d: 2, volumeLast7d: 500),
+        ]
+        let recommendations = TrainingRotationRecommender.upcomingDays(
+            localFatigue: fatigue,
+            decision: .keep,
+            recoveryScore: 40,
+            days: 3
+        )
+        XCTAssertEqual(recommendations[0].groups, [], "恢复偏低时明天应先休息")
+        XCTAssertTrue(recommendations[0].note.contains("恢复"))
+        XCTAssertEqual(recommendations[1].groups, ["chest"])
+    }
+
+    func testPersonalRecordBestRecordsKeepsHighestPerExerciseAndKind() {
+        // 个人纪录聚合回归：同一动作 × 类型只保留最高值；数值相同时保留带
+        // previousValue（即「打破前纪录」）的那条。
+        let records = [
+            PersonalRecord(exerciseName: "卧推", kind: "max_weight", value: 80, previousValue: 75),
+            PersonalRecord(exerciseName: "卧推", kind: "max_weight", value: 100, previousValue: 80),
+            PersonalRecord(exerciseName: "卧推", kind: "estimated_1rm", value: 95),
+            PersonalRecord(exerciseName: "深蹲", kind: "max_weight", value: 120),
+            PersonalRecord(exerciseName: "深蹲", kind: "max_weight", value: 120, previousValue: 110),
+        ]
+        let best = PersonalRecord.bestRecords(from: records)
+        XCTAssertEqual(best.count, 3, "动作 × 类型去重后应剩 3 条")
+        let benchMax = best.first { $0.exerciseName == "卧推" && $0.kind == "max_weight" }
+        XCTAssertEqual(benchMax?.value, 100)
+        XCTAssertEqual(benchMax?.previousValue, 80, "最高值条目应保留其打破前的纪录")
+        let squatMax = best.first { $0.exerciseName == "深蹲" && $0.kind == "max_weight" }
+        XCTAssertEqual(squatMax?.value, 120)
+        XCTAssertEqual(squatMax?.previousValue, 110, "数值相同时应保留带历史值的条目")
+    }
+
+    func testDailySetsByMuscleBucketsSevenDaysOldestFirst() {
+        // 局部训练状态 7 天逐日组数回归：锚定日窗口、index 0 = 最旧、只数有效组、
+        // 窗口外训练不计入。
+        let calendar = Calendar.current
+        let anchorDay = calendar.startOfDay(for: Date(timeIntervalSince1970: 1_700_000_000))
+        let oldestDay = calendar.date(byAdding: .day, value: -6, to: anchorDay)!
+        let outsideDay = calendar.date(byAdding: .day, value: -8, to: anchorDay)!
+
+        func chestWorkout(at date: Date) -> StrengthWorkoutDTO {
+            StrengthWorkoutRecord(
+                title: "Push",
+                startedAt: date.addingTimeInterval(36_000),
+                durationMinutes: 60,
+                exercises: [
+                    StrengthExerciseLog(
+                        name: "Bench Press",
+                        equipment: "barbell",
+                        primaryMuscleGroup: "chest",
+                        sets: [
+                            StrengthSetLog(repetitions: 8, weightKilograms: 40, isWarmup: true, rpe: nil, rir: nil, isCompleted: true),
+                            StrengthSetLog(repetitions: 8, weightKilograms: 80, rpe: nil, rir: nil, isCompleted: true),
+                            StrengthSetLog(repetitions: 8, weightKilograms: 80, rpe: nil, rir: nil, isCompleted: true),
+                        ]
+                    )
+                ]
+            ).dto
+        }
+
+        let daily = TrainingAnalyticsService.dailySetsByMuscle(
+            workouts: [
+                chestWorkout(at: oldestDay),
+                chestWorkout(at: anchorDay.addingTimeInterval(36_000)),
+                chestWorkout(at: outsideDay),
+            ],
+            days: 7,
+            endingAt: anchorDay.addingTimeInterval(36_000),
+            calendar: calendar
+        )
+
+        let chest = daily["chest"]
+        XCTAssertNotNil(chest, "有效组应聚合出 chest 序列")
+        XCTAssertEqual(chest?.count, 7, "始终返回 7 天窗口")
+        XCTAssertEqual(chest, [2, 0, 0, 0, 0, 0, 2], "最旧一天 2 组（不含热身），锚定日 2 组，窗口外不计")
+    }
+
+    func testWorkoutHeartRateAveragerSweepMatchesFilterSemantics() {
+        // 性能重构回归：O(n+m) 双指针实现必须与旧 O(n×m) filter 语义一致——
+        // 区间外样本排除、重叠训练同时计入、区间内求均值；输入乱序也可处理。
+        let base = Date(timeIntervalSince1970: 1_700_000_000)
+        func t(_ s: Double) -> Date { base.addingTimeInterval(s) }
+        let first = UUID()
+        let second = UUID()
+        let workouts = [
+            WorkoutSummary(id: first, start: t(100), end: t(200), activityName: "A"),
+            WorkoutSummary(id: second, start: t(150), end: t(250), activityName: "B"),
+        ]
+        let samples = [
+            HeartRateSample(date: t(300), bpm: 60),    // 区间外
+            HeartRateSample(date: t(120), bpm: 100),   // 仅 A
+            HeartRateSample(date: t(50), bpm: 40),     // 区间外
+            HeartRateSample(date: t(220), bpm: 140),   // 仅 B
+            HeartRateSample(date: t(160), bpm: 120),   // A+B 重叠
+        ]
+        let result = WorkoutHeartRateAverager.averageHeartRates(samples: samples, workouts: workouts)
+        XCTAssertEqual(result[first] ?? 0, 110, accuracy: 0.01, "A 应只含 100/120 两样本")
+        XCTAssertEqual(result[second] ?? 0, 130, accuracy: 0.01, "B 应含重叠的 120 与 140 两样本")
+        XCTAssertNil(result[UUID()], "无样本的训练不产生条目")
+    }
+
+    func testSleepDayAggregatorSplitsAcrossHealthDayBoundary() {
+        // 历史回填睡眠聚合：跨 04:00 健康日边界的睡眠段按时间比例拆分，
+        // 分段计入两天，深睡/REM 分钟随段归属。
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let day = calendar.date(from: DateComponents(year: 2025, month: 5, day: 1))!
+        let start = calendar.date(byAdding: .hour, value: 23, to: day)!           // 5/1 23:00
+        let nextDay = calendar.date(byAdding: .day, value: 1, to: day)!
+        let end = calendar.date(byAdding: .hour, value: 7, to: nextDay)!          // 5/2 07:00
+        let segments = [
+            SleepStageSegment(stage: .deep, start: start, end: start.addingTimeInterval(2 * 3_600)),
+            SleepStageSegment(stage: .rem, start: start.addingTimeInterval(2 * 3_600), end: end),
+        ]
+        let buckets = SleepDayAggregator.aggregate(segments: segments, boundaryMinutes: 240, calendar: calendar)
+        let day1 = buckets[day]!
+        let day2 = buckets[nextDay]!
+        // 5/1 健康日 [5/1 04:00, 5/2 04:00)：深睡 2h + REM 3h
+        XCTAssertEqual(day1.sleepMinutes, 300, accuracy: 0.01)
+        XCTAssertEqual(day1.deepMinutes, 120, accuracy: 0.01)
+        XCTAssertEqual(day1.remMinutes, 180, accuracy: 0.01)
+        // 5/2 健康日：04:00-07:00 全为 REM
+        XCTAssertEqual(day2.sleepMinutes, 180, accuracy: 0.01)
+        XCTAssertEqual(day2.remMinutes, 180, accuracy: 0.01)
+        XCTAssertEqual(day2.deepMinutes, 0, accuracy: 0.01)
+    }
+
+    func testHistoricalBackfillPlannerChunksFromBoundaryToThreeYears() {
+        // 回填分块规划：无游标时首块 = [同步边界-90天, 同步边界)；
+        // 每块新游标 = 块起点；一直做到 3 年前的最老日为止，游标可续传。
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let today = calendar.date(from: DateComponents(year: 2025, month: 6, day: 15))!
+
+        let first = HistoricalBackfillPlanner.nextChunk(today: today, cursor: nil, calendar: calendar)!
+        let boundary = HistoricalBackfillPlanner.syncBoundaryStart(today: today, calendar: calendar)
+        XCTAssertEqual(first.end, boundary)
+        XCTAssertEqual(first.start, calendar.date(byAdding: .day, value: -90, to: first.end)!)
+        XCTAssertEqual(first.newCursor, first.start)
+
+        var cursor: Date? = first.newCursor
+        var lastStart = first.start
+        var chunks = 1
+        while let chunk = HistoricalBackfillPlanner.nextChunk(today: today, cursor: cursor, calendar: calendar) {
+            lastStart = chunk.start
+            cursor = chunk.newCursor
+            chunks += 1
+            if chunks > 100 {
+                XCTFail("分块不应无限循环")
+                break
+            }
+        }
+        let earliest = HistoricalBackfillPlanner.targetEarliest(today: today, calendar: calendar)
+        XCTAssertGreaterThanOrEqual(lastStart, earliest, "最老一块不得早于 3 年前")
+        XCTAssertNil(
+            HistoricalBackfillPlanner.nextChunk(today: today, cursor: cursor, calendar: calendar),
+            "游标到最老日后应判定完成"
+        )
+        let progress = HistoricalBackfillPlanner.progress(today: today, cursor: cursor, calendar: calendar)
+        XCTAssertEqual(progress.completed, progress.total)
+    }
+
+    func testLongTermTrendMathMonthlyAveragesAndYearOverYear() {
+        // 长期趋势纯计算：月均值聚合 + 今年/去年同期对齐比较（超出对齐时段的样本排除）。
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        func d(_ year: Int, _ month: Int, _ day: Int) -> Date {
+            calendar.date(from: DateComponents(year: year, month: month, day: day))!
+        }
+        var pairs: [(date: Date, value: Double)] = []
+        for i in 0..<8 { pairs.append((d(2025, 1, 1 + i), 60 + Double(i))) }   // 今年 1 月 60..67
+        for i in 0..<8 { pairs.append((d(2024, 1, 1 + i), 70 + Double(i))) }   // 去年 1 月 70..77
+        pairs.append((d(2024, 6, 1), 90))                                       // 去年 6 月（超出对齐时段）
+
+        let monthly = LongTermTrendMath.monthlyAverages(values: pairs, calendar: calendar)
+        XCTAssertEqual(monthly.count, 3)
+        let jan2025 = monthly.first { calendar.isDate($0.date, equalTo: d(2025, 1, 1), toGranularity: .month) }
+        XCTAssertEqual(jan2025?.value ?? 0, 63.5, accuracy: 0.01)
+
+        let today = d(2025, 3, 15)
+        let cmp = LongTermTrendMath.samePeriodComparison(values: pairs, today: today, calendar: calendar)
+        XCTAssertEqual(cmp.thisYear ?? 0, 63.5, accuracy: 0.01)
+        XCTAssertEqual(cmp.lastYear ?? 0, 73.5, accuracy: 0.01, "去年 6 月的样本必须被对齐时段排除")
+    }
+
+    func testYearlyTrainingAggregatorGroupsPerYear() {
+        // 历年训练量聚合：按年分桶，无训练的天/年不产生行。
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        func record(_ year: Int, count: Int, duration: Double, calories: Double) -> DailyHealthSummaryRecord {
+            let date = calendar.date(from: DateComponents(year: year, month: 3, day: 10))!
+            return DailyHealthSummaryRecord(
+                dayIdentifier: DailyHealthSummaryRecord.dayIdentifier(for: date, calendar: calendar),
+                date: date,
+                activeCalories: calories,
+                workoutCount: count,
+                workoutDuration: duration
+            )
+        }
+        let records = [
+            record(2023, count: 1, duration: 60, calories: 300),
+            record(2024, count: 2, duration: 45, calories: 400),
+            record(2024, count: 0, duration: 30, calories: 250),
+            record(2025, count: 0, duration: 0, calories: 0),
+        ]
+        let stats = YearlyTrainingAggregator.aggregate(records: records, calendar: calendar)
+        XCTAssertEqual(stats.map(\.year), [2023, 2024])
+        XCTAssertEqual(stats[1].trainingDays, 2)
+        XCTAssertEqual(stats[1].workoutCount, 2)
+        XCTAssertEqual(stats[1].totalMinutes, 75, accuracy: 0.01)
+        XCTAssertEqual(stats[1].totalCalories, 650, accuracy: 0.01)
+    }
+
+    func testTrainingHeatmapBuildsMondayAlignedWeeksWithRealTiers() {
+        // 热力图回归：周一起始、真实强度分档、过去练过的肌群聚合到对应日期。
+        let calendar = Calendar.current
+        let end = calendar.startOfDay(for: Date(timeIntervalSince1970: 1_700_000_000))
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: end)!
+
+        let workout = StrengthWorkoutRecord(
+            title: "Push",
+            startedAt: yesterday.addingTimeInterval(36_000),
+            durationMinutes: 60,
+            exercises: [
+                StrengthExerciseLog(
+                    name: "Bench Press",
+                    equipment: "barbell",
+                    primaryMuscleGroup: "chest",
+                    sets: [StrengthSetLog(repetitions: 8, weightKilograms: 80, isCompleted: true)]
+                )
+            ]
+        )
+        let heavyDay = DailyHealthSummaryRecord(
+            dayIdentifier: DailyHealthSummaryRecord.dayIdentifier(for: yesterday),
+            date: yesterday,
+            workoutCount: 3
+        )
+
+        let weeks = TrainingHeatmapData.weeks(
+            endingAt: end,
+            weeks: 2,
+            records: [heavyDay],
+            workouts: [workout],
+            summaries: [
+                WorkoutSummary(
+                    start: yesterday.addingTimeInterval(40_000),
+                    end: yesterday.addingTimeInterval(40_000 + 1_800),
+                    activityName: "跑步"
+                ),
+                WorkoutSummary(
+                    start: yesterday.addingTimeInterval(41_000),
+                    end: yesterday.addingTimeInterval(41_000 + 3_600),
+                    activityName: "Strength Training"
+                )
+            ],
+            calendar: calendar
+        )
+
+        XCTAssertEqual(weeks.count, 2)
+        XCTAssertTrue(weeks.allSatisfy { $0.days.count == 7 })
+        // 周一起始：每周第一天是周一。
+        for week in weeks {
+            XCTAssertEqual(calendar.component(.weekday, from: week.days[0].date), 2, "每周应从周一开始")
+        }
+        let yesterdayDay = weeks.flatMap(\.days).first { calendar.isDate($0.date, inSameDayAs: yesterday) }
+        XCTAssertEqual(yesterdayDay?.tier, 3, "3 次训练应为高强度分档")
+        XCTAssertEqual(yesterdayDay?.groups, ["chest"])
+        XCTAssertEqual(yesterdayDay?.cardioMinutes ?? 0, 30, accuracy: 0.1, "非力量训练应聚合为有氧分钟")
+        XCTAssertTrue(
+            yesterdayDay?.activityNames.contains("力量训练") == true,
+            "HK 力量训练必须出现在当天训练类型里（点击详情不得显示休息）"
+        )
+        // 网格终点当天非 future；其后一天为 future（弱化占位）。
+        let endDay = weeks.flatMap(\.days).first { calendar.isDate($0.date, inSameDayAs: end) }
+        XCTAssertEqual(endDay?.isFuture, false)
+        let dayAfterEnd = calendar.date(byAdding: .day, value: 1, to: end)!
+        let futureDay = weeks.flatMap(\.days).first { calendar.isDate($0.date, inSameDayAs: dayAfterEnd) }
+        XCTAssertEqual(futureDay?.isFuture, true)
+    }
+
+    func testRhythmHourlyExertionLoadUsesHeartRateReserve() {        // 按小时活动强度：小时平均心率储备率 × 覆盖分钟（5 分钟/样本封顶 60）。
+        let calendar = Calendar.current
+        let day = calendar.startOfDay(for: Date(timeIntervalSince1970: 1_700_000_000))
+        let samples = [
+            // 1 点：静息水平 60 → 储备率 0 → 负荷 0
+            HeartRateSample(date: day.addingTimeInterval(3_600), bpm: 60),
+            HeartRateSample(date: day.addingTimeInterval(3_660), bpm: 60),
+            // 2 点：110 bpm，储备率 (110-60)/(160-60)=0.5，覆盖 10 分钟 → 负荷 5
+            HeartRateSample(date: day.addingTimeInterval(7_200), bpm: 110),
+            HeartRateSample(date: day.addingTimeInterval(7_500), bpm: 110),
+        ]
+
+        let points = RhythmTrendSource.hourlyExertionLoad(
+            samples: samples,
+            day: day,
+            restingHeartRate: 60,
+            maxHeartRate: 160,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(points.map(\.hour), [1, 2])
+        XCTAssertEqual(points[0].value, 0, accuracy: 0.001)
+        XCTAssertEqual(points[1].value, 5, accuracy: 0.001)
+
+        // 缺基线 → 空（不伪造）
+        XCTAssertTrue(
+            RhythmTrendSource.hourlyExertionLoad(
+                samples: samples, day: day,
+                restingHeartRate: nil, maxHeartRate: 160, calendar: calendar
+            ).isEmpty
+        )
+    }
+
     func testStrengthGroupingPlannerCreatesContiguousSuperset() {
         let first = StrengthExerciseLog(name: "卧推", equipment: "杠铃", sets: [])
         let middle = StrengthExerciseLog(name: "深蹲", equipment: "杠铃", sets: [])
@@ -1173,6 +1577,367 @@ final class VelaThemeTests: XCTestCase {
         XCTAssertFalse(rendered?.contains("value=92") == true)
         XCTAssertFalse(rendered?.contains("value=999") == true)
         XCTAssertTrue(rendered?.contains("不是指令") == true)
+    }
+
+
+
+    // MARK: - 三年长线基准（Layer 1/2/3）
+
+    func testLongTermBaselineEngineComputesMedianPercentilesAndDeviation() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let today = calendar.date(from: DateComponents(year: 2025, month: 6, day: 15, hour: 12))!
+        var points: [LongTermBaselinePoint] = []
+        for offset in 0..<100 {
+            let day = calendar.date(byAdding: .day, value: -offset, to: today)!
+            let rhr = offset <= 30 ? 55.0 : 62.0
+            points.append(LongTermBaselinePoint(date: day, restingHeartRate: rhr))
+        }
+        let report = LongTermBaselineEngine.compute(points: points, today: today, calendar: calendar)
+        let rhr = report.baselines[.restingHeartRate]
+        XCTAssertEqual(report.daysOfData, 100)
+        XCTAssertEqual(rhr?.sampleCount, 100)
+        XCTAssertEqual(rhr?.threeYearMedian ?? 0, 62, accuracy: 0.01)
+        XCTAssertEqual(rhr?.recent30DayMean ?? 0, 55, accuracy: 0.01)
+        XCTAssertEqual(rhr?.longTermDeviationPercent ?? 0, (55 - 62) / 62 * 100, accuracy: 0.1)
+        XCTAssertEqual(rhr?.percentile10 ?? 0, 55, accuracy: 0.01)
+        XCTAssertEqual(rhr?.percentile90 ?? 0, 62, accuracy: 0.01)
+    }
+
+    func testLongTermBaselineEngineRequiresMinimumDays() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let today = calendar.date(from: DateComponents(year: 2025, month: 6, day: 15, hour: 12))!
+        var points: [LongTermBaselinePoint] = []
+        for offset in 0..<30 {
+            points.append(LongTermBaselinePoint(
+                date: calendar.date(byAdding: .day, value: -offset, to: today)!,
+                restingHeartRate: 60
+            ))
+        }
+        let report = LongTermBaselineEngine.compute(points: points, today: today, calendar: calendar)
+        XCTAssertEqual(report.daysOfData, 30)
+        XCTAssertTrue(report.baselines.isEmpty, "不足 60 天不得发布长线统计")
+    }
+
+    func testLongTermBaselineEngineYearOverYearDeltaAndTrend() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let today = calendar.date(from: DateComponents(year: 2025, month: 6, day: 15, hour: 12))!
+        var points: [LongTermBaselinePoint] = []
+        // 24 个月逐月下降：越靠近现在 RHR 越低（长期改善）。
+        for m in 0..<24 {
+            let month = calendar.date(byAdding: .month, value: -m, to: today)!
+            for d in 0..<3 {
+                let day = calendar.date(byAdding: .day, value: -d, to: month)!
+                points.append(LongTermBaselinePoint(date: day, restingHeartRate: 68 + Double(m) * 0.5))
+            }
+        }
+        let report = LongTermBaselineEngine.compute(points: points, today: today, calendar: calendar)
+        let rhr = report.baselines[.restingHeartRate]
+        XCTAssertEqual(rhr?.trendLabel, "improving", "RHR 逐年下降应判为改善")
+        XCTAssertEqual(rhr?.yearOverYearDelta ?? 0, -6, accuracy: 0.5, "今年对齐时段均值应比去年同期低约 6 bpm")
+    }
+
+    func testLongTermBaselineTrainingVolumePercentile() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let today = calendar.date(from: DateComponents(year: 2025, month: 6, day: 15, hour: 12))!
+        var points: [LongTermBaselinePoint] = []
+        for m in 0..<12 {
+            let month = calendar.date(byAdding: .month, value: -m, to: today)!
+            for d in 0..<5 {
+                let day = calendar.date(byAdding: .day, value: -d, to: month)!
+                points.append(LongTermBaselinePoint(date: day, workoutDuration: m == 0 ? 2000 : 500))
+            }
+        }
+        let report = LongTermBaselineEngine.compute(points: points, today: today, calendar: calendar)
+        let volume = report.trainingVolume
+        XCTAssertEqual(volume?.sampleMonths, 12)
+        XCTAssertEqual(volume?.currentMonthMinutes ?? 0, 8000, accuracy: 0.01, "与 today 同刻的点被 < today 过滤，本月合计 4 天 × 2000")
+        XCTAssertEqual(volume?.currentMonthPercentile ?? 0, 100, accuracy: 0.01, "本月分钟数最高应处于 P100")
+    }
+
+    func testRecoveryLongTermModifierOnlyWithValidContext() {
+        func makeInput(longTerm: RecoveryLongTermContext? = nil) -> RecoveryScoreInput {
+            RecoveryScoreInput(
+                asOf: Date(),
+                hrvToday: 50,
+                hrvBaseline: 55,
+                hrvHistory: Array(repeating: 55.0, count: 20),
+                restingHeartRateToday: 60,
+                restingHeartRateBaseline: 60,
+                rhrHistory: Array(repeating: 60.0, count: 20),
+                sleepScoreLastNight: 70,
+                strainScoreYesterday: 50,
+                longTermContext: longTerm
+            )
+        }
+        let plain = RecoveryScoreEngine().calculate(from: makeInput()).value ?? -1
+        // 无效上下文（样本不足 60 天）不启用修正。
+        let invalid = RecoveryScoreEngine().calculate(
+            from: makeInput(longTerm: RecoveryLongTermContext(hrvPercentile10: 60, hrvPercentile90: 90, hrvSampleCount: 10))
+        ).value ?? -2
+        XCTAssertEqual(invalid, plain, accuracy: 0.01)
+        // 今日 HRV 低于三年 P10 → -3 并给出长线理由。
+        let lowered = RecoveryScoreEngine().calculate(
+            from: makeInput(longTerm: RecoveryLongTermContext(hrvPercentile10: 60, hrvPercentile90: 90, hrvSampleCount: 100))
+        )
+        XCTAssertEqual(lowered.value ?? 0, max(0, plain - 3), accuracy: 0.01)
+        XCTAssertTrue(lowered.reasons.contains { $0.contains("P10") })
+    }
+
+    func testStressDoubleBaselineGateNeutralizesWithinLongTermNormal() {
+        var base = StressIndexInput(
+            asOf: Date(),
+            mode: .rawVitals,
+            quietHRToday: 70,
+            quietHRBaseline: 60,
+            quietHRSD: 5,
+            hrvToday: 50,
+            hrvBaseline: 55,
+            hrvSD: 10,
+            respRateToday: 16,
+            respRateBaseline: 15,
+            respRateSD: 1,
+            sleepScoreLastNight: 70,
+            strainScoreToday: 50,
+            isWithinWorkoutWindow: false
+        )
+        let without = StressIndexEngine().calculate(from: base)
+        XCTAssertGreaterThan(without.components["rhr_stress"] ?? 0, 50, "高于短期基线应计入压力")
+        base.longTermQuietHRMedian = 72
+        let gated = StressIndexEngine().calculate(from: base)
+        XCTAssertEqual(gated.components["rhr_stress"] ?? 0, 50, accuracy: 0.01, "仍在三年正常范围内应中和")
+        XCTAssertTrue(gated.reasons.contains { $0.contains("中和") })
+    }
+
+    func testTrainingDecisionKernelReducesOnHighLongTermVolumePercentile() {
+        let now = Date()
+        let dashboard = DashboardSummary.preview(date: now)
+        let bodyState = BodyState(
+            date: now,
+            readiness: .ready,
+            recovery: dashboard.recovery,
+            sleep: dashboard.sleepScore,
+            strain: dashboard.strain,
+            energy: dashboard.energy,
+            stress: dashboard.stress,
+            localFatigue: [:],
+            drivers: [],
+            confidence: .high,
+            freshness: .live,
+            source: "test",
+            activeStatus: "active",
+            hash: "test-hash"
+        )
+        let without = TrainingDecisionKernel().decide(input: TrainingDecisionInput(bodyState: bodyState))
+        XCTAssertEqual(without.decision, .keep, "ready 状态应保持计划")
+        let with = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
+            bodyState: bodyState,
+            longTermTrainingVolume: TrainingVolumeLongTerm(
+                monthlyMinutes: [],
+                currentMonthMinutes: 2400,
+                currentMonthPercentile: 95,
+                lastYearSameMonthMinutes: 1200,
+                sampleMonths: 24
+            )
+        ))
+        XCTAssertEqual(with.decision, .reduce, "本月训练量处于三年 P95 应建议减量")
+        XCTAssertTrue(with.reasons.contains { $0.contains("长线训练量") })
+    }
+
+
+
+    // MARK: - 身体模型三年拟合
+
+    func testBodyModelFitsLongTermDataIntoStableMaturity() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let now = Date()
+        let journalEntries = (0..<6).map { i in
+            JournalEntryRecord(
+                createdAt: now.addingTimeInterval(TimeInterval(-i * 86_400)),
+                tags: ["behavior:caffeine"],
+                note: "咖啡"
+            )
+        }
+        let workouts = (0..<8).map { i in
+            StrengthWorkoutRecord(
+                title: "力量训练",
+                startedAt: now.addingTimeInterval(TimeInterval(-i * 86_400)),
+                durationMinutes: 45,
+                exercises: []
+            )
+        }
+        let points = (0..<200).map { i in
+            LongTermBaselinePoint(
+                date: now.addingTimeInterval(TimeInterval(-i * 86_400)),
+                restingHeartRate: 60
+            )
+        }
+        let report = LongTermBaselineEngine.compute(points: points, today: now, calendar: calendar)
+        let state = BodyModelBuilder().build(
+            onboarding: nil,
+            dailySummaries: [],
+            journalEntries: journalEntries,
+            strengthWorkouts: workouts,
+            trainingResponses: [],
+            longTermBaselines: report,
+            asOf: now,
+            calendar: calendar
+        )
+        XCTAssertEqual(state.maturity.overall, .stable, "三年基线 + 8 次训练 + 6 对行为配对应进入稳定期")
+        XCTAssertTrue(state.claims.contains { $0.id == "long_term_baseline" }, "应出现三年生理基线已拟合断言")
+        XCTAssertFalse(state.uncertainAreas.contains { $0.id == "baseline_history" }, "三年数据不应再显示基线建立中")
+    }
+
+    func testTrainingResponsePairingAcrossThreeYears() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let base = calendar.date(from: DateComponents(year: 2025, month: 6, day: 1))!
+        var records: [DailyHealthSummaryRecord] = []
+        for i in 0..<40 {
+            let day = calendar.date(byAdding: .day, value: i * 2, to: base)!
+            let next = calendar.date(byAdding: .day, value: 1, to: day)!
+            let isTraining = i % 2 == 0   // 20 训练日 / 20 休息日
+            records.append(DailyHealthSummaryRecord(
+                dayIdentifier: DailyHealthSummaryRecord.dayIdentifier(for: day, calendar: calendar),
+                date: day,
+                hrvAverage: 50,
+                workoutCount: isTraining ? 1 : 0,
+                workoutDuration: isTraining ? 60 : 0
+            ))
+            records.append(DailyHealthSummaryRecord(
+                dayIdentifier: DailyHealthSummaryRecord.dayIdentifier(for: next, calendar: calendar),
+                date: next,
+                hrvAverage: isTraining ? 40 : 50,
+                restingHeartRate: isTraining ? 61 : 60
+            ))
+        }
+        let asOf = calendar.date(byAdding: .day, value: 80, to: base)!
+        let pairing = BodyModelBuilder.trainingResponsePairing(
+            dailySummaries: records,
+            calendar: calendar,
+            asOf: asOf
+        )
+        XCTAssertNotNil(pairing)
+        XCTAssertTrue(pairing?.summary.contains("多降") == true, "训练日次日 HRV 多降 10 ms 应被配对")
+        XCTAssertTrue(pairing?.summary.contains("n=20") == true)
+        let small = BodyModelBuilder.trainingResponsePairing(
+            dailySummaries: Array(records.prefix(6)),
+            calendar: calendar,
+            asOf: asOf
+        )
+        XCTAssertNil(small, "训练日样本不足 8 天不得发布配对")
+    }
+
+
+
+    func testPhysiologicalInsightsPairTrainingDaysWithNextDayHRV() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let base = calendar.date(from: DateComponents(year: 2025, month: 6, day: 1))!
+        var snaps: [DailyHealthSnapshot] = []
+        for i in 0..<80 {
+            let day = calendar.date(byAdding: .day, value: i, to: base)!
+            let isTraining = i % 2 == 0
+            let prevTraining = i > 0 && (i - 1) % 2 == 0
+            snaps.append(DailyHealthSnapshot(
+                date: day,
+                hrvAverage: i == 0 ? 50 : (prevTraining ? 45 : 55),
+                restingHeartRate: i == 0 ? 60 : (prevTraining ? 61 : 60),
+                sleepHours: 7,
+                steps: isTraining ? 12000 : 6000,
+                workoutCount: isTraining ? 1 : 0,
+                workoutDuration: isTraining ? 60 : 0
+            ))
+        }
+        let insights = JournalCorrelationEngine().physiologicalInsights(snapshots: snaps, calendar: calendar)
+        XCTAssertFalse(insights.isEmpty, "训练/高活动应产生生理配对")
+        let trainingHRV = insights.first { $0.habit == "训练日" && $0.outcome == "HRV" }
+        XCTAssertNotNil(trainingHRV, "训练日 → 次日 HRV 配对应存在")
+        XCTAssertLessThan(trainingHRV?.correlation ?? 0, 0, "训练压制次日 HRV 应为负相关")
+        XCTAssertEqual(trainingHRV?.sampleSize, 79, "最后一天没有次日，共 79 对")
+        XCTAssertTrue(insights.contains { $0.habit == "高活动日" }, "高活动日配对应存在")
+    }
+
+    func testBodyModelMaturityCountsRecordedTrainingDays() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let now = Date()
+        let journals = (0..<6).map { i in
+            JournalEntryRecord(
+                createdAt: now.addingTimeInterval(TimeInterval(-i * 86_400)),
+                tags: ["behavior:caffeine"],
+                note: "咖啡"
+            )
+        }
+        var records: [DailyHealthSummaryRecord] = []
+        for i in 0..<10 {
+            let day = calendar.date(byAdding: .day, value: -i, to: now)!
+            records.append(DailyHealthSummaryRecord(
+                dayIdentifier: DailyHealthSummaryRecord.dayIdentifier(for: day, calendar: calendar),
+                date: day,
+                workoutCount: 1,
+                workoutDuration: 60
+            ))
+        }
+        let points = (0..<200).map { i in
+            LongTermBaselinePoint(
+                date: now.addingTimeInterval(TimeInterval(-i * 86_400)),
+                restingHeartRate: 60
+            )
+        }
+        let report = LongTermBaselineEngine.compute(points: points, today: now, calendar: calendar)
+        let state = BodyModelBuilder().build(
+            onboarding: nil,
+            dailySummaries: records,
+            journalEntries: journals,
+            strengthWorkouts: [],
+            trainingResponses: [],
+            longTermBaselines: report,
+            asOf: now,
+            calendar: calendar
+        )
+        XCTAssertEqual(state.maturity.trainingSessions, 10, "训练事实应计入每日汇总里的训练日")
+        XCTAssertEqual(state.maturity.overall, .stable, "三年基线 + 10 个训练日 + 6 对配对应为稳定期")
+    }
+
+
+    func testBodyModelStableWithoutJournalBehaviorsWhenLongTermFitted() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let now = Date()
+        var records: [DailyHealthSummaryRecord] = []
+        for i in 0..<10 {
+            let day = calendar.date(byAdding: .day, value: -i, to: now)!
+            records.append(DailyHealthSummaryRecord(
+                dayIdentifier: DailyHealthSummaryRecord.dayIdentifier(for: day, calendar: calendar),
+                date: day,
+                workoutCount: 1,
+                workoutDuration: 60
+            ))
+        }
+        let points = (0..<200).map { i in
+            LongTermBaselinePoint(
+                date: now.addingTimeInterval(TimeInterval(-i * 86_400)),
+                restingHeartRate: 60
+            )
+        }
+        let report = LongTermBaselineEngine.compute(points: points, today: now, calendar: calendar)
+        let state = BodyModelBuilder().build(
+            onboarding: nil,
+            dailySummaries: records,
+            journalEntries: [],      // 零手记行为
+            strengthWorkouts: [],
+            trainingResponses: [],
+            longTermBaselines: report,
+            asOf: now,
+            calendar: calendar
+        )
+        XCTAssertEqual(state.maturity.overall, .stable, "三年拟合 + 训练事实足够时，零手记行为也应为稳定期")
+        XCTAssertTrue(state.uncertainAreas.contains { $0.id == "behavior_pairs" }, "手记行为不足仍应诚实提示")
     }
 
     private func strengthWorkout(daysAgo: Int, rpe: Double, completed: Bool) -> StrengthWorkoutRecord {

@@ -853,7 +853,8 @@ final class ContextBuilderTests: XCTestCase {
 
         let state = TodayCommandBuilder.build(from: dashboard, generatedAt: generatedAt)
 
-        XCTAssertEqual(state.keySignals.first(where: { $0.id == "hrv" })?.confidence, .unavailable)
+        // D8：signal 级 confidence 字段已删除（此前只被死视图消费），
+        // 低置信度语义由 dataConfidence 聚合表达（HRV 缺失 → .low）。
         XCTAssertEqual(state.dataConfidence, .low)
     }
 

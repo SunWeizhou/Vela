@@ -53,35 +53,30 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertEqual(plan.days, [strengthDay])
     }
 
-    func testHealthProfileHydrationOnlyFillsMissingValues() {
+    func testHealthProfileMigrationResetsLegacyHydratedValuesOnce() {
         let suiteName = "UserProfileSettingsTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        UserProfileSettings.hydrateMissingValuesFromHealth(
-            age: 29,
-            weightKilograms: 71.4,
-            heightCentimeters: 178,
-            biologicalSex: "male",
-            defaults: defaults
-        )
-        XCTAssertEqual(UserProfileSettings.age(defaults: defaults), 29)
-        XCTAssertEqual(UserProfileSettings.weightKilograms(defaults: defaults), 71.4)
-        XCTAssertEqual(UserProfileSettings.heightCentimeters(defaults: defaults), 178)
-        XCTAssertEqual(UserProfileSettings.biologicalSex(defaults: defaults), "male")
+        // 旧版本会把 Apple 健康值 hydrate 进 UserDefaults；新解析语义下手填值优先，
+        // 这些残留值会冻结陈旧健康数据，迁移应一次性清除。
+        defaults.set(29, forKey: UserProfileSettings.ageKey)
+        defaults.set(71.4, forKey: UserProfileSettings.weightKey)
+        defaults.set(178, forKey: UserProfileSettings.heightKey)
+        defaults.set("male", forKey: UserProfileSettings.biologicalSexKey)
 
+        UserProfileSettings.migrateLegacyHydratedValuesIfNeeded(defaults: defaults)
+        XCTAssertNil(UserProfileSettings.age(defaults: defaults))
+        XCTAssertNil(UserProfileSettings.weightKilograms(defaults: defaults))
+        XCTAssertNil(UserProfileSettings.heightCentimeters(defaults: defaults))
+        XCTAssertNil(UserProfileSettings.biologicalSex(defaults: defaults))
+
+        // 迁移后用户再次手动填写，重复迁移不得再清除。
         defaults.set(35, forKey: UserProfileSettings.ageKey)
-        UserProfileSettings.hydrateMissingValuesFromHealth(
-            age: 29,
-            weightKilograms: 70,
-            heightCentimeters: 180,
-            biologicalSex: "female",
-            defaults: defaults
-        )
+        defaults.set(80.0, forKey: UserProfileSettings.weightKey)
+        UserProfileSettings.migrateLegacyHydratedValuesIfNeeded(defaults: defaults)
         XCTAssertEqual(UserProfileSettings.age(defaults: defaults), 35)
-        XCTAssertEqual(UserProfileSettings.weightKilograms(defaults: defaults), 71.4)
-        XCTAssertEqual(UserProfileSettings.heightCentimeters(defaults: defaults), 178)
-        XCTAssertEqual(UserProfileSettings.biologicalSex(defaults: defaults), "male")
+        XCTAssertEqual(UserProfileSettings.weightKilograms(defaults: defaults), 80.0)
     }
 
     func testPersonalBaselineRequiresSevenValidSamplesPerMetric() {
@@ -609,7 +604,29 @@ final class ScoringEngineTests: XCTestCase {
         )
         let result = EnergyBankEngine().calculate(from: input)
         let tsb = result.components["tsb"] ?? 0
-        XCTAssertLessThan(tsb, -15, "今日高负荷（120 TRIMP）应产生深度负 TSB，实际 \(tsb)")
+        let atl = result.components["atl"] ?? 0
+        let ctl = result.components["ctl"] ?? 0
+        // 暖启动（初期均值种子）后阈值按新语义校准：仍是深度负 TSB、急性高于慢性。
+        XCTAssertLessThan(tsb, -5, "今日高负荷（120 TRIMP）应产生负 TSB，实际 \(tsb)")
+        XCTAssertGreaterThan(atl, ctl, "急性负荷应高于慢性负荷：atl=\(atl) ctl=\(ctl)")
+        XCTAssertGreaterThan(atl, 90, "120 TRIMP 应显著抬升 ATL，实际 \(atl)")
+    }
+
+    /// 暖启动回归：EWMA 不再被最旧的离群值锚定（旧实现以首值为种子）。
+    func testEnergyBankEWMAWarmStartNotAnchoredByOldestOutlier() {
+        let input = EnergyBankInput(
+            asOf: Date(timeIntervalSince1970: 1_700_000_000),
+            recoveryScore: 75,
+            sleepScore: 75,
+            strainScore: 60,
+            stressIndex: 50,
+            strainHistory: [70, 70, 70, 70, 70, 70, 300], // newest-first，最旧=300 离群
+            todayLoad: 70
+        )
+        let result = EnergyBankEngine().calculate(from: input)
+        let ctl = result.components["ctl"] ?? 0
+        XCTAssertLessThan(ctl, 120, "CTL 不应被最旧离群值 300 锚定，实际 \(ctl)")
+        XCTAssertGreaterThan(ctl, 60, "CTL 应接近近期负荷 70，实际 \(ctl)")
     }
 
     func testStressEngineHRVFactorRespondsToRealisticHRVDecline() {
@@ -1740,5 +1757,299 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertEqual(makeMetric(domain: .strain, band: .high).state, .moderate)
         XCTAssertEqual(makeMetric(domain: .strain, band: .veryLow).state, .poor)
         XCTAssertEqual(makeMetric(domain: .strain, band: .veryHigh).state, .poor)
+    }
+
+    // MARK: - 数值审计修复回归（V1/V4/V5/V7）
+
+    /// V1：睡眠效率 105%（inBed 短于总睡眠）应钳制 1.0，而非除以 100 得 0.0105。
+    func testSleepEfficiencyFractionOverOneClampsToOne() {
+        XCTAssertEqual(HealthUnitNormalizer.normalizeSleepEfficiency(1.05), 1.0, accuracy: 0.0001)
+        XCTAssertEqual(HealthUnitNormalizer.normalizeSleepEfficiency(0.85), 0.85, accuracy: 0.0001)
+        XCTAssertEqual(HealthUnitNormalizer.normalizeSleepEfficiency(85.0), 0.85, accuracy: 0.0001)
+        XCTAssertEqual(HealthUnitNormalizer.normalizeSleepEfficiency(0.0), 0.0, accuracy: 0.0001)
+    }
+
+    /// V4：睡眠数据缺失 + 恢复正常时不应误判「减量」。
+    func testMissingSleepDataDoesNotForceReduceDecision() {
+        var dashboard = DashboardSummary.empty(date: Date())
+        dashboard.recovery = MetricResult(
+            name: "Recovery", value: 80, band: .normal, confidence: .high,
+            components: [:], componentWeights: [:], reasons: ["HRV 正常"],
+            missingInputs: [], dataWindow: DateInterval(start: Date(), duration: 86400),
+            source: .derived, algorithmVersion: "audit", lastUpdated: Date()
+        )
+        dashboard.sleepScore = MetricResult(
+            name: "Sleep", value: nil, band: .low, confidence: .low,
+            components: [:], componentWeights: [:], reasons: [],
+            missingInputs: ["sleep"], dataWindow: DateInterval(start: Date(), duration: 86400),
+            source: .derived, algorithmVersion: "audit", lastUpdated: Date()
+        )
+        let result = TodayCommandBuilder.readinessDecision(from: dashboard, signals: [], recentStrengthSummary: nil)
+        // 睡眠/压力缺失时保守降级为 reduce，且理由必须诚实说明是数据缺失
+        //（不得是「不够低到休息、不够强到满量」这类误导性文案）。
+        XCTAssertEqual(result.decision, .reduce, "睡眠数据缺失应保守降级，实际 \(result.decision)")
+        XCTAssertFalse(result.reasons.contains { $0.contains("not strong enough") },
+            "理由不得误导为「数据不达标」：\(result.reasons)")
+    }
+
+    /// V7：Stress 引擎 SD=0 应回退基线 SD，而非除零静默满分。
+    func testStressEngineZeroSDFallsBackInsteadOfFullScore() {
+        let input = StressIndexInput(
+            asOf: Date(), mode: .rawVitals,
+            quietHRToday: 60, quietHRBaseline: 55, quietHRSD: 0.0,
+            isWithinWorkoutWindow: false
+        )
+        let result = StressIndexEngine().calculate(from: input)
+        XCTAssertNotNil(result.value, "SD=0 时不应因除零而丢失输出")
+        if let value = result.value {
+            XCTAssertLessThan(value, 100.0, "SD=0 不应产出满分，实际 \(value)")
+        }
+    }
+
+    /// V5：todayLoad 缺失时 ACWR 不得随 0-100 评分域 strainScore 漂移。
+    func testEnergyBankAcwrIgnoresScoreWhenTodayLoadMissing() {
+        func acwr(strainScore: Double) -> Double? {
+            let input = EnergyBankInput(
+                asOf: Date(),
+                recoveryScore: 70, sleepScore: 70, strainScore: strainScore, stressIndex: 30,
+                hrvToday: 50, hrvBaseline: 50, rhrToday: 55, rhrBaseline: 55, sleepHours: 7.5,
+                strainHistory: Array(repeating: 30.0, count: 42),
+                todayLoad: nil
+            )
+            return EnergyBankEngine().calculate(from: input).components["acwr"]
+        }
+        let a = acwr(strainScore: 100)
+        let b = acwr(strainScore: 50)
+        XCTAssertEqual(a, b, "todayLoad 缺失时 acwr 不应随评分域 strainScore 变化：100→\(String(describing: a)) vs 50→\(String(describing: b))")
+    }
+
+    // MARK: - 批次二修复回归
+
+    /// 回归：多个失败气泡时，重试锚定在点击的气泡对应的用户问题上。
+    @MainActor
+    func testCoachRetryAnchorTargetsTheTappedBubble() {
+        let q1 = CoachChatVM.ChatMsg(role: .user, content: "Q1")
+        let f1 = CoachChatVM.ChatMsg(
+            role: .assistant, content: "服务不可用",
+            recoveryAction: LLMErrorRecoveryAction(title: "重试", systemImage: "arrow.clockwise", destination: .retry)
+        )
+        let q2 = CoachChatVM.ChatMsg(role: .user, content: "Q2")
+        let f2 = CoachChatVM.ChatMsg(
+            role: .assistant, content: "服务不可用",
+            recoveryAction: LLMErrorRecoveryAction(title: "重试", systemImage: "arrow.clockwise", destination: .retry)
+        )
+        let messages = [q1, f1, q2, f2]
+
+        let target1 = CoachChatVM.userMessageForRetry(in: messages, retryBubbleId: f1.id)
+        let target2 = CoachChatVM.userMessageForRetry(in: messages, retryBubbleId: f2.id)
+
+        XCTAssertEqual(target1?.text, "Q1", "点 Q1 的气泡必须重发 Q1")
+        XCTAssertEqual(target2?.text, "Q2", "点 Q2 的气泡必须重发 Q2")
+    }
+
+    /// 回归：ReportGenerator 的上下文裁剪必须产出合法 JSON，而非字符截断残片。
+    func testReportContextTrimmingProducesValidJSONWithinBudget() throws {
+        var dict: [String: Any] = ["small": 1]
+        for i in 0..<200 {
+            dict["key_\(i)"] = String(repeating: "x", count: 200)
+        }
+        let data = try JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys])
+        let full = String(data: data, encoding: .utf8)!
+
+        let trimmed = ReportGenerator.trimmedContextJSON(from: full, maxChars: 3000)
+
+        XCTAssertLessThanOrEqual(trimmed.utf8.count, 3000, "裁剪结果必须在预算内")
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(trimmed.utf8)) as? [String: Any]
+        )
+        XCTAssertLessThan(object.count, 200, "应丢弃部分键")
+        XCTAssertNotNil(object["small"], "小键应保留")
+    }
+
+    // MARK: - 决策反馈回灌（C1）
+
+    func testDecisionFeedbackCalibrationAdjustsConfidenceByAccuracy() {
+        let base = 0.76
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        func record(_ rating: String?, offset: Double = 0) -> DailyDecisionFeedbackRecord {
+            DailyDecisionFeedbackRecord(
+                dayIdentifier: "fb-\(UUID().uuidString)",
+                bodyStateHash: "h",
+                decisionType: "keep",
+                decisionTitle: "按计划训练",
+                accuracyRating: rating,
+                createdAt: now.addingTimeInterval(-offset)
+            )
+        }
+
+        // 样本不足：不校准
+        let few = [record("accurate"), record("inaccurate")]
+        XCTAssertEqual(
+            DecisionFeedbackCalibrator.calibratedConfidence(base: base, decision: .keep, records: few, now: now),
+            base,
+            accuracy: 0.0001,
+            "样本 < 3 不应校准"
+        )
+
+        // 4/5 准确 → 乘数 0.6 + 0.4*0.8 = 0.92
+        let mixed = [
+            record("accurate"), record("accurate"), record("accurate"),
+            record("accurate"), record("inaccurate")
+        ]
+        XCTAssertEqual(
+            DecisionFeedbackCalibrator.calibratedConfidence(base: base, decision: .keep, records: mixed, now: now),
+            0.76 * 0.92,
+            accuracy: 0.0001,
+            "4/5 准确应把置信度乘 0.92"
+        )
+
+        // 全准确 → 乘数 1.0，置信度不变
+        let perfect = [record("accurate"), record("accurate"), record("accurate")]
+        XCTAssertEqual(
+            DecisionFeedbackCalibrator.calibratedConfidence(base: base, decision: .keep, records: perfect, now: now),
+            base,
+            accuracy: 0.0001
+        )
+
+        // 过期反馈不计入
+        let stale = [record("inaccurate", offset: 40 * 86_400), record("accurate"), record("accurate")]
+        XCTAssertEqual(
+            DecisionFeedbackCalibrator.calibratedConfidence(base: base, decision: .keep, records: stale, now: now),
+            base,
+            accuracy: 0.0001,
+            "超过 28 天的反馈不应计入"
+        )
+    }
+
+    func testDecisionFeedbackCalibrationNormalizesRestToRecover() {
+        // PR1 回归：写入路径存 DailyTrainingDecisionType（"rest"），
+        // 校准器按 ReadinessDecisionKind（"recover"）匹配——必须归一化，恢复日反馈不得丢弃。
+        let base = 0.72
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let restRecords = (0..<3).map { i in
+            DailyDecisionFeedbackRecord(
+                dayIdentifier: "rest-\(i)",
+                bodyStateHash: "h",
+                decisionType: "rest",
+                decisionTitle: "休息",
+                accuracyRating: i < 2 ? "accurate" : "inaccurate",
+                createdAt: now
+            )
+        }
+        // 2/3 准确 → 乘数 0.6 + 0.4 * (2/3)
+        XCTAssertEqual(
+            DecisionFeedbackCalibrator.calibratedConfidence(base: base, decision: .recover, records: restRecords, now: now),
+            base * (0.6 + 0.4 * (2.0 / 3.0)),
+            accuracy: 0.0001,
+            "rest 记录的反馈必须计入 recover 决策的校准"
+        )
+    }
+
+    func testDecisionFeedbackCalibrationCountsPartlyAsHalfCredit() {
+        // PR9 回归：「部分准确」按 0.5 计分，不再误判为不准确。
+        let base = 0.8
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let records = (0..<3).map { i in
+            DailyDecisionFeedbackRecord(
+                dayIdentifier: "p-\(i)",
+                bodyStateHash: "h",
+                decisionType: "keep",
+                decisionTitle: "t",
+                accuracyRating: i == 2 ? "partly" : "accurate",
+                createdAt: now
+            )
+        }
+        // (1 + 1 + 0.5)/3 = 5/6 → 乘数 0.6 + 0.4 * (5/6)
+        XCTAssertEqual(
+            DecisionFeedbackCalibrator.calibratedConfidence(base: base, decision: .keep, records: records, now: now),
+            base * (0.6 + 0.4 * (5.0 / 6.0)),
+            accuracy: 0.0001
+        )
+    }
+
+    func testComputationProfileUsesFallbacksWhenManualAndWikiEmpty() {
+        // F1/M1 机制回归：手动与 wiki 均无值时，HealthKit 兜底必须生效。
+        let defaults = UserDefaults.standard
+        let keys = [UserProfileSettings.ageKey, UserProfileSettings.biologicalSexKey]
+        let originals = keys.map { defaults.object(forKey: $0) }
+        let wikiURL = WikiFileService.localURL(for: "profile.md")
+        let wikiOriginal = try? Data(contentsOf: wikiURL)
+        defer {
+            for (key, value) in zip(keys, originals) {
+                if let value {
+                    defaults.set(value, forKey: key)
+                } else {
+                    defaults.removeObject(forKey: key)
+                }
+            }
+            if let wikiOriginal {
+                try? FileManager.default.createDirectory(at: wikiURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? wikiOriginal.write(to: wikiURL)
+            } else {
+                try? FileManager.default.removeItem(at: wikiURL)
+            }
+        }
+        defaults.removeObject(forKey: UserProfileSettings.ageKey)
+        defaults.removeObject(forKey: UserProfileSettings.biologicalSexKey)
+        try? FileManager.default.removeItem(at: wikiURL)
+
+        let profile = DailyHealthComputationProfile.current(
+            ageFallback: 29,
+            biologicalSexFallback: "female"
+        )
+        XCTAssertEqual(profile.maxHeartRate, UserProfileSettings.inferredMaxHeartRate(age: 29))
+        XCTAssertEqual(profile.biologicalSex, "female")
+    }
+
+    // MARK: - 时间衰减基线（B1）
+
+    func testRecencyWeightedMeanEmphasizesRecentSamples() {
+        // 30 个样本：前 23 个 = 10，近 7 个 = 20。
+        let values = Array(repeating: 10.0, count: 23) + Array(repeating: 20.0, count: 7)
+        let weighted = PersonalBaselineEngine.recencyWeightedMean(values)
+        // 期望 = (10*23 + 20*7*2) / (23 + 14) = 510/37 ≈ 13.78
+        XCTAssertEqual(weighted ?? 0, 510.0 / 37.0, accuracy: 0.0001)
+        XCTAssertGreaterThan(weighted ?? 0, 12.33, "加权后必须更靠近近期水平")
+        let short = PersonalBaselineEngine.recencyWeightedMean([1, 2, 3])
+        XCTAssertEqual(short ?? 0, 2.0, accuracy: 0.0001)
+    }
+
+    // MARK: - 训练响应校准（C3）
+
+    func testTrainingResponseCalibratorAdjustsVolumeByMeanRecoveryDelta() {
+        let base = 1.0
+        // 样本不足：不校准
+        XCTAssertEqual(
+            TrainingResponseCalibrator.calibratedVolumeMultiplier(base: base, recoveryDeltas: [-5, 3, 2]),
+            base,
+            accuracy: 0.0001
+        )
+        // 平均恢复变化 +5 → ×1.05
+        let positive = [5.0, 6.0, 4.0, 5.0, 6.0, 4.0]
+        XCTAssertEqual(
+            TrainingResponseCalibrator.calibratedVolumeMultiplier(base: base, recoveryDeltas: positive),
+            1.05,
+            accuracy: 0.0001
+        )
+        // 平均恢复变化 -20 → 0.8（低于下限 0.85 → 钳 0.85）
+        let crash = [-20.0, -20.0, -20.0, -20.0, -20.0, -20.0]
+        XCTAssertEqual(
+            TrainingResponseCalibrator.calibratedVolumeMultiplier(base: base, recoveryDeltas: crash),
+            0.85,
+            accuracy: 0.0001
+        )
+    }
+
+    // MARK: - token 预算（B3）
+
+    func testTokenEstimationWeightsChineseHeavierThanASCII() {
+        let ascii = String(repeating: "a", count: 4000)
+        let chinese = String(repeating: "汉", count: 2000)
+        XCTAssertEqual(ContextBudget.estimatedTokenCount(ascii), 1000, "4000 ASCII ≈ 1000 token")
+        XCTAssertEqual(ContextBudget.estimatedTokenCount(chinese), 3000, "2000 汉字 ≈ 3000 token")
+        XCTAssertGreaterThan(
+            ContextBudget.estimatedTokenCount(chinese),
+            ContextBudget.estimatedTokenCount(ascii)
+        )
     }
 }

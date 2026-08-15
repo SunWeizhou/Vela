@@ -59,6 +59,221 @@ final class WorkoutAggregationTests: XCTestCase {
         try context.fetch(FetchDescriptor<WorkoutEventRecord>())
     }
 
+    @MainActor
+    func testAggregateDayExcludesBlacklistedWorkouts() throws {
+        // P1-1/P1-2 回归：被拉黑（删除）的训练不得从陈旧 workoutsData 复活，
+        // aggregateDay 必须按黑名单过滤事件。
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let calendar = Calendar.current
+        let day = calendar.startOfDay(for: makeDate())
+        let hkID = UUID()
+
+        let event = WorkoutEventRecord(
+            source: "healthKit",
+            startedAt: day.addingTimeInterval(10 * 3600),
+            endedAt: day.addingTimeInterval(11 * 3600),
+            activityType: "Running",
+            linkedHealthKitWorkoutId: hkID,
+            calendar: calendar
+        )
+        context.insert(event)
+        context.insert(DailyHealthSummaryRecord(
+            dayIdentifier: DailyHealthSummaryRecord.dayIdentifier(for: day, calendar: calendar),
+            date: day
+        ))
+        try context.save()
+
+        // 陈旧缓存：workoutsData 里残留该训练（模拟删除前写出的旧 JSON）。
+        let staleData = try JSONEncoder().encode([
+            WorkoutSummary(
+                id: hkID,
+                start: day.addingTimeInterval(10 * 3600),
+                end: day.addingTimeInterval(11 * 3600),
+                activityName: "Running",
+                source: "healthKit"
+            )
+        ])
+        let record = try context.fetch(FetchDescriptor<DailyHealthSummaryRecord>()).first
+        record?.workoutsData = staleData
+        try context.save()
+
+        // 用户删除 → 黑名单。
+        WorkoutAggregationService.shared.blacklistWorkout(id: hkID.uuidString, modelContext: context)
+        try context.save()
+
+        try WorkoutAggregationService.shared.aggregateDay(date: day, modelContext: context, calendar: calendar)
+
+        let updated = try context.fetch(FetchDescriptor<DailyHealthSummaryRecord>()).first
+        XCTAssertEqual(updated?.workoutCount ?? -1, 0, "黑名单训练不得复活进 workoutCount")
+        let stored = try XCTUnwrap(updated?.workoutsData)
+        let storedWorkouts = try XCTUnwrap(try? JSONDecoder().decode([WorkoutSummary].self, from: stored))
+        XCTAssertTrue(storedWorkouts.isEmpty, "黑名单训练不得残留进 workoutsData")
+    }
+
+    @MainActor
+    func testPlanLinkingMatchesChineseMuscleTitles() throws {
+        // P2-5 回归：中文计划标题（「胸 + 三头」）必须能与英文肌群键匹配。
+        let linker = TrainingPlanLinkingService()
+        let calendar = Calendar.current
+        let start = makeDate()
+        let day = TrainingDay(
+            weekNumber: 1, dayNumber: 1,
+            title: "胸 + 三头",
+            description: "卧推",
+            focus: "strength",
+            durationMinutes: 60,
+            intensity: "high",
+            plannedExercisesJSON: "[]"
+        )
+        let workout = makeStrengthWorkout(start: start)
+        let event = WorkoutEventRecord(
+            source: "strengthLog",
+            startedAt: start,
+            endedAt: start.addingTimeInterval(3600),
+            activityType: "Strength Training",
+            title: "胸 + 三头",
+            linkedStrengthWorkoutId: workout.id,
+            calendar: calendar
+        )
+
+        let score = linker.calculateMatchScore(
+            event: event,
+            planDay: day,
+            strengthWorkout: workout,
+            expectedDate: start,
+            calendar: calendar
+        )
+        XCTAssertGreaterThanOrEqual(score, 65, "中文肌群标题应达到高置信打卡阈值，实际 \(score)")
+    }
+
+    @MainActor
+    func testUpsertHealthKitWorkoutEventsCreatesAndRemovesMirrorEvents() throws {
+        // 回归：前台路径依赖 upsertHealthKitWorkoutEvents 把当天 Apple 健康训练
+        // 落成 WorkoutEventRecord；从 HealthKit 消失（健康 App 删除）后必须清理。
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let calendar = Calendar.current
+        let day = calendar.startOfDay(for: makeDate())
+        let workoutID = UUID()
+
+        let workout = WorkoutSummary(
+            id: workoutID,
+            start: day.addingTimeInterval(10 * 3600),
+            end: day.addingTimeInterval(11 * 3600),
+            activityName: "Running",
+            energyKilocalories: 320,
+            source: "healthKit"
+        )
+        try WorkoutAggregationService.shared.upsertHealthKitWorkoutEvents(
+            [workout], on: day, modelContext: context, calendar: calendar
+        )
+
+        let events = try fetchEvents(context)
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events.first?.linkedHealthKitWorkoutId, workoutID)
+        XCTAssertEqual(events.first?.source, "healthKit")
+        XCTAssertEqual(events.first?.activityType, "Running")
+
+        try WorkoutAggregationService.shared.upsertHealthKitWorkoutEvents(
+            [], on: day, modelContext: context, calendar: calendar
+        )
+        let after = try fetchEvents(context)
+        XCTAssertTrue(after.isEmpty, "从 HealthKit 消失的训练必须删除事件，不得残留在记录里")
+    }
+
+    @MainActor
+    func testCaptureTrainingResponsesBackfillsNilDeltasForExistingRecords() throws {
+        // T1 回归：手动记录路径（upsertTrainingResponseRecord）创建时次日增量留空，
+        // capture 必须对已存在记录回填，内核「恢复响应欠佳」分支与校准器才拿得到输入。
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let calendar = Calendar.current
+        let workoutDay = calendar.date(byAdding: .day, value: -3, to: Date())!
+        let nextDay = calendar.date(byAdding: .day, value: 1, to: workoutDay)!
+
+        let workout = makeStrengthWorkout(start: workoutDay)
+        context.insert(workout)
+
+        let record = TrainingResponseRecord(
+            workoutId: workout.id,
+            date: workoutDay,
+            nextDayDate: nextDay,
+            primaryMuscleGroups: ["chest"],
+            totalEffectiveSets: 2,
+            totalVolumeKg: 1280,
+            sessionRPE: 7
+        )
+        context.insert(record)
+        try context.save()
+
+        let snapshots = [
+            DailyHealthSnapshot(date: workoutDay, sleepScore: 80, recoveryScore: 82, hrvAverage: 58, restingHeartRate: 55),
+            DailyHealthSnapshot(date: nextDay, sleepScore: 72, recoveryScore: 68, hrvAverage: 49, restingHeartRate: 61)
+        ]
+
+        let filled = try TrainingResponseInsightService().captureTrainingResponses(
+            modelContext: context,
+            snapshots: snapshots,
+            workouts: [workout],
+            calendar: calendar
+        )
+        XCTAssertEqual(filled, 1, "已存在记录的增量回填应计数一次")
+
+        let updated = try XCTUnwrap(
+            try context.fetch(FetchDescriptor<TrainingResponseRecord>()).first
+        )
+        XCTAssertEqual(updated.nextDayRecoveryDelta ?? 0, -14, accuracy: 0.01)
+        XCTAssertEqual(updated.nextDayHRVDelta ?? 0, -9, accuracy: 0.01)
+        XCTAssertEqual(updated.nextDayRHRDelta ?? 0, 6, accuracy: 0.01)
+        XCTAssertEqual(updated.nextDaySleepScore ?? 0, 72, accuracy: 0.01)
+    }
+
+    @MainActor
+    func testCaptureTrainingResponsesDoesNotOverwriteExistingDeltas() throws {
+        // T1 边界：已有增量（如训记导入路径填充）不得被回填覆盖。
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let calendar = Calendar.current
+        let workoutDay = calendar.date(byAdding: .day, value: -3, to: Date())!
+        let nextDay = calendar.date(byAdding: .day, value: 1, to: workoutDay)!
+
+        let workout = makeStrengthWorkout(start: workoutDay)
+        context.insert(workout)
+
+        let record = TrainingResponseRecord(
+            workoutId: workout.id,
+            date: workoutDay,
+            nextDayDate: nextDay,
+            primaryMuscleGroups: ["chest"],
+            totalEffectiveSets: 2,
+            totalVolumeKg: 1280,
+            sessionRPE: 7,
+            nextDayRecoveryDelta: -20
+        )
+        context.insert(record)
+        try context.save()
+
+        let snapshots = [
+            DailyHealthSnapshot(date: workoutDay, sleepScore: nil, recoveryScore: 82),
+            DailyHealthSnapshot(date: nextDay, sleepScore: nil, recoveryScore: 68)
+        ]
+
+        let filled = try TrainingResponseInsightService().captureTrainingResponses(
+            modelContext: context,
+            snapshots: snapshots,
+            workouts: [workout],
+            calendar: calendar
+        )
+        XCTAssertEqual(filled, 0, "无字段需要回填时不应计数")
+
+        let updated = try XCTUnwrap(
+            try context.fetch(FetchDescriptor<TrainingResponseRecord>()).first
+        )
+        XCTAssertEqual(updated.nextDayRecoveryDelta, -20, "已有增量不得被覆盖")
+        XCTAssertNil(updated.nextDaySleepScore, "无快照值时保持 nil")
+    }
+
     private func fetchDailySummary(_ context: ModelContext, date: Date) throws -> DailyHealthSummaryRecord? {
         let identifier = DailyHealthSummaryRecord.dayIdentifier(for: date)
         let descriptor = FetchDescriptor<DailyHealthSummaryRecord>(
@@ -394,7 +609,7 @@ final class WorkoutAggregationTests: XCTestCase {
         try testAggregateDayPreservesManualWorkoutAfterHealthKitResync()
     }
 
-    func testDailySummaryApplyDoesNotWriteWorkoutAggregationFields() {
+    func testDailySummaryApplyWritesEngineLoadAndAggregationFields() {
         let start = makeDate()
         let existing = DailyHealthSummaryRecord(
             dayIdentifier: DailyHealthSummaryRecord.dayIdentifier(for: start),
@@ -423,12 +638,17 @@ final class WorkoutAggregationTests: XCTestCase {
 
         existing.apply(snapshot: snapshot)
 
-        XCTAssertEqual(existing.workoutCount, 3)
-        XCTAssertEqual(existing.workoutTypes, "Strength")
-        XCTAssertEqual(existing.workoutDuration, 90)
-        XCTAssertEqual(existing.dailyLoad, 120)
-        XCTAssertEqual(existing.workoutLoad, 90)
-        XCTAssertEqual(existing.workoutsData, Data("existing".utf8))
+        // [10] 修复后：快照含 workouts 时聚合字段随快照落库（不再依赖
+        // 「apply 之后必须紧跟 aggregateDay」的隐式契约）。
+        XCTAssertEqual(existing.workoutCount, 1)
+        XCTAssertEqual(existing.workoutTypes, "Running")
+        XCTAssertEqual(existing.workoutDuration, 30)
+        // 引擎写入的 dailyLoad/workoutLoad（TRIMP 域）必须随快照落库，
+        // 不再被丢弃后由 aggregateDay 以另一套公式覆盖。
+        XCTAssertEqual(existing.dailyLoad, 40)
+        XCTAssertEqual(existing.workoutLoad, 30)
+        let storedWorkouts = try? JSONDecoder().decode([WorkoutSummary].self, from: try XCTUnwrap(existing.workoutsData))
+        XCTAssertEqual(storedWorkouts?.first?.activityName, "Running")
     }
 
     func testXunjiImportIsIdempotentByExternalID() throws {
