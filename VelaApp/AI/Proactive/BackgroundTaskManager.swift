@@ -2,6 +2,7 @@ import Foundation
 import BackgroundTasks
 import SwiftData
 import os.log
+import HealthKit
 
 /// Manages registration and scheduling of BGAppRefreshTask for Vela's background agents.
 @MainActor
@@ -121,9 +122,16 @@ enum BackgroundTaskManager {
 
                 let lastSync = HealthSyncCursorStore().load().lastSuccessfulSyncAt
                 let freshEnough = lastSync.map { Date().timeIntervalSince($0) < 4 * 3600 } ?? false
+                // F5 修复：即便 4 小时 TTL 内刚同步过，只要有后台投递标记
+                // （HKObserverQuery 收到新样本），也必须重新摄入——
+                // 否则晨间新到的 HRV/睡眠数据会被 TTL 挡掉，晨报用旧数据。
+                let pendingDelivery = UserDefaults.standard.bool(
+                    forKey: HealthKitBackgroundDelivery.pendingDeliveryKey
+                )
                 // Only run the expensive HealthKit sync when the cache is stale (or on
-                // first launch); otherwise recompute from persisted data.
-                let shouldSyncData = !freshEnough
+                // first launch) or new background data actually arrived; otherwise
+                // recompute from persisted data.
+                let shouldSyncData = !freshEnough || pendingDelivery
 
                 let dashboard = try await DailySummaryUseCase(
                     queryService: queryService
@@ -133,6 +141,9 @@ enum BackgroundTaskManager {
                     syncDays: shouldSyncData ? 7 : 0,
                     shouldSyncHealthData: shouldSyncData
                 )
+                if pendingDelivery {
+                    UserDefaults.standard.set(false, forKey: HealthKitBackgroundDelivery.pendingDeliveryKey)
+                }
                 try? DailyLogService.refresh(dashboard: dashboard)
 
                 if config.autoEveningWikiSync, (hour >= 21 || hour < 4) {
@@ -180,5 +191,62 @@ enum BackgroundTaskManager {
             logger.warning("Background refresh task expired.")
             handle.cancel()
         }
+    }
+}
+
+// MARK: - HealthKit 后台投递
+
+/// 注册 HKObserverQuery 与后台投递：健康数据在后台更新时（如早晨手表同步
+/// 睡眠段），重排后台刷新——此前只有前台刷新 + 机会性 BGAppRefreshTask，
+/// 晨报可能基于过期的当夜睡眠数据生成。
+enum HealthKitBackgroundDelivery {
+    /// 后台投递脏标记：HKObserverQuery 收到新样本时置 true，
+    /// BG 任务据此越过 4 小时 TTL 强制同步，成功后清除（见 handleRefreshTask）。
+    static let pendingDeliveryKey = "vela_hk_pending_background_delivery"
+
+    static func registerObservers() {
+        guard HKHealthStore.isHealthDataAvailable() else { return }
+        let store = HKHealthStore()
+
+        let quantityIdentifiers: [HKQuantityTypeIdentifier] = [
+            .heartRateVariabilitySDNN,
+            .restingHeartRate,
+            .heartRate,
+            .stepCount,
+            .activeEnergyBurned,
+        ]
+        for identifier in quantityIdentifiers {
+            guard let type = HKQuantityType.quantityType(forIdentifier: identifier) else { continue }
+            register(store: store, sampleType: type)
+        }
+        if let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) {
+            register(store: store, sampleType: sleepType)
+        }
+        register(store: store, sampleType: HKObjectType.workoutType())
+    }
+
+    private static func register(store: HKHealthStore, sampleType: HKSampleType) {
+        let query = HKObserverQuery(sampleType: sampleType, predicate: nil) { _, completionHandler, error in
+            guard error == nil else {
+                completionHandler()
+                return
+            }
+            Task { @MainActor in
+                UserDefaults.standard.set(true, forKey: HealthKitBackgroundDelivery.pendingDeliveryKey)
+                // 训练/健康数据晚到（>3 天）的历史日此前永不重算（markDirty 生产零调用）：
+                // 把最近 7 天标脏，planner 会纳入 rawRefresh 并重新评分。
+                let cursorStore = HealthSyncCursorStore()
+                let calendar = Calendar.current
+                for offset in 0..<7 {
+                    if let day = calendar.date(byAdding: .day, value: -offset, to: Date()) {
+                        cursorStore.markDirty(day, calendar: calendar)
+                    }
+                }
+                BackgroundTaskManager.schedule()
+            }
+            completionHandler()
+        }
+        store.execute(query)
+        store.enableBackgroundDelivery(for: sampleType, frequency: .hourly) { _, _ in }
     }
 }

@@ -26,7 +26,7 @@ public enum HealthDataSource: String, Codable, Hashable, CaseIterable, Sendable 
     case computed
 }
 
-struct BaselineComparison: Codable, Hashable {
+struct BaselineComparison: Codable, Hashable, Sendable {
     var baselineValue: Double?
     var delta: Double?
     var deltaPercent: Double?
@@ -34,7 +34,7 @@ struct BaselineComparison: Codable, Hashable {
     var windowDays: Int?
 }
 
-struct MetricValue<T: Codable & Hashable>: Codable, Hashable {
+struct MetricValue<T: Codable & Hashable & Sendable>: Codable, Hashable, Sendable {
     var value: T?
     var unit: String?
     var source: HealthDataSource
@@ -71,16 +71,18 @@ struct MetricValue<T: Codable & Hashable>: Codable, Hashable {
 
 // MARK: - Typed Domain Contexts
 
-struct RecoveryContext: Codable, Hashable {
+struct RecoveryContext: Codable, Hashable, Sendable {
     var score: MetricValue<Double>
     var band: String
     var hrv: MetricValue<Double>
+    /// A2：RMSSD 派生指标（缺失时引擎回退 SDNN，但此处如实标注 missing）。
+    var hrvRmssd: MetricValue<Double>?
     var restingHeartRate: MetricValue<Double>
     var respiratoryRate: MetricValue<Double>
     var topReason: String?
 }
 
-struct SleepContext: Codable, Hashable {
+struct SleepContext: Codable, Hashable, Sendable {
     var score: MetricValue<Double>
     var band: String
     var totalMinutes: MetricValue<Int>
@@ -96,7 +98,7 @@ struct SleepContext: Codable, Hashable {
     var topReason: String?
 }
 
-struct StrainContext: Codable, Hashable {
+struct StrainContext: Codable, Hashable, Sendable {
     var score: MetricValue<Double>
     var band: String
     var targetStatus: String
@@ -107,14 +109,14 @@ struct StrainContext: Codable, Hashable {
     var exerciseMinutes: MetricValue<Int>
 }
 
-struct StressContext: Codable, Hashable {
+struct StressContext: Codable, Hashable, Sendable {
     var stressIndex: MetricValue<Double>
     var band: String
     var confidence: DataConfidence
     var proxyNote: String
 }
 
-struct EnergyBankContext: Codable, Hashable {
+struct EnergyBankContext: Codable, Hashable, Sendable {
     var morningEnergy: MetricValue<Double>
     var currentEnergy: MetricValue<Double>
     var status: String
@@ -124,7 +126,7 @@ struct EnergyBankContext: Codable, Hashable {
     var tsbFreshness: MetricValue<Double>
 }
 
-struct TrainingContext: Codable, Hashable {
+struct TrainingContext: Codable, Hashable, Sendable {
     var activePlan: ActivePlanSummary?
     var workoutCount: Int
     var workoutTypes: [String]
@@ -133,7 +135,7 @@ struct TrainingContext: Codable, Hashable {
     var workoutListJSON: String
 }
 
-struct ActivePlanSummary: Codable, Hashable {
+struct ActivePlanSummary: Codable, Hashable, Sendable {
     var title: String
     var goalDescription: String
     var weeksCount: Int
@@ -141,7 +143,7 @@ struct ActivePlanSummary: Codable, Hashable {
     var totalDays: Int
 }
 
-struct NutritionContext: Codable, Hashable {
+struct NutritionContext: Codable, Hashable, Sendable {
     var recentEntries: [String]
     var recentCount: Int
     var totalCalories: Int
@@ -151,7 +153,7 @@ struct NutritionContext: Codable, Hashable {
     var totalFiber: Int
 }
 
-struct ExtendedMetricsContext: Codable, Hashable {
+struct ExtendedMetricsContext: Codable, Hashable, Sendable {
     var age: Int?
     var biologicalSex: String?
     var heightCm: MetricValue<Double>
@@ -173,7 +175,7 @@ struct ExtendedMetricsContext: Codable, Hashable {
     var wristTempC: MetricValue<Double>?
 }
 
-struct AgentBodyStateContext: Codable, Hashable {
+struct AgentBodyStateContext: Codable, Hashable, Sendable {
     var readiness: BodyReadiness
     var confidence: DataConfidence
     var freshness: DataFreshness
@@ -183,7 +185,7 @@ struct AgentBodyStateContext: Codable, Hashable {
     var drivers: [BodyStateDriver]
 }
 
-struct AgentTrainingDecisionContext: Codable, Hashable {
+struct AgentTrainingDecisionContext: Codable, Hashable, Sendable {
     var readinessLevel: String
     var readinessGuidance: String
     var volumeMultiplier: Double
@@ -193,7 +195,7 @@ struct AgentTrainingDecisionContext: Codable, Hashable {
     var confidence: DataConfidence
 }
 
-struct AgentDataCoverageContext: Codable, Hashable {
+struct AgentDataCoverageContext: Codable, Hashable, Sendable {
     var availableSections: Int
     var totalSections: Int
     var missingSections: [String]
@@ -202,7 +204,7 @@ struct AgentDataCoverageContext: Codable, Hashable {
 
 // MARK: - Canonical Agent Fact Snapshot (v2)
 
-struct AgentFactSnapshot: Codable, Hashable {
+struct AgentFactSnapshot: Codable, Hashable, Sendable {
     var schemaVersion: String
     var contextHash: String
     var generatedAt: Date
@@ -227,4 +229,7 @@ struct AgentFactSnapshot: Codable, Hashable {
     var journalEntries: [String]
     var historicalReports: [String]
     var userWiki: [String: String]
+    /// A1：完整 Daily Operating Plan（主行动/支持行动/理由/置信度）。
+    /// 此前 LLM 只拿到 trainingDecision 切片，无法讨论跨域计划的完整内容。
+    var dailyOperatingPlan: [String: String]?
 }

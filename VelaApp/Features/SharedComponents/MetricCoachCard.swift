@@ -54,7 +54,7 @@ struct MetricCoachCard: View {
                         .font(.headline)
                         .foregroundStyle(VelaTheme.fg)
 
-                    Text(AppLanguage.stored.isChinese ? "由 DeepSeek 提供强力支持" : "Powered by DeepSeek AI")
+                    Text(AppLanguage.stored.isChinese ? "由 DeepSeek 驱动" : "Powered by DeepSeek AI")
                         .font(.caption2)
                         .foregroundStyle(VelaTheme.muted)
                 }
@@ -176,7 +176,7 @@ struct MetricCoachCard: View {
                 let asOf = Date()
                 let input = AgentFactInputLoader().load(modelContext: modelContext, asOf: asOf)
                 let bodyState = input.bodyState(dashboard: dashboard)
-                let wiki = WikiFileService.loadDictionary()
+                let wiki = WikiFileService.loadPopulatedDictionary()
                 let coverageSummary = DataCoverageSummaryModel.build(
                     groups: await DataCoverageGroupFactory.loadPriorityGroups()
                 )
@@ -194,7 +194,9 @@ struct MetricCoachCard: View {
                     bodyState: bodyState,
                     trainingDecision: input.canonicalTrainingDecision(for: bodyState),
                     dataCoverage: coverageSummary.agentFactContext,
-                    profileAge: WikiFileService.getAgeFromWiki() ?? dashboard.extendedMetrics.age,
+                    profileAge: dashboard.extendedMetrics.age ?? WikiFileService.getAgeFromWiki(),
+                    dailyOperatingPlan: AIContextBuilder.compactDailyOperatingPlan(input.dailyOperatingPlan),
+                    activePlan: input.activePlan?.dto,
                     generatedAt: asOf
                 ).snapshot
                 let canonicalFacts = CoachCompactContextAdapter().render(
@@ -221,7 +223,9 @@ struct MetricCoachCard: View {
                 \(resolvedQuestion)
                 """
 
-                let provider = DeepSeekProvider(apiKey: apiKey)
+                let baseProvider = DeepSeekProvider(apiKey: apiKey)
+                // 此前直连 provider 无重试：偶发网络抖动直接报错。
+                let provider = RetryingLLMProvider(base: baseProvider)
                 let messages = [
                     ChatMessage(role: .system, content: systemPrompt),
                     ChatMessage(role: .user, content: metricsPrompt)
@@ -230,6 +234,7 @@ struct MetricCoachCard: View {
                 let stream = provider.streamChat(messages: messages)
                 for try await chunk in stream {
                     streamText += chunk
+                    if Task.isCancelled { break }
                 }
                 
                 isStreaming = false

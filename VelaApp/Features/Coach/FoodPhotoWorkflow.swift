@@ -27,13 +27,22 @@ final class FoodPhotoWorkflow {
             let formattedResult = result.formattedMarkdown()
             let summaryText = result.plainTextSummary()
 
-            let userMessage = """
-            I just took a photo of my meal. Here's the AI-powered nutritional analysis:
+            let isChinese = AppLanguage.stored.isChinese
+            let userMessage = isChinese
+                ? """
+                我刚拍了一张餐食照片，AI 营养分析如下：
 
-            \(formattedResult)
+                \(formattedResult)
 
-            Based on this analysis and my current health data, can you provide personalized feedback on this meal? Consider my activity level, recovery state, and health goals from my wiki profile.
-            """
+                请结合我当前的健康数据、活动量、恢复状态与个人档案目标，对这顿饭给出个性化反馈。
+                """
+                : """
+                I just took a photo of my meal. Here's the AI-powered nutritional analysis:
+
+                \(formattedResult)
+
+                Based on this analysis and my current health data, can you provide personalized feedback on this meal? Consider my activity level, recovery state, and health goals from my wiki profile.
+                """
 
             await chatVM.send(
                 text: userMessage,
@@ -55,7 +64,7 @@ final class FoodPhotoWorkflow {
             let entry = JournalEntryRecord(
                 createdAt: Date(),
                 tags: ["food", "meal"],
-                note: "[Photo Analysis] \(summaryText)",
+                note: (AppLanguage.stored.isChinese ? "[照片分析] \(summaryText)" : "[Photo Analysis] \(summaryText)"),
                 value: Double(result.totalCalories),
                 unit: "kcal"
             )

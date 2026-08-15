@@ -59,11 +59,13 @@ enum ToolFactory {
             StrengthWorkoutHistoryTool(executionContext: executionContext),
             TrainingResponseHistoryTool(executionContext: executionContext),
             JournalCorrelationTool(executionContext: executionContext),
+            UpdateUserProfileTool(executionContext: executionContext),
+            GetDecisionFeedbackTool(executionContext: executionContext),
             FoodLogTool(executionContext: executionContext),
             TrainingPlanTool(decision: dashboard.trainingDecision),
             CreateTrainingPlanTool(executionContext: executionContext),
             DeleteTrainingPlanTool(executionContext: executionContext),
-            RenderCorrelationChartTool(),
+            RenderCorrelationChartTool(executionContext: executionContext),
         ]
     }
 }

@@ -479,6 +479,7 @@ enum CoachChatLayout {
 
 struct VelaCoachView: View {
     @Environment(\.velaSurfaceIsActive) private var isActiveSurface
+    @Environment(\.scenePhase) private var scenePhase
     var presentation: CoachPresentationStyle
     var usesOverlayNavigation: Bool
     @ObservedObject var vm: CoachChatVM
@@ -505,7 +506,7 @@ struct VelaCoachView: View {
     /// Actual keyboard height (from keyboardWillShowFrameEnd). Used to lift the
     /// composer above the software keyboard regardless of whether SwiftUI's
     /// safeAreaInset auto-lift holds inside the ZStack of overlay layers.
-    @State private var keyboardHeight: CGFloat = 0
+    @State private var isNearBottom = true
 
     // Drawer state management
     @State private var showHistoryDrawer = false
@@ -593,7 +594,7 @@ struct VelaCoachView: View {
                                     if let action = msg.recoveryAction, msg.role == .assistant {
                                         HStack {
                                             CoachRecoveryActionButton(action: action) {
-                                                handleRecoveryAction(action)
+                                                handleRecoveryAction(action, retryBubbleId: msg.id)
                                             }
                                             Spacer(minLength: 0)
                                         }
@@ -630,6 +631,7 @@ struct VelaCoachView: View {
                     }
                     .scrollIndicators(.hidden)
                     .scrollDismissesKeyboard(.immediately)
+                    .nearBottomTracking($isNearBottom)
                     .onChange(of: vm.messages.count) { _, _ in
                         scrollToBottom(using: proxy, animated: true)
                     }
@@ -639,7 +641,10 @@ struct VelaCoachView: View {
                     }
                     .onChange(of: vm.streamingContent) { _, content in
                         guard !content.isEmpty else { return }
-                        scrollToBottom(using: proxy, animated: false)
+                        // 用户上滑读历史时不再被每 delta 强制拽回底部。
+                        if isNearBottom {
+                            scrollToBottom(using: proxy, animated: false)
+                        }
                     }
                     .onChange(of: isKeyboardVisible) { _, visible in
                         guard visible else { return }
@@ -651,13 +656,18 @@ struct VelaCoachView: View {
                     }
                 }
             }
+            .onChange(of: scenePhase) { _, phase in
+                if phase != .active, dictation.isRecording {
+                    dictation.stop()
+                }
+            }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 composerView
                     // Explicitly add the real keyboard height so the composer (and its
                     // send button / TextField) clears the software keyboard even when
                     // SwiftUI's safeAreaInset auto-lift is defeated by the ZStack of
                     // surrounding overlay layers. bottomClearance covers the overlay-nav
-                    // (no-keyboard) case; keyboardHeight covers the keyboard case.
+                    // (no-keyboard) case; safeAreaInset handles the keyboard case.
                     .padding(.bottom, CoachChatLayout.bottomClearance(
                         presentation: presentation,
                         keyboardVisible: isKeyboardVisible,
@@ -713,13 +723,11 @@ struct VelaCoachView: View {
             let height = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect)?.height ?? 0
             withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                 isKeyboardVisible = true
-                keyboardHeight = height
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                 isKeyboardVisible = false
-                keyboardHeight = 0
             }
         }
         .onChange(of: appState.coachRouteRevision) { _, _ in
@@ -947,8 +955,82 @@ struct VelaCoachView: View {
 
     // MARK: - Composer
 
+    /// ADR 0008：AI 只能提议写操作，用户显式确认后才执行。
+    private func toolConfirmationCard(_ tool: ToolCallDescription) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "checkmark.shield.fill")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(VelaTheme.rhythmDeep)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("AI 请求执行「\(toolConfirmationLabel(tool))」")
+                    .font(VelaTheme.subheadline().weight(.semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                Text(tool.arguments.count > 120 ? String(tool.arguments.prefix(120)) + "…" : tool.arguments)
+                    .font(VelaTheme.caption2())
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .lineLimit(2)
+                HStack(spacing: 10) {
+                    Button("允许") { vm.confirmToolCall(true) }
+                        .font(VelaTheme.caption1().weight(.semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeepOn)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(VelaTheme.rhythmDeep, in: Capsule())
+                    Button("拒绝") { vm.confirmToolCall(false) }
+                        .font(VelaTheme.caption1().weight(.semibold))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(VelaTheme.rhythmMist.opacity(0.6), in: Capsule())
+                }
+                .buttonStyle(.cardPress)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(VelaTheme.rhythmDeep.opacity(0.35), lineWidth: 0.75)
+        )
+        .padding(.horizontal, VelaTheme.pagePadding)
+        .padding(.bottom, 8)
+    }
+
+    private func toolConfirmationLabel(_ tool: ToolCallDescription) -> String {
+        switch tool.name {
+        case "create_training_plan": return "创建训练计划"
+        case "delete_plan": return "删除训练计划"
+        case "log_food": return "记录饮食"
+        case "update_wiki": return "更新档案文件"
+        case "update_user_profile": return "更新个人档案"
+        default: return tool.name
+        }
+    }
+
     private var composerView: some View {
         VStack(spacing: 0) {
+            if let hint = vm.interactionHint {
+                Text(hint)
+                    .font(VelaTheme.caption1())
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(VelaTheme.rhythmMist.opacity(0.6), in: Capsule())
+                    .padding(.bottom, 6)
+                    .transition(.opacity)
+                    .onAppear {
+                        Task {
+                            try? await Task.sleep(nanoseconds: 2_500_000_000)
+                            vm.interactionHint = nil
+                            vm.sessionStoreHintCleared()
+                        }
+                    }
+            }
+            if let tool = vm.pendingToolConfirmation {
+                toolConfirmationCard(tool)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
             HStack(alignment: .bottom, spacing: 8) {
                 Menu {
                     Button {
@@ -1183,7 +1265,7 @@ struct VelaCoachView: View {
         )
     }
 
-    private func handleRecoveryAction(_ action: LLMErrorRecoveryAction) {
+    private func handleRecoveryAction(_ action: LLMErrorRecoveryAction, retryBubbleId: UUID? = nil) {
         switch action.destination {
         case .settings:
             if presentation == .quickCover {
@@ -1197,7 +1279,8 @@ struct VelaCoachView: View {
                 journalEntries: journalEntries,
                 savedReports: savedReports,
                 focus: .general,
-                services: services
+                services: services,
+                retryBubbleId: retryBubbleId
             )
         }
     }
@@ -1409,5 +1492,24 @@ enum LocalCoachGuidanceBuilder {
         return hasRecovery
             ? "Some body signals are available, but today's plan is still being generated. Refresh Today first, and do not increase training from a single metric alone. General guidance only; not a medical diagnosis."
             : "Recovery and sleep coverage is still limited. Sync Apple Health from Today and build your baseline first; until then, keep your normal routine or reduce load conservatively. General guidance only; not a medical diagnosis."
+    }
+}
+
+
+extension View {
+    /// iOS 18+ 用 onScrollGeometryChange 跟踪「接近底部」；iOS 17 回退为恒 true
+    /// （保持旧的流式跟随行为）。
+    @ViewBuilder
+    func nearBottomTracking(_ isNearBottom: Binding<Bool>) -> some View {
+        if #available(iOS 18.0, *) {
+            self.onScrollGeometryChange(for: Bool.self) { geo in
+                geo.contentOffset.y + geo.containerSize.height
+                    >= geo.contentSize.height - 240
+            } action: { _, nearBottom in
+                isNearBottom.wrappedValue = nearBottom
+            }
+        } else {
+            self
+        }
     }
 }

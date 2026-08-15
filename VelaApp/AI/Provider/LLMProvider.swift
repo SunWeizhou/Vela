@@ -129,7 +129,7 @@ enum LLMProviderError: LocalizedError, Hashable, Sendable {
     case networkUnavailable
     case timedOut
     case invalidResponse
-    case requestFailed(String)
+    case requestFailed(statusCode: Int, message: String)
 
     static func classify(_ error: Error) -> LLMProviderError {
         if let providerError = error as? LLMProviderError {
@@ -142,30 +142,26 @@ enum LLMProviderError: LocalizedError, Hashable, Sendable {
             case .timedOut:
                 return .timedOut
             default:
-                return .requestFailed(urlError.localizedDescription)
+                return .requestFailed(statusCode: 0, message: urlError.localizedDescription)
             }
         }
-        return .requestFailed(error.localizedDescription)
+        return .requestFailed(statusCode: 0, message: error.localizedDescription)
     }
 
     static func httpFailure(statusCode: Int, body: String) -> LLMProviderError {
         if statusCode == 401 || statusCode == 403 {
             return .authenticationFailed
         }
-        return .requestFailed("DeepSeek request failed with status \(statusCode): \(body.prefix(200))")
+        return .requestFailed(statusCode: statusCode, message: "DeepSeek request failed with status \(statusCode): \(body.prefix(200))")
     }
 
     var isRetryable: Bool {
         switch self {
         case .networkUnavailable, .timedOut:
             return true
-        case .requestFailed(let message):
-            return message.contains("status 408")
-                || message.contains("status 429")
-                || message.contains("status 500")
-                || message.contains("status 502")
-                || message.contains("status 503")
-                || message.contains("status 504")
+        case .requestFailed(let statusCode, _):
+            // 按状态码判定（此前靠错误消息子串匹配，文案变化即失效）。
+            return [408, 429, 500, 502, 503, 504].contains(statusCode)
         case .missingAPIKey, .authenticationFailed, .invalidResponse:
             return false
         }
@@ -223,7 +219,7 @@ enum LLMProviderError: LocalizedError, Hashable, Sendable {
             return "The provider request timed out."
         case .invalidResponse:
             return "The provider returned an invalid response."
-        case .requestFailed(let message):
+        case .requestFailed(_, let message):
             return message
         }
     }
@@ -238,4 +234,51 @@ struct LLMErrorRecoveryAction: Hashable, Sendable, Codable {
     var title: String
     var systemImage: String
     var destination: Destination
+}
+
+/// LLMProvider 层的指数退避重试（供 ReportGenerator 与后台 Agent 使用；
+/// Coach 对话路径使用 RetryingAgentChatProvider，策略保持一致）。
+/// 此前 MorningBrief/EveningWiki 直连 provider，瞬时网络错误整次运行静默失败。
+struct RetryingLLMProvider: LLMProvider {
+    let base: any LLMProvider
+    let maxAttempts: Int
+    let initialDelayNanoseconds: UInt64
+
+    init(
+        base: any LLMProvider,
+        maxAttempts: Int = 3,
+        initialDelayNanoseconds: UInt64 = 350_000_000
+    ) {
+        self.base = base
+        self.maxAttempts = max(1, maxAttempts)
+        self.initialDelayNanoseconds = initialDelayNanoseconds
+    }
+
+    func complete(request: LLMRequest) async throws -> LLMResponse {
+        var attempt = 1
+        while true {
+            do {
+                return try await base.complete(request: request)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                let providerError = LLMProviderError.classify(error)
+                guard attempt < maxAttempts, providerError.isRetryable else {
+                    throw providerError
+                }
+                let shift = min(max(attempt - 1, 0), 4)
+                let multiplier = UInt64(1) << UInt64(shift)
+                let (product, overflow) = initialDelayNanoseconds.multipliedReportingOverflow(by: multiplier)
+                var delay = overflow ? UInt64.max : product
+                if delay > 0 && delay < UInt64.max {
+                    let jitter = UInt64.random(in: 0...max(1, delay / 5))
+                    delay = delay - delay / 10 + jitter
+                }
+                if delay > 0 {
+                    try await Task.sleep(nanoseconds: delay)
+                }
+                attempt += 1
+            }
+        }
+    }
 }

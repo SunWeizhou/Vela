@@ -44,7 +44,28 @@ final class MemoryLedger {
         guard WikiFileService.allowedFilenames.contains(targetFile) else {
             throw MemoryLedgerError.invalidTargetFile(targetFile)
         }
+        // M4：baselines.md 由引擎自动生成（每次刷新以 .replace 覆盖），
+        // 确认写入的基线记忆会在下一次刷新被静默抹掉——拒绝把提案指向该文件。
+        guard targetFile != "baselines.md" else {
+            throw MemoryLedgerError.invalidTargetFile(targetFile)
+        }
         try PersistenceWriteGate.shared.assertWritable(operation: "MemoryLedger: createProposal", modelContext: modelContext)
+
+        // PR4：跨源去重——同一稳定事实可被 evening_wiki_sync / coach_tool /
+        // coach legacy 三通道重复提案，待确认收件箱此前被稀释。
+        let normalizedContent = content.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let allRecords = (try? modelContext.fetch(FetchDescriptor<MemoryEventRecord>())) ?? []
+        if let duplicate = allRecords.first(where: { record in
+            (record.status == MemoryProposalStatus.proposed.rawValue
+                || record.status == MemoryProposalStatus.accepted.rawValue)
+                && record.targetFile == targetFile
+                && (record.content.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == normalizedContent
+                    || WikiFileService.textSimilarity(record.content, content) > 0.85)
+        }) {
+            logger.info("Memory proposal deduplicated across sources: \(targetFile)")
+            return duplicate
+        }
+
         let record = MemoryEventRecord(
             source: source,
             targetFile: targetFile,
@@ -165,6 +186,10 @@ final class MemoryLedger {
         let currentContent = (try? String(contentsOf: currentURL, encoding: .utf8)) ?? ""
         if let appliedHash = record.newContentHash,
            ContentHash.hash(currentContent) != appliedHash {
+            // M5：文件被二次改动后无法安全回滚——不再静默无操作，
+            // 把原因写进 userNote 让用户可见，状态保持 accepted。
+            record.userNote = "文件已被后续修改，无法安全回滚。"
+            try? modelContext.save()
             logger.warning("Cannot rollback memory \(recordId): wiki changed after this memory was applied.")
             return
         }

@@ -6,7 +6,7 @@ struct ReportGenerator: Sendable {
     /// Bounds the context JSON sent to the model to fit its context window.
     static let maxContextCharacters = 12_000
 
-    func generate(type: AIReportType, context: AgentContextEnvelope) async throws -> GeneratedAIReport {
+    func generate(type: AIReportType, context: AgentFactSnapshot) async throws -> GeneratedAIReport {
         let encoder: JSONEncoder = {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
@@ -17,8 +17,10 @@ struct ReportGenerator: Sendable {
         // Cap the context sent to the model. The full AgentContextEnvelope (journal
         // history, wiki, 34-day trends, past reports) can exceed the model's context
         // window for long-standing users, causing a hard 400/context-length error on
-        // every report. Bound it (the full snapshot is still stored for the record).
-        let contextJSON = String(fullContextJSON.prefix(Self.maxContextCharacters))
+        // every report. Bound it by dropping the largest top-level keys until the
+        // serialized form fits — the model always receives VALID JSON, never a
+        // character-truncated fragment. (The full snapshot is still stored.)
+        let contextJSON = Self.trimmedContextJSON(from: fullContextJSON)
 
         var userPrompt = prompt(for: type)
         if type == .morningBrief {
@@ -42,21 +44,59 @@ struct ReportGenerator: Sendable {
         )
     }
 
-    private func buildMorningBriefFactsPrompt(from context: AgentContextEnvelope) -> String {
-        let recoveryScore = context.recovery["score"] ?? "N/A"
-        let recoveryBand = context.recovery["band"] ?? "N/A"
-        let sleepScore = context.sleep["sleep_score"] ?? "N/A"
-        let sleepDurationMin = context.sleep["duration_minutes"] ?? "N/A"
-        let sleepEfficiencyPct = context.sleep["sleep_efficiency_pct"] ?? "N/A"
-        let hrvToday = context.recovery["hrv_ms"] ?? "N/A"
-        let hrvBaseline = context.recovery["hrv_baseline_ms"] ?? "N/A"
-        let hrvVsBaselinePct = context.recovery["hrv_vs_baseline_pct"] ?? "N/A"
-        let hrvZScore = context.recovery["hrv_z_score"] ?? "N/A"
-        let rhrToday = context.recovery["rhr_bpm"] ?? "N/A"
-        let rhrBaseline = context.recovery["rhr_baseline_bpm"] ?? "N/A"
-        
-        let readinessLevel = context.todaySummary["readiness_level"] ?? "N/A"
-        let readinessGuidance = context.todaySummary["readiness_guidance"] ?? "N/A"
+    /// 把超预算的 context JSON 裁剪为合法 JSON：解析为顶层字典后逐次丢弃
+    /// 体积最大的键，直到序列化长度 ≤ maxChars。解析失败时退回前缀截断。
+    static func trimmedContextJSON(
+        from full: String,
+        maxChars: Int = maxContextCharacters
+    ) -> String {
+        guard full.utf8.count > maxChars,
+              let data = full.data(using: .utf8),
+              var dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            return String(full.prefix(maxChars))
+        }
+        func serializedSize(_ object: Any) -> Int {
+            // JSONSerialization 要求顶层为数组/字典，标量直接写会抛 NSException
+            // （try? 无法捕获），故标量先包一层数组估量。
+            let topLevel: Any = (object is [String: Any] || object is [Any]) ? object : [object]
+            return (try? JSONSerialization.data(withJSONObject: topLevel, options: []))?.count ?? 0
+        }
+        func fits(_ d: [String: Any]) -> Bool {
+            serializedSize(d) <= maxChars
+        }
+        while !fits(dict), dict.count > 1 {
+            guard let largestKey = dict.max(by: { serializedSize($0.value) < serializedSize($1.value) })?.key else {
+                break
+            }
+            dict.removeValue(forKey: largestKey)
+        }
+        if let trimmed = try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys]),
+           let json = String(data: trimmed, encoding: .utf8) {
+            return json
+        }
+        return "{}"
+    }
+
+    // A6：晨报上下文从 v1 AgentContextEnvelope 迁移到 v2 AgentFactSnapshot，
+    // 与 Coach / 晚间同步同源（此前三处对同一天产生不同表示）。
+    private func buildMorningBriefFactsPrompt(from context: AgentFactSnapshot) -> String {
+        func intMetric(_ metric: MetricValue<Double>) -> String {
+            metric.value.map { "\(Int($0.rounded()))" } ?? "N/A"
+        }
+        let recoveryScore = intMetric(context.recovery.score)
+        let recoveryBand = context.recovery.band
+        let sleepScore = intMetric(context.sleep.score)
+        let sleepDurationMin = context.sleep.totalMinutes.value.map { "\($0)" } ?? "N/A"
+        let sleepEfficiencyPct = intMetric(context.sleep.efficiency)
+        let hrvToday = intMetric(context.recovery.hrv)
+        let hrvBaseline = context.recovery.hrv.baseline?.baselineValue.map { "\(Int($0.rounded()))" } ?? "N/A"
+        let hrvZScore = context.recovery.hrv.baseline?.zScore.map { String(format: "%.2f", $0) } ?? "N/A"
+        let hrvVsBaselinePct = context.recovery.hrv.baseline?.deltaPercent.map { "\(Int($0.rounded()))%" } ?? "N/A"
+        let rhrToday = intMetric(context.recovery.restingHeartRate)
+        let rhrBaseline = context.recovery.restingHeartRate.baseline?.baselineValue.map { "\(Int($0.rounded()))" } ?? "N/A"
+
+        let readinessLevel = context.trainingDecision.readinessLevel
+        let readinessGuidance = context.trainingDecision.readinessGuidance
 
         if language.isChinese {
             return """

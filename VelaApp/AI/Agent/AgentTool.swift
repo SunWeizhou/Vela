@@ -107,11 +107,29 @@ struct WebSearchTool: AgentTool {
         ]
     }
 
+    /// 与 CoachPromptComposer.needsWebSearch 相同的隐私判定（工具层兜底）。
+    static func containsPersonalMetric(_ query: String) -> Bool {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let personalMetricWords = [
+            "hrv", "rhr", "bpm", "heart rate", "resting heart",
+            "blood pressure", "心率", "血压", "血氧", "体重", "血糖", "静息心率"
+        ]
+        let containsDigits = trimmed.range(of: "[0-9]", options: .regularExpression) != nil
+        guard containsDigits else { return false }
+        return personalMetricWords.contains { trimmed.contains($0) }
+    }
+
     func execute(arguments: String) async throws -> String {
         guard let data = arguments.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let query = json["query"] as? String else {
             return "Error: missing or invalid 'query' argument."
+        }
+
+        // 隐私兜底：needsWebSearch 只在提示层短路，模型自拟的查询在此再拦一道——
+        // 含具体健康数值的查询不得作为搜索词发给第三方。
+        if Self.containsPersonalMetric(query) {
+            return "Search skipped for privacy: the query contains personal health metrics. Rephrase with general terms instead."
         }
 
         let policyRaw = json["source_policy"] as? String
@@ -324,12 +342,47 @@ struct TodayHealthTool: AgentTool {
                     "resting_hr_bpm": rhrBpm as Any,
                     "respiratory_rate_brpm": rr as Any,
                 ]
+                // A2：RMSSD 此前已存储却无任何通路交给模型。
+                let rmssd = todayRecord?.hrvRmssdMilliseconds ?? dashboard.recoveryMetrics.hrvRmssdMilliseconds
+                if let rmssd { auto["hrv_rmssd_ms"] = rmssd }
                 if let z = dashboard.recovery.metrics["hrv_z_score"] { auto["hrv_z_score"] = (z * 100).rounded() / 100 }
                 if let z = dashboard.recovery.metrics["rhr_z_score"] { auto["rhr_z_score"] = (z * 100).rounded() / 100 }
                 // prefix(3) 返回 ArraySlice（Swift 结构体），必须转 Array——
                 // 否则 JSONSerialization 抛不可捕获的 NSException (__SwiftValue)
                 if !dashboard.recovery.reasons.isEmpty { auto["recovery_key_factors"] = Array(dashboard.recovery.reasons.prefix(3)) }
                 result["autonomic"] = auto
+            }
+
+            // ── Evidence（A2：持久化的 Scored Health Evidence——此前只写不读） ──
+            if include("evidence") {
+                func evidenceSummary(_ metric: MetricResult) -> [String: Any] {
+                    var dict: [String: Any] = [
+                        "value": metric.value.map { Int($0.rounded()) } as Any,
+                        "band": metric.band.rawValue,
+                        "confidence": metric.confidence.rawValue,
+                        "source": metric.source.rawValue,
+                    ]
+                    if !metric.components.isEmpty { dict["components"] = metric.components }
+                    if !metric.componentWeights.isEmpty { dict["component_weights"] = metric.componentWeights }
+                    if !metric.reasons.isEmpty { dict["reasons"] = Array(metric.reasons.prefix(5)) }
+                    if !metric.missingInputs.isEmpty { dict["missing_inputs"] = metric.missingInputs }
+                    return dict
+                }
+                if let evidence = todayRecord?.decodedScoreEvidence() {
+                    result["evidence"] = [
+                        "persisted_at": ISO8601DateFormatter().string(from: evidence.persistedAt),
+                        "sleep": evidenceSummary(evidence.sleep),
+                        "recovery": evidenceSummary(evidence.recovery),
+                        "strain": evidenceSummary(evidence.strain),
+                        "stress": evidenceSummary(evidence.stress),
+                        "energy": evidenceSummary(evidence.energy),
+                    ]
+                } else {
+                    result["evidence"] = [
+                        "available": false,
+                        "note": "未找到持久化评分证据；scores 各节为内存实时值。"
+                    ]
+                }
             }
 
             // ── Sleep detail ──
@@ -929,7 +982,10 @@ struct HealthHistoryTool: AgentTool {
     func execute(arguments: String) async throws -> String {
         let parsed = Self.parse(arguments: arguments)
         return await MainActor.run {
-            let cutoff = Calendar.current.startOfDay(for: Date().addingTimeInterval(-Double(parsed.days) * 24 * 3600))
+            // 用日历日运算而非 86400 秒当一天（DST 切换日会偏一天）。
+            let calendar = Calendar.current
+            let dayStart = calendar.startOfDay(for: Date())
+            let cutoff = calendar.date(byAdding: .day, value: -parsed.days, to: dayStart) ?? dayStart
             let descriptor = FetchDescriptor<DailyHealthSummaryRecord>(
                 predicate: #Predicate<DailyHealthSummaryRecord> { $0.date >= cutoff },
                 sortBy: [SortDescriptor(\.date, order: .reverse)]
@@ -966,6 +1022,7 @@ private struct HealthHistoryDayPayload: Encodable {
     var energyBank: Double?
     var healthAge: Double?
     var hrvAverage: Double?
+    var hrvRmssdMilliseconds: Double?
     var restingHeartRate: Double?
     var sleepHours: Double?
     var deepSleepPercent: Double?
@@ -1010,6 +1067,7 @@ private struct HealthHistoryDayPayload: Encodable {
         energyBank = record.energyBank
         healthAge = record.healthAge
         hrvAverage = record.hrvAverage
+        hrvRmssdMilliseconds = record.hrvRmssdMilliseconds
         restingHeartRate = record.restingHeartRate
         sleepHours = record.sleepHours
         deepSleepPercent = record.deepSleepPercent
@@ -1447,6 +1505,8 @@ struct RenderCorrelationChartTool: AgentTool {
     let name = "render_correlation_chart"
     let description = "Generate and render an interactive correlation chart in the user's chat panel to analyze the relationship between two variables over 7, 14, or 30 days. Example variables: hrv, sleep_score, resting_hr, stress_index, steps, caffeine, alcohol, meditation, late_meal. Calling this tool will prepare the visual chart for rendering."
 
+    let executionContext: ToolExecutionContext
+
     var parameters: [String: Value] {
         [
             "type": .string("object"),
@@ -1471,9 +1531,50 @@ struct RenderCorrelationChartTool: AgentTool {
               let metricY = json["metric_y"] as? String else {
             return "Error: missing or invalid 'metric_x' or 'metric_y' arguments."
         }
-        
+
         let key = "\(metricX.lowercased())_vs_\(metricY.lowercased())"
-        return "Successfully prepared the correlation chart for '\(metricX)' vs '\(metricY)'. You MUST now include the tag `[ARTIFACT:correlation:\(key)]` in your final text response exactly where you want the visual chart to be rendered."
+
+        // T6：返回本地引擎计算出的真实相关系数（r/n/置信度），
+        // 让 LLM 叙述与客户端图表同源；此前只回样板文本，数值由 LLM 自由发挥。
+        return await MainActor.run {
+            let outcomeMap = [
+                "hrv": "HRV",
+                "resting_hr": "RHR",
+                "sleep_score": "Sleep Score",
+                "recovery": "Recovery Score",
+                "recovery_score": "Recovery Score"
+            ]
+            let outcome = outcomeMap[metricX.lowercased()] ?? "HRV"
+
+            let threeYearsAgo = Date().addingTimeInterval(-1095 * 24 * 3600)
+            let journalDescriptor = FetchDescriptor<JournalEntryRecord>(
+                predicate: #Predicate<JournalEntryRecord> { $0.createdAt >= threeYearsAgo }
+            )
+            let journalEntries = (try? executionContext.modelContext.fetch(journalDescriptor)) ?? []
+            let healthDescriptor = FetchDescriptor<DailyHealthSummaryRecord>(
+                predicate: #Predicate<DailyHealthSummaryRecord> { $0.date >= threeYearsAgo }
+            )
+            let healthRecords = (try? executionContext.modelContext.fetch(healthDescriptor)) ?? []
+            let snapshots = healthRecords.map { $0.toSnapshot() }
+
+            let insights = JournalCorrelationEngine().calculateInsights(
+                journalEntries: journalEntries,
+                snapshots: snapshots
+            )
+            let matched = insights.filter {
+                $0.habit.lowercased() == metricY.lowercased()
+                    && $0.outcome == outcome
+            }
+
+            let statsText: String
+            if let best = matched.max(by: { abs($0.correlation) < abs($1.correlation) }) {
+                statsText = "computed_correlation: r=\(String(format: "%.3f", best.correlation)) (direction \(best.direction)), n=\(best.sampleSize), lag=\(best.lagDays), confidence=\(best.confidence.rawValue), outcome=\(best.outcome), habit=\(best.habit)"
+            } else {
+                statsText = "computed_correlation: none — insufficient samples (requires ≥28 days with ≥8 exposed and ≥8 control days after FDR screening)."
+            }
+
+            return "Prepared the correlation chart for '\(metricX)' vs '\(metricY)'. \(statsText). You MUST now include the tag `[ARTIFACT:correlation:\(key)]` in your final text response exactly where you want the visual chart to be rendered. Narrate only what the computed_correlation values support; if none, say the sample is insufficient instead of inventing numbers."
+        }
     }
 }
 
@@ -1521,5 +1622,179 @@ struct DeleteTrainingPlanTool: AgentTool {
                 return "Error: training plan \(planId) not found."
             }
         }
+    }
+}
+
+// MARK: - Decision Feedback Tool
+
+/// A3：把 DailyDecisionFeedbackRecord 的 16 个反馈字段回灌给 Agent。
+/// 此前反馈只进本机校准器（单一标量乘数），模型完全不知道哪次建议错了、
+/// 用户实际做了什么——个性化被冻结。只读工具，无副作用。
+struct GetDecisionFeedbackTool: AgentTool {
+    let name = "get_decision_feedback"
+    let description = "Retrieve a summary of the user's feedback on recent daily decisions: adoption status, accuracy ratings, actual actions taken, and energy/fatigue/pain/satisfaction scores. Use this to learn which past recommendations worked or failed and to personalize future advice."
+    let riskLevel: ToolRiskLevel = .read
+
+    let executionContext: ToolExecutionContext
+
+    var parameters: [String: Value] {
+        [
+            "type": .string("object"),
+            "properties": .object([
+                "days": .object([
+                    "type": .string("integer"),
+                    "description": .string("Lookback window in days. Defaults to 28, capped at 60."),
+                ]),
+            ]),
+        ]
+    }
+
+    func execute(arguments: String) async throws -> String {
+        var days = 28
+        if let data = arguments.data(using: .utf8),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let requested = json["days"] as? Int {
+            days = min(max(requested, 1), 60)
+        }
+        let cutoff = Date().addingTimeInterval(-Double(days) * 86_400)
+
+        return await MainActor.run {
+            let records = (try? executionContext.modelContext.fetch(
+                FetchDescriptor<DailyDecisionFeedbackRecord>(
+                    sortBy: [SortDescriptor<DailyDecisionFeedbackRecord>(\.createdAt, order: .reverse)]
+                )
+            )) ?? []
+            let recent = records.filter { $0.createdAt >= cutoff }
+            guard !recent.isEmpty else {
+                return "{\"days\": \(days), \"total_feedback\": 0, \"note\": \"最近 \(days) 天没有决策反馈记录。\"}"
+            }
+
+            let withAccuracy = recent.filter { $0.accuracyRating != nil }
+            let accurate = withAccuracy.filter { $0.accuracyRating == "accurate" }.count
+            let partly = withAccuracy.filter { $0.accuracyRating == "partly" }.count
+            let inaccurate = withAccuracy.filter { $0.accuracyRating == "inaccurate" }.count
+
+            var adoption: [String: Int] = [:]
+            for record in recent {
+                if let status = record.adoptionStatus, !status.isEmpty {
+                    adoption[status, default: 0] += 1
+                }
+            }
+
+            let decisions: [String: Int] = Dictionary(grouping: recent, by: \.decisionType)
+                .mapValues(\.count)
+
+            func avg(_ values: [Int]) -> Double? {
+                guard !values.isEmpty else { return nil }
+                return Double(values.reduce(0, +)) / Double(values.count)
+            }
+
+            let recentActions = Array(recent.compactMap { record -> String? in
+                guard let action = record.actualAction, !action.isEmpty else { return nil }
+                return "\(record.decisionType) → \(action)" +
+                    (record.accuracyRating.map { " [\($0)]" } ?? "")
+            }.suffix(8))
+
+            var summary: [String: Any] = [
+                "days": days,
+                "total_feedback": recent.count,
+                "rated_feedback": withAccuracy.count,
+                "accuracy_breakdown": ["accurate": accurate, "partly": partly, "inaccurate": inaccurate],
+                "accuracy_rate": withAccuracy.isEmpty ? NSNull() : (Double(accurate) / Double(withAccuracy.count) * 100).rounded() / 100,
+                "adoption_by_status": adoption,
+                "feedback_by_decision_type": decisions,
+                "energy_rating_avg": avg(recent.compactMap(\.energyRating)) as Any,
+                "fatigue_rating_avg": avg(recent.compactMap(\.fatigueRating)) as Any,
+                "pain_rating_avg": avg(recent.compactMap(\.painRating)) as Any,
+                "satisfaction_rating_avg": avg(recent.compactMap(\.satisfactionRating)) as Any,
+                "recent_actual_actions": recentActions,
+            ]
+            if JSONSerialization.isValidJSONObject(summary),
+               let data = try? JSONSerialization.data(withJSONObject: summary, options: [.prettyPrinted, .sortedKeys]),
+               let json = String(data: data, encoding: .utf8) {
+                return json
+            }
+            return "{\"error\": \"failed to encode decision feedback\"}"
+        }
+    }
+}
+
+// MARK: - Update User Profile Tool
+
+/// 更新用户的生理档案（年龄/体重/身高/最大心率/生理性别）。
+/// 写入 UserDefaults 覆盖值（手动优先语义），并通过 markLocalDataChanged
+/// 触发全 App 刷新——评分、今日决策与 AI 上下文随后都读到新值。
+struct UpdateUserProfileTool: AgentTool {
+    let name = "update_user_profile"
+    let description = "Update the user's physiological profile (age, weight, height, max heart rate, biological sex). Use only when the user explicitly states these values or corrects a wrong value. Fields not provided are left unchanged."
+    let riskLevel: ToolRiskLevel = .write
+
+    let executionContext: ToolExecutionContext
+
+    var parameters: [String: Value] {
+        [
+            "type": .string("object"),
+            "properties": .object([
+                "age": .object([
+                    "type": .string("integer"),
+                    "description": .string("Age in years (10-100)"),
+                ]),
+                "weight_kg": .object([
+                    "type": .string("number"),
+                    "description": .string("Body weight in kilograms (25-350)"),
+                ]),
+                "height_cm": .object([
+                    "type": .string("number"),
+                    "description": .string("Height in centimeters (100-250)"),
+                ]),
+                "max_hr": .object([
+                    "type": .string("integer"),
+                    "description": .string("Measured maximum heart rate in bpm (100-240)"),
+                ]),
+                "biological_sex": .object([
+                    "type": .string("string"),
+                    "description": .string("Biological sex: male, female, or other"),
+                ]),
+            ]),
+        ]
+    }
+
+    func execute(arguments: String) async throws -> String {
+        guard let data = arguments.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return "Error: missing or invalid arguments."
+        }
+        var updated: [String] = []
+        if let age = json["age"] as? Int, (10...100).contains(age) {
+            UserDefaults.standard.set(age, forKey: UserProfileSettings.ageKey)
+            updated.append("年龄 \(age) 岁")
+        }
+        if let weight = (json["weight_kg"] as? NSNumber)?.doubleValue, (25...350).contains(weight) {
+            UserDefaults.standard.set(weight, forKey: UserProfileSettings.weightKey)
+            updated.append("体重 \(String(format: "%.1f", weight)) kg")
+        }
+        if let height = (json["height_cm"] as? NSNumber)?.doubleValue, (100...250).contains(height) {
+            UserDefaults.standard.set(height, forKey: UserProfileSettings.heightKey)
+            updated.append("身高 \(String(format: "%.0f", height)) cm")
+        }
+        if let maxHR = json["max_hr"] as? Int, (100...240).contains(maxHR) {
+            UserDefaults.standard.set(maxHR, forKey: UserProfileSettings.maxHeartRateKey)
+            updated.append("最大心率 \(maxHR) bpm")
+        }
+        if let sex = json["biological_sex"] as? String, ["male", "female", "other"].contains(sex) {
+            UserDefaults.standard.set(sex, forKey: UserProfileSettings.biologicalSexKey)
+            updated.append("生理性别 \(sex)")
+        }
+        guard !updated.isEmpty else {
+            return "Error: no valid profile fields provided (age 10-100, weight_kg 25-350, height_cm 100-250, max_hr 100-240, biological_sex male/female/other)."
+        }
+        await MainActor.run {
+            VelaAppState.shared.markLocalDataChanged()
+            // Coach 维护的生理档案同步进 wiki（写透 SwiftData 记录），健康档案页即时可见。
+            WikiProfileMaterializer.refreshPhysiologicalProfile(
+                modelContext: executionContext.modelContext
+            )
+        }
+        return "已更新个人档案：" + updated.joined(separator: "，") + "。评分与建议将按新档案重新计算。"
     }
 }

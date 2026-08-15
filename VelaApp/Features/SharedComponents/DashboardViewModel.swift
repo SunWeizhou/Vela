@@ -105,6 +105,8 @@ final class DashboardViewModel: ObservableObject {
     // Secondary data properties for the dashboard view
     @Published private(set) var todayExperience: TodayExperienceModel?
     @Published private(set) var todayCommandState: TodayCommandState?
+    /// 未经反馈校准的 readiness 置信度（校准乘数基于它，避免重复缩放）。
+    private var baseReadinessConfidence: Double = 0
     @Published private(set) var latestTodayArtifact: CoachArtifact?
     @Published private(set) var persistedOperatingPlan: DailyOperatingPlanRecord?
     @Published private(set) var todayCalories: Int = 0
@@ -171,6 +173,44 @@ final class DashboardViewModel: ObservableObject {
         }
     }
 
+    /// 已确认的个人反应规律（observation 类 MemoryEventRecord）摘要，
+    /// 供今日计划文案引用（C2：个人反应规律接入 Daily Operating Plan）。
+    @MainActor
+    private func confirmedObservationSummaries(modelContext: ModelContext) -> [String] {
+        let records = (try? modelContext.fetch(FetchDescriptor<MemoryEventRecord>())) ?? []
+        return records
+            .filter { $0.memoryTypeRaw == "observation" && $0.status == MemoryProposalStatus.accepted.rawValue }
+            .compactMap { record -> String? in
+                // content 形如 "**规律**: 咖啡因过午影响睡眠\n..."
+                let range = record.content.range(of: "**规律**: ") ?? record.content.range(of: "**Rule**: ")
+                guard let range else { return nil }
+                let name = record.content[range.upperBound...]
+                    .components(separatedBy: "\n")
+                    .first?
+                    .trimmingCharacters(in: .whitespaces)
+                guard let name, !name.isEmpty else { return nil }
+                return name.count > 40 ? String(name.prefix(40)) + "…" : name
+            }
+    }
+
+    /// 按历史反馈校准当前决策置信度（从 base 重新计算，避免重复缩放）。
+    @MainActor
+    func applyFeedbackCalibration(modelContext: ModelContext) {
+        guard var state = todayCommandState else { return }
+        let records = (try? modelContext.fetch(FetchDescriptor<DailyDecisionFeedbackRecord>())) ?? []
+        let calibrated = DecisionFeedbackCalibrator.calibratedConfidence(
+            base: baseReadinessConfidence,
+            decision: state.readinessDecision.decision,
+            records: records
+        )
+        guard abs(calibrated - state.readinessDecision.confidence) > 0.0001 else { return }
+        var decision = state.readinessDecision
+        decision.confidence = calibrated
+        decision.reasons.append("置信度已按你过去的反馈校准。")
+        state.readinessDecision = decision
+        todayCommandState = state
+    }
+
     func refresh(modelContext: ModelContext? = nil, force: Bool = false) async {
         if let modelContext,
            dashboard.source == .empty || !Calendar.current.isDate(dashboard.date, inSameDayAs: selectedDate) {
@@ -200,14 +240,14 @@ final class DashboardViewModel: ObservableObject {
         refreshTaskDate = requestedDate
         refreshTask = Task { [weak self] in
             guard let self else { return }
-            await performRefresh(for: requestedDate, modelContext: modelContext)
+            await performRefresh(for: requestedDate, modelContext: modelContext, force: force)
             refreshTask = nil
             refreshTaskDate = nil
         }
         await refreshTask?.value
     }
 
-    private func performRefresh(for requestedDate: Date, modelContext: ModelContext?) async {
+    private func performRefresh(for requestedDate: Date, modelContext: ModelContext?, force: Bool) async {
         isLoading = true
         errorMessage = nil
         currentError = nil
@@ -219,13 +259,21 @@ final class DashboardViewModel: ObservableObject {
                 modelContext: modelContext
             )
             guard Calendar.current.isDate(selectedDate, inSameDayAs: requestedDate) else { return }
+            // F9 修复：只有数据实际变化（或用户显式强制刷新）才推进「上次更新」。
+            // 此前任何一次 load 都把墙钟时间当新鲜度，no-op 刷新也被标记为新鲜。
+            let dataChanged = refreshedDashboard.source != dashboard.source
+                || refreshedDashboard.recovery.value != dashboard.recovery.value
+                || refreshedDashboard.sleepScore.value != dashboard.sleepScore.value
+                || refreshedDashboard.strain.value != dashboard.strain.value
+                || refreshedDashboard.stress.value != dashboard.stress.value
+                || refreshedDashboard.energy.value != dashboard.energy.value
             dashboard = refreshedDashboard
             if Calendar.current.isDateInToday(dashboard.date) {
                 try? DailyLogService.refresh(dashboard: dashboard)
             }
-            lastUpdated = Date()
-            let generator = UIImpactFeedbackGenerator(style: .light)
-            generator.impactOccurred()
+            if dataChanged || force {
+                lastUpdated = Date()
+            }
             if let modelContext {
                 computeStreaK(modelContext: modelContext)
                 computeWeeklyComparison(modelContext: modelContext)
@@ -506,6 +554,7 @@ final class DashboardViewModel: ObservableObject {
         let activePlanDTO = activePlan?.dto
         let persistedDecision = persistedPlan?.trainingDecision
         let dashboardSnapshot = dashboard
+        let observationSummaries = confirmedObservationSummaries(modelContext: modelContext)
 
         let assembly = await Task.detached {
             SecondaryDataAssembler.assemble(
@@ -520,7 +569,8 @@ final class DashboardViewModel: ObservableObject {
                 journalEntries: journalDTOs,
                 coachArtifacts: artifactValues,
                 activePlan: activePlanDTO,
-                persistedDecision: persistedDecision
+                persistedDecision: persistedDecision,
+                confirmedObservations: observationSummaries
             )
         }.value
 
@@ -536,6 +586,8 @@ final class DashboardViewModel: ObservableObject {
         self.todayExperience = assembly.todayExperience
         self.latestTodayArtifact = assembly.latestTodayArtifact
         self.todayCommandState = assembly.todayCommandState
+        baseReadinessConfidence = assembly.todayCommandState.readinessDecision.confidence
+        applyFeedbackCalibration(modelContext: modelContext)
 
         // Side effects stay in the VM (coordination, not pure assembly). They run on the
         // main actor using the real SwiftData records fetched above.
@@ -600,7 +652,8 @@ enum SecondaryDataAssembler {
         journalEntries: [JournalEntryDTO],
         coachArtifacts: [CoachArtifact],
         activePlan: TrainingPlanDTO?,
-        persistedDecision: DailyTrainingDecision?
+        persistedDecision: DailyTrainingDecision?,
+        confirmedObservations: [String] = []
     ) -> SecondaryDataAssembly {
         let startOfDayRef = calendar.startOfDay(for: refDate)
 
@@ -622,9 +675,11 @@ enum SecondaryDataAssembler {
         ))
 
         // 3. Build Training Decision
+        // F4 修复：窗口与 loadDashboard 持久化路径保持一致（28 天），
+        // 避免「持久化计划决策」与「展示决策」因 7d/28d 摘要分歧而产生不同结论。
         let recentStrengthSummary = TrainingAnalyticsService().buildRecentSummary(
             workouts: strengthWorkouts,
-            days: 7,
+            days: 28,
             endingAt: refDate
         )
         let dailyTrainingDecision: DailyTrainingDecision
@@ -635,7 +690,8 @@ enum SecondaryDataAssembler {
                 bodyState: bodyState,
                 activePlan: activePlan,
                 recentStrengthSummary: recentStrengthSummary,
-                trainingResponses: trainingResponses
+                trainingResponses: trainingResponses,
+                longTermTrainingVolume: dashboard.longTermBaselines?.trainingVolume
             ))
         }
 
@@ -667,7 +723,8 @@ enum SecondaryDataAssembler {
             from: updatedDashboard,
             recentStrengthSummary: recentStrengthSummary,
             coachArtifact: latestTodayArtifact,
-            generatedAt: Date()
+            generatedAt: Date(),
+            confirmedObservations: confirmedObservations
         )
         let todayExperience = TodayExperienceModel.build(
             dashboard: updatedDashboard,

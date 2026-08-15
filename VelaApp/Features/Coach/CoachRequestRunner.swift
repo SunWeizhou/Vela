@@ -11,7 +11,8 @@ final class CoachRequestRunner {
         modelContext: ModelContext,
         services: VelaServices?,
         isGhostMode: Bool = false,
-        onStreamDelta: @MainActor @escaping (String) -> Void
+        onStreamDelta: @MainActor @escaping (String) -> Void,
+        onConfirmToolCall: (@Sendable (ToolCallDescription) async -> Bool)? = nil
     ) async throws -> AgentLoopResult {
         let lang = AppLanguage.stored
         let policy = ResponseLengthPolicy.forQuery(userText, lang: lang)
@@ -62,7 +63,14 @@ final class CoachRequestRunner {
                 trace: trace
             )
         } else {
-            let agentLoop = AgentLoop(provider: provider, toolRegistry: toolRegistry)
+            // ADR 0008：AI 只能提议、用户确认——写/破坏类工具必须经过确认回调。
+            // 此前未传 onConfirmToolCall，create_training_plan/log_food/delete_plan
+            // 等工具被提示词诱导调用后必然被拒（死功能）。
+            let agentLoop = AgentLoop(
+                provider: provider,
+                toolRegistry: toolRegistry,
+                onConfirmToolCall: onConfirmToolCall
+            )
             let snapshotVersion = ContentHash.hash("\(dashboard.date.timeIntervalSince1970)-\(dashboard.source.rawValue)")
             return try await agentLoop.run(
                 messages: chatMessages,

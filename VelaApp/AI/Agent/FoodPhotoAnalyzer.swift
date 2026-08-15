@@ -275,7 +275,7 @@ final class FoodPhotoAnalyzer: Sendable {
                 foods.append(IdentifiedFood(
                     name: item["name"] as? String ?? "Unknown",
                     portion: item["portion"] as? String ?? "Unknown",
-                    calories: item["calories"] as? Int ?? 0
+                    calories: Self.asInt(item["calories"]) ?? 0
                 ))
             }
         }

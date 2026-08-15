@@ -100,7 +100,7 @@ struct GeneratedAIReport: Codable, Hashable {
 
 // MARK: - Strength Training Context
 
-struct StrengthTrainingContext: Codable, Hashable {
+struct StrengthTrainingContext: Codable, Hashable, Sendable {
     var sessions7d: Int
     var sessions14d: Int
     var hardSets7d: Int

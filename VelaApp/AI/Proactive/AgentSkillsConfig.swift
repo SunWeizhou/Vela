@@ -205,6 +205,10 @@ enum CoachCheckInScheduler {
         if settings.authorizationStatus == .notDetermined {
             _ = try? await center.requestAuthorization(options: [.alert, .sound])
         }
+        if settings.authorizationStatus == .denied {
+            // 通知被拒时排程静默失败，给可见反馈。
+            NSLog("Vela CoachCheckIn: notification permission denied; check-ins will not be scheduled.")
+        }
         center.removePendingNotificationRequests(withIdentifiers: CoachCheckInCadence.allCases.map { prefix + $0.rawValue })
 
         let plans: [(CoachCheckInCadence, Bool, DateComponents, String, String)] = [

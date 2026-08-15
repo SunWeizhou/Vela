@@ -69,7 +69,7 @@ final class EveningWikiSyncAgent: ObservableObject {
                 modelContext: modelContext,
                 input: input
             )
-            let wiki = WikiFileService.loadDictionary()
+            let wiki = WikiFileService.loadPopulatedDictionary()
             let canonicalBodyState = input.bodyState(dashboard: dashboard)
             let coverageSummary = DataCoverageSummaryModel.build(
                 groups: await DataCoverageGroupFactory.loadPriorityGroups()
@@ -88,7 +88,9 @@ final class EveningWikiSyncAgent: ObservableObject {
                 bodyState: canonicalBodyState,
                 trainingDecision: input.canonicalTrainingDecision(for: canonicalBodyState),
                 dataCoverage: coverageSummary.agentFactContext,
-                profileAge: WikiFileService.getAgeFromWiki() ?? dashboard.extendedMetrics.age,
+                profileAge: dashboard.extendedMetrics.age ?? WikiFileService.getAgeFromWiki(),
+                dailyOperatingPlan: AIContextBuilder.compactDailyOperatingPlan(input.dailyOperatingPlan),
+                activePlan: input.activePlan?.dto,
                 generatedAt: contextAsOf
             )
             let encoder = JSONEncoder()
@@ -123,7 +125,8 @@ final class EveningWikiSyncAgent: ObservableObject {
                 chatMessages: chatMessages
             )
 
-            let provider = services?.deepSeekProvider(apiKey: apiKey) ?? DeepSeekProvider(apiKey: apiKey)
+            let baseProvider = services?.deepSeekProvider(apiKey: apiKey) ?? DeepSeekProvider(apiKey: apiKey)
+            let provider = RetryingLLMProvider(base: baseProvider)
             let response = try await provider.complete(request: LLMRequest(
                 systemPrompt: syncSystemPrompt,
                 userPrompt: prompt,

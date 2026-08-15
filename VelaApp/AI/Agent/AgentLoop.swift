@@ -130,7 +130,10 @@ struct RetryingAgentChatProvider: AgentChatProvider {
     private func delayNanoseconds(for attempt: Int) -> UInt64 {
         guard initialDelayNanoseconds > 0 else { return 0 }
         let multiplier = UInt64(1 << min(max(attempt - 1, 0), 4))
-        return initialDelayNanoseconds.saturatingMultiply(multiplier)
+        let base = initialDelayNanoseconds.saturatingMultiply(multiplier)
+        // ±20% 抖动：并发重试不再同步打向 API（429 雪上加霜）。
+        let jitter = UInt64.random(in: 0...max(1, base / 5))
+        return base - base / 10 + jitter
     }
 }
 
@@ -377,7 +380,10 @@ struct AgentLoop {
             // unbounded provider call: it would extend past the deadline and would
             // send the [CANCELLED]/[TIME EXCEEDED] injection strings to the model.
             if didTerminateEarly {
-                fullResponse = "该请求已被中止，未能完成。你可以重试，或换个说法再问。"
+                fullResponse = L10n.t(
+                    "The request was cancelled before completion. You can retry or rephrase your question.",
+                    "该请求已被中止，未能完成。你可以重试，或换个说法再问。"
+                )
             } else if let onStreamDelta {
                 providerCallCount += 1
                 let finalResponse = try await provider.chat(messages: agentMessages, tools: nil)
@@ -550,11 +556,11 @@ struct AgentLoop {
         switch toolName {
         case "web_search", "today_health", "health_history", "health_trend",
              "workout_history", "strength_workout_history", "training_response_history",
-             "journal_correlation", "render_correlation_chart":
+             "journal_correlation", "render_correlation_chart", "get_decision_feedback":
             return .read
         case "update_user_wiki":
             return .propose
-        case "update_food_log", "food_photo", "food_search", "create_training_plan":
+        case "update_food_log", "food_photo", "food_search", "create_training_plan", "update_user_profile":
             return .write
         case "delete_plan", "deactivate_all_plans":
             return .destructive

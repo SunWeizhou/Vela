@@ -260,7 +260,7 @@ enum AgentActionParser {
     )
 
     private static let wikiFilePattern = try? NSRegularExpression(
-        pattern: "^(?:file|File|FILE|文件):\\s*(\\S+)",
+        pattern: "^(?:file|File|FILE|文件):\\s*([\\w.\\-/]+)",
         options: [.anchorsMatchLines]
     )
 

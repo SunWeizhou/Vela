@@ -439,13 +439,19 @@ struct VelaReportsView: View {
             }
         } else {
             VStack(spacing: 0) {
+                // PR8：报告行可点开阅读完整正文（此前周报/月报正文生成后无阅读入口）。
                 ForEach(Array(reports.prefix(5).enumerated()), id: \.element.createdAt) { index, report in
-                    reportRow(
-                        icon: report.type.contains("sleep") ? "moon.fill" : "sun.max.fill",
-                        color: report.type.contains("sleep") ? .indigo : .orange,
-                        title: report.title,
-                        subtitle: report.createdAt.formatted(.dateTime.month().day().hour().minute())
-                    )
+                    NavigationLink {
+                        AIReportDetailView(report: report)
+                    } label: {
+                        reportRow(
+                            icon: report.type.contains("sleep") ? "moon.fill" : "sun.max.fill",
+                            color: report.type.contains("sleep") ? .indigo : .orange,
+                            title: report.title,
+                            subtitle: report.createdAt.formatted(.dateTime.month().day().hour().minute())
+                        )
+                    }
+                    .buttonStyle(.plain)
                     if index < min(reports.count, 5) - 1 {
                         Divider().padding(.leading, 60)
                     }
@@ -453,6 +459,30 @@ struct VelaReportsView: View {
             }
             .background(VelaTheme.cardBg)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+    }
+
+    /// PR8：报告完整正文阅读页（此前只显示标题行，正文不可读）。
+    private struct AIReportDetailView: View {
+        let report: AIReportRecord
+
+        var body: some View {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(report.title)
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(VelaTheme.fg)
+                    Text(report.createdAt.formatted(date: .abbreviated, time: .shortened))
+                        .font(.system(size: 12))
+                        .foregroundStyle(VelaTheme.muted)
+                    MarkdownText(markdown: report.markdownContent, color: VelaTheme.fg)
+                }
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .background(VelaTheme.rhythmCanvas)
+            .navigationTitle("历史报告")
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
 

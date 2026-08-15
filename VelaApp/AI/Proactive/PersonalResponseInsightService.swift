@@ -32,7 +32,7 @@ struct PersonalResponseInsightService {
 
         // 2. Dedup against existing confirmed rules
         let existingRuleNames = Set(existingRules
-            .filter { $0.status == MemoryProposalStatus.accepted.rawValue }
+            .filter { $0.status != MemoryProposalStatus.expired.rawValue }
             .compactMap { extractRuleName(from: $0.content) }
         )
 
@@ -46,7 +46,7 @@ struct PersonalResponseInsightService {
         for rule in newRules {
             let content = buildProposalContent(from: rule)
             let evidence = rule.evidenceSummary
-            _ = try? ledger.createProposal(
+            if let _ = try? ledger.createProposal(
                 targetFile: "observations.md",
                 memoryType: .observation,
                 content: content,
@@ -54,8 +54,9 @@ struct PersonalResponseInsightService {
                 confidence: rule.confidence,
                 source: "personal_response_model",
                 linkedAgentRunId: nil
-            )
-            created += 1
+            ) {
+                created += 1
+            }
         }
 
         // 4. Expire old pending proposals
@@ -67,8 +68,8 @@ struct PersonalResponseInsightService {
     // MARK: - Helpers
 
     private func extractRuleName(from content: String) -> String? {
-        // Content format: "**Rule**: rule_name\n..."
-        guard let range = content.range(of: "**Rule**: ") else { return nil }
+        let range = content.range(of: "**规律**: ") ?? content.range(of: "**Rule**: ")
+        guard let range else { return nil }
         let after = content[range.upperBound...]
         return after.components(separatedBy: "\n").first?.trimmingCharacters(in: .whitespaces)
     }
@@ -125,13 +126,17 @@ struct TrainingResponseInsightService {
         calendar: Calendar = .current
     ) throws -> Int {
         let existing = try modelContext.fetch(FetchDescriptor<TrainingResponseRecord>())
-        let existingWorkoutIDs = Set(existing.map(\.workoutId))
+        let existingByWorkout = Dictionary(
+            existing.map { ($0.workoutId, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
         let snapshotsByDay = Dictionary(uniqueKeysWithValues: snapshots.map {
             (DailyHealthSummaryRecord.dayIdentifier(for: $0.date, calendar: calendar), $0)
         })
         var created = 0
+        var backfilled = 0
 
-        for workout in workouts where !existingWorkoutIDs.contains(workout.id) {
+        for workout in workouts {
             let workoutDay = calendar.startOfDay(for: workout.startedAt)
             guard let nextDay = calendar.date(byAdding: .day, value: 1, to: workoutDay) else { continue }
             let todayID = DailyHealthSummaryRecord.dayIdentifier(for: workoutDay, calendar: calendar)
@@ -141,6 +146,36 @@ struct TrainingResponseInsightService {
             let analysis = TrainingAnalyticsService().summarizeWorkout(workout.dto)
             let setRPEs = workout.exercises.flatMap(\.sets).compactMap(\.rpe)
             let sessionRPE = workout.sessionRPE ?? average(setRPEs)
+
+            if let record = existingByWorkout[workout.id] {
+                // T1 修复：手动记录路径（upsertTrainingResponseRecord）创建时
+                // 次日增量留空，且从未有代码回填——导致内核「恢复响应欠佳」分支
+                // 与 TrainingResponseCalibrator 对主路径永远拿到空输入。
+                // 此处对已存在记录回填缺失增量（仅填 nil 字段且快照有值，不覆盖已有值）。
+                var changed = false
+                if record.nextDayRecoveryDelta == nil,
+                   let recovery = delta(following.recoveryScore, today.recoveryScore) {
+                    record.nextDayRecoveryDelta = recovery
+                    changed = true
+                }
+                if record.nextDayHRVDelta == nil,
+                   let hrv = delta(following.hrvAverage, today.hrvAverage) {
+                    record.nextDayHRVDelta = hrv
+                    changed = true
+                }
+                if record.nextDayRHRDelta == nil,
+                   let rhr = delta(following.restingHeartRate, today.restingHeartRate) {
+                    record.nextDayRHRDelta = rhr
+                    changed = true
+                }
+                if record.nextDaySleepScore == nil, let sleep = following.sleepScore {
+                    record.nextDaySleepScore = sleep
+                    changed = true
+                }
+                if changed { backfilled += 1 }
+                continue
+            }
+
             let response = TrainingResponseRecord(
                 workoutId: workout.id,
                 date: workoutDay,
@@ -158,14 +193,14 @@ struct TrainingResponseInsightService {
             created += 1
         }
 
-        if created > 0 {
+        if created > 0 || backfilled > 0 {
             try PersistenceWriteGate.shared.assertWritable(
                 operation: "TrainingResponseInsightService: capture responses",
                 modelContext: modelContext
             )
             try modelContext.save()
         }
-        return created
+        return created + backfilled
     }
 
     func buildWeeklyBodyReport(
@@ -337,7 +372,9 @@ struct TrainingResponseInsightService {
             }
         }
 
-        let markdown = """
+        let markdown: String
+        if AppLanguage.stored.isChinese {
+        markdown = """
         # 每周身体报告
 
         ## 训练
@@ -366,6 +403,37 @@ struct TrainingResponseInsightService {
         ### 生理压力源相关分析（咖啡因/压力/熬夜/酒精与生理恢复）
         \(stressorAnalysis)
         """
+        } else {
+        markdown = """
+        # Weekly Body Report
+
+        ## Training
+        - Strength sessions: \(weekWorkouts.count) (\(workoutTitles))
+        - Next-day response records: \(weekResponses.count)
+
+        ## Recovery & Sleep
+        - Average recovery: \(formatted(recoveryAverage))
+        - Average sleep: \(formatted(sleepAverage))
+
+        ## Nutrition & Habits
+        - Food logs: \(weekFoodLogs.count)
+        - Journal tags: \(journalTags.isEmpty ? "none" : journalTags)
+
+        ## Next-Day Training Responses
+        \(responseSummary)
+
+        ## Correlation Analysis
+
+        ### Sleep & Training Performance
+        \(sleepPerformanceAnalysis)
+
+        ### Nutrition & Recovery
+        \(dietRecoveryAnalysis)
+
+        ### Physiological Stressors (caffeine/stress/late nights/alcohol)
+        \(stressorAnalysis)
+        """
+        }
         
         return WeeklyBodyReport(
             generatedAt: endDate,
@@ -484,7 +552,9 @@ struct TrainingResponseInsightService {
             DailyHealthSummaryRecord.dayIdentifier(for: $0.date, calendar: calendar)
         })
 
-        let markdown = """
+        let markdown: String
+        if AppLanguage.stored.isChinese {
+        markdown = """
         # 月度身体总结
 
         ## 数据覆盖
@@ -510,6 +580,34 @@ struct TrainingResponseInsightService {
         ## 解读边界
         趋势只比较两个 15 天窗口的已记录均值；每个窗口少于 5 个有效样本时不显示方向。观察到的同步变化不代表因果关系，也不构成医疗诊断。
         """
+        } else {
+        markdown = """
+        # Monthly Body Summary
+
+        ## Data Coverage
+        - Window: last 30 days
+        - Days with health snapshots: \(coveredDayIDs.count) / 30
+        - Days with recovery source: \(sourcedRecovery.count)
+        - Days with sleep source: \(sourcedSleep.count)
+
+        ## Overview
+        - Average recovery: \(formatted(recoveryAverage))
+        - Average sleep: \(formatted(sleepAverage))
+        - Strength sessions: \(monthWorkouts.count)
+        - Food logs: \(monthFoodLogs.count)
+        - Journal entries: \(monthJournalEntries.count)
+        - Common tags: \(tagCounts.isEmpty ? "none" : tagCounts)
+
+        ## First vs Second Half Trends
+        - \(recoveryTrend)
+        - \(sleepTrend)
+        - \(hrvTrend)
+        - \(rhrTrend)
+
+        ## Interpretation Boundary
+        Trends only compare recorded means of the two 15-day windows; a direction is shown only when each window has at least 5 valid samples. Observed co-movement does not imply causation and is not medical diagnosis.
+        """
+        }
 
         return MonthlyBodyReport(
             generatedAt: endDate,

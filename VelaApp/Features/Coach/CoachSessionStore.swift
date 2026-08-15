@@ -6,6 +6,8 @@ final class CoachSessionStore: ObservableObject {
     @Published var sessions: [CoachSessionRecord] = []
     @Published var currentSession: CoachSessionRecord?
     @Published var persistenceError: String?
+    /// 流式/前台重试中被守卫拦截的会话操作提示（短暂展示）。
+    @Published var interactionHint: String?
 
     init() {}
 
@@ -39,7 +41,10 @@ final class CoachSessionStore: ObservableObject {
             self.currentSession = list.first
         }
         
-        guard !isStreaming, !isAwaitingForegroundRetry else { return }
+        guard !isStreaming, !isAwaitingForegroundRetry else {
+            interactionHint = "正在回复中，完成后即可操作会话。"
+            return
+        }
 
         if let currentSession {
             if let data = currentSession.serializedMessages.data(using: .utf8),
@@ -54,7 +59,10 @@ final class CoachSessionStore: ObservableObject {
     func createNewSession(modelContext: ModelContext, isStreaming: Bool, isAwaitingForegroundRetry: Bool, messagesHandler: ([CoachChatVM.ChatMsg]) -> Void) {
         // 流式中新建会话会导致完成时的 persistThread 把在途问答写进新会话、
         // 或清空 UI 后回复凭空消失——与 selectSession 同一守卫，拒绝切换。
-        guard !isStreaming, !isAwaitingForegroundRetry else { return }
+        guard !isStreaming, !isAwaitingForegroundRetry else {
+            interactionHint = "正在回复中，完成后即可操作会话。"
+            return
+        }
         let newSession = CoachSessionRecord(
             id: UUID(),
             title: "新对话",
@@ -78,7 +86,10 @@ final class CoachSessionStore: ObservableObject {
         // Don't swap to another session while a reply is streaming: the messages
         // array was already loaded and the in-flight stream writes to the old
         // session's indices, so switching would orphan the completed response.
-        guard !isStreaming, !isAwaitingForegroundRetry else { return }
+        guard !isStreaming, !isAwaitingForegroundRetry else {
+            interactionHint = "正在回复中，完成后即可操作会话。"
+            return
+        }
         self.currentSession = session
         if let data = session.serializedMessages.data(using: .utf8),
            let decoded = try? JSONDecoder().decode([CoachChatVM.ChatMsg].self, from: data) {
@@ -92,7 +103,10 @@ final class CoachSessionStore: ObservableObject {
     func deleteSession(_ session: CoachSessionRecord, modelContext: ModelContext, isStreaming: Bool, isAwaitingForegroundRetry: Bool, messagesHandler: ([CoachChatVM.ChatMsg]) -> Void) {
         // 流式中删除当前会话：完成后 persistThread 会写进 loadSessions 自动选中的
         // 另一个会话并覆盖其历史（旧历史全部丢失）——与 selectSession 同一守卫。
-        guard !isStreaming, !isAwaitingForegroundRetry else { return }
+        guard !isStreaming, !isAwaitingForegroundRetry else {
+            interactionHint = "正在回复中，完成后即可操作会话。"
+            return
+        }
         modelContext.delete(session)
         do {
             try modelContext.save()

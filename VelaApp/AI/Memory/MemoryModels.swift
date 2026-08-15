@@ -207,9 +207,23 @@ struct ContextBudget: Codable, Hashable {
     /// Maximum characters for weekly trends in the system prompt.
     var maxTrendsCharacters: Int = 500
 
+    /// 估算 token 数（预算按 token 而非字符：中文约 1.5 token/字，其余约 0.25）。
+    static func estimatedTokenCount(_ text: String) -> Int {
+        var tokens = 0.0
+        for scalar in text.unicodeScalars {
+            if scalar.value >= 0x4E00 && scalar.value <= 0x9FFF {
+                tokens += 1.5
+            } else {
+                tokens += 0.25
+            }
+        }
+        return Int(tokens.rounded())
+    }
+
     /// Applies budget trimming to wiki text, keeping the most important sections first.
+    /// maxChars 语义保留为向后兼容的「预算单位」；实际比较用 token 估算。
     static func trimWiki(_ wikiText: String, maxChars: Int = 3000) -> String {
-        guard wikiText.count > maxChars else { return wikiText }
+        guard estimatedTokenCount(wikiText) > maxChars else { return wikiText }
         // Priority: baselines > goals > profile > constraints > preferences > habits > observations > strategies
         let sections = wikiText.components(separatedBy: "\n### ")
         guard sections.count > 1 else {
@@ -235,7 +249,7 @@ struct ContextBudget: Codable, Hashable {
         var result = ""
         for section in ordered {
             let candidate = result.isEmpty ? section : "### \(section)"
-            if result.count + candidate.count > maxChars { break }
+            if estimatedTokenCount(result) + estimatedTokenCount(candidate) > maxChars { break }
             result += (result.isEmpty ? "" : "\n") + candidate
         }
         return result + "\n\n[Wiki truncated to fit context budget. Remaining sections available via Wiki profile.]"

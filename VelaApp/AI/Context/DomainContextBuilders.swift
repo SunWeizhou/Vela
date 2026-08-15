@@ -152,7 +152,7 @@ struct WorkoutsContextBuilder {
 struct ExtendedMetricsContextBuilder {
     func build(ext: ExtendedHealthMetrics, body: BodyMetricsSummary) -> [String: String] {
         var d: [String: String] = [:]
-        if let age = WikiFileService.getAgeFromWiki() ?? ext.age {
+        if let age = ext.age ?? WikiFileService.getAgeFromWiki() {
             d["age"] = "\(age)"
         }
         if let sex = ext.biologicalSex { d["biological_sex"] = sex }

@@ -81,6 +81,8 @@ struct AIContextBuilder {
         trainingDecision: DailyTrainingDecision? = nil,
         dataCoverage: AgentDataCoverageContext? = nil,
         profileAge: Int? = nil,
+        dailyOperatingPlan: [String: String]? = nil,
+        activePlan: TrainingPlanDTO? = nil,
         calendar: Calendar = .current,
         generatedAt: Date = Date()
     ) -> (snapshot: AgentFactSnapshot, metadata: ContextSnapshotMetadata) {
@@ -139,6 +141,9 @@ struct AIContextBuilder {
             score: healthMetric(dashboard.recovery.hasData ? dashboard.recovery.value : nil, unit: "pts", note: "Recovery score is not computed yet.", measuredAt: dashboard.recovery.lastUpdated, source: .computed, confidence: dataConfidence(dashboard.recovery.confidence)),
             band: dashboard.recovery.hasData ? dashboard.recovery.band.rawValue : "unavailable",
             hrv: healthMetric(hrvMs, unit: "ms", note: "HRV is unavailable.", measuredAt: dashboard.recovery.lastUpdated),
+            hrvRmssd: dashboard.recoveryMetrics.hrvRmssdMilliseconds.map {
+                healthMetric($0, unit: "ms", note: "RMSSD is unavailable.", measuredAt: dashboard.recovery.lastUpdated, source: .healthKit)
+            },
             restingHeartRate: healthMetric(rhrBpm, unit: "bpm", note: "Resting heart rate is unavailable.", measuredAt: dashboard.recovery.lastUpdated),
             respiratoryRate: healthMetric(dashboard.recoveryMetrics.respiratoryRate, unit: "br/min", note: "Respiratory rate is unavailable.", measuredAt: dashboard.recovery.lastUpdated),
             topReason: dashboard.recovery.reasons.first
@@ -190,13 +195,41 @@ struct AIContextBuilder {
         )
 
         let workouts = dashboard.workouts
+        // A9：v2 TrainingContext 的死字段补齐——激活计划与训练明细此前恒为 nil/"[]"。
+        let planSummary: ActivePlanSummary? = activePlan.map { plan in
+            ActivePlanSummary(
+                title: plan.title,
+                goalDescription: plan.goalDescription,
+                weeksCount: plan.weeksCount,
+                completedDays: plan.days.filter(\.isCompleted).count,
+                totalDays: plan.days.count
+            )
+        }
+        let workoutListJSON: String = {
+            let recent = workoutEvents
+                .sorted { $0.startedAt > $1.startedAt }
+                .prefix(12)
+                .map { event in
+                    [
+                        "name": event.title.isEmpty ? event.activityType : event.title,
+                        "started_at": ISO8601DateFormatter().string(from: event.startedAt),
+                        "duration_min": event.durationMinutes as Any,
+                        "energy_kcal": event.energyKilocalories as Any,
+                        "source": event.source as Any
+                    ] as [String: Any]
+                }
+            guard JSONSerialization.isValidJSONObject(Array(recent)),
+                  let data = try? JSONSerialization.data(withJSONObject: Array(recent)),
+                  let text = String(data: data, encoding: .utf8) else { return "[]" }
+            return text
+        }()
         let training = TrainingContext(
-            activePlan: nil,
+            activePlan: planSummary,
             workoutCount: workouts.count,
             workoutTypes: Array(Set(workouts.map(\.activityName))).sorted(),
             totalEnergyKcal: workouts.compactMap(\.energyKilocalories).reduce(0, +),
             totalDurationMin: workouts.map { Int($0.end.timeIntervalSince($0.start) / 60) }.reduce(0, +),
-            workoutListJSON: "[]"
+            workoutListJSON: workoutListJSON
         )
 
         let nutrition = NutritionContext(
@@ -322,11 +355,16 @@ struct AIContextBuilder {
                 dashboard: dashboard,
                 generatedAt: generatedAt
             ),
-            recentTrends: ["note": "v2 typed context"],
+            // A12：recentTrends 占位符移除——与 weeklyTrends 同源，避免固定死字节。
+            recentTrends: weeklyTrends.isEmpty ? ["note": "No weekly trend data available yet."] : weeklyTrends,
             weeklyTrends: weeklyTrends.isEmpty ? ["note": "No weekly trend data available yet."] : weeklyTrends,
             journalEntries: journalEntries.map { "\($0.tags.joined(separator: "|")): \($0.text)" },
-            historicalReports: historicalReports.map { "\($0.title): \($0.markdownContent.prefix(160))" },
-            userWiki: mergedUserWiki
+            // A4：各上限统一路由到 ContextBudget 字段（此前散落为字面量）。
+            historicalReports: historicalReports.prefix(ContextBudget().maxHistoricalReports).map { "\($0.title): \($0.markdownContent.prefix(160))" },
+            userWiki: Dictionary(uniqueKeysWithValues: mergedUserWiki.map { key, value in
+                (key, ContextBudget.trimWiki(value, maxChars: 3000))
+            }),
+            dailyOperatingPlan: dailyOperatingPlan
         )
 
         let hash = canonicalContentHash(context)
@@ -684,7 +722,11 @@ struct AIContextBuilder {
         onboardingState: OnboardingState?,
         bodyModelState: BodyModelState? = nil
     ) -> [String: String] {
-        var result = userWiki
+        // A5：wiki 文件键中未初始化的（空/默认模板）一律剔除，空模板样板不进 AI 上下文。
+        var result = userWiki.filter { key, _ in
+            guard WikiFileService.allowedFilenames.contains(key) else { return true }
+            return !WikiFileService.isUninitialized(key)
+        }
         if let onboardingState {
             let goal = onboardingState.goalProfile
             let training = onboardingState.trainingPreference
@@ -723,6 +765,33 @@ struct AIContextBuilder {
             result["body_model.coach_rules"] = bodyModelState.coachRules.joined(separator: " | ")
         }
         return result
+    }
+
+    /// A1：把持久化的 Daily Operating Plan 压缩成结构化事实。
+    /// 此前 AI 只拿到 trainingDecision 切片；主行动/支持行动/理由/置信度全部缺席。
+    static func compactDailyOperatingPlan(_ plan: DailyOperatingPlanRecord?) -> [String: String]? {
+        guard let plan else { return nil }
+        var dict: [String: String] = [
+            "day_identifier": plan.dayIdentifier,
+            "status": plan.status,
+            "title": plan.title,
+            "primary_action_type": plan.primaryActionType,
+            "confidence": String(format: "%.2f", plan.confidence),
+            "actions_json": String(plan.payloadJSON.prefix(800)),
+            "reasons_json": String(plan.reasonsJSON.prefix(800))
+        ]
+        if let payload = plan.operatingPlanPayload {
+            dict["decision"] = payload.decision.rawValue
+            dict["volume_multiplier"] = String(format: "%.2f", payload.volumeMultiplier)
+            dict["intensity_cap_rpe"] = "\(payload.intensityCap)"
+            dict["summary"] = payload.summary
+            if let target = payload.targetSessionTitle {
+                dict["target_session_title"] = target
+            }
+        }
+        if let source = plan.source { dict["source"] = source }
+        if let safety = plan.safetyNotice { dict["safety_notice"] = safety }
+        return dict
     }
 
 }
@@ -868,9 +937,10 @@ struct AgentFactInputLoader {
         let allReports = (try? modelContext.fetch(FetchDescriptor<AIReportRecord>(
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         ))) ?? []
+        // A4：历史报告上限路由到 ContextBudget（此前硬编码 6）。
         let reports = Array(allReports.lazy
             .filter { $0.type != "coach_prompt" && $0.type != "coach_thread" }
-            .prefix(6))
+            .prefix(ContextBudget().maxHistoricalReports))
 
         let foods = (try? modelContext.fetch(FetchDescriptor<FoodLogRecord>(
             predicate: #Predicate<FoodLogRecord> { $0.createdAt >= historyStart },
@@ -888,10 +958,13 @@ struct AgentFactInputLoader {
             predicate: #Predicate<TrainingResponseRecord> { $0.date >= historyStart },
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         ))) ?? []
-        let summaries = (try? modelContext.fetch(FetchDescriptor<DailyHealthSummaryRecord>(
+        // A8 修复：每日快照只取最新一条（此前抓 35 天只用 .first，白费一次大 fetch）。
+        var summaryDescriptor = FetchDescriptor<DailyHealthSummaryRecord>(
             predicate: #Predicate<DailyHealthSummaryRecord> { $0.date >= historyStart },
             sortBy: [SortDescriptor(\.date, order: .reverse)]
-        ))) ?? []
+        )
+        summaryDescriptor.fetchLimit = 1
+        let summaries = (try? modelContext.fetch(summaryDescriptor)) ?? []
         let activePlan = (try? modelContext.fetch(FetchDescriptor<TrainingPlanRecord>(
             predicate: #Predicate<TrainingPlanRecord> { $0.isActive }
         )))?.first
@@ -990,6 +1063,22 @@ struct CoachCompactContextAdapter {
                 appendIfFits(isChinese
                     ? "- 近期恢复反应：\(summary)"
                     : "- Recent recovery response: \(summary)")
+            }
+        }
+
+        // A1：完整 Daily Operating Plan 进入紧凑快照（此前只有 training decision 切片）。
+        if let plan = snapshot.dailyOperatingPlan {
+            let planLines: [String] = [
+                plan["title"].map { "- 今日计划：\($0)（\(plan["status"] ?? "--")）" },
+                plan["primary_action_type"].map { "- 主行动类型：\($0)" },
+                plan["summary"].map { "- 计划摘要：\($0)" },
+                plan["reasons_json"].map { "- 计划理由：\(String($0.prefix(200)))" }
+            ].compactMap { $0 }
+            if !planLines.isEmpty {
+                appendIfFits(
+                    (isChinese ? "## 今日运行计划\n" : "## Daily Operating Plan\n")
+                        + planLines.joined(separator: "\n")
+                )
             }
         }
 

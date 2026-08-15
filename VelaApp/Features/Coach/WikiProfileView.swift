@@ -404,11 +404,13 @@ struct WikiProfileView: View {
 
     private func saveEdit(_ doc: WikiDocument) {
         let fieldValues = Dictionary(uniqueKeysWithValues: draftFields.map { ($0.label, $0.value) })
+        // preferredOrder 使用草稿标签本身（支持中文标签），
+        // replacingStructuredFields 会原位替换同名条目并补齐缺失项。
         let newContent = WikiFileService.replacingStructuredFields(
             in: doc.content,
             title: doc.title,
             fieldValues: fieldValues,
-            preferredOrder: fileTemplateFields[doc.filename] ?? [doc.title]
+            preferredOrder: draftFields.map(\.label)
         )
         try? WikiFileService.updateSection(filename: doc.filename, content: newContent, mode: .replace)
         
@@ -457,33 +459,13 @@ struct WikiProfileView: View {
     }
 
     private func parseFields(from doc: WikiDocument) -> [WikiField] {
-        let labels = fileTemplateFields[doc.filename] ?? [doc.title]
-        let content = doc.content
-        let lines = content.components(separatedBy: "\n")
-
-        // Try to parse existing values from markdown: "- Label: value" or "# Label\nvalue"
-        var values: [String: String] = [:]
-
-        for i in 0..<lines.count {
-            let trimmed = lines[i].trimmingCharacters(in: .whitespaces)
-            // Pattern: "- Label: value" or "- Label value"
-            if trimmed.hasPrefix("- ") {
-                let body = String(trimmed.dropFirst(2))
-                for label in labels {
-                    let colonPrefix = "\(label): "
-                    let spacePrefix = "\(label) "
-                    if body.hasPrefix(colonPrefix) {
-                        values[label] = String(body.dropFirst(colonPrefix.count))
-                        break
-                    } else if body.hasPrefix(spacePrefix) && !body.hasPrefix(colonPrefix) {
-                        values[label] = String(body.dropFirst(spacePrefix.count))
-                        break
-                    }
-                }
-            }
-        }
-
-        return labels.map { WikiField(label: $0, value: values[$0] ?? "") }
+        // 通用解析：中英文标签、中英文冒号均可展示。
+        // 空内容回退到模板字段，保证空白档案仍可结构化编辑。
+        WikiBulletParser.parseFields(
+            in: doc.content,
+            templateLabels: fileTemplateFields[doc.filename] ?? [doc.title]
+        )
+        .map { WikiField(label: $0.label, value: $0.value) }
     }
 
     private func placeholderForField(_ label: String) -> String {
@@ -523,7 +505,25 @@ struct WikiProfileView: View {
             "Targets": ("e.g. 7.5 hours sleep", "例如 7.5小时睡眠"),
             "Observations": ("e.g. Fatigue after squats", "例如 深蹲后大腿易疲劳"),
             "Active strategies": ("e.g. Progressive overload", "例如 渐进性超负荷"),
-            "Archive": ("e.g. Old goals...", "例如 历史目标存档...")
+            "Archive": ("e.g. Old goals...", "例如 历史目标存档..."),
+            "主要目标": ("e.g. Fat loss", "例如 减脂"),
+            "经验水平": ("e.g. Intermediate", "例如 中级"),
+            "训练风格": ("e.g. Strength training", "例如 力量训练"),
+            "每周训练": ("e.g. 3 times × 60 min", "例如 每周3次、每次60分钟"),
+            "设备": ("e.g. Gym", "例如 健身房"),
+            "教练风格": ("e.g. Direct", "例如 直截了当"),
+            "沟通风格": ("e.g. Direct", "例如 直截了当"),
+            "训练频次": ("e.g. 3 per week", "例如 每周3次"),
+            "训练节奏": ("e.g. 3 per week", "例如 每周3次"),
+            "训练设备": ("e.g. Dumbbells", "例如 哑铃"),
+            "晚间作息": ("e.g. Sleep at 23:00", "例如 23点入睡"),
+            "典型每周训练量": ("e.g. 3 sessions", "例如 每周3练"),
+            "偏好的训练类型": ("e.g. Strength", "例如 力量训练"),
+            "年龄": ("e.g. 28", "例如 28"),
+            "身高": ("e.g. 175 cm", "例如 175 cm"),
+            "体重": ("e.g. 72 kg", "例如 72 kg"),
+            "最大心率": ("e.g. 188 bpm", "例如 188 bpm"),
+            "性别": ("e.g. Male", "例如 男")
         ]
         if let entry = map[label] {
             return lang.isChinese ? entry.zh : entry.en

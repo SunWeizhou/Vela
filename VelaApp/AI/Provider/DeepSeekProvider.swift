@@ -211,6 +211,7 @@ struct DeepSeekProvider: LLMProvider {
                     }
 
                     var didReceiveDone = false
+                    var didReceiveLengthFinish = false
                     for try await line in bytes.lines {
                         let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
                         if trimmedLine == "data: [DONE]" || trimmedLine == "data:[DONE]" {
@@ -220,12 +221,19 @@ struct DeepSeekProvider: LLMProvider {
                         guard line.hasPrefix("data: ") else { continue }
                         let json = String(line.dropFirst(6))
                         guard let data = json.data(using: .utf8),
-                              let chunk = try? JSONDecoder().decode(DeepSeekStreamChunk.self, from: data),
-                              let delta = chunk.choices.first?.delta.content,
+                              let chunk = try? JSONDecoder().decode(DeepSeekStreamChunk.self, from: data) else { continue }
+                        if chunk.choices.first?.finishReason == "length" {
+                            // max_tokens 截断属正常收尾（此前被判 invalidResponse，
+                            // 用户看到「无法解析」而非「回复过长」）。
+                            didReceiveLengthFinish = true
+                        }
+                        guard let delta = chunk.choices.first?.delta.content,
                               !delta.isEmpty else { continue }
                         continuation.yield(delta)
                     }
-                    guard DeepSeekStreamCompletion.isComplete(didReceiveDone: didReceiveDone) else {
+                    guard DeepSeekStreamCompletion.isComplete(
+                        didReceiveDone: didReceiveDone || didReceiveLengthFinish
+                    ) else {
                         throw LLMProviderError.invalidResponse
                     }
                     continuation.finish()
@@ -372,6 +380,7 @@ private struct DeepSeekStreamChunk: Decodable {
 
     struct Choice: Decodable {
         var delta: Delta
+        var finishReason: String?
     }
 
     struct Delta: Decodable {

@@ -129,11 +129,16 @@ final class CoachChatVM: ObservableObject {
         }
     }
 
-    /// 重试目标：最近一次失败气泡对应的用户消息（而非「最后一条」用户消息——
-    /// 用户在 Q1 失败后又问了 Q2 时，点 Q1 的重试必须重发 Q1）。
-    static func userMessageForRetry(in messages: [ChatMsg]) -> (text: String, retryBubbleId: UUID)? {
+    /// 重试目标：以失败气泡身份为锚点，找到它对应的用户消息——
+    /// 用户在 Q1 失败后又问了 Q2 时，点 Q1 的重试必须重发 Q1。
+    static func userMessageForRetry(
+        in messages: [ChatMsg],
+        retryBubbleId: UUID? = nil
+    ) -> (text: String, retryBubbleId: UUID)? {
         guard let retryIndex = messages.lastIndex(where: {
-            $0.role == .assistant && $0.recoveryAction?.destination == .retry
+            $0.role == .assistant
+                && $0.recoveryAction?.destination == .retry
+                && (retryBubbleId == nil || $0.id == retryBubbleId)
         }),
         let userIndex = messages[..<retryIndex].lastIndex(where: { $0.role == .user }) else {
             return nil
@@ -149,7 +154,13 @@ final class CoachChatVM: ObservableObject {
     @Published var isAnalyzingFood = false
     @Published var isAwaitingForegroundRetry = false
     @Published var persistenceError: String?
+    /// 会话操作被守卫拦截时的提示（与 sessionStore.interactionHint 同步展示）。
+    @Published var interactionHint: String?
     @Published private(set) var isGhostMode = false
+    /// 写/破坏类工具等待用户确认（ADR 0008：AI 提议、用户确认）。
+    @Published var pendingToolConfirmation: ToolCallDescription?
+    private var toolConfirmationContinuation: CheckedContinuation<Bool, Never>?
+    private var toolConfirmationTimeoutTask: Task<Void, Never>?
 
     let quickQuestions: [String] = [
         L10n.t("Today's training advice", "今天的训练建议"),
@@ -243,6 +254,7 @@ final class CoachChatVM: ObservableObject {
         ) { [weak self] msgs in
             self?.messages = msgs
         }
+        interactionHint = sessionStore.interactionHint
     }
 
     func selectSession(_ session: CoachSessionRecord, modelContext: ModelContext) {
@@ -254,6 +266,7 @@ final class CoachChatVM: ObservableObject {
         ) { [weak self] msgs in
             self?.messages = msgs
         }
+        interactionHint = sessionStore.interactionHint
     }
 
     func deleteSession(_ session: CoachSessionRecord, modelContext: ModelContext) {
@@ -265,6 +278,7 @@ final class CoachChatVM: ObservableObject {
         ) { [weak self] msgs in
             self?.messages = msgs
         }
+        interactionHint = sessionStore.interactionHint
     }
 
     func renameSession(_ session: CoachSessionRecord, to newTitle: String, modelContext: ModelContext) {
@@ -277,6 +291,10 @@ final class CoachChatVM: ObservableObject {
         ) { [weak self] msgs in
             self?.messages = msgs
         }
+    }
+
+    func sessionStoreHintCleared() {
+        sessionStore.interactionHint = nil
     }
 
     func persistThread(modelContext: ModelContext) {
@@ -383,7 +401,10 @@ final class CoachChatVM: ObservableObject {
         focus: CoachContextFocus = .general,
         services: VelaServices? = nil
     ) {
-        guard activeResponseTask == nil else { return }
+        guard activeResponseTask == nil else {
+            interactionHint = "正在回复中，完成后即可再次发送。"
+            return
+        }
         let targetText = (text ?? draft).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !targetText.isEmpty else { return }
         draft = ""
@@ -412,10 +433,11 @@ final class CoachChatVM: ObservableObject {
         journalEntries: [JournalEntryRecord],
         savedReports: [AIReportRecord],
         focus: CoachContextFocus = .general,
-        services: VelaServices? = nil
+        services: VelaServices? = nil,
+        retryBubbleId: UUID? = nil
     ) {
         guard activeResponseTask == nil,
-              let retryTarget = Self.userMessageForRetry(in: messages) else {
+              let retryTarget = Self.userMessageForRetry(in: messages, retryBubbleId: retryBubbleId) else {
             return
         }
 
@@ -543,6 +565,10 @@ final class CoachChatVM: ObservableObject {
                 isGhostMode: isGhostMode,
                 onStreamDelta: { [weak self] delta in
                     self?.streamingContent += delta
+                },
+                onConfirmToolCall: { [weak self] description in
+                    guard let self else { return false }
+                    return await self.requestToolConfirmation(description)
                 }
             )
 
@@ -588,7 +614,11 @@ final class CoachChatVM: ObservableObject {
             }
 
             let parsed = AgentActionParser.parse(finalResponseProcessed)
-            if !isGhostMode {
+            // 双通道去重：AgentLoop 路径的 wiki 更新已由 update_user_wiki 工具
+            // （带用户确认）处理，legacy [ACTION:update_wiki] 解析仅在 casual
+            // 短回复路径（无工具通道）保留。
+            let isCasualPath = ResponseLengthPolicy.forQuery(userText, lang: AppLanguage.stored) == .casual
+            if !isGhostMode && isCasualPath {
                 let ledger = MemoryLedger(modelContext: modelContext)
                 for action in parsed.actions where action.type == .updateWiki {
                     let memType = WikiFileRole.memoryTypeFor(filename: action.target)
@@ -619,30 +649,36 @@ final class CoachChatVM: ObservableObject {
             }
 
             if !isGhostMode {
-                persistThread(modelContext: modelContext)
-                try writer.persistInteraction(
-                    userText: userText,
-                    assistantText: finalText,
-                    focus: focus,
-                    contextHash: contextHash,
-                    currentSession: currentSession,
-                    modelContext: modelContext
-                )
+                do {
+                    persistThread(modelContext: modelContext)
+                    try writer.persistInteraction(
+                        userText: userText,
+                        assistantText: finalText,
+                        focus: focus,
+                        contextHash: contextHash,
+                        currentSession: currentSession,
+                        modelContext: modelContext
+                    )
 
-                var agentTrace = loopResult.trace
-                agentTrace.finalResponse = finalText
-                agentTrace.endedAt = Date()
-                try writer.persistAgentTrace(agentTrace, modelContext: modelContext)
+                    var agentTrace = loopResult.trace
+                    agentTrace.finalResponse = finalText
+                    agentTrace.endedAt = Date()
+                    try writer.persistAgentTrace(agentTrace, modelContext: modelContext)
 
-                try? DailyLogService.recordInteraction(
-                    dashboard: dashboard,
-                    userText: userText,
-                    assistantText: finalText,
-                    wikiUpdates: wikiFiles,
-                    coachArchiveSummary: wikiUpdateSummaries.isEmpty
-                        ? nil
-                        : "本轮 Coach 主动提出长期档案更新：" + wikiUpdateSummaries.joined(separator: "；")
-                )
+                    try? DailyLogService.recordInteraction(
+                        dashboard: dashboard,
+                        userText: userText,
+                        assistantText: finalText,
+                        wikiUpdates: wikiFiles,
+                        coachArchiveSummary: wikiUpdateSummaries.isEmpty
+                            ? nil
+                            : "本轮 Coach 主动提出长期档案更新：" + wikiUpdateSummaries.joined(separator: "；")
+                    )
+                } catch {
+                    // 持久化失败 ≠ 请求失败：已成功的回复保留在界面上，只暴露持久化错误。
+                    persistenceError = error.localizedDescription
+                    persistThread(modelContext: modelContext)
+                }
             }
 
             isReady = true
@@ -651,7 +687,19 @@ final class CoachChatVM: ObservableObject {
             let isUserCancellation = error is CancellationError
                 || (error as? URLError)?.code == .cancelled
             if isUserCancellation {
-                // 用户主动停止：保留已流出的部分内容，不追加伪造的「服务不可用」错误气泡
+                // 用户主动停止：把已流出的部分内容固化进气泡（与注释一致），
+                // 不追加伪造的「服务不可用」错误气泡；无内容则移除空泡。
+                let partial = streamingContent
+                if partial.isEmpty {
+                    messages.removeAll { $0.id == assistantId }
+                } else if let idx = messages.firstIndex(where: { $0.id == assistantId }) {
+                    messages[idx] = ChatMsg(
+                        id: assistantId,
+                        role: .assistant,
+                        content: partial,
+                        wikiUpdates: messages[idx].wikiUpdates
+                    )
+                }
                 streamingContent = ""
             } else {
                 streamingContent = ""
@@ -676,5 +724,36 @@ final class CoachChatVM: ObservableObject {
 
         streamingContent = ""
         isStreaming = false
+        // 流式结束/取消时若确认弹窗仍挂起（用户未响应），自动按拒绝收尾，
+        // 避免 continuation 泄漏导致任务悬挂。
+        if pendingToolConfirmation != nil {
+            confirmToolCall(false)
+        }
+    }
+
+    /// 等待用户在界面上确认写/破坏类工具调用；60 秒未响应按拒绝处理，
+    /// 避免确认挂起卡死整个 Agent 循环。
+    @MainActor
+    private func requestToolConfirmation(_ description: ToolCallDescription) async -> Bool {
+        await withCheckedContinuation { continuation in
+            toolConfirmationContinuation = continuation
+            pendingToolConfirmation = description
+            toolConfirmationTimeoutTask?.cancel()
+            toolConfirmationTimeoutTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
+                guard let self, self.toolConfirmationContinuation != nil else { return }
+                self.confirmToolCall(false)
+            }
+        }
+    }
+
+    /// 用户对工具确认弹窗作出选择。
+    func confirmToolCall(_ approved: Bool) {
+        guard let continuation = toolConfirmationContinuation else { return }
+        toolConfirmationTimeoutTask?.cancel()
+        toolConfirmationTimeoutTask = nil
+        toolConfirmationContinuation = nil
+        pendingToolConfirmation = nil
+        continuation.resume(returning: approved)
     }
 }

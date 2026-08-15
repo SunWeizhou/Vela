@@ -57,6 +57,27 @@ final class MorningBriefScheduler: ObservableObject {
             }
         }
         
+        // 2.5 数据新鲜度检查：今日快照未同步、或早于健康日 04:00 边界（大概率
+        // 缺当夜睡眠数据）时不生成——此前只查「存在性」，00:30 的空快照可通过。
+        if !force {
+            let todayIdentifier = DailyHealthSummaryRecord.dayIdentifier(
+                for: Date(),
+                calendar: Calendar.current
+            )
+            let todayDescriptor = FetchDescriptor<DailyHealthSummaryRecord>(
+                predicate: #Predicate<DailyHealthSummaryRecord> { $0.dayIdentifier == todayIdentifier }
+            )
+            guard let todayRecord = (try? modelContext.fetch(todayDescriptor))?.first else {
+                logger.warning("Today's health snapshot is not yet synced. Skipping morning brief.")
+                return
+            }
+            let healthDayBoundary = Calendar.current.date(bySettingHour: 4, minute: 0, second: 0, of: Date()) ?? Date()
+            guard todayRecord.updatedAt >= healthDayBoundary else {
+                logger.warning("Today's snapshot predates the 04:00 health-day boundary (likely missing sleep data). Skipping morning brief.")
+                return
+            }
+        }
+
         // 3. Read API Key from Keychain
         guard let apiKey = try? keychain.read(account: apiKeyAccount), !apiKey.isEmpty else {
             logger.warning("DeepSeek API Key is not set in Keychain. Cannot generate morning brief.")
@@ -87,10 +108,11 @@ final class MorningBriefScheduler: ObservableObject {
             )
 
             // 5. Load Wiki data
-            let wiki = WikiFileService.loadDictionary()
+            let wiki = WikiFileService.loadPopulatedDictionary()
 
-            // 6. Render the frozen v1 report contract from the shared facts.
-            let (context, contextMeta) = (services?.contextBuilder ?? AIContextBuilder()).build(
+            // 6. A6：晨报消费 v2 AgentFactSnapshot（与 Coach / 晚间同步同源），
+            // 不再走 v1 AgentContextEnvelope 双序列化路径。
+            let (context, contextMeta) = (services?.contextBuilder ?? AIContextBuilder()).buildFacts(
                 dashboard: dashboard,
                 journalEntries: input.journalContext,
                 historicalReports: input.reportContext,
@@ -102,11 +124,14 @@ final class MorningBriefScheduler: ObservableObject {
                 trainingResponses: input.trainingResponses,
                 onboardingState: input.onboardingState,
                 bodyState: input.bodyState(dashboard: dashboard),
+                dailyOperatingPlan: AIContextBuilder.compactDailyOperatingPlan(input.dailyOperatingPlan),
+                activePlan: input.activePlan?.dto,
                 generatedAt: contextAsOf
             )
             
-            // 7. Generate Report using ReportGenerator
-            let provider = services?.deepSeekProvider(apiKey: apiKey) ?? DeepSeekProvider(apiKey: apiKey)
+            // 7. Generate Report using ReportGenerator（带指数退避重试）
+            let baseProvider = services?.deepSeekProvider(apiKey: apiKey) ?? DeepSeekProvider(apiKey: apiKey)
+            let provider = RetryingLLMProvider(base: baseProvider)
             let generator = ReportGenerator(provider: provider, language: AppLanguage.stored)
             
             logger.info("Calling ReportGenerator for morning brief...")
@@ -134,8 +159,12 @@ final class MorningBriefScheduler: ObservableObject {
             runRecord.outputSummary = String(generatedReport.markdownContent.prefix(300))
             try? modelContext.save()
 
-            // Send notification that the morning brief is ready
-            NotificationService.shared.scheduleMorningBriefCheck()
+            // Send notification that the morning brief is ready（PR11：带报告首行正文）
+            let headline = generatedReport.markdownContent
+                .components(separatedBy: .newlines)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .first { !$0.isEmpty && !$0.hasPrefix("#") && !$0.hasPrefix("|") }
+            NotificationService.shared.scheduleMorningBriefCheck(headline: headline)
 
         } catch {
             logger.error("Failed to generate Morning Brief: \(error.localizedDescription)")

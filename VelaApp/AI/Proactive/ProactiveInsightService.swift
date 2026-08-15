@@ -147,7 +147,7 @@ enum ProactiveInsightService {
                 relatedMetrics: ["walking_asymmetry"],
                 evidence: [
                     isChinese ? "步行不对称性 \(String(format: "%.1f%%", walkingAsymmetry))" : "Walking asymmetry \(String(format: "%.1f%%", walkingAsymmetry))",
-                    isChinese ? "高于当前参考阈值" : "Above the current reference threshold"
+                    isChinese ? "高于 4% 的固定参考阈值" : "Above the fixed 4% reference threshold"
                 ],
                 priority: 30,
                 coachPresetQuestion: isChinese
@@ -303,6 +303,13 @@ final class ProactiveIntelligenceOrchestrator: Sendable {
     /// Executed on app launch, scene active change, or background refresh task.
     @discardableResult
     func runAsyncCheck(modelContext: ModelContext, date: Date = Date()) async -> [ProactiveInsight] {
+        // 主动洞察开关必须生效：关闭时前台检查与告警排程都应跳过。
+        guard AutoAgentConfig.shared.proactiveInsights else { return [] }
+        // 日级去重：每次前台激活都会触发本检查，同日只评估一次。
+        let dayStart = Calendar.current.startOfDay(for: date)
+        let lastRunKey = "vela.proactive.last_async_check_day"
+        if (UserDefaults.standard.object(forKey: lastRunKey) as? Date) == dayStart { return [] }
+        UserDefaults.standard.set(dayStart, forKey: lastRunKey)
         Self.logger.info("Running proactive intelligence evaluation for \(date)...")
         
         do {
@@ -312,34 +319,8 @@ final class ProactiveIntelligenceOrchestrator: Sendable {
             // 2. Evaluate Proactive Insights via ProactiveInsightService
             let evaluatedInsights = ProactiveInsightService.evaluate(dashboard: dashboard)
             
-            // 3. Persist Insights into SwiftData
-            let dayStart = Calendar.current.startOfDay(for: date)
-            let existingRecords = (try? modelContext.fetch(FetchDescriptor<ProactiveInsightRecord>(
-                predicate: #Predicate { $0.date >= dayStart }
-            ))) ?? []
-            
-            for oldRecord in existingRecords {
-                modelContext.delete(oldRecord)
-            }
-            
-            for insight in evaluatedInsights {
-                let record = ProactiveInsightRecord(
-                    date: dayStart,
-                    focusRaw: "\(insight.focus)",
-                    severityRaw: "\(insight.severity)",
-                    title: insight.title,
-                    bodyText: insight.body,
-                    suggestedAction: insight.suggestedAction,
-                    priority: insight.priority,
-                    coachPresetQuestion: insight.coachPresetQuestion,
-                    createdAt: Date()
-                )
-                modelContext.insert(record)
-            }
-            
-            try? modelContext.save()
-            
-            // 4. Log event in Event Service
+            // 3. D3 修复：不再持久化 ProactiveInsightRecord——UI 每次实时重算（唯一事实来源），
+            //    落库记录此前无任何渲染读者（只写数据 + TodayView 死 @Query）。
             VelaEventService.shared.log(
                 modelContext: modelContext,
                 type: VelaProductEventType.proactiveInsightGenerated,
@@ -370,10 +351,16 @@ final class ProactiveIntelligenceOrchestrator: Sendable {
         content.body = insight.body
         content.sound = .default
         
+        // 日级固定 identifier：同一天同 focus 只弹一次（此前 UUID 标识无去重，
+        // 每次进前台都会重复弹同一条告警）。
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        let identifier = "vela_alert_\(insight.focus)_\(formatter.string(from: Date()))"
+        center.removePendingNotificationRequests(withIdentifiers: [identifier])
+        center.removeDeliveredNotifications(withIdentifiers: [identifier])
         let request = UNNotificationRequest(
-            // Unique per alert: focus alone (~7 values) reused the same identifier,
-            // so a new alert for the same focus silently replaced the previous one.
-            identifier: "vela_alert_\(insight.focus)_\(UUID().uuidString)",
+            identifier: identifier,
             content: content,
             trigger: nil
         )
@@ -463,13 +450,19 @@ public struct AutonomousHealthDigitalTwin: Sendable {
 
         if sleepMultiplier < 0.9 {
             tag = "suboptimal_timing"
-            rec = "晚间高强度训练可能干扰自主神经平息，建议将训练提早至 19:00 前完成或降低容量。"
+            rec = AppLanguage.stored.isChinese
+                ? "晚间高强度训练可能干扰自主神经平息，建议将训练提早至 19:00 前完成或降低容量。"
+                : "Late high-intensity training may disrupt autonomic settling; finish before 19:00 or reduce volume."
         } else if predictedRecovery >= 75.0 {
             tag = "optimal"
-            rec = "该模拟组合支持次日恢复维持在绿区，建议按此计划执行。"
+            rec = AppLanguage.stored.isChinese
+                ? "该模拟组合支持次日恢复维持在绿区，建议按此计划执行。"
+                : "This simulated combination keeps next-day recovery in the green zone; proceed as planned."
         } else {
             tag = "strained"
-            rec = "预测次日恢复呈中度偏低，建议增加 30 分钟睡眠或降低 15% 训练容量。"
+            rec = AppLanguage.stored.isChinese
+                ? "预测次日恢复呈中度偏低，建议增加 30 分钟睡眠或降低 15% 训练容量。"
+                : "Predicted next-day recovery is moderately low; add 30 minutes of sleep or reduce training volume by 15%."
         }
 
         return DigitalTwinSimulationResult(
