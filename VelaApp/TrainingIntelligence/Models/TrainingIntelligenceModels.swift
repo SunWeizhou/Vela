@@ -49,6 +49,35 @@ struct PersonalRecord: Codable, Hashable, Identifiable, Sendable {
     }
 }
 
+extension PersonalRecord {
+    /// 聚合一段时间内的 PR：同一动作 + 同一类型只保留数值最高的一条；
+    /// 若多条数值相同，保留带 previousValue（即「打破前纪录」）的那条。
+    static func bestRecords(from records: [PersonalRecord]) -> [PersonalRecord] {
+        var bestByKey: [String: PersonalRecord] = [:]
+        for record in records {
+            let key = "\(record.exerciseName)|\(record.kind)"
+            guard let existing = bestByKey[key] else {
+                bestByKey[key] = record
+                continue
+            }
+            if record.value > existing.value {
+                bestByKey[key] = record
+            } else if record.value == existing.value,
+                      existing.previousValue == nil,
+                      record.previousValue != nil {
+                bestByKey[key] = record
+            }
+        }
+        return Array(bestByKey.values)
+            .sorted {
+                if $0.exerciseName == $1.exerciseName {
+                    return $0.kind < $1.kind
+                }
+                return $0.exerciseName < $1.exerciseName
+            }
+    }
+}
+
 struct LocalMuscleFatigue: Codable, Hashable, Sendable {
     var muscleGroup: String
     var setsLast48h: Int
@@ -176,6 +205,7 @@ struct RecoveryTrainingInput: Codable, Hashable, Sendable {
     var energyScore: Double?
     var localFatigue: [String: LocalMuscleFatigue] = [:]
     var plannedFocus: String?
+    var trainingResponseRecoveryDeltas: [Double] = []
 
     init(
         recoveryScore: Double,
@@ -185,7 +215,8 @@ struct RecoveryTrainingInput: Codable, Hashable, Sendable {
         tsb: Double? = nil,
         energyScore: Double? = nil,
         localFatigue: [String: LocalMuscleFatigue] = [:],
-        plannedFocus: String? = nil
+        plannedFocus: String? = nil,
+        trainingResponseRecoveryDeltas: [Double] = []
     ) {
         self.recoveryScore = recoveryScore
         self.sleepScore = sleepScore
@@ -195,6 +226,7 @@ struct RecoveryTrainingInput: Codable, Hashable, Sendable {
         self.energyScore = energyScore
         self.localFatigue = localFatigue
         self.plannedFocus = plannedFocus
+        self.trainingResponseRecoveryDeltas = trainingResponseRecoveryDeltas
     }
 }
 

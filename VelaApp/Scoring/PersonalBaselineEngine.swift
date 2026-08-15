@@ -52,22 +52,22 @@ enum PersonalBaselineEngine {
         let sleepScoreValues = recent.compactMap(\.sleepScore)
 
         return PersonalBaselines(
-            hrvBaselineMean: meanOfIfReady(hrvValues),
+            hrvBaselineMean: recencyMeanIfReady(hrvValues),
             hrvBaselineSD: standardDeviationIfReady(hrvValues),
-            rhrBaselineMean: meanOfIfReady(rhrValues),
+            rhrBaselineMean: recencyMeanIfReady(rhrValues),
             rhrBaselineSD: standardDeviationIfReady(rhrValues),
-            sleepHoursBaseline: meanOfIfReady(sleepHoursValues),
-            sleepEfficiencyBaseline: meanOfIfReady(sleepEfficiencyValues),
-            deepSleepPercentBaseline: meanOfIfReady(deepSleepValues),
-            remSleepPercentBaseline: meanOfIfReady(remSleepValues),
-            strainBaselineMean: meanOfIfReady(strainValues),
-            stepsBaseline: meanOfIfReady(stepsValues),
-            activeCaloriesBaseline: meanOfIfReady(caloriesValues),
+            sleepHoursBaseline: recencyMeanIfReady(sleepHoursValues),
+            sleepEfficiencyBaseline: recencyMeanIfReady(sleepEfficiencyValues),
+            deepSleepPercentBaseline: recencyMeanIfReady(deepSleepValues),
+            remSleepPercentBaseline: recencyMeanIfReady(remSleepValues),
+            strainBaselineMean: recencyMeanIfReady(strainValues),
+            stepsBaseline: recencyMeanIfReady(stepsValues),
+            activeCaloriesBaseline: recencyMeanIfReady(caloriesValues),
             calculatedAt: calculatedAt,
             daysOfData: recent.count,
-            recoveryBaselineMean: meanOfIfReady(recoveryValues),
+            recoveryBaselineMean: recencyMeanIfReady(recoveryValues),
             recoveryBaselineSD: standardDeviationIfReady(recoveryValues),
-            sleepScoreBaselineMean: meanOfIfReady(sleepScoreValues),
+            sleepScoreBaselineMean: recencyMeanIfReady(sleepScoreValues),
             sleepScoreBaselineSD: standardDeviationIfReady(sleepScoreValues)
         )
     }
@@ -76,6 +76,10 @@ enum PersonalBaselineEngine {
 
     private static func meanOfIfReady(_ values: [Double]) -> Double? {
         values.count >= minimumSamples ? meanOf(values) : nil
+    }
+
+    private static func recencyMeanIfReady(_ values: [Double]) -> Double? {
+        values.count >= minimumSamples ? recencyWeightedMean(values) : nil
     }
 
     private static func standardDeviationIfReady(_ values: [Double]) -> Double? {
@@ -238,8 +242,12 @@ enum PersonalBaselineEngine {
     // MARK: - Save to Wiki
 
     /// Save computed baselines to baselines.md in the user Wiki for AI coach reference.
-    static func saveBaselinesToWiki(_ baselines: PersonalBaselines) {
-        let markdown = formatForWiki(baselines)
+    /// longTerm 非空时追加「三年长期基线」章节（Layer 2：Coach 上下文自动携带）。
+    static func saveBaselinesToWiki(_ baselines: PersonalBaselines, longTerm: LongTermBaselineReport? = nil) {
+        var markdown = formatForWiki(baselines)
+        if let longTerm {
+            markdown += "\n" + LongTermBaselineEngine.formatForWiki(longTerm)
+        }
         try? WikiFileService.updateSection(filename: "baselines.md", content: markdown, mode: .replace)
     }
 
@@ -319,6 +327,26 @@ enum PersonalBaselineEngine {
     private static func percentFraction(in text: String) -> Double? {
         guard let value = firstNumber(in: text) else { return nil }
         return value / 100.0
+    }
+
+    /// 时间衰减加权均值：最近 recentWindow 个样本（按时间升序的末尾）权重 ×recentWeight。
+    /// 个人基线应对近期状态更敏感，同时保留长窗口的稳健性。
+    static func recencyWeightedMean(
+        _ values: [Double],
+        recentWindow: Int = 7,
+        recentWeight: Double = 2.0
+    ) -> Double? {
+        guard !values.isEmpty else { return nil }
+        let recentStart = max(0, values.count - recentWindow)
+        var weightedSum = 0.0
+        var totalWeight = 0.0
+        for (index, value) in values.enumerated() {
+            let weight = index >= recentStart ? recentWeight : 1.0
+            weightedSum += value * weight
+            totalWeight += weight
+        }
+        guard totalWeight > 0 else { return nil }
+        return weightedSum / totalWeight
     }
 
     private static func meanOf(_ values: [Double]) -> Double? {
@@ -428,4 +456,433 @@ struct PersonalBaselineThresholds {
     var sleepCaution: Double
     var sleepRest: Double
     var source: String
+}
+
+// MARK: - Long-term baseline engine（三年长线基准）
+
+enum LongTermBaselineMetric: String, CaseIterable, Hashable, Sendable {
+    case restingHeartRate
+    case hrv
+    case sleepHours
+    case bodyWeight
+    case steps
+    case activeCalories
+
+    var title: String {
+        switch self {
+        case .restingHeartRate: return "静息心率"
+        case .hrv: return "HRV"
+        case .sleepHours: return "睡眠时长"
+        case .bodyWeight: return "体重"
+        case .steps: return "步数"
+        case .activeCalories: return "活动能量"
+        }
+    }
+
+    var unit: String {
+        switch self {
+        case .restingHeartRate: return "bpm"
+        case .hrv: return "ms"
+        case .sleepHours: return "小时"
+        case .bodyWeight: return "kg"
+        case .steps: return "步"
+        case .activeCalories: return "kcal"
+        }
+    }
+
+    /// 数值变大是否代表变好（趋势与偏离的解读方向）。
+    var improvementIsPositive: Bool {
+        switch self {
+        case .restingHeartRate: return false
+        case .hrv: return true
+        case .sleepHours: return true
+        case .bodyWeight: return false
+        case .steps: return true
+        case .activeCalories: return true
+        }
+    }
+}
+
+/// 三年长线统计的一个输入日（只含原始字段）。
+struct LongTermBaselinePoint: Hashable, Sendable {
+    var date: Date
+    var hrvAverage: Double?
+    var restingHeartRate: Double?
+    var sleepHours: Double?
+    var bodyWeight: Double?
+    var steps: Double?
+    var activeCalories: Double?
+    var workoutCount: Int?
+    var workoutDuration: Double?
+
+    func value(for metric: LongTermBaselineMetric) -> Double? {
+        switch metric {
+        case .restingHeartRate: return restingHeartRate
+        case .hrv: return hrvAverage
+        case .sleepHours: return sleepHours
+        case .bodyWeight: return bodyWeight
+        case .steps: return steps
+        case .activeCalories: return activeCalories
+        }
+    }
+}
+
+extension DailyHealthSnapshot {
+    var longTermBaselinePoint: LongTermBaselinePoint {
+        LongTermBaselinePoint(
+            date: date,
+            hrvAverage: hrvAverage,
+            restingHeartRate: restingHeartRate,
+            sleepHours: sleepHours,
+            bodyWeight: bodyWeight,
+            steps: steps,
+            activeCalories: activeCalories,
+            workoutCount: workoutCount,
+            workoutDuration: workoutDuration
+        )
+    }
+}
+
+extension DailyHealthSummaryRecord {
+    var longTermBaselinePoint: LongTermBaselinePoint {
+        LongTermBaselinePoint(
+            date: date,
+            hrvAverage: hrvAverage,
+            restingHeartRate: restingHeartRate,
+            sleepHours: sleepHours,
+            bodyWeight: bodyWeight,
+            steps: steps,
+            activeCalories: activeCalories,
+            workoutCount: workoutCount,
+            workoutDuration: workoutDuration
+        )
+    }
+}
+
+struct LongTermMetricBaseline: Hashable, Sendable {
+    var metric: LongTermBaselineMetric
+    var sampleCount: Int
+    var threeYearMedian: Double?
+    var percentile10: Double?
+    var percentile25: Double?
+    var percentile75: Double?
+    var percentile90: Double?
+    var recent30DayMean: Double?
+    /// (近 30 天均值 - 三年中位) / 三年中位 × 100；缺失时不输出。
+    var longTermDeviationPercent: Double?
+    /// 今年（1/1 至今）均值 - 去年同期对齐时段均值；任一时段样本 < 7 天时为 nil。
+    var yearOverYearDelta: Double?
+    /// 三年月均值的年化斜率：improving / stable / worsening / nil（数据不足）。
+    var trendLabel: String?
+}
+
+struct TrainingVolumeMonth: Hashable, Sendable {
+    var date: Date
+    var value: Double
+}
+
+struct TrainingVolumeLongTerm: Hashable, Sendable {
+    /// 三年逐月训练分钟（键为当月 1 号）。
+    var monthlyMinutes: [TrainingVolumeMonth] = []
+    var currentMonthMinutes: Double = 0
+    /// 本月分钟数在三年月分布中的百分位（0-100；样本不足时为 nil）。
+    var currentMonthPercentile: Double?
+    var lastYearSameMonthMinutes: Double?
+    var sampleMonths: Int = 0
+}
+
+struct LongTermBaselineReport: Hashable, Sendable {
+    var calculatedAt: Date
+    var daysOfData: Int
+    var earliestDate: Date?
+    var latestDate: Date?
+    var baselines: [LongTermBaselineMetric: LongTermMetricBaseline] = [:]
+    var trainingVolume: TrainingVolumeLongTerm?
+}
+
+enum LongTermBaselineEngine {
+    /// 单指标三年长线统计需要的最少天数（少于则整体不发布该指标）。
+    static let minimumDays = 60
+
+    static func compute(
+        points: [LongTermBaselinePoint],
+        today: Date = Date(),
+        calendar: Calendar = .current
+    ) -> LongTermBaselineReport {
+        let endOfToday = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: today)) ?? today
+        let ordered = points
+            .filter { $0.date < endOfToday }
+            .sorted { $0.date < $1.date }
+        guard !ordered.isEmpty else {
+            return LongTermBaselineReport(calculatedAt: today, daysOfData: 0, earliestDate: nil, latestDate: nil)
+        }
+
+        var baselines: [LongTermBaselineMetric: LongTermMetricBaseline] = [:]
+        for metric in LongTermBaselineMetric.allCases {
+            let values = ordered
+                .compactMap { point -> Double? in
+                    guard let value = point.value(for: metric), value.isFinite else { return nil }
+                    switch metric {
+                    case .bodyWeight: return value > 30 ? value : nil
+                    case .restingHeartRate: return value > 20 ? value : nil
+                    default: return value > 0 ? value : nil
+                    }
+                }
+            guard values.count >= minimumDays else { continue }
+            let median = PersonalBaselineEngine.median(values)
+            let recent30 = recentMean(of: ordered, for: metric, calendar: calendar, today: today)
+            let yoy = samePeriodDelta(of: ordered, for: metric, calendar: calendar, today: today)
+            let trend = trendLabel(of: ordered, for: metric, calendar: calendar)
+            var deviation: Double?
+            if let median, median > 0, let recent30 {
+                deviation = (recent30 - median) / median * 100
+            }
+            baselines[metric] = LongTermMetricBaseline(
+                metric: metric,
+                sampleCount: values.count,
+                threeYearMedian: median,
+                percentile10: percentile(values, 0.10),
+                percentile25: percentile(values, 0.25),
+                percentile75: percentile(values, 0.75),
+                percentile90: percentile(values, 0.90),
+                recent30DayMean: recent30,
+                longTermDeviationPercent: deviation,
+                yearOverYearDelta: yoy,
+                trendLabel: trend
+            )
+        }
+
+        let volume = trainingVolume(of: ordered, calendar: calendar, today: today)
+
+        return LongTermBaselineReport(
+            calculatedAt: today,
+            daysOfData: ordered.count,
+            earliestDate: ordered.first?.date,
+            latestDate: ordered.last?.date,
+            baselines: baselines,
+            trainingVolume: volume
+        )
+    }
+
+    // MARK: - Training volume
+
+    static func trainingVolume(
+        of points: [LongTermBaselinePoint],
+        calendar: Calendar,
+        today: Date
+    ) -> TrainingVolumeLongTerm? {
+        let start = calendar.date(byAdding: .year, value: -3, to: today) ?? today
+        let window = points.filter { $0.date >= start && $0.date < today }
+        guard !window.isEmpty else { return nil }
+
+        var sums: [Date: Double] = [:]
+        for point in window {
+            guard let minutes = point.workoutDuration, minutes > 0 else { continue }
+            let month = monthStart(of: point.date, calendar: calendar)
+            sums[month, default: 0] += minutes
+        }
+        let monthly = sums.keys.sorted().map { TrainingVolumeMonth(date: $0, value: sums[$0] ?? 0) }
+        guard monthly.count >= 6 else { return nil }
+
+        let currentMonth = monthStart(of: today, calendar: calendar)
+        let current = sums[currentMonth] ?? 0
+        let priorMonths = monthly.filter { $0.date != currentMonth }.map(\.value)
+        var percentileValue: Double?
+        if !priorMonths.isEmpty {
+            let below = priorMonths.filter { $0 <= current }.count
+            percentileValue = Double(below) / Double(priorMonths.count) * 100
+        }
+        let lastYearSameMonth = calendar.date(byAdding: .year, value: -1, to: currentMonth)
+            .flatMap { sums[$0] }
+
+        return TrainingVolumeLongTerm(
+            monthlyMinutes: monthly,
+            currentMonthMinutes: current,
+            currentMonthPercentile: percentileValue,
+            lastYearSameMonthMinutes: lastYearSameMonth,
+            sampleMonths: monthly.count
+        )
+    }
+
+    // MARK: - Formatting
+
+    /// 长线基线 → 中文证据行（Coach 上下文 / 决策理由共用）。
+    static func contextLines(_ report: LongTermBaselineReport) -> [String] {
+        var lines: [String] = []
+        for metric in LongTermBaselineMetric.allCases {
+            guard let baseline = report.baselines[metric],
+                  let median = baseline.threeYearMedian else { continue }
+            var parts: [String] = []
+            let medianText = String(format: "%.0f", median)
+            if let p25 = baseline.percentile25, let p75 = baseline.percentile75 {
+                parts.append("三年中位 \(medianText) \(metric.unit)（P25–P75 \(String(format: "%.0f", p25))–\(String(format: "%.0f", p75))）")
+            } else {
+                parts.append("三年中位 \(medianText) \(metric.unit)")
+            }
+            if let recent = baseline.recent30DayMean {
+                parts.append("近 30 天均值 \(String(format: "%.0f", recent))")
+            }
+            if let deviation = baseline.longTermDeviationPercent {
+                parts.append("长期偏离 \(String(format: "%+.0f", deviation))%")
+            }
+            if let yoy = baseline.yearOverYearDelta {
+                parts.append("今年 vs 去年 \(String(format: "%+.0f", yoy)) \(metric.unit)")
+            }
+            if let trend = baseline.trendLabel {
+                let label: String
+                switch trend {
+                case "improving": label = "趋势 改善"
+                case "worsening": label = "趋势 走弱"
+                default: label = "趋势 平稳"
+                }
+                parts.append(label)
+            }
+            lines.append("\(metric.title)：\(parts.joined(separator: "，"))")
+        }
+        if let volume = report.trainingVolume {
+            var line = "训练量：本月 \(Int(volume.currentMonthMinutes.rounded())) 分钟"
+            if let pct = volume.currentMonthPercentile {
+                line += "，处于三年月分布 P\(Int(pct.rounded()))"
+            }
+            if let lastYear = volume.lastYearSameMonthMinutes {
+                line += "，去年同月 \(Int(lastYear.rounded())) 分钟"
+            }
+            lines.append(line)
+        }
+        return lines
+    }
+
+    /// baselines.md 的「三年长期基线」章节（30 天基线表之后追加；解析器按行名读取，互不冲突）。
+    static func formatForWiki(_ report: LongTermBaselineReport) -> String {
+        var lines: [String] = [
+            "",
+            "## Three-Year Long-Term Baselines",
+            "",
+            "**Days of long-term data:** \(report.daysOfData)",
+        ]
+        guard !report.baselines.isEmpty else {
+            return lines.joined(separator: "\n")
+        }
+        lines.append(contentsOf: [
+            "",
+            "| Metric | 3-Year Median (P25-P75) | Last 30 Days | Year-over-Year | Trend |",
+            "|--------|-------------------------|--------------|----------------|-------|",
+        ])
+        for metric in LongTermBaselineMetric.allCases {
+            guard let baseline = report.baselines[metric],
+                  let median = baseline.threeYearMedian else { continue }
+            let p25 = baseline.percentile25.map { String(format: "%.0f", $0) } ?? "—"
+            let p75 = baseline.percentile75.map { String(format: "%.0f", $0) } ?? "—"
+            let recent = baseline.recent30DayMean.map { String(format: "%.0f", $0) } ?? "—"
+            let yoy = baseline.yearOverYearDelta.map { String(format: "%+.0f", $0) } ?? "—"
+            let trend = baseline.trendLabel ?? "—"
+            lines.append("| \(metric.title) 3Y | \(median.formatted(.number.precision(.fractionLength(0)))) \(metric.unit) (\(p25)-\(p75)) | \(recent) | \(yoy) | \(trend) |")
+        }
+        if let volume = report.trainingVolume {
+            lines.append("| 本月训练量 3Y | \(Int(volume.currentMonthMinutes.rounded())) 分钟 | P\(Int((volume.currentMonthPercentile ?? 0).rounded())) | \(volume.lastYearSameMonthMinutes.map { "\(Int($0.rounded())) 分钟" } ?? "—") | — |")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    // MARK: - Helpers
+
+    private static func recentMean(
+        of points: [LongTermBaselinePoint],
+        for metric: LongTermBaselineMetric,
+        calendar: Calendar,
+        today: Date
+    ) -> Double? {
+        let cutoff = calendar.startOfDay(for: calendar.date(byAdding: .day, value: -30, to: today) ?? today)
+        let values = points
+            .filter { $0.date >= cutoff }
+            .compactMap { $0.value(for: metric) }
+            .filter { $0.isFinite && $0 > 0 }
+        guard values.count >= 7 else { return nil }
+        return values.reduce(0, +) / Double(values.count)
+    }
+
+    /// 今年（1/1 至今）vs 去年同对齐时段；任一时段不足 7 天返回 nil。
+    private static func samePeriodDelta(
+        of points: [LongTermBaselinePoint],
+        for metric: LongTermBaselineMetric,
+        calendar: Calendar,
+        today: Date
+    ) -> Double? {
+        let thisYearStart = yearStart(of: today, calendar: calendar)
+        let lastYearStart = yearStart(
+            of: calendar.date(byAdding: .year, value: -1, to: today) ?? today,
+            calendar: calendar
+        )
+        let thisYearEnd = calendar.startOfDay(for: today)
+        let lastYearEnd = calendar.date(byAdding: .year, value: -1, to: thisYearEnd) ?? thisYearEnd
+
+        func mean(_ include: (Date) -> Bool) -> Double? {
+            let values = points
+                .filter { include($0.date) }
+                .compactMap { $0.value(for: metric) }
+                .filter { $0.isFinite && $0 > 0 }
+            guard values.count >= 7 else { return nil }
+            return values.reduce(0, +) / Double(values.count)
+        }
+        guard let thisYear = mean({ $0 >= thisYearStart && $0 <= thisYearEnd }),
+              let lastYear = mean({ $0 >= lastYearStart && $0 <= lastYearEnd }) else {
+            return nil
+        }
+        return thisYear - lastYear
+    }
+
+    /// 三年趋势：月均值最小二乘斜率年化，相对三年中位的百分比；
+    /// |年化变化| < 1% → stable，方向按指标语义判定 improving/worsening。
+    private static func trendLabel(
+        of points: [LongTermBaselinePoint],
+        for metric: LongTermBaselineMetric,
+        calendar: Calendar
+    ) -> String? {
+        var sums: [Date: (Double, Int)] = [:]
+        for point in points {
+            guard let value = point.value(for: metric), value.isFinite, value > 0 else { continue }
+            let month = monthStart(of: point.date, calendar: calendar)
+            var bucket = sums[month] ?? (0, 0)
+            bucket.0 += value
+            bucket.1 += 1
+            sums[month] = bucket
+        }
+        let monthly = sums.keys.sorted().map { (date: $0, mean: sums[$0]!.0 / Double(sums[$0]!.1)) }
+        guard monthly.count >= 9 else { return nil }
+        guard let grandMedian = PersonalBaselineEngine.median(monthly.map(\.mean)), grandMedian > 0 else { return nil }
+
+        let n = Double(monthly.count)
+        let xMean = (n - 1) / 2
+        var sxx = 0.0
+        var sxy = 0.0
+        for (index, entry) in monthly.enumerated() {
+            let x = Double(index) - xMean
+            sxx += x * x
+            sxy += x * entry.mean
+        }
+        guard sxx > 0 else { return nil }
+        let slope = sxy / sxx
+        let percentPerYear = slope / grandMedian * 12 * 100
+
+        if abs(percentPerYear) < 1.0 { return "stable" }
+        let rising = slope > 0
+        return rising == metric.improvementIsPositive ? "improving" : "worsening"
+    }
+
+    private static func percentile(_ values: [Double], _ fraction: Double) -> Double? {
+        guard !values.isEmpty else { return nil }
+        let sorted = values.sorted()
+        let index = Int((Double(sorted.count - 1) * fraction).rounded())
+        return sorted[max(0, min(index, sorted.count - 1))]
+    }
+
+    private static func monthStart(of date: Date, calendar: Calendar) -> Date {
+        let components = calendar.dateComponents([.year, .month], from: date)
+        return calendar.date(from: components) ?? date
+    }
+
+    private static func yearStart(of date: Date, calendar: Calendar) -> Date {
+        let components = calendar.dateComponents([.year], from: date)
+        return calendar.date(from: components) ?? date
+    }
 }

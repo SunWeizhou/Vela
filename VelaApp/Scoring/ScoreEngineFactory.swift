@@ -35,33 +35,19 @@ enum UserProfileSettings {
         return ["male", "female", "other"].contains(value) ? value : nil
     }
 
-    static func hydrateMissingValuesFromHealth(
-        age: Int?,
-        weightKilograms: Double?,
-        heightCentimeters: Double?,
-        biologicalSex: String?,
-        defaults: UserDefaults = .standard
-    ) {
-        if Self.age(defaults: defaults) == nil,
-           let age,
-           (10...100).contains(age) {
-            defaults.set(age, forKey: ageKey)
-        }
-        if Self.weightKilograms(defaults: defaults) == nil,
-           let weightKilograms,
-           (25...350).contains(weightKilograms) {
-            defaults.set(weightKilograms, forKey: weightKey)
-        }
-        if Self.heightCentimeters(defaults: defaults) == nil,
-           let heightCentimeters,
-           (100...250).contains(heightCentimeters) {
-            defaults.set(heightCentimeters, forKey: heightKey)
-        }
-        if Self.biologicalSex(defaults: defaults) == nil,
-           let biologicalSex,
-           ["male", "female", "other"].contains(biologicalSex) {
-            defaults.set(biologicalSex, forKey: biologicalSexKey)
-        }
+    /// One-time migration: UserDefaults previously received Apple Health values via
+    /// `hydrateMissingValuesFromHealth`, which (under the new manual-first resolution)
+    /// would freeze stale HealthKit values as if they were user overrides.
+    /// Reset those auto-filled values once so the profile genuinely follows Apple Health.
+    static let priorityMigrationKey = "vela_user_profile_priority_v2_migrated"
+
+    static func migrateLegacyHydratedValuesIfNeeded(defaults: UserDefaults = .standard) {
+        guard !defaults.bool(forKey: priorityMigrationKey) else { return }
+        defaults.removeObject(forKey: ageKey)
+        defaults.removeObject(forKey: weightKey)
+        defaults.removeObject(forKey: heightKey)
+        defaults.removeObject(forKey: biologicalSexKey)
+        defaults.set(true, forKey: priorityMigrationKey)
     }
 
     static func bodyMassIndex(weightKilograms: Double?, heightCentimeters: Double?) -> Double? {
@@ -79,12 +65,12 @@ enum UserProfileSettings {
 
     static func resolvedMaxHeartRate(
         age: Int,
-        explicit: Double? = nil,
         wiki: Double? = nil,
         defaults: UserDefaults = .standard
     ) -> Double {
-        explicit.flatMap(validatedMaxHeartRate)
-            ?? maxHeartRate(defaults: defaults)
+        // explicit 参数此前无任何调用方传入（死参数已删除），
+        // 与引擎解析链一致：UserDefaults → wiki → 年龄推断。
+        maxHeartRate(defaults: defaults)
             ?? wiki.flatMap(validatedMaxHeartRate)
             ?? inferredMaxHeartRate(age: age)
     }
@@ -192,14 +178,23 @@ struct DailyHealthComputationProfile: Sendable {
     let maxHeartRate: Double?
     let biologicalSex: String?
 
-    static func current() -> DailyHealthComputationProfile {
-        let age = UserProfileSettings.age() ?? WikiFileService.getAgeFromWiki()
+    static func current(
+        ageFallback: Int? = nil,
+        biologicalSexFallback: String? = nil
+    ) -> DailyHealthComputationProfile {
+        // M2 修复：与展示/AI 层同源——手动 → HealthKit → wiki。
+        // 此前引擎是 manual → wiki → HK，wiki 陈旧年龄会压过 HealthKit 出生日期，
+        // 评分与 AI 对同一用户年龄看法不一致。
+        let age = UserProfileSettings.age()
+            ?? ageFallback
+            ?? WikiFileService.getAgeFromWiki()
         return DailyHealthComputationProfile(
             sleepTargetMinutes: SleepTargetSettings.targetMinutes(),
             maxHeartRate: UserProfileSettings.maxHeartRate()
                 ?? WikiFileService.getMaxHeartRateFromWiki()
                 ?? age.map(UserProfileSettings.inferredMaxHeartRate),
             biologicalSex: UserProfileSettings.biologicalSex()
+                ?? biologicalSexFallback
         )
     }
 }
@@ -223,7 +218,8 @@ final class DailyHealthComputation {
 
     func compute(
         for snapshot: DailyHealthSnapshot,
-        history: [DailyHealthSnapshot]
+        history: [DailyHealthSnapshot],
+        longTermBaselines: LongTermBaselineReport? = nil
     ) -> ScoredHealthEvidence {
         let asOf = evaluationDate(for: snapshot)
         let baselineHistory = personalBaselineHistory(for: snapshot, from: history)
@@ -242,7 +238,7 @@ final class DailyHealthComputation {
             totalSleepMinutes: snapshot.sleepHours.map { $0 * 60 },
             sleepTargetMinutes: profile.sleepTargetMinutes,
             todayBedtime: snapshot.bedtime,
-            recentBedtimes: baselineHistory.compactMap(\.bedtime),
+            recentBedtimes: baselineHistory.prefix(13).compactMap(\.bedtime),
             awakeMinutes: snapshot.awakeMinutes,
             awakeEpisodeCount: snapshot.awakeEpisodeCount,
             remMinutes: snapshot.remSleepMinutes,
@@ -270,7 +266,8 @@ final class DailyHealthComputation {
             respiratoryRateBaseline: PersonalBaselineEngine.median(respiratoryHistory),
             respiratoryRateHistory: respiratoryHistory,
             bodyTempDelta: temperatureDelta,
-            SpO2: snapshot.oxygenSaturation
+            SpO2: snapshot.oxygenSaturation,
+            longTermContext: recoveryLongTermContext(from: longTermBaselines)
         ))
 
         let strain = StrainScoreEngine().calculate(from: StrainScoreInput(
@@ -289,7 +286,7 @@ final class DailyHealthComputation {
             restingHR: snapshot.restingHeartRate ?? 0,
             maxHR: profile.maxHeartRate ?? 0,
             biologicalSex: profile.biologicalSex,
-            last28DaysDailyLoads: dailyLoadHistory,
+            last28DaysDailyLoads: Array(dailyLoadHistory.prefix(28)),
             recoveryScore: recovery.value
         ))
 
@@ -311,7 +308,8 @@ final class DailyHealthComputation {
             isWithinWorkoutWindow: isInsideWorkoutRecoveryWindow(
                 snapshot: snapshot,
                 asOf: asOf
-            )
+            ),
+            longTermQuietHRMedian: longTermBaselines?.baselines[.restingHeartRate]?.threeYearMedian
         ))
 
         let respiratoryRateZ: Double? = {
@@ -360,6 +358,18 @@ final class DailyHealthComputation {
         return nextDay.addingTimeInterval(-1)
     }
 
+    /// Layer 3：从三年长线报告提取 HRV 分布上下文（样本不足 60 天时返回 nil，不启用修正）。
+    private func recoveryLongTermContext(from report: LongTermBaselineReport?) -> RecoveryLongTermContext? {
+        guard let report,
+              let hrvBaseline = report.baselines[.hrv],
+              hrvBaseline.sampleCount >= 60 else { return nil }
+        return RecoveryLongTermContext(
+            hrvPercentile10: hrvBaseline.percentile10,
+            hrvPercentile90: hrvBaseline.percentile90,
+            hrvSampleCount: hrvBaseline.sampleCount
+        )
+    }
+
     private func personalBaselineHistory(
         for snapshot: DailyHealthSnapshot,
         from history: [DailyHealthSnapshot]
@@ -389,7 +399,7 @@ final class DailyHealthComputation {
         snapshot: DailyHealthSnapshot,
         asOf: Date
     ) -> Bool {
-        guard calendar.isDate(snapshot.date, inSameDayAs: now) else { return false }
+        guard calendar.isDate(snapshot.date, inSameDayAs: asOf) else { return false }
         return snapshot.workouts.contains { workout in
             asOf >= workout.start && asOf <= workout.end.addingTimeInterval(90 * 60)
         }

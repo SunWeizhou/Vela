@@ -74,19 +74,16 @@ enum ActiveStatusSettings {
 
 @MainActor
 final class DailySummaryUseCase {
-    private let refreshService: HealthDataRefreshService
     private let queryService: HealthKitQueryService
     private let calendar: Calendar
     private let syncCoordinator: AppSyncCoordinator?
 
     init(
-        refreshService: HealthDataRefreshService? = nil,
         queryService: HealthKitQueryService = HealthKitQueryService(),
         calendar: Calendar = .current,
         syncCoordinator: AppSyncCoordinator? = nil
     ) {
         self.queryService = queryService
-        self.refreshService = refreshService ?? HealthDataRefreshService(queryService: queryService)
         self.calendar = calendar
         self.syncCoordinator = syncCoordinator
     }
@@ -182,6 +179,20 @@ final class DailySummaryUseCase {
         } else {
             snapshots42 = []
         }
+
+        // 2b. 三年长线基准（Layer 1/2/3 同源）：全量每日记录 → LongTermBaselineEngine。
+        // 回填后约 1100 行，中位/分位/同比计算在毫秒级；未回填时自动退化为空报告。
+        let longTermReport: LongTermBaselineReport
+        if let modelContext {
+            let allRecords = (try? modelContext.fetch(FetchDescriptor<DailyHealthSummaryRecord>())) ?? []
+            longTermReport = LongTermBaselineEngine.compute(
+                points: allRecords.map(\.longTermBaselinePoint),
+                today: now,
+                calendar: calendar
+            )
+        } else {
+            longTermReport = LongTermBaselineEngine.compute(points: [], today: now, calendar: calendar)
+        }
         
         // 3. Locate today's snapshot
         let todaySnapshot = snapshots42.first(where: { calendar.isDate($0.date, inSameDayAs: now) })
@@ -224,16 +235,23 @@ final class DailySummaryUseCase {
         let todayRange = DateRangeQuery.today(containing: now, calendar: calendar)
         let todayStrainSummary = try? await queryService.strainSummary(in: todayRange)
         let rawHKWorkouts = todayStrainSummary?.workouts ?? []
+        // [1] 修复：前台路径与同步路径同一黑名单语义——删除过的训练不得复活。
+        // 修复二合一：此前 upsertHealthKitWorkoutEvents 只在后台同步调用，
+        // 前台刷新时当天 HK 训练不会落成事件（记录缺失当天训练）；
+        // 现在过滤 + upsert + 合并都用同一份过滤后列表。
         let workouts: [WorkoutSummary]
-        if let modelContext = modelContext {
+        if let modelContext {
+            let deletedRecords = (try? modelContext.fetch(FetchDescriptor<DeletedWorkoutRecord>())) ?? []
+            let blacklistedIDs = Set(deletedRecords.map(\.id))
+            let filteredWorkouts = rawHKWorkouts.filter { !blacklistedIDs.contains($0.id.uuidString) }
             try? WorkoutAggregationService.shared.upsertHealthKitWorkoutEvents(
-                rawHKWorkouts,
+                filteredWorkouts,
                 on: now,
                 modelContext: modelContext,
                 calendar: calendar
             )
             workouts = WorkoutAggregationService.shared.aggregateWorkouts(
-                healthKitWorkouts: rawHKWorkouts,
+                healthKitWorkouts: filteredWorkouts,
                 for: now,
                 modelContext: modelContext,
                 calendar: calendar
@@ -242,6 +260,11 @@ final class DailySummaryUseCase {
             workouts = rawHKWorkouts
         }
         let liveExtended = (try? await queryService.extendedMetrics(in: todayRange)) ?? ExtendedHealthMetrics()
+        // VO2max 不持久化（DailyHealthSummaryRecord 无此字段，避免触碰 SwiftData
+        // versioned schema）；live 路径直接查询，快照内存值作兜底。
+        let liveBody = (try? await queryService.bodyMetrics(
+            in: DateRangeQuery.recentDays(90, endingAt: now, calendar: calendar)
+        )) ?? BodyMetricsSummary()
         if let modelContext {
             await refreshIntradayBuckets(
                 in: todayRange,
@@ -254,16 +277,12 @@ final class DailySummaryUseCase {
         let resolvedSleep = try? await queryService.sleepSummary(in: DateRangeQuery.today(containing: now, calendar: calendar))
         let profileWeight = UserProfileSettings.weightKilograms()
         let profileHeight = UserProfileSettings.heightCentimeters()
-        UserProfileSettings.hydrateMissingValuesFromHealth(
-            age: liveExtended.age,
-            weightKilograms: snapshot.bodyWeight,
-            heightCentimeters: liveExtended.heightCm,
-            biologicalSex: liveExtended.biologicalSex
-        )
-        let resolvedWeight = snapshot.bodyWeight ?? profileWeight
+        // 手动设置的档案值优先，Apple 健康数据兜底；清空手填字段即回退 Apple 健康。
+        let resolvedWeight = profileWeight ?? snapshot.bodyWeight
         var extendedMetrics = liveExtended
-        extendedMetrics.age = extendedMetrics.age ?? UserProfileSettings.age()
-        extendedMetrics.heightCm = extendedMetrics.heightCm ?? profileHeight
+        extendedMetrics.age = UserProfileSettings.age() ?? extendedMetrics.age
+        extendedMetrics.heightCm = profileHeight ?? extendedMetrics.heightCm
+        extendedMetrics.biologicalSex = UserProfileSettings.biologicalSex() ?? extendedMetrics.biologicalSex
         extendedMetrics.bmi = snapshot.bmi
             ?? extendedMetrics.bmi
             ?? UserProfileSettings.bodyMassIndex(
@@ -283,9 +302,9 @@ final class DailySummaryUseCase {
         
         let recoveryBaseline = RecoveryMetricSummary(
             hrvMilliseconds: hrvHistory.count >= 5 ? calculateMedian(hrvHistory) : nil,
-            restingHeartRate: rhrHistory.count >= 5 ? calculateMedian(rhrHistory) : nil,
+            restingHeartRate: rhrHistory.count >= 5 ? PersonalBaselineEngine.recencyWeightedMean(rhrHistory) : nil,
             sleepHeartRate: nil,
-            respiratoryRate: respHistory.count >= 5 ? calculateMedian(respHistory) : nil
+            respiratoryRate: respHistory.count >= 5 ? PersonalBaselineEngine.recencyWeightedMean(respHistory) : nil
         )
         
         let context = DailyHealthContext(
@@ -301,7 +320,7 @@ final class DailySummaryUseCase {
             ),
             strainBaselineDaily: StrainActivitySummary(workouts: []),
             bodyMetrics: BodyMetricsSummary(
-                vo2Max: nil,
+                vo2Max: liveBody.vo2Max ?? snapshot.vo2Max,
                 weightKilograms: resolvedWeight,
                 bodyFatPercentage: snapshot.bodyFatPercent,
                 leanBodyMassKilograms: nil
@@ -325,9 +344,24 @@ final class DailySummaryUseCase {
         pipelineSnapshot.awakeEpisodeCount = pipelineSnapshot.awakeEpisodeCount ?? context.sleepSummary?.segments.filter { $0.stage == .awake && $0.end.timeIntervalSince($0.start) >= 120 }.count
 
         let historicalSnapshots = snapshots42.filter { !calendar.isDate($0.date, inSameDayAs: now) }
-        let metrics = DailyHealthComputation(calendar: calendar, now: now).compute(
+        // F10 修复：历史日评分用日末评估时刻（与同步引擎一致），
+        // 避免 hoursSinceWake / 训练恢复窗口在午夜与日末之间漂移。
+        let evaluationNow = calendar.isDateInToday(now)
+            ? now
+            : (calendar.date(bySettingHour: 23, minute: 59, second: 59, of: now) ?? now)
+        // F1/M1 修复：前台重算必须携带与同步引擎一致的 HealthKit 年龄/性别兜底，
+        // 否则覆盖持久化分数时会把「性别系数 / maxHR→年龄链」退回 unknown/other。
+        let metrics = DailyHealthComputation(
+            calendar: calendar,
+            now: evaluationNow,
+            profile: .current(
+                ageFallback: extendedMetrics.age,
+                biologicalSexFallback: extendedMetrics.biologicalSex
+            )
+        ).compute(
             for: pipelineSnapshot,
-            history: historicalSnapshots
+            history: historicalSnapshots,
+            longTermBaselines: longTermReport
         )
         let sleepScore = metrics.sleepScore
         let resolvedSleepSummary = DashboardMetricProjection.resolvedSleepSummary(
@@ -421,7 +455,8 @@ final class DailySummaryUseCase {
             extendedMetrics: context.extendedMetrics,
             workouts: context.strainToday.workouts,
             dailyInsight: dailyInsight(recovery: recovery, sleepScore: sleepScore, strain: strain, source: .healthKit),
-            source: .healthKit
+            source: .healthKit,
+            longTermBaselines: longTermReport
         )
         let activeStatus = ActiveStatusSettings.resolveCurrentStatus(now: now)
         let bodyState = BodyStateKernel().build(input: BodyStateInput(
@@ -472,7 +507,12 @@ final class DailySummaryUseCase {
             bodyState: bodyState
         )
         
-        let persistedSnapshot = makeSnapshot(from: dashboard, context: context, date: now)
+        let persistedSnapshot = makeSnapshot(
+            from: dashboard,
+            context: context,
+            date: now,
+            rawBodyWeight: snapshot.bodyWeight
+        )
         if let modelContext {
             let snapshotRepo = HealthSnapshotRepository(modelContext: modelContext, calendar: calendar)
             do {
@@ -512,9 +552,11 @@ final class DailySummaryUseCase {
                     error: error
                 )
             }
-            await refreshPersonalBaselinesIfNeeded(modelContext: modelContext)
+            await refreshPersonalBaselinesIfNeeded(modelContext: modelContext, longTerm: longTermReport)
             do {
-                try snapshotRepo.pruneOldSnapshots(keepingDays: 90)
+                // 三年历史回填（HistoricalBackfillService）写入的长期记录同样保留：
+                // 保留窗口从 90 天放宽到 3 年 + 余量，只清理更老的孤儿行。
+                try snapshotRepo.pruneOldSnapshots(keepingDays: 1100)
             } catch {
                 PipelineDiagnosticsLogger.log(
                     modelContext: modelContext,
@@ -624,7 +666,10 @@ final class DailySummaryUseCase {
         return (bedtimeOffset, wakeOffset)
     }
 
-    private func refreshPersonalBaselinesIfNeeded(modelContext: ModelContext) async {
+    private func refreshPersonalBaselinesIfNeeded(
+        modelContext: ModelContext,
+        longTerm: LongTermBaselineReport? = nil
+    ) async {
         let snapshotRepo = HealthSnapshotRepository(modelContext: modelContext, calendar: calendar)
         let snapshots = (try? snapshotRepo.fetchSnapshots(days: 30)) ?? []
         guard snapshots.count >= 7 else { return }
@@ -637,7 +682,7 @@ final class DailySummaryUseCase {
             baselines.strainBaselineMean
         ].contains { $0 != nil }
         guard hasPublishedBaseline else { return }
-        PersonalBaselineEngine.saveBaselinesToWiki(baselines)
+        PersonalBaselineEngine.saveBaselinesToWiki(baselines, longTerm: longTerm)
         WikiSyncManager.sync(modelContext: modelContext)
     }
 
@@ -673,7 +718,8 @@ final class DailySummaryUseCase {
     func makeSnapshot(
         from dashboard: DashboardSummary,
         context: DailyHealthContext,
-        date: Date
+        date: Date,
+        rawBodyWeight: Double? = nil
     ) -> DailyHealthSnapshot {
         let sleepMetrics = dashboard.sleepScore.metrics
         let strainMetrics = dashboard.strain.metrics
@@ -686,7 +732,9 @@ final class DailySummaryUseCase {
             stressIndex: dashboard.stress.hasData ? dashboard.stress.value : nil,
             morningEnergy: dashboard.energy.hasData ? dashboard.energy.morningEnergy : nil,
             currentEnergy: dashboard.energy.hasData ? dashboard.energy.value : nil,
-            energyBank: nil,
+            // F3 修复：与引擎 applying(to:) 一致（energyBank = energy.value），
+            // 此前硬编码 nil 会抹掉引擎写入的「能量银行」字段。
+            energyBank: dashboard.energy.hasData ? dashboard.energy.value : nil,
             healthAge: dashboard.healthAge.trendScore,
             hrvAverage: dashboard.recoveryMetrics.hrvMilliseconds,
             hrvRmssdMilliseconds: dashboard.recoveryMetrics.hrvRmssdMilliseconds,
@@ -701,7 +749,10 @@ final class DailySummaryUseCase {
             workoutCount: dashboard.workouts.isEmpty ? nil : dashboard.workouts.count,
             workoutTypes: dashboard.workouts.isEmpty ? nil : Set(dashboard.workouts.map(\.activityName)).sorted().joined(separator: ", "),
             workoutDuration: dashboard.workouts.isEmpty ? nil : dashboard.workouts.reduce(0) { $0 + $1.end.timeIntervalSince($1.start) } / 60.0,
-            bodyWeight: context.bodyMetrics.weightKilograms,
+            // F8 修复：快照存原始 HealthKit 体重（rawBodyWeight），
+            // 手动覆盖只在展示/上下文层生效——此前手填体重污染原始 HK 体重历史，
+            // 清除手填值后历史日也回不去真实测量值。
+            bodyWeight: rawBodyWeight ?? context.bodyMetrics.weightKilograms,
             bodyFatPercent: context.bodyMetrics.bodyFatPercentage.map { HealthUnitNormalizer.normalizeBodyFatPercentage($0) },
             bmi: context.extendedMetrics.bmi,
             oxygenSaturation: context.extendedMetrics.oxygenSaturation.map { HealthUnitNormalizer.normalizeOxygenSaturation($0) },
@@ -813,7 +864,16 @@ final class DailySummaryUseCase {
         let records = try SwiftDataDailyHealthSummaryRepository(modelContext: modelContext)
             .fetch(in: DateRangeQuery(start: dayStart, end: dayEnd))
         guard let record = records.last else { return nil }
-        return makeDashboardFromRecord(record)
+        var dashboard = makeDashboardFromRecord(record)
+        // 缓存启动路径同样挂载三年长线基准：否则重启后长线修正/证据/身体模型
+        // 会静默退化为空（直到一次完整刷新）。
+        let allRecords = (try? modelContext.fetch(FetchDescriptor<DailyHealthSummaryRecord>())) ?? []
+        dashboard.longTermBaselines = LongTermBaselineEngine.compute(
+            points: allRecords.map(\.longTermBaselinePoint),
+            today: date,
+            calendar: calendar
+        )
+        return dashboard
     }
 
     func makeDashboardFromRecord(
@@ -921,12 +981,16 @@ final class DailySummaryUseCase {
             energy: energy,
             healthAge: cachedHealthAgeTrend(record.healthAge),
             bodyMetrics: BodyMetricsSummary(
+                // VO2max 未持久化到记录，缓存态不携带（live 路径查询 HealthKit 提供）。
                 vo2Max: nil,
-                weightKilograms: record.bodyWeight,
+                weightKilograms: UserProfileSettings.weightKilograms() ?? record.bodyWeight,
                 bodyFatPercentage: record.bodyFatPercent,
                 leanBodyMassKilograms: nil
             ),
             extendedMetrics: ExtendedHealthMetrics(
+                age: UserProfileSettings.age(),
+                biologicalSex: UserProfileSettings.biologicalSex(),
+                heightCm: UserProfileSettings.heightCentimeters(),
                 bmi: record.bmi,
                 oxygenSaturation: record.oxygenSaturation,
                 bodyTemperature: record.wristTemperature

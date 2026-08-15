@@ -1,5 +1,22 @@
 import Foundation
 
+/// C3：用真实训练后的次日恢复变化校准容量系数——
+/// 平均恢复变化正向（练后恢复良好）→ 略放宽；负向（练后吃力）→ 收紧。
+enum TrainingResponseCalibrator {
+    static func calibratedVolumeMultiplier(
+        base: Double,
+        recoveryDeltas: [Double],
+        minimumSamples: Int = 6,
+        floor: Double = 0.85,
+        ceiling: Double = 1.1
+    ) -> Double {
+        guard recoveryDeltas.count >= minimumSamples else { return base }
+        let meanDelta = recoveryDeltas.reduce(0, +) / Double(recoveryDeltas.count)
+        let adjustment = ScoringMath.clamp(1.0 + meanDelta / 100.0, min: floor, max: ceiling)
+        return base * adjustment
+    }
+}
+
 struct RecoveryTrainingAdapter: Sendable {
     
     init() {}
@@ -61,12 +78,24 @@ struct RecoveryTrainingAdapter: Sendable {
         }
         let focus = preferred.first ?? (shouldTrain ? "balanced" : "active_recovery")
         let multiplier = avoid.contains(input.plannedFocus ?? "") ? min(baseMultiplier, 0.6) : baseMultiplier
+        // C3：按个人训练响应校准容量系数。
+        let calibratedMultiplier = TrainingResponseCalibrator.calibratedVolumeMultiplier(
+            base: multiplier,
+            recoveryDeltas: input.trainingResponseRecoveryDeltas
+        )
+        if abs(calibratedMultiplier - multiplier) > 0.005 {
+            reasons.append(
+                AppLanguage.stored.isChinese
+                    ? "已按你近期的训练后恢复变化校准容量。"
+                    : "Volume calibrated from your recent post-training recovery responses."
+            )
+        }
         
         let modifiedDesc: String
         if shouldTrain {
             modifiedDesc = AppLanguage.stored.isChinese
-                ? "建议使用计划容量的 \(Int((multiplier * 100).rounded()))%，强度控制在 \(intensity)。"
-                : "Use \(Int((multiplier * 100).rounded()))% of planned volume at \(intensity) intensity."
+                ? "建议使用计划容量的 \(Int((calibratedMultiplier * 100).rounded()))%，强度控制在 \(intensity)。"
+                : "Use \(Int((calibratedMultiplier * 100).rounded()))% of planned volume at \(intensity) intensity."
         } else {
             modifiedDesc = AppLanguage.stored.isChinese
                 ? "建议选择休息、散步、拉伸或极轻度的恢复性训练。"
@@ -77,7 +106,7 @@ struct RecoveryTrainingAdapter: Sendable {
             readinessLevel: readiness,
             shouldTrain: shouldTrain,
             recommendedIntensity: intensity,
-            volumeMultiplier: multiplier,
+            volumeMultiplier: calibratedMultiplier,
             suggestedFocus: focus,
             avoidMuscleGroups: avoid,
             preferredMuscleGroups: preferred,

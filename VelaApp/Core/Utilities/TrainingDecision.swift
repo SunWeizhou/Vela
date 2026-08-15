@@ -42,19 +42,23 @@ struct TrainingDecisionInput {
     var recentStrengthSummary: RecentTrainingSummary?
     var trainingResponses: [TrainingResponseDTO]
     var userConstraints: [String]
+    /// 三年训练量长线统计（Layer 2：本月训练量三年百分位信号；nil = 不启用）。
+    var longTermTrainingVolume: TrainingVolumeLongTerm?
 
     init(
         bodyState: BodyState,
         activePlan: TrainingPlanDTO? = nil,
         recentStrengthSummary: RecentTrainingSummary? = nil,
         trainingResponses: [TrainingResponseDTO] = [],
-        userConstraints: [String] = []
+        userConstraints: [String] = [],
+        longTermTrainingVolume: TrainingVolumeLongTerm? = nil
     ) {
         self.bodyState = bodyState
         self.activePlan = activePlan
         self.recentStrengthSummary = recentStrengthSummary
         self.trainingResponses = trainingResponses
         self.userConstraints = userConstraints
+        self.longTermTrainingVolume = longTermTrainingVolume
     }
 }
 
@@ -188,6 +192,32 @@ struct TrainingDecisionKernel: Sendable {
             reasons.append("生理评级: 身体信号优良，支持正常训练。")
         }
         
+        // Layer 2：本月训练量处于三年月分布 P85 以上时，长期视角建议减量。
+        if type == .keep,
+           let volume = input.longTermTrainingVolume,
+           let percentile = volume.currentMonthPercentile,
+           percentile >= 85 {
+            type = .reduce
+            multiplier = 0.85
+            cap = 8
+            summary = "本月训练量处于三年月分布 P\(Int(percentile.rounded()))，长期视角偏高，建议适当减量。"
+            reasons.append("长线训练量: 本月 \(Int(volume.currentMonthMinutes.rounded())) 分钟处于三年月分布 P\(Int(percentile.rounded()))。")
+        }
+
+        // C3：按个人训练响应的平均恢复变化全局校准容量系数
+        //（rest/swap 的决策语义已固定，不参与校准）。
+        if type == .keep || type == .reduce {
+            let recoveryDeltas = recentResponses.compactMap(\.nextDayRecoveryDelta)
+            let calibrated = TrainingResponseCalibrator.calibratedVolumeMultiplier(
+                base: multiplier,
+                recoveryDeltas: recoveryDeltas
+            )
+            if abs(calibrated - multiplier) > 0.005 {
+                reasons.append("已按你近期的训练后恢复变化校准容量。")
+                multiplier = calibrated
+            }
+        }
+
         // Inject user constraints
         for constraint in input.userConstraints {
             if constraint.localizedCaseInsensitiveContains("injury") || constraint.localizedCaseInsensitiveContains("hurt") || constraint.localizedCaseInsensitiveContains("pain") {

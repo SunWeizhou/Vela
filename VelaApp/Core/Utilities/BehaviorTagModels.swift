@@ -235,15 +235,24 @@ struct BodyModelBuilder {
         journalEntries: [JournalEntryRecord],
         strengthWorkouts: [StrengthWorkoutRecord],
         trainingResponses: [TrainingResponseRecord],
+        longTermBaselines: LongTermBaselineReport? = nil,
         asOf: Date = Date(),
         calendar: Calendar = .current
     ) -> BodyModelState {
-        let baselineDays = Set(dailySummaries.map { calendar.startOfDay(for: $0.date) }).count
+        let recentBaselineDays = Set(dailySummaries.map { calendar.startOfDay(for: $0.date) }).count
+        let longTermDays = longTermBaselines?.daysOfData ?? 0
+        // 三年回填后基线天数以全历史为准：基线「仍在建立」从此不再由窗口截断造成。
+        let baselineDays = max(recentBaselineDays, longTermDays)
         let behaviorSignals = journalEntries.flatMap { BehaviorSignalExtractor.extract(from: $0) }
         let behaviorPairs = behaviorSignals.count
-        let trainingSessions = strengthWorkouts.count
+        // 训练事实 = App 内力量记录 ∪ 三年每日汇总里的训练日
+        //（Apple 健康 + 训记导入的训练都以 workoutCount/时长落进每日汇总）。
+        let recordedTrainingDays = dailySummaries.filter {
+            ($0.workoutCount ?? 0) > 0 || ($0.workoutDuration ?? 0) >= 15
+        }.count
+        let trainingSessions = max(strengthWorkouts.count, recordedTrainingDays)
         let maturity = BodyModelMaturity(
-            overall: maturityLevel(baselineDays: baselineDays, behaviorPairs: behaviorPairs, trainingSessions: trainingSessions),
+            overall: maturityLevel(baselineDays: baselineDays, behaviorPairs: behaviorPairs, trainingSessions: trainingSessions, longTermDays: longTermDays),
             baselineDays: baselineDays,
             behaviorPairs: behaviorPairs,
             trainingSessions: trainingSessions
@@ -273,6 +282,47 @@ struct BodyModelBuilder {
                 evidenceCount: trainingSessions
             ))
         }
+        // 三年生理基线拟合（Layer 2 身体模型版）：从回填数据拟合出「你这个人」。
+        if let report = longTermBaselines, report.daysOfData >= 60 {
+            var parts: [String] = []
+            if let rhr = report.baselines[.restingHeartRate], let median = rhr.threeYearMedian {
+                var text = "静息心率三年中位 \(Int(median.rounded())) bpm"
+                if let dev = rhr.longTermDeviationPercent {
+                    text += "，近 30 天偏离 \(String(format: "%+.0f", dev))%"
+                }
+                parts.append(text)
+            }
+            if let hrv = report.baselines[.hrv], let median = hrv.threeYearMedian {
+                var text = "HRV 三年中位 \(Int(median.rounded())) ms"
+                if let trend = hrv.trendLabel {
+                    let label = trend == "improving" ? "改善" : (trend == "worsening" ? "走弱" : "平稳")
+                    text += "，趋势\(label)"
+                }
+                parts.append(text)
+            }
+            if let volume = report.trainingVolume, let pct = volume.currentMonthPercentile {
+                parts.append("本月训练量处于三年月分布 P\(Int(pct.rounded()))")
+            }
+            if !parts.isEmpty {
+                claims.append(BodyModelClaim(
+                    id: "long_term_baseline",
+                    title: "三年生理基线已拟合",
+                    summary: parts.joined(separator: "；"),
+                    confidence: .high,
+                    evidenceCount: report.daysOfData
+                ))
+            }
+        }
+        // 训练 → 次日 HRV/RHR 三年配对（行为-结果配对：训练作为行为）。
+        if let pairing = Self.trainingResponsePairing(dailySummaries: dailySummaries, calendar: calendar, asOf: asOf) {
+            claims.append(BodyModelClaim(
+                id: "training_outcome_pairing",
+                title: "训练后的次日反应已配对",
+                summary: pairing.summary,
+                confidence: pairing.sampleCount >= 24 ? .high : .medium,
+                evidenceCount: pairing.sampleCount
+            ))
+        }
         if behaviorPairs >= 6 {
             let grouped = Dictionary(grouping: behaviorSignals, by: \.tag)
             if let top = grouped.max(by: { $0.value.count < $1.value.count }) {
@@ -287,7 +337,7 @@ struct BodyModelBuilder {
         }
 
         var uncertain: [BodyModelUncertainArea] = []
-        if baselineDays < 7 {
+        if baselineDays < 7 && longTermDays < 60 {
             uncertain.append(BodyModelUncertainArea(
                 id: "baseline_history",
                 title: "个人基线仍在建立",
@@ -315,21 +365,108 @@ struct BodyModelBuilder {
             claims: claims,
             uncertainAreas: uncertain,
             behaviorSignals: behaviorSignals,
-            trainingPatternSummary: trainingSummary(strengthWorkouts, asOf: asOf),
+            trainingPatternSummary: trainingSummary(strengthWorkouts, recordedTrainingDays: recordedTrainingDays, asOf: asOf),
             coachRules: coachRules(for: maturity, uncertainAreas: uncertain)
         )
     }
 
-    private func maturityLevel(baselineDays: Int, behaviorPairs: Int, trainingSessions: Int) -> BodyModelMaturityLevel {
-        if baselineDays >= 28, behaviorPairs >= 12, trainingSessions >= 8 { return .stable }
-        if baselineDays >= 7 || behaviorPairs >= 6 || trainingSessions >= 3 { return .learning }
+    private func maturityLevel(
+        baselineDays: Int,
+        behaviorPairs: Int,
+        trainingSessions: Int,
+        longTermDays: Int
+    ) -> BodyModelMaturityLevel {
+        // 整体成熟度衡量「模型是否拟合了你这个人」，以生理数据为准：
+        // 三年长线（≥180 天）+ 足够训练事实即视为稳定期；
+        // 手记行为是独立轨道（不足 6 对时仍在「待验证区域」诚实提示），
+        // 不再阻塞整体稳定期——用户不写手记不意味着身体模型没拟合。
+        let physiologicallyFitted = baselineDays >= 28 && trainingSessions >= 8
+        let longTermFitted = longTermDays >= 180 && trainingSessions >= 8
+        if physiologicallyFitted && behaviorPairs >= 12 { return .stable }
+        if longTermFitted { return .stable }
+        if baselineDays >= 7 || longTermDays >= 60 || behaviorPairs >= 6 || trainingSessions >= 3 { return .learning }
         return .seed
     }
 
-    private func trainingSummary(_ workouts: [StrengthWorkoutRecord], asOf: Date) -> String {
-        guard !workouts.isEmpty else { return "尚无训练事实。训记或 Vela 训练记录同步后会开始学习训练反应。" }
+    private func trainingSummary(_ workouts: [StrengthWorkoutRecord], recordedTrainingDays: Int, asOf: Date) -> String {
+        guard !workouts.isEmpty else {
+            if recordedTrainingDays > 0 {
+                return "三年记录 \(recordedTrainingDays) 个训练日（Apple 健康 + 训记）；记录动作与组数后还可分析肌群容量。"
+            }
+            return "尚无训练事实。训记或 Vela 训练记录同步后会开始学习训练反应。"
+        }
         let summary = TrainingAnalyticsService().buildRecentSummary(workouts: workouts.map { $0.dto }, days: 28, endingAt: asOf)
         return "近 28 天 \(summary.sessions) 次训练，\(summary.effectiveSets) 个有效组，容量 \(Int(summary.volumeKg.rounded())) kg。"
+    }
+
+    /// 训练-结果三年配对（纯函数）：训练日次日 HRV/RHR 变化 vs 休息日次日变化。
+    /// 训练日 = workoutCount > 0 或 workoutDuration ≥ 15 分钟；两组各 ≥ 8 天才发布，
+    /// 效应量超过噪声阈值（HRV 3 ms / RHR 1.5 bpm）才形成结论。
+    struct TrainingOutcomePairing: Equatable {
+        var sampleCount: Int
+        var summary: String
+    }
+
+    static func trainingResponsePairing(
+        dailySummaries: [DailyHealthSummaryRecord],
+        calendar: Calendar = .current,
+        asOf: Date = Date()
+    ) -> TrainingOutcomePairing? {
+        let byDay = Dictionary(uniqueKeysWithValues: dailySummaries.map { (calendar.startOfDay(for: $0.date), $0) })
+        let sortedDays = byDay.keys.filter { $0 <= calendar.startOfDay(for: asOf) }.sorted()
+        guard sortedDays.count >= 10 else { return nil }
+
+        func isTrainingDay(_ record: DailyHealthSummaryRecord) -> Bool {
+            (record.workoutCount ?? 0) > 0 || (record.workoutDuration ?? 0) >= 15
+        }
+
+        var trainHRVDeltas: [Double] = []
+        var restHRVDeltas: [Double] = []
+        var trainRHRDeltas: [Double] = []
+        var restRHRDeltas: [Double] = []
+
+        for day in sortedDays {
+            guard let record = byDay[day] else { continue }
+            guard let next = calendar.date(byAdding: .day, value: 1, to: day),
+                  let nextRecord = byDay[next] else { continue }
+            if let today = record.hrvAverage, let tomorrow = nextRecord.hrvAverage {
+                let delta = tomorrow - today
+                if isTrainingDay(record) { trainHRVDeltas.append(delta) } else { restHRVDeltas.append(delta) }
+            }
+            if let today = record.restingHeartRate, let tomorrow = nextRecord.restingHeartRate {
+                let delta = tomorrow - today
+                if isTrainingDay(record) { trainRHRDeltas.append(delta) } else { restRHRDeltas.append(delta) }
+            }
+        }
+
+        func mean(_ values: [Double]) -> Double? {
+            guard !values.isEmpty else { return nil }
+            return values.reduce(0, +) / Double(values.count)
+        }
+        guard trainHRVDeltas.count >= 8, restHRVDeltas.count >= 8 else { return nil }
+
+        var parts: [String] = []
+        let sampleCount = trainHRVDeltas.count
+        if let trainMean = mean(trainHRVDeltas), let restMean = mean(restHRVDeltas) {
+            let effect = trainMean - restMean
+            if abs(effect) >= 3 {
+                let direction = effect < 0 ? "多降" : "少降"
+                parts.append("训练日次日 HRV 平均比休息日\(direction) \(String(format: "%.0f", abs(effect))) ms")
+            }
+        }
+        if trainRHRDeltas.count >= 8, restRHRDeltas.count >= 8,
+           let trainMean = mean(trainRHRDeltas), let restMean = mean(restRHRDeltas) {
+            let effect = trainMean - restMean
+            if abs(effect) >= 1.5 {
+                let direction = effect > 0 ? "多升" : "少升"
+                parts.append("次日静息心率比休息日\(direction) \(String(format: "%.1f", abs(effect))) bpm")
+            }
+        }
+        guard !parts.isEmpty else { return nil }
+        return TrainingOutcomePairing(
+            sampleCount: sampleCount,
+            summary: "三年配对（n=\(sampleCount) 个训练日）：\(parts.joined(separator: "；"))"
+        )
     }
 
     private func coachRules(for maturity: BodyModelMaturity, uncertainAreas: [BodyModelUncertainArea]) -> [String] {

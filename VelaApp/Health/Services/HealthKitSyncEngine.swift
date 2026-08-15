@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+@preconcurrency import HealthKit
 
 struct HealthSyncCursorState: Codable, Equatable {
     var lastSuccessfulSyncAt: Date?
@@ -120,15 +121,6 @@ final class HealthKitSyncEngine {
         forceRefreshRecentDays: Int? = nil
     ) async throws {
         let snapshotRepo = HealthSnapshotRepository(modelContext: modelContext, calendar: calendar)
-        if let healthKitQueryService = queryService as? HealthKitQueryService {
-            let characteristics = healthKitQueryService.queryCharacteristics()
-            UserProfileSettings.hydrateMissingValuesFromHealth(
-                age: characteristics.age,
-                weightKilograms: nil,
-                heightCentimeters: nil,
-                biologicalSex: characteristics.biologicalSex
-            )
-        }
 
         // Pass 1: Build and save the raw daily snapshots from HealthKit for the last (42 + days)
         // This ensures the database already has raw data for rolling baseline calculations in Pass 2!
@@ -179,6 +171,15 @@ final class HealthKitSyncEngine {
             }
         }
 
+        // 三年长线基准（与前台 loadDashboard 同源）：后台同步评分同样携带，
+        // 保证两条评分路径的 Layer 3 修正语义一致。
+        let longTermReport = LongTermBaselineEngine.compute(
+            points: ((try? modelContext.fetch(FetchDescriptor<DailyHealthSummaryRecord>())) ?? [])
+                .map(\.longTermBaselinePoint),
+            today: endDate,
+            calendar: calendar
+        )
+
         // Pass 2: Calculate scores day-by-day, pulling correct rolling raw baselines
         for dayStart in plan.scoreRecomputeDays {
             // Load this day's snapshot from SwiftData
@@ -217,10 +218,19 @@ final class HealthKitSyncEngine {
             let historicalSnapshots = pastSnapshots.filter { !calendar.isDate($0.date, inSameDayAs: dayStart) }
             
             // Run computation pipeline
-            let pipeline = DailyHealthComputation(calendar: calendar, now: endDate)
+            let hkCharacteristics = (queryService as? HealthKitQueryService)?.queryCharacteristics()
+            let pipeline = DailyHealthComputation(
+                calendar: calendar,
+                now: endDate,
+                profile: .current(
+                    ageFallback: hkCharacteristics?.age,
+                    biologicalSexFallback: hkCharacteristics?.biologicalSex
+                )
+            )
             let metrics = pipeline.compute(
                 for: snapshot,
-                history: historicalSnapshots
+                history: historicalSnapshots,
+                longTermBaselines: longTermReport
             )
 
             snapshot = metrics.applying(to: snapshot)
@@ -425,6 +435,7 @@ final class DailySnapshotBuilder {
         if let body = body {
             if let w = body.weightKilograms { snapshot.bodyWeight = w }
             if let fat = body.bodyFatPercentage { snapshot.bodyFatPercent = HealthUnitNormalizer.normalizeBodyFatPercentage(fat) }
+            if let vo2 = body.vo2Max { snapshot.vo2Max = vo2 }
             if let bmi = extended.bmi { snapshot.bmi = bmi }
         }
 
@@ -433,5 +444,268 @@ final class DailySnapshotBuilder {
         if let temp = extended.bodyTemperature { snapshot.wristTemperature = temp }
 
         return snapshot
+    }
+}
+
+// MARK: - Historical backfill（三年 Apple 健康历史回填）
+
+/// 纯分块规划：目标 3 年、每块 90 天、避开正常同步窗口（最近 45 天）、游标可续传。
+enum HistoricalBackfillPlanner {
+    static let targetYears = 3
+    static let chunkDays = 90
+    static let syncBoundaryDays = 45
+
+    static func targetEarliest(today: Date, calendar: Calendar = .current) -> Date {
+        calendar.date(byAdding: .year, value: -targetYears, to: calendar.startOfDay(for: today))
+            ?? calendar.startOfDay(for: today)
+    }
+
+    static func syncBoundaryStart(today: Date, calendar: Calendar = .current) -> Date {
+        calendar.date(byAdding: .day, value: -syncBoundaryDays, to: calendar.startOfDay(for: today))
+            ?? calendar.startOfDay(for: today)
+    }
+
+    /// 下一块 [start, end) 与处理后新游标；nil = 已全部回填。
+    static func nextChunk(
+        today: Date,
+        cursor: Date?,
+        calendar: Calendar = .current
+    ) -> (start: Date, end: Date, newCursor: Date)? {
+        let earliest = targetEarliest(today: today, calendar: calendar)
+        let boundary = syncBoundaryStart(today: today, calendar: calendar)
+        let nextEnd = calendar.startOfDay(for: cursor ?? boundary)
+        guard nextEnd > earliest else { return nil }
+        let start = max(
+            earliest,
+            calendar.date(byAdding: .day, value: -chunkDays, to: nextEnd) ?? nextEnd
+        )
+        guard start < nextEnd else { return nil }
+        return (start, nextEnd, start)
+    }
+
+    /// (已完成天数, 总天数)：总天数 = 同步边界到 3 年前。
+    static func progress(
+        today: Date,
+        cursor: Date?,
+        calendar: Calendar = .current
+    ) -> (completed: Int, total: Int) {
+        let earliest = targetEarliest(today: today, calendar: calendar)
+        let boundary = syncBoundaryStart(today: today, calendar: calendar)
+        let total = max(0, calendar.dateComponents([.day], from: earliest, to: boundary).day ?? 0)
+        let nextEnd = calendar.startOfDay(for: cursor ?? boundary)
+        let completed = max(0, calendar.dateComponents([.day], from: nextEnd, to: boundary).day ?? 0)
+        return (min(completed, total), total)
+    }
+}
+
+struct HistoricalBackfillProgress: Equatable {
+    var completedDays: Int
+    var totalDays: Int
+
+    var percent: Double {
+        totalDays > 0 ? min(1, Double(completedDays) / Double(totalDays)) : 0
+    }
+
+    var isComplete: Bool {
+        totalDays > 0 && completedDays >= totalDays
+    }
+}
+
+/// 回填执行器：每块并行聚合 8 组逐日 HealthKit 数据，只写「尚无记录」的
+/// 历史日（create-only，绝不覆盖正常同步生成的记录），游标存 UserDefaults。
+@MainActor
+struct HistoricalBackfillService {
+    let queryService: HealthKitQueryService
+    let modelContext: ModelContext
+    let calendar: Calendar
+
+    private static let cursorKey = "vela.historicalBackfill.nextChunkEnd"
+
+    static func storedCursor(defaults: UserDefaults = .standard) -> Date? {
+        defaults.object(forKey: cursorKey) as? Date
+    }
+
+    static func storeCursor(_ date: Date?, defaults: UserDefaults = .standard) {
+        defaults.set(date, forKey: cursorKey)
+    }
+
+    struct ChunkResult {
+        var insertedDays: Int
+        var chunkStart: Date
+        var chunkEnd: Date
+        var isComplete: Bool
+    }
+
+    func runNextChunk() async throws -> ChunkResult {
+        let today = calendar.startOfDay(for: Date())
+        guard let chunk = HistoricalBackfillPlanner.nextChunk(
+            today: today,
+            cursor: Self.storedCursor(),
+            calendar: calendar
+        ) else {
+            return ChunkResult(insertedDays: 0, chunkStart: today, chunkEnd: today, isComplete: true)
+        }
+
+        async let hrv = queryService.dailyAverages(
+            identifier: .heartRateVariabilitySDNN,
+            unit: HKUnit.secondUnit(with: .milli),
+            start: chunk.start, end: chunk.end, calendar: calendar
+        )
+        async let rhr = queryService.dailyAverages(
+            identifier: .restingHeartRate,
+            unit: HKUnit.count().unitDivided(by: .minute()),
+            start: chunk.start, end: chunk.end, calendar: calendar
+        )
+        async let sleep = queryService.dailySleep(start: chunk.start, end: chunk.end, calendar: calendar)
+        async let steps = queryService.dailySums(
+            identifier: .stepCount, unit: .count(),
+            start: chunk.start, end: chunk.end, calendar: calendar
+        )
+        async let energy = queryService.dailySums(
+            identifier: .activeEnergyBurned, unit: .kilocalorie(),
+            start: chunk.start, end: chunk.end, calendar: calendar
+        )
+        async let weight = queryService.dailyMostRecent(
+            identifier: .bodyMass, unit: .gramUnit(with: .kilo),
+            start: chunk.start, end: chunk.end, calendar: calendar
+        )
+        async let bodyFat = queryService.dailyMostRecent(
+            identifier: .bodyFatPercentage, unit: .percent(),
+            start: chunk.start, end: chunk.end, calendar: calendar
+        )
+        async let workouts = queryService.workoutSummaries(
+            in: DateRangeQuery(start: chunk.start, end: chunk.end)
+        )
+
+        let hrvValues = (try? await hrv) ?? [:]
+        let rhrValues = (try? await rhr) ?? [:]
+        let sleepValues = (try? await sleep) ?? [:]
+        let stepValues = (try? await steps) ?? [:]
+        let energyValues = (try? await energy) ?? [:]
+        let weightValues = (try? await weight) ?? [:]
+        let bodyFatValues = (try? await bodyFat) ?? [:]
+        let workoutSummaries = (try? await workouts) ?? []
+
+        // 训练按日历日聚合（与 aggregateDay 语义一致）
+        var countsByDay: [Date: Int] = [:]
+        var durationByDay: [Date: Double] = [:]
+        var typesByDay: [Date: Set<String>] = [:]
+        for workout in workoutSummaries {
+            let day = calendar.startOfDay(for: workout.start)
+            countsByDay[day, default: 0] += 1
+            durationByDay[day, default: 0] += workout.end.timeIntervalSince(workout.start) / 60.0
+            typesByDay[day, default: []].insert(workout.activityName)
+        }
+
+        // 已存在的日（create-only）
+        let all = (try? modelContext.fetch(FetchDescriptor<DailyHealthSummaryRecord>())) ?? []
+        var existing = Set<String>()
+        for record in all {
+            let day = calendar.startOfDay(for: record.date)
+            if day >= chunk.start, day < chunk.end {
+                existing.insert(record.dayIdentifier)
+            }
+        }
+
+        var inserted = 0
+        var day = chunk.start
+        while day < chunk.end {
+            let identifier = DailyHealthSummaryRecord.dayIdentifier(for: day, calendar: calendar)
+            if !existing.contains(identifier) {
+                let sleepDay = sleepValues[day]
+                modelContext.insert(DailyHealthSummaryRecord(
+                    dayIdentifier: identifier,
+                    date: day,
+                    hrvAverage: hrvValues[day],
+                    restingHeartRate: rhrValues[day],
+                    sleepHours: sleepDay?.sleepHours,
+                    steps: stepValues[day],
+                    activeCalories: energyValues[day],
+                    workoutCount: countsByDay[day],
+                    workoutTypes: typesByDay[day].map { $0.sorted().joined(separator: ", ") },
+                    workoutDuration: durationByDay[day],
+                    bodyWeight: weightValues[day],
+                    bodyFatPercent: bodyFatValues[day],
+                    deepSleepMinutes: sleepDay?.deepMinutes,
+                    remSleepMinutes: sleepDay?.remMinutes
+                ))
+                inserted += 1
+            }
+            guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
+            day = next
+        }
+        try modelContext.save()
+        Self.storeCursor(chunk.newCursor)
+        let done = HistoricalBackfillPlanner.progress(today: today, cursor: chunk.newCursor, calendar: calendar)
+        return ChunkResult(
+            insertedDays: inserted,
+            chunkStart: chunk.start,
+            chunkEnd: chunk.end,
+            isComplete: done.completed >= done.total
+        )
+    }
+}
+
+/// 回填协调器：跨页面存活的任务驱动 + 进度发布（个人页入口观察）。
+@MainActor
+final class HistoricalBackfillCoordinator: ObservableObject {
+    static let shared = HistoricalBackfillCoordinator()
+
+    @Published private(set) var progress = HistoricalBackfillProgress(completedDays: 0, totalDays: 1)
+    @Published private(set) var isRunning = false
+    @Published var lastError: String?
+
+    private var task: Task<Void, Never>?
+
+    private init() {}
+
+    var stateText: String {
+        if progress.isComplete { return "已完成" }
+        if isRunning { return "回填中 \(Int(progress.percent * 100))%" }
+        if progress.completedDays > 0 { return "已完成 \(Int(progress.percent * 100))% · 点按继续" }
+        return "未开始"
+    }
+
+    func refreshState(calendar: Calendar = .current) {
+        let p = HistoricalBackfillPlanner.progress(
+            today: Date(),
+            cursor: HistoricalBackfillService.storedCursor(),
+            calendar: calendar
+        )
+        progress = HistoricalBackfillProgress(completedDays: p.completed, totalDays: p.total)
+    }
+
+    func start(queryService: HealthKitQueryService, modelContext: ModelContext, calendar: Calendar = .current) {
+        guard !isRunning else { return }
+        isRunning = true
+        lastError = nil
+        refreshState(calendar: calendar)
+        task = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let service = HistoricalBackfillService(
+                    queryService: queryService,
+                    modelContext: modelContext,
+                    calendar: calendar
+                )
+                while true {
+                    try Task.checkCancellation()
+                    let result = try await service.runNextChunk()
+                    self.refreshState(calendar: calendar)
+                    if result.isComplete { break }
+                }
+                VelaAppState.shared.markLocalDataChanged()
+            } catch is CancellationError {
+                // 用户取消：游标已保存，下次从断点继续。
+            } catch {
+                self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+            self.isRunning = false
+        }
+    }
+
+    func cancel() {
+        task?.cancel()
+        isRunning = false
     }
 }

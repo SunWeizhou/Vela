@@ -11,11 +11,7 @@ struct TodayHealthSignal: Codable, Hashable, Identifiable, Sendable {
     var id: String
     var title: String
     var value: String
-    var baseline: String?
     var interpretation: String
-    var source: HealthDataSource
-    var confidence: DataConfidence
-    var metricKey: String
 }
 
 struct TodayAction: Codable, Hashable, Identifiable, Sendable {
@@ -40,7 +36,6 @@ struct ReadinessDecision: Codable, Hashable, Sendable {
     var confidence: Double
     var reasons: [String]
     var supportingSignals: [TodayHealthSignal]
-    var suggestedActions: [TodayAction]
     var userOverrideAvailable: Bool
 
     var displayTitle: String {
@@ -64,12 +59,57 @@ struct TodayCommandState: Codable, Hashable, Sendable {
     var dataConfidence: DataConfidence
 }
 
+/// 决策反馈回灌：按同类历史反馈的准确率校准置信度（服务 Trusted Decision Day 北极星）。
+/// DailyDecisionFeedbackRecord 此前只写不回，本校准器把它接回决策展示。
+enum DecisionFeedbackCalibrator {
+    static let minimumSamples = 3
+    static let recencyWindowDays = 28
+
+    static func calibratedConfidence(
+        base: Double,
+        decision: ReadinessDecisionKind,
+        records: [DailyDecisionFeedbackRecord],
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Double {
+        let cutoff = now.addingTimeInterval(-Double(recencyWindowDays) * 86_400)
+        let rated = records.filter {
+            matches(decision: decision, recordDecisionType: $0.decisionType)
+                && $0.accuracyRating != nil
+                && $0.createdAt >= cutoff
+        }
+        guard rated.count >= minimumSamples else { return base }
+        // PR9：「部分准确」按 0.5 计分，不再被误判为不准确。
+        // 校准只降不升（上限 1.0）：自报反馈不得把置信度抬到数据驱动基线之上。
+        let score = rated.reduce(0.0) { partial, record in
+            switch record.accuracyRating {
+            case "accurate": return partial + 1.0
+            case "partly": return partial + 0.5
+            default: return partial
+            }
+        }
+        let accuracy = score / Double(rated.count)
+        // 校准乘数：100% 准确 → 1.0；0% → 0.6 下限（样本有限，不完全归零）。
+        let multiplier = 0.6 + 0.4 * accuracy
+        return min(1.0, base * multiplier)
+    }
+
+    /// PR1 修复：写入路径存的是 DailyTrainingDecisionType（case `.rest`），
+    /// 而本校准器按 ReadinessDecisionKind（case `.recover`）匹配。
+    /// 归一化 `rest → recover`，恢复/休息日的反馈不再被静默丢弃。
+    private static func matches(decision: ReadinessDecisionKind, recordDecisionType: String?) -> Bool {
+        let normalized = recordDecisionType == "rest" ? "recover" : recordDecisionType
+        return normalized == decision.rawValue
+    }
+}
+
 enum TodayCommandBuilder {
     static func build(
         from dashboard: DashboardSummary,
         recentStrengthSummary: RecentTrainingSummary? = nil,
         coachArtifact: CoachArtifact? = nil,
-        generatedAt: Date = Date()
+        generatedAt: Date = Date(),
+        confirmedObservations: [String] = []
     ) -> TodayCommandState {
         let signals = keySignals(from: dashboard, recentStrengthSummary: recentStrengthSummary)
         let decision = readinessDecision(from: dashboard, signals: signals, recentStrengthSummary: recentStrengthSummary)
@@ -77,16 +117,21 @@ enum TodayCommandBuilder {
         let artifact = coachArtifact ?? localMorningBrief(from: dashboard, decision: decision, generatedAt: generatedAt)
         let confidence = aggregateConfidence(dashboard: dashboard, signals: signals)
 
+        var summaryText = summary(for: decision.decision, dashboard: dashboard)
+        // C2：已确认的个人反应规律直接进入今日计划文案（本地规则引擎也能用，不只 AI 知道）。
+        if !confirmedObservations.isEmpty {
+            let compact = confirmedObservations.prefix(2).joined(separator: "；")
+            summaryText += "\n\n参考你的长期记录：" + compact
+        }
         return TodayCommandState(
             date: dashboard.date,
             bodyStateTitle: title(for: decision.decision, dashboard: dashboard),
-            summary: summary(for: decision.decision, dashboard: dashboard),
+            summary: summaryText,
             readinessDecision: ReadinessDecision(
                 decision: decision.decision,
                 confidence: decision.confidence,
                 reasons: decision.reasons,
                 supportingSignals: signals,
-                suggestedActions: actions,
                 userOverrideAvailable: true
             ),
             keySignals: Array(signals.prefix(5)),
@@ -129,37 +174,48 @@ enum TodayCommandBuilder {
         if let first = dashboard.recovery.reasons.first {
             reasons.append(first)
         }
+        // Layer 2：三年长线证据（只作为理由补充，不改变决策分支）。
+        if let report = dashboard.longTermBaselines,
+           let line = LongTermBaselineEngine.contextLines(report).first {
+            reasons.append("长线参照：\(line)")
+        }
         let thresholds = PersonalBaselineEngine.resolveThresholds()
         if dashboard.recovery.score < thresholds.recoveryRest {
             reasons.append("Recovery \(Int(dashboard.recovery.score.rounded())) is below the recovery-day threshold (\(thresholds.source)).")
-            return (.recover, 0.86 * dynamicConfidence, reasons)
+            return (.recover, dynamicConfidence, reasons)
         }
         if dashboard.sleepScore.hasData, dashboard.sleepScore.score < thresholds.sleepRest {
             reasons.append("Sleep score \(Int(dashboard.sleepScore.score.rounded())) is limiting readiness (\(thresholds.source)).")
-            return (.recover, 0.78 * dynamicConfidence, reasons)
+            return (.recover, dynamicConfidence, reasons)
         }
-        if dashboard.stress.hasData, dashboard.stress.stressIndex > 78 {
+        if dashboard.stress.hasData, dashboard.stress.stressIndex > 75 {
             reasons.append("Physiological stress is elevated.")
-            return (.recover, 0.74 * dynamicConfidence, reasons)
+            return (.recover, dynamicConfidence, reasons)
+        }
+        if !dashboard.sleepScore.hasData || !dashboard.stress.hasData {
+            // 关键上下文缺失时保守降级，避免在信息不足时给出「可训练」结论。
+            reasons.append("睡眠或压力数据缺失，按保守方案执行。")
+            return (.reduce, dynamicConfidence, reasons)
         }
         if let summary = recentStrengthSummary,
            summary.localFatigue.values.contains(where: { $0.fatigueLevel == "high" }) {
             reasons.append("Local muscle fatigue is high from recent strength work.")
-            return (.swap, 0.72 * dynamicConfidence, reasons)
+            return (.swap, dynamicConfidence, reasons)
         }
-        if dashboard.recovery.score < thresholds.recoveryCaution || dashboard.sleepScore.score < thresholds.sleepCaution {
+        if dashboard.recovery.score < thresholds.recoveryCaution
+            || (dashboard.sleepScore.hasData && dashboard.sleepScore.score < thresholds.sleepCaution) {
             reasons.append("Recovery or sleep is not low enough for rest, but not strong enough for full volume (\(thresholds.source)).")
-            return (.reduce, 0.68 * dynamicConfidence, reasons)
+            return (.reduce, dynamicConfidence, reasons)
         }
         if dashboard.strain.hasData, dashboard.strain.score > Double(dashboard.strain.recommendedRange.upperBound) {
             reasons.append("Current strain is already above today's target range.")
-            return (.reduce, 0.70 * dynamicConfidence, reasons)
+            return (.reduce, dynamicConfidence, reasons)
         }
 
         if reasons.isEmpty {
             reasons.append("Recovery, sleep, and strain are within an actionable range.")
         }
-        return (.keep, 0.76 * dynamicConfidence, reasons)
+        return (.keep, dynamicConfidence, reasons)
     }
 
     private static func keySignals(
@@ -171,55 +227,33 @@ enum TodayCommandBuilder {
             id: "recovery",
             title: "Recovery",
             value: dashboard.recovery.hasData ? "\(Int(dashboard.recovery.score.rounded()))" : "--",
-            baseline: nil,
-            interpretation: dashboard.recovery.reasons.first ?? "恢复数据仍在建立基线。",
-            source: .computed,
-            confidence: confidence(from: dashboard.recovery.confidence),
-            metricKey: "recovery"
+            interpretation: dashboard.recovery.reasons.first ?? "恢复数据仍在建立基线。"
         ))
         signals.append(TodayHealthSignal(
             id: "sleep",
             title: "Sleep",
             value: dashboard.sleepScore.hasData ? "\(Int(dashboard.sleepScore.score.rounded()))" : "--",
-            baseline: dashboard.sleepSummary.totalSleepMinutes > 0 ? "\(dashboard.sleepSummary.totalSleepMinutes) min" : nil,
-            interpretation: dashboard.sleepScore.reasons.first ?? "睡眠数据不足。",
-            source: .computed,
-            confidence: confidence(from: dashboard.sleepScore.confidence),
-            metricKey: "sleep"
+            interpretation: dashboard.sleepScore.reasons.first ?? "睡眠数据不足。"
         ))
         let hrvValue = dashboard.recoveryMetrics.hrvMilliseconds.map { "\(Int($0.rounded())) ms" } ?? "--"
-        let hrvBaseline = dashboard.recoveryBaseline.hrvMilliseconds.map { "\(Int($0.rounded())) ms baseline" }
         signals.append(TodayHealthSignal(
             id: "hrv",
             title: "HRV vs baseline",
             value: hrvValue,
-            baseline: hrvBaseline,
-            interpretation: hrvInterpretation(dashboard),
-            source: .healthKit,
-            confidence: dashboard.recoveryMetrics.hrvMilliseconds == nil ? .unavailable : .high,
-            metricKey: "recovery"
+            interpretation: hrvInterpretation(dashboard)
         ))
         let rhrValue = dashboard.recoveryMetrics.restingHeartRate.map { "\(Int($0.rounded())) bpm" } ?? "--"
-        let rhrBaseline = dashboard.recoveryBaseline.restingHeartRate.map { "\(Int($0.rounded())) bpm baseline" }
         signals.append(TodayHealthSignal(
             id: "rhr",
             title: "Resting HR",
             value: rhrValue,
-            baseline: rhrBaseline,
-            interpretation: rhrInterpretation(dashboard),
-            source: .healthKit,
-            confidence: dashboard.recoveryMetrics.restingHeartRate == nil ? .unavailable : .high,
-            metricKey: "recovery"
+            interpretation: rhrInterpretation(dashboard)
         ))
         signals.append(TodayHealthSignal(
             id: "strain",
             title: "Training load",
             value: dashboard.strain.hasData ? "\(Int(dashboard.strain.score.rounded()))" : "--",
-            baseline: "target \(dashboard.strain.recommendedRange.lowerBound)-\(dashboard.strain.recommendedRange.upperBound)",
-            interpretation: dashboard.strain.reasons.first ?? "负荷数据不足。",
-            source: .computed,
-            confidence: confidence(from: dashboard.strain.confidence),
-            metricKey: "strain"
+            interpretation: dashboard.strain.reasons.first ?? "负荷数据不足。"
         ))
         if let summary = recentStrengthSummary, !summary.muscleGroupSets.isEmpty {
             let top = summary.muscleGroupSets.sorted { $0.value > $1.value }.first
@@ -227,17 +261,15 @@ enum TodayCommandBuilder {
                 id: "local_fatigue",
                 title: "Local fatigue",
                 value: top.map { "\($0.key) \($0.value) sets" } ?? "--",
-                baseline: "7d effective sets",
-                interpretation: "近期肌群组数会影响今天是否换部位或减量。",
-                source: .computed,
-                confidence: .medium,
-                metricKey: "training"
+                interpretation: "近期肌群组数会影响今天是否换部位或减量。"
             ))
         }
         return signals
     }
 
     private static func actions(for decision: ReadinessDecisionKind, dashboard: DashboardSummary) -> [TodayAction] {
+        // 注：kind 用于今日页图标与路由，detail 用于 coach 问题预填——二者是活的，
+        // 与 D7/D8 的死字段不同，保留。
         switch decision {
         case .keep:
             return [
@@ -334,7 +366,9 @@ enum TodayCommandBuilder {
 
     private static func aggregateConfidence(dashboard: DashboardSummary, signals: [TodayHealthSignal]) -> DataConfidence {
         if !dashboard.recovery.hasData { return .unavailable }
-        if signals.contains(where: { $0.confidence == .unavailable }) { return .low }
+        if dashboard.recoveryMetrics.hrvMilliseconds == nil || dashboard.recoveryMetrics.restingHeartRate == nil {
+            return .low
+        }
         if [dashboard.recovery.confidence, dashboard.sleepScore.confidence, dashboard.strain.confidence].contains(.low) {
             return .low
         }
@@ -342,13 +376,5 @@ enum TodayCommandBuilder {
             return .medium
         }
         return .high
-    }
-
-    private static func confidence(from metricConfidence: MetricConfidence) -> DataConfidence {
-        switch metricConfidence {
-        case .high: return .high
-        case .medium: return .medium
-        case .low: return .low
-        }
     }
 }

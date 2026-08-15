@@ -111,9 +111,6 @@ final class VelaServices: ObservableObject {
     var queryService: HealthKitQueryService {
         VelaResolver.shared.resolve(HealthQueryService.self) as! HealthKitQueryService
     }
-    var refreshService: HealthDataRefreshService {
-        VelaResolver.shared.resolve(HealthDataRefreshService.self)
-    }
     var contextBuilder: AIContextBuilder {
         VelaResolver.shared.resolve(AIContextBuilder.self)
     }
@@ -134,7 +131,7 @@ final class VelaServices: ObservableObject {
     }
 
     /// WebSearchService uses a private singleton — expose via computed property.
-    var webSearchService: WebSearchService { .shared }
+    /// D10：WebSearchService 为死代码（线上路径是 WebSearchHelper），已移除暴露。
 
     /// WikiFileService is a stateless enum namespace — reference directly or via this alias.
     typealias Wiki = WikiFileService
@@ -165,14 +162,10 @@ final class VelaResolver {
     private init() {
         // Register default implementations
         register(HealthQueryService.self) { HealthKitQueryService() }
-        register(HealthDataRefreshService.self) {
-            HealthDataRefreshService(queryService: self.resolve(HealthQueryService.self))
-        }
         register(AIContextBuilder.self) { AIContextBuilder() }
         register(AppSyncCoordinator.self) { AppSyncCoordinator() }
         register(DailySummaryUseCase.self) {
             DailySummaryUseCase(
-                refreshService: self.resolve(HealthDataRefreshService.self),
                 queryService: self.resolve(HealthQueryService.self) as! HealthKitQueryService,
                 syncCoordinator: self.resolve(AppSyncCoordinator.self)
             )

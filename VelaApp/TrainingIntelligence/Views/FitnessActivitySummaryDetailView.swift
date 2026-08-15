@@ -4,8 +4,10 @@ import SwiftData
 struct FitnessActivitySummaryDetailView: View {
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \DailyHealthSummaryRecord.date, order: .forward) private var records: [DailyHealthSummaryRecord]
-    @Query(sort: \WorkoutEventRecord.startedAt, order: .forward) private var workoutEvents: [WorkoutEventRecord]
+    @Environment(\.modelContext) private var modelContext
+    // P3-11 修复：此前无谓词 @Query 全量加载全表；改为按浏览日 35 天窗口拉取。
+    @State private var records: [DailyHealthSummaryRecord] = []
+    @State private var workoutEvents: [WorkoutEventRecord] = []
 
     private var recentRecords: [DailyHealthSummaryRecord] {
         let calendar = Calendar.current
@@ -91,6 +93,22 @@ struct FitnessActivitySummaryDetailView: View {
             .scrollIndicators(.hidden)
         }
         .navigationTitle("")
+        .task(id: dashboardVM.selectedDate) {
+            let calendar = Calendar.current
+            let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: dashboardVM.selectedDate))
+                ?? dashboardVM.selectedDate
+            let start = calendar.date(byAdding: .day, value: -35, to: end) ?? end
+            let recordsDescriptor = FetchDescriptor<DailyHealthSummaryRecord>(
+                predicate: #Predicate<DailyHealthSummaryRecord> { $0.date >= start && $0.date < end },
+                sortBy: [SortDescriptor(\.date, order: .forward)]
+            )
+            records = (try? modelContext.fetch(recordsDescriptor)) ?? []
+            let eventsDescriptor = FetchDescriptor<WorkoutEventRecord>(
+                predicate: #Predicate<WorkoutEventRecord> { $0.startedAt >= start && $0.startedAt < end },
+                sortBy: [SortDescriptor(\.startedAt, order: .forward)]
+            )
+            workoutEvents = (try? modelContext.fetch(eventsDescriptor)) ?? []
+        }
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .top) {
             VStack(spacing: 0) {
@@ -308,7 +326,30 @@ struct FitnessActivitySummaryDetailView: View {
 
 struct AreaChartCurveView: View {
     let points: [CGPoint]
-    
+    /// 真实数值与日期（可选）：提供后支持拖动查看每天的真实耗力分数。
+    var values: [Double]? = nil
+    var dates: [Date]? = nil
+
+    @State private var scrubIndex: Int?
+    @State private var showLabels = false
+
+    private var canScrub: Bool {
+        guard let values else { return false }
+        return values.count == points.count && points.count > 1
+    }
+
+    private var labelStride: Int {
+        points.count > 15 ? 2 : 1
+    }
+
+    private func dateText(for index: Int) -> String {
+        guard let dates, dates.indices.contains(index) else { return "" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "M/d"
+        return formatter.string(from: dates[index])
+    }
+
     var body: some View {
         GeometryReader { geo in
             ZStack {
@@ -358,8 +399,127 @@ struct AreaChartCurveView: View {
                             .position(x: x, y: y)
                     }
                 }
+
+                // 数值标注模式：点一下曲线显示数值（>15 点时隔点标注）+ 最高/最低图例
+                valueLabelOverlay(geo: geo)
+
+                // 交互：拖动查看每天的真实耗力分数
+                scrubOverlay(geo: geo)
+            }
+            .contentShape(Rectangle())
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                    .onChanged { value in
+                        guard canScrub, geo.size.width > 0 else { return }
+                        let fraction = min(1, max(0, value.location.x / geo.size.width))
+                        scrubIndex = Int((fraction * CGFloat(points.count - 1)).rounded())
+                    }
+                    .onEnded { _ in
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+                            scrubIndex = nil
+                        }
+                    }
+            )
+            .simultaneousGesture(
+                TapGesture()
+                    .onEnded {
+                        guard canScrub else { return }
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.9)) {
+                            showLabels.toggle()
+                        }
+                    }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func valueLabelOverlay(geo: GeometryProxy) -> some View {
+        if showLabels, canScrub, let values {
+            ForEach(0..<points.count, id: \.self) { index in
+                if index % labelStride == 0 || index == points.count - 1 {
+                    let pt = points[index]
+                    let label = "\(Int(values[index].rounded()))"
+                    let labelPosition = CGPoint(
+                        x: min(geo.size.width - 13, pt.x * geo.size.width + 6),
+                        y: max(9, pt.y * geo.size.height - 6)
+                    )
+                    ChartValueLabel(text: label, position: labelPosition)
+                }
+            }
+
+            ChartMaxMinLegend(maxText: maxValueText, minText: minValueText)
+                .position(x: geo.size.width - 68, y: 14)
+        }
+    }
+
+    @ViewBuilder
+    private func scrubOverlay(geo: GeometryProxy) -> some View {
+        if canScrub, let values {
+            let index = scrubIndex ?? points.count - 1
+            if points.indices.contains(index) {
+                let pt = points[index]
+                let x = pt.x * geo.size.width
+                let y = pt.y * geo.size.height
+                let label = dateText(for: index) + " · \(Int(values[index].rounded()))"
+                Circle()
+                    .fill(VelaTheme.accent)
+                    .frame(width: 8, height: 8)
+                    .position(x: x, y: y)
+                Text(label)
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(VelaTheme.fg)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(VelaTheme.cardBg, in: Capsule())
+                    .shadow(color: VelaTheme.accent.opacity(0.25), radius: 5)
+                    .position(
+                        x: min(geo.size.width - 52, max(52, x)),
+                        y: max(16, y - 18)
+                    )
             }
         }
+    }
+
+    private var maxValueText: String {
+        guard let values else { return "--" }
+        return "\(Int((values.max() ?? 0).rounded()))"
+    }
+
+    private var minValueText: String {
+        guard let values else { return "--" }
+        return "\(Int((values.min() ?? 0).rounded()))"
+    }
+}
+
+/// 图表上的小数值标注（独立子视图，减轻大视图类型推导负担）。
+private struct ChartValueLabel: View {
+    let text: String
+    let position: CGPoint
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 7, weight: .medium, design: .rounded))
+            .foregroundStyle(VelaTheme.fg2)
+            .position(position)
+    }
+}
+
+/// 最高/最低图例小胶囊。
+private struct ChartMaxMinLegend: View {
+    let maxText: String
+    let minText: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Label("最高 \(maxText)", systemImage: "arrow.up")
+            Label("最低 \(minText)", systemImage: "arrow.down")
+        }
+        .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+        .foregroundStyle(VelaTheme.fg)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(VelaTheme.cardBg.opacity(0.95), in: Capsule())
+        .shadow(color: VelaTheme.accent.opacity(0.25), radius: 5)
     }
 }
 

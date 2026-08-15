@@ -17,6 +17,8 @@ struct DashboardSummary: Hashable, Sendable {
     var workouts: [WorkoutSummary]
     var dailyInsight: String
     var source: DataSource
+    /// 三年长线基准报告（回填后可用）；评分修正、长线证据与 wiki 同源。
+    var longTermBaselines: LongTermBaselineReport? = nil
     
     private var _trainingDecision: TrainingDecision?
     var trainingDecision: TrainingDecision {
@@ -111,7 +113,8 @@ struct DashboardSummary: Hashable, Sendable {
         extendedMetrics: ExtendedHealthMetrics,
         workouts: [WorkoutSummary],
         dailyInsight: String,
-        source: DataSource
+        source: DataSource,
+        longTermBaselines: LongTermBaselineReport? = nil
     ) {
         self.date = date
         self.sleepSummary = sleepSummary
@@ -128,6 +131,7 @@ struct DashboardSummary: Hashable, Sendable {
         self.workouts = workouts
         self.dailyInsight = dailyInsight
         self.source = source
+        self.longTermBaselines = longTermBaselines
         self._trainingDecision = nil
         self._bodyState = nil
     }

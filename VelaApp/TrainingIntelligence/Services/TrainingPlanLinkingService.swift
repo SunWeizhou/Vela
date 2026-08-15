@@ -4,6 +4,29 @@ import SwiftData
 final class TrainingPlanLinkingService: Sendable {
     init() {}
 
+    /// P2-5：肌群键 → 中文别名映射。计划标题是中文（如「胸 + 三头」「推日」）时，
+    /// 纯英文键匹配永远失败、自动打卡几乎不触发。
+    private static let muscleAliases: [String: [String]] = [
+        "chest": ["胸"],
+        "back": ["背"],
+        "shoulders": ["肩", "三角"],
+        "quads": ["腿", "股四头", "深蹲"],
+        "hamstrings": ["腿", "腘绳", "腿后"],
+        "glutes": ["臀", "腿"],
+        "biceps": ["二头", "臂", "弯举"],
+        "triceps": ["三头", "臂"],
+        "core": ["核心", "腹"],
+    ]
+
+    private func muscleMatches(_ muscle: String, title: String, description: String) -> Bool {
+        let key = muscle.lowercased()
+        if title.contains(key) || description.contains(key) { return true }
+        for alias in Self.muscleAliases[key] ?? [] {
+            if title.contains(alias) || description.contains(alias) { return true }
+        }
+        return false
+    }
+
     func calculateMatchScore(
         event: WorkoutEventRecord,
         planDay: TrainingDay,
@@ -47,7 +70,7 @@ final class TrainingPlanLinkingService: Sendable {
                     let planDayTitle = planDay.title.lowercased()
                     let planDayDesc = planDay.description.lowercased()
                     let musclesMatchPlan = workoutMuscles.contains { muscle in
-                        planDayTitle.contains(muscle) || planDayDesc.contains(muscle)
+                        muscleMatches(muscle, title: planDayTitle, description: planDayDesc)
                     }
                     // Full strength match bonus: needs both a linked workout AND muscle/title alignment
                     if musclesMatchPlan {
@@ -73,7 +96,7 @@ final class TrainingPlanLinkingService: Sendable {
 
             var muscleMatched = false
             for muscle in workoutMuscles {
-                if planDayTitle.contains(muscle) || planDayDesc.contains(muscle) {
+                if muscleMatches(muscle, title: planDayTitle, description: planDayDesc) {
                     muscleMatched = true
                     break
                 }

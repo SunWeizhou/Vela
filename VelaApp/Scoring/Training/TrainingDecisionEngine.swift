@@ -113,7 +113,7 @@ enum TrainingDecisionEngine {
             energyScore: dashboard.energy.currentEnergy,
             trainingLoadStatus: hasEnoughHistory ? (dashboard.strain.trainingLoadStatus) : .optimal, // Inhibits training load limiter when history is insufficient
             journalFlags: journalFlags,
-            bodyTempDelta: 0.0,
+            bodyTempDelta: dashboard.recovery.metrics["body_temp_delta"] ?? 0.0,
             hrvZ: dashboard.recovery.metrics["hrv_z_score"] ?? 0.0,
             rhrZ: dashboard.recovery.metrics["rhr_z_score"] ?? 0.0
         )

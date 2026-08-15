@@ -361,11 +361,19 @@ struct RetentionPolicyService {
         var agentArtifacts = 0
         var coachArtifacts = 0
         var xunjiCaches = 0
+        var aiReports = 0
+        var coachInteractions = 0
+        var productEvents = 0
+        var memoryEvents = 0
+        var proactiveInsights = 0
     }
 
     var agentRunDays = 30
     var agentArtifactDays = 90
     var coachArtifactDays = 180
+    var coachInteractionDays = 90
+    var productEventDays = 180
+    var memoryEventDays = 90
     var xunjiCacheDays = 7
 
     @MainActor
@@ -403,9 +411,62 @@ struct RetentionPolicyService {
         oldCaches.forEach(modelContext.delete)
         result.xunjiCaches = oldCaches.count
 
+        // AIReportRecord 此前无保留策略、只增不减：每 type 保留最近 N 条。
+        let allReports = try modelContext.fetch(FetchDescriptor<AIReportRecord>(
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        ))
+        var keptByType: [String: Int] = [:]
+        for report in allReports {
+            let type = report.type
+            let kept = keptByType[type, default: 0]
+            if kept >= Self.reportKeepCountPerType {
+                modelContext.delete(report)
+                result.aiReports += 1
+            } else {
+                keptByType[type] = kept + 1
+            }
+        }
+
+        // PR5：保留策略从 5 类扩展到覆盖对话交互/产品事件/记忆事件/主动洞察。
+        // 用户内容类（日志/对话会话/训练/计划）仍永久保留——这是用户的历史，
+        // 只修剪诊断/遥测类记录。
+        let coachInteractionCutoff = now.addingTimeInterval(-Double(coachInteractionDays) * 86_400)
+        let oldInteractions = try modelContext.fetch(FetchDescriptor<CoachInteractionRecord>(
+            predicate: #Predicate { $0.createdAt < coachInteractionCutoff }
+        ))
+        oldInteractions.forEach(modelContext.delete)
+        result.coachInteractions = oldInteractions.count
+
+        let productEventCutoff = now.addingTimeInterval(-Double(productEventDays) * 86_400)
+        let oldEvents = try modelContext.fetch(FetchDescriptor<VelaEventRecord>(
+            predicate: #Predicate { $0.timestamp < productEventCutoff }
+        ))
+        oldEvents.forEach(modelContext.delete)
+        result.productEvents = oldEvents.count
+
+        let memoryCutoff = now.addingTimeInterval(-Double(memoryEventDays) * 86_400)
+        let memoryStatuses = [
+            MemoryProposalStatus.rejected.rawValue,
+            MemoryProposalStatus.superseded.rawValue,
+            MemoryProposalStatus.expired.rawValue
+        ]
+        let oldMemories = try modelContext.fetch(FetchDescriptor<MemoryEventRecord>(
+            predicate: #Predicate { $0.createdAt < memoryCutoff && memoryStatuses.contains($0.status) }
+        ))
+        oldMemories.forEach(modelContext.delete)
+        result.memoryEvents = oldMemories.count
+
+        // ProactiveInsightRecord 已不再写入（D3），历史行全部清理。
+        let staleInsights = try modelContext.fetch(FetchDescriptor<ProactiveInsightRecord>())
+        staleInsights.forEach(modelContext.delete)
+        result.proactiveInsights = staleInsights.count
+
         if result != Result() {
             try modelContext.save()
         }
         return result
     }
+
+    /// 每种报告类型保留的最新条数（morning_brief/weekly_review 等）。
+    static let reportKeepCountPerType = 30
 }

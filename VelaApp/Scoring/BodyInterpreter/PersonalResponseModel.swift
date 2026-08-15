@@ -54,6 +54,12 @@ struct PersonalResponseModel {
             let today = snapshots[i]
             let yesterday = snapshots[i-1]
 
+            // 快照窗口可能是稀疏的：只有相邻日历日才能构成「次日」配对。
+            let calendar = Calendar.current
+            let todayDay = calendar.startOfDay(for: today.date)
+            guard let expectedYesterday = calendar.date(byAdding: .day, value: -1, to: todayDay),
+                  calendar.isDate(yesterday.date, inSameDayAs: expectedYesterday) else { continue }
+
             guard let todayHRV = today.hrvAverage,
                   let yesterdayHRV = yesterday.hrvAverage,
                   yesterdayHRV > 0,
@@ -100,6 +106,14 @@ struct PersonalResponseModel {
             let day1 = snapshots[i-2]
             let day2 = snapshots[i-1]
             let day3 = snapshots[i]
+
+            // 连续三天必须日历相邻，稀疏窗口下的伪差值会催生错误规律。
+            let calendar = Calendar.current
+            let day3Start = calendar.startOfDay(for: day3.date)
+            guard let expectedDay2 = calendar.date(byAdding: .day, value: -1, to: day3Start),
+                  let expectedDay1 = calendar.date(byAdding: .day, value: -2, to: day3Start),
+                  calendar.isDate(day2.date, inSameDayAs: expectedDay2),
+                  calendar.isDate(day1.date, inSameDayAs: expectedDay1) else { continue }
 
             guard let strain1 = day1.strainScore,
                   let strain2 = day2.strainScore,
@@ -151,7 +165,8 @@ struct PersonalResponseModel {
         for entry in caffeineEntries {
             let entryDay = calendar.startOfDay(for: entry.createdAt)
             // Check sleep on the night OF that day (next day's snapshot)
-            if let snapshot = snapshots.first(where: { calendar.startOfDay(for: $0.date) == entryDay }),
+            guard let nextDay = calendar.date(byAdding: .day, value: 1, to: entryDay) else { continue }
+            if let snapshot = snapshots.first(where: { calendar.startOfDay(for: $0.date) == nextDay }),
                let sleepEff = snapshot.sleepEfficiency,
                sleepEff > 0 {
                 caffeineDays += 1
@@ -187,6 +202,12 @@ struct PersonalResponseModel {
         for i in 1..<snapshots.count {
             let yesterday = snapshots[i-1]
             let today = snapshots[i]
+
+            // 稀疏窗口下仅相邻日历日构成配对。
+            let calendar = Calendar.current
+            let todayDay = calendar.startOfDay(for: today.date)
+            guard let expectedYesterday = calendar.date(byAdding: .day, value: -1, to: todayDay),
+                  calendar.isDate(yesterday.date, inSameDayAs: expectedYesterday) else { continue }
 
             guard let yesterdayStress = yesterday.stressIndex,
                   let yesterdayRecovery = yesterday.recoveryScore,

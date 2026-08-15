@@ -26,6 +26,9 @@ public struct StressIndexInput: Hashable {
     
     public var isWithinWorkoutWindow: Bool // inside workout window or 90 minutes post-workout
 
+    /// 三年长线静息心率中位（Layer 3：RHR 压力分量的双基线门控；nil = 不启用）。
+    public var longTermQuietHRMedian: Double?
+
     // Legacy fields for backward compatibility
     public var heartRateElevationScore: Double?
     public var hrvSuppressionScore: Double?
@@ -48,6 +51,7 @@ public struct StressIndexInput: Hashable {
         sleepScoreLastNight: Double? = nil,
         strainScoreToday: Double? = nil,
         isWithinWorkoutWindow: Bool = false,
+        longTermQuietHRMedian: Double? = nil,
         heartRateElevationScore: Double? = nil,
         hrvSuppressionScore: Double? = nil,
         sleepDebtStressScore: Double? = nil,
@@ -74,6 +78,7 @@ public struct StressIndexInput: Hashable {
         self.sleepScoreLastNight = sleepScoreLastNight
         self.strainScoreToday = strainScoreToday
         self.isWithinWorkoutWindow = isWithinWorkoutWindow
+        self.longTermQuietHRMedian = longTermQuietHRMedian
         self.heartRateElevationScore = heartRateElevationScore
         self.hrvSuppressionScore = hrvSuppressionScore
         self.sleepDebtStressScore = sleepDebtStressScore
@@ -132,14 +137,28 @@ public struct StressIndexEngine: ScoreEngine {
         case .rawVitals:
             if let quietHR = input.quietHRToday {
                 let baseline = input.quietHRBaseline ?? quietHR
-                let sd = input.quietHRSD ?? max(2.5, baseline * 0.04)
+                // SD=0 或非有限值时视为缺失（否则除零 → +inf → 静默满分）。
+                let sd: Double
+                if let provided = input.quietHRSD, provided.isFinite, provided > 0 {
+                    sd = provided
+                } else {
+                    sd = max(2.5, baseline * 0.04)
+                }
                 let rhrZ = (quietHR - baseline) / sd
-                let rhrStress = ScoringMath.clamp(50.0 + 18.0 * rhrZ, min: 0, max: 100)
+                var rhrStress = ScoringMath.clamp(50.0 + 18.0 * rhrZ, min: 0, max: 100)
                 components["rhr_stress"] = rhrStress
                 componentWeights["rhr_stress"] = weights["rhr_stress"] ?? 0
 
                 if rhrZ > 1.2 {
-                    reasons.append("静息心率高于近期个人基线")
+                    // Layer 3 双基线门控：高于短期基线、但仍在三年长线正常范围内时，
+                    // RHR 压力分量中和为 50（不再计为压力），并给出解释。
+                    if let longTermMedian = input.longTermQuietHRMedian, quietHR <= longTermMedian {
+                        rhrStress = 50.0
+                        components["rhr_stress"] = rhrStress
+                        reasons.append("静息心率高于短期基线，但仍在三年长期正常范围内，RHR 压力分量已中和")
+                    } else {
+                        reasons.append("静息心率高于近期个人基线")
+                    }
                 }
             } else {
                 missingInputs.append("quietHRToday")
@@ -189,7 +208,13 @@ public struct StressIndexEngine: ScoreEngine {
         // 3. Respiratory Rate Stress (15%)
         if let respToday = input.respRateToday {
             let baseline = input.respRateBaseline ?? respToday
-            let sd = input.respRateSD ?? 1.0
+            // SD=0 或非有限值时视为缺失（否则除零 → +inf → 静默满分）。
+            let sd: Double
+            if let provided = input.respRateSD, provided.isFinite, provided > 0 {
+                sd = provided
+            } else {
+                sd = 1.0
+            }
             let respZ = (respToday - baseline) / sd
             let respStress = ScoringMath.clamp(50.0 + 15.0 * respZ, min: 0, max: 100)
             components["resp_stress"] = respStress

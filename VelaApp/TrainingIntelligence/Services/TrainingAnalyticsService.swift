@@ -28,7 +28,18 @@ struct TrainingAnalyticsService: Sendable {
                 reps += set.repetitions
                 let setVolume = set.volumeKilograms
                 volume += setVolume
-                guard isEffective(set, equipment: exercise.equipment) else { continue }
+                guard isEffective(set, equipment: exercise.equipment) else {
+                    // 真实 1-2 次组不算「有效组」，但仍是 e1RM 测试数据（此前被
+                    // reps>=3 门控排除，1RM 测试永不进 e1RM）。
+                    if !set.isWarmup,
+                       (1...12).contains(set.repetitions),
+                       set.weightKilograms > 0,
+                       (set.rpe ?? 8) >= 6 {
+                        let value = set.weightKilograms * (1 + Double(set.repetitions) / 30)
+                        e1RM[exercise.name] = max(e1RM[exercise.name] ?? 0, value)
+                    }
+                    continue
+                }
                 effectiveSets += 1
                 muscleGroupSets[muscle, default: 0] += 1
                 muscleGroupVolume[muscle, default: 0] += setVolume
@@ -366,6 +377,7 @@ struct XunjiTrainingImportService: Sendable {
         var imported = 0
         var updated = 0
         var skipped = 0
+        var deduped = 0
         var titles: [String] = []
         var affectedDatesByIdentifier: [String: Date] = [:]
         func markAffected(_ date: Date) {
@@ -403,6 +415,19 @@ struct XunjiTrainingImportService: Sendable {
                 workout.completedAt = normalized.startedAt.addingTimeInterval(TimeInterval(normalized.durationMinutes * 60))
                 updated += 1
             } else {
+                // 双录防护：同日已存在时长相近的本地记录时视为同一场训练，
+                // 不再创建第二条 StrengthWorkoutRecord（否则 sessions/volume 翻倍）。
+                // T4 升级：除时长差 ≤10 分钟外，开始时间差 ≤60 分钟也视为同一场
+                //（此前手动补录与训记时长差 >10 分钟时仍会双写，容量/局部疲劳翻倍）。
+                if let duplicate = existingWorkouts.first(where: {
+                    calendar.isDate($0.startedAt, inSameDayAs: normalized.startedAt)
+                        && (abs($0.durationMinutes - normalized.durationMinutes) <= 10
+                            || abs($0.startedAt.timeIntervalSince(normalized.startedAt)) <= 3_600)
+                }) {
+                    markAffected(duplicate.startedAt)
+                    deduped += 1
+                    continue
+                }
                 workout = StrengthWorkoutRecord(
                     title: normalized.title,
                     startedAt: normalized.startedAt,
@@ -420,8 +445,11 @@ struct XunjiTrainingImportService: Sendable {
                 history: existingWorkouts.filter { $0.id != workout.id }.map { $0.dto },
                 exerciseLibrary: ExerciseLibraryService.defaultDefinitionsDTO()
             )
-            workout.analyticsJSON = (try? String(data: encoder.encode(analysis), encoding: .utf8)) ?? "{}"
-            let artifactHash = ContentHash.hash("xunji-\(normalized.externalID)-\(workout.analyticsJSON ?? "")")
+            // T7 修复：analyticsJSON 只写不读（详情页每次按需重算），停止写入；
+            // 内容哈希改用训练事实本身，语义不变。
+            let artifactHash = ContentHash.hash(
+                "xunji-\(normalized.externalID)-\(workout.totalVolumeKilograms)-\(workout.exercises.flatMap(\.sets).count)"
+            )
             let workoutIdStr = workout.id.uuidString
             let existingArtifacts = (try? modelContext.fetch(FetchDescriptor<CoachArtifactRecord>())) ?? []
             
@@ -454,6 +482,15 @@ struct XunjiTrainingImportService: Sendable {
                     sessionRPE: normalized.sessionRPE,
                     calendar: calendar
                 )
+                // P1-3：训记导入的力量训练也要参与计划日打卡（此前只有手动路径）。
+                if event.linkedTrainingPlanDayId == nil {
+                    try? WorkoutAggregationService.shared.linkActivePlanDay(
+                        for: event,
+                        strengthWorkout: workout,
+                        modelContext: modelContext,
+                        calendar: calendar
+                    )
+                }
                 // Clean up any previously imported duplicate xunji event
                 if let oldXunjiEvent = existingEvents.first(where: { $0.linkedStrengthWorkoutId == workout.id && $0.source == "xunji" }) {
                     modelContext.delete(oldXunjiEvent)
@@ -523,7 +560,7 @@ struct XunjiTrainingImportService: Sendable {
         return XunjiImportSummary(
             importedCount: imported,
             updatedCount: updated,
-            skippedCount: skipped,
+            skippedCount: skipped + deduped,
             importedTitles: titles
         )
     }
@@ -562,7 +599,8 @@ struct XunjiTrainingImportService: Sendable {
         let durationMinutes = max(1, Int(end.timeIntervalSince(start) / 60))
         let exercises = flattenExercises(
             from: train.movements,
-            exerciseLibrary: ExerciseLibraryService.defaultDefinitions()
+            exerciseLibrary: ExerciseLibraryService.defaultDefinitions(),
+            completedAtFallback: start
         )
         guard !exercises.isEmpty else { return nil }
         let externalID = train.localid.map(String.init) ?? "\(trainDate)-\(train.title ?? "workout")-\(Int(start.timeIntervalSince1970))"
@@ -583,7 +621,8 @@ struct XunjiTrainingImportService: Sendable {
 
     private func flattenExercises(
         from movements: [XunjiMovement],
-        exerciseLibrary: [ExerciseDefinitionRecord]
+        exerciseLibrary: [ExerciseDefinitionRecord],
+        completedAtFallback: Date? = nil
     ) -> [StrengthExerciseLog] {
         var grouped: [String: StrengthExerciseLog] = [:]
         var order: [String] = []
@@ -614,10 +653,10 @@ struct XunjiTrainingImportService: Sendable {
             for set in movement.sets {
                 if !set.items.isEmpty {
                     for item in set.items {
-                        appendSet(item.set.strengthSet(doneFallback: set.done), movementName: item.name ?? movement.name)
+                        appendSet(item.set.strengthSet(doneFallback: set.done, completedAtFallback: completedAtFallback), movementName: item.name ?? movement.name)
                     }
                 } else {
-                    appendSet(set.strengthSet(doneFallback: set.done), movementName: movement.name)
+                    appendSet(set.strengthSet(doneFallback: set.done, completedAtFallback: completedAtFallback), movementName: movement.name)
                 }
             }
         }
@@ -829,7 +868,7 @@ private struct XunjiSet: Codable {
         items = try container.decodeIfPresent([XunjiSetItem].self, forKey: .items) ?? []
     }
 
-    func strengthSet(doneFallback: Bool?) -> StrengthSetLog {
+    func strengthSet(doneFallback: Bool?, completedAtFallback: Date? = nil) -> StrengthSetLog {
         let completed = done ?? doneFallback ?? true
         return StrengthSetLog(
             repetitions: reps.flatMap { Int(Double($0) ?? 0) }.flatMap { $0 > 0 ? $0 : nil } ?? 1,
@@ -838,7 +877,7 @@ private struct XunjiSet: Codable {
             rpe: rpe,
             rir: rir,
             isCompleted: completed,
-            completedAt: completed ? Date() : nil
+            completedAt: completed ? (completedAtFallback ?? Date()) : nil
         )
     }
 
@@ -866,25 +905,18 @@ private struct XunjiSetItem: Codable {
 }
 
 private struct XunjiSetMetrics: Codable {
-    var distance: Double?
-    var kcal: Double?
-    var calories: Double?
-    var workoutTime: Double?
+    // T8 修复：distance/kcal/calories/workoutTime/maxHeartRate 解析后全仓无消费者
+    //（WorkoutEventRecord 无对应字段，零 schema 变更政策下也无法透传），
+    // 保留唯一被消费的 avgHeartRate，其余停止解析。
     var avgHeartRate: Double?
-    var maxHeartRate: Double?
 
     enum CodingKeys: String, CodingKey {
-        case distance, kcal, calories, workoutTime, avgHeartRate, maxHeartRate
+        case avgHeartRate
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        distance = try container.decodeFlexibleDoubleIfPresent(forKey: .distance)
-        kcal = try container.decodeFlexibleDoubleIfPresent(forKey: .kcal)
-        calories = try container.decodeFlexibleDoubleIfPresent(forKey: .calories)
-        workoutTime = try container.decodeFlexibleDoubleIfPresent(forKey: .workoutTime)
         avgHeartRate = try container.decodeFlexibleDoubleIfPresent(forKey: .avgHeartRate)
-        maxHeartRate = try container.decodeFlexibleDoubleIfPresent(forKey: .maxHeartRate)
     }
 }
 
@@ -971,7 +1003,7 @@ enum TrainingScheduleResolver: Sendable {
         }) {
             return exact.day
         }
-        if let earliestOverdue = scheduled.first(where: { $0.date < selectedDay }) {
+        if let earliestOverdue = scheduled.first(where: { $0.date < selectedDay && $0.date >= planStart }) {
             return earliestOverdue.day
         }
         return scheduled.first(where: { $0.date > selectedDay })?.day
@@ -1026,6 +1058,7 @@ enum TrainingPlanReviewService {
                 .filter { $0.startedAt < endOfDay }
                 .compactMap(\.linkedTrainingPlanDayId)
         )
+        let planStartDay = calendar.startOfDay(for: plan.startDate)
         let scheduled = plan.days.filter { day in
             guard day.focus != "rest",
                   let scheduledDate = TrainingScheduleResolver.scheduledDate(
@@ -1033,13 +1066,22 @@ enum TrainingPlanReviewService {
                     planStart: plan.startDate,
                     calendar: calendar
                   ) else { return false }
-            return scheduledDate < endOfDay
+            // 排除计划开始日之前的「幽灵日」（周中建计划时起始周早于计划日的排期）。
+            return scheduledDate >= planStartDay && scheduledDate < endOfDay
         }
         let completed = scheduled.filter {
             $0.isCompleted || completedEventDayIDs.contains($0.id)
         }
         let adherenceValues = completed.compactMap(\.adherenceScore)
-        let linkedWorkoutIDs = Set(completed.flatMap(\.linkedWorkoutEventIds))
+        // 力量训练响应存的是 StrengthWorkoutRecord.id，而 plan day 关联的是事件 ID：
+        // 两种 ID 空间合并，否则力量驱动的响应永远匹配不上。
+        let completedDayIDs = Set(completed.map(\.id))
+        let linkedWorkoutIDs = Set(
+            completed.flatMap(\.linkedWorkoutEventIds)
+            + events
+                .filter { $0.linkedTrainingPlanDayId.map(completedDayIDs.contains) ?? false }
+                .compactMap(\.linkedStrengthWorkoutId)
+        )
         let measured = responses.filter { linkedWorkoutIDs.contains($0.workoutId) }
         let recoveryDeltas = measured.compactMap(\.nextDayRecoveryDelta)
 
@@ -1148,6 +1190,15 @@ struct TrainingSessionDraftBuilder {
         }
     }
 
+    /// T5：按历史组反推 e1RM（Epley），再按目标次数正推同 RPE 强度重量。
+    /// 单次增幅封顶 +2.5%（保守渐进），返回 nil 表示无法处方（无历史组）。
+    private func prescribedWeight(forReps reps: Int, previous: StrengthSetLog?) -> Double? {
+        guard let previous else { return nil }
+        let previousE1RM = previous.weightKilograms * (1.0 + Double(previous.repetitions) / 30.0)
+        let target = previousE1RM / (1.0 + Double(reps) / 30.0)
+        return min(target, previous.weightKilograms * 1.025)
+    }
+
     private func strengthExercises(
         day: TrainingDay,
         decision: DailyTrainingDecision,
@@ -1186,9 +1237,14 @@ struct TrainingSessionDraftBuilder {
             )
             let sets = (0..<targetSetCount).map { index in
                 let previous = index < previousSets.count ? previousSets[index] : nil
+                // T5：负荷处方优先参考 e1RM 渐进——按目标次数反推与历史同 RPE 的重量
+                //（Epley 反解），单次增幅封顶 +2.5% 保守渐进；替代直接复制上一组重量。
+                let prescribed = prescribedWeight(forReps: targetReps, previous: previous)
+                    ?? previous?.weightKilograms
+                    ?? fallbackWeight
                 return StrengthSetLog(
                     repetitions: targetReps,
-                    weightKilograms: previous?.weightKilograms ?? fallbackWeight,
+                    weightKilograms: prescribed,
                     isWarmup: false,
                     rpe: targetRPE,
                     rir: nil,
@@ -1244,5 +1300,122 @@ private extension Array where Element == Double {
     var average: Double? {
         guard !isEmpty else { return nil }
         return reduce(0, +) / Double(count)
+    }
+}
+
+// MARK: - AI 未来训练规划（Coach 参与决策）
+
+/// LLM 返回的规划条目（解析层）。
+struct AIPlanDay: Codable {
+    let day: Int
+    let groups: [String]
+    let note: String?
+}
+
+enum TrainingPlanAdvisorError: Error {
+    case unparseable
+}
+
+/// Coach 参与未来训练决策：本地推荐器先给出即时建议，本服务让 LLM
+/// 结合疲劳/恢复/历史复核并给出未来三天规划。只提议、不落盘（ADR 0008）。
+enum TrainingPlanAdvisor {
+    static let allowedGroups = ["chest", "back", "shoulders", "legs", "biceps", "triceps", "core", "other"]
+
+    /// 解析 LLM 返回（容忍 markdown 代码块包裹与前后多余文字）。
+    static func parsePlan(from content: String) -> [RotationDayRecommendation] {
+        guard let start = content.firstIndex(of: "["),
+              let end = content.lastIndex(of: "]"),
+              start < end else { return [] }
+        let jsonText = String(content[start...end])
+        guard let data = jsonText.data(using: .utf8),
+              let days = try? JSONDecoder().decode([AIPlanDay].self, from: data) else { return [] }
+        return days.compactMap { day in
+            guard (1...7).contains(day.day) else { return nil }
+            let groups = day.groups.filter { allowedGroups.contains($0.lowercased()) }
+            return RotationDayRecommendation(
+                dayOffset: day.day,
+                groups: Array(groups.prefix(2)),
+                note: day.note ?? "",
+                source: "ai"
+            )
+        }
+    }
+
+    static func suggestNextDays(
+        contextText: String,
+        apiKey: String?,
+        language: AppLanguage = .stored
+    ) async throws -> [RotationDayRecommendation] {
+        guard let apiKey, !apiKey.isEmpty else {
+            throw LLMProviderError.missingAPIKey
+        }
+        let provider = RetryingLLMProvider(base: DeepSeekProvider(apiKey: apiKey))
+        let system = language.isChinese ? zhSystemPrompt : enSystemPrompt
+        let response = try await provider.complete(request: LLMRequest(
+            systemPrompt: system,
+            userPrompt: contextText,
+            contextJSON: ""
+        ))
+        let parsed = parsePlan(from: response.content)
+        guard !parsed.isEmpty else {
+            throw TrainingPlanAdvisorError.unparseable
+        }
+        return parsed
+    }
+
+    private static let zhSystemPrompt = """
+    你是 Vela 的训练规划助手。基于用户提供的真实数据（各肌群疲劳组数、恢复/睡眠/负荷评分、最近训练历史、本地轮转建议），为未来两天（明天 day=1、后天 day=2）每天推荐一个训练部位或休息。规则：高疲劳（48h≥14 组或 7 天≥24 组）的肌群必须避开；相邻两天不重复同一部位；恢复评分偏低时明天安排休息或轻活动；优先力量部位，休息日 groups 为空数组；note 用一句话给出依据（引用具体组数与恢复分数）。只输出一个 JSON 数组，不要任何其他文字。格式：[{"day":1,"groups":["legs"],"note":"依据：48h 0 组 · 7 天 3 组"}]
+    """
+
+    private static let enSystemPrompt = """
+    You are Vela's training planner. Based on real data provided (muscle-group fatigue sets, recovery/sleep/strain scores, recent training history, local rotation suggestion), recommend one muscle group or rest for each of the next two days (tomorrow day=1, the day after day=2). Rules: avoid high-fatigue groups (48h>=14 or 7d>=24 sets); never repeat the same group on consecutive days; if recovery is low, day 1 is rest or light activity; rest days use an empty groups array; note explains the reasoning with concrete numbers. Output only a JSON array, nothing else. Format: [{"day":1,"groups":["legs"],"note":"Based on: 48h 0 sets, 7d 3 sets"}]
+    """
+}
+
+// MARK: - Muscle daily set aggregation
+
+extension TrainingAnalyticsService {
+    /// 每个肌群最近 `days` 天（含 `endingAt` 当天）的逐日有效组数。
+    /// 返回字典：肌群键 → 长度为 `days` 的数组，index 0 = 最旧一天。
+    /// 纯函数、可测试；训练页「局部训练状态」的 7 天迷你条同源。
+    static func dailySetsByMuscle(
+        workouts: [StrengthWorkoutDTO],
+        days: Int = 7,
+        endingAt: Date,
+        calendar: Calendar = .current
+    ) -> [String: [Int]] {
+        let endDay = calendar.startOfDay(for: endingAt)
+        guard days > 0,
+              let startDay = calendar.date(byAdding: .day, value: -(days - 1), to: endDay) else {
+            return [:]
+        }
+
+        var buckets: [Date: [String: Int]] = [:]
+        for offset in 0..<days {
+            guard let day = calendar.date(byAdding: .day, value: -offset, to: endDay) else { continue }
+            buckets[day] = [:]
+        }
+
+        for workout in workouts {
+            let day = calendar.startOfDay(for: workout.startedAt)
+            guard buckets[day] != nil else { continue }
+            let analysis = TrainingAnalyticsService().summarizeWorkout(workout)
+            var dayBucket = buckets[day] ?? [:]
+            for (muscle, sets) in analysis.muscleGroupSets {
+                dayBucket[muscle, default: 0] += sets
+            }
+            buckets[day] = dayBucket
+        }
+
+        var result: [String: [Int]] = [:]
+        for offset in stride(from: days - 1, through: 0, by: -1) {
+            guard let day = calendar.date(byAdding: .day, value: -offset, to: endDay) else { continue }
+            for (muscle, sets) in buckets[day] ?? [:] {
+                var series = result[muscle] ?? Array(repeating: 0, count: days)
+                series[days - 1 - offset] = sets
+                result[muscle] = series
+            }
+        }
+        return result
     }
 }

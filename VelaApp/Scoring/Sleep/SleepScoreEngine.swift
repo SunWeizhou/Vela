@@ -126,7 +126,7 @@ public struct SleepScoreEngine: ScoreEngine {
                 durationScore = 50.0 * ScoringMath.clamp(progress, min: 0, max: 1)
             } else {
                 let progress = 1.0 - (totalSleep - (target + 60)) / 240.0
-                durationScore = 50.0 * ScoringMath.clamp(progress, min: 0.35, max: 1)
+                durationScore = 50.0 * ScoringMath.clamp(progress, min: 0, max: 1)
             }
             components["duration"] = durationScore!
             componentWeights["duration"] = 50.0

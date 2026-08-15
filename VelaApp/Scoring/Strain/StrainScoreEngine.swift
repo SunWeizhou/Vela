@@ -168,6 +168,17 @@ public struct StrainScoreEngine: ScoreEngine {
 
     public init() {}
 
+    /// Banister 性别系数：male (0.64/1.92)、female (0.86/1.67)；
+    /// other/未设置用插值 (0.75/1.80)（未经验证，但与 Method B 历史行为一致，
+    /// 此前 Method A 把 other 一律按男性处理，两方法口径不一致）。
+    private static func banisterConstants(sex: String?) -> (alpha: Double, beta: Double) {
+        switch sex {
+        case "female": return (0.86, 1.67)
+        case "male": return (0.64, 1.92)
+        default: return (0.75, 1.80)
+        }
+    }
+
     public func calculate(from input: StrainScoreInput) -> MetricResult {
         var components: [String: Double] = [:]
         var componentWeights: [String: Double] = [:]
@@ -200,34 +211,19 @@ public struct StrainScoreEngine: ScoreEngine {
             if hasHeartRateReserve && !workout.heartRateSamples.isEmpty {
                 // Method A: Continuous Banister TRIMP exponential sample integration
                 let sampleWeight = workout.durationMinutes / Double(workout.heartRateSamples.count)
+                let (alpha, beta) = Self.banisterConstants(sex: input.biologicalSex)
                 for hr in workout.heartRateSamples {
                     let hrr = (hr - restingHR) / hrRange
                     let clampedHRR = ScoringMath.clamp(hrr, min: 0.01, max: 1.0)
-                    let weight: Double
-                    if input.biologicalSex == "female" {
-                        weight = clampedHRR * 0.86 * exp(1.67 * clampedHRR)
-                    } else {
-                        weight = clampedHRR * 0.64 * exp(1.92 * clampedHRR)
-                    }
-                    workoutLoad += sampleWeight * weight
+                    workoutLoad += sampleWeight * clampedHRR * alpha * exp(beta * clampedHRR)
                 }
             } else if hasHeartRateReserve, let avgHR = workout.averageHeartRate {
                 // Method B: Banister TRIMP using average heart rate fallback
                 let hrr = (avgHR - restingHR) / hrRange
                 let clampedHRR = ScoringMath.clamp(hrr, min: 0.01, max: 1.0)
-                let trimp: Double
-                if input.biologicalSex == "male" {
-                    trimp = workout.durationMinutes * clampedHRR * 0.64 * exp(1.92 * clampedHRR)
-                } else if input.biologicalSex == "female" {
-                    trimp = workout.durationMinutes * clampedHRR * 0.86 * exp(1.67 * clampedHRR)
-                } else {
-                    // gender-neutral fallback. NOTE: the 0.75 / 1.80 coefficients are an
-                    // unvalidated interpolation between the published male (0.64 / 1.92) and
-                    // female (0.86 / 1.67) Banister constants — they do NOT come from the
-                    // literature. Applied only when HealthKit biologicalSex is other/not-set.
-                    trimp = workout.durationMinutes * clampedHRR * 0.75 * exp(1.80 * clampedHRR)
-                }
-                workoutLoad = trimp
+                // gender-neutral fallback: 0.75 / 1.80 为未经验证的插值（仅 other/未设置）。
+                let (alpha, beta) = Self.banisterConstants(sex: input.biologicalSex)
+                workoutLoad = workout.durationMinutes * clampedHRR * alpha * exp(beta * clampedHRR)
             } else if let rpe = workout.rpe {
                 // Method C: Foster's session RPE scaled to TRIMP units (duration * rpe * 0.3)
                 workoutLoad = workout.durationMinutes * rpe * 0.3
@@ -334,6 +330,7 @@ public struct StrainScoreEngine: ScoreEngine {
             case .optimal: statusCode = 2.0
             case .elevated: statusCode = 3.0
             case .highRisk: statusCode = 4.0
+            case .unknown: statusCode = -1.0
             }
             components["training_load_status_code"] = statusCode
             components["recommended_lower"] = Double(recommendedRange(for: input.recoveryScore).lowerBound)
@@ -383,9 +380,12 @@ public struct StrainScoreEngine: ScoreEngine {
 
     private func ewma(_ values: [Double], lambda: Double) -> Double {
         guard !values.isEmpty else { return 0 }
-        var result = values[0]
-        for i in 1..<values.count {
-            result = values[i] * lambda + result * (1.0 - lambda)
+        // 暖启动：用初期（最多 7 个）样本的均值作种子，降低首值冷启动偏差。
+        let warmupCount = min(7, values.count)
+        let seed = values.prefix(warmupCount).reduce(0, +) / Double(warmupCount)
+        var result = seed
+        for value in values.dropFirst(warmupCount) {
+            result = value * lambda + result * (1.0 - lambda)
         }
         return result
     }

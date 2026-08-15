@@ -57,7 +57,9 @@ struct StrengthWorkoutLogSheetView: View {
         if let editingWorkout {
             return max(1, editingWorkout.durationMinutes)
         }
-        return max(1, Int(now.timeIntervalSince(startedAt) / 60))
+        // 草稿跨天续录时 now - startedAt 可膨胀到数百上千分钟，污染时长/负荷/热量；
+        // 单次训练时长封顶 4 小时（超过时按 startedAt 重算最近一次活跃的保守值）。
+        return min(max(1, Int(now.timeIntervalSince(startedAt) / 60)), 240)
     }
 
     private var completedSetCount: Int {
@@ -412,7 +414,7 @@ struct StrengthWorkoutLogSheetView: View {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("重量 kg").font(VelaTheme.caption2()).foregroundStyle(VelaTheme.muted)
-                    TextField("0", value: set.weightKilograms, format: .number.precision(.fractionLength(0...1)))
+                    TextField("0", value: set.weightKilograms, format: .number.precision(.fractionLength(0...2)))
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.center)
                         .font(VelaTheme.headline().monospacedDigit())
@@ -534,12 +536,16 @@ struct StrengthWorkoutLogSheetView: View {
             editingWorkout.completedAt = startedAt.addingTimeInterval(TimeInterval(durationMinutes * 60))
             
             do {
+                // PR 历史只取早于本次训练的记录，避免编辑旧训练时与未来记录比较产生伪 PR。
+                let editingStart = editingWorkout.startedAt
                 let analysis = TrainingAnalyticsService().summarizeWorkout(
                     editingWorkout.dto,
-                    history: workoutHistory.filter { $0.id != editingWorkout.id }.map { $0.dto },
+                    history: workoutHistory
+                        .filter { $0.id != editingWorkout.id && $0.startedAt < editingStart }
+                        .map { $0.dto },
                     exerciseLibrary: ExerciseLibraryService.defaultDefinitionsDTO()
                 )
-                editingWorkout.analyticsJSON = (try? String(data: JSONEncoder().encode(analysis), encoding: .utf8)) ?? "{}"
+                // T7 修复：停止写入只写不读的 analyticsJSON。
                 
                 _ = try WorkoutSaveCoordinator().commitWorkoutEdit(
                     workout: editingWorkout,
@@ -572,7 +578,7 @@ struct StrengthWorkoutLogSheetView: View {
                     history: workoutHistory.map { $0.dto },
                     exerciseLibrary: ExerciseLibraryService.defaultDefinitionsDTO()
                 )
-                record.analyticsJSON = (try? String(data: JSONEncoder().encode(analysis), encoding: .utf8)) ?? "{}"
+                // T7 修复：停止写入只写不读的 analyticsJSON。
                 let workoutIdStr = record.id.uuidString
                 let existingArtifacts = try? modelContext.fetch(FetchDescriptor<CoachArtifactRecord>())
                 if let existing = existingArtifacts {
@@ -595,7 +601,9 @@ struct StrengthWorkoutLogSheetView: View {
                     workout: record,
                     summary: analysis,
                     readinessDecision: readinessDecision,
-                    sourceContextHash: ContentHash.hash("\(record.id.uuidString)-\(record.analyticsJSON ?? "")")
+                    sourceContextHash: ContentHash.hash(
+                        "\(record.id.uuidString)-\(record.totalVolumeKilograms)-\(record.exercises.flatMap(\.sets).count)"
+                    )
                 )
                 _ = try WorkoutSaveCoordinator().commitNewWorkout(
                     workout: record,
@@ -767,7 +775,8 @@ struct StrengthWorkoutLogSheetView: View {
         
         var restDuration = 90
         if let plan = try? modelContext.fetch(FetchDescriptor<TrainingPlanRecord>(predicate: #Predicate { $0.isActive })).first {
-            let todayWeekday = Calendar.current.component(.weekday, from: Date())
+            // 用本次训练的开始日而非「今天」（跨天补录时取错计划日）。
+            let todayWeekday = Calendar.current.component(.weekday, from: startedAt)
             let dayNum = todayWeekday == 1 ? 7 : todayWeekday - 1
             if let day = plan.days.first(where: { $0.dayNumber == dayNum }),
                let data = day.plannedExercisesJSON.data(using: .utf8),

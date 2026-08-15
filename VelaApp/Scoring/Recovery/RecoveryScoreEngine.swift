@@ -1,5 +1,23 @@
 import Foundation
 
+/// 三年长线 HRV 分布上下文（Layer 3：恢复评分的长期偏离修正）。
+/// 由 DailyHealthComputation 从 LongTermBaselineReport 提取；nil = 不启用（行为不变）。
+public struct RecoveryLongTermContext: Hashable, Sendable {
+    public var hrvPercentile10: Double?
+    public var hrvPercentile90: Double?
+    public var hrvSampleCount: Int
+
+    public init(hrvPercentile10: Double? = nil, hrvPercentile90: Double? = nil, hrvSampleCount: Int = 0) {
+        self.hrvPercentile10 = hrvPercentile10
+        self.hrvPercentile90 = hrvPercentile90
+        self.hrvSampleCount = hrvSampleCount
+    }
+
+    var isValid: Bool {
+        hrvSampleCount >= 60 && hrvPercentile10 != nil && hrvPercentile90 != nil
+    }
+}
+
 public struct RecoveryScoreInput: Hashable {
     public var asOf: Date
     public var hrvToday: Double?
@@ -24,6 +42,9 @@ public struct RecoveryScoreInput: Hashable {
     public var bodyTempDelta: Double?
     public var SpO2: Double?
 
+    /// 三年 HRV 长线分布（Layer 3 修正；nil = 不启用，保持原行为）。
+    public var longTermContext: RecoveryLongTermContext? = nil
+
     public init(
         asOf: Date,
         hrvToday: Double?,
@@ -41,7 +62,8 @@ public struct RecoveryScoreInput: Hashable {
         respiratoryRateBaseline: Double? = nil,
         respiratoryRateHistory: [Double] = [],
         bodyTempDelta: Double? = nil,
-        SpO2: Double? = nil
+        SpO2: Double? = nil,
+        longTermContext: RecoveryLongTermContext? = nil
     ) {
         self.asOf = asOf
         self.hrvToday = hrvToday
@@ -60,6 +82,7 @@ public struct RecoveryScoreInput: Hashable {
         self.respiratoryRateHistory = respiratoryRateHistory
         self.bodyTempDelta = bodyTempDelta
         self.SpO2 = SpO2
+        self.longTermContext = longTermContext
     }
 }
 
@@ -278,6 +301,23 @@ public struct RecoveryScoreEngine: ScoreEngine {
 
         if let val = recoveryValue {
             recoveryValue = ScoringMath.clamp(val - penalty, min: 0, max: 100)
+        }
+
+        // 6. 三年长线偏离修正（Layer 3）：今天的 HRV 相对三年分布处于 P10 以下 /
+        // P90 以上时小幅修正（±3），并给出长线视角的理由。护栏：需 60 天以上
+        // 三年样本；未提供长线上下文时完全不影响原行为。
+        if let longTerm = input.longTermContext, longTerm.isValid, let hrvToday = input.hrvToday {
+            if let p10 = longTerm.hrvPercentile10, hrvToday < p10 {
+                if let val = recoveryValue {
+                    recoveryValue = ScoringMath.clamp(val - 3, min: 0, max: 100)
+                }
+                reasons.append("HRV 低于三年分布 P10（长期视角同样偏低），恢复评分小幅下调")
+            } else if let p90 = longTerm.hrvPercentile90, hrvToday > p90 {
+                if let val = recoveryValue {
+                    recoveryValue = ScoringMath.clamp(val + 3, min: 0, max: 100)
+                }
+                reasons.append("HRV 高于三年分布 P90（长期视角同样偏高），恢复评分小幅上调")
+            }
         }
 
         // Mapped Band

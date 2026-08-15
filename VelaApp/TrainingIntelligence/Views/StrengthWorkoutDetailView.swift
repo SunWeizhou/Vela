@@ -92,20 +92,8 @@ struct StrengthWorkoutDetailView: View {
 
     private func deleteWorkout() {
         do {
-            let workoutID = workout.id
-            let eventDescriptor = FetchDescriptor<WorkoutEventRecord>(
-                predicate: #Predicate<WorkoutEventRecord> { $0.linkedStrengthWorkoutId == workoutID }
-            )
-            let events = try? modelContext.fetch(eventDescriptor)
-            if let events {
-                for event in events {
-                    if let hkId = event.linkedHealthKitWorkoutId {
-                        modelContext.insert(DeletedWorkoutRecord(id: hkId.uuidString))
-                    } else if event.source == "healthKit" {
-                        modelContext.insert(DeletedWorkoutRecord(id: event.id.uuidString))
-                    }
-                }
-            }
+            // P3-8 修复：黑名单插入由 deleteStrengthWorkout 统一处理（查重 + 计划日回滚），
+            // 此处不再直接插入 DeletedWorkoutRecord（unique 键重复插入会导致保存冲突）。
             try WorkoutAggregationService.shared.deleteStrengthWorkout(workout, modelContext: modelContext)
             
             VelaAppState.shared.markLocalDataChanged()

@@ -12,6 +12,19 @@ struct HabitCorrelationInsight: Codable, Hashable, Identifiable {
     var explanation: String
 }
 
+extension JournalCorrelationEngine {
+    /// T6：统一口径——Coach 工具 / Coach 上下文 / 图表工具全部消费
+    /// `calculateInsights`（点二列 + BH-FDR），不再走旧 `correlateTags`（均值差、无校正）。
+    func formatInsightsForAI(_ insights: [HabitCorrelationInsight], limit: Int = 6) -> String {
+        guard !insights.isEmpty else { return "" }
+        return insights.prefix(limit).map { insight in
+            let dirText = insight.direction == "positive" ? "正相关" : "负相关"
+            let lagText = insight.lagDays == 0 ? "当天" : "次日"
+            return "「\(insight.habit)」与\(lagText)\(insight.outcome)呈\(dirText)（r=\(String(format: "%.2f", insight.correlation))，n=\(insight.sampleSize)，置信度 \(insight.confidence.rawValue)）"
+        }.joined(separator: "\n")
+    }
+}
+
 // Struct to retain old class usage compatibility if needed, but primary calculations will be returned here
 struct TagCorrelation: Identifiable, Hashable, Codable {
     var id: String { tag }
@@ -404,3 +417,85 @@ struct JournalCorrelationEngine {
     }
 }
 
+
+// MARK: - 三年生理行为配对（无需手记）
+
+extension JournalCorrelationEngine {
+    /// 用三年生理记录直接配对「行为」：训练日 / 高活动日 / 短睡眠夜
+    /// → 次日 HRV / RHR 的点二列相关。曝光组与对照组各 ≥ 8 天才发布，
+    /// |r| < 0.15 视为噪声不发布。回填后立即可用，不依赖手记。
+    func physiologicalInsights(
+        snapshots: [DailyHealthSnapshot],
+        calendar: Calendar = .current
+    ) -> [HabitCorrelationInsight] {
+        let byDay = Dictionary(uniqueKeysWithValues: snapshots.map { (calendar.startOfDay(for: $0.date), $0) })
+        let days = byDay.keys.sorted()
+        guard days.count >= 30 else { return [] }
+
+        let stepsValues = snapshots.compactMap(\.steps).filter { $0 > 0 }.sorted()
+        let sleepValues = snapshots.compactMap(\.sleepHours).filter { $0 > 0 }.sorted()
+        func percentile(_ sorted: [Double], _ fraction: Double) -> Double? {
+            guard !sorted.isEmpty else { return nil }
+            let index = Int((Double(sorted.count - 1) * fraction).rounded())
+            return sorted[max(0, min(index, sorted.count - 1))]
+        }
+        let highStepsThreshold = percentile(stepsValues, 0.75)
+        let shortSleepThreshold = percentile(sleepValues, 0.25)
+
+        struct HabitSpec {
+            var name: String
+            var exposure: (DailyHealthSnapshot) -> Bool
+        }
+        let specs: [HabitSpec] = [
+            HabitSpec(name: "训练日", exposure: { ($0.workoutCount ?? 0) > 0 || ($0.workoutDuration ?? 0) >= 15 }),
+            HabitSpec(name: "高活动日", exposure: { snap in
+                guard let threshold = highStepsThreshold, let steps = snap.steps, steps > 0 else { return false }
+                return steps >= threshold
+            }),
+            HabitSpec(name: "短睡眠夜", exposure: { snap in
+                guard let threshold = shortSleepThreshold, let hours = snap.sleepHours, hours > 0 else { return false }
+                return hours <= threshold
+            }),
+        ]
+
+        var results: [HabitCorrelationInsight] = []
+        for spec in specs {
+            for outcomeName in ["HRV", "RHR"] {
+                var x: [Double] = []
+                var y: [Double] = []
+                var exposed = 0
+                var control = 0
+                for day in days {
+                    guard let snap = byDay[day],
+                          let next = calendar.date(byAdding: .day, value: 1, to: day),
+                          let nextSnap = byDay[next] else { continue }
+                    let outcome: Double?
+                    if outcomeName == "HRV" {
+                        outcome = nextSnap.hrvAverage
+                    } else {
+                        outcome = nextSnap.restingHeartRate
+                    }
+                    guard let outcome, outcome.isFinite else { continue }
+                    let isExposed = spec.exposure(snap)
+                    x.append(isExposed ? 1.0 : 0.0)
+                    y.append(outcome)
+                    if isExposed { exposed += 1 } else { control += 1 }
+                }
+                guard exposed >= 8, control >= 8 else { continue }
+                let r = pearsonCorrelation(x, y)
+                guard r.isFinite, abs(r) >= 0.15 else { continue }
+                results.append(HabitCorrelationInsight(
+                    habit: spec.name,
+                    outcome: outcomeName,
+                    lagDays: 1,
+                    correlation: r,
+                    sampleSize: x.count,
+                    confidence: x.count >= 60 ? .high : .medium,
+                    direction: r > 0 ? "positive" : "negative",
+                    explanation: "基于三年生理记录的个人配对（无需手记）"
+                ))
+            }
+        }
+        return results
+    }
+}

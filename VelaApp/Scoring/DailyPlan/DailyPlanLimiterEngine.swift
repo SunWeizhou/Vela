@@ -131,7 +131,9 @@ public final class DailyPlanLimiterEngine {
         }
 
         // 5. Check Body Temperature
-        if input.bodyTempDelta > 0.6 {
+        // 阈值与 RecoveryScoreEngine（>=1.0 才扣分）对齐；StressIndexEngine 将
+        // ±0.6°C 视为正常昼夜波动，0.6-1.0°C 不应强制休息。
+        if input.bodyTempDelta >= 1.0 {
             limiters.append(PlanLimiter(
                 id: "high_temp",
                 severity: 3,

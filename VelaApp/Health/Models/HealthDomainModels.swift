@@ -28,6 +28,7 @@ struct DailyHealthSnapshot: Identifiable, Hashable {
     var workoutDuration: Double?
     var bodyWeight: Double?
     var bodyFatPercent: Double?
+    var vo2Max: Double?
     var bmi: Double?
     var oxygenSaturation: Double?
     var respiratoryRate: Double?
@@ -211,6 +212,12 @@ struct HeartRateSample: Identifiable, Codable, Hashable {
     var bpm: Double
 }
 
+/// 逐小时聚合值（步数/活动能量等累计型指标）。
+struct HourlyQuantity: Equatable, Sendable {
+    var hour: Int
+    var value: Double
+}
+
 enum SleepHeartRateRangeResolver {
     static func range(for episodes: [SleepSummary], fallback: DateRangeQuery) -> DateRangeQuery {
         let candidates = episodes.compactMap { episode -> DateRangeQuery? in
@@ -227,13 +234,51 @@ enum SleepHeartRateRangeResolver {
 
 enum WorkoutHeartRateAverager {
     static func averageHeartRates(samples: [HeartRateSample], workouts: [WorkoutSummary]) -> [UUID: Double] {
-        var result: [UUID: Double] = [:]
-        for workout in workouts {
-            let matching = samples.filter { sample in
-                sample.date >= workout.start && sample.date <= workout.end
+        guard !samples.isEmpty, !workouts.isEmpty else { return [:] }
+        // 性能修复：此前每个训练对全量样本做一次 filter，O(训练数 × 样本数)——
+        // 60 天窗口 + 数十万心率样本时每次刷新要几秒。
+        // 改为双指针单遍归并（O(n+m)）：样本按时间升序，训练按开始时间升序，
+        // 每个样本只考察一次；重叠训练（罕见）保持旧语义：同时计入两者。
+        let sortedWorkouts = workouts.sorted { $0.start < $1.start }
+        let sortedSamples = samples.sorted { $0.date < $1.date }
+
+        var sums: [UUID: Double] = [:]
+        var counts: [UUID: Int] = [:]
+
+        func accumulate(_ bpm: Double, for workout: WorkoutSummary) {
+            sums[workout.id, default: 0] += bpm
+            counts[workout.id, default: 0] += 1
+        }
+
+        var sampleIndex = 0
+        var workoutIndex = 0
+        while sampleIndex < sortedSamples.count, workoutIndex < sortedWorkouts.count {
+            let sample = sortedSamples[sampleIndex]
+            let workout = sortedWorkouts[workoutIndex]
+            if sample.date < workout.start {
+                sampleIndex += 1
+                continue
             }
-            guard !matching.isEmpty else { continue }
-            result[workout.id] = matching.map(\.bpm).reduce(0, +) / Double(matching.count)
+            if sample.date > workout.end {
+                workoutIndex += 1
+                continue
+            }
+            accumulate(sample.bpm, for: workout)
+            // 重叠训练：后续开始时间早于当前样本的训练也计入（与旧 filter 语义一致）。
+            var next = workoutIndex + 1
+            while next < sortedWorkouts.count, sortedWorkouts[next].start <= sample.date {
+                if sample.date <= sortedWorkouts[next].end {
+                    accumulate(sample.bpm, for: sortedWorkouts[next])
+                }
+                next += 1
+            }
+            sampleIndex += 1
+        }
+
+        var result: [UUID: Double] = [:]
+        for (id, sum) in sums {
+            guard let count = counts[id], count > 0 else { continue }
+            result[id] = sum / Double(count)
         }
         return result
     }
@@ -249,4 +294,55 @@ struct RouteCoordinate: Identifiable, Codable, Hashable {
     var id = UUID()
     var latitude: Double
     var longitude: Double
+}
+
+// MARK: - Historical sleep day aggregation
+
+/// 历史回填用：把睡眠阶段段按健康日（默认 04:00 边界）聚合到每一天。
+/// 跨边界的睡眠段按时间比例拆分到两天（与同步引擎的健康日归属语义一致）。
+/// 纯函数，测试覆盖。
+enum SleepDayAggregator {
+    struct SleepDayBucket: Equatable {
+        var sleepMinutes: Double = 0
+        var deepMinutes: Double = 0
+        var remMinutes: Double = 0
+    }
+
+    static func aggregate(
+        segments: [SleepStageSegment],
+        boundaryMinutes: Int = HealthDaySettings.boundaryMinutes(),
+        calendar: Calendar = .current
+    ) -> [Date: SleepDayBucket] {
+        let boundary = HealthDayBoundary(calendar: calendar, boundaryMinutes: boundaryMinutes)
+        var result: [Date: SleepDayBucket] = [:]
+
+        for segment in segments {
+            guard segment.end > segment.start else { continue }
+            var cursor = segment.start
+            while cursor < segment.end {
+                let day = boundary.labelDate(containing: cursor)
+                let dayRange = boundary.range(forLabelDate: day)
+                let cut = min(segment.end, dayRange.end)
+                let minutes = max(0, cut.timeIntervalSince(cursor) / 60.0)
+                if minutes > 0 {
+                    var bucket = result[day] ?? SleepDayBucket()
+                    switch segment.stage {
+                    case .deep:
+                        bucket.deepMinutes += minutes
+                        bucket.sleepMinutes += minutes
+                    case .rem:
+                        bucket.remMinutes += minutes
+                        bucket.sleepMinutes += minutes
+                    case .core, .asleep:
+                        bucket.sleepMinutes += minutes
+                    case .awake, .inBed:
+                        break
+                    }
+                    result[day] = bucket
+                }
+                cursor = cut
+            }
+        }
+        return result
+    }
 }

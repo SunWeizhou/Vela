@@ -47,10 +47,11 @@ final class HealthKitQueryService: HealthQueryService {
         let nsError = error as NSError
         guard nsError.domain == HKErrorDomain,
               let code = HKError.Code(rawValue: nsError.code) else { return false }
+        // [4] 修复：授权被拒/参数错误不再当「空数据」静默吞掉——
+        // 只有真正没有样本的 errorNoData 走空数据分支，
+        // 其余错误向上抛，让调用方能区分「没数据」与「读不到」。
         switch code {
-        case .errorNoData,              // genuinely no samples in range
-             .errorInvalidArgument,     // predicate/type mismatch (preserved)
-             .errorAuthorizationDenied: // preserved existing swallow behavior
+        case .errorNoData:
             return true
         default:
             return false
@@ -86,7 +87,13 @@ final class HealthKitQueryService: HealthQueryService {
             return []
         }
 
-        let samples = try await categorySamples(type: sleepType, range: range)
+        // 与 sleepSummary 一致：查询窗向前扩展 12h，避免跨 04:00 边界的夜晚被截断；
+        // 结果按主睡眠段结束时刻过滤回原始窗口。
+        let expanded = DateRangeQuery(
+            start: range.start.addingTimeInterval(-12 * 3_600),
+            end: range.end
+        )
+        let samples = try await categorySamples(type: sleepType, range: expanded)
         let segments = samples.map {
             SleepStageSegment(
                 stage: HealthKitSleepStageMapper.map($0.value),
@@ -95,7 +102,10 @@ final class HealthKitQueryService: HealthQueryService {
             )
         }
 
-        return SleepSampleNormalizer.allNightlyEpisodes(segments: segments)
+        return SleepSampleNormalizer.allNightlyEpisodes(segments: segments).filter { episode in
+            guard let wake = episode.wakeTime else { return true }
+            return wake >= range.start && wake < range.end
+        }
     }
 
     func recoveryMetrics(in range: DateRangeQuery) async throws -> RecoveryMetricSummary {
@@ -232,7 +242,8 @@ final class HealthKitQueryService: HealthQueryService {
         }
     }
 
-    private func workoutSummaries(in range: DateRangeQuery) async throws -> [WorkoutSummary] {
+    /// 指定日期窗口内的训练摘要（含心率/恢复心率）——热力图/近期列表用。
+    func workoutSummaries(in range: DateRangeQuery) async throws -> [WorkoutSummary] {
         guard let workoutType = HealthSignalCatalog.objectType(for: .workouts) as? HKWorkoutType else {
             return []
         }
@@ -295,85 +306,122 @@ final class HealthKitQueryService: HealthQueryService {
             start: Calendar.current.date(byAdding: .day, value: -60, to: range.end) ?? range.start,
             end: range.end
         )
-        m.heightCm = try? await mostRecentQuantity(.height, unit: .meterUnit(with: .centi), range: bodyRange)
-        m.bmi = try? await mostRecentQuantity(.bodyMassIndex, unit: .count(), range: bodyRange)
-        m.bodyWeightKg = try? await mostRecentQuantity(.bodyMass, unit: .gramUnit(with: .kilo), range: bodyRange)
-        m.bodyFatPercent = try? await mostRecentQuantity(.bodyFatPercentage, unit: .percent(), range: bodyRange)
+
+        // 性能：约 20 个相互独立的 HealthKit 查询并行发起——
+        // 此前逐行串行 await，下拉刷新总耗时 = 查询数 × 单查询耗时。
+        async let heightCm = mostRecentQuantity(.height, unit: .meterUnit(with: .centi), range: bodyRange)
+        async let bmi = mostRecentQuantity(.bodyMassIndex, unit: .count(), range: bodyRange)
+        async let bodyWeightKg = mostRecentQuantity(.bodyMass, unit: .gramUnit(with: .kilo), range: bodyRange)
+        async let bodyFatPercent = mostRecentQuantity(.bodyFatPercentage, unit: .percent(), range: bodyRange)
 
         // Cardiovascular
-        m.walkingHeartRateAvg = try? await averageQuantity(.walkingHeartRate, unit: HKUnit.count().unitDivided(by: .minute()), range: range)
-        m.oxygenSaturation = try? await mostRecentQuantity(.oxygenSaturation, unit: .percent(), range: range)
-        m.bloodPressureSystolic = try? await mostRecentQuantity(.bloodPressureSystolic, unit: .millimeterOfMercury(), range: range)
-        m.bloodPressureDiastolic = try? await mostRecentQuantity(.bloodPressureDiastolic, unit: .millimeterOfMercury(), range: range)
+        async let walkingHeartRateAvg = averageQuantity(.walkingHeartRate, unit: HKUnit.count().unitDivided(by: .minute()), range: range)
+        async let oxygenSaturation = mostRecentQuantity(.oxygenSaturation, unit: .percent(), range: range)
+        async let bloodPressureSystolic = mostRecentQuantity(.bloodPressureSystolic, unit: .millimeterOfMercury(), range: range)
+        async let bloodPressureDiastolic = mostRecentQuantity(.bloodPressureDiastolic, unit: .millimeterOfMercury(), range: range)
 
         // Metabolic
-        m.bloodGlucose = try? await mostRecentQuantity(.bloodGlucose, unit: HKUnit(from: "mg/dL"), range: range)
+        async let bloodGlucose = mostRecentQuantity(.bloodGlucose, unit: HKUnit(from: "mg/dL"), range: range)
 
         // Mobility & gait
-        m.walkingSpeed = try? await averageQuantity(.walkingSpeed, unit: HKUnit.meter().unitDivided(by: .second()), range: range)
-        m.walkingStepLength = try? await averageQuantity(.walkingStepLength, unit: .meter(), range: range)
-        m.walkingAsymmetry = try? await averageQuantity(.walkingAsymmetry, unit: .percent(), range: range)
-        m.walkingDoubleSupport = try? await averageQuantity(.doubleSupport, unit: .percent(), range: range)
-        m.walkingSteadiness = try? await averageQuantity(.walkingSteadiness, unit: .percent(), range: range)
-        m.stairAscentSpeed = try? await averageQuantity(.stairAscentSpeed, unit: HKUnit.meter().unitDivided(by: .second()), range: range)
-        m.stairDescentSpeed = try? await averageQuantity(.stairDescentSpeed, unit: HKUnit.meter().unitDivided(by: .second()), range: range)
-        m.sixMinuteWalkDistance = try? await mostRecentQuantity(.sixMinuteWalkDistance, unit: .meter(), range: range)
+        async let walkingSpeed = averageQuantity(.walkingSpeed, unit: HKUnit.meter().unitDivided(by: .second()), range: range)
+        async let walkingAsymmetry = averageQuantity(.walkingAsymmetry, unit: .percent(), range: range)
+        async let walkingDoubleSupport = averageQuantity(.doubleSupport, unit: .percent(), range: range)
 
         // Activity totals
-        m.exerciseMinutes = (try? await sumQuantity(.exerciseTime, unit: .minute(), range: range)).map { Int($0) }
-        m.standMinutes = (try? await sumQuantity(.standTime, unit: .minute(), range: range)).map { Int($0) }
-        m.flightsClimbed = (try? await sumQuantity(.flightsClimbed, unit: .count(), range: range)).map { Int($0) }
-        m.distanceKm = try? await sumQuantity(.walkingRunningDistance, unit: .meterUnit(with: .kilo), range: range)
-        m.cyclingDistanceKm = try? await sumQuantity(.cyclingDistance, unit: .meterUnit(with: .kilo), range: range)
+        async let exerciseMinutes = sumQuantity(.exerciseTime, unit: .minute(), range: range)
+        async let flightsClimbed = sumQuantity(.flightsClimbed, unit: .count(), range: range)
 
         // Environment
-        m.environmentalNoisedB = try? await averageQuantity(.envNoise, unit: .decibelAWeightedSoundPressureLevel(), range: range)
-        m.headphoneNoisedB = try? await averageQuantity(.headphoneNoise, unit: .decibelAWeightedSoundPressureLevel(), range: range)
-        m.timeInDaylight = try? await sumQuantity(.daylight, unit: .minute(), range: range)
+        async let environmentalNoisedB = averageQuantity(.envNoise, unit: .decibelAWeightedSoundPressureLevel(), range: range)
+        async let timeInDaylight = sumQuantity(.daylight, unit: .minute(), range: range)
 
         // Apple Watch records nightly wrist temperature separately from manually-entered
         // body temperature. Prefer the wearable signal and fall back only if absent.
-        let wristTemperature = try? await mostRecentQuantity(
-            .wristTemperature,
-            unit: .degreeCelsius(),
-            range: range
-        )
-        if let wristTemperature {
-            m.bodyTemperature = wristTemperature
-        } else {
-            m.bodyTemperature = try? await mostRecentQuantity(
-                .bodyTemperature,
-                unit: .degreeCelsius(),
-                range: range
-            )
-        }
+        async let wristTemperature = mostRecentQuantity(.wristTemperature, unit: .degreeCelsius(), range: range)
+        async let bodyTemperatureFallback = mostRecentQuantity(.bodyTemperature, unit: .degreeCelsius(), range: range)
 
-        // Nutrition
-        m.waterMl = try? await sumQuantity(.water, unit: .literUnit(with: .milli), range: range)
-        m.caffeineMg = try? await sumQuantity(.caffeine, unit: .gramUnit(with: .milli), range: range)
-        m.dietaryEnergyKcal = try? await sumQuantity(.dietaryEnergy, unit: .kilocalorie(), range: range)
-        m.dietaryProteinG = try? await sumQuantity(.dietaryProtein, unit: .gram(), range: range)
-        m.dietaryCarbsG = try? await sumQuantity(.dietaryCarbohydrates, unit: .gram(), range: range)
-        m.dietaryFatG = try? await sumQuantity(.dietaryFat, unit: .gram(), range: range)
+        // Nutrition（开关门控：关闭时直接 nil，不发起查询）
+        async let waterMl = sumQuantity(.water, unit: .literUnit(with: .milli), range: range)
+        async let caffeineMg = sumQuantity(.caffeine, unit: .gramUnit(with: .milli), range: range)
+        async let dietaryEnergyKcal = VelaFeatureFlags.nutritionEnabled
+            ? sumQuantity(.dietaryEnergy, unit: .kilocalorie(), range: range) : nil
+        async let dietaryProteinG = VelaFeatureFlags.nutritionEnabled
+            ? sumQuantity(.dietaryProtein, unit: .gram(), range: range) : nil
+        async let dietaryCarbsG = VelaFeatureFlags.nutritionEnabled
+            ? sumQuantity(.dietaryCarbohydrates, unit: .gram(), range: range) : nil
+        async let dietaryFatG = VelaFeatureFlags.nutritionEnabled
+            ? sumQuantity(.dietaryFat, unit: .gram(), range: range) : nil
 
         // Wellness
-        // Mindful sessions — category type, sum durations manually
-        if let mindfulType = HealthSignalCatalog.objectType(for: .mindfulSession) as? HKCategoryType {
-            do {
-                let mindfulSamples = try await categorySamples(type: mindfulType, range: range)
-                let totalMinutes = mindfulSamples.reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) } / 60.0
-                m.mindfulMinutes = totalMinutes > 0 ? totalMinutes : nil
-            } catch {
-                m.mindfulMinutes = nil
-            }
+        async let mindfulMinutesValue = mindfulMinutes(in: range)
+        async let sleepBreathingDisturbancesValue = sleepBreathingDisturbancesAverage(in: range)
+
+        m.heightCm = try? await heightCm
+        m.bmi = try? await bmi
+        m.bodyWeightKg = try? await bodyWeightKg
+        m.bodyFatPercent = try? await bodyFatPercent
+
+        m.walkingHeartRateAvg = try? await walkingHeartRateAvg
+        m.oxygenSaturation = try? await oxygenSaturation
+        m.bloodPressureSystolic = try? await bloodPressureSystolic
+        m.bloodPressureDiastolic = try? await bloodPressureDiastolic
+
+        m.bloodGlucose = try? await bloodGlucose
+
+        m.walkingSpeed = try? await walkingSpeed
+        m.walkingAsymmetry = try? await walkingAsymmetry
+        m.walkingDoubleSupport = try? await walkingDoubleSupport
+
+        m.exerciseMinutes = (try? await exerciseMinutes).map { Int($0) }
+        m.flightsClimbed = (try? await flightsClimbed).map { Int($0) }
+
+        m.environmentalNoisedB = try? await environmentalNoisedB
+        m.timeInDaylight = try? await timeInDaylight
+
+        if let wrist = try? await wristTemperature {
+            m.bodyTemperature = wrist
+        } else {
+            m.bodyTemperature = try? await bodyTemperatureFallback
         }
 
-        // Sleep breathing disturbances (iOS 18+)
-        if #available(iOS 18.0, *) {
-            m.sleepBreathingDisturbances = try? await averageQuantity(.sleepBreathingDisturbances, unit: HKUnit.count().unitDivided(by: .hour()), range: range)
+        m.waterMl = try? await waterMl
+        m.caffeineMg = try? await caffeineMg
+        if VelaFeatureFlags.nutritionEnabled {
+            m.dietaryEnergyKcal = try? await dietaryEnergyKcal
+            m.dietaryProteinG = try? await dietaryProteinG
+            m.dietaryCarbsG = try? await dietaryCarbsG
+            m.dietaryFatG = try? await dietaryFatG
         }
+
+        m.mindfulMinutes = await mindfulMinutesValue
+        m.sleepBreathingDisturbances = await sleepBreathingDisturbancesValue
 
         return m
+    }
+
+    /// 正念分钟（品类样本时长求和；无数据/失败返回 nil）。
+    private func mindfulMinutes(in range: DateRangeQuery) async -> Double? {
+        guard let mindfulType = HealthSignalCatalog.objectType(for: .mindfulSession) as? HKCategoryType else {
+            return nil
+        }
+        do {
+            let mindfulSamples = try await categorySamples(type: mindfulType, range: range)
+            let totalMinutes = mindfulSamples.reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) } / 60.0
+            return totalMinutes > 0 ? totalMinutes : nil
+        } catch {
+            return nil
+        }
+    }
+
+    /// 睡眠呼吸紊乱均值（iOS 18+；低版本直接 nil，不发起查询）。
+    private func sleepBreathingDisturbancesAverage(in range: DateRangeQuery) async -> Double? {
+        guard #available(iOS 18.0, *) else { return nil }
+        return try? await averageQuantity(
+            .sleepBreathingDisturbances,
+            unit: HKUnit.count().unitDivided(by: .hour()),
+            range: range
+        )
     }
 
     func hrvHistory(in range: DateRangeQuery) async throws -> [Double] {
@@ -388,8 +436,10 @@ final class HealthKitQueryService: HealthQueryService {
         }
 
         return try await withCheckedThrowingContinuation { continuation in
-            // Anchor to a known midnight in the past for stable daily alignment
-            let anchor = Calendar.current.startOfDay(for: Date(timeIntervalSince1970: 0))
+            // 锚定到健康日边界（04:00），使日分桶与调用方的健康日窗口一致；
+            // 此前锚 1970 本地午夜，分桶与健康日归属差 4 小时。
+            let anchor = HealthDayBoundary(calendar: Calendar.current)
+                .labelDate(containing: range.start)
             let predicate = HKQuery.predicateForSamples(
                 withStart: range.start,
                 end: range.end,
@@ -436,7 +486,8 @@ final class HealthKitQueryService: HealthQueryService {
         }
 
         return try await withCheckedThrowingContinuation { continuation in
-            let anchor = Calendar.current.startOfDay(for: Date(timeIntervalSince1970: 0))
+            let anchor = HealthDayBoundary(calendar: Calendar.current)
+                .labelDate(containing: range.start)
             let predicate = HKQuery.predicateForSamples(
                 withStart: range.start,
                 end: range.end,
@@ -502,8 +553,12 @@ final class HealthKitQueryService: HealthQueryService {
         let rawWorkouts: [HKWorkout] = try await withCheckedThrowingContinuation { continuation in
             let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
             let query = HKSampleQuery(sampleType: workoutType, predicate: nil, limit: limit, sortDescriptors: [sort]) { _, samples, error in
-                if error != nil {
-                    continuation.resume(returning: [])
+                if let error {
+                    if Self.isBenignHealthKitDataError(error) {
+                        continuation.resume(returning: [])
+                    } else {
+                        continuation.resume(throwing: error)
+                    }
                     return
                 }
                 continuation.resume(returning: (samples as? [HKWorkout]) ?? [])
@@ -542,12 +597,9 @@ final class HealthKitQueryService: HealthQueryService {
     }
 
     private func averageHeartRates(for workouts: [HKWorkout]) async throws -> [UUID: Double] {
-        guard let start = workouts.map(\.startDate).min(),
-              let end = workouts.map(\.endDate).max(),
-              end > start else {
-            return [:]
-        }
-        let samples = try await heartRateSamples(start: start, end: end)
+        // 性能修复：只取训练区间内的心率样本（OR 谓词并集），
+        // 不再把训练之间的夜间连续心率也全量拉下来（60 天可达数十万样本）。
+        let samples = try await heartRateSamples(within: workouts)
         let summaries = workouts.map {
             WorkoutSummary(
                 id: $0.uuid,
@@ -557,6 +609,21 @@ final class HealthKitQueryService: HealthQueryService {
             )
         }
         return WorkoutHeartRateAverager.averageHeartRates(samples: samples, workouts: summaries)
+    }
+
+    /// 仅查询给定训练区间并集内的心率样本；无训练直接返回空。
+    private func heartRateSamples(within workouts: [HKWorkout]) async throws -> [HeartRateSample] {
+        let predicates = workouts.compactMap { workout -> NSPredicate? in
+            guard workout.endDate > workout.startDate else { return nil }
+            return HKQuery.predicateForSamples(
+                withStart: workout.startDate,
+                end: workout.endDate,
+                options: [.strictStartDate, .strictEndDate]
+            )
+        }
+        guard !predicates.isEmpty else { return [] }
+        let compound = NSCompoundPredicate(orPredicateWithSubpredicates: predicates)
+        return try await heartRateSamples(predicate: compound)
     }
 
     private func heartRateRecoveries(for workouts: [HKWorkout]) async throws -> [UUID: Double] {
@@ -583,8 +650,12 @@ final class HealthKitQueryService: HealthQueryService {
             let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
             let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
             let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, error in
-                if error != nil {
-                    continuation.resume(returning: [])
+                if let error {
+                    if Self.isBenignHealthKitDataError(error) {
+                        continuation.resume(returning: [])
+                    } else {
+                        continuation.resume(throwing: error)
+                    }
                     return
                 }
                 let values = (samples as? [HKQuantitySample])?.map {
@@ -601,17 +672,75 @@ final class HealthKitQueryService: HealthQueryService {
         }
     }
 
+    /// 逐小时累计聚合（步数/活动能量等），返回当天每个有值的小时。
+    func hourlySums(
+        identifier: HKQuantityTypeIdentifier,
+        unit: HKUnit,
+        day: Date,
+        calendar: Calendar = .current
+    ) async throws -> [HourlyQuantity] {
+        guard let type = HKQuantityType.quantityType(forIdentifier: identifier) else { return [] }
+        let start = calendar.startOfDay(for: day)
+        let end = start.addingTimeInterval(86_400)
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKStatisticsCollectionQuery(
+                quantityType: type,
+                quantitySamplePredicate: predicate,
+                options: [.cumulativeSum],
+                anchorDate: start,
+                intervalComponents: DateComponents(hour: 1)
+            )
+            query.initialResultsHandler = { _, results, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                var points: [HourlyQuantity] = []
+                results?.enumerateStatistics(from: start, to: end) { statistics, _ in
+                    let hour = calendar.component(.hour, from: statistics.startDate)
+                    if let sum = statistics.sumQuantity() {
+                        let value = sum.doubleValue(for: unit)
+                        if value > 0 {
+                            points.append(HourlyQuantity(hour: hour, value: value))
+                        }
+                    }
+                }
+                continuation.resume(returning: points)
+            }
+            healthStore.execute(query)
+        }
+    }
+
+    func hourlySteps(day: Date, calendar: Calendar = .current) async throws -> [HourlyQuantity] {
+        try await hourlySums(identifier: .stepCount, unit: .count(), day: day, calendar: calendar)
+    }
+
+    func hourlyActiveEnergy(day: Date, calendar: Calendar = .current) async throws -> [HourlyQuantity] {
+        try await hourlySums(identifier: .activeEnergyBurned, unit: .kilocalorie(), day: day, calendar: calendar)
+    }
+
     func heartRateSamples(start: Date, end: Date) async throws -> [HeartRateSample] {
+        try await heartRateSamples(
+            predicate: HKQuery.predicateForSamples(withStart: start, end: end, options: [])
+        )
+    }
+
+    func heartRateSamples(predicate: NSPredicate) async throws -> [HeartRateSample] {
         guard let heartRateType = HealthSignalCatalog.objectType(for: .workoutHR) as? HKQuantityType else {
             return []
         }
         
         return try await withCheckedThrowingContinuation { continuation in
-            let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
             let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
             let query = HKSampleQuery(sampleType: heartRateType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, error in
-                if error != nil {
-                    continuation.resume(returning: [])
+                if let error {
+                    if Self.isBenignHealthKitDataError(error) {
+                        continuation.resume(returning: [])
+                    } else {
+                        continuation.resume(throwing: error)
+                    }
                     return
                 }
                 let hrSamples = (samples as? [HKQuantitySample])?.map { sample in
@@ -805,8 +934,186 @@ private extension HKWorkoutActivityType {
             return "Pilates"
         case .rowing:
             return "Rowing"
+        case .mixedCardio:
+            return "Mixed Cardio"
+        case .other:
+            return "Other Workout"
         default:
             return "Workout"
+        }
+    }
+}
+
+// MARK: - Historical backfill aggregations（三年历史回填用逐日聚合）
+
+/// 一天的睡眠聚合（回填写入 DailyHealthSummaryRecord 的原始字段）。
+struct HistoricalSleepDay: Sendable {
+    var sleepHours: Double
+    var deepMinutes: Double?
+    var remMinutes: Double?
+}
+
+extension HealthKitQueryService {
+    /// 逐健康日均值（HRV/静息心率等）。
+    func dailyAverages(
+        identifier: HKQuantityTypeIdentifier,
+        unit: HKUnit,
+        start: Date,
+        end: Date,
+        calendar: Calendar = .current
+    ) async throws -> [Date: Double] {
+        try await dailyStatistics(
+            identifier: identifier,
+            unit: unit,
+            options: .discreteAverage,
+            start: start,
+            end: end,
+            calendar: calendar
+        )
+    }
+
+    /// 逐健康日累计（步数/活动能量等）。
+    func dailySums(
+        identifier: HKQuantityTypeIdentifier,
+        unit: HKUnit,
+        start: Date,
+        end: Date,
+        calendar: Calendar = .current
+    ) async throws -> [Date: Double] {
+        try await dailyStatistics(
+            identifier: identifier,
+            unit: unit,
+            options: .cumulativeSum,
+            start: start,
+            end: end,
+            calendar: calendar
+        )
+    }
+
+    /// 逐健康日最新值（体重/体脂等时点型指标）。
+    func dailyMostRecent(
+        identifier: HKQuantityTypeIdentifier,
+        unit: HKUnit,
+        start: Date,
+        end: Date,
+        calendar: Calendar = .current
+    ) async throws -> [Date: Double] {
+        try await dailyStatistics(
+            identifier: identifier,
+            unit: unit,
+            options: .discreteMostRecent,
+            start: start,
+            end: end,
+            calendar: calendar
+        )
+    }
+
+    /// 逐健康日睡眠聚合：总睡眠小时 + 深睡/REM 分钟（iOS 16+ 分期；旧数据只有总时长）。
+    /// 跨 04:00 边界的睡眠段按比例拆分（SleepDayAggregator，与同步引擎归属语义一致）。
+    func dailySleep(
+        start: Date,
+        end: Date,
+        calendar: Calendar = .current
+    ) async throws -> [Date: HistoricalSleepDay] {
+        guard let sleepType = HealthSignalCatalog.objectType(for: .sleepAnalysis) as? HKCategoryType else {
+            return [:]
+        }
+        // 向前扩 12 小时：捕获在前夜入睡、次日早上结束的睡眠段。
+        let extendedStart = start.addingTimeInterval(-12 * 3_600)
+        let samples = try await categorySamples(
+            type: sleepType,
+            range: DateRangeQuery(start: extendedStart, end: end)
+        )
+        var segments: [SleepStageSegment] = []
+        segments.reserveCapacity(samples.count)
+        for sample in samples {
+            let stage: SleepStage
+            if let value = HKCategoryValueSleepAnalysis(rawValue: sample.value) {
+                switch value {
+                case .asleepUnspecified: stage = .asleep
+                case .asleepCore: stage = .core
+                case .asleepDeep: stage = .deep
+                case .asleepREM: stage = .rem
+                case .awake: stage = .awake
+                case .inBed: stage = .inBed
+                @unknown default: stage = .asleep
+                }
+            } else {
+                stage = .asleep
+            }
+            segments.append(SleepStageSegment(
+                stage: stage,
+                start: sample.startDate,
+                end: sample.endDate
+            ))
+        }
+
+        let aggregated = SleepDayAggregator.aggregate(
+            segments: segments,
+            boundaryMinutes: HealthDaySettings.boundaryMinutes(),
+            calendar: calendar
+        )
+        let windowStart = calendar.startOfDay(for: start)
+        let windowEnd = calendar.startOfDay(for: end)
+        var out: [Date: HistoricalSleepDay] = [:]
+        for (day, bucket) in aggregated where day >= windowStart && day < windowEnd {
+            out[day] = HistoricalSleepDay(
+                sleepHours: bucket.sleepMinutes / 60.0,
+                deepMinutes: bucket.deepMinutes > 0 ? bucket.deepMinutes : nil,
+                remMinutes: bucket.remMinutes > 0 ? bucket.remMinutes : nil
+            )
+        }
+        return out
+    }
+
+    /// 通用逐日统计聚合：HKStatisticsCollectionQuery、1 天间隔、
+    /// 锚定 04:00 健康日边界，结果按日历日午夜为键。
+    private func dailyStatistics(
+        identifier: HKQuantityTypeIdentifier,
+        unit: HKUnit,
+        options: HKStatisticsOptions,
+        start: Date,
+        end: Date,
+        calendar: Calendar
+    ) async throws -> [Date: Double] {
+        guard let quantityType = HKQuantityType.quantityType(forIdentifier: identifier) else { return [:] }
+        let anchor = HealthDayBoundary(calendar: calendar).labelDate(containing: start)
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKStatisticsCollectionQuery(
+                quantityType: quantityType,
+                quantitySamplePredicate: predicate,
+                options: options,
+                anchorDate: anchor,
+                intervalComponents: DateComponents(day: 1)
+            )
+            query.initialResultsHandler = { _, results, error in
+                if let error {
+                    if Self.isBenignHealthKitDataError(error) {
+                        continuation.resume(returning: [:])
+                    } else {
+                        continuation.resume(throwing: error)
+                    }
+                    return
+                }
+                var out: [Date: Double] = [:]
+                results?.enumerateStatistics(from: start, to: end) { statistics, _ in
+                    let value: Double?
+                    if options.contains(.cumulativeSum) {
+                        value = statistics.sumQuantity()?.doubleValue(for: unit)
+                    } else if options.contains(.discreteMostRecent) {
+                        value = statistics.mostRecentQuantity()?.doubleValue(for: unit)
+                    } else {
+                        value = statistics.averageQuantity()?.doubleValue(for: unit)
+                    }
+                    if let value {
+                        out[calendar.startOfDay(for: statistics.startDate)] = value
+                    }
+                }
+                continuation.resume(returning: out)
+            }
+            healthStore.execute(query)
         }
     }
 }

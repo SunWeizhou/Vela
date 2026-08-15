@@ -18,12 +18,15 @@ public final class WorkoutAggregationService {
         healthKitWorkouts: [WorkoutSummary],
         for date: Date,
         modelContext: ModelContext,
+        blacklistedIDs: Set<String> = [],
         calendar: Calendar = .current
     ) -> [WorkoutSummary] {
-        let dayRange = DateRangeQuery.singleDay(date, calendar: calendar)
-        let dayStart = dayRange.start
-        let dayEnd = dayRange.end
-        
+        // 用「日历日」而非 04:00 健康日边界取事件：record 主键是日历午夜。
+        // 此前 00:00–04:00 的训练会落入前一天的查询窗，而 aggregateDay 只重算
+        // 当天 → workoutCount/时长/热量写错记录。
+        let dayStart = calendar.startOfDay(for: date)
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+
         let descriptor = FetchDescriptor<WorkoutEventRecord>(
             predicate: #Predicate<WorkoutEventRecord> {
                 $0.startedAt >= dayStart && $0.startedAt < dayEnd
@@ -32,12 +35,22 @@ public final class WorkoutAggregationService {
         )
         
         let localRecords = consolidateLocalEvents((try? modelContext.fetch(descriptor)) ?? [])
-        
+
         var merged: [WorkoutSummary] = []
-        
+
         // 1. Keep HealthKit workouts unless a mirrored WorkoutEventRecord already represents them.
-        for hk in healthKitWorkouts {
-            if !localRecords.contains(where: { localRecordRepresentsHealthKitWorkout($0, hk) }) {
+        // P1-2 修复：黑名单（用户在 App 删除过的训练）必须同时过滤 HK 摘要与本地镜像事件，
+        // 否则删除后仍被重新计数。
+        let filteredHealthKit = healthKitWorkouts.filter { !blacklistedIDs.contains($0.id.uuidString) }
+        let filteredLocal = localRecords.filter { record in
+            if blacklistedIDs.contains(record.id.uuidString) { return false }
+            if let hkId = record.linkedHealthKitWorkoutId,
+               blacklistedIDs.contains(hkId.uuidString) { return false }
+            return true
+        }
+
+        for hk in filteredHealthKit {
+            if !filteredLocal.contains(where: { localRecordRepresentsHealthKitWorkout($0, hk) }) {
                 merged.append(WorkoutSummary(
                     id: hk.id,
                     start: hk.start,
@@ -54,8 +67,8 @@ public final class WorkoutAggregationService {
         }
         
         // 2. Add local records (manual / strength / xunji / HealthKit mirrors).
-        for local in localRecords {
-            let matchedHK = healthKitWorkouts.first { localRecordRepresentsHealthKitWorkout(local, $0) }
+        for local in filteredLocal {
+            let matchedHK = filteredHealthKit.first { localRecordRepresentsHealthKitWorkout(local, $0) }
             let useHealthKitTiming = local.linkedHealthKitWorkoutId != nil && matchedHK != nil
             let useLocalDisplay = local.linkedStrengthWorkoutId != nil
             
@@ -156,6 +169,16 @@ public final class WorkoutAggregationService {
                     calendar: calendar
                 )
                 modelContext.insert(event)
+            }
+            // P1-3：Apple Watch 有氧等 HealthKit 训练也要参与计划日打卡
+            //（此前只有手动力量路径会关联计划）。
+            if event.linkedTrainingPlanDayId == nil {
+                try? linkActivePlanDay(
+                    for: event,
+                    strengthWorkout: nil,
+                    modelContext: modelContext,
+                    calendar: calendar
+                )
             }
         }
         try modelContext.save()
@@ -290,7 +313,8 @@ public final class WorkoutAggregationService {
     public func aggregateDay(
         date: Date,
         modelContext: ModelContext,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        resetActivityTotals: Bool = false
     ) throws {
         try PersistenceWriteGate.shared.withSerializedWrite(
             operation: "WorkoutAggregationService.aggregateDay"
@@ -308,11 +332,16 @@ public final class WorkoutAggregationService {
                 modelContext.insert(record)
             }
 
-            let healthKitWorkouts = record.toSnapshot().workouts.filter { ($0.source ?? "healthKit") == "healthKit" }
+            // P1-1 修复：不再回读 workoutsData 自反馈缓存（旧 JSON 会让已删除的
+            // HealthKit 训练自我复活）。HK 训练已由 upsertHealthKitWorkoutEvents
+            // 落成事件，这里只合并事件 + 黑名单过滤。
+            let deletedRecords = (try? modelContext.fetch(FetchDescriptor<DeletedWorkoutRecord>())) ?? []
+            let blacklistedIDs = Set(deletedRecords.map(\.id))
             let merged = aggregateWorkouts(
-                healthKitWorkouts: healthKitWorkouts,
+                healthKitWorkouts: [],
                 for: dayStart,
                 modelContext: modelContext,
+                blacklistedIDs: blacklistedIDs,
                 calendar: calendar
             )
             let duration = merged.reduce(0) { $0 + max(0, $1.end.timeIntervalSince($1.start) / 60) }
@@ -329,11 +358,23 @@ public final class WorkoutAggregationService {
             record.workoutCount = merged.count
             record.workoutTypes = Set(merged.map(\.activityName)).sorted().joined(separator: ", ")
             record.workoutDuration = duration
-            record.activeMinutes = max(record.activeMinutes ?? 0, duration)
-            record.activeCalories = max(record.activeCalories ?? 0, energy)
+            // 删除回滚（[5]）：resetActivityTotals 时用训练侧数值整体重算，
+            // 否则 max() 语义让已删除训练的热量/分钟永久残留（下次 HK 同步会恢复总量）。
+            if resetActivityTotals {
+                record.activeCalories = energy
+                record.activeMinutes = max(0, duration)
+            } else {
+                record.activeMinutes = max(record.activeMinutes ?? 0, duration)
+                record.activeCalories = max(record.activeCalories ?? 0, energy)
+            }
             record.activityLoad = activityLoad
-            record.workoutLoad = load
-            record.dailyLoad = dailyLoad
+            // 引擎（TRIMP 域）已在 apply(snapshot:) 写入 dailyLoad/workoutLoad 时
+            // 保留引擎值；仅在无引擎结果（导入/手动补录路径）时以 session-RPE 兜底，
+            // 防止两套公式写同一字段造成量纲混用。
+            if record.dailyLoad == nil {
+                record.workoutLoad = load
+                record.dailyLoad = dailyLoad
+            }
             record.updatedAt = Date()
         }
     }
@@ -592,9 +633,11 @@ public final class WorkoutAggregationService {
         try modelContext.save()
     }
 
-    private func linkActivePlanDay(
+    /// P1-3：把计划日关联从「仅手动力量」扩展到 Apple Watch 有氧与训记导入——
+    /// 所有事件统一走此收口（strengthWorkout 为 nil 时按活动类型匹配）。
+    func linkActivePlanDay(
         for event: WorkoutEventRecord,
-        strengthWorkout: StrengthWorkoutRecord,
+        strengthWorkout: StrengthWorkoutRecord?,
         modelContext: ModelContext,
         calendar: Calendar
     ) throws {
@@ -654,7 +697,9 @@ public final class WorkoutAggregationService {
                 plan.days[index] = day
                 plan.updatedAt = Date()
                 event.linkedTrainingPlanDayId = day.id
-                strengthWorkout.planDayId = day.id
+                if let strengthWorkout {
+                    strengthWorkout.planDayId = day.id
+                }
                 break
             }
         }
@@ -703,6 +748,44 @@ public final class WorkoutAggregationService {
         }
     }
 
+    /// P3-8：插入黑名单前查重（id 为 @Attribute(.unique)，双入口重复插入会导致保存冲突）。
+    func blacklistWorkout(id: String, modelContext: ModelContext) {
+        let descriptor = FetchDescriptor<DeletedWorkoutRecord>(
+            predicate: #Predicate<DeletedWorkoutRecord> { $0.id == id }
+        )
+        let existing = (try? modelContext.fetch(descriptor)) ?? []
+        if existing.isEmpty {
+            modelContext.insert(DeletedWorkoutRecord(id: id))
+        }
+    }
+
+    /// P2-6：删除训练时回滚其关联的计划日打卡（此前日历该日仍打勾、执行率仍计数）。
+    private func rollbackLinkedPlanDays(
+        for events: [WorkoutEventRecord],
+        modelContext: ModelContext
+    ) {
+        let dayIDs = Set(events.compactMap(\.linkedTrainingPlanDayId))
+        guard !dayIDs.isEmpty else { return }
+        let plans = (try? modelContext.fetch(FetchDescriptor<TrainingPlanRecord>())) ?? []
+        for plan in plans {
+            var changed = false
+            for (index, day) in plan.days.enumerated() where dayIDs.contains(day.id) {
+                var updated = day
+                updated.linkedWorkoutEventIds = []
+                updated.isCompleted = false
+                updated.completedAt = nil
+                updated.loggedStrain = nil
+                updated.actualSummaryJSON = ""
+                updated.adherenceScore = nil
+                plan.days[index] = updated
+                changed = true
+            }
+            if changed {
+                plan.updatedAt = Date()
+            }
+        }
+    }
+
     /// Deletes a StrengthWorkoutRecord and cleans up its linked WorkoutEventRecord, XunjiWorkoutMirrorRecord, TrainingResponseRecord, and daily load.
     func deleteStrengthWorkout(
         _ workout: StrengthWorkoutRecord,
@@ -719,16 +802,22 @@ public final class WorkoutAggregationService {
         let events = try modelContext.fetch(eventDescriptor)
         for event in events {
             if let hkId = event.linkedHealthKitWorkoutId {
-                modelContext.insert(DeletedWorkoutRecord(id: hkId.uuidString))
+                blacklistWorkout(id: hkId.uuidString, modelContext: modelContext)
             }
             if event.source == "xunji" || event.source == "strengthLog" {
                 modelContext.delete(event)
             } else {
-                // If it is a HealthKit or other synced event, keep the event but unlink it
+                // If it is a HealthKit or other synced event, keep the event but unlink it.
+                // P3-9：解除关联后必须重算 source，否则列表仍把已删训练标成「Apple + 训记」。
                 event.linkedStrengthWorkoutId = nil
+                event.source = resolvedSource(for: event)
                 event.updatedAt = Date()
             }
         }
+
+        // P2-6 修复：删除训练后回滚计划日打卡——此前日历该日仍打勾、
+        // 计划执行率仍按 isCompleted 计数。
+        rollbackLinkedPlanDays(for: events, modelContext: modelContext)
         
         // 2. Find Xunji mirror records
         let mirrorDescriptor = FetchDescriptor<XunjiWorkoutMirrorRecord>(
@@ -736,7 +825,7 @@ public final class WorkoutAggregationService {
         )
         let mirrors = try modelContext.fetch(mirrorDescriptor)
         for mirror in mirrors {
-            modelContext.insert(DeletedWorkoutRecord(id: mirror.externalID))
+            blacklistWorkout(id: mirror.externalID, modelContext: modelContext)
             modelContext.delete(mirror)
         }
 
@@ -755,7 +844,8 @@ public final class WorkoutAggregationService {
         try modelContext.save()
         
         // 5. Recalculate summary and aggregation for the affected day
-        try aggregateDay(date: workoutDate, modelContext: modelContext, calendar: calendar)
+        // 删除回滚：activeCalories/activeMinutes 需整体重算（max 语义会残留旧值）。
+        try aggregateDay(date: workoutDate, modelContext: modelContext, calendar: calendar, resetActivityTotals: true)
         try modelContext.save()
         
         // Trigger DailyPlanRefreshCoordinator

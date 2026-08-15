@@ -88,6 +88,7 @@ public enum EnergyBankStatus: String, Codable, Hashable {
 }
 
 public enum TrainingLoadStatus: String, Codable, Hashable {
+    case unknown = "unknown"
     case wellBelow = "wellBelow"
     case below = "below"
     case optimal = "optimal"
@@ -218,14 +219,14 @@ public struct MetricResult: Codable, Hashable, Sendable {
         return .withinTarget
     }
     public var trainingLoadStatus: TrainingLoadStatus {
-        guard let code = components["training_load_status_code"] else { return .optimal }
+        guard let code = components["training_load_status_code"] else { return .unknown }
         switch Int(code) {
         case 0: return .wellBelow
         case 1: return .below
         case 2: return .optimal
         case 3: return .elevated
         case 4: return .highRisk
-        default: return .optimal
+        default: return .unknown
         }
     }
 
@@ -316,7 +317,9 @@ public struct StandardScoreResult: Codable, Hashable {
 
 public enum ScoringMath {
     public static func clamp(_ value: Double, min minimum: Double = 0, max maximum: Double = 100) -> Double {
-        Swift.max(minimum, Swift.min(maximum, value))
+        // NaN/+inf/−inf 无意义：NaN 此前经 Swift.max/min 语义静默变成 100。
+        guard value.isFinite else { return minimum }
+        return Swift.max(minimum, Swift.min(maximum, value))
     }
 
     public static func band(for score: Double) -> MetricBand {

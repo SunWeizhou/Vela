@@ -92,8 +92,11 @@ final class HealthSnapshotRepository {
     func fetchSnapshots(days: Int, endingAt endDate: Date = Date()) throws -> [DailyHealthSnapshot] {
         let safeDays = max(days, 1)
         let range = DateRangeQuery.recentDays(safeDays, endingAt: endDate, calendar: calendar)
-        let rangeStart = range.start
-        let rangeEnd = range.end
+        // 记录层的 date 存的是日历午夜，而查询窗是 04:00 健康日边界：
+        // 用日历日边界比较，否则最老一天（存于其 00:00，早于窗口 04:00 起点）
+        // 会被恒久排除——42 天请求只返回 41 条，滚动基线系统性缺一天。
+        let rangeStart = calendar.startOfDay(for: range.start)
+        let rangeEnd = calendar.startOfDay(for: range.end)
         // Fetch without a date #Predicate and filter in memory. SwiftData's
         // #Predicate date comparison has been observed to trap (SIGTRAP) when a
         // stored row carries an anomalous `date`, hard-crashing the app on the

@@ -134,7 +134,9 @@ public struct EnergyBankEngine: ScoreEngine {
 
         let trainingLoad = calculateTrainingLoad(
             strainHistory: input.strainHistory,
-            todayStrain: input.todayLoad ?? input.strainScore ?? 0.0
+            // todayLoad 缺失视为「无活动证据」置 0，绝不回退到 0-100 评分域
+            // strainScore——ATL/CTL/TSB/ACWR 必须与 strainHistory 同属 TRIMP 域。
+            todayStrain: input.todayLoad ?? 0.0
         )
         components["atl"] = trainingLoad.atl
         components["ctl"] = trainingLoad.ctl
@@ -283,9 +285,12 @@ public struct EnergyBankEngine: ScoreEngine {
 
     private func ewma(_ values: [Double], lambda: Double) -> Double {
         guard !values.isEmpty else { return 0 }
-        var result = values[0]
-        for i in 1..<values.count {
-            result = values[i] * lambda + result * (1.0 - lambda)
+        // 暖启动：用初期（最多 7 个）样本的均值作种子，降低首值冷启动偏差。
+        let warmupCount = min(7, values.count)
+        let seed = values.prefix(warmupCount).reduce(0, +) / Double(warmupCount)
+        var result = seed
+        for value in values.dropFirst(warmupCount) {
+            result = value * lambda + result * (1.0 - lambda)
         }
         return result
     }

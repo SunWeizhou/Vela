@@ -507,7 +507,7 @@ struct StrengthWorkoutSummarySheet: View {
     }
 
     private var nutritionRecommendation: String {
-        "训练后的进食以全天总能量、蛋白质 and 碳水安排为先。选择你方便的下一餐补充蛋白质、主食 and 水分即可；无需为了固定的时间窗口强行进食。"
+        "训练后的进食以全天总能量、蛋白质与碳水安排为先。选择你方便的下一餐补充蛋白质、主食与水分即可；无需为了固定的时间窗口强行进食。"
     }
 
     private var nextSessionRecommendation: String {

@@ -347,8 +347,8 @@ final class DailyHealthSummaryRecord {
             oxygenSaturation: snapshot.oxygenSaturation,
             respiratoryRate: snapshot.respiratoryRate,
             wristTemperature: snapshot.wristTemperature,
-            dailyLoad: nil,
-            workoutLoad: nil,
+            dailyLoad: snapshot.dailyLoad,
+            workoutLoad: snapshot.workoutLoad,
             activityLoad: snapshot.activityLoad,
             trainingLoadRatio: snapshot.trainingLoadRatio,
             atl: snapshot.atl,
@@ -393,6 +393,11 @@ final class DailyHealthSummaryRecord {
         respiratoryRate = snapshot.respiratoryRate
         wristTemperature = snapshot.wristTemperature
         activityLoad = snapshot.activityLoad
+        // dailyLoad/workoutLoad 由评分引擎写入（TRIMP 域），必须随快照落库；
+        // aggregateDay 仅在引擎未提供时才以 session-RPE 兜底，避免两套公式
+        // 写同一字段导致历史（RPE 域）与当日（TRIMP 域）量纲混用。
+        dailyLoad = snapshot.dailyLoad
+        workoutLoad = snapshot.workoutLoad
         trainingLoadRatio = snapshot.trainingLoadRatio
         atl = snapshot.atl
         ctl = snapshot.ctl
@@ -404,6 +409,17 @@ final class DailyHealthSummaryRecord {
         awakeEpisodeCount = snapshot.awakeEpisodeCount
         deepSleepMinutes = snapshot.deepSleepMinutes
         remSleepMinutes = snapshot.remSleepMinutes
+        // [10] 修复：聚合字段随快照一并落库，消除「saveDailySnapshot 必须紧跟
+        // aggregateDay」的隐式契约。快照含 workouts 时写入；空快照不动存量
+        //（避免部分更新路径清空已有聚合）。
+        if !snapshot.workouts.isEmpty {
+            workoutCount = snapshot.workoutCount ?? snapshot.workouts.count
+            workoutDuration = snapshot.workoutDuration
+                ?? snapshot.workouts.reduce(0) { $0 + max(0, $1.end.timeIntervalSince($1.start) / 60) }
+            workoutTypes = snapshot.workoutTypes
+                ?? Set(snapshot.workouts.map(\.activityName)).sorted().joined(separator: ", ")
+            workoutsData = try? JSONEncoder().encode(snapshot.workouts)
+        }
         configVersion = VelaAppMetadata.configVersion
         self.updatedAt = updatedAt
     }
@@ -2243,6 +2259,7 @@ struct WorkoutEventDTO: Sendable {
     var startedAt: Date
     var durationMinutes: Double
     var linkedTrainingPlanDayId: UUID?
+    var linkedStrengthWorkoutId: UUID?
 }
 
 extension WorkoutEventRecord {
@@ -2251,7 +2268,8 @@ extension WorkoutEventRecord {
             id: id,
             startedAt: startedAt,
             durationMinutes: durationMinutes,
-            linkedTrainingPlanDayId: linkedTrainingPlanDayId
+            linkedTrainingPlanDayId: linkedTrainingPlanDayId,
+            linkedStrengthWorkoutId: linkedStrengthWorkoutId
         )
     }
 }
