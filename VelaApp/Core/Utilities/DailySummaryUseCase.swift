@@ -182,11 +182,13 @@ final class DailySummaryUseCase {
 
         // 2b. 三年长线基准（Layer 1/2/3 同源）：全量每日记录 → LongTermBaselineEngine。
         // 回填后约 1100 行，中位/分位/同比计算在毫秒级；未回填时自动退化为空报告。
+        // 全量记录只取一次，后面 BodyModelBuilder 复用同一份，避免重复全表 fetch。
+        var allDailySummaryRecords: [DailyHealthSummaryRecord] = []
         let longTermReport: LongTermBaselineReport
         if let modelContext {
-            let allRecords = (try? modelContext.fetch(FetchDescriptor<DailyHealthSummaryRecord>())) ?? []
+            allDailySummaryRecords = (try? modelContext.fetch(FetchDescriptor<DailyHealthSummaryRecord>())) ?? []
             longTermReport = LongTermBaselineEngine.compute(
-                points: allRecords.map(\.longTermBaselinePoint),
+                points: allDailySummaryRecords.map(\.longTermBaselinePoint),
                 today: now,
                 calendar: calendar
             )
@@ -384,6 +386,7 @@ final class DailySummaryUseCase {
         
         var activePlan: TrainingPlanRecord?
         var currentDailySummary: DailyHealthSummaryRecord?
+        var planResolutionEvents: [WorkoutEventRecord] = []
         var recentWorkoutEvents: [WorkoutEventRecord] = []
         var recentStrengthWorkouts: [StrengthWorkoutRecord] = []
         var recentTrainingResponses: [TrainingResponseRecord] = []
@@ -396,19 +399,37 @@ final class DailySummaryUseCase {
             )
             activePlan = (try? modelContext.fetch(activePlanFetch))?.first
 
+            // TrainingDecisionKernel 需要与训练页相同的计划日解析事实：
+            // 取计划开始以来的全部事件（不含未来），让已完成日/逾期日逻辑一致。
+            if let activePlan {
+                let selectedDayEnd = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) ?? now
+                let planEventStart = min(activePlan.startDate, selectedDayEnd)
+                let planEventFetch = FetchDescriptor<WorkoutEventRecord>(
+                    predicate: #Predicate<WorkoutEventRecord> {
+                        $0.startedAt >= planEventStart && $0.startedAt < selectedDayEnd
+                    },
+                    sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+                )
+                planResolutionEvents = (try? modelContext.fetch(planEventFetch)) ?? []
+            }
+
+            // BodyStateKernel 的近期活动证据始终使用真实近 48h 事件；
+            // 计划解析事件和近期证据分开，避免有活跃计划时丢失计划开始前的近期活动。
+            let recentEventStart = calendar.date(byAdding: .hour, value: -48, to: now) ?? now
+            var recentEventFetch = FetchDescriptor<WorkoutEventRecord>(
+                predicate: #Predicate<WorkoutEventRecord> {
+                    $0.startedAt >= recentEventStart && $0.startedAt <= now
+                },
+                sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+            )
+            recentEventFetch.fetchLimit = 100
+            recentWorkoutEvents = (try? modelContext.fetch(recentEventFetch)) ?? []
+
             let dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: now, calendar: calendar)
             let summaryFetch = FetchDescriptor<DailyHealthSummaryRecord>(
                 predicate: #Predicate<DailyHealthSummaryRecord> { $0.dayIdentifier == dayIdentifier }
             )
             currentDailySummary = (try? modelContext.fetch(summaryFetch))?.first
-
-            let recentEventStart = calendar.date(byAdding: .hour, value: -48, to: now) ?? now
-            var eventFetch = FetchDescriptor<WorkoutEventRecord>(
-                predicate: #Predicate<WorkoutEventRecord> { $0.startedAt >= recentEventStart && $0.startedAt <= now },
-                sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
-            )
-            eventFetch.fetchLimit = 100
-            recentWorkoutEvents = (try? modelContext.fetch(eventFetch)) ?? []
 
             let recentJournalStart = calendar.date(byAdding: .hour, value: -36, to: now) ?? now
             let journalFetch = FetchDescriptor<JournalEntryRecord>(
@@ -447,10 +468,9 @@ final class DailySummaryUseCase {
             let allResponsesForModel = (try? modelContext.fetch(FetchDescriptor<TrainingResponseRecord>())) ?? []
             let allJournalsForModel = (try? modelContext.fetch(FetchDescriptor<JournalEntryRecord>())) ?? []
             let onboardingForModel = (try? modelContext.fetch(FetchDescriptor<OnboardingState>()))?.first
-            let allSummariesForModel = (try? modelContext.fetch(FetchDescriptor<DailyHealthSummaryRecord>())) ?? []
             bodyModelState = BodyModelBuilder().build(
                 onboarding: onboardingForModel,
-                dailySummaries: allSummariesForModel,
+                dailySummaries: allDailySummaryRecords,
                 journalEntries: allJournalsForModel,
                 strengthWorkouts: allStrengthForModel,
                 trainingResponses: allResponsesForModel,
@@ -480,10 +500,16 @@ final class DailySummaryUseCase {
             bodyModelState: bodyModelState
         )
         let activeStatus = ActiveStatusSettings.resolveCurrentStatus(now: now)
+        // 合并计划事件与近 48h 事件：hash 要覆盖计划完成事件，近期活动证据也要完整。
+        var bodyStateEvents = planResolutionEvents
+        let planEventIDs = Set(planResolutionEvents.map(\.id))
+        for event in recentWorkoutEvents where !planEventIDs.contains(event.id) {
+            bodyStateEvents.append(event)
+        }
         let bodyState = BodyStateKernel().build(input: BodyStateInput(
             dashboard: dashboard,
             dailySummary: currentDailySummary?.dto,
-            workoutEvents: recentWorkoutEvents.map { $0.dto },
+            workoutEvents: bodyStateEvents.map { $0.dto },
             strengthWorkouts: recentStrengthWorkouts.map { $0.dto },
             trainingResponses: recentTrainingResponses.map { $0.dto },
             foodLogs: todayFoodLogs.map { $0.dto },
@@ -513,6 +539,7 @@ final class DailySummaryUseCase {
                 bodyState: bodyState,
                 activePlan: activePlan?.dto,
                 trainingResponses: recentTrainingResponses.map { $0.dto },
+                workoutEvents: planResolutionEvents.map { $0.dto },
                 // 算法打通（深度专项批次 1）：与展示路径同源，恢复此前被
                 // persistedDecision 遮蔽的「本月训练量三年 P85 → 减量」门控。
                 longTermTrainingVolume: longTermReport.trainingVolume
@@ -889,6 +916,22 @@ final class DailySummaryUseCase {
         dashboard.longTermBaselines = LongTermBaselineEngine.compute(
             points: allRecords.map(\.longTermBaselinePoint),
             today: date,
+            calendar: calendar
+        )
+        // 缓存启动路径同样挂载身体模型：否则重启后的前 15 分钟 TTL 内，
+        // 今日页/训练页的个人洞察会静默消失，与完整刷新口径不一致。
+        let allStrength = (try? modelContext.fetch(FetchDescriptor<StrengthWorkoutRecord>())) ?? []
+        let allResponses = (try? modelContext.fetch(FetchDescriptor<TrainingResponseRecord>())) ?? []
+        let allJournals = (try? modelContext.fetch(FetchDescriptor<JournalEntryRecord>())) ?? []
+        let onboarding = (try? modelContext.fetch(FetchDescriptor<OnboardingState>()))?.first
+        dashboard.bodyModelState = BodyModelBuilder().build(
+            onboarding: onboarding,
+            dailySummaries: allRecords,
+            journalEntries: allJournals,
+            strengthWorkouts: allStrength,
+            trainingResponses: allResponses,
+            longTermBaselines: dashboard.longTermBaselines,
+            asOf: date,
             calendar: calendar
         )
         return dashboard

@@ -340,11 +340,22 @@ struct CoachContextAssembler {
         // 行为-结果配对用三年窗口：回填后旧手记也能对上次日体征。
         // 深度专项批次 6：相关性结果 + 1100 天快照做会话内 memo——每条消息此前都
         // 全表 fetch + Spearman/BH-FDR 重算一遍；快照日期/手记数变化自动失效。
+        // 行为-结果配对必须吃全量手记，不能只吃调用方传入的最近 12 条；
+        // 否则 Coach 相关性会与身体模型页（三年全窗口）出现两套结论。
+        let correlationJournalEntries: [JournalEntryRecord]
+        if outboundPolicy.journal, outboundPolicy.health {
+            correlationJournalEntries = (try? modelContext.fetch(FetchDescriptor<JournalEntryRecord>(
+                sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+            ))) ?? []
+        } else {
+            correlationJournalEntries = []
+        }
+
         let correlationCacheKey: String?
         if outboundPolicy.journal, outboundPolicy.health {
-            let latestJournalUpdate = journalEntries.max(by: { $0.createdAt < $1.createdAt })?.createdAt
+            let latestJournalUpdate = correlationJournalEntries.max(by: { $0.createdAt < $1.createdAt })?.createdAt
                 ?? .distantPast
-            correlationCacheKey = "\(journalEntries.count)-\(Int(latestJournalUpdate.timeIntervalSince1970))-\(Self.latestSnapshotEpoch)"
+            correlationCacheKey = "\(correlationJournalEntries.count)-\(Int(latestJournalUpdate.timeIntervalSince1970))-\(Self.latestSnapshotEpoch)"
         } else {
             correlationCacheKey = nil
         }
@@ -360,7 +371,7 @@ struct CoachContextAssembler {
             // 与身体模型页同口径，避免同一标签两处结论矛盾。
             correlationText = JournalCorrelationEngine().formatInsightsForAI(
                 JournalCorrelationEngine().calculateInsights(
-                    journalEntries: outboundPolicy.journal ? Array(journalEntries) : [],
+                    journalEntries: correlationJournalEntries,
                     snapshots: snapshots
                 )
             )
@@ -395,7 +406,7 @@ struct CoachContextAssembler {
         if let provided = coverageSummary {
             effectiveCoverage = provided
         } else if outboundPolicy.health {
-            effectiveCoverage = await DataCoverageSummaryModel.build(
+            effectiveCoverage = DataCoverageSummaryModel.build(
                 groups: await DataCoverageGroupFactory.loadPriorityGroups()
             )
         } else {
@@ -557,6 +568,10 @@ struct CoachContextAssembler {
         let strengths = (try? modelContext.fetch(FetchDescriptor<StrengthWorkoutRecord>())) ?? []
         let responses = (try? modelContext.fetch(FetchDescriptor<TrainingResponseRecord>())) ?? []
         let summaries = (try? modelContext.fetch(FetchDescriptor<DailyHealthSummaryRecord>())) ?? []
+        // Coach 看到的身体模型必须与身体模型页同口径：这里补全量手记，
+        // 而不是只吃调用方传入的最近 12 条，否则行为配对/成熟度会偏小。
+        let allJournals = (try? modelContext.fetch(FetchDescriptor<JournalEntryRecord>())) ?? []
+        let journalEntries = allJournals
         let onboarding = (try? modelContext.fetch(FetchDescriptor<OnboardingState>()))?.first
         let key = [
             "\(strengths.count)",

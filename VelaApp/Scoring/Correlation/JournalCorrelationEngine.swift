@@ -121,6 +121,14 @@ struct JournalCorrelationEngine {
             snapshotByDay[key] = snap
         }
 
+        // 预索引「某天真正发生的标签」：下方每个 tag/outcome/lag/day 不再
+        // 线性扫描全量手记，避免全量 1100 天 + 大量标签时出现 O(n²)。
+        var tagsByDay: [String: Set<String>] = [:]
+        for entry in journalEntries where entry.value != 0 && entry.value != 1 {
+            tagsByDay[dayKey(for: entry.createdAt, calendar: calendar), default: []]
+                .formUnion(entry.tags)
+        }
+
         // Get all unique tags
         let allTags = Set(journalEntries.flatMap { $0.tags })
         let allDaysSortedKeys = snapshotByDay.keys.sorted()
@@ -161,12 +169,8 @@ struct JournalCorrelationEngine {
                         // Neutral (1) and not-done (0) must not be correlated as an
                         // occurrence (previously any day containing the tag counted,
                         // which let an explicit "neutral" bias the point-biserial r).
-                        let isTagLogged = journalEntries.contains { entry in
-                            calendar.isDate(entry.createdAt, inSameDayAs: sampleDate)
-                                && entry.tags.contains(tag)
-                                && entry.value != 0
-                                && entry.value != 1
-                        }
+                        let isTagLogged = tagsByDay[dayKey(for: sampleDate, calendar: calendar)]?
+                            .contains(tag) == true
 
                         if let outcomeVal = snapshotByDay[key].flatMap(outcome.1) {
                             tagSeries.append(isTagLogged ? 1.0 : 0.0)

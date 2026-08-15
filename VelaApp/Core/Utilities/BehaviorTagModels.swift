@@ -257,6 +257,16 @@ struct BodyModelBuilder {
         asOf: Date = Date(),
         calendar: Calendar = .current
     ) -> BodyModelState {
+        // 历史日/缓存路径的 asOf 语义：模型只能使用 asOf 当天及之前的事实，
+        // 不能让未来日期的训练/手记/摘要反向抬高成熟度或改变训练事实计数。
+        let asOfDay = calendar.startOfDay(for: asOf)
+        let dailySummaries = dailySummaries.filter {
+            calendar.startOfDay(for: $0.date) <= asOfDay
+        }
+        let journalEntries = journalEntries.filter { $0.createdAt <= asOf }
+        let strengthWorkouts = strengthWorkouts.filter { $0.startedAt <= asOf }
+        let trainingResponses = trainingResponses.filter { $0.date <= asOf }
+
         let recentBaselineDays = Set(dailySummaries.map { calendar.startOfDay(for: $0.date) }).count
         let longTermDays = longTermBaselines?.daysOfData ?? 0
         // 三年回填后基线天数以全历史为准：基线「仍在建立」从此不再由窗口截断造成。

@@ -409,19 +409,27 @@ struct TrainingHeroSection: View {
                 VStack(alignment: .leading, spacing: 8) {
                     // 联通专项批次 2：主流程一句话个人洞察（身体模型断言）。
                     if let personalInsight {
-                        HStack(alignment: .top, spacing: 8) {
-                            Image(systemName: "waveform.path.ecg")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(VelaTheme.rhythmDeep)
-                                .padding(.top, 2)
-                            Text(personalInsight)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(VelaTheme.rhythmInk)
-                                .fixedSize(horizontal: false, vertical: true)
+                        NavigationLink(destination: BodyModelDetailView()) {
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: "waveform.path.ecg")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(VelaTheme.rhythmDeep)
+                                    .padding(.top, 2)
+                                Text(personalInsight)
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(VelaTheme.rhythmInk)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Spacer(minLength: 4)
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.6))
+                            }
+                            .padding(10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(VelaTheme.rhythmCanvasRaised.opacity(0.95), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         }
-                        .padding(10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(VelaTheme.rhythmCanvasRaised.opacity(0.95), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .buttonStyle(.plain)
                     }
                     if !decisionReasons.isEmpty {
                         ForEach(Array(decisionReasons.enumerated()), id: \.offset) { _, reason in
@@ -1292,6 +1300,68 @@ struct TrainingPostWorkoutPrompt: View {
     }
 }
 
+/// 训练计划的建议入口：显示本机 BodyInterpreter 与 AI 练后边界生成的
+/// 待确认提案数，点击进入计划页完成确认（ADR 0008：确认前不修改计划）。
+struct TrainingProposalPortal: View {
+    let proposals: [TrainingPlanAdaptationRecord]
+
+    var body: some View {
+        HStack(spacing: 13) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(VelaTheme.rhythmDeep)
+                .frame(width: 44, height: 44)
+                .background(VelaTheme.rhythmMist, in: Circle())
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(proposals.isEmpty ? "当前没有待确认调整" : "\(proposals.count) 条待确认调整")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                Text(previewLine)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 8)
+
+            Text("去确认")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(VelaTheme.rhythmDeep)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+        }
+        .padding(14)
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 23, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 23, style: .continuous)
+                .stroke(proposals.isEmpty ? VelaTheme.rhythmMist : VelaTheme.rhythmDeep.opacity(0.35), lineWidth: 0.75)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 23, style: .continuous))
+    }
+
+    private var previewLine: String {
+        guard let first = proposals.first else {
+            return "当前计划无需调整。Vela 只提出方案，任何修改都由你确认后生效。"
+        }
+        return "\(adjustmentLabel(first.adjustment)) · \(first.originalDayTitle) · \(first.reason)"
+    }
+
+    private func adjustmentLabel(_ adjustment: String) -> String {
+        switch adjustment {
+        case "keep": return "保持边界"
+        case "reduce": return "建议减量"
+        case "swap": return "建议替换"
+        case "rest": return "建议休息"
+        case "reschedule": return "建议改期"
+        case "deloadWeek": return "建议减载周"
+        default: return adjustment
+        }
+    }
+}
+
 struct TrainingPlanPortal: View {
     let planTitle: String?
     let nextFocus: String?
@@ -1301,6 +1371,8 @@ struct TrainingPlanPortal: View {
     var days: [TrainingDay] = []
     /// 今天解析到的计划日标题（轮转条高亮）。
     var todayTitle: String?
+    /// 待用户确认的调整提案数（BodyInterpreter / AI 练后边界共用同一提案区）。
+    var pendingProposalCount: Int = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1344,6 +1416,22 @@ struct TrainingPlanPortal: View {
             if !days.isEmpty {
                 rotationStrip
                     .padding(.top, 13)
+            }
+
+            if pendingProposalCount > 0 {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                    Text("\(pendingProposalCount) 条调整提案待你确认")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                    Spacer()
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(VelaTheme.rhythmDeep.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .padding(.top, 12)
             }
         }
         .padding(15)
@@ -1423,5 +1511,397 @@ struct TrainingPlanPortal: View {
         if let nextFocus, !nextFocus.isEmpty { return "当前建议：\(nextFocus)" }
         if totalDays > 0 { return "\(completedDays) / \(totalDays) 个训练日已完成" }
         return "让 Vela 根据恢复与偏好生成可调整计划"
+    }
+}
+
+// MARK: - Training Status Section
+
+/// 训练页的「恢复 / 负荷 / 压力」三指标状态条：始终展示、可点进详情，
+/// 并同时把 Body State、身体模型与健康档案接到训练决策现场。
+/// 三个指标与 `TrainingDecisionKernel` 使用同一 `DashboardSummary` 值，
+/// 不在视图层另算口径。
+struct TrainingStatusSection: View {
+    @EnvironmentObject private var dashboardVM: DashboardViewModel
+
+    let decision: DailyTrainingDecision?
+    let onDiscussWithCoach: () -> Void
+
+    private var dashboard: DashboardSummary { dashboardVM.dashboard }
+    private var bodyState: BodyState { dashboard.bodyState }
+    private var bodyModelState: BodyModelState? { dashboard.bodyModelState }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VelaRhythmSectionHeader(
+                eyebrow: "",
+                title: "训练状态",
+                actionTitle: "问 Vela",
+                action: onDiscussWithCoach
+            )
+
+            Text("\(readinessTitle(bodyState.readiness)) · \(statusDecisionTitle)")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(VelaTheme.rhythmDeep)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(VelaTheme.rhythmDeep.opacity(0.10), in: Capsule())
+
+            HStack(spacing: 10) {
+                metricCard(
+                    metric: .recovery,
+                    title: "恢复",
+                    value: dashboard.recovery.formattedScore,
+                    detail: recoveryDetail,
+                    context: "越高越好",
+                    color: VelaTheme.recoveryColor
+                )
+                metricCard(
+                    metric: .strain,
+                    title: "负荷",
+                    value: dashboard.strain.formattedScore,
+                    detail: strainDetail,
+                    context: dashboard.strain.hasData
+                        ? "目标 \(dashboard.strain.recommendedRange.lowerBound)-\(dashboard.strain.recommendedRange.upperBound)"
+                        : "越高负荷越大",
+                    color: VelaTheme.strainColor
+                )
+                metricCard(
+                    metric: .stress,
+                    title: "压力",
+                    value: dashboard.stress.formattedScore,
+                    detail: stressDetail,
+                    context: "越高越需关注",
+                    color: VelaTheme.stressColor
+                )
+            }
+
+            VStack(spacing: 0) {
+                NavigationLink(destination: BodyModelDetailView()) {
+                    contextRow(
+                        icon: "waveform.path.ecg",
+                        title: "身体模型",
+                        value: bodyModelMaturityTitle(bodyModelState?.maturity.overall),
+                        detail: bodyModelState?.insightLine() ?? "正在从健康数据、训练事实与手记中学习你的个人反应。"
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Rectangle()
+                    .fill(VelaTheme.rhythmMist)
+                    .frame(height: 0.75)
+                    .padding(.leading, 48)
+
+                NavigationLink(destination: AccountSettingsView()) {
+                    contextRow(
+                        icon: "heart.text.square",
+                        title: "生理特征档案",
+                        value: profileSummary,
+                        detail: "已参与评分与训练建议；手动值优先，Apple 健康兜底。"
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Rectangle()
+                    .fill(VelaTheme.rhythmMist)
+                    .frame(height: 0.75)
+                    .padding(.leading, 48)
+
+                NavigationLink(destination: UserWikiArchiveView()) {
+                    contextRow(
+                        icon: "books.vertical",
+                        title: "长期健康档案",
+                        value: bodyModelState == nil ? "待建立" : "已建档",
+                        detail: "目标、约束与稳定模式由 Vela 记忆并供 Coach 引用。"
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 15)
+            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 23, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 23, style: .continuous)
+                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+            }
+        }
+    }
+
+    private var profileSummary: String {
+        var values: [String] = []
+        if let age = dashboard.extendedMetrics.age { values.append("\(age) 岁") }
+        if let sex = dashboard.extendedMetrics.biologicalSex {
+            values.append(sex == "male" ? "男" : sex == "female" ? "女" : "性别其他")
+        }
+        if let height = dashboard.extendedMetrics.heightCm { values.append("\(Int(height)) cm") }
+        if let weight = dashboard.bodyMetrics.weightKilograms {
+            values.append(String(format: "%.1f kg", weight))
+        }
+        return values.isEmpty ? "等待 Apple 健康或手动填写" : values.joined(separator: " · ")
+    }
+
+    private var recoveryDetail: String {
+        guard dashboard.recovery.hasData else { return "等待 HRV / 静息心率基线" }
+        let thresholds = PersonalBaselineEngine.resolveThresholds()
+        let score = dashboard.recovery.score
+        if score < thresholds.recoveryRest { return "低于休息阈值，恢复优先" }
+        if score < thresholds.recoveryCaution { return "谨慎区间，训练保留余力" }
+        return "支持计划训练"
+    }
+
+    private var strainDetail: String {
+        guard dashboard.strain.hasData else { return "等待训练与活动负荷" }
+        switch dashboard.strain.targetStatus {
+        case .belowTarget: return "低于建议负荷区间"
+        case .withinTarget: return "位于建议负荷区间"
+        case .aboveTarget: return "高于区间，停止加量"
+        }
+    }
+
+    private var stressDetail: String {
+        guard dashboard.stress.hasData else { return "等待夜间生理信号" }
+        let score = dashboard.stress.stressIndex
+        if score > 75 { return "偏高，今天恢复优先" }
+        if score >= 45 { return "中等，减少额外刺激" }
+        return "处于可控区间"
+    }
+
+    private func metricCard(
+        metric: VelaMetricDetailView.MetricType,
+        title: String,
+        value: String,
+        detail: String,
+        context: String,
+        color: Color
+    ) -> some View {
+        NavigationLink(destination: VelaMetricDetailView(metric: metric)) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 5) {
+                    Text(title)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    Circle()
+                        .fill(color)
+                        .frame(width: 6, height: 6)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.75))
+                }
+                Text(value)
+                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                    .monospacedDigit()
+                Text(detail)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(color)
+                    .lineLimit(2)
+                    .frame(height: 26, alignment: .top)
+                Text(context)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.75))
+                    .lineLimit(1)
+            }
+            .padding(11)
+            .frame(maxWidth: .infinity, minHeight: 108, alignment: .topLeading)
+            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(color.opacity(0.22), lineWidth: 0.75)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.cardPress)
+        .accessibilityLabel("\(title) \(value)，\(detail)")
+    }
+
+    private func contextRow(icon: String, title: String, value: String, detail: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(VelaTheme.rhythmDeep)
+                .frame(width: 32, height: 32)
+                .background(VelaTheme.rhythmMist, in: Circle())
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 7) {
+                    Text(title)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                    Text(value)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                        .lineLimit(1)
+                }
+                Text(detail)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 8)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.7))
+        }
+        .padding(.vertical, 11)
+        .contentShape(Rectangle())
+    }
+
+    private func readinessTitle(_ readiness: BodyReadiness) -> String {
+        switch readiness {
+        case .ready: return "身体状态良好"
+        case .caution: return "身体状态谨慎"
+        case .recovering: return "身体状态恢复中"
+        case .unknown: return "身体状态待评估"
+        }
+    }
+
+    private var statusDecisionTitle: String {
+        if let decision { return decisionTitle(decision) }
+        switch dashboard.trainingDecision.kind {
+        case .train: return "今日按计划训练"
+        case .maintain: return "今日控制训练量"
+        case .downshift: return "今日降低训练要求"
+        case .rest, .recovery: return "今日恢复优先"
+        case .protectSleep: return "优先保护睡眠"
+        }
+    }
+
+    private func decisionTitle(_ decision: DailyTrainingDecision) -> String {
+        switch decision.decision {
+        case .keep: return "今日保持计划"
+        case .reduce: return "今日建议减量"
+        case .swap: return "今日建议换部位"
+        case .rest: return "今日恢复优先"
+        }
+    }
+
+    private func bodyModelMaturityTitle(_ level: BodyModelMaturityLevel?) -> String {
+        switch level {
+        case .seed: return "种子期"
+        case .learning: return "学习期"
+        case .stable: return "稳定期"
+        case nil: return "建立中"
+        }
+    }
+}
+
+// MARK: - Training History Portal
+
+struct TrainingHistoryPortal: View {
+    let workouts: [WorkoutSummary]
+
+    var body: some View {
+        HStack(spacing: 13) {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(VelaTheme.rhythmDeep)
+                .frame(width: 44, height: 44)
+                .background(VelaTheme.rhythmMist, in: Circle())
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(workouts.isEmpty ? "等待训练记录同步" : "最近 \(min(workouts.count, 3)) 次训练")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                Text(previewLine)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            Text("查看全部")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(VelaTheme.rhythmDeep)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+        }
+        .padding(14)
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 23, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 23, style: .continuous)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 23, style: .continuous))
+    }
+
+    private var previewLine: String {
+        workouts.prefix(3).map { workout in
+            let minutes = max(1, Int(workout.end.timeIntervalSince(workout.start) / 60))
+            return "\(workout.activityName) \(minutes) 分"
+        }.joined(separator: " · ")
+    }
+}
+
+/// 训练历史完整列表：训练事实统一入口，提供详情与 Coach 分析两个去向。
+struct TrainingHistoryView: View {
+    @EnvironmentObject private var dashboardVM: DashboardViewModel
+
+    let recentWorkouts: [WorkoutSummary]
+    let strengthWorkout: (WorkoutSummary) -> StrengthWorkoutRecord?
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 18) {
+                if recentWorkouts.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundStyle(VelaTheme.rhythmDeep)
+                        Text("暂无可读取的训练记录")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(VelaTheme.rhythmInk)
+                        Text("Apple 健康、训记与力量补录合并后，会出现在这里。")
+                            .font(.system(size: 13))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                } else {
+                    RecentWorkoutsSection(
+                        recentWorkouts: recentWorkouts,
+                        limit: nil,
+                        strengthWorkout: strengthWorkout
+                    )
+                }
+
+                Button {
+                    VelaAppState.shared.routeToCoach(question: historyCoachQuestion)
+                } label: {
+                    Label("让 Vela 分析训练历史", systemImage: "sparkles")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeepOn)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(VelaTheme.rhythmDeep, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
+                .buttonStyle(.cardPress)
+
+                Text("Coach 会读取同一份训练事实、恢复/负荷/压力评分与身体模型，不会另算口径。")
+                    .font(.system(size: 10))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
+            .padding(.horizontal, VelaTheme.pagePadding)
+            .padding(.top, 16)
+            .padding(.bottom, 44)
+        }
+        .scrollIndicators(.hidden)
+        .background(VelaTheme.rhythmCanvas)
+        .navigationTitle("训练历史")
+        .velaRhythmDetailChrome()
+    }
+
+    private var historyCoachQuestion: String {
+        let dashboard = dashboardVM.dashboard
+        let recovery = dashboard.recovery.hasData ? "\(Int(dashboard.recovery.score.rounded()))" : "--"
+        let strain = dashboard.strain.hasData ? "\(Int(dashboard.strain.score.rounded()))" : "--"
+        let stress = dashboard.stress.hasData ? "\(Int(dashboard.stress.stressIndex.rounded()))" : "--"
+        return "请结合我过去 30 天的训练历史（\(recentWorkouts.count) 次可读记录）、恢复 \(recovery)、负荷 \(strain)、压力 \(stress) 和身体模型，分析训练趋势并给出下一次训练建议。"
     }
 }

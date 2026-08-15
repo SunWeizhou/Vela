@@ -19,11 +19,16 @@ struct VelaTrainingView: View {
     }
 
     @State private var strengthWorkouts: [StrengthWorkoutRecord] = []
+    /// 页面展示/合并用的近 90 天训练事件。
     @State private var localWorkoutEvents: [WorkoutEventRecord] = []
+    /// 计划解析专用事件：覆盖活跃计划开始以来的全部完成记录。
+    @State private var planResolutionEvents: [WorkoutEventRecord] = []
     @State private var workoutTemplates: [WorkoutTemplateRecord] = []
     @State private var trainingPlans: [TrainingPlanRecord] = []
     @State private var operatingPlans: [DailyOperatingPlanRecord] = []
     @State private var trainingResponses: [TrainingResponseRecord] = []
+    /// 活跃计划未来训练日中待确认的调整提案（本机 BodyInterpreter / AI 练后边界共用）。
+    @State private var pendingPlanAdaptations: [TrainingPlanAdaptationRecord] = []
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
     private var activePlan: TrainingPlanRecord? {
@@ -38,7 +43,7 @@ struct VelaTrainingView: View {
         return TrainingScheduleResolver.resolve(
             plan: activePlan.dto,
             on: dashboardVM.selectedDate,
-            events: localWorkoutEvents.map { $0.dto }
+            events: planResolutionEvents.map { $0.dto }
         )
     }
     private var todayDecision: DailyTrainingDecision? {
@@ -70,13 +75,16 @@ struct VelaTrainingView: View {
     @State private var cachedWorkoutSummaries: [WorkoutSummary] = []
     @State private var cachedWorkoutSummariesAt: Date?
     @State private var cachedWorkoutSummariesAnchor: Date?
-    /// 随 loadDynamicData 一次性算好的个人纪录与肌群 7 天逐日组数
+    /// 随 loadDynamicData 一次性算好的近 7 天训练摘要、个人纪录与肌群逐日组数
     /// （此前每次 body 重渲染都 O(n²) 重算，刷新后主线程被拖住）。
+    @State private var memoStrengthSummary: RecentTrainingSummary?
     @State private var memoPersonalRecords: [PersonalRecord] = []
     @State private var memoMuscleDailySets: [String: [Int]] = [:]
     /// 三年历史基线（回填后可用；给 AI 规划上下文的长线参照）。
     @State private var memoLongTermRHRMedian: Double?
     @State private var memoLongTermHRVMedian: Double?
+    /// 长线基线按「浏览日 + 本地数据版本」懒加载，避免每次进入训练页都全表抓 1100 天快照。
+    @State private var longTermMediansCacheKey: String?
     @State private var showStrengthWorkoutLog = false
     @State private var selectedTemplateID: UUID?
     @State private var selectedSessionDraft: TrainingSessionDraft?
@@ -128,11 +136,55 @@ struct VelaTrainingView: View {
                         }
                     }
 
+                    TrainingStatusSection(
+                        decision: todayDecision,
+                        onDiscussWithCoach: {
+                            VelaAppState.shared.routeToCoach(question: trainingAnalysisQuestion)
+                        }
+                    )
+
                     TrainingMuscleLandscape(
                         summary: strengthSummary,
                         muscleDailySets: memoMuscleDailySets,
                         endingAt: dashboardVM.selectedDate
                     )
+
+                    VStack(alignment: .leading, spacing: 14) {
+                        VelaRhythmSectionHeader(
+                            eyebrow: "",
+                            title: "训练历史",
+                            actionTitle: recentWorkouts.isEmpty ? nil : "问 Vela",
+                            action: {
+                                VelaAppState.shared.routeToCoach(question: trainingAnalysisQuestion)
+                            }
+                        )
+
+                        NavigationLink {
+                            TrainingHistoryView(
+                                recentWorkouts: recentWorkouts,
+                                strengthWorkout: { workout in self.strengthWorkout(for: workout) }
+                            )
+                        } label: {
+                            TrainingHistoryPortal(workouts: recentWorkouts)
+                        }
+                        .buttonStyle(.cardPress)
+                    }
+
+                    VStack(alignment: .leading, spacing: 14) {
+                        VelaRhythmSectionHeader(
+                            eyebrow: "",
+                            title: "训练计划的建议",
+                            actionTitle: nil,
+                            action: {}
+                        )
+
+                        NavigationLink {
+                            VelaTrainingPlanView()
+                        } label: {
+                            TrainingProposalPortal(proposals: pendingPlanAdaptations)
+                        }
+                        .buttonStyle(.cardPress)
+                    }
 
                     VStack(alignment: .leading, spacing: 14) {
                         VelaRhythmSectionHeader(
@@ -151,7 +203,8 @@ struct VelaTrainingView: View {
                                 completedDays: activePlan?.days.filter(\.isCompleted).count ?? 0,
                                 totalDays: activePlan?.days.count ?? 0,
                                 days: activePlan?.days ?? [],
-                                todayTitle: todaySession?.title
+                                todayTitle: todaySession?.title,
+                                pendingProposalCount: pendingPlanAdaptations.count
                             )
                         }
                         .buttonStyle(.cardPress)
@@ -185,6 +238,7 @@ struct VelaTrainingView: View {
                                 strengthSummary: strengthSummary,
                                 exerciseProgressLines: exerciseProgressLines,
                                 personalRecords: personalRecords,
+                                metricRecords: recentMetricRecords,
                                 strengthWorkout: { workout in self.strengthWorkout(for: workout) }
                             )
                         } label: {
@@ -227,6 +281,7 @@ struct VelaTrainingView: View {
         }
         .onChange(of: dashboardVM.selectedDate) { _, _ in
             guard isActiveSurface else { return }
+            aiFutureDays = nil
             loadRealFitnessData()
             Task {
                 await syncRealFitnessData()
@@ -234,6 +289,7 @@ struct VelaTrainingView: View {
         }
         .onChange(of: appState.localDataRevision) { _, _ in
             guard isActiveSurface else { return }
+            aiFutureDays = nil
             loadRealFitnessData()
             Task {
                 await syncRealFitnessData()
@@ -383,7 +439,19 @@ struct VelaTrainingView: View {
 
 
     private var trainingAnalysisQuestion: String {
-        "请结合我过去 30 天的 Apple 健康训练记录、耗力趋势、恢复、睡眠和能量，分析训练状态并给出下一次训练建议。"
+        let dashboard = dashboardVM.dashboard
+        let recovery = dashboard.recovery.hasData ? "\(Int(dashboard.recovery.score.rounded()))" : "--"
+        let strain = dashboard.strain.hasData ? "\(Int(dashboard.strain.score.rounded()))" : "--"
+        let stress = dashboard.stress.hasData ? "\(Int(dashboard.stress.stressIndex.rounded()))" : "--"
+        let decisionText = todayDecision.map {
+            switch $0.decision {
+            case .keep: "保持"
+            case .reduce: "减量"
+            case .swap: "换部位"
+            case .rest: "恢复"
+            }
+        } ?? "待定"
+        return "请结合过去 30 天训练记录、恢复 \(recovery)、负荷 \(strain)、压力 \(stress)、局部肌群疲劳、身体模型与健康档案，复核本机今日决策（\(decisionText)）并给出下一次训练建议。"
     }
 
     /// 剂量环「为什么」的证据指标（真实评分，缺失时不伪造）。
@@ -436,6 +504,18 @@ struct VelaTrainingView: View {
         )
     }
 
+    /// 趋势卡使用的最近 30 天每日快照（恢复 / 负荷 / 压力同窗口、同源）。
+    /// 热力图加载时已经取到 42 天窗口，这里只做内存过滤，不额外查询 SwiftData。
+    private var recentMetricRecords: [DailyHealthSummaryRecord] {
+        let calendar = Calendar.current
+        let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: dashboardVM.selectedDate))
+            ?? dashboardVM.selectedDate
+        let start = calendar.date(byAdding: .day, value: -30, to: end) ?? end
+        return heatmapRecords
+            .filter { $0.date >= start && $0.date < end }
+            .sorted { $0.date < $1.date }
+    }
+
     /// 未来 2 天最佳训练部位（肌群疲劳 + 恢复状态 + 轮转交替；今天卡由今日决策驱动）。
     private var rotationFutureDays: [RotationDayRecommendation] {
         TrainingRotationRecommender.upcomingDays(
@@ -473,7 +553,10 @@ struct VelaTrainingView: View {
     /// 给 Coach 的未来两天规划上下文——联通专项批次 4：改走 AgentFactSnapshot
     /// 共享边界（ADR 0002），健康事实不再手工拼装。
     private var aiPlanContextText: String {
-        let input = AgentFactInputLoader().load(modelContext: modelContext, asOf: Date())
+        // 规划上下文必须锚定训练页正在浏览的日期：历史日请求不能把
+        // 真实今天之后的训练/手记/报告泄漏进 AI 上下文。
+        let asOf = dashboardVM.selectedDate
+        let input = AgentFactInputLoader().load(modelContext: modelContext, asOf: asOf)
         let dashboard = dashboardVM.dashboard
         let bodyState = input.bodyState(dashboard: dashboard)
         let snapshot = AIContextBuilder().buildFacts(
@@ -487,13 +570,14 @@ struct VelaTrainingView: View {
             strengthWorkouts: input.strengthWorkouts,
             trainingResponses: input.trainingResponses,
             onboardingState: input.onboardingState,
+            bodyModelState: dashboard.bodyModelState,
             bodyState: bodyState,
             trainingDecision: input.canonicalTrainingDecision(for: bodyState),
             dataCoverage: nil,
             profileAge: nil,
             dailyOperatingPlan: AIContextBuilder.compactDailyOperatingPlan(input.dailyOperatingPlan),
             activePlan: input.activePlan?.dto,
-            generatedAt: Date()
+            generatedAt: asOf
         ).snapshot
         let recentLines = recentTrainedDays.map { entry in
             let groups = entry.groups.isEmpty ? "休息" : entry.groups.joined(separator: "+")
@@ -522,7 +606,9 @@ struct VelaTrainingView: View {
             return
         }
         isPlanningWithAI = true
+        aiFutureDays = nil
         defer { isPlanningWithAI = false }
+        loadLongTermMediansIfNeeded()
         let apiKey = try? KeychainService.shared.read(account: "deepseek_api_key")
         do {
             let plan = try await TrainingPlanAdvisor.suggestNextDays(
@@ -537,9 +623,14 @@ struct VelaTrainingView: View {
     }
 
     private var recentStrengthSummary: RecentTrainingSummary {
+        if let memoStrengthSummary { return memoStrengthSummary }
         // Anchor to the browsed date, not real-world "today": otherwise browsing a
         // historical date on the Training page still shows real-today muscle volume,
         // PRs and fatigue.
+        return makeStrengthSummary()
+    }
+
+    private func makeStrengthSummary() -> RecentTrainingSummary {
         TrainingAnalyticsService().buildRecentSummary(
             workouts: strengthWorkouts.map { $0.dto },
             days: 7,
@@ -1037,12 +1128,6 @@ struct VelaTrainingView: View {
         )
         self.strengthWorkouts = (try? modelContext.fetch(strengthDesc)) ?? []
 
-        let eventsDesc = FetchDescriptor<WorkoutEventRecord>(
-            predicate: #Predicate<WorkoutEventRecord> { $0.startedAt >= startLimit && $0.startedAt <= endLimit },
-            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
-        )
-        self.localWorkoutEvents = (try? modelContext.fetch(eventsDesc)) ?? []
-
         let templatesDesc = FetchDescriptor<WorkoutTemplateRecord>(
             sortBy: [SortDescriptor(\.title, order: .forward)]
         )
@@ -1055,6 +1140,41 @@ struct VelaTrainingView: View {
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
         self.trainingPlans = (try? modelContext.fetch(plansDesc)) ?? []
+
+        // 训练事件窗口覆盖完整活跃计划：TrainingScheduleResolver 需要看到
+        // 计划开始以来的完成事件，否则长计划会被 90 天窗口截断。
+        let eventStartLimit = min(
+            startLimit,
+            self.trainingPlans.first(where: { $0.isActive })?.startDate ?? startLimit
+        )
+        let eventsDesc = FetchDescriptor<WorkoutEventRecord>(
+            predicate: #Predicate<WorkoutEventRecord> { $0.startedAt >= eventStartLimit && $0.startedAt <= endLimit },
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+        let planEvents = (try? modelContext.fetch(eventsDesc)) ?? []
+        self.planResolutionEvents = planEvents
+        // 展示层继续使用近 90 天窗口，避免热力图/最近记录被长计划全量事件撑大。
+        self.localWorkoutEvents = planEvents.filter {
+            $0.startedAt >= startLimit && $0.startedAt <= endLimit
+        }
+
+        // 训练计划的建议入口：把「计划与轮转」门户接到真实提案表。
+        // 同一提案区也承接练后 AI 边界建议；只有未来未完成训练日的 proposed 才计数。
+        if let activePlan = self.trainingPlans.first(where: { $0.isActive }) {
+            let upcomingDayIDs = Set(activePlan.days.filter { !$0.isCompleted }.map(\.id))
+            let activePlanID = activePlan.id
+            let proposedForPlan = (try? modelContext.fetch(FetchDescriptor<TrainingPlanAdaptationRecord>(
+                predicate: #Predicate<TrainingPlanAdaptationRecord> {
+                    $0.planId == activePlanID && $0.status == "proposed"
+                },
+                sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+            ))) ?? []
+            self.pendingPlanAdaptations = proposedForPlan.filter {
+                upcomingDayIDs.contains($0.dayId)
+            }
+        } else {
+            self.pendingPlanAdaptations = []
+        }
 
         let dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: refDate, calendar: calendar)
         var opPlansDesc = FetchDescriptor<DailyOperatingPlanRecord>(
@@ -1073,13 +1193,26 @@ struct VelaTrainingView: View {
         // 性能：个人纪录（需逐次传入历史先例）与肌群 7 天逐日组数只在数据加载后
         // 算一次并缓存，body 重渲染不再重复 O(n²) 扫描。
         let service = TrainingAnalyticsService()
+        self.memoStrengthSummary = service.buildRecentSummary(
+            workouts: self.strengthWorkouts.map { $0.dto },
+            days: 7,
+            endingAt: refDate
+        )
+
+        // PR 计算改为递增先例：排序后维护一个逐渐增长的 history 数组，
+        // 每个训练只与它之前的训练比较，整体从 O(n²) 降为 O(n)。
+        // 按 startedAt 分组处理，保证同一时刻的训练彼此不进入先例集合，
+        // 与旧实现的 `startedAt < current.startedAt` 语义逐位一致。
         let sortedStrength = self.strengthWorkouts.sorted { $0.startedAt < $1.startedAt }
+        let groupedByStart = Dictionary(grouping: sortedStrength, by: { $0.startedAt })
+        var priorDTOs: [StrengthWorkoutDTO] = []
         var allPRs: [PersonalRecord] = []
-        for workout in sortedStrength {
-            let prior = sortedStrength
-                .filter { $0.startedAt < workout.startedAt }
-                .map(\.dto)
-            allPRs.append(contentsOf: service.summarizeWorkout(workout.dto, history: prior).personalRecords)
+        for start in groupedByStart.keys.sorted() {
+            let batch = groupedByStart[start] ?? []
+            for workout in batch {
+                allPRs.append(contentsOf: service.summarizeWorkout(workout.dto, history: priorDTOs).personalRecords)
+            }
+            priorDTOs.append(contentsOf: batch.map(\.dto))
         }
         self.memoPersonalRecords = PersonalRecord.bestRecords(from: allPRs)
         self.memoMuscleDailySets = TrainingAnalyticsService.dailySetsByMuscle(
@@ -1089,10 +1222,18 @@ struct VelaTrainingView: View {
             calendar: calendar
         )
 
-        // 三年历史基线（不含近 90 天）：回填后用于 AI 规划上下文的长线参照。
+    }
+
+    /// 只在用户点击「Vela 规划」时计算三年长线中位数，并按浏览日缓存。
+    private func loadLongTermMediansIfNeeded() {
+        let refDate = dashboardVM.selectedDate
+        let dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: refDate)
+        let cacheKey = "\(dayIdentifier)-\(VelaAppState.shared.localDataRevision)"
+        guard longTermMediansCacheKey != cacheKey else { return }
+
         let allSummaries = (try? modelContext.fetch(FetchDescriptor<DailyHealthSummaryRecord>())) ?? []
-        let longTermCutoff = calendar.startOfDay(
-            for: calendar.date(byAdding: .day, value: -90, to: refDate) ?? refDate
+        let longTermCutoff = Calendar.current.startOfDay(
+            for: Calendar.current.date(byAdding: .day, value: -90, to: refDate) ?? refDate
         )
         let oldRHR = allSummaries
             .filter { $0.date < longTermCutoff }
@@ -1102,6 +1243,7 @@ struct VelaTrainingView: View {
             .compactMap(\.hrvAverage)
         self.memoLongTermRHRMedian = Self.median(of: oldRHR)
         self.memoLongTermHRVMedian = Self.median(of: oldHRV)
+        self.longTermMediansCacheKey = cacheKey
     }
 
     private static func median(of values: [Double]) -> Double? {
@@ -1154,6 +1296,8 @@ private struct TrainingDeepAnalysisView: View {
     let strengthSummary: RecentTrainingSummary
     let exerciseProgressLines: [String]
     let personalRecords: [PersonalRecord]
+    /// 最近 30 天每日快照：恢复 / 负荷 / 压力趋势共用同一窗口与同一数据源。
+    let metricRecords: [DailyHealthSummaryRecord]
     let strengthWorkout: (WorkoutSummary) -> StrengthWorkoutRecord?
 
     var body: some View {
@@ -1182,6 +1326,8 @@ private struct TrainingDeepAnalysisView: View {
                     previousMonthActiveTiers: previousMonthActiveTiers,
                     currentMonthActiveTiers: currentMonthActiveTiers
                 )
+
+                RecoveryLoadStressTrendsCard(records: metricRecords)
 
                 CardioStatusCard(snapshot: cardioSnapshot)
 

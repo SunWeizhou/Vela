@@ -1406,10 +1406,7 @@ extension TrainingAnalyticsService {
         calendar: Calendar = .current
     ) -> [String: [Int]] {
         let endDay = calendar.startOfDay(for: endingAt)
-        guard days > 0,
-              let startDay = calendar.date(byAdding: .day, value: -(days - 1), to: endDay) else {
-            return [:]
-        }
+        guard days > 0 else { return [:] }
 
         var buckets: [Date: [String: Int]] = [:]
         for offset in 0..<days {

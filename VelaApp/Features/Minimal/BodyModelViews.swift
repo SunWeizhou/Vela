@@ -510,12 +510,13 @@ struct BodyModelDetailView: View {
         )) ?? []
  
         let repo = HealthSnapshotRepository(modelContext: modelContext)
-        if let snaps = try? repo.fetchSnapshots(days: 1100) {
+        if let snaps = try? repo.fetchSnapshots(days: 1100, endingAt: dashboard.date) {
             self.healthSnapshots = snaps
             let engine = JournalCorrelationEngine()
             // 手记行为配对 + 三年生理行为配对（训练日/高活动日/短睡眠夜），
             // Impact Matrix 回填后立即有内容，不再只依赖手记。
-            let journalInsights = engine.calculateInsights(journalEntries: self.journalEntries, snapshots: snaps)
+            let journalsThroughDate = self.journalEntries.filter { $0.createdAt <= dashboard.date }
+            let journalInsights = engine.calculateInsights(journalEntries: journalsThroughDate, snapshots: snaps)
             let physiologicalInsights = engine.physiologicalInsights(snapshots: snaps)
             self.insights = journalInsights + physiologicalInsights
         }

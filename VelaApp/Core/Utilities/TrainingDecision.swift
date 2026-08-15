@@ -41,6 +41,9 @@ struct TrainingDecisionInput {
     var activePlan: TrainingPlanDTO?
     var trainingResponses: [TrainingResponseDTO]
     var userConstraints: [String]
+    /// 已落库的训练事件：用于解析「今天实际应执行的计划日」。
+    /// 与训练页 `TrainingScheduleResolver` 同源，避免遗漏已完成/逾期日。
+    var workoutEvents: [WorkoutEventDTO]
     /// 三年训练量长线统计（Layer 2：本月训练量三年百分位信号；nil = 不启用）。
     var longTermTrainingVolume: TrainingVolumeLongTerm?
 
@@ -49,12 +52,14 @@ struct TrainingDecisionInput {
         activePlan: TrainingPlanDTO? = nil,
         trainingResponses: [TrainingResponseDTO] = [],
         userConstraints: [String] = [],
+        workoutEvents: [WorkoutEventDTO] = [],
         longTermTrainingVolume: TrainingVolumeLongTerm? = nil
     ) {
         self.bodyState = bodyState
         self.activePlan = activePlan
         self.trainingResponses = trainingResponses
         self.userConstraints = userConstraints
+        self.workoutEvents = workoutEvents
         self.longTermTrainingVolume = longTermTrainingVolume
     }
 }
@@ -64,14 +69,21 @@ struct TrainingDecisionKernel: Sendable {
         let state = input.bodyState
         let activePlan = input.activePlan
         
-        // 1. Resolve today's scheduled TrainingDay using bodyState date
+        // 1. Resolve today's scheduled TrainingDay with the same resolver used by
+        // the Training page. A simplistic weekday lookup missed completed days
+        // linked through WorkoutEventRecord and overdue-day carry-over.
         let calendar = Calendar.current
-        let weekday = calendar.component(.weekday, from: state.date)
-        let dayNumber = weekday == 1 ? 7 : weekday - 1
-        
-        let todayScheduledDay = activePlan?.days.first(where: {
-            !$0.isCompleted && $0.dayNumber == dayNumber
-        })
+        let todayScheduledDay: TrainingDay?
+        if let activePlan {
+            todayScheduledDay = TrainingScheduleResolver.resolve(
+                plan: activePlan,
+                on: state.date,
+                events: input.workoutEvents,
+                calendar: calendar
+            )
+        } else {
+            todayScheduledDay = nil
+        }
         
         // 2. Identify target muscle groups from planned exercises
         var targetMuscles = Set<String>()

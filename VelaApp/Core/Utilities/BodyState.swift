@@ -247,6 +247,15 @@ struct BodyStateKernel: Sendable {
             }
             .joined(separator: "|")
         let eventHash = recentEvents.map(\.id.uuidString).sorted().joined(separator: "|")
+        // 计划完成事件可能来自历史导入（startedAt 不在 48h 内），
+        // 但它会改变 TrainingScheduleResolver 的解析结果，因此也必须进 hash。
+        let scheduleEventHash = input.workoutEvents
+            .compactMap { event -> String? in
+                guard let dayID = event.linkedTrainingPlanDayId else { return nil }
+                return "\(dayID.uuidString):\(event.id.uuidString)"
+            }
+            .sorted()
+            .joined(separator: "|")
         let nutritionHash = todayFood
             .map { food in "\(food.id.uuidString):\(food.totalCalories):\(food.proteinGrams)" }
             .sorted()
@@ -262,9 +271,19 @@ struct BodyStateKernel: Sendable {
             "\(dashboard.recovery.score)",
             "\(dashboard.sleepScore.score)",
             "\(dashboard.strain.score)",
+            // TrainingDecisionKernel 还会读取压力/能量/TSB/阈值；这些值变化时
+            // bodyStateHash 必须变化，否则已持久化计划会错误复用旧决策。
+            "\(dashboard.stress.score)",
+            "\(dashboard.energy.score)",
+            dashboard.energy.metrics["tsb"].map { String(format: "%.1f", $0) } ?? "no-tsb",
+            "\(thresholds.recoveryRest)",
+            "\(thresholds.recoveryCaution)",
+            "\(thresholds.sleepRest)",
+            "\(thresholds.sleepCaution)",
             input.activeStatus,
             input.activePlan?.id.uuidString ?? "no-plan",
             eventHash,
+            scheduleEventHash,
             nutritionHash,
             journalHash,
             fatigueHash,
@@ -311,7 +330,7 @@ struct BodyStateKernel: Sendable {
                 source: "SleepScoreEngine \(dashboard.sleepScore.algorithmVersion)"
             ))
         }
-        if dashboard.stress.hasData, dashboard.stress.score >= 75 {
+        if dashboard.stress.hasData, dashboard.stress.score > 75 {
             drivers.append(.init(
                 id: "stress",
                 kind: .stress,
@@ -319,6 +338,20 @@ struct BodyStateKernel: Sendable {
                 detail: dashboard.stress.reasons.first ?? "生理压力偏高。",
                 impact: -0.6,
                 source: "StressIndexEngine \(dashboard.stress.algorithmVersion)"
+            ))
+        }
+        // 负荷是训练决策的正式输入之一；超过个人目标上限时，Body State
+        // 证据层也必须出现，避免「决策已减量、证据只字不提」。
+        if dashboard.strain.hasData,
+           dashboard.strain.score > Double(dashboard.strain.recommendedRange.upperBound) {
+            let range = dashboard.strain.recommendedRange
+            drivers.append(.init(
+                id: "strain",
+                kind: .strain,
+                title: "今日负荷",
+                detail: "负荷 \(Int(dashboard.strain.score.rounded())) 已高于个人目标上限 \(range.upperBound)。",
+                impact: -0.5,
+                source: "StrainScoreEngine \(dashboard.strain.algorithmVersion)"
             ))
         }
         return drivers
@@ -331,11 +364,15 @@ struct BodyStateKernel: Sendable {
     ) -> DataConfidence {
         guard dashboard.source != .empty, freshness != .missing else { return .low }
         if livedConflict { return .low }
-        let values = [
+        var values = [
             dashboard.recovery.confidence,
             dashboard.sleepScore.confidence,
             dashboard.strain.confidence
         ]
+        // 压力与能量也是 TrainingDecisionKernel 的正式输入；任一低置信度时，
+        // 整体 Body State 置信度不能继续显示「高」。
+        if dashboard.stress.hasData { values.append(dashboard.stress.confidence) }
+        if dashboard.energy.hasData { values.append(dashboard.energy.confidence) }
         if freshness == .stale || values.contains(.low) { return .low }
         if values.allSatisfy({ $0 == .high }) { return .high }
         return .medium

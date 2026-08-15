@@ -741,6 +741,8 @@ struct PersonalRecordsCard: View {
 
 struct RecentWorkoutsSection: View {
     let recentWorkouts: [WorkoutSummary]
+    /// nil = 显示全部；默认 12 条用于深入分析入口。
+    var limit: Int? = 12
     /// Resolves a HealthKit/merged summary back to a locally-logged strength
     /// workout record, if any, so strength workouts open the rich detail view.
     var strengthWorkout: (WorkoutSummary) -> StrengthWorkoutRecord?
@@ -765,7 +767,7 @@ struct RecentWorkoutsSection: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
             } else {
-                ForEach(recentWorkouts.prefix(12)) { workout in
+                ForEach(recentWorkouts.prefix(limit ?? recentWorkouts.count)) { workout in
                     // Strength workouts that were logged locally open the rich
                     // strength detail (PR trophies, muscle distribution, edit/delete).
                     // Previously ALL workouts opened the generic HealthKit detail, so
@@ -1231,5 +1233,154 @@ struct YearlyTrainingCard: View {
         .padding(.vertical, 10)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(year.year) 年，训练 \(year.trainingDays) 天，共 \(year.workoutCount) 次，\(Int(year.totalMinutes / 60)) 小时")
+    }
+}
+
+// MARK: - Recovery / Strain / Stress Trend Card
+
+/// 深入分析页的恢复、负荷、压力 30 天趋势卡。
+/// 三个指标使用同一批 `DailyHealthSummaryRecord`，不重算、不换窗；
+/// 点击任一行进入对应指标详情（那里还有更长窗口与证据分解）。
+struct RecoveryLoadStressTrendsCard: View {
+    let records: [DailyHealthSummaryRecord]
+
+    private struct TrendSeries: Identifiable {
+        let id: String
+        let title: String
+        let metric: VelaMetricDetailView.MetricType
+        let color: Color
+        let values: [Double]
+        let dates: [Date]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            HStack {
+                Label("恢复 · 负荷 · 压力趋势", systemImage: "chart.xyaxis.line")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                Spacer()
+                Text("最近 30 天")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            }
+
+            VStack(spacing: 0) {
+                ForEach(Array(series.enumerated()), id: \.element.id) { index, item in
+                    NavigationLink(destination: VelaMetricDetailView(metric: item.metric)) {
+                        trendRow(item)
+                    }
+                    .buttonStyle(.plain)
+
+                    if index < series.count - 1 {
+                        Rectangle()
+                            .fill(VelaTheme.rhythmMist)
+                            .frame(height: 0.75)
+                            .padding(.leading, 12)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
+    }
+
+    private var series: [TrendSeries] {
+        [
+            TrendSeries(
+                id: "recovery",
+                title: "恢复",
+                metric: .recovery,
+                color: VelaTheme.recoveryColor,
+                values: metricValues(\.recoveryScore),
+                dates: metricDates(\.recoveryScore)
+            ),
+            TrendSeries(
+                id: "strain",
+                title: "负荷",
+                metric: .strain,
+                color: VelaTheme.strainColor,
+                values: metricValues(\.strainScore),
+                dates: metricDates(\.strainScore)
+            ),
+            TrendSeries(
+                id: "stress",
+                title: "压力",
+                metric: .stress,
+                color: VelaTheme.stressColor,
+                values: metricValues(\.stressIndex),
+                dates: metricDates(\.stressIndex)
+            )
+        ]
+    }
+
+    private func trendRow(_ item: TrendSeries) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(item.title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                    Text(latestText(item.values))
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundStyle(item.color)
+                        .monospacedDigit()
+                }
+                Text(item.values.isEmpty ? "暂无评分记录" : "\(item.values.count) 天有记录")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            }
+
+            Spacer(minLength: 8)
+
+            if item.values.count > 1 {
+                AreaChartCurveView(
+                    points: normalizedPoints(item.values),
+                    values: item.values,
+                    dates: item.dates
+                )
+                .frame(width: 148, height: 40)
+            } else {
+                Capsule()
+                    .fill(VelaTheme.rhythmMist)
+                    .frame(width: 148, height: 1.5)
+            }
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.7))
+        }
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(item.title) 趋势，最新 \(latestText(item.values))，\(item.values.count) 天有记录")
+    }
+
+    private func metricValues(_ keyPath: KeyPath<DailyHealthSummaryRecord, Double?>) -> [Double] {
+        records.compactMap { $0[keyPath: keyPath] }
+    }
+
+    private func metricDates(_ keyPath: KeyPath<DailyHealthSummaryRecord, Double?>) -> [Date] {
+        records.compactMap { record in
+            record[keyPath: keyPath] == nil ? nil : record.date
+        }
+    }
+
+    private func normalizedPoints(_ values: [Double]) -> [CGPoint] {
+        guard values.count > 1 else { return [] }
+        let minValue = values.min() ?? 0
+        let maxValue = values.max() ?? 0
+        let span = max(maxValue - minValue, 1)
+        return values.enumerated().map { index, value in
+            let x = Double(index) / Double(values.count - 1)
+            let y = 0.86 - (value - minValue) / span * 0.70
+            return CGPoint(x: x, y: y)
+        }
+    }
+
+    private func latestText(_ values: [Double]) -> String {
+        guard let latest = values.last else { return "--" }
+        return "\(Int(latest.rounded()))"
     }
 }

@@ -308,7 +308,7 @@ struct VelaApp: App {
 
 /// 前台通知展示委托：无此 delegate 时，立即投递的本地通知在前台被系统默认抑制。
 final class VelaNotificationDelegate: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
-    nonisolated(unsafe) static let shared = VelaNotificationDelegate()
+    static let shared = VelaNotificationDelegate()
 
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,

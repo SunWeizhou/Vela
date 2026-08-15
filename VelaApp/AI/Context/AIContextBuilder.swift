@@ -941,6 +941,7 @@ struct AgentFactInputLoader {
         let historyStart = asOf.addingTimeInterval(-35 * 86_400)
 
         var journalDescriptor = FetchDescriptor<JournalEntryRecord>(
+            predicate: #Predicate<JournalEntryRecord> { $0.createdAt <= asOf },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
         journalDescriptor.fetchLimit = 12
@@ -950,29 +951,31 @@ struct AgentFactInputLoader {
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         ))) ?? []
         // A4：历史报告上限路由到 ContextBudget（此前硬编码 6）。
+        // 浏览历史日时同样只允许读取 asOf 之前的报告，避免未来信息泄漏进历史快照。
         let reports = Array(allReports.lazy
-            .filter { $0.type != "coach_prompt" && $0.type != "coach_thread" }
+            .filter { $0.createdAt <= asOf && $0.type != "coach_prompt" && $0.type != "coach_thread" }
             .prefix(ContextBudget().maxHistoricalReports))
 
         let foods = (try? modelContext.fetch(FetchDescriptor<FoodLogRecord>(
-            predicate: #Predicate<FoodLogRecord> { $0.createdAt >= historyStart },
+            predicate: #Predicate<FoodLogRecord> { $0.createdAt >= historyStart && $0.createdAt <= asOf },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         ))) ?? []
         let workoutEvents = (try? modelContext.fetch(FetchDescriptor<WorkoutEventRecord>(
-            predicate: #Predicate<WorkoutEventRecord> { $0.startedAt >= historyStart },
+            predicate: #Predicate<WorkoutEventRecord> { $0.startedAt >= historyStart && $0.startedAt <= asOf },
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
         ))) ?? []
         let strength = (try? modelContext.fetch(FetchDescriptor<StrengthWorkoutRecord>(
-            predicate: #Predicate<StrengthWorkoutRecord> { $0.startedAt >= historyStart },
+            predicate: #Predicate<StrengthWorkoutRecord> { $0.startedAt >= historyStart && $0.startedAt <= asOf },
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
         ))) ?? []
         let responses = (try? modelContext.fetch(FetchDescriptor<TrainingResponseRecord>(
-            predicate: #Predicate<TrainingResponseRecord> { $0.date >= historyStart },
+            predicate: #Predicate<TrainingResponseRecord> { $0.date >= historyStart && $0.date <= asOf },
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         ))) ?? []
         // A8 修复：每日快照只取最新一条（此前抓 35 天只用 .first，白费一次大 fetch）。
+        // 这里再加 asOf 上界：浏览历史日时 body state 应使用该日快照，而不是真实今天。
         var summaryDescriptor = FetchDescriptor<DailyHealthSummaryRecord>(
-            predicate: #Predicate<DailyHealthSummaryRecord> { $0.date >= historyStart },
+            predicate: #Predicate<DailyHealthSummaryRecord> { $0.date >= historyStart && $0.date <= asOf },
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
         summaryDescriptor.fetchLimit = 1
@@ -993,7 +996,7 @@ struct AgentFactInputLoader {
             asOf: asOf,
             journalRecords: journals,
             reportRecords: reports,
-            weeklyTrends: (try? HealthSnapshotRepository(modelContext: modelContext).buildWeeklyTrendSummary()) ?? [:],
+            weeklyTrends: (try? HealthSnapshotRepository(modelContext: modelContext).buildWeeklyTrendSummary(referenceDate: asOf)) ?? [:],
             foodLogs: foods,
             workoutEvents: workoutEvents,
             strengthWorkouts: strength,
@@ -1188,7 +1191,7 @@ public struct FoodVisionIntelligenceEngine: Sendable {
         let lower = text.lowercased()
         var protein = 25
         var carbs = 45
-        var fat = 15
+        let fat = 15
         var fiber = 6
         var gl = "medium"
         var tag = "balanced"
@@ -1256,6 +1259,21 @@ enum AgentFactAdapters {
         if let weekly = snapshot.userWiki["body_model.weekly_training_days"], !weekly.isEmpty { profileParts.append("每周 \(weekly) 次") }
         let profileLine = profileParts.isEmpty ? "暂无" : profileParts.joined(separator: "，")
 
+        var bodyModelParts: [String] = []
+        if let maturity = snapshot.userWiki["body_model.maturity"], !maturity.isEmpty {
+            let maturityLabel = maturity == "stable" ? "稳定期" : (maturity == "learning" ? "学习期" : "种子期")
+            bodyModelParts.append("成熟度 \(maturityLabel)")
+        }
+        if let claims = snapshot.userWiki["body_model.claims"], !claims.isEmpty {
+            bodyModelParts.append("断言 \(claims)")
+        }
+        if let rules = snapshot.userWiki["body_model.coach_rules"], !rules.isEmpty {
+            bodyModelParts.append("教练规则 \(rules)")
+        }
+        let bodyModelLine = bodyModelParts.isEmpty
+            ? "暂无"
+            : bodyModelParts.joined(separator: "；")
+
         func scoreText(_ value: MetricValue<Double>, unavailable: String = "暂无") -> String {
             value.value.map { "\(Int($0.rounded()))" } ?? unavailable
         }
@@ -1276,6 +1294,7 @@ enum AgentFactAdapters {
             : "三年历史基线(不含近90天):\n\(longTermParts.joined(separator: "，"))\n"
         return """
         生理档案: \(profileLine)
+        身体模型: \(bodyModelLine)
         恢复评分: \(scoreText(snapshot.recovery.score))
         睡眠评分: \(scoreText(snapshot.sleep.score))
         压力指数: \(scoreText(snapshot.stress.stressIndex))

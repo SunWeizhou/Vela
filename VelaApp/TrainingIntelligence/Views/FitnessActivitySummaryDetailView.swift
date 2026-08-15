@@ -292,7 +292,7 @@ struct FitnessActivitySummaryDetailView: View {
     private var guidanceCard: some View {
         Button {
             VelaAppState.shared.routeToCoach(
-                question: "请结合我过去 30 天的活动摘要、耗力趋势、恢复和睡眠，给出下一次训练的明确建议。"
+                question: "请结合我过去 30 天的活动摘要、耗力趋势、恢复、负荷、压力和身体模型，给出下一次训练的明确建议。"
             )
         } label: {
             VelaGlassCard {
@@ -306,7 +306,7 @@ struct FitnessActivitySummaryDetailView: View {
                         Text("让 Coach 分析活动趋势")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(VelaTheme.fg)
-                        Text("结合恢复、睡眠和能量给出下一步建议")
+                        Text("结合恢复、负荷、压力和身体模型给出下一步建议")
                             .font(.system(size: 12))
                             .foregroundStyle(VelaTheme.fg2)
                     }

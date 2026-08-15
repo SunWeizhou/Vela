@@ -2054,4 +2054,73 @@ final class ScoringEngineTests: XCTestCase {
             ContextBudget.estimatedTokenCount(ascii)
         )
     }
+
+    // MARK: - 计划日解析与训练页同源
+
+    func testTrainingDecisionKernelSkipsPlanDayCompletedThroughWorkoutEvent() {
+        let calendar = Calendar.current
+        let now = Date()
+        let todayNumber = calendar.component(.weekday, from: now) == 1
+            ? 7
+            : calendar.component(.weekday, from: now) - 1
+        let tomorrowNumber = todayNumber == 7 ? 1 : todayNumber + 1
+
+        let todayDay = TrainingDay(
+            id: UUID(),
+            weekNumber: 1,
+            dayNumber: todayNumber,
+            title: "今天已完成",
+            description: "",
+            focus: "strength",
+            durationMinutes: 45,
+            intensity: "moderate",
+            isCompleted: false
+        )
+        let tomorrowDay = TrainingDay(
+            id: UUID(),
+            weekNumber: tomorrowNumber == 1 ? 2 : 1,
+            dayNumber: tomorrowNumber,
+            title: "明天待执行",
+            description: "",
+            focus: "strength",
+            durationMinutes: 45,
+            intensity: "moderate",
+            isCompleted: false
+        )
+        let plan = TrainingPlanRecord(
+            title: "Schedule Test",
+            goalDescription: "",
+            startDate: now,
+            isActive: true,
+            days: [todayDay, tomorrowDay]
+        )
+        let completedEvent = WorkoutEventRecord(
+            source: "manual",
+            startedAt: now.addingTimeInterval(-3600),
+            endedAt: now,
+            activityType: "Strength",
+            linkedTrainingPlanDayId: todayDay.id
+        )
+
+        var dashboard = DashboardSummary.preview(date: now)
+        dashboard.recovery.value = 85
+        dashboard.sleepScore.value = 85
+        dashboard.strain.value = 40
+        dashboard.stress.value = 30
+        dashboard.energy.value = 80
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: dashboard,
+            activeStatus: "active",
+            generatedAt: now
+        ))
+
+        let decision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
+            bodyState: bodyState,
+            activePlan: plan.dto,
+            workoutEvents: [completedEvent.dto]
+        ))
+
+        XCTAssertEqual(decision.targetSessionTitle, "明天待执行")
+        XCTAssertNotEqual(decision.targetSessionTitle, "今天已完成")
+    }
 }

@@ -212,6 +212,24 @@ final class DashboardViewModel: ObservableObject {
     }
 
     func refresh(modelContext: ModelContext? = nil, force: Bool = false) async {
+        // F9/TTL：同一浏览日内的非强制刷新受 15 分钟节流保护。
+        // 空 dashboard 在第一次刷新后不应被第二次 hydrate 再次推进 lastUpdated；
+        // 其他情况仍先尝试 hydrate 缓存，再由节流挡住 full fetch。
+        let isFreshAttempt: Bool = {
+            guard !force,
+                  let lastRefreshAttemptDate,
+                  Calendar.current.isDate(lastRefreshAttemptDate, inSameDayAs: selectedDate) else {
+                return false
+            }
+            return !HealthCachePolicy.dashboard.isStale(lastUpdatedAt: lastRefreshAttemptAt)
+        }()
+
+        if isFreshAttempt,
+           dashboard.source == .empty,
+           Calendar.current.isDate(dashboard.date, inSameDayAs: selectedDate) {
+            return
+        }
+
         if let modelContext,
            dashboard.source == .empty || !Calendar.current.isDate(dashboard.date, inSameDayAs: selectedDate) {
             await hydrateFromCache(modelContext: modelContext)
@@ -227,10 +245,7 @@ final class DashboardViewModel: ObservableObject {
             return
         }
 
-        if !force,
-           let lastRefreshAttemptDate,
-           Calendar.current.isDate(lastRefreshAttemptDate, inSameDayAs: selectedDate),
-           !HealthCachePolicy.dashboard.isStale(lastUpdatedAt: lastRefreshAttemptAt) {
+        if isFreshAttempt {
             return
         }
 
@@ -500,14 +515,27 @@ final class DashboardViewModel: ObservableObject {
         )
         let coachArtifacts = (try? modelContext.fetch(artifactsDesc)) ?? []
 
+        // 活跃计划必须用 isActive 谓词直取，不能从「最近更新 10 条」里猜；
+        // 否则较早更新的活跃计划会让今日决策/手表推送/提案生成全部漏计划。
+        let activePlan = (try? modelContext.fetch(FetchDescriptor<TrainingPlanRecord>(
+            predicate: #Predicate<TrainingPlanRecord> { $0.isActive },
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )))?.first
+
         let strengthDesc = FetchDescriptor<StrengthWorkoutRecord>(
             predicate: #Predicate<StrengthWorkoutRecord> { $0.startedAt >= trainingStartLimit && $0.startedAt <= endLimit },
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
         )
         let strengthWorkouts = (try? modelContext.fetch(strengthDesc)) ?? []
 
+        // 训练事件窗口覆盖完整活跃计划；TrainingScheduleResolver 依赖历史完成事件，
+        // 不能被 30 天训练窗口截断。
+        let eventStartLimit = min(
+            trainingStartLimit,
+            activePlan?.startDate ?? trainingStartLimit
+        )
         let eventsDesc = FetchDescriptor<WorkoutEventRecord>(
-            predicate: #Predicate<WorkoutEventRecord> { $0.startedAt >= trainingStartLimit && $0.startedAt <= endLimit },
+            predicate: #Predicate<WorkoutEventRecord> { $0.startedAt >= eventStartLimit && $0.startedAt <= endLimit },
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
         )
         let workoutEvents = (try? modelContext.fetch(eventsDesc)) ?? []
@@ -536,12 +564,6 @@ final class DashboardViewModel: ObservableObject {
         )
         let dailySummaries = (try? modelContext.fetch(summaryDesc)) ?? []
 
-        var plansDesc = FetchDescriptor<TrainingPlanRecord>(
-            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-        )
-        plansDesc.fetchLimit = 10
-        let trainingPlans = (try? modelContext.fetch(plansDesc)) ?? []
-
         let dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: refDate, calendar: calendar)
         var opPlansDesc = FetchDescriptor<DailyOperatingPlanRecord>(
             predicate: #Predicate<DailyOperatingPlanRecord> { $0.dayIdentifier == dayIdentifier },
@@ -550,7 +572,6 @@ final class DashboardViewModel: ObservableObject {
         opPlansDesc.fetchLimit = 1
         let operatingPlans = (try? modelContext.fetch(opPlansDesc)) ?? []
 
-        let activePlan = trainingPlans.first(where: \.isActive)
         let persistedPlan = operatingPlans.first
         self.persistedOperatingPlan = persistedPlan
 
@@ -686,7 +707,7 @@ enum SecondaryDataAssembler {
             journalEntries: journalEntries,
             activePlan: activePlan,
             activeStatus: ActiveStatusSettings.resolveCurrentStatus(),
-            generatedAt: Date()
+            generatedAt: refDate
         ))
 
         // 3. Build Training Decision
@@ -705,6 +726,7 @@ enum SecondaryDataAssembler {
                 bodyState: bodyState,
                 activePlan: activePlan,
                 trainingResponses: trainingResponses,
+                workoutEvents: workoutEvents,
                 longTermTrainingVolume: dashboard.longTermBaselines?.trainingVolume
             ))
         }
@@ -738,7 +760,7 @@ enum SecondaryDataAssembler {
             from: updatedDashboard,
             recentStrengthSummary: recentStrengthSummary,
             coachArtifact: latestTodayArtifact,
-            generatedAt: Date(),
+            generatedAt: refDate,
             confirmedObservations: confirmedObservations,
             trainingDecision: dailyTrainingDecision
         )
@@ -747,6 +769,7 @@ enum SecondaryDataAssembler {
             bodyState: bodyState,
             trainingDecision: dailyTrainingDecision,
             readiness: todayCommandState.readinessDecision.decision,
+            generatedAt: refDate,
             nutrition: TodayExperienceNutrition(
                 calories: cals,
                 calorieTarget: dailyTarget,

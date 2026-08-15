@@ -128,6 +128,11 @@ struct AdaptiveTrainingManager {
         guard let dayIndex = plan.days.firstIndex(where: { $0.id == record.dayId }) else { return false }
 
         switch record.adjustment {
+        case "keep":
+            // AI 练后边界常以 keep 表达「维持计划但遵守容量/RPE 边界」。
+            // 确认后无需改计划结构，但必须返回 true 让提案状态机走到 accepted，
+            // 否则 keep 提案永远停在待确认列表。
+            return true
         case "rest":
             plan.days[dayIndex] = TrainingDay(
                 id: plan.days[dayIndex].id,
@@ -314,32 +319,53 @@ struct WorkoutAdaptationService: Sendable {
                         apiKey: aiKey,
                         factsText: facts
                     )
+                    let runID = "ai-post-workout-\(completedWorkoutID?.uuidString ?? "unknown")"
+                    let existingArtifacts = (try? ctx.fetch(FetchDescriptor<CoachArtifactRecord>(
+                        predicate: #Predicate<CoachArtifactRecord> { $0.sourceContextHash == runID }
+                    ))) ?? []
+                    let existingProposals = (try? ctx.fetch(FetchDescriptor<TrainingPlanAdaptationRecord>())) ?? []
+                    let alreadyHasArtifact = existingArtifacts.contains { $0.sourceContextHash == runID }
+                    let alreadyHasProposal = existingProposals.contains { $0.agentRunId == runID }
+
                     // ① 观察性复盘 → CoachArtifactRecord（AI 标注）。
-                    let artifact = CoachArtifact(
-                        type: .postWorkoutReview,
-                        title: "AI 练后复盘",
-                        summary: boundary.observation,
-                        createdAt: Date(),
-                        relatedDate: completedAt,
-                        decision: nil,
-                        confidence: 0.6,
-                        reasons: [
-                            CoachArtifactReason(
-                                signal: "ai_review",
-                                value: boundary.rationale,
-                                explanation: "AI 复盘基于本机训练事实；训练事实为唯一真值，边界建议需用户确认。"
-                            )
-                        ],
-                        actions: [],
-                        sourceContextHash: "ai-post-workout-\(completedWorkoutID?.uuidString ?? "unknown")",
-                        followUpQuestion: nil
-                    )
-                    ctx.insert(CoachArtifactRecord(artifact: artifact))
+                    if !alreadyHasArtifact {
+                        let artifact = CoachArtifact(
+                            type: .postWorkoutReview,
+                            title: "AI 练后复盘",
+                            summary: boundary.observation,
+                            createdAt: Date(),
+                            relatedDate: completedAt,
+                            decision: nil,
+                            confidence: 0.6,
+                            reasons: [
+                                CoachArtifactReason(
+                                    signal: "ai_review",
+                                    value: boundary.rationale,
+                                    explanation: "AI 复盘基于本机训练事实；训练事实为唯一真值，边界建议需用户确认。"
+                                )
+                            ],
+                            actions: [],
+                            sourceContextHash: runID,
+                            followUpQuestion: nil
+                        )
+                        ctx.insert(CoachArtifactRecord(artifact: artifact))
+                    }
                     // ② 下次训练边界建议 → 提案状态机（proposed，用户确认才生效）。
-                    if let nextDay = plan.days
+                    // 下一个训练日同样走 TrainingScheduleResolver：跳过今天已完成的计划日，
+                    // 再退回「未完成 + 非休息」的简单兜底。
+                    let events = (try? ctx.fetch(FetchDescriptor<WorkoutEventRecord>())) ?? []
+                    let nextEvaluationDate = Calendar.current.date(byAdding: .day, value: 1, to: completedAt) ?? completedAt
+                    let resolvedNextDay = TrainingScheduleResolver.resolve(
+                        plan: plan.dto,
+                        on: nextEvaluationDate,
+                        events: events.map { $0.dto }
+                    )
+                    let fallbackNextDay = plan.days
                         .filter({ !$0.isCompleted && $0.focus.lowercased() != "rest" })
                         .sorted(by: { $0.dayNumber < $1.dayNumber })
-                        .first {
+                        .first
+                    if !alreadyHasProposal,
+                       let nextDay = resolvedNextDay ?? fallbackNextDay {
                         ctx.insert(TrainingPlanAdaptationRecord(
                             planId: plan.id,
                             dayId: nextDay.id,
@@ -350,7 +376,7 @@ struct WorkoutAdaptationService: Sendable {
                             suggestedAlternative: nil,
                             status: .proposed,
                             originalDayTitle: nextDay.title,
-                            agentRunId: "ai-post-workout-\(completedWorkoutID?.uuidString ?? "unknown")"
+                            agentRunId: runID
                         ))
                     }
                     try ctx.save()

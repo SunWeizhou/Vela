@@ -66,10 +66,16 @@ struct VelaTrainingPlanView: View {
         .task {
             fetchTodayOperatingPlan()
         }
+        .onChange(of: dashboardVM.selectedDate) {
+            fetchTodayOperatingPlan()
+        }
     }
 
     private func fetchTodayOperatingPlan() {
-        let identifier = DailyHealthSummaryRecord.dayIdentifier(for: Date(), calendar: .current)
+        let identifier = DailyHealthSummaryRecord.dayIdentifier(
+            for: dashboardVM.selectedDate,
+            calendar: .current
+        )
         var descriptor = FetchDescriptor<DailyOperatingPlanRecord>(
             predicate: #Predicate<DailyOperatingPlanRecord> { $0.dayIdentifier == identifier },
             sortBy: [SortDescriptor(\.generatedAt, order: .reverse)]
@@ -152,6 +158,11 @@ struct VelaTrainingPlanView: View {
             Text("今天如何调整")
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmInk)
+
+            Text(metricContextLine)
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             if let todayOperatingPlan, let payload = todayOperatingPlan.operatingPlanPayload {
                 HStack(spacing: 8) {
@@ -325,7 +336,7 @@ struct VelaTrainingPlanView: View {
     private var coachActions: some View {
         VStack(spacing: 10) {
             Button {
-                VelaAppState.shared.routeToCoach(question: "请根据我最新的恢复、睡眠、局部疲劳和训练负荷，提出未来一周训练轮转的调整方案；修改前先让我确认。")
+                VelaAppState.shared.routeToCoach(question: coachPlanQuestion)
             } label: {
                 Label("和 Vela 调整计划", systemImage: "sparkles")
                     .font(.system(size: 15, weight: .semibold))
@@ -352,12 +363,47 @@ struct VelaTrainingPlanView: View {
         return "保留训练方向，同时允许恢复、科研压力与临时有氧改变当天落点。"
     }
 
-    private var adaptationText: String {
-        let recovery = dashboardVM.dashboard.recovery.score
-        if recovery >= 70 {
-            return "当前恢复支持保留计划方向。训练时按 Apple Watch 记录，容量与强度仍以身体边界为准。"
+    /// 计划页发给 Coach 的问题：显式带上三指标与身体模型，避免 Agent
+    /// 只看到计划文本、脱离当前身体证据。
+    private var coachPlanQuestion: String {
+        let dashboard = dashboardVM.dashboard
+        let recovery = dashboard.recovery.hasData ? "\(Int(dashboard.recovery.score.rounded()))" : "--"
+        let strain = dashboard.strain.hasData ? "\(Int(dashboard.strain.score.rounded()))" : "--"
+        let stress = dashboard.stress.hasData ? "\(Int(dashboard.stress.stressIndex.rounded()))" : "--"
+        return "请根据我最新的恢复 \(recovery)、负荷 \(strain)、压力 \(stress)、局部疲劳、身体模型与健康档案，提出未来一周训练轮转的调整方案；修改前先让我确认。"
+    }
+
+    /// 计划页的统一指标依据：恢复、负荷、压力直接来自 DashboardSummary，
+    /// 与训练页状态卡和 TrainingDecisionKernel 同源。
+    private var metricContextLine: String {
+        let dashboard = dashboardVM.dashboard
+        var parts: [String] = []
+        if dashboard.recovery.hasData {
+            parts.append("恢复 \(Int(dashboard.recovery.score.rounded()))")
         }
-        return "恢复信号偏弱。建议保留训练习惯但降低容量，或换到疲劳更低的部位；如精神压力明显，恢复也算完成计划。"
+        if dashboard.strain.hasData {
+            let range = dashboard.strain.recommendedRange
+            parts.append("负荷 \(Int(dashboard.strain.score.rounded()))（目标 \(range.lowerBound)-\(range.upperBound)）")
+        }
+        if dashboard.stress.hasData {
+            parts.append("压力 \(Int(dashboard.stress.stressIndex.rounded()))")
+        }
+        return parts.isEmpty ? "恢复、负荷与压力信号尚未同步，先使用保守训练窗口。" : "依据：" + parts.joined(separator: " · ")
+    }
+
+    private var adaptationText: String {
+        let dashboard = dashboardVM.dashboard
+        guard dashboard.recovery.hasData else {
+            return "恢复信号尚未同步，无法给出个性化计划调整。先同步 Apple 健康，同时按保守窗口执行。"
+        }
+        let recovery = dashboard.recovery.score
+        let stress = dashboard.stress.hasData ? Int(dashboard.stress.stressIndex.rounded()) : nil
+        let loadHigh = dashboard.strain.hasData
+            && dashboard.strain.score > Double(dashboard.strain.recommendedRange.upperBound)
+        if recovery >= 70, (stress ?? 0) < 75, !loadHigh {
+            return "恢复、压力与负荷支持保留计划方向。训练时按 Apple Watch 记录，容量与强度仍以身体边界为准。"
+        }
+        return "当前恢复/压力/负荷至少有一项不支持满量执行。建议保留训练习惯但降低容量，或换到疲劳更低的部位；如精神压力明显，恢复也算完成计划。"
     }
 
     private func planMetric(_ title: String, _ value: String) -> some View {

@@ -1425,7 +1425,9 @@ private enum RhythmCurve {
 
     static func point(nearX fraction: CGFloat, xys: [(CGFloat, CGFloat)], size: CGSize) -> CGPoint {
         guard !xys.isEmpty else { return .zero }
-        let nearest = xys.min(by: { abs($0.0 - fraction) < abs($1.0 - fraction) }) ?? xys.last!
+        guard let nearest = xys.min(by: { abs($0.0 - fraction) < abs($1.0 - fraction) }) else {
+            return .zero
+        }
         return CGPoint(x: nearest.0 * size.width, y: nearest.1 * size.height)
     }
 
