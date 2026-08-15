@@ -449,11 +449,14 @@ final class DailySnapshotBuilder {
 
 // MARK: - Historical backfill（三年 Apple 健康历史回填）
 
-/// 纯分块规划：目标 3 年、每块 90 天、避开正常同步窗口（最近 45 天）、游标可续传。
+/// 纯分块规划：目标 3 年、每块 90 天、避开正常同步窗口（最近 7 天）、游标可续传。
 enum HistoricalBackfillPlanner {
     static let targetYears = 3
     static let chunkDays = 90
-    static let syncBoundaryDays = 45
+    // 联通专项批次 3：45 → 7。正常同步只覆盖最近 3-7 天，此前 45 天边界
+    // 会让「未打开 App 的中间日」永久缺失（热力图/年度统计出现空洞）。
+    // 回填是 create-only（已存在日跳过），与正常同步重叠没有覆盖风险。
+    static let syncBoundaryDays = 7
 
     static func targetEarliest(today: Date, calendar: Calendar = .current) -> Date {
         calendar.date(byAdding: .year, value: -targetYears, to: calendar.startOfDay(for: today))
@@ -519,7 +522,9 @@ struct HistoricalBackfillService {
     let modelContext: ModelContext
     let calendar: Calendar
 
-    private static let cursorKey = "vela.historicalBackfill.nextChunkEnd"
+    // 联通专项批次 3：游标键升版 v2——边界从 45 天收窄到 7 天后，
+    // 已回填用户的重跑游标从头开始（create-only，只补缺口不覆盖）。
+    private static let cursorKey = "vela.historicalBackfill.nextChunkEnd.v2"
 
     static func storedCursor(defaults: UserDefaults = .standard) -> Date? {
         defaults.object(forKey: cursorKey) as? Date

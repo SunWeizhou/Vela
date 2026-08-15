@@ -80,6 +80,9 @@ struct RecoveryContext: Codable, Hashable, Sendable {
     var restingHeartRate: MetricValue<Double>
     var respiratoryRate: MetricValue<Double>
     var topReason: String?
+    /// 联通专项批次 3：v2 上下文补齐 z-score（此前 v1 有、v2 反而丢）。
+    var hrvZScore: MetricValue<Double>
+    var rhrZScore: MetricValue<Double>
 }
 
 struct SleepContext: Codable, Hashable, Sendable {
@@ -114,6 +117,13 @@ struct StressContext: Codable, Hashable, Sendable {
     var band: String
     var confidence: DataConfidence
     var proxyNote: String
+    /// 联通专项批次 3：压力六因子（此前 v2 只有聚合值，agent 无法解释压力来源）。
+    var rhrStress: MetricValue<Double>
+    var hrvStress: MetricValue<Double>
+    var respStress: MetricValue<Double>
+    var tempStress: MetricValue<Double>
+    var sleepDebtStress: MetricValue<Double>
+    var loadStress: MetricValue<Double>
 }
 
 struct EnergyBankContext: Codable, Hashable, Sendable {
@@ -124,6 +134,8 @@ struct EnergyBankContext: Codable, Hashable, Sendable {
     var atl7Day: MetricValue<Double>
     var ctl42Day: MetricValue<Double>
     var tsbFreshness: MetricValue<Double>
+    /// 联通专项批次 3：v2 补齐 ACWR（此前 v1 有、v2 丢）。
+    var acwrRatio: MetricValue<Double>
 }
 
 struct TrainingContext: Codable, Hashable, Sendable {

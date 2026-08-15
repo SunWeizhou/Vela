@@ -649,3 +649,12 @@ P1-1 工具回调、P1-2 VO2max、41/42 天窗口、睡眠缺失误判 reduce、
 - **AgentTool 改档案触发重算**：`UpdateUserProfileTool` 显式调 `VelaDailyOrchestrator.refresh`（不同步只重算）——在 Coach/Me 停留时改档案，评分与计划也立即按新档案口径更新。
 
 **测试**：wiki 契约测试 2 处按新语义更新（清空=删除生理行、手改备注仍保留），全量 **410/410** 绿；已推送到 iPhone（databaseSequenceNumber 2932）。
+
+## 联通性专项批次 3（2026-08-15 · v2 上下文与历史补齐）✅ 已修并推送
+
+- **v2 类型化上下文补齐**（此前 v2 反而比 v1 贫瘠）：`RecoveryContext` 补 `hrvZScore/rhrZScore`；`StressContext` 补六因子（rhr/hrv/resp/temp/sleepDebt/load）；`EnergyBankContext` 补 `acwrRatio`（`TypedContextSchema` + `AIContextBuilder` 组装同改）。
+- **get_health_history 历史成分分解**：`HealthHistoryDayPayload` 增加 `recovery_components/strain_components/stress_components`（经 `decodedScoreEvidence()`）——历史查询此前只能看到聚合分，agent 现在能解释「过去 7 天压力为什么高」。
+- **回填覆盖空隙修复**：`HistoricalBackfillPlanner.syncBoundaryDays` 45 → 7（正常同步只覆盖最近 3-7 天，此前 45 天边界让「未打开 App 的中间日」永久缺失）；游标键升版 v2，已回填用户重跑从新边界开始（create-only 只补缺口不覆盖既有记录）。
+- 复核确认：活动摘要入口文案已是「过去 30 天」（此前报告的 30/35 口径偏差不存在，未改）。
+
+**测试**：全量 **410/410** 绿；已推送到 iPhone（databaseSequenceNumber 2940）。

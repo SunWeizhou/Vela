@@ -1066,6 +1066,11 @@ private struct HealthHistoryDayPayload: Encodable {
     var deepSleepMinutes: Double?
     var remSleepMinutes: Double?
     var workouts: [WorkoutSummary]?
+    /// 联通专项批次 3：历史成分分解（z-score/六因子/负荷指标）——此前历史查询
+    /// 只能看到聚合分，agent 无法解释「过去 7 天压力为什么高」。
+    var recoveryComponents: [String: Double]?
+    var strainComponents: [String: Double]?
+    var stressComponents: [String: Double]?
 
     init(record: DailyHealthSummaryRecord, includeWorkouts: Bool) {
         date = record.date
@@ -1111,6 +1116,15 @@ private struct HealthHistoryDayPayload: Encodable {
         deepSleepMinutes = record.deepSleepMinutes
         remSleepMinutes = record.remSleepMinutes
         workouts = includeWorkouts ? record.toSnapshot().workouts : nil
+        if let evidence = record.decodedScoreEvidence() {
+            recoveryComponents = evidence.recovery.components
+            strainComponents = evidence.strain.components
+            stressComponents = evidence.stress.components
+        } else {
+            recoveryComponents = nil
+            strainComponents = nil
+            stressComponents = nil
+        }
     }
 
     enum CodingKeys: String, CodingKey {
@@ -1156,6 +1170,9 @@ private struct HealthHistoryDayPayload: Encodable {
         case deepSleepMinutes = "deep_sleep_minutes"
         case remSleepMinutes = "rem_sleep_minutes"
         case workouts
+        case recoveryComponents = "recovery_components"
+        case strainComponents = "strain_components"
+        case stressComponents = "stress_components"
     }
 }
 

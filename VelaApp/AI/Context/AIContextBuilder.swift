@@ -146,7 +146,10 @@ struct AIContextBuilder {
             },
             restingHeartRate: healthMetric(rhrBpm, unit: "bpm", note: "Resting heart rate is unavailable.", measuredAt: dashboard.recovery.lastUpdated),
             respiratoryRate: healthMetric(dashboard.recoveryMetrics.respiratoryRate, unit: "br/min", note: "Respiratory rate is unavailable.", measuredAt: dashboard.recovery.lastUpdated),
-            topReason: dashboard.recovery.reasons.first
+            topReason: dashboard.recovery.reasons.first,
+            // 联通专项批次 3：v2 补齐 z-score。
+            hrvZScore: healthMetric(dashboard.recovery.metrics["hrv_z_score"], unit: "z", note: "HRV z-score is unavailable.", measuredAt: dashboard.recovery.lastUpdated, source: .computed),
+            rhrZScore: healthMetric(dashboard.recovery.metrics["rhr_z_score"], unit: "z", note: "RHR z-score is unavailable.", measuredAt: dashboard.recovery.lastUpdated, source: .computed)
         )
 
         let sleepMetrics = dashboard.sleepScore.metrics
@@ -181,7 +184,14 @@ struct AIContextBuilder {
             stressIndex: healthMetric(dashboard.stress.hasData ? dashboard.stress.value : nil, unit: "index", note: "Stress index is not computed yet.", measuredAt: dashboard.stress.lastUpdated, source: .computed, confidence: dataConfidence(dashboard.stress.confidence)),
             band: dashboard.stress.hasData ? dashboard.stress.band.rawValue : "unavailable",
             confidence: dashboard.stress.hasData ? (dashboard.stress.confidence.rawValue == "high" ? .high : .medium) : .unavailable,
-            proxyNote: "Physiological proxy, not a medical or mental health diagnosis."
+            proxyNote: "Physiological proxy, not a medical or mental health diagnosis.",
+            // 联通专项批次 3：压力六因子进 v2。
+            rhrStress: healthMetric(dashboard.stress.metrics["rhr_stress"], unit: "pts", note: "RHR stress component is unavailable.", measuredAt: dashboard.stress.lastUpdated, source: .computed),
+            hrvStress: healthMetric(dashboard.stress.metrics["hrv_stress"], unit: "pts", note: "HRV stress component is unavailable.", measuredAt: dashboard.stress.lastUpdated, source: .computed),
+            respStress: healthMetric(dashboard.stress.metrics["resp_stress"], unit: "pts", note: "Respiratory stress component is unavailable.", measuredAt: dashboard.stress.lastUpdated, source: .computed),
+            tempStress: healthMetric(dashboard.stress.metrics["temp_stress"], unit: "pts", note: "Temperature stress component is unavailable.", measuredAt: dashboard.stress.lastUpdated, source: .computed),
+            sleepDebtStress: healthMetric(dashboard.stress.metrics["sleep_debt_stress"], unit: "pts", note: "Sleep-debt stress component is unavailable.", measuredAt: dashboard.stress.lastUpdated, source: .computed),
+            loadStress: healthMetric(dashboard.stress.metrics["load_stress"], unit: "pts", note: "Load stress component is unavailable.", measuredAt: dashboard.stress.lastUpdated, source: .computed)
         )
 
         let energyBank = EnergyBankContext(
@@ -191,7 +201,9 @@ struct AIContextBuilder {
             chargeEfficiency: healthMetric(dashboard.energy.metrics["charge_efficiency"], unit: "ratio", note: "Charge efficiency is unavailable.", measuredAt: dashboard.energy.lastUpdated, source: .computed),
             atl7Day: healthMetric(dashboard.energy.metrics["atl"], unit: "AU", note: "Acute training load is unavailable.", measuredAt: dashboard.energy.lastUpdated, source: .computed),
             ctl42Day: healthMetric(dashboard.energy.metrics["ctl"], unit: "AU", note: "Chronic training load is unavailable.", measuredAt: dashboard.energy.lastUpdated, source: .computed),
-            tsbFreshness: healthMetric(dashboard.energy.metrics["tsb"], unit: "AU", note: "Training stress balance is unavailable.", measuredAt: dashboard.energy.lastUpdated, source: .computed)
+            tsbFreshness: healthMetric(dashboard.energy.metrics["tsb"], unit: "AU", note: "Training stress balance is unavailable.", measuredAt: dashboard.energy.lastUpdated, source: .computed),
+            // 联通专项批次 3：v2 补齐 ACWR。
+            acwrRatio: healthMetric(dashboard.energy.metrics["acwr"], unit: "ratio", note: "ACWR is unavailable.", measuredAt: dashboard.energy.lastUpdated, source: .computed)
         )
 
         let workouts = dashboard.workouts
