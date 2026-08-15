@@ -134,7 +134,8 @@ enum BackgroundTaskManager {
                 let shouldSyncData = !freshEnough || pendingDelivery
 
                 let dashboard = try await DailySummaryUseCase(
-                    queryService: queryService
+                    queryService: queryService,
+                    syncCoordinator: AppSyncCoordinator.shared
                 ).loadDashboard(
                     for: Date(),
                     modelContext: modelContext,

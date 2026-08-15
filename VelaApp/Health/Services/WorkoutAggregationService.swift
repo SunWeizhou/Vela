@@ -354,10 +354,16 @@ public final class WorkoutAggregationService {
             // Confidence: medium for HR/RPE workouts, low for duration-only workouts.
             let activityLoad = normalizedActivityLoad(record)
             let dailyLoad = activityLoad + load
-            record.workoutsData = try JSONEncoder().encode(merged)
-            record.workoutCount = merged.count
-            record.workoutTypes = Set(merged.map(\.activityName)).sorted().joined(separator: ", ")
-            record.workoutDuration = duration
+            // 深度专项批次 1：回填日（45 天前的历史日）没有 WorkoutEventRecord，
+            // workoutsData 也为 nil（回填只写计数/时长/类型）。此时若用空事件表
+            // 覆盖，会把回填的 HealthKit 训练计数抹成 0，年度统计漏计。
+            // 保留回填值；有事件或强制重置（删除回滚）时维持原行为。
+            if !(merged.isEmpty && !resetActivityTotals && record.workoutsData == nil) {
+                record.workoutsData = try JSONEncoder().encode(merged)
+                record.workoutCount = merged.count
+                record.workoutTypes = Set(merged.map(\.activityName)).sorted().joined(separator: ", ")
+                record.workoutDuration = duration
+            }
             // 删除回滚（[5]）：resetActivityTotals 时用训练侧数值整体重算，
             // 否则 max() 语义让已删除训练的热量/分钟永久残留（下次 HK 同步会恢复总量）。
             if resetActivityTotals {

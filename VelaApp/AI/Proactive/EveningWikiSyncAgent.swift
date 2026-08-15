@@ -44,6 +44,27 @@ final class EveningWikiSyncAgent: ObservableObject {
             }
         }
 
+        // 算法打通（深度专项批次 1）：
+        // ① force 只允许触发本机记忆维护，网络段仍强制 consent（隐私门控不再被短路）。
+        // ② 复刻晨报的新鲜度守卫：今日快照未同步或早于 04:00 健康日边界时，
+        //    不把空/过期数据送进 LLM 生成「每日同步」与记忆提议。
+        if !force {
+            let todayIdentifier = DailyHealthSummaryRecord.dayIdentifier(
+                for: Date(),
+                calendar: Calendar.current
+            )
+            let todayDescriptor = FetchDescriptor<DailyHealthSummaryRecord>(
+                predicate: #Predicate<DailyHealthSummaryRecord> { $0.dayIdentifier == todayIdentifier }
+            )
+            if let todayRecord = (try? modelContext.fetch(todayDescriptor))?.first {
+                let healthDayBoundary = Calendar.current.date(bySettingHour: 4, minute: 0, second: 0, of: Date()) ?? Date()
+                if todayRecord.updatedAt < healthDayBoundary {
+                    logger.info("Today's snapshot predates the 04:00 health-day boundary. Skipping evening wiki sync.")
+                    return
+                }
+            }
+        }
+
         logger.info("Starting evening wiki sync...")
         isRunning = true
         defer { isRunning = false }
@@ -99,7 +120,8 @@ final class EveningWikiSyncAgent: ObservableObject {
             let contextJSON = (try? encoder.encode(context))
                 .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
 
-            let networkAIAllowed = force || AutoAgentConfig.shared.canSendHealthContextToNetworkAI
+            // 算法打通（深度专项批次 1）：force 不再短路网络 consent。
+            let networkAIAllowed = AutoAgentConfig.shared.canSendHealthContextToNetworkAI
             guard networkAIAllowed,
                   let apiKey = try? keychain.read(account: apiKeyAccount),
                   !apiKey.isEmpty else {
@@ -127,11 +149,15 @@ final class EveningWikiSyncAgent: ObservableObject {
 
             let baseProvider = services?.deepSeekProvider(apiKey: apiKey) ?? DeepSeekProvider(apiKey: apiKey)
             let provider = RetryingLLMProvider(base: baseProvider)
-            let response = try await provider.complete(request: LLMRequest(
-                systemPrompt: syncSystemPrompt,
-                userPrompt: prompt,
-                contextJSON: contextJSON
-            ))
+            // 深度专项批次 2：20s 总 deadline（BGTask 预算 ~30s）。
+            let systemPrompt = syncSystemPrompt
+            let response = try await LLMProviderDeadline.withTimeout(seconds: 20) {
+                try await provider.complete(request: LLMRequest(
+                    systemPrompt: systemPrompt,
+                    userPrompt: prompt,
+                    contextJSON: contextJSON
+                ))
+            }
 
             // Parse legacy [ACTION:update_wiki] and convert to MemoryProposals
             let parsed = AgentActionParser.parse(response.content)

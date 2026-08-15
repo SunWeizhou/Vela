@@ -532,3 +532,27 @@ P1-1 工具回调、P1-2 VO2max、41/42 天窗口、睡眠缺失误判 reduce、
 - 附注：`VelaAppTests/StabilizationTests.swift` 为孤儿文件（未注册 pbxproj、引用了旧 API 不参与编译），已记录在案，未动。
 
 **测试**：+12 回归（kernel 六门控、投影四映射与加权置信度、Lived State 三用例、计划反馈校准、压力投影一致性测试改写），全量 **386/386** 绿；已推送到 iPhone（databaseSequenceNumber 2876）。
+
+## 深度专项批次 1+2（2026-08-15 · 快速修复 + Coach/LLM 稳健性）✅ 已修并推送
+
+五面并行审计（统一调度/三年建模/agent 参与/训练记录/Coach 交互）的合并报告经用户确认后实施。本批 = 全部已复核的函数级修复（15 项）+ Coach/LLM 稳健性（4 项）。
+
+**批次 1 — 正确性/隐私/数据质量（15 项）**：
+- 同步去重：`AppSyncCoordinator.shared` 全 App 共享（`VelaServices.swift`），主动洞察（`ProactiveInsightService:318`）与后台任务（`BackgroundTaskManager:136`）改用共享实例——此前回前台并发拉起两条全量管线、inFlight/30s 节流失效。
+- P85 长线减量门控恢复：`loadDashboard` kernel 调用补传 `longTermTrainingVolume`（此前被 persistedDecision 遮蔽）。
+- 隐私：`force` 不再短路 `canSendHealthContextToNetworkAI`（MorningBriefScheduler:26 + EveningWikiSyncAgent:102 两处）；晚间同步复刻晨报的今日快照 04:00 新鲜度守卫。
+- 性能：切历史日期不再触发 HealthKit 2-pass 同步（`DashboardViewModel.performRefresh` 按 isToday 传 syncDays/shouldSync）。
+- Coach 竞态：`submit`/`startPendingRequest` 同步置 `isStreaming`（会话新建/切换/删除的窄窗口可致在途回复写进错误会话，数据破坏级）；stop() 立即 `confirmToolCall(false)` 收尾挂起的确认卡。
+- Coach 性能：`CoachContextAssembler.buildChatMessages` 增加 `coverageSummary` 参数，CoachView 传入已算好的摘要——每条消息省 9 次串行 HealthKit 覆盖查询。
+- 训练记录：训记双录判定收紧为「同日 && 开始差≤60min && 时长差≤10min」（原 `||` 会误合并同日两场不同训练，违反宁重复不丢训练）；`aggregateDay` 无事件且非强制重置时保留回填计数（编辑/删除旧训练不再把回填 HealthKit 计数抹成 0）；通用详情删除补 `resetActivityTotals:true`（max 语义残留）；「历年训练量」训练日判定去掉 calories、总消耗改读 workoutsData 训练能量（不再把全天活动能耗当训练消耗、步行休息日不再算训练日）；热力图 tier 去掉 activeCalories 分档。
+- 三年数据：体脂率进入 `LongTermBaselinePoint`/`LongTermBaselineMetric`，体脂率+活动能量进入趋势页 `LongTermMetric` picker；决策理由长线参照 `.first` → 前两行（RHR+HRV）。
+
+**批次 2 — Coach/LLM 稳健性（4 项）**：
+- AgentLoop 取消传播修复：用户取消抛 `CancellationError`（此前转成 canned「请求已被中止」成功消息）；工具批次中途取消立即收尾；deadline 到期仍用本地 canned 消息。
+- AgentLoop 真实总超时：`providerCall(within:)` 竞速把 `maxDuration` 变成 provider 调用的硬约束（此前单次 120s×3 重试可击穿 90s 预算数倍，最坏 ~20 分钟）。
+- 非对话 LLM 调用加 20s deadline：`LLMProviderDeadline.withTimeout` 套在晨报/晚间同步/训练规划三处（BGTask ~30s 预算内不再挂起数分钟）。
+- 错误文案按状态码区分（400 请求过长/429 繁忙/5xx 服务端故障）；用户消息 append 后立即 `persistThread`（流式中杀 App 不再连提问一起丢）。
+
+**测试**：+11 回归（年度聚合口径×2、训记去重判定、aggregateDay 保留回填、热力图 tier、LongTermMetric 新指标、长线参照两行、AgentLoop deadline/取消传播、LLMProviderDeadline、状态码文案），全量 **397/397** 绿；已推送到 iPhone（databaseSequenceNumber 2884）。
+
+**遗留（下批）**：批次 3 三年建模（月度 MAD 基线/剂量-反应/脱轨/季节性/训记批量回填）、批次 4 Agent 管线 A+C、批次 5 VelaDailyOrchestrator、批次 6 Agent 管线 B；Coach 覆盖摘要外的相关性/快照 memo、BGTask 拆分为独立授予。

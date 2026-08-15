@@ -315,7 +315,11 @@ final class ProactiveIntelligenceOrchestrator: Sendable {
         
         do {
             // 1. Build current DashboardSummary
-            let dashboard = (try? await DailySummaryUseCase().loadDashboard(for: date, modelContext: modelContext)) ?? DashboardSummary.empty(date: date)
+            // 算法打通（深度专项批次 1）：共享 AppSyncCoordinator——此前新实例绕过
+            // inFlight/30s 节流，回前台与 TodayView 的刷新并发拉起两条全量管线。
+            let dashboard = (try? await DailySummaryUseCase(
+                syncCoordinator: AppSyncCoordinator.shared
+            ).loadDashboard(for: date, modelContext: modelContext)) ?? DashboardSummary.empty(date: date)
             
             // 2. Evaluate Proactive Insights via ProactiveInsightService
             let evaluatedInsights = ProactiveInsightService.evaluate(dashboard: dashboard)

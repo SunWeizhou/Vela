@@ -680,7 +680,13 @@ struct WorkoutDetailView: View {
                 WorkoutAggregationService.shared.blacklistWorkout(id: workout.id.uuidString, modelContext: modelContext)
             }
             try modelContext.save()
-            try? WorkoutAggregationService.shared.aggregateDay(date: workout.start, modelContext: modelContext)
+            // 深度专项批次 1：与 deleteStrengthWorkout 一致，删除回滚需整体重算
+            //（max 语义会残留旧值），否则 activeMinutes/activeCalories 不回落。
+            try? WorkoutAggregationService.shared.aggregateDay(
+                date: workout.start,
+                modelContext: modelContext,
+                resetActivityTotals: true
+            )
             
             VelaAppState.shared.markLocalDataChanged()
             

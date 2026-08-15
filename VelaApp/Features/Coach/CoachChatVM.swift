@@ -193,6 +193,7 @@ final class CoachChatVM: ObservableObject {
         var journalEntries: [JournalEntryRecord]
         var savedReports: [AIReportRecord]
         var focus: CoachContextFocus
+        var coverageSummary: DataCoverageSummaryModel?
     }
 
     var sessions: [CoachSessionRecord] {
@@ -399,7 +400,8 @@ final class CoachChatVM: ObservableObject {
         journalEntries: [JournalEntryRecord],
         savedReports: [AIReportRecord],
         focus: CoachContextFocus = .general,
-        services: VelaServices? = nil
+        services: VelaServices? = nil,
+        coverageSummary: DataCoverageSummaryModel? = nil
     ) {
         guard activeResponseTask == nil else {
             interactionHint = "正在回复中，完成后即可再次发送。"
@@ -410,13 +412,18 @@ final class CoachChatVM: ObservableObject {
         draft = ""
         ensureActiveSession(modelContext: modelContext)
         serviceHost = services
+        // 算法打通（深度专项批次 1）：isStreaming 同步置位——此前要等异步 send()
+        // 跑到后半段才翻转，会话新建/切换/删除守卫只看 isStreaming，存在窄窗口
+        // 可绕过守卫，让在途回复写进错误会话（数据破坏级）。
+        isStreaming = true
         pendingRequest = PendingRequest(
             text: targetText,
             dashboard: dashboard,
             modelContext: modelContext,
             journalEntries: journalEntries,
             savedReports: savedReports,
-            focus: focus
+            focus: focus,
+            coverageSummary: coverageSummary
         )
         startPendingRequest(appendingUserMessage: true)
     }
@@ -457,6 +464,8 @@ final class CoachChatVM: ObservableObject {
     private func startPendingRequest(appendingUserMessage: Bool) {
         guard activeResponseTask == nil, let pendingRequest else { return }
         isAwaitingForegroundRetry = false
+        // 深度专项批次 1：与 submit() 一致，重试路径同样同步置位 isStreaming。
+        isStreaming = true
         activeResponseTask = Task { [weak self] in
             guard let self else { return }
             await self.send(
@@ -467,7 +476,8 @@ final class CoachChatVM: ObservableObject {
                 savedReports: pendingRequest.savedReports,
                 focus: pendingRequest.focus,
                 services: self.serviceHost,
-                appendingUserMessage: appendingUserMessage
+                appendingUserMessage: appendingUserMessage,
+                coverageSummary: pendingRequest.coverageSummary
             )
             self.activeResponseTask = nil
             if self.isAwaitingForegroundRetry {
@@ -489,6 +499,12 @@ final class CoachChatVM: ObservableObject {
     /// Cancel the in-flight assistant response (user tapped "stop").
     func cancelActiveResponse() {
         guard activeResponseTask != nil else { return }
+        // 深度专项批次 1：stop() 立即按拒绝收尾挂起的工具确认卡——
+        // 此前要等流结束后才 confirmToolCall(false)，确认卡最多挂满 60s，
+        // 且期间 activeResponseTask 非空、后续发送被挡。
+        if pendingToolConfirmation != nil {
+            confirmToolCall(false)
+        }
         activeResponseTask?.cancel()
     }
 
@@ -500,10 +516,13 @@ final class CoachChatVM: ObservableObject {
         savedReports: [AIReportRecord],
         focus: CoachContextFocus = .general,
         services: VelaServices? = nil,
-        appendingUserMessage: Bool = true
+        appendingUserMessage: Bool = true,
+        coverageSummary: DataCoverageSummaryModel? = nil
     ) async {
         let userText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !userText.isEmpty, !isStreaming else { return }
+        // 深度专项批次 1：isStreaming 已在 submit/startPendingRequest 同步置位，
+        // 此处不再用它挡双重入口（activeResponseTask 守卫已保证唯一在途请求）。
+        guard !userText.isEmpty else { return }
         draft = ""
         refreshKeyState()
 
@@ -511,6 +530,9 @@ final class CoachChatVM: ObservableObject {
         streamingContent = ""
         if appendingUserMessage {
             messages.append(ChatMsg(role: .user, content: userText))
+            // 深度专项批次 2：用户消息立即落盘——此前整条线程要到流式完成/出错才
+            // 首次持久化，流式中被杀 App 连用户提问一起丢失。
+            persistThread(modelContext: modelContext)
         }
 
         if !isGhostMode, appendingUserMessage, let current = currentSession, (current.title == "新对话" || current.title == "New Chat" || current.title == "New Session" || current.title.isEmpty) {
@@ -550,7 +572,8 @@ final class CoachChatVM: ObservableObject {
                 savedReports: savedReports,
                 focus: focus,
                 modelContext: modelContext,
-                messages: messages
+                messages: messages,
+                coverageSummary: coverageSummary
             )
 
             let contextHash = ContentHash.hash(chatMessages.map { $0.content }.joined(separator: "\n"))

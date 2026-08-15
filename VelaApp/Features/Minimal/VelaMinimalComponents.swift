@@ -1093,7 +1093,9 @@ enum LongTermMetric: String, CaseIterable, Identifiable {
     case hrv
     case sleep
     case weight
+    case bodyFat
     case steps
+    case activeCalories
 
     var id: String { rawValue }
 
@@ -1103,7 +1105,9 @@ enum LongTermMetric: String, CaseIterable, Identifiable {
         case .hrv: return "HRV"
         case .sleep: return "睡眠时长"
         case .weight: return "体重"
+        case .bodyFat: return "体脂率"
         case .steps: return "步数"
+        case .activeCalories: return "活动能量"
         }
     }
 
@@ -1113,7 +1117,9 @@ enum LongTermMetric: String, CaseIterable, Identifiable {
         case .hrv: return "ms"
         case .sleep: return "小时"
         case .weight: return "kg"
+        case .bodyFat: return "%"
         case .steps: return "步"
+        case .activeCalories: return "kcal"
         }
     }
 
@@ -1124,7 +1130,9 @@ enum LongTermMetric: String, CaseIterable, Identifiable {
         case .hrv: return true
         case .sleep: return true
         case .weight: return false
+        case .bodyFat: return false
         case .steps: return true
+        case .activeCalories: return true
         }
     }
 
@@ -1134,7 +1142,9 @@ enum LongTermMetric: String, CaseIterable, Identifiable {
         case .hrv: return record.hrvAverage
         case .sleep: return record.sleepHours
         case .weight: return record.bodyWeight
+        case .bodyFat: return record.bodyFatPercent
         case .steps: return record.steps
+        case .activeCalories: return record.activeCalories
         }
     }
 }

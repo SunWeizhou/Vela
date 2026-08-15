@@ -179,6 +179,29 @@ struct AgentLoop {
         self.onConfirmToolCall = onConfirmToolCall
     }
 
+    /// 深度专项批次 2：provider 调用与剩余预算竞速——超时取消底层调用并抛
+    /// AgentLoopTimeoutError，把 maxDuration 变成真实硬约束。
+    private static func providerCall<T: Sendable>(
+        within seconds: TimeInterval,
+        operation: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        guard seconds > 0 else { throw AgentLoopTimeoutError() }
+        return try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw AgentLoopTimeoutError()
+            }
+            guard let result = try await group.next() else {
+                throw AgentLoopTimeoutError()
+            }
+            group.cancelAll()
+            return result
+        }
+    }
+
     /// Runs the agentic loop and returns the final response plus tool execution details.
     /// - Parameters:
     ///   - messages: The chat message history including system prompt.
@@ -205,8 +228,12 @@ struct AgentLoop {
         // a lie, and the [CANCELLED]/[TIME EXCEEDED] injection strings must never
         // be sent to the model). Instead we return an honest local message.
         var didTerminateEarly = false
+        // 深度专项批次 2：区分「用户取消」与「deadline 到期」——用户取消必须把
+        // CancellationError 抛回 CoachChatVM（保留部分流式内容），deadline 才用
+        // 本地 canned 消息。此前两者都伪装成「正常成功」。
+        var userCancelled = false
 
-        for _ in 0..<maxIterations {
+        iterationLoop: for _ in 0..<maxIterations {
             // Honour user/outer cancellation between provider calls, and enforce
             // a whole-loop deadline so a slow/looping agent can't hold the Coach
             // indefinitely. Both return a graceful, coherent stop for the user.
@@ -216,6 +243,7 @@ struct AgentLoop {
                     content: "[CANCELLED: The request was cancelled. Please acknowledge and stop.]"
                 ))
                 didTerminateEarly = true
+                userCancelled = true
                 break
             }
             if Date().timeIntervalSince(startedAt) > maxDuration {
@@ -244,10 +272,22 @@ struct AgentLoop {
             }
 
             providerCallCount += 1
-            let response = try await provider.chat(
-                messages: agentMessages,
-                tools: toolRegistry.definitions
-            )
+            // 深度专项批次 2：把 maxDuration 变成 provider 调用的真实硬约束——
+            // 此前只在迭代间隙检查，单次 120s×3 重试可击穿 90s 预算数倍。
+            let remainingBudget = maxDuration - Date().timeIntervalSince(startedAt)
+            let messagesSnapshot = agentMessages
+            let response: LLMResponse
+            do {
+                response = try await Self.providerCall(within: remainingBudget) {
+                    try await provider.chat(
+                        messages: messagesSnapshot,
+                        tools: toolRegistry.definitions
+                    )
+                }
+            } catch is AgentLoopTimeoutError {
+                didTerminateEarly = true
+                break
+            }
 
             if let toolCalls = response.toolCalls, !toolCalls.isEmpty {
                 agentMessages.append(ChatMessage(
@@ -258,6 +298,13 @@ struct AgentLoop {
                 ))
 
                 for tc in toolCalls {
+                    // 深度专项批次 2：工具批次中途取消立即收尾——此前工具执行
+                    // 不随父任务取消，stop() 要等整个批次（最坏 15×20s）跑完。
+                    if Task.isCancelled {
+                        didTerminateEarly = true
+                        userCancelled = true
+                        break iterationLoop
+                    }
                     toolCallBudget -= 1
 
                     guard toolRegistry.contains(name: tc.name) else {
@@ -380,34 +427,81 @@ struct AgentLoop {
             // unbounded provider call: it would extend past the deadline and would
             // send the [CANCELLED]/[TIME EXCEEDED] injection strings to the model.
             if didTerminateEarly {
+                if userCancelled {
+                    // 深度专项批次 2：用户取消必须抛出，让 CoachChatVM 走
+                    // isUserCancellation 分支（保留已流出的部分内容）。
+                    throw CancellationError()
+                }
                 fullResponse = L10n.t(
                     "The request was cancelled before completion. You can retry or rephrase your question.",
                     "该请求已被中止，未能完成。你可以重试，或换个说法再问。"
                 )
             } else if let onStreamDelta {
                 providerCallCount += 1
-                let finalResponse = try await provider.chat(messages: agentMessages, tools: nil)
-                fullResponse = finalResponse.content
-                if !fullResponse.isEmpty {
-                    await onStreamDelta(fullResponse)
+                let remainingBudget = maxDuration - Date().timeIntervalSince(startedAt)
+                let finalMessagesSnapshot = agentMessages
+                var finalResponse: LLMResponse?
+                do {
+                    finalResponse = try await Self.providerCall(within: remainingBudget) {
+                        try await provider.chat(messages: finalMessagesSnapshot, tools: nil)
+                    }
+                } catch is AgentLoopTimeoutError {
+                    didTerminateEarly = true
                 }
-                return AgentLoopResult(
-                    response: fullResponse,
-                    executedTools: executedTools,
-                    finalMessages: agentMessages,
-                    wasStreamed: false,
-                    trace: makeTrace(
-                        startedAt: startedAt,
-                        inputMessages: messages,
-                        executedTools: executedTools,
-                        finalResponse: fullResponse,
-                        contextHash: initialDataVersion,
-                        providerCallCount: providerCallCount
+                if didTerminateEarly || finalResponse == nil {
+                    fullResponse = L10n.t(
+                        "The request was cancelled before completion. You can retry or rephrase your question.",
+                        "该请求已被中止，未能完成。你可以重试，或换个说法再问。"
                     )
-                )
+                } else if let finalResponse {
+                    fullResponse = finalResponse.content
+                    if !fullResponse.isEmpty {
+                        await onStreamDelta(fullResponse)
+                    }
+                    return AgentLoopResult(
+                        response: fullResponse,
+                        executedTools: executedTools,
+                        finalMessages: agentMessages,
+                        wasStreamed: false,
+                        trace: makeTrace(
+                            startedAt: startedAt,
+                            inputMessages: messages,
+                            executedTools: executedTools,
+                            finalResponse: fullResponse,
+                            contextHash: initialDataVersion,
+                            providerCallCount: providerCallCount
+                        )
+                    )
+                }
             } else {
                 providerCallCount += 1
-                let finalResponse = try await provider.chat(messages: agentMessages, tools: nil)
+                let remainingBudget = maxDuration - Date().timeIntervalSince(startedAt)
+                let finalMessagesSnapshot = agentMessages
+                let finalResponse: LLMResponse
+                do {
+                    finalResponse = try await Self.providerCall(within: remainingBudget) {
+                        try await provider.chat(messages: finalMessagesSnapshot, tools: nil)
+                    }
+                } catch is AgentLoopTimeoutError {
+                    fullResponse = L10n.t(
+                        "The request was cancelled before completion. You can retry or rephrase your question.",
+                        "该请求已被中止，未能完成。你可以重试，或换个说法再问。"
+                    )
+                    return AgentLoopResult(
+                        response: fullResponse,
+                        executedTools: executedTools,
+                        finalMessages: agentMessages,
+                        wasStreamed: false,
+                        trace: makeTrace(
+                            startedAt: startedAt,
+                            inputMessages: messages,
+                            executedTools: executedTools,
+                            finalResponse: fullResponse,
+                            contextHash: initialDataVersion,
+                            providerCallCount: providerCallCount
+                        )
+                    )
+                }
                 fullResponse = finalResponse.content.isEmpty
                     ? "I wasn't able to generate a response. Please try again."
                     : finalResponse.content
@@ -642,3 +736,6 @@ struct AgentRunTrace: Codable {
         var result: String
     }
 }
+
+/// 深度专项批次 2：AgentLoop 的 provider 级超时错误。
+struct AgentLoopTimeoutError: Error {}

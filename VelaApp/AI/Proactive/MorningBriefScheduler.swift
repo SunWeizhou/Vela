@@ -23,7 +23,10 @@ final class MorningBriefScheduler: ObservableObject {
     func runIfNeeded(modelContext: ModelContext, dashboard: DashboardSummary, force: Bool = false, services: VelaServices? = nil) async {
         logger.info("runIfNeeded called (force: \(force))")
 
-        guard force || (AutoAgentConfig.shared.canSendHealthContextToNetworkAI && AutoAgentConfig.shared.autoMorningBrief) else {
+        // 算法打通（深度专项批次 1）：force 只跳过时间窗/去重/新鲜度检查，
+        // 绝不绕过健康数据出网 consent（canSendHealthContextToNetworkAI）。
+        guard AutoAgentConfig.shared.autoMorningBrief,
+              AutoAgentConfig.shared.canSendHealthContextToNetworkAI else {
             logger.info("Automated morning brief is not enabled by the user. Skipping.")
             return
         }

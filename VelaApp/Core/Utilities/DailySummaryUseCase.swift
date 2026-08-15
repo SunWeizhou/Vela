@@ -491,7 +491,10 @@ final class DailySummaryUseCase {
             dailyTrainingDecision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
                 bodyState: bodyState,
                 activePlan: activePlan?.dto,
-                trainingResponses: recentTrainingResponses.map { $0.dto }
+                trainingResponses: recentTrainingResponses.map { $0.dto },
+                // 算法打通（深度专项批次 1）：与展示路径同源，恢复此前被
+                // persistedDecision 遮蔽的「本月训练量三年 P85 → 减量」门控。
+                longTermTrainingVolume: longTermReport.trainingVolume
             ))
         }
         

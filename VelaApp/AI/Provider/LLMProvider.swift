@@ -202,8 +202,26 @@ enum LLMProviderError: LocalizedError, Hashable, Sendable {
             return isChinese ? "Coach 请求超时，未写入空回复。请检查网络后重试。" : "The Coach request timed out and no empty reply was saved. Check the network and retry."
         case .invalidResponse:
             return isChinese ? "AI 服务返回了无法解析的内容，请稍后重试。" : "The AI provider returned an unreadable response. Please retry."
-        case .requestFailed:
-            return isChinese ? "AI 服务暂时不可用，本地功能不受影响。请稍后重试。" : "The AI provider is temporarily unavailable. Local features are unaffected; please retry."
+        case .requestFailed(let statusCode, _):
+            // 深度专项批次 2：按状态码区分真实原因，不再一律「服务暂时不可用」。
+            if statusCode == 400 {
+                return isChinese
+                    ? "请求内容过长或格式有误（400）。换个说法，或稍后重试。"
+                    : "The request was too long or malformed (400). Rephrase and retry."
+            }
+            if statusCode == 429 {
+                return isChinese
+                    ? "AI 服务当前繁忙（429），请稍后重试。"
+                    : "The AI service is busy right now (429). Retry in a moment."
+            }
+            if statusCode >= 500 {
+                return isChinese
+                    ? "AI 服务端出现故障（\(statusCode)），本地功能不受影响，请稍后重试。"
+                    : "The AI provider hit a server error (\(statusCode)). Local features are unaffected; retry later."
+            }
+            return isChinese
+                ? "AI 服务暂时不可用（\(statusCode)），本地功能不受影响。请稍后重试。"
+                : "The AI provider is temporarily unavailable (\(statusCode)). Local features are unaffected; please retry."
         }
     }
 
@@ -279,6 +297,28 @@ struct RetryingLLMProvider: LLMProvider {
                 }
                 attempt += 1
             }
+        }
+    }
+}
+
+/// 深度专项批次 2：非对话 LLM 调用（晨报/晚间同步/训练规划）的总 deadline 竞速——
+/// BGTask 预算 ~30s，此前无 deadline 的最坏挂起可击穿预算并静默丢失结果。
+enum LLMProviderDeadline {
+    static func withTimeout<T: Sendable>(
+        seconds: TimeInterval,
+        operation: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw LLMProviderError.timedOut
+            }
+            guard let result = try await group.next() else {
+                throw LLMProviderError.timedOut
+            }
+            group.cancelAll()
+            return result
         }
     }
 }

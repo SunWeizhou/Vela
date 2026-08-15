@@ -337,6 +337,19 @@ private struct XunjiReadRequest: Encodable {
 }
 
 struct XunjiTrainingImportService: Sendable {
+
+    /// 深度专项批次 1：训记↔本地力量的双录判定（纯函数，便于回归测试）。
+    /// 收紧为「同日 且 开始差≤60min 且 时长差≤10min」——宁可重复显示也不丢训练。
+    static func isSameSessionDuplicate(
+        existing: StrengthWorkoutRecord,
+        candidateStart: Date,
+        candidateDurationMinutes: Int,
+        calendar: Calendar
+    ) -> Bool {
+        calendar.isDate(existing.startedAt, inSameDayAs: candidateStart)
+            && abs(existing.startedAt.timeIntervalSince(candidateStart)) <= 3_600
+            && abs(existing.durationMinutes - candidateDurationMinutes) <= 10
+    }
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
 
@@ -417,12 +430,17 @@ struct XunjiTrainingImportService: Sendable {
             } else {
                 // 双录防护：同日已存在时长相近的本地记录时视为同一场训练，
                 // 不再创建第二条 StrengthWorkoutRecord（否则 sessions/volume 翻倍）。
-                // T4 升级：除时长差 ≤10 分钟外，开始时间差 ≤60 分钟也视为同一场
-                //（此前手动补录与训记时长差 >10 分钟时仍会双写，容量/局部疲劳翻倍）。
+                // 深度专项批次 1：原判定为「时长差≤10 || 开始差≤60min」——|| 会把
+                // 同日两场时长相近（如都约 50 分钟）但相隔数小时的不同训练误合并，
+                // 违反「宁可重复显示也不丢训练」。收紧为「同日 且 开始差≤60min
+                // 且 时长差≤10min」，只合并时间窗内重叠的同场双录。
                 if let duplicate = existingWorkouts.first(where: {
-                    calendar.isDate($0.startedAt, inSameDayAs: normalized.startedAt)
-                        && (abs($0.durationMinutes - normalized.durationMinutes) <= 10
-                            || abs($0.startedAt.timeIntervalSince(normalized.startedAt)) <= 3_600)
+                    Self.isSameSessionDuplicate(
+                        existing: $0,
+                        candidateStart: normalized.startedAt,
+                        candidateDurationMinutes: normalized.durationMinutes,
+                        calendar: calendar
+                    )
                 }) {
                     markAffected(duplicate.startedAt)
                     deduped += 1
@@ -1351,11 +1369,14 @@ enum TrainingPlanAdvisor {
         }
         let provider = RetryingLLMProvider(base: DeepSeekProvider(apiKey: apiKey))
         let system = language.isChinese ? zhSystemPrompt : enSystemPrompt
-        let response = try await provider.complete(request: LLMRequest(
-            systemPrompt: system,
-            userPrompt: contextText,
-            contextJSON: ""
-        ))
+        // 深度专项批次 2：20s 总 deadline（此前无超时，最坏挂起数分钟）。
+        let response = try await LLMProviderDeadline.withTimeout(seconds: 20) {
+            try await provider.complete(request: LLMRequest(
+                systemPrompt: system,
+                userPrompt: contextText,
+                contextJSON: ""
+            ))
+        }
         let parsed = parsePlan(from: response.content)
         guard !parsed.isEmpty else {
             throw TrainingPlanAdvisorError.unparseable

@@ -254,9 +254,14 @@ final class DashboardViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
+            // 算法打通（深度专项批次 1）：浏览历史日期只读缓存+重算，
+            // 不再对历史日跑一遍 HealthKit 2-pass 同步。
+            let isToday = Calendar.current.isDateInToday(requestedDate)
             let refreshedDashboard = try await useCase.loadDashboard(
                 for: requestedDate,
-                modelContext: modelContext
+                modelContext: modelContext,
+                syncDays: isToday ? 3 : 0,
+                shouldSyncHealthData: isToday
             )
             guard Calendar.current.isDate(selectedDate, inSameDayAs: requestedDate) else { return }
             // F9 修复：只有数据实际变化（或用户显式强制刷新）才推进「上次更新」。

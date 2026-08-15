@@ -173,7 +173,8 @@ struct CoachContextAssembler {
         savedReports: [AIReportRecord],
         focus: CoachContextFocus,
         modelContext: ModelContext,
-        messages: [CoachChatVM.ChatMsg]
+        messages: [CoachChatVM.ChatMsg],
+        coverageSummary: DataCoverageSummaryModel? = nil
     ) async -> [ChatMessage] {
         let outboundPolicy = CoachOutboundDataPolicy.stored
         // A5：只注入已初始化的 wiki 文件，空模板不进 AI 上下文。
@@ -363,9 +364,18 @@ struct CoachContextAssembler {
         let canonicalBodyState = outboundPolicy.health
             ? input.bodyState(dashboard: dashboard)
             : outboundDashboard.bodyState
-        let coverageSummary = DataCoverageSummaryModel.build(
-            groups: outboundPolicy.health ? await DataCoverageGroupFactory.loadPriorityGroups() : []
-        )
+        // 算法打通（深度专项批次 1）：覆盖摘要在 CoachView 已算好（.task 时加载），
+        // 传入则跳过每条消息 9 次串行 HealthKit 覆盖查询；nil 时保持旧行为。
+        let effectiveCoverage: DataCoverageSummaryModel
+        if let provided = coverageSummary {
+            effectiveCoverage = provided
+        } else if outboundPolicy.health {
+            effectiveCoverage = await DataCoverageSummaryModel.build(
+                groups: await DataCoverageGroupFactory.loadPriorityGroups()
+            )
+        } else {
+            effectiveCoverage = DataCoverageSummaryModel.unknown
+        }
         let canonical = AIContextBuilder().buildFacts(
             dashboard: outboundDashboard,
             journalEntries: outboundPolicy.journal ? input.journalContext : [],
@@ -381,7 +391,7 @@ struct CoachContextAssembler {
             trainingDecision: outboundPolicy.training
                 ? input.canonicalTrainingDecision(for: canonicalBodyState)
                 : nil,
-            dataCoverage: outboundPolicy.health ? coverageSummary.agentFactContext : nil,
+            dataCoverage: outboundPolicy.health ? effectiveCoverage.agentFactContext : nil,
             profileAge: profileAge,
             dailyOperatingPlan: outboundPolicy.health
                 ? AIContextBuilder.compactDailyOperatingPlan(input.dailyOperatingPlan)
@@ -420,7 +430,7 @@ struct CoachContextAssembler {
             ChatMessage(role: .system, content: systemPrompt),
             ChatMessage(role: .system, content: """
             ## Data Coverage Guardrail
-            \(coverageSummary.coachContextLine)
+            \(effectiveCoverage.coachContextLine)
             If coverage is low or a relevant blocker is listed, lower certainty, avoid pretending missing signals are normal, and tell the user which signal would improve the recommendation.
             """)
         ]

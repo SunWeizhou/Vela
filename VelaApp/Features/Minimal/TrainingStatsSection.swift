@@ -1121,8 +1121,18 @@ enum YearlyTrainingAggregator {
         for record in records {
             let count = record.workoutCount ?? 0
             let duration = record.workoutDuration ?? 0
-            let calories = record.activeCalories ?? 0
-            guard count > 0 || duration > 0 || calories > 0 else { continue }
+            // 深度专项批次 1：训练日判定去掉 calories——
+            // activeCalories 是全天活动能耗，任何有步行量的休息日此前都被算成训练日。
+            guard count > 0 || duration > 0 else { continue }
+            // 总消耗改为真实训练 kcal：从 workoutsData 解码 WorkoutSummary 求和；
+            // 回填日无 workoutsData 时记 0（不再把全天活动能耗冒充训练消耗）。
+            let workoutEnergy: Double
+            if let workoutsData = record.workoutsData,
+               let workouts = try? JSONDecoder().decode([WorkoutSummary].self, from: workoutsData) {
+                workoutEnergy = workouts.compactMap(\.energyKilocalories).reduce(0, +)
+            } else {
+                workoutEnergy = 0
+            }
             let year = calendar.component(.year, from: record.date)
             var stats = byYear[year] ?? YearStats(
                 year: year, trainingDays: 0, workoutCount: 0,
@@ -1131,7 +1141,7 @@ enum YearlyTrainingAggregator {
             stats.trainingDays += 1
             stats.workoutCount += count
             stats.totalMinutes += duration
-            stats.totalCalories += calories
+            stats.totalCalories += workoutEnergy
             byYear[year] = stats
         }
         return byYear.values.sorted { $0.year < $1.year }

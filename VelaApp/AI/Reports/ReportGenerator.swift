@@ -22,19 +22,24 @@ struct ReportGenerator: Sendable {
         // character-truncated fragment. (The full snapshot is still stored.)
         let contextJSON = Self.trimmedContextJSON(from: fullContextJSON)
 
-        var userPrompt = prompt(for: type)
+        let baseUserPrompt = prompt(for: type)
+        let userPrompt: String
         if type == .morningBrief {
-            let facts = buildMorningBriefFactsPrompt(from: context)
-            userPrompt += "\n\n" + facts
+            userPrompt = baseUserPrompt + "\n\n" + buildMorningBriefFactsPrompt(from: context)
+        } else {
+            userPrompt = baseUserPrompt
         }
 
-        let response = try await provider.complete(
-            request: LLMRequest(
-                systemPrompt: systemPrompt,
-                userPrompt: userPrompt,
-                contextJSON: contextJSON
+        // 深度专项批次 2：20s 总 deadline（BGTask 预算 ~30s，此前可挂起数分钟）。
+        let response = try await LLMProviderDeadline.withTimeout(seconds: 20) {
+            try await provider.complete(
+                request: LLMRequest(
+                    systemPrompt: systemPrompt,
+                    userPrompt: userPrompt,
+                    contextJSON: contextJSON
+                )
             )
-        )
+        }
         return GeneratedAIReport(
             type: type,
             title: localizedReportTitle(type),

@@ -465,6 +465,7 @@ enum LongTermBaselineMetric: String, CaseIterable, Hashable, Sendable {
     case hrv
     case sleepHours
     case bodyWeight
+    case bodyFatPercent
     case steps
     case activeCalories
 
@@ -474,6 +475,7 @@ enum LongTermBaselineMetric: String, CaseIterable, Hashable, Sendable {
         case .hrv: return "HRV"
         case .sleepHours: return "睡眠时长"
         case .bodyWeight: return "体重"
+        case .bodyFatPercent: return "体脂率"
         case .steps: return "步数"
         case .activeCalories: return "活动能量"
         }
@@ -485,6 +487,7 @@ enum LongTermBaselineMetric: String, CaseIterable, Hashable, Sendable {
         case .hrv: return "ms"
         case .sleepHours: return "小时"
         case .bodyWeight: return "kg"
+        case .bodyFatPercent: return "%"
         case .steps: return "步"
         case .activeCalories: return "kcal"
         }
@@ -497,6 +500,7 @@ enum LongTermBaselineMetric: String, CaseIterable, Hashable, Sendable {
         case .hrv: return true
         case .sleepHours: return true
         case .bodyWeight: return false
+        case .bodyFatPercent: return false
         case .steps: return true
         case .activeCalories: return true
         }
@@ -510,6 +514,7 @@ struct LongTermBaselinePoint: Hashable, Sendable {
     var restingHeartRate: Double?
     var sleepHours: Double?
     var bodyWeight: Double?
+    var bodyFatPercent: Double?
     var steps: Double?
     var activeCalories: Double?
     var workoutCount: Int?
@@ -521,6 +526,7 @@ struct LongTermBaselinePoint: Hashable, Sendable {
         case .hrv: return hrvAverage
         case .sleepHours: return sleepHours
         case .bodyWeight: return bodyWeight
+        case .bodyFatPercent: return bodyFatPercent
         case .steps: return steps
         case .activeCalories: return activeCalories
         }
@@ -535,6 +541,7 @@ extension DailyHealthSnapshot {
             restingHeartRate: restingHeartRate,
             sleepHours: sleepHours,
             bodyWeight: bodyWeight,
+            bodyFatPercent: bodyFatPercent,
             steps: steps,
             activeCalories: activeCalories,
             workoutCount: workoutCount,
@@ -551,6 +558,7 @@ extension DailyHealthSummaryRecord {
             restingHeartRate: restingHeartRate,
             sleepHours: sleepHours,
             bodyWeight: bodyWeight,
+            bodyFatPercent: bodyFatPercent,
             steps: steps,
             activeCalories: activeCalories,
             workoutCount: workoutCount,

@@ -4,6 +4,11 @@ import SwiftData
 
 @MainActor
 final class AppSyncCoordinator: ObservableObject {
+    /// 算法打通（深度专项批次 1）：全 App 共享一个去重/节流实例——
+    /// 此前前台刷新、主动洞察、后台任务各自构造实例，inFlight/30s 节流失效，
+    /// 回前台一次会并发拉起多条全量同步+评分管线。
+    static let shared = AppSyncCoordinator()
+
     enum Source: Hashable {
         case healthKit
         case xunji
@@ -163,7 +168,7 @@ final class VelaResolver {
         // Register default implementations
         register(HealthQueryService.self) { HealthKitQueryService() }
         register(AIContextBuilder.self) { AIContextBuilder() }
-        register(AppSyncCoordinator.self) { AppSyncCoordinator() }
+        register(AppSyncCoordinator.self) { AppSyncCoordinator.shared }
         register(DailySummaryUseCase.self) {
             DailySummaryUseCase(
                 queryService: self.resolve(HealthQueryService.self) as! HealthKitQueryService,

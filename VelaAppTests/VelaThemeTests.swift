@@ -305,7 +305,9 @@ final class VelaThemeTests: XCTestCase {
         XCTAssertEqual(stats[1].trainingDays, 2)
         XCTAssertEqual(stats[1].workoutCount, 2)
         XCTAssertEqual(stats[1].totalMinutes, 75, accuracy: 0.01)
-        XCTAssertEqual(stats[1].totalCalories, 650, accuracy: 0.01)
+        // 深度专项批次 1：总消耗口径改为 workoutsData 的训练能量——
+        // 全天活动能耗（activeCalories）不再冒充训练消耗。
+        XCTAssertEqual(stats[1].totalCalories, 0, accuracy: 0.01)
     }
 
     func testTrainingHeatmapBuildsMondayAlignedWeeksWithRealTiers() {
@@ -2197,5 +2199,218 @@ final class VelaThemeTests: XCTestCase {
             durationMinutes: 45,
             exercises: [StrengthExerciseLog(name: "深蹲", equipment: "barbell", sets: sets)]
         )
+    }
+
+
+    // MARK: - 深度专项批次 1+2 回归
+
+    func testYearlyTrainingAggregatorExcludesRestDaysWithOnlyActivity() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let base = calendar.date(from: DateComponents(year: 2024, month: 3, day: 10))!
+        let restDay = DailyHealthSummaryRecord(
+            dayIdentifier: DailyHealthSummaryRecord.dayIdentifier(for: base, calendar: calendar),
+            date: base,
+            activeCalories: 350
+        )
+        let trainingDay = DailyHealthSummaryRecord(
+            dayIdentifier: DailyHealthSummaryRecord.dayIdentifier(for: calendar.date(byAdding: .day, value: 1, to: base)!, calendar: calendar),
+            date: calendar.date(byAdding: .day, value: 1, to: base)!,
+            activeCalories: 300,
+            workoutCount: 1,
+            workoutDuration: 60
+        )
+        let stats = YearlyTrainingAggregator.aggregate(records: [restDay, trainingDay], calendar: calendar)
+        XCTAssertEqual(stats.count, 1)
+        XCTAssertEqual(stats.first?.trainingDays, 1, "纯活动能耗的休息日不得计入训练天数")
+        XCTAssertEqual(stats.first?.totalCalories ?? -1, 0, "无 workoutsData 的训练消耗应为 0，不再把全天活动能耗冒充训练消耗")
+    }
+
+    func testYearlyTrainingAggregatorUsesWorkoutEnergyNotActiveCalories() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let day = calendar.date(from: DateComponents(year: 2024, month: 3, day: 12))!
+        let workouts = [
+            WorkoutSummary(start: day, end: day.addingTimeInterval(3_600), activityName: "力量训练", energyKilocalories: 150),
+            WorkoutSummary(start: day.addingTimeInterval(3_700), end: day.addingTimeInterval(7_200), activityName: "跑步", energyKilocalories: 200)
+        ]
+        let record = DailyHealthSummaryRecord(
+            dayIdentifier: DailyHealthSummaryRecord.dayIdentifier(for: day, calendar: calendar),
+            date: day,
+            activeCalories: 800,
+            workoutCount: 2,
+            workoutDuration: 110,
+            workoutsData: try! JSONEncoder().encode(workouts)
+        )
+        let stats = YearlyTrainingAggregator.aggregate(records: [record], calendar: calendar)
+        XCTAssertEqual(stats.first?.totalCalories ?? -1, 350, accuracy: 0.001, "训练消耗应来自 workoutsData 而非全天活动能耗")
+    }
+
+    func testXunjiDedupDoesNotMergeSameDaySeparateWorkouts() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let morning = calendar.date(from: DateComponents(year: 2026, month: 8, day: 10, hour: 9))!
+        let evening = calendar.date(from: DateComponents(year: 2026, month: 8, day: 10, hour: 16))!
+        let existing = StrengthWorkoutRecord(title: "胸", startedAt: morning, durationMinutes: 50, exercises: [])
+        // 同日两场时长相近（50 分钟）但相隔 7 小时 → 不得合并（原 || 判定会误合并）。
+        XCTAssertFalse(
+            XunjiTrainingImportService.isSameSessionDuplicate(
+                existing: existing, candidateStart: evening, candidateDurationMinutes: 50, calendar: calendar
+            ),
+            "同日不同场次即使时长相近也不得合并"
+        )
+        // 同日同场（开始差 5 分钟且时长差 3 分钟）→ 合并。
+        XCTAssertTrue(
+            XunjiTrainingImportService.isSameSessionDuplicate(
+                existing: existing,
+                candidateStart: morning.addingTimeInterval(5 * 60),
+                candidateDurationMinutes: 53,
+                calendar: calendar
+            )
+        )
+    }
+
+    @MainActor
+    func testAggregateDayPreservesBackfilledCountsWithoutEvents() throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let backfillDay = calendar.date(from: DateComponents(year: 2024, month: 1, day: 15))!
+        let record = DailyHealthSummaryRecord(
+            dayIdentifier: DailyHealthSummaryRecord.dayIdentifier(for: backfillDay, calendar: calendar),
+            date: backfillDay,
+            workoutCount: 2,
+            workoutDuration: 90
+        )
+        context.insert(record)
+        try context.save()
+        try WorkoutAggregationService.shared.aggregateDay(date: backfillDay, modelContext: context, calendar: calendar)
+        let after = try context.fetch(FetchDescriptor<DailyHealthSummaryRecord>()).first
+        XCTAssertEqual(after?.workoutCount, 2, "回填日无事件时不得用空事件表把 HealthKit 计数抹成 0")
+        XCTAssertEqual(after?.workoutDuration, 90)
+    }
+
+    func testHeatmapTierIgnoresActivityCalories() {
+        let day = Date()
+        let restWithSteps = DailyHealthSummaryRecord(
+            dayIdentifier: "tier-rest",
+            date: day,
+            activeCalories: 500
+        )
+        XCTAssertEqual(TrainingHeatmapData.tier(for: restWithSteps), 0, "高步行量的休息日不得染成训练强度")
+        let trained = DailyHealthSummaryRecord(
+            dayIdentifier: "tier-trained",
+            date: day,
+            workoutCount: 1,
+            workoutDuration: 60
+        )
+        XCTAssertEqual(TrainingHeatmapData.tier(for: trained), 1)
+    }
+
+    func testLongTermMetricIncludesBodyFatAndActiveCalories() {
+        XCTAssertTrue(LongTermMetric.allCases.contains(.bodyFat))
+        XCTAssertTrue(LongTermMetric.allCases.contains(.activeCalories))
+        let record = DailyHealthSummaryRecord(
+            dayIdentifier: "lt-metric",
+            date: Date(),
+            activeCalories: 620,
+            bodyFatPercent: 18.5
+        )
+        XCTAssertEqual(LongTermMetric.bodyFat.value(from: record) ?? 0, 18.5, accuracy: 0.001)
+        XCTAssertEqual(LongTermMetric.activeCalories.value(from: record) ?? 0, 620, accuracy: 0.001)
+        XCTAssertFalse(LongTermMetric.bodyFat.improvementIsPositive)
+    }
+
+    func testTodayCommandListsTwoLongTermReferenceLines() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let base = calendar.date(from: DateComponents(year: 2024, month: 1, day: 1))!
+        var points: [LongTermBaselinePoint] = []
+        for i in 0..<120 {
+            let day = calendar.date(byAdding: .day, value: i, to: base)!
+            points.append(LongTermBaselinePoint(
+                date: day,
+                hrvAverage: 45 + Double(i % 5),
+                restingHeartRate: 58 + Double(i % 4),
+                sleepHours: 7.2,
+                steps: 8000 + Double(i % 7) * 500
+            ))
+        }
+        let report = LongTermBaselineEngine.compute(points: points, today: base.addingTimeInterval(120 * 86_400), calendar: calendar)
+        var dashboard = DashboardSummary.preview(date: Date())
+        dashboard.longTermBaselines = report
+        let state = TodayCommandBuilder.build(from: dashboard, recentStrengthSummary: nil, coachArtifact: nil)
+        let longTermLines = state.readinessDecision.reasons.filter { $0.contains("长线参照") }
+        XCTAssertGreaterThanOrEqual(longTermLines.count, 2, "长线参照应展示 RHR + HRV 两行而非仅一行")
+    }
+
+    // MARK: - 深度专项批次 2 回归（AgentLoop 取消/超时 + LLM deadline）
+
+    private struct SleepingAgentProvider: AgentChatProvider {
+        var delayNanoseconds: UInt64
+        var content: String
+        func chat(messages: [ChatMessage], tools: [[String: Value]]?) async throws -> LLMResponse {
+            try await Task.sleep(nanoseconds: delayNanoseconds)
+            return LLMResponse(content: content, toolCalls: nil)
+        }
+        func streamChat(messages: [ChatMessage]) -> AsyncThrowingStream<String, Error> {
+            AsyncThrowingStream { $0.finish() }
+        }
+    }
+
+    func testAgentLoopDeadlineBoundsSlowProviderCall() async throws {
+        let provider = SleepingAgentProvider(delayNanoseconds: 3_000_000_000, content: "late")
+        let startedAt = Date()
+        let result = try await AgentLoop(
+            provider: provider,
+            toolRegistry: ToolRegistry(tools: []),
+            maxDuration: 0.2
+        ).run(messages: [ChatMessage(role: .user, content: "hi")])
+        let elapsed = Date().timeIntervalSince(startedAt)
+        XCTAssertLessThan(elapsed, 2.0, "provider 调用应被剩余预算截断，不再击穿 maxDuration")
+        XCTAssertTrue(result.response.contains("中止") || result.response.contains("cancelled"))
+    }
+
+    func testAgentLoopPropagatesUserCancellation() async {
+        let provider = SleepingAgentProvider(delayNanoseconds: 400_000_000, content: "")
+        let loop = AgentLoop(provider: provider, toolRegistry: ToolRegistry(tools: []), maxDuration: 30)
+        let task = Task {
+            try await loop.run(messages: [ChatMessage(role: .user, content: "hi")])
+        }
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        task.cancel()
+        do {
+            _ = try await task.value
+            XCTFail("用户取消应抛出 CancellationError，而不是 canned 成功消息")
+        } catch is CancellationError {
+            // 预期
+        } catch {
+            XCTFail("应抛 CancellationError，实际：\(error)")
+        }
+    }
+
+    func testLLMProviderDeadlineTimesOutSlowOperation() async {
+        do {
+            let _: String = try await LLMProviderDeadline.withTimeout(seconds: 0.05) {
+                try await Task.sleep(nanoseconds: 500_000_000)
+                return "done"
+            }
+            XCTFail("应超时")
+        } catch LLMProviderError.timedOut {
+            // 预期
+        } catch {
+            XCTFail("应抛 timedOut，实际：\(error)")
+        }
+    }
+
+    func testRequestFailedMessagesDifferentiateStatusCodes() {
+        let zh400 = LLMProviderError.requestFailed(statusCode: 400, message: "").userFacingMessage(isChinese: true)
+        let zh429 = LLMProviderError.requestFailed(statusCode: 429, message: "").userFacingMessage(isChinese: true)
+        let zh500 = LLMProviderError.requestFailed(statusCode: 500, message: "").userFacingMessage(isChinese: true)
+        XCTAssertTrue(zh400.contains("400"), "400 应提示请求过长/格式问题")
+        XCTAssertTrue(zh429.contains("429"), "429 应提示服务繁忙")
+        XCTAssertTrue(zh500.contains("500"), "5xx 应提示服务端故障")
+        XCTAssertNotEqual(zh400, zh429)
     }
 }

@@ -231,9 +231,13 @@ enum TodayCommandBuilder {
             reasons.append(first)
         }
         // Layer 2：三年长线证据（只作为理由补充，不改变决策分支）。
-        if let report = dashboard.longTermBaselines,
-           let line = LongTermBaselineEngine.contextLines(report).first {
-            reasons.append("长线参照：\(line)")
+        // 深度专项批次 1：此前只取 .first（恒为 RHR 一行），
+        // 改为前两行（RHR + HRV），让三年视角在决策理由里可见。
+        if let report = dashboard.longTermBaselines {
+            let lines = LongTermBaselineEngine.contextLines(report).prefix(2)
+            for line in lines {
+                reasons.append("长线参照：\(line)")
+            }
         }
         let thresholds = PersonalBaselineEngine.resolveThresholds()
         if dashboard.recovery.score < thresholds.recoveryRest {

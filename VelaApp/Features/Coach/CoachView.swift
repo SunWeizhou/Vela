@@ -1261,7 +1261,8 @@ struct VelaCoachView: View {
             journalEntries: journalEntries,
             savedReports: savedReports,
             focus: .general,
-            services: services
+            services: services,
+            coverageSummary: dataCoverageSummary
         )
     }
 

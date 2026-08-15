@@ -681,13 +681,14 @@ enum TrainingHeatmapData {
     static func tier(for record: DailyHealthSummaryRecord?) -> Int {
         guard let record else { return 0 }
         let count = record.workoutCount ?? 0
-        let calories = record.activeCalories ?? 0
         let duration = record.workoutDuration ?? 0
         if count >= 3 { return 3 }
         if count == 2 { return 2 }
         if count == 1 { return 1 }
-        if calories > 400 || duration > 45 { return 2 }
-        if calories > 150 || duration > 15 { return 1 }
+        // 深度专项批次 1：分档只用训练计数/时长——此前 calories>400/150 的分档
+        // 用的是全天活动能耗，高步行量的休息日会被染成"中强度训练"。
+        if duration > 45 { return 2 }
+        if duration > 15 { return 1 }
         return 0
     }
 
