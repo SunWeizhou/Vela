@@ -386,18 +386,27 @@ struct VelaTrainingView: View {
     }
 
     /// 剂量环「为什么」的证据指标（真实评分，缺失时不伪造）。
+    /// 联通专项批次 1：证据锚点改为「恢复 + 负荷 + 动态第三槽」——
+    /// 把触发的隐性门控（压力>75 / TSB≤-15 / 能量<30）抬进证据层，
+    /// 与 kernel 门控同阈值同源（TrainingDecision.swift），最多 3 个锚点。
     private var trainingEvidenceMetrics: [String] {
         let dashboard = dashboardVM.dashboard
         var metrics: [String] = []
         if dashboard.recovery.hasData {
             metrics.append("恢复 \(Int(dashboard.recovery.score.rounded()))")
         }
-        if dashboard.sleepScore.hasData {
-            metrics.append("睡眠 \(Int(dashboard.sleepScore.score.rounded()))")
-        }
         if dashboard.strain.hasData {
             let range = dashboard.strain.recommendedRange
             metrics.append("负荷 \(Int(dashboard.strain.score.rounded()))（目标 \(range.lowerBound)-\(range.upperBound)）")
+        }
+        if dashboard.stress.hasData, dashboard.stress.stressIndex > 75 {
+            metrics.append("压力 \(Int(dashboard.stress.stressIndex.rounded()))（>75）")
+        } else if let tsb = dashboard.energy.metrics["tsb"], tsb <= -15 {
+            metrics.append("TSB \(String(format: "%+.0f", tsb))（深度为负）")
+        } else if dashboard.energy.hasData, dashboard.energy.currentEnergy < 30 {
+            metrics.append("能量 \(Int(dashboard.energy.currentEnergy.rounded()))（偏低）")
+        } else if dashboard.sleepScore.hasData {
+            metrics.append("睡眠 \(Int(dashboard.sleepScore.score.rounded()))")
         }
         return metrics
     }
@@ -488,9 +497,28 @@ struct VelaTrainingView: View {
         let longTermLine = longTermParts.isEmpty
             ? ""
             : "三年历史基线(不含近90天):\n\(longTermParts.joined(separator: "，"))\n"
+        // 联通专项批次 1：档案与目标/风格补进 AI 规划上下文（此前规划看不到用户是谁）。
+        let onboarding = (try? modelContext.fetch(FetchDescriptor<OnboardingState>()))?.first
+        var profileParts: [String] = []
+        if let age = dashboard.extendedMetrics.age { profileParts.append("年龄 \(age)") }
+        if let sex = dashboard.extendedMetrics.biologicalSex {
+            profileParts.append(sex == "male" ? "男" : sex == "female" ? "女" : "性别其他")
+        }
+        if let height = dashboard.extendedMetrics.heightCm { profileParts.append("身高 \(Int(height))cm") }
+        if let weight = dashboard.bodyMetrics.weightKilograms { profileParts.append("体重 \(String(format: "%.1f", weight))kg") }
+        if let onboarding {
+            var goalParts: [String] = []
+            if !onboarding.goalProfile.primaryGoal.isEmpty { goalParts.append("目标 \(onboarding.goalProfile.primaryGoal)") }
+            if !onboarding.trainingPreference.trainingStyle.isEmpty { goalParts.append("训练风格 \(onboarding.trainingPreference.trainingStyle)") }
+            if onboarding.trainingPreference.weeklyTrainingDays > 0 { goalParts.append("每周 \(onboarding.trainingPreference.weeklyTrainingDays) 次") }
+            if !goalParts.isEmpty { profileParts.append(goalParts.joined(separator: "，")) }
+        }
+        let profileLine = profileParts.isEmpty ? "暂无" : profileParts.joined(separator: "，")
         return """
+        生理档案: \(profileLine)
         恢复评分: \(dashboard.recovery.hasData ? "\(Int(dashboard.recovery.score.rounded()))" : "暂无")
         睡眠评分: \(dashboard.sleepScore.hasData ? "\(Int(dashboard.sleepScore.score.rounded()))" : "暂无")
+        压力指数: \(dashboard.stress.hasData ? "\(Int(dashboard.stress.stressIndex.rounded()))" : "暂无")
         负荷评分: \(dashboard.strain.hasData ? "\(Int(dashboard.strain.score.rounded()))" : "暂无")
         \(longTermLine)肌群疲劳(48h组数/7天组数/等级):
         \(fatigueLines.isEmpty ? "暂无力量训练数据" : fatigueLines)

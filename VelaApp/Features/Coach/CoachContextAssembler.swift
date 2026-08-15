@@ -169,6 +169,8 @@ struct CoachContextAssembler {
     /// 深度专项批次 6：相关性结果会话内 memo（≤5 条，快照日期/手记变化自动失效）。
     private static var correlationMemo: [String: String] = [:]
     private static var latestSnapshotEpoch: Int = 0
+    /// 联通专项批次 1：身体模型状态 memo（≤5 条；训练/手记/快照变化自动失效）。
+    private static var bodyModelMemo: [String: BodyModelState] = [:]
     func buildChatMessages(
         userText: String,
         dashboard: DashboardSummary,
@@ -410,6 +412,15 @@ struct CoachContextAssembler {
             strengthWorkouts: outboundPolicy.training ? input.strengthWorkouts : [],
             trainingResponses: outboundPolicy.training ? input.trainingResponses : [],
             onboardingState: outboundPolicy.health ? input.onboardingState : nil,
+            // 联通专项批次 1：身体模型注入——此前 bodyModelState 形参零生产调用，
+            // Coach 永远看不到成熟度/断言/coachRules。
+            bodyModelState: (outboundPolicy.health && outboundPolicy.training)
+                ? Self.resolvedBodyModelState(
+                    modelContext: modelContext,
+                    dashboard: outboundDashboard,
+                    journalEntries: Array(journalEntries)
+                )
+                : nil,
             bodyState: canonicalBodyState,
             trainingDecision: outboundPolicy.training
                 ? input.canonicalTrainingDecision(for: canonicalBodyState)
@@ -533,6 +544,42 @@ struct CoachContextAssembler {
 
         result.append(ChatMessage(role: .user, content: userText))
         return result
+    }
+
+    /// 联通专项批次 1：构造身体模型状态（memo 化；训练/手记/快照变化自动失效）。
+    /// BodyModelBuilder 的 claims（三年基线/训练-结果配对/剂量-反应）与 coachRules
+    /// 由此首次真正进入 AI 上下文。
+    private static func resolvedBodyModelState(
+        modelContext: ModelContext,
+        dashboard: DashboardSummary,
+        journalEntries: [JournalEntryRecord]
+    ) -> BodyModelState {
+        let strengths = (try? modelContext.fetch(FetchDescriptor<StrengthWorkoutRecord>())) ?? []
+        let responses = (try? modelContext.fetch(FetchDescriptor<TrainingResponseRecord>())) ?? []
+        let summaries = (try? modelContext.fetch(FetchDescriptor<DailyHealthSummaryRecord>())) ?? []
+        let onboarding = (try? modelContext.fetch(FetchDescriptor<OnboardingState>()))?.first
+        let key = [
+            "\(strengths.count)",
+            "\(Int(strengths.map(\.startedAt).max()?.timeIntervalSince1970 ?? 0))",
+            "\(responses.count)",
+            "\(summaries.count)",
+            "\(Int(summaries.map(\.date).max()?.timeIntervalSince1970 ?? 0))",
+            "\(journalEntries.count)",
+            "\(Int(journalEntries.map(\.createdAt).max()?.timeIntervalSince1970 ?? 0))"
+        ].joined(separator: "-")
+        if let cached = bodyModelMemo[key] { return cached }
+        let state = BodyModelBuilder().build(
+            onboarding: onboarding,
+            dailySummaries: summaries,
+            journalEntries: journalEntries,
+            strengthWorkouts: strengths,
+            trainingResponses: responses,
+            longTermBaselines: dashboard.longTermBaselines,
+            asOf: Date()
+        )
+        if bodyModelMemo.count > 4 { bodyModelMemo.removeAll() }
+        bodyModelMemo[key] = state
+        return state
     }
 
     /// BodyInterpreterEngine 输出的 Coach 上下文渲染（双语、≤3 条/类）。

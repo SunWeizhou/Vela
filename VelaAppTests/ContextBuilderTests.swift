@@ -321,9 +321,13 @@ final class ContextBuilderTests: XCTestCase {
             "respiratory_rate", "hrv_z_score", "hrv_vs_baseline_pct",
             "hrv_baseline_ms", "rhr_baseline_bpm"
         ])
+        // 联通专项批次 1：v1 strain 契约有意扩展（负荷分解指标），
+        // stress 契约扩展（六因子）——agent 不再只能看到聚合分数。
         XCTAssertEqual(Set(result.envelope.strain.keys), [
             "score", "band", "target_status", "recommended_range",
-            "steps", "active_energy_kcal", "exercise_minutes"
+            "steps", "active_energy_kcal", "exercise_minutes",
+            "training_load_ratio", "acute_7d_load", "chronic_28d_equivalent",
+            "training_load_status"
         ])
         XCTAssertEqual(Set(result.envelope.energyBank.keys), [
             "morning_energy", "current_energy", "status", "charge_efficiency",

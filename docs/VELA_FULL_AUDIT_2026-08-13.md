@@ -620,3 +620,20 @@ P1-1 工具回调、P1-2 VO2max、41/42 天窗口、睡眠缺失误判 reduce、
 4. **季节性剖面展示**：`seasonalHRV/seasonalRHR` 报告字段已就绪，趋势页「月历节律」条未接。
 5. **孤儿测试文件**：`VelaAppTests/StabilizationTests.swift` 未注册 pbxproj（引用旧 API 不参与编译），建议下轮修复注册或删除。
 6. **Watch 侧**：WristSnapshotBridge 已推送 command+plan，Watch 端展示未纳入本轮范围。
+
+## 联通性专项批次 1（2026-08-15 · 接线与口径修复）✅ 已修并推送
+
+四面并行审计（训练页五模块/身体模型与档案/三指标/agent 联通）合并报告经用户确认后的第一批（9 项，全部函数级）：
+
+- **身体模型注入 Coach**：`CoachContextAssembler.resolvedBodyModelState`（memo 化）计算 BodyModelState 并传入 `buildFacts(bodyModelState:)`——此前该形参零生产调用，Coach 永远看不到成熟度/断言/coachRules；训练/手记/快照变化自动失效。
+- **Coach 紧凑视图补局部疲劳**：`CoachCompactContextAdapter.render` 追加 48h/7d 组数 Top3（此前被剥掉，Coach 无法回答「某肌群 48h 练了几组」）。
+- **工具口径统一**：`get_strength_workout_history` 的 payload 增加 `effective_sets`/`muscle_group_sets`（经 `summarizeWorkout` 与训练页/快照同一 isEffective 口径 + 肌群映射）——消除「agent 说 8 组 vs 训练页 12 组」的第三套计数口径。
+- **详情页补齐成分**：压力详情补 `temp_stress`/`load_stress`（此前 6 因子只展示 4）；恢复详情补 `parasympathetic_tone_index`（此前算了零展示）。
+- **Coach 上下文补成分**：v1 `StrainContextBuilder` 补 training_load_ratio/acute_7d/chronic_28d/status；`StressContextBuilder` 补六因子——agent 解释压力/负荷不再依赖 get_today_health 的 evidence 段。
+- **今日页证据锚点真实化**：HRV chip 改用基线 z-score（"HRV 基线 +x.x SD"）；driver 证据展示 `reasons.first` 正文而非仅标题。
+- **训练页证据锚点升级**：`trainingEvidenceMetrics` 改为「恢复 + 负荷 + 动态第三槽」——压力>75 / TSB≤-15 / 能量<30 触发时抬进证据层（与 kernel 门控同阈值同源），默认睡眠兜底，最多 3 个锚点。
+- **AI 规划上下文补档案+目标**：`aiPlanContextText` 增加生理档案（年龄/性别/身高/体重）+ 目标/训练风格/周频 + 压力指数行。
+- **疲劳阈值唯一事实源**：`LocalMuscleFatigue` 新增 high/moderate 48h/7d 静态常量，`fatigueLevel` 与 AI 规划中英提示词共用——消除「48h≥14/7d≥24」双源硬编码。
+- **未来卡冲突注记**：AI 建议与本地推荐不一致时显示弱注记「Vela 与本地建议不同…本地轮转保持不变」（ADR 0008 一致性）。
+
+**测试**：v1 strain 键集契约测试按有意扩展更新（+4 键），全量 **410/410** 绿；已推送到 iPhone（databaseSequenceNumber 2924）。

@@ -394,9 +394,13 @@ struct TodayExperienceModel: Codable, Hashable {
 
         var chips = [decisionEvidenceChip(decision)]
         if let driver = bodyState.drivers.first {
-            chips.append(displayDriverTitle(driver))
+            // 联通专项批次 1：证据锚点展示引擎理由正文（reasons.first），而非只有标题。
+            chips.append(driver.detail.isEmpty ? displayDriverTitle(driver) : driver.detail)
         }
-        if let hrv = dashboard.recoveryMetrics.hrvMilliseconds {
+        if let hrvZ = dashboard.recovery.metrics["hrv_z_score"] {
+            // 联通专项批次 1：HRV 证据改用个人基线 z-score（相对语义），不再只报 raw ms。
+            chips.append(String(format: "HRV 基线 %+.1f SD", hrvZ))
+        } else if let hrv = dashboard.recoveryMetrics.hrvMilliseconds {
             chips.append("HRV \(Int(hrv.rounded()))ms")
         }
         if dashboard.sleepScore.hasData {

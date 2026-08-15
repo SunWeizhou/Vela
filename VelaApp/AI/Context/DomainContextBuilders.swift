@@ -62,7 +62,7 @@ struct RecoveryContextBuilder: DomainContextBuilder {
 
 struct StrainContextBuilder: DomainContextBuilder {
     func build(from dashboard: DashboardSummary) -> [String: String] {
-        [
+        var dict: [String: String] = [
             "score": (dashboard.strain.hasData ? dashboard.strain.value : nil).map { $0.formatted(.number.precision(.fractionLength(0))) } ?? "N/A",
             "band": dashboard.strain.hasData ? dashboard.strain.band.rawValue : "unavailable",
             "target_status": dashboard.strain.hasData ? dashboard.strain.targetStatus.rawValue : "unavailable",
@@ -71,6 +71,12 @@ struct StrainContextBuilder: DomainContextBuilder {
             "active_energy_kcal": dashboard.strain.metrics["active_energy_raw"].map { "\(Int($0))" } ?? "N/A",
             "exercise_minutes": dashboard.strain.metrics["exercise_minutes_raw"].map { "\(Int($0))" } ?? "N/A"
         ]
+        // 联通专项批次 1：补齐负荷分解指标（此前 agent 只能看到聚合分数）。
+        dict["training_load_ratio"] = dashboard.strain.metrics["training_load_ratio"].map { String(format: "%.2f", $0) } ?? "N/A"
+        dict["acute_7d_load"] = dashboard.strain.metrics["acute_7d_load"].map { String(format: "%.0f", $0) } ?? "N/A"
+        dict["chronic_28d_equivalent"] = dashboard.strain.metrics["chronic_28d_equivalent"].map { String(format: "%.0f", $0) } ?? "N/A"
+        dict["training_load_status"] = dashboard.strain.trainingLoadStatus.rawValue
+        return dict
     }
 }
 
@@ -78,12 +84,20 @@ struct StrainContextBuilder: DomainContextBuilder {
 
 struct StressContextBuilder: DomainContextBuilder {
     func build(from dashboard: DashboardSummary) -> [String: String] {
-        [
+        var dict: [String: String] = [
             "stress_index": (dashboard.stress.hasData ? dashboard.stress.value : nil).map { $0.formatted(.number.precision(.fractionLength(0))) } ?? "N/A",
             "band": dashboard.stress.hasData ? dashboard.stress.band.rawValue : "unavailable",
             "confidence": dashboard.stress.confidence.rawValue,
             "proxy_notice": "Stress is a physiological proxy, not a medical or mental health diagnosis."
         ]
+        // 联通专项批次 1：补齐压力六因子分解（此前 agent 只能看到聚合 stress_index）。
+        dict["rhr_stress"] = dashboard.stress.metrics["rhr_stress"].map { String(format: "%.0f", $0) } ?? "N/A"
+        dict["hrv_stress"] = dashboard.stress.metrics["hrv_stress"].map { String(format: "%.0f", $0) } ?? "N/A"
+        dict["resp_stress"] = dashboard.stress.metrics["resp_stress"].map { String(format: "%.0f", $0) } ?? "N/A"
+        dict["temp_stress"] = dashboard.stress.metrics["temp_stress"].map { String(format: "%.0f", $0) } ?? "N/A"
+        dict["sleep_debt_stress"] = dashboard.stress.metrics["sleep_debt_stress"].map { String(format: "%.0f", $0) } ?? "N/A"
+        dict["load_stress"] = dashboard.stress.metrics["load_stress"].map { String(format: "%.0f", $0) } ?? "N/A"
+        return dict
     }
 }
 

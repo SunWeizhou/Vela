@@ -220,6 +220,17 @@ struct TrainingHeroSection: View {
                         futurePlanCard(recommendation)
                     }
                 }
+
+                // 联通专项批次 1：AI 建议与本地建议不一致时加弱注记（ADR 0008 一致性）。
+                if let aiDays = aiFutureDays, !aiDays.isEmpty,
+                   let local = futureRecommendations.first,
+                   let firstAI = aiDays.first,
+                   firstAI.groups != local.groups {
+                    Text("Vela 与本地建议不同（\(firstAI.groups.isEmpty ? "休息" : firstAI.groups.joined(separator: "+")) vs \(local.groups.isEmpty ? "休息" : local.groups.joined(separator: "+"))）。本地轮转保持不变，Vela 仅提供参考。")
+                        .font(.system(size: 10))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }

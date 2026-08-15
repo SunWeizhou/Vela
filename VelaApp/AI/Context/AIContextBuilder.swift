@@ -1058,6 +1058,23 @@ struct CoachCompactContextAdapter {
                     ? "- 近 7 天力量训练：\(strength.sessions7d) 次 · \(strength.hardSets7d) 个有效组 · \(Int(strength.volume7dKg)) kg"
                     : "- Strength 7d: \(strength.sessions7d) sessions · \(strength.hardSets7d) effective sets · \(Int(strength.volume7dKg)) kg")
             }
+            // 联通专项批次 1：局部疲劳（48h/7d 逐肌群组数）进紧凑视图——
+            // 此前被剥掉，Coach 无法回答「某肌群 48h 练了几组」，只能拿不同口径的
+            // 工具原始组次心算。
+            let fatigueLines = strength.localFatigue.values
+                .filter { $0.setsLast48h > 0 || $0.setsLast7d > 0 }
+                .sorted { $0.setsLast48h > $1.setsLast48h }
+                .prefix(3)
+                .map { fatigue in
+                    isChinese
+                        ? "\(fatigue.muscleGroup) 48h \(fatigue.setsLast48h) 组 · 7d \(fatigue.setsLast7d) 组（\(fatigue.fatigueLevel)）"
+                        : "\(fatigue.muscleGroup): 48h \(fatigue.setsLast48h), 7d \(fatigue.setsLast7d) sets (\(fatigue.fatigueLevel))"
+                }
+            if !fatigueLines.isEmpty {
+                appendIfFits(isChinese
+                    ? "- 局部疲劳：\(fatigueLines.joined(separator: "；"))"
+                    : "- Local fatigue: \(fatigueLines.joined(separator: "; "))")
+            }
             let summary = strength.recoveryResponseSummary
             if !summary.isEmpty && summary != "No post-training response data yet." && summary != "No post-training recovery response records in the past 28 days." {
                 appendIfFits(isChinese

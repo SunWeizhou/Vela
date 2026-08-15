@@ -716,6 +716,11 @@ private struct StrengthWorkoutHistoryPayload: Encodable {
     var completedVolumeKilograms: Double
     var warmupSets: Int
     var uncompletedSets: Int
+    // 联通专项批次 1：与训练页/快照统一口径的有效组数与肌群组数——
+    // 此前 completed_work_sets 只过滤热身/完成，把 reps<3、rpe<6 等组也计入，
+    // agent 说出的组数与训练页「有效组」不一致。
+    var effectiveSets: Int
+    var muscleGroupSets: [String: Int]
     var exercises: [StrengthExerciseHistoryPayload]
 
     init(workout: StrengthWorkoutRecord) {
@@ -733,6 +738,10 @@ private struct StrengthWorkoutHistoryPayload: Encodable {
         }
         warmupSets = exercises.reduce(0) { $0 + $1.warmupSets.count }
         uncompletedSets = exercises.reduce(0) { $0 + $1.uncompletedSets.count }
+        // 与 TrainingAnalyticsService.summarizeWorkout 同一口径（isEffective + 肌群映射）。
+        let summary = TrainingAnalyticsService().summarizeWorkout(workout.dto)
+        effectiveSets = summary.effectiveSets
+        muscleGroupSets = summary.muscleGroupSets
     }
 
     enum CodingKeys: String, CodingKey {
@@ -745,6 +754,8 @@ private struct StrengthWorkoutHistoryPayload: Encodable {
         case completedVolumeKilograms = "completed_volume_kilograms"
         case warmupSets = "warmup_sets"
         case uncompletedSets = "uncompleted_sets"
+        case effectiveSets = "effective_sets"
+        case muscleGroupSets = "muscle_group_sets"
         case exercises
     }
 }

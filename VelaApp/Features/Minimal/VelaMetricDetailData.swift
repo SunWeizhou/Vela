@@ -747,7 +747,9 @@ extension VelaMetricDetailView {
                 evidence("RHR 偏离", dashboard.recovery.metrics["rhr_z_score"], .signedDecimal(" z"), "相对个人基线"),
                 evidence("呼吸率偏离", dashboard.recovery.metrics["respiratory_rate_z"], .signedDecimal(" z"), "相对个人基线"),
                 evidence("体温偏离", dashboard.recovery.metrics["body_temp_delta"], .signedDecimal("°C"), "夜间体温变化"),
-                evidence("血氧", dashboard.recovery.metrics["spo2"] ?? dashboard.extendedMetrics.oxygenSaturation, .decimal("%"), "SpO₂")
+                evidence("血氧", dashboard.recovery.metrics["spo2"] ?? dashboard.extendedMetrics.oxygenSaturation, .decimal("%"), "SpO₂"),
+                // 联通专项批次 1：副交感张力指数（此前算了但任何地方都不展示）。
+                evidence("副交感张力", dashboard.recovery.metrics["parasympathetic_tone_index"], .signedDecimal(""), "HRV 高频成分启发式")
             ]
         case .sleep:
             return [
@@ -762,7 +764,10 @@ extension VelaMetricDetailView {
                 evidence("心率压力", dashboard.stress.metrics["rhr_stress"], .integer(""), "静息心率维度"),
                 evidence("HRV 压力", dashboard.stress.metrics["hrv_stress"], .integer(""), "自主神经维度"),
                 evidence("呼吸压力", dashboard.stress.metrics["resp_stress"], .integer(""), "呼吸率维度"),
-                evidence("睡眠债压力", dashboard.stress.metrics["sleep_debt_stress"], .integer(""), "睡眠影响")
+                evidence("睡眠债压力", dashboard.stress.metrics["sleep_debt_stress"], .integer(""), "睡眠影响"),
+                // 联通专项批次 1：补齐此前缺失的两个压力因子。
+                evidence("体温压力", dashboard.stress.metrics["temp_stress"], .integer(""), "夜间体温维度"),
+                evidence("负荷压力", dashboard.stress.metrics["load_stress"], .integer(""), "近期负荷维度")
             ]
         case .energy:
             return [

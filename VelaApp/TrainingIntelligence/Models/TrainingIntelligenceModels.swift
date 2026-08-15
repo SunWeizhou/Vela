@@ -91,9 +91,16 @@ struct LocalMuscleFatigue: Codable, Hashable, Sendable {
         self.volumeLast7d = volumeLast7d
     }
 
+    /// 联通专项批次 1：疲劳阈值唯一事实源——此前 AI 规划提示词里硬编码
+    /// 「48h≥14 / 7d≥24」，与本地定义分离，单边改动即再断链（15 vs 14 事故同类）。
+    static let highFatigue48hSets = 14
+    static let highFatigue7dSets = 24
+    static let moderateFatigue48hSets = 8
+    static let moderateFatigue7dSets = 14
+
     var fatigueLevel: String {
-        if setsLast48h >= 14 || setsLast7d >= 24 { return "high" }
-        if setsLast48h >= 8 || setsLast7d >= 14 { return "moderate" }
+        if setsLast48h >= Self.highFatigue48hSets || setsLast7d >= Self.highFatigue7dSets { return "high" }
+        if setsLast48h >= Self.moderateFatigue48hSets || setsLast7d >= Self.moderateFatigue7dSets { return "moderate" }
         return "low"
     }
 
