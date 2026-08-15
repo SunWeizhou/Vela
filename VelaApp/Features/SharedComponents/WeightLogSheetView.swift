@@ -134,6 +134,12 @@ struct WeightLogSheetView: View {
             modelContext.insert(fatRecord)
         }
 
+        // 3. 手记体重成为档案覆盖值（手填优先解析语义）；在「账户与特征基准」
+        //    清空体重字段即可恢复跟随 Apple 健康。
+        if (25...350).contains(weightVal) {
+            UserDefaults.standard.set(weightVal, forKey: UserProfileSettings.weightKey)
+        }
+
         // Log weight event
         VelaEventService.shared.log(
             modelContext: modelContext,

@@ -24,11 +24,14 @@ enum CoreMetricTrendMapper {
 
         guard let first = values.first, let latest = values.last else { return nil }
         let delta = latest - first
+        let unit = unitSuffix(for: metric)
+        // 阈值按指标相对化：体重/HRV 等不同量纲不能共用 0.05 一刀切。
+        let threshold = max(abs(first) * 0.02, 0.05)
         let statusLabel: String
-        if abs(delta) < 0.05 {
+        if abs(delta) < threshold {
             statusLabel = "近30天基本稳定"
         } else {
-            statusLabel = String(format: "近30天 %+.1f", delta)
+            statusLabel = String(format: "近30天 %+.1f%@", delta, unit)
         }
 
         return CoreMetricTrendSeries(
@@ -97,6 +100,15 @@ enum CoreMetricTrendMapper {
         case .steps: "shoeprints.fill"
         case .activeCalories: "flame.fill"
         case .activeMinutes: "clock.badge.checkmark"
+        }
+    }
+
+    private static func unitSuffix(for metric: VelaMetricDetailView.MetricType) -> String {
+        switch metric {
+        case .weight: return " kg"
+        case .hrv: return " ms"
+        case .rhr: return " bpm"
+        default: return ""
         }
     }
 

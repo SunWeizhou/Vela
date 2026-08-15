@@ -64,6 +64,19 @@ final class WristSnapshotBridge: NSObject, WCSessionDelegate, @unchecked Sendabl
     private let lock = NSLock()
     private var latestPayload: Data?
     private var latestActiveWorkoutPayload: Data?
+    private var pendingContextUpdate = false
+
+    /// 会话激活后补发未送达的上下文更新。
+    func retryPendingContextUpdateIfNeeded() {
+        lock.lock()
+        let pending = pendingContextUpdate
+        lock.unlock()
+        guard pending else { return }
+        lock.lock()
+        pendingContextUpdate = false
+        lock.unlock()
+        updateCombinedApplicationContext()
+    }
 
     override private init() {
         super.init()
@@ -167,8 +180,12 @@ final class WristSnapshotBridge: NSObject, WCSessionDelegate, @unchecked Sendabl
     func clearCachedSnapshot() {
         lock.lock()
         latestPayload = nil
+        latestActiveWorkoutPayload = nil
         lock.unlock()
+        // 「清除全部本地数据」必须连同 watch 缓存一起清，否则旧训练态/待应用编辑残留。
         UserDefaults.standard.removeObject(forKey: cacheKey)
+        UserDefaults.standard.removeObject(forKey: activeWorkoutCacheKey)
+        UserDefaults.standard.removeObject(forKey: pendingEditCacheKey)
         updateCombinedApplicationContext()
     }
 
@@ -176,7 +193,14 @@ final class WristSnapshotBridge: NSObject, WCSessionDelegate, @unchecked Sendabl
         _ session: WCSession,
         activationDidCompleteWith activationState: WCSessionActivationState,
         error: Error?
-    ) {}
+    ) {
+        // 激活前 publish 的上下文会被静默丢弃；激活成功后补发一次。
+        if activationState == .activated {
+            DispatchQueue.main.async {
+                WristSnapshotBridge.shared.retryPendingContextUpdateIfNeeded()
+            }
+        }
+    }
 
     nonisolated func sessionDidBecomeInactive(_ session: WCSession) {}
 
@@ -213,6 +237,18 @@ final class WristSnapshotBridge: NSObject, WCSessionDelegate, @unchecked Sendabl
         }
     }
 
+    /// watch 端以 replyHandler=nil 发送消息时走此变体（此前未实现导致
+    /// strengthSetEdit 在手机可达时被静默丢弃）。
+    nonisolated func session(
+        _ session: WCSession,
+        didReceiveMessage message: [String: Any]
+    ) {
+        if let data = message["strengthSetEdit"] as? Data,
+           let edit = try? JSONDecoder().decode(WristStrengthSetEdit.self, from: data) {
+            enqueue(edit)
+        }
+    }
+
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
         guard let data = userInfo["strengthSetEdit"] as? Data,
               let edit = try? JSONDecoder().decode(WristStrengthSetEdit.self, from: data) else { return }
@@ -238,7 +274,11 @@ final class WristSnapshotBridge: NSObject, WCSessionDelegate, @unchecked Sendabl
     }
 
     private func updateCombinedApplicationContext() {
-        guard WCSession.isSupported(), WCSession.default.activationState == .activated else { return }
+        guard WCSession.isSupported() else { return }
+        guard WCSession.default.activationState == .activated else {
+            pendingContextUpdate = true
+            return
+        }
         lock.lock()
         let snapshot = latestPayload
         let activeWorkout = latestActiveWorkoutPayload
@@ -247,6 +287,7 @@ final class WristSnapshotBridge: NSObject, WCSessionDelegate, @unchecked Sendabl
         if let snapshot { context["snapshot"] = snapshot } else { context["clearSnapshot"] = true }
         if let activeWorkout { context["activeWorkout"] = activeWorkout } else { context["clearActiveWorkout"] = true }
         try? WCSession.default.updateApplicationContext(context)
+        pendingContextUpdate = false
     }
 
     private static func intensityLabel(_ intensity: String) -> String {

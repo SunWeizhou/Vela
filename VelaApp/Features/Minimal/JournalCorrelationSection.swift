@@ -52,7 +52,7 @@ struct JournalCorrelationSection: View {
 
             impactMatrix
 
-            if bodyModelState.maturity.overall == .seed || bodyModelState.uncertainAreas.contains(where: { $0.id == "behavior_pairs" }) {
+            if matrixPoints.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "chart.bar.doc.horizontal")
                         .font(.system(size: 24))

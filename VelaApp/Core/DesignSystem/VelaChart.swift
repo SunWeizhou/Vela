@@ -286,73 +286,6 @@ struct VelaStageTimeline: View {
 
 // MARK: - ScoreRing (Ring progress view)
 
-struct ScoreRing: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    let score: Double      // 0…1
-    let color: Color
-    let size: CGFloat
-    let strokeWidth: CGFloat?
-    let value: String
-    let unit: String?
-    let label: String
-
-    init(
-        score: Double,
-        color: Color,
-        size: CGFloat = VelaTheme.ringMd,
-        strokeWidth: CGFloat? = nil,
-        value: String,
-        unit: String? = nil,
-        label: String
-    ) {
-        self.score = max(0, min(1, score))
-        self.color = color
-        self.size = size
-        self.strokeWidth = strokeWidth ?? (size * 0.085)
-        self.value = value
-        self.unit = unit
-        self.label = label
-    }
-
-    var body: some View {
-        let sw = strokeWidth ?? (size * 0.085)
-        ZStack {
-            Circle()
-                .stroke(VelaTheme.borderSoft, lineWidth: sw)
-
-            Circle()
-                .trim(from: 0, to: score)
-                .stroke(color, style: StrokeStyle(lineWidth: sw, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-                .animation(VelaTheme.dataAnimation(reduceMotion: reduceMotion), value: score)
-
-            VStack(spacing: 0) {
-                if let unit = unit {
-                    Text(value)
-                        .font(.system(size: size * 0.28, weight: .semibold, design: .rounded))
-                        .foregroundStyle(VelaTheme.fg)
-                    Text(unit)
-                        .font(VelaTheme.caption2())
-                        .foregroundStyle(VelaTheme.meta)
-                } else {
-                    Text(value)
-                        .font(.system(size: size * 0.28, weight: .semibold, design: .rounded))
-                        .foregroundStyle(VelaTheme.fg)
-                }
-            }
-        }
-        .frame(width: size, height: size)
-        .overlay(alignment: .bottom) {
-            Text(label)
-                .font(VelaTheme.caption2())
-                .foregroundStyle(VelaTheme.muted)
-                .offset(y: size * 0.2)
-        }
-        .padding(.bottom, size * 0.16)
-    }
-}
-
 // MARK: - Bevel Score Ring (Bevel-style circular gauge)
 
 struct BevelScoreRing: View {
@@ -508,7 +441,7 @@ struct SparklineLineGraph: View {
                 .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
                 
                 // End Dot
-                if let lastVal = data.last {
+                if data.count > 1, let lastVal = data.last {
                     let stepX = width / CGFloat(data.count - 1)
                     let x = CGFloat(data.count - 1) * stepX
                     let y = height - (CGFloat(lastVal) * (height - 6) + 3)

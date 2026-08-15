@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 
 enum TrainingTargetComparison: Equatable {
@@ -44,10 +45,10 @@ enum TrainingTargetComparison: Equatable {
 
     var tint: Color {
         switch self {
-        case .unavailable: return VelaTheme.muted
-        case .below: return VelaTheme.accent
-        case .withinTarget: return VelaTheme.success
-        case .above: return VelaTheme.warn
+        case .unavailable: return VelaTheme.rhythmInkSecondary
+        case .below: return VelaTheme.rhythmDeep
+        case .withinTarget: return VelaTheme.rhythmGlow
+        case .above: return VelaTheme.rhythmWarm
         }
     }
 }
@@ -137,7 +138,10 @@ enum CardioTrainingAnalyzer {
         let included = [
             "run", "跑", "walk", "步行", "hiking", "徒步", "cycle", "cycling", "骑行",
             "swim", "游泳", "row", "划船", "elliptical", "椭圆", "cardio", "有氧",
-            "soccer", "football", "basketball", "dance", "舞蹈", "stair", "爬楼"
+            "soccer", "football", "basketball", "dance", "舞蹈", "stair", "爬楼",
+            // [8] 修复：HIIT/Cross Training/Mixed Cardio 此前漏出有氧统计。
+            "hiit", "interval", "间歇", "cross training", "crossfit", "mixed cardio",
+            "mixed", "混合", "跳绳", "jump rope"
         ]
         return included.contains(where: value.contains)
     }
@@ -176,11 +180,11 @@ struct CardioStatusCard: View {
             }
 
             HStack(spacing: 8) {
-                cardioMetric("Cardio Load", snapshot.cardioSessions == 0 ? "—" : "\(snapshot.acuteMinutes) 分", detail: baselineDetail)
-                cardioMetric("Cardio Status", snapshot.status?.title ?? "校准中", detail: statusDetail)
+                cardioMetric("有氧负荷", snapshot.cardioSessions == 0 ? "—" : "\(snapshot.acuteMinutes) 分", detail: baselineDetail)
+                cardioMetric("有氧状态", snapshot.status?.title ?? "校准中", detail: statusDetail)
             }
             HStack(spacing: 8) {
-                cardioMetric("Cardio Focus", snapshot.focus ?? "—", detail: snapshot.focus == nil ? "暂无有氧训练" : "按训练时长最多")
+                cardioMetric("有氧重点", snapshot.focus ?? "—", detail: snapshot.focus == nil ? "暂无有氧训练" : "按训练时长最多")
                 cardioMetric("心率恢复", snapshot.heartRateRecoveryBPM.map { "\(Int($0.rounded())) bpm" } ?? "—", detail: recoveryDetail)
             }
 
@@ -235,8 +239,14 @@ struct TrainingStatsSection: View {
     @Binding var selectedAnalyticsTab: Int
     let targetComparison: TrainingTargetComparison
     let dynamicExertionWorkload: [Double]
+    /// 与 dynamicExertionWorkload 同序的真实耗力分数与日期（标注/拖动交互显示）。
+    let exertionValues: [Double]
+    let exertionDates: [Date]
     let totalWorkoutDurationText: String
     let summaryWorkPathPoints: [CGPoint]
+    /// 与 summaryWorkPathPoints 同序的真实耗力分数与日期（拖动交互显示）。
+    let summaryWorkValues: [Double]
+    let summaryWorkDates: [Date]
     let summaryPeakStrainText: String
     let selectedDate: Date
     let previousMonthActiveTiers: [Int: Int]
@@ -276,7 +286,7 @@ struct TrainingStatsSection: View {
                 HStack(spacing: 6) {
                     Image(systemName: selectedAnalyticsTab == 0 ? "bolt.heart.fill" : (selectedAnalyticsTab == 1 ? "chart.bar.fill" : "calendar"))
                         .font(.system(size: 14))
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     Text("表现与分析")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmInk)
@@ -308,7 +318,7 @@ struct TrainingStatsSection: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(targetComparison.valueText)
                                 .font(.system(size: 26, weight: .bold, design: .rounded))
-                                .foregroundStyle(VelaTheme.fg)
+                                .foregroundStyle(VelaTheme.rhythmInk)
                             Text(dynamicExertionWorkload.isEmpty ? "暂无耗力记录" : targetComparison.contextText)
                                 .font(.system(size: 12, weight: .bold))
                                 .foregroundStyle(targetComparison.tint)
@@ -320,14 +330,16 @@ struct TrainingStatsSection: View {
                                   Image(systemName: "chevron.right")
                             }
                             .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(VelaTheme.accent)
+                            .foregroundStyle(VelaTheme.rhythmDeep)
                         }
                         .buttonStyle(.cardPress)
                     }
                     
                     SafeZoneWorkloadChartView(
                         workload: dynamicExertionWorkload,
-                        showsTargetZone: targetComparison != .unavailable
+                        showsTargetZone: targetComparison != .unavailable,
+                        values: exertionValues,
+                        dates: exertionDates
                     )
                         .frame(height: 72)
                         .padding(.vertical, 4)
@@ -346,10 +358,10 @@ struct TrainingStatsSection: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(totalWorkoutDurationText)
                                 .font(.system(size: 26, weight: .bold, design: .rounded))
-                                .foregroundStyle(VelaTheme.fg)
+                                .foregroundStyle(VelaTheme.rhythmInk)
                             Text("过去 30 天耗力趋势")
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(VelaTheme.muted)
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         }
                         Spacer()
                         NavigationLink(destination: FitnessActivitySummaryDetailView()) {
@@ -358,19 +370,23 @@ struct TrainingStatsSection: View {
                                 Image(systemName: "chevron.right")
                             }
                             .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(VelaTheme.accent)
+                            .foregroundStyle(VelaTheme.rhythmDeep)
                         }
                         .buttonStyle(.cardPress)
                     }
                     
                     ZStack(alignment: .topTrailing) {
-                        AreaChartCurveView(points: summaryWorkPathPoints)
+                        AreaChartCurveView(
+                            points: summaryWorkPathPoints,
+                            values: summaryWorkValues,
+                            dates: summaryWorkDates
+                        )
                             .frame(height: 100)
                             .padding(.top, 10)
                         
                         Text(summaryPeakStrainText)
                             .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .foregroundStyle(VelaTheme.meta)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .offset(y: -4)
                         
                         HStack {
@@ -381,7 +397,7 @@ struct TrainingStatsSection: View {
                             Text("今天")
                         }
                         .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(VelaTheme.meta)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .padding(.top, 114)
                     }
                     }
@@ -405,9 +421,9 @@ struct TrainingStatsSection: View {
                     }
                     
                     HStack(spacing: 12) {
-                        legendItem(color: Color(hex: "#A5D6A7"), label: "1 项活动")
-                        legendItem(color: Color(hex: "#66BB6A"), label: "2 项活动")
-                        legendItem(color: Color(hex: "#29B6F6"), label: "3+ 活动")
+                        legendItem(color: VelaTheme.rhythmGlow.opacity(0.55), label: "1 项活动")
+                        legendItem(color: VelaTheme.rhythmGlow, label: "2 项活动")
+                        legendItem(color: VelaTheme.rhythmDeep, label: "3+ 活动")
                     }
                     .padding(.top, 4)
                 }
@@ -428,17 +444,17 @@ struct TrainingStatsSection: View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(VelaTheme.accent)
+                .foregroundStyle(VelaTheme.rhythmDeep)
                 .frame(width: 36, height: 36)
-                .background(VelaTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+                .background(VelaTheme.rhythmDeep.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(VelaTheme.subheadline().weight(.semibold))
-                    .foregroundStyle(VelaTheme.fg)
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Text(detail)
                     .font(VelaTheme.footnote())
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .lineSpacing(2)
             }
 
@@ -456,14 +472,14 @@ struct TrainingStatsSection: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(monthTitle)
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(VelaTheme.muted)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
             
             // Grid Header Days
             HStack(spacing: 5) {
                 ForEach(["日", "一", "二", "三", "四", "五", "六"], id: \.self) { d in
                     Text(d)
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(VelaTheme.meta)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.8))
                         .frame(width: 16)
                 }
             }
@@ -484,10 +500,10 @@ struct TrainingStatsSection: View {
                     let tier = activeTiers[day] ?? 0
                     let cellColor: Color = {
                         switch tier {
-                        case 1:  return Color(hex: "#C8E6C9") // light green
-                        case 2:  return Color(hex: "#81C784") // medium green
-                        case 3:  return Color(hex: "#29B6F6") // teal-blue
-                        default: return Color(hex: "#ECEFF1") // light grey/off-white
+                        case 1:  return VelaTheme.rhythmGlow.opacity(0.55) // 轻度
+                        case 2:  return VelaTheme.rhythmGlow // 中度
+                        case 3:  return VelaTheme.rhythmDeep // 高强度
+                        default: return VelaTheme.rhythmMist.opacity(0.7) // 无训练
                         }
                     }()
                     
@@ -508,7 +524,7 @@ struct TrainingStatsSection: View {
             
             Text(label)
                 .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(VelaTheme.muted)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
         }
     }
 }
@@ -522,39 +538,39 @@ struct MuscleVolumeCard: View {
             HStack {
                 Text("过去 7 天肌群有效组")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(VelaTheme.fg)
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Text("\(summary.sessions) 次力量训练")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
             
             if summary.muscleGroupSets.isEmpty {
                 Text("完成力量训练后，这里会显示肌群训练量与局部疲劳。")
                     .font(.system(size: 12))
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 12)
             } else {
                 VStack(spacing: 10) {
-                    ForEach(summary.muscleGroupSets.sorted { $0.key < $1.key }, id: \.key) { muscle, sets in
+                    ForEach(summary.muscleGroupSets.sorted { $0.value > $1.value }, id: \.key) { muscle, sets in
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
                                 Text(localizedMuscleGroup(muscle))
                                     .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(VelaTheme.fg)
+                                    .foregroundStyle(VelaTheme.rhythmInk)
                                 Spacer()
                                 Text("\(sets) 组")
                                     .font(.system(size: 11, weight: .bold))
-                                    .foregroundStyle(sets >= 18 ? VelaTheme.danger : (sets < 6 ? VelaTheme.accent : VelaTheme.success))
+                                    .foregroundStyle(sets >= 18 ? VelaTheme.statePoor : (sets < 6 ? VelaTheme.rhythmDeep : VelaTheme.rhythmGlow))
                             }
                             
                             GeometryReader { geo in
                                 let pct = min(CGFloat(sets) / 20.0, 1.0)
-                                let barColor = sets >= 18 ? VelaTheme.danger : (sets < 6 ? VelaTheme.accent : VelaTheme.success)
+                                let barColor = sets >= 18 ? VelaTheme.statePoor : (sets < 6 ? VelaTheme.rhythmDeep : VelaTheme.rhythmGlow)
                                 ZStack(alignment: .leading) {
                                     RoundedRectangle(cornerRadius: 3)
-                                        .fill(VelaTheme.surface)
+                                        .fill(VelaTheme.rhythmMist)
                                         .frame(height: 6)
                                     RoundedRectangle(cornerRadius: 3)
                                         .fill(barColor)
@@ -572,10 +588,10 @@ struct MuscleVolumeCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("近期 PR")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     Text(summary.recentPRs.prefix(3).map(\.summary).joined(separator: " · "))
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(VelaTheme.accent)
+                        .foregroundStyle(VelaTheme.rhythmDeep)
                 }
             }
             
@@ -584,10 +600,10 @@ struct MuscleVolumeCard: View {
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.uturn.left")
                         .font(.caption2)
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     Text("最近一次：\(latest)")
                         .font(.system(size: 12))
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
             }
             
@@ -596,11 +612,11 @@ struct MuscleVolumeCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("常练动作进步")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(VelaTheme.fg)
+                        .foregroundStyle(VelaTheme.rhythmInk)
                     ForEach(exerciseProgressLines.prefix(3), id: \.self) { line in
                         Text("• \(line)")
                             .font(.system(size: 12))
-                            .foregroundStyle(VelaTheme.muted)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                 }
             }
@@ -614,6 +630,112 @@ struct MuscleVolumeCard: View {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         )
+    }
+}
+
+/// 个人纪录卡：窗口内去重后的真实 PR（动作 × 类型保留最高值）。
+struct PersonalRecordsCard: View {
+    let records: [PersonalRecord]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            HStack {
+                Label("个人纪录", systemImage: "trophy")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                Spacer()
+                Text(records.isEmpty ? "" : "\(records.count) 项")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            }
+
+            if records.isEmpty {
+                HStack(spacing: 11) {
+                    Image(systemName: "trophy")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                    Text("打破此前重量或次数后，个人纪录会出现在这里。")
+                        .font(.system(size: 12))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                }
+                .padding(.vertical, 6)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(records.prefix(5).enumerated()), id: \.element.id) { index, record in
+                        recordRow(record)
+                        if index < min(records.count, 5) - 1 {
+                            Rectangle()
+                                .fill(VelaTheme.rhythmMist)
+                                .frame(height: 0.75)
+                                .padding(.leading, 12)
+                        }
+                    }
+                    if records.count > 5 {
+                        Text("另有 \(records.count - 5) 项纪录")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                            .padding(.top, 9)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(VelaTheme.rhythmCanvasRaised)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+        )
+    }
+
+    private func recordRow(_ record: PersonalRecord) -> some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(VelaTheme.rhythmDeep)
+                .frame(width: 6, height: 6)
+            Text(record.exerciseName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(VelaTheme.rhythmInk)
+                .lineLimit(1)
+            Spacer(minLength: 6)
+            Text(kindLabel(record.kind))
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            Text(valueText(record))
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundStyle(VelaTheme.rhythmDeep)
+                .frame(minWidth: 58, alignment: .trailing)
+            if let previous = record.previousValue {
+                Text("+\(Int((record.value - previous).rounded())) \(unit(record.kind))")
+                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .foregroundStyle(VelaTheme.rhythmDeep)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(VelaTheme.rhythmDeep.opacity(0.12), in: Capsule())
+            }
+        }
+        .padding(.vertical, 9)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(record.exerciseName) \(kindLabel(record.kind)) \(valueText(record))")
+    }
+
+    private func kindLabel(_ kind: String) -> String {
+        switch kind {
+        case "max_weight": return "最大重量"
+        case "estimated_1rm": return "估算 1RM"
+        case "max_reps": return "最大次数"
+        default: return kind
+        }
+    }
+
+    private func unit(_ kind: String) -> String {
+        kind == "max_reps" ? "次" : "kg"
+    }
+
+    private func valueText(_ record: PersonalRecord) -> String {
+        record.value.formatted(.number.precision(.fractionLength(0...1))) + " \(unit(record.kind))"
     }
 }
 
@@ -758,10 +880,10 @@ struct StrengthWorkoutsSection: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("力量训练记录")
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(VelaTheme.fg)
+                        .foregroundStyle(VelaTheme.rhythmInk)
                     Text("动作、器械、组次与训练容量")
                         .font(.system(size: 11))
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 Spacer()
                 Button {
@@ -769,10 +891,10 @@ struct StrengthWorkoutsSection: View {
                 } label: {
                     Label("记录力量", systemImage: "plus")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(VelaTheme.accent)
+                        .foregroundStyle(VelaTheme.rhythmDeep)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
-                        .background(Capsule().fill(VelaTheme.cardBg))
+                        .background(Capsule().fill(VelaTheme.rhythmCanvasRaised))
                 }
                 .buttonStyle(.plain)
             }
@@ -780,10 +902,10 @@ struct StrengthWorkoutsSection: View {
             if strengthWorkouts.isEmpty {
                 Text("尚未记录力量训练。完成一次动作与组次记录后，Coach 就能读取容量历史。")
                     .font(.system(size: 13))
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
+                    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
             } else {
                 ForEach(strengthWorkouts.prefix(5)) { workout in
                     NavigationLink(destination: WorkoutDetailView(workout: WorkoutSummary(
@@ -796,30 +918,30 @@ struct StrengthWorkoutsSection: View {
                         HStack(spacing: 12) {
                             Image(systemName: "figure.strengthtraining.traditional")
                                 .font(.system(size: 18))
-                                .foregroundStyle(VelaTheme.accent)
+                                .foregroundStyle(VelaTheme.rhythmDeep)
                                 .frame(width: 38, height: 38)
-                                .background(Circle().fill(Color(hex: "#EAF3FF")))
+                                .background(Circle().fill(VelaTheme.rhythmMist))
 
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(workout.title)
                                     .font(.system(size: 14, weight: .bold))
-                                    .foregroundStyle(VelaTheme.fg)
+                                    .foregroundStyle(VelaTheme.rhythmInk)
                                 Text("\(workout.exerciseCount) 个动作 · \(workout.totalSetCount) 组 · \(Int(workout.totalVolumeKilograms.rounded())) kg 容量")
                                     .font(.system(size: 11))
-                                    .foregroundStyle(VelaTheme.muted)
+                                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                 Text(workout.startedAt.formatted(date: .abbreviated, time: .shortened))
                                     .font(.system(size: 10))
-                                    .foregroundStyle(VelaTheme.meta)
+                                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             }
 
                             Spacer()
 
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(VelaTheme.meta)
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         }
                         .padding(14)
-                        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.cardBg))
+                        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
                     }
                     .buttonStyle(.plain)
                 }
@@ -832,7 +954,34 @@ struct StrengthWorkoutsSection: View {
 struct SafeZoneWorkloadChartView: View {
     let workload: [Double]
     let showsTargetZone: Bool
-    
+    /// 真实耗力分数与日期（可选）：提供后支持点按标数值 + 拖动查看。
+    var values: [Double]? = nil
+    var dates: [Date]? = nil
+
+    @State private var showLabels = false
+    @State private var scrubIndex: Int?
+
+    private var canInteract: Bool {
+        guard let values else { return false }
+        return values.count == workload.count && workload.count > 1
+    }
+
+    private func pointX(_ index: Int, width: CGFloat) -> CGFloat {
+        workload.count > 1 ? CGFloat(index) / CGFloat(workload.count - 1) * width : 0
+    }
+
+    private func pointY(_ index: Int, height: CGFloat) -> CGFloat {
+        height - (CGFloat(workload[index]) * (height - 8) + 4)
+    }
+
+    private func dateText(_ index: Int) -> String {
+        guard let dates, dates.indices.contains(index) else { return "" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "M/d"
+        return formatter.string(from: dates[index])
+    }
+
     var body: some View {
         GeometryReader { geo in
             ZStack {
@@ -840,19 +989,18 @@ struct SafeZoneWorkloadChartView: View {
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
                     .fill(
                         showsTargetZone
-                            ? Color(hex: "#E8F5E9").opacity(0.8)
-                            : VelaTheme.surface.opacity(0.8)
+                            ? VelaTheme.rhythmDeep.opacity(0.16).opacity(0.8)
+                            : VelaTheme.rhythmMist.opacity(0.8)
                     )
                     .frame(height: geo.size.height * 0.45)
                     .position(x: geo.size.width / 2, y: geo.size.height / 2)
-                
+
                 // Colored workload line
                 Path { path in
                     guard workload.count > 1 else { return }
-                    let stepX = geo.size.width / CGFloat(workload.count - 1)
                     for idx in 0..<workload.count {
-                        let x = CGFloat(idx) * stepX
-                        let y = geo.size.height - (CGFloat(workload[idx]) * (geo.size.height - 8) + 4)
+                        let x = pointX(idx, width: geo.size.width)
+                        let y = pointY(idx, height: geo.size.height)
                         if idx == 0 {
                             path.move(to: CGPoint(x: x, y: y))
                         } else {
@@ -862,24 +1010,216 @@ struct SafeZoneWorkloadChartView: View {
                 }
                 .stroke(
                     LinearGradient(
-                        colors: [VelaTheme.recoveryColor, VelaTheme.strainColor, VelaTheme.accent],
+                        colors: [VelaTheme.recoveryColor, VelaTheme.strainColor, VelaTheme.rhythmDeep],
                         startPoint: .leading,
                         endPoint: .trailing
                     ),
                     style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)
                 )
-                
+
                 // Highlighting end node dot
                 if let lastVal = workload.last {
                     let x = geo.size.width
                     let y = geo.size.height - (CGFloat(lastVal) * (geo.size.height - 8) + 4)
                     Circle()
-                        .fill(VelaTheme.accent)
+                        .fill(VelaTheme.rhythmDeep)
                         .frame(width: 8, height: 8)
-                        .overlay(Circle().stroke(VelaTheme.cardBg, lineWidth: 1.5))
+                        .overlay(Circle().stroke(VelaTheme.rhythmCanvasRaised, lineWidth: 1.5))
                         .position(x: x, y: y)
+                }
+
+                // 数值标注模式：点一下曲线显示每个数据点数值 + 最高/最低图例
+                if showLabels, canInteract, let values {
+                    ForEach(0..<workload.count, id: \.self) { index in
+                        Text("\(Int(values[index].rounded()))")
+                            .font(.system(size: 7.5, weight: .medium, design: .rounded))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                            .position(
+                                x: min(geo.size.width - 14, pointX(index, width: geo.size.width) + 6),
+                                y: max(9, pointY(index, height: geo.size.height) - 6)
+                            )
+                    }
+
+                    HStack(spacing: 8) {
+                        Label("最高 \(Int((values.max() ?? 0).rounded()))", systemImage: "arrow.up")
+                        Label("最低 \(Int((values.min() ?? 0).rounded()))", systemImage: "arrow.down")
+                    }
+                    .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(VelaTheme.rhythmCanvasRaised.opacity(0.95), in: Capsule())
+                    .shadow(color: VelaTheme.rhythmDeep.opacity(0.25), radius: 5)
+                    .position(x: geo.size.width - 68, y: 14)
+                }
+
+                // 拖动查看：日期 · 真实耗力分数
+                if canInteract, let values, let scrubIndex, values.indices.contains(scrubIndex) {
+                    let x = pointX(scrubIndex, width: geo.size.width)
+                    let y = pointY(scrubIndex, height: geo.size.height)
+                    Circle()
+                        .fill(VelaTheme.rhythmDeep)
+                        .frame(width: 8, height: 8)
+                        .position(x: x, y: y)
+                    Text("\(dateText(scrubIndex)) · \(Int(values[scrubIndex].rounded()))")
+                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(VelaTheme.rhythmCanvasRaised.opacity(0.95), in: Capsule())
+                        .shadow(color: VelaTheme.rhythmDeep.opacity(0.25), radius: 5)
+                        .position(
+                            x: min(geo.size.width - 46, max(46, x)),
+                            y: max(13, y - 16)
+                        )
+                }
+            }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                    .onChanged { gesture in
+                        guard canInteract, geo.size.width > 0 else { return }
+                        let fraction = min(1, max(0, gesture.location.x / geo.size.width))
+                        scrubIndex = Int((fraction * CGFloat(workload.count - 1)).rounded())
+                    }
+                    .onEnded { _ in
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+                            scrubIndex = nil
+                        }
+                    }
+            )
+            .simultaneousGesture(
+                TapGesture()
+                    .onEnded {
+                        guard canInteract else { return }
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.9)) {
+                            showLabels.toggle()
+                        }
+                    }
+            )
+        }
+    }
+}
+
+// MARK: - Yearly training aggregate（历年训练量）
+
+/// 按年聚合训练事实（纯函数，测试覆盖）。数据源 = 回填后的每日记录。
+enum YearlyTrainingAggregator {
+    struct YearStats: Equatable {
+        var year: Int
+        var trainingDays: Int     // 有训练的天数
+        var workoutCount: Int
+        var totalMinutes: Double
+        var totalCalories: Double
+    }
+
+    static func aggregate(
+        records: [DailyHealthSummaryRecord],
+        calendar: Calendar = .current
+    ) -> [YearStats] {
+        var byYear: [Int: YearStats] = [:]
+        for record in records {
+            let count = record.workoutCount ?? 0
+            let duration = record.workoutDuration ?? 0
+            let calories = record.activeCalories ?? 0
+            guard count > 0 || duration > 0 || calories > 0 else { continue }
+            let year = calendar.component(.year, from: record.date)
+            var stats = byYear[year] ?? YearStats(
+                year: year, trainingDays: 0, workoutCount: 0,
+                totalMinutes: 0, totalCalories: 0
+            )
+            stats.trainingDays += 1
+            stats.workoutCount += count
+            stats.totalMinutes += duration
+            stats.totalCalories += calories
+            byYear[year] = stats
+        }
+        return byYear.values.sorted { $0.year < $1.year }
+    }
+}
+
+struct YearlyTrainingCard: View {
+    @Environment(\.modelContext) private var modelContext
+    @State private var stats: [YearlyTrainingAggregator.YearStats] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            HStack {
+                Label("历年训练量", systemImage: "calendar")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                Spacer()
+                Text("Apple 健康历史")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            }
+
+            if stats.isEmpty {
+                HStack(spacing: 11) {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                    Text("回填 Apple 健康历史后，这里会出现每年的训练天数、总时长与消耗。")
+                        .font(.system(size: 12))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.vertical, 6)
+            } else {
+                let maxMinutes = stats.map(\.totalMinutes).max() ?? 1
+                VStack(spacing: 0) {
+                    ForEach(Array(stats.enumerated()), id: \.element.year) { index, year in
+                        yearRow(year, maxMinutes: maxMinutes)
+                        if index < stats.count - 1 {
+                            Rectangle()
+                                .fill(VelaTheme.rhythmMist)
+                                .frame(height: 0.75)
+                                .padding(.leading, 12)
+                        }
+                    }
                 }
             }
         }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
+        .task { await load() }
+    }
+
+    private func load() async {
+        let all = (try? modelContext.fetch(FetchDescriptor<DailyHealthSummaryRecord>())) ?? []
+        stats = YearlyTrainingAggregator.aggregate(records: all)
+    }
+
+    private func yearRow(_ year: YearlyTrainingAggregator.YearStats, maxMinutes: Double) -> some View {
+        HStack(spacing: 12) {
+            Text("\(year.year)")
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(VelaTheme.rhythmInk)
+                .frame(width: 44, alignment: .leading)
+
+            GeometryReader { proxy in
+                let ratio = min(1, CGFloat(year.totalMinutes) / CGFloat(max(maxMinutes, 1)))
+                ZStack(alignment: .leading) {
+                    Capsule().fill(VelaTheme.rhythmMist).frame(height: 6)
+                    Capsule().fill(VelaTheme.rhythmDeep)
+                        .frame(width: max(5, proxy.size.width * ratio), height: 6)
+                }
+            }
+            .frame(height: 6)
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(year.trainingDays) 天 · \(Int(year.totalMinutes / 60)) 小时")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                Text("\(year.workoutCount) 次 · \(Int(year.totalCalories.rounded())) kcal")
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            }
+            .frame(width: 108, alignment: .trailing)
+        }
+        .padding(.vertical, 10)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(year.year) 年，训练 \(year.trainingDays) 天，共 \(year.workoutCount) 次，\(Int(year.totalMinutes / 60)) 小时")
     }
 }

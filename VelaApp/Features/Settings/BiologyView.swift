@@ -77,7 +77,7 @@ struct BiologyView: View {
     }
 
     private var chronologicalAge: Int? {
-        WikiFileService.getAgeFromWiki() ?? dashboardVM.dashboard.extendedMetrics.age
+        dashboardVM.dashboard.extendedMetrics.age ?? WikiFileService.getAgeFromWiki()
     }
 
     private var hasHealthAgeInput: Bool {

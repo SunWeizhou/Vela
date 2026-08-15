@@ -64,7 +64,7 @@ struct AIModelSettingsView: View {
 
             Section(header: Text("数据如何流动")) {
                 Label {
-                    Text("只有当你主动发送 Coach 消息时，消息与回答所需的健康、训练上下文才会发送给 DeepSeek。")
+                    Text("只有当你主动发送 Coach 消息时，消息与回答所需的健康、训练上下文才会发送给 DeepSeek；餐食照片分析由第三方 Moonshot（Kimi Vision）处理，照片只会用于该次营养分析。")
                 } icon: {
                     Image(systemName: "text.bubble.fill")
                         .foregroundStyle(VelaTheme.accent)

@@ -188,7 +188,7 @@ struct VelaOnboardingView: View {
                     .stroke(VelaTheme.rhythmMist.opacity(0.8), lineWidth: 0.75)
             )
 
-            Label("你可以逐项选择权限；Vela 无法写入或修改 Apple 健康中的原始数据。", systemImage: "lock.fill")
+            Label("授权后可在系统「设置 > 健康」中逐项管理权限；Vela 无法写入或修改 Apple 健康中的原始数据。", systemImage: "lock.fill")
                 .font(VelaTheme.footnote())
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
         }
@@ -212,35 +212,6 @@ struct VelaOnboardingView: View {
 
     private func permissionRow(icon: String, title: String, detail: String) -> some View {
         onboardingValueRow(icon: icon, title: title, detail: detail)
-    }
-
-    private var heroSection: some View {
-        VStack(spacing: 12) {
-            Text(L10n.t("Welcome to", "欢迎使用"))
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(VelaTheme.muted)
-                .tracking(2)
-                .textCase(.uppercase)
-
-            VelaLogoMark(size: 76)
-
-            Text("VELA")
-                .font(.system(size: 44, weight: .black, design: .rounded))
-                .foregroundStyle(VelaTheme.fg)
-
-            Text(L10n.t("Active Coach OS", "主动式身体教练系统"))
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(VelaTheme.fg)
-
-            Text(L10n.t(
-                "Build your first body model, connect Apple Health, then let Vela turn readiness, training, and recovery into daily decisions.",
-                "先建立你的首日身体模型，再连接 Apple 健康；Vela 会把准备度、训练和恢复合成每日决策。"
-            ))
-            .font(.system(size: 14))
-            .foregroundStyle(VelaTheme.muted.opacity(0.75))
-            .multilineTextAlignment(.center)
-            .lineSpacing(4)
-        }
     }
 
     private var bodyModelSetupCard: some View {
@@ -278,7 +249,7 @@ struct VelaOnboardingView: View {
 
                 Stepper(value: $sessionDurationMinutes, in: 20...120, step: 5) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("\(sessionDurationMinutes) min")
+                        Text("\(sessionDurationMinutes) 分钟")
                             .font(.system(size: 15, weight: .semibold, design: .rounded))
                             .foregroundStyle(VelaTheme.fg)
                         Text(L10n.t("session", "单次时长"))
@@ -316,32 +287,6 @@ struct VelaOnboardingView: View {
         )
     }
 
-    private var signalPreviewCard: some View {
-        VStack(spacing: 10) {
-            featureCard(
-                icon: "heart.fill",
-                bgColor: VelaTheme.recoveryColor.opacity(0.12),
-                fgColor: VelaTheme.recoveryColor,
-                title: L10n.t("Readiness Decision", "每日准备度决策"),
-                detail: L10n.t("Recovery, HRV, resting heart rate, sleep, and strain become one action.", "恢复、HRV、静息心率、睡眠和负荷会合成为一个行动建议。")
-            )
-            featureCard(
-                icon: "figure.strengthtraining.traditional",
-                bgColor: VelaTheme.strainColor.opacity(0.12),
-                fgColor: VelaTheme.strainColor,
-                title: L10n.t("Training Loop", "训练闭环"),
-                detail: L10n.t("Templates, set logging, post-workout review, and Coach artifact memory.", "模板、组记录、训练后复盘和 Coach artifact 记忆。")
-            )
-            featureCard(
-                icon: "checkmark.shield.fill",
-                bgColor: VelaTheme.success.opacity(0.12),
-                fgColor: VelaTheme.success,
-                title: L10n.t("Local-first Trust", "本地优先与信任中心"),
-                detail: L10n.t("Profiles and health context stay in SwiftData unless you explicitly use network AI.", "资料和健康上下文保存在本机 SwiftData，只有主动使用联网 AI 时才会发送。")
-            )
-        }
-    }
-
     private var ctaButtons: some View {
         VStack(spacing: 12) {
             Button(action: primaryOnboardingAction) {
@@ -357,7 +302,7 @@ struct VelaOnboardingView: View {
             if currentStep > 0 {
                 Button {
                     if currentStep == 2 {
-                        finishOnboarding(missingSignals: [])
+                        Task { await finishOnboardingSkippingHealth() }
                     } else {
                         isMovingForward = false
                         withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
@@ -456,7 +401,9 @@ struct VelaOnboardingView: View {
         var missing: [HealthSignal] = []
         for signal in [HealthSignal.hrvSDNN, .restingHR, .sleepAnalysis, .workouts, .activeEnergy, .stepCount] {
             let cov = await coverageService.fetchCoverage(for: signal)
-            if cov.authorizationState == .unavailable || cov.authorizationState == .notRequested {
+            if cov.authorizationState == .unavailable
+                || cov.authorizationState == .notRequested
+                || cov.authorizationState == .denied {
                 missing.append(signal)
             }
         }
@@ -469,10 +416,28 @@ struct VelaOnboardingView: View {
         }
     }
 
+    /// 「稍后连接」：不请求授权，但真实记录缺失信号（此前 missingData=[]，
+    /// Me 页「待补充健康指标」永不出现，且无重进 onboarding 的入口）。
+    private func finishOnboardingSkippingHealth() async {
+        let coverageService = HealthSignalCoverageService()
+        var missing: [HealthSignal] = []
+        for signal in [HealthSignal.hrvSDNN, .restingHR, .sleepAnalysis, .workouts, .activeEnergy, .stepCount] {
+            let cov = await coverageService.fetchCoverage(for: signal)
+            if cov.authorizationState == .unavailable
+                || cov.authorizationState == .notRequested
+                || cov.authorizationState == .denied {
+                missing.append(signal)
+            }
+        }
+        finishOnboarding(missingSignals: missing)
+    }
+
     private func finishOnboarding(missingSignals: [HealthSignal]) {
         guard saveOnboardingState(missingSignals: missingSignals, completed: true) else { return }
         onboardingCompleted = true
         VelaAppState.shared.markLocalDataChanged()
+        // 建档资料落盘 wiki：Coach 页健康档案不再显示空模板。
+        WikiProfileMaterializer.materializeIfNeeded(modelContext: modelContext)
         Task {
             await dashboardVM.refresh(modelContext: modelContext, force: true)
         }
@@ -485,7 +450,8 @@ struct VelaOnboardingView: View {
         state.completedAt = completed ? Date() : nil
         state.goalProfile = UserGoalProfile(
             primaryGoal: primaryGoal,
-            secondaryGoals: [trainingStyle],
+            // 训练风格属于 trainingPreference，不应混入「次要目标」。
+            secondaryGoals: [],
             experienceLevel: experienceLevel,
             bodyConcerns: []
         )
@@ -552,29 +518,4 @@ struct VelaOnboardingView: View {
         }
     }
 
-    private func featureCard(icon: String, bgColor: Color, fgColor: Color, title: String, detail: String) -> some View {
-        VelaGlassCard(padding: 16, cornerRadius: 16) {
-            HStack(spacing: 14) {
-                Image(systemName: icon)
-                    .font(.system(size: 16))
-                    .foregroundStyle(fgColor)
-                    .frame(width: 40, height: 40)
-                    .background(
-                        RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                            .fill(bgColor)
-                    )
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(VelaTheme.fg)
-                    Text(detail)
-                        .font(.system(size: 13))
-                        .foregroundStyle(VelaTheme.muted)
-                }
-
-                Spacer()
-            }
-        }
-    }
 }

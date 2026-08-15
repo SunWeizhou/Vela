@@ -55,10 +55,10 @@ struct PlusActionSheet: View {
                 
                 // Row 3
                 circleActionButton(icon: "wand.and.stars", label: "智能处方") {
-                    deferAction(.coach("帮我根据今日状态生成一份运动健康处方模版"))
+                    deferAction(.coach("帮我根据今日状态生成一份运动健康处方模板"))
                 }
                 
-                circleActionButton(icon: "list.bullet.clipboard.fill", label: "查看模版") {
+                circleActionButton(icon: "list.bullet.clipboard.fill", label: "查看模板") {
                     deferAction(.coach("我有哪些已保存的运动与习惯处方模版？"))
                 }
                 
@@ -131,16 +131,16 @@ struct PlusActionSheet: View {
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    Color(hex: "#7986CB"), // Indigo
-                                    Color(hex: "#42A5F5"), // Sky blue
-                                    VelaTheme.indigo  // Deep indigo
+                                    VelaTheme.brandBright,
+                                    VelaTheme.accent,
+                                    VelaTheme.rhythmDeep
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
                         .frame(width: 60, height: 60)
-                        .shadow(color: VelaTheme.indigo.opacity(0.3), radius: 8, y: 4)
+                        .shadow(color: VelaTheme.rhythmDeep.opacity(0.25), radius: 8, y: 4)
                     
                     AlpacaView()
                         .offset(y: -1)

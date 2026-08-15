@@ -91,7 +91,7 @@ struct VelaVitalsView: View {
                     .opacity(0.4)
             }
         }
-        .background(VelaTheme.systemGroupedBackground)
+        .background(VelaTheme.rhythmCanvas)
         .onAppear {
             loadRealVitalsData()
         }
@@ -180,9 +180,7 @@ struct VelaVitalsView: View {
 
         return NavigationLink(destination: BiologyView()) {
             Group {
-                if result == nil || chronologicalAge == nil {
-                    biologicalAgeUnavailableCard
-                } else {
+                if let result, chronologicalAge != nil {
                     VStack(alignment: .leading, spacing: 14) {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: isPhenoAge ? "cross.case.fill" : "waveform.path.ecg")
@@ -215,7 +213,7 @@ struct VelaVitalsView: View {
 
                     HStack(alignment: .firstTextBaseline, spacing: 18) {
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(isPhenoAge ? String(format: "%.1f", result!.biologicalAge) : "\(Int(result!.overallScore.rounded()))")
+                            Text(isPhenoAge ? String(format: "%.1f", result.biologicalAge) : "\(Int(result.overallScore.rounded()))")
                                 .font(.system(size: 34, weight: .bold, design: .rounded))
                                 .foregroundStyle(VelaTheme.fg)
                             Text(isPhenoAge ? "岁（估算）" : "信号评分")
@@ -236,10 +234,10 @@ struct VelaVitalsView: View {
                     }
 
                     HStack(spacing: 14) {
-                        Text("可用信号 \(result!.factors.count)")
-                        Text("参考积极 \(result!.optimalCount)")
-                        if result!.suboptimalCount > 0 {
-                            Text("待关注 \(result!.suboptimalCount)")
+                        Text("可用信号 \(result.factors.count)")
+                        Text("参考积极 \(result.optimalCount)")
+                        if result.suboptimalCount > 0 {
+                            Text("待关注 \(result.suboptimalCount)")
                         }
                     }
                     .font(.system(size: 11, weight: .semibold))
@@ -249,6 +247,8 @@ struct VelaVitalsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
                     .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
+                } else {
+                    biologicalAgeUnavailableCard
                 }
             }
         }

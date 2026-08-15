@@ -4,7 +4,13 @@ import SwiftData
 struct VelaTrainingPlanView: View {
     @Query(sort: \TrainingPlanRecord.updatedAt, order: .reverse)
     private var plans: [TrainingPlanRecord]
+    @Query(sort: \WorkoutEventRecord.startedAt, order: .reverse)
+    private var events: [WorkoutEventRecord]
     @EnvironmentObject private var dashboardVM: DashboardViewModel
+    @Environment(\.modelContext) private var modelContext
+
+    /// 今天的正式运营计划（决策面板数据源；无则退回恢复信号说明）。
+    @State private var todayOperatingPlan: DailyOperatingPlanRecord?
 
     private var activePlan: TrainingPlanRecord? {
         plans.first(where: \.isActive) ?? plans.first
@@ -17,7 +23,7 @@ struct VelaTrainingPlanView: View {
 
                 VStack(alignment: .leading, spacing: 14) {
                     VelaRhythmSectionHeader(
-                        eyebrow: "FLEXIBLE ROTATION",
+                        eyebrow: "",
                         title: "训练轮转",
                         actionTitle: nil,
                         action: {}
@@ -25,7 +31,7 @@ struct VelaTrainingPlanView: View {
                     planRows
                 }
 
-                adaptationSection
+                todayDecisionSection
                 coachActions
             }
             .padding(.horizontal, VelaTheme.pagePadding)
@@ -36,20 +42,23 @@ struct VelaTrainingPlanView: View {
         .background(VelaTheme.rhythmCanvas)
         .navigationTitle("训练计划")
         .velaRhythmDetailChrome()
+        .task {
+            fetchTodayOperatingPlan()
+        }
+    }
+
+    private func fetchTodayOperatingPlan() {
+        let identifier = DailyHealthSummaryRecord.dayIdentifier(for: Date(), calendar: .current)
+        var descriptor = FetchDescriptor<DailyOperatingPlanRecord>(
+            predicate: #Predicate<DailyOperatingPlanRecord> { $0.dayIdentifier == identifier },
+            sortBy: [SortDescriptor(\.generatedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+        todayOperatingPlan = (try? modelContext.fetch(descriptor))?.first
     }
 
     private var planHero: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 7) {
-                Circle()
-                    .fill(VelaTheme.rhythmDeep)
-                    .frame(width: 7, height: 7)
-                Text("LIVING PLAN")
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(1.4)
-                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
-            }
-
             Text(activePlan?.title ?? "建立可调整的训练轮转")
                 .font(.system(size: 32, weight: .semibold))
                 .tracking(-0.8)
@@ -87,7 +96,7 @@ struct VelaTrainingPlanView: View {
         if let activePlan, !activePlan.days.isEmpty {
             VStack(spacing: 0) {
                 ForEach(Array(activePlan.days.enumerated()), id: \.element.id) { index, day in
-                    planRow(day)
+                    PlanDayRow(day: day, events: events)
                     if index < activePlan.days.count - 1 {
                         Rectangle()
                             .fill(VelaTheme.rhythmMist)
@@ -115,70 +124,76 @@ struct VelaTrainingPlanView: View {
         }
     }
 
-    private func planRow(_ day: TrainingDay) -> some View {
-        HStack(spacing: 13) {
-            ZStack {
-                Circle()
-                    .fill(day.isCompleted ? VelaTheme.rhythmDeep : VelaTheme.rhythmMist)
-                if day.isCompleted {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.white)
-                } else {
-                    Text("\(day.dayNumber)")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(VelaTheme.rhythmInk)
-                }
-            }
-            .frame(width: 34, height: 34)
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 7) {
-                    Text(day.title)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(VelaTheme.rhythmInk)
-                        .lineLimit(1)
-
-                    if day.isCompleted {
-                        Text("已完成")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(VelaTheme.rhythmDeep)
-                    }
-                }
-
-                Text(day.description.isEmpty ? "边界会在训练当天根据状态调整" : day.description)
-                    .font(.system(size: 11))
-                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                    .lineLimit(2)
-            }
-
-            Spacer(minLength: 8)
-
-            Text(day.focus == "rest" ? "恢复" : "\(day.durationMinutes)′")
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(VelaTheme.rhythmInkSecondary)
-        }
-        .padding(.vertical, 14)
-        .accessibilityElement(children: .combine)
-    }
-
-    private var adaptationSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("TODAY'S ADAPTATION")
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(1.25)
-                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+    /// 今天如何调整：优先展示当天正式决策（容量/RPE 边界 + 理由），
+    /// 没有运营计划时退回恢复信号说明——不再是一句通用文案。
+    private var todayDecisionSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
             Text("今天如何调整")
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmInk)
-            Text(adaptationText)
-                .font(.system(size: 13))
-                .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                .lineSpacing(3)
-                .fixedSize(horizontal: false, vertical: true)
+
+            if let todayOperatingPlan, let payload = todayOperatingPlan.operatingPlanPayload {
+                HStack(spacing: 8) {
+                    Text(decisionLabel(payload.decision))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeepOn)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 4)
+                        .background(VelaTheme.rhythmDeep, in: Capsule())
+                    Text(boundaryText(payload))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                }
+
+                if !payload.summary.isEmpty {
+                    Text(payload.summary)
+                        .font(.system(size: 13))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        .lineSpacing(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                let reasons = todayOperatingPlan.operatingPlanReasons
+                if !reasons.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(Array(reasons.prefix(3).enumerated()), id: \.offset) { _, reason in
+                            HStack(alignment: .top, spacing: 7) {
+                                Circle()
+                                    .fill(VelaTheme.rhythmDeep.opacity(0.6))
+                                    .frame(width: 5, height: 5)
+                                    .padding(.top, 5)
+                                Text(reason)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                }
+            } else {
+                Text(adaptationText)
+                    .font(.system(size: 13))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(17)
         .background(VelaTheme.rhythmMist.opacity(0.72), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    private func decisionLabel(_ decision: DailyTrainingDecisionType) -> String {
+        switch decision {
+        case .keep: return "保持计划"
+        case .reduce: return "建议减量"
+        case .swap: return "建议换部位"
+        case .rest: return "恢复优先"
+        }
+    }
+
+    private func boundaryText(_ payload: DailyOperatingPlanPayload) -> String {
+        guard payload.decision != .rest else { return "优先恢复 · 轻活动" }
+        return "容量 \(Int((payload.volumeMultiplier * 100).rounded()))% · RPE ≤ \(payload.intensityCap)"
     }
 
     private var coachActions: some View {
@@ -236,5 +251,161 @@ struct VelaTrainingPlanView: View {
             .fill(VelaTheme.rhythmMist)
             .frame(width: 1, height: 32)
             .padding(.horizontal, 12)
+    }
+}
+
+// MARK: - Expandable plan day row
+
+/// 计划日行：点开看计划动作、实际执行记录与依从度——计划与事实的闭环。
+private struct PlanDayRow: View {
+    let day: TrainingDay
+    let events: [WorkoutEventRecord]
+
+    @State private var isExpanded = false
+
+    private var plannedExercises: [WorkoutTemplateExercise] {
+        guard let data = day.plannedExercisesJSON.data(using: .utf8),
+              let list = try? JSONDecoder().decode([WorkoutTemplateExercise].self, from: data) else {
+            return []
+        }
+        return list
+    }
+
+    private var linkedEvents: [WorkoutEventRecord] {
+        events.filter { $0.linkedTrainingPlanDayId == day.id }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 13) {
+                    ZStack {
+                        Circle()
+                            .fill(day.isCompleted ? VelaTheme.rhythmDeep : VelaTheme.rhythmMist)
+                        if day.isCompleted {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(.white)
+                        } else {
+                            Text("\(day.dayNumber)")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(VelaTheme.rhythmInk)
+                        }
+                    }
+                    .frame(width: 34, height: 34)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 7) {
+                            Text(day.title)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(VelaTheme.rhythmInk)
+                                .lineLimit(1)
+
+                            if day.isCompleted {
+                                Text("已完成")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundStyle(VelaTheme.rhythmDeep)
+                            } else if let adherence = day.adherenceScore {
+                                Text("依从 \(Int((adherence * 100).rounded()))%")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundStyle(VelaTheme.rhythmDeep)
+                            }
+                        }
+
+                        Text(day.description.isEmpty ? "边界会在训练当天根据状态调整" : day.description)
+                            .font(.system(size: 11))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Text(day.focus == "rest" ? "恢复" : "\(day.durationMinutes)′")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.7))
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                        .frame(width: 14, height: 14)
+                }
+                .padding(.vertical, 14)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(day.title)，点按查看计划动作与实际执行")
+
+            if isExpanded {
+                expandedPanel
+                    .padding(.bottom, 14)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var expandedPanel: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            if !plannedExercises.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("计划动作")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    ForEach(Array(plannedExercises.prefix(6).enumerated()), id: \.element.id) { index, exercise in
+                        Text("• \(exercise.name) — \(exercise.targetSets) 组 × \(exercise.targetReps)")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(VelaTheme.rhythmInk)
+                    }
+                    if plannedExercises.count > 6 {
+                        Text("另有 \(plannedExercises.count - 6) 个动作")
+                            .font(.system(size: 10))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    }
+                }
+            }
+
+            if !linkedEvents.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("实际执行")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    ForEach(Array(linkedEvents.prefix(3).enumerated()), id: \.element.id) { _, event in
+                        HStack(spacing: 7) {
+                            Circle()
+                                .fill(VelaTheme.rhythmDeep)
+                                .frame(width: 5, height: 5)
+                            Text(eventText(event))
+                                .font(.system(size: 12))
+                                .foregroundStyle(VelaTheme.rhythmInk)
+                        }
+                    }
+                }
+            } else if !day.isCompleted {
+                Text("还没有关联的实际训练记录。")
+                    .font(.system(size: 11))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            }
+
+            if day.isCompleted, let completedAt = day.completedAt {
+                Text("完成于 \(completedAt.formatted(date: .abbreviated, time: .shortened))")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(VelaTheme.rhythmDeep)
+            }
+        }
+        .padding(13)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(VelaTheme.rhythmMist.opacity(0.45), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.leading, 47)
+    }
+
+    private func eventText(_ event: WorkoutEventRecord) -> String {
+        let date = event.startedAt.formatted(date: .abbreviated, time: .shortened)
+        let name = event.activityType.isEmpty ? "训练" : event.activityType
+        return "\(date) · \(name)"
     }
 }

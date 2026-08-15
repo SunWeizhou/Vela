@@ -43,10 +43,11 @@ struct BodyModelEditView: View {
             
             Section(header: Text("训练偏好")) {
                 Picker("训练风格", selection: $trainingStyle) {
-                    Text(localizedOnboardingTrainingStyle("mixed")).tag("mixed")
+                    // 选项集与 onboarding 一致（此前 mixed/cardio/yoga 与
+                    // strength/hybrid/endurance 不互通，编辑即丢值）。
                     Text(localizedOnboardingTrainingStyle("strength")).tag("strength")
-                    Text(localizedOnboardingTrainingStyle("cardio")).tag("cardio")
-                    Text(localizedOnboardingTrainingStyle("yoga")).tag("yoga")
+                    Text(localizedOnboardingTrainingStyle("hybrid")).tag("hybrid")
+                    Text(localizedOnboardingTrainingStyle("endurance")).tag("endurance")
                 }
                 .pickerStyle(.menu)
                 
@@ -83,7 +84,7 @@ struct BodyModelEditView: View {
             Section(header: Text("教练指导")) {
                 Picker("指导风格", selection: $coachStyle) {
                     Text(localizedOnboardingCoachStyle("direct")).tag("direct")
-                    Text(localizedOnboardingCoachStyle("encouraging")).tag("encouraging")
+                    Text(localizedOnboardingCoachStyle("balanced")).tag("balanced")
                     Text(localizedOnboardingCoachStyle("explanatory")).tag("explanatory")
                 }
                 .pickerStyle(.segmented)
@@ -136,7 +137,8 @@ struct BodyModelEditView: View {
         let state = onboarding ?? OnboardingState()
         state.goalProfile = UserGoalProfile(
             primaryGoal: primaryGoal,
-            secondaryGoals: [trainingStyle],
+            // 训练风格属于 trainingPreference，不应混入「次要目标」。
+            secondaryGoals: [],
             experienceLevel: experienceLevel,
             bodyConcerns: []
         )
@@ -286,7 +288,7 @@ struct BodyModelDetailView: View {
     }
     private var healthProfileSummary: String {
         var values: [String] = []
-        let age = UserProfileSettings.age() ?? dashboard.extendedMetrics.age
+        let age = UserProfileSettings.age() ?? dashboard.extendedMetrics.age ?? WikiFileService.getAgeFromWiki()
         let weight = UserProfileSettings.weightKilograms() ?? dashboard.bodyMetrics.weightKilograms
         let height = UserProfileSettings.heightCentimeters() ?? dashboard.extendedMetrics.heightCm
         let sex = UserProfileSettings.biologicalSex() ?? dashboard.extendedMetrics.biologicalSex
@@ -299,13 +301,17 @@ struct BodyModelDetailView: View {
     private var bodyModelState: BodyModelState {
         BodyModelBuilder().build(
             onboarding: onboarding,
-            dailySummaries: Array(dailySummaries.prefix(35)),
-            journalEntries: Array(journalEntries.prefix(100)),
-            strengthWorkouts: Array(strengthWorkouts.prefix(50)),
-            trainingResponses: Array(trainingResponses.prefix(50)),
+            dailySummaries: dailySummaries,
+            journalEntries: journalEntries,
+            strengthWorkouts: strengthWorkouts,
+            trainingResponses: trainingResponses,
+            longTermBaselines: longTermReport,
             asOf: dashboard.date
         )
     }
+
+    /// 详情页自给自足：用自己拉取的三年记录计算长线基准（不依赖 dashboard 缓存状态）。
+    @State private var longTermReport: LongTermBaselineReport? = nil
     
     @State private var healthSnapshots: [DailyHealthSnapshot] = []
     @State private var insights: [HabitCorrelationInsight] = []
@@ -383,7 +389,7 @@ struct BodyModelDetailView: View {
             }
             
             VStack(spacing: 0) {
-                detailRow(title: "基础健康档案", value: healthProfileSummary)
+                detailRow(title: "生理特征", value: healthProfileSummary)
                 Divider().padding(.leading, 16)
                 detailRow(title: "主要健身目标", value: staticGoalText)
                 Divider().padding(.leading, 16)
@@ -485,28 +491,38 @@ struct BodyModelDetailView: View {
     }
     
     private func loadModelData() {
-        var summariesDesc = FetchDescriptor<DailyHealthSummaryRecord>(sortBy: [SortDescriptor(\.date, order: .reverse)])
-        summariesDesc.fetchLimit = 35
-        self.dailySummaries = (try? modelContext.fetch(summariesDesc)) ?? []
+        // 三年窗口：身体模型与行为-结果配对用回填历史立即拟合，
+        // 不再被 35/100/50/30 天的窗口截断在学习期。
+        self.dailySummaries = (try? modelContext.fetch(
+            FetchDescriptor<DailyHealthSummaryRecord>(sortBy: [SortDescriptor(\.date, order: .reverse)])
+        )) ?? []
  
-        var journalDesc = FetchDescriptor<JournalEntryRecord>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
-        journalDesc.fetchLimit = 100
-        self.journalEntries = (try? modelContext.fetch(journalDesc)) ?? []
+        self.journalEntries = (try? modelContext.fetch(
+            FetchDescriptor<JournalEntryRecord>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        )) ?? []
  
-        var workoutsDesc = FetchDescriptor<StrengthWorkoutRecord>(sortBy: [SortDescriptor(\.startedAt, order: .reverse)])
-        workoutsDesc.fetchLimit = 50
-        self.strengthWorkouts = (try? modelContext.fetch(workoutsDesc)) ?? []
+        self.strengthWorkouts = (try? modelContext.fetch(
+            FetchDescriptor<StrengthWorkoutRecord>(sortBy: [SortDescriptor(\.startedAt, order: .reverse)])
+        )) ?? []
  
-        var responsesDesc = FetchDescriptor<TrainingResponseRecord>(sortBy: [SortDescriptor(\.date, order: .reverse)])
-        responsesDesc.fetchLimit = 50
-        self.trainingResponses = (try? modelContext.fetch(responsesDesc)) ?? []
+        self.trainingResponses = (try? modelContext.fetch(
+            FetchDescriptor<TrainingResponseRecord>(sortBy: [SortDescriptor(\.date, order: .reverse)])
+        )) ?? []
  
         let repo = HealthSnapshotRepository(modelContext: modelContext)
-        if let snaps = try? repo.fetchSnapshots(days: 30) {
+        if let snaps = try? repo.fetchSnapshots(days: 1100) {
             self.healthSnapshots = snaps
             let engine = JournalCorrelationEngine()
-            self.insights = engine.calculateInsights(journalEntries: self.journalEntries, snapshots: snaps)
+            // 手记行为配对 + 三年生理行为配对（训练日/高活动日/短睡眠夜），
+            // Impact Matrix 回填后立即有内容，不再只依赖手记。
+            let journalInsights = engine.calculateInsights(journalEntries: self.journalEntries, snapshots: snaps)
+            let physiologicalInsights = engine.physiologicalInsights(snapshots: snaps)
+            self.insights = journalInsights + physiologicalInsights
         }
+        self.longTermReport = LongTermBaselineEngine.compute(
+            points: self.dailySummaries.map(\.longTermBaselinePoint),
+            today: dashboard.date
+        )
     }
     
     private func confidenceColor(_ conf: MetricConfidence) -> Color {

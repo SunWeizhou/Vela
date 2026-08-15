@@ -402,7 +402,7 @@ struct VelaShell: View {
                     .font(.system(size: 17, weight: isActive ? .semibold : .regular))
                     .frame(height: 22)
                 Text(label(for: tab))
-                    .font(.system(size: 8.5, weight: .bold))
+                    .font(.caption2.weight(.bold))
             }
             .foregroundStyle(isActive ? VelaTheme.fg : VelaTheme.muted)
             .frame(maxWidth: .infinity)

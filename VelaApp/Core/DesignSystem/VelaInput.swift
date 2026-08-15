@@ -112,41 +112,6 @@ struct EvidenceStep: View {
 
 // MARK: - DataFreshnessBar
 
-struct DataFreshnessBar: View {
-    let lastSync: String
-    let device: String?
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Circle()
-                .fill(VelaTheme.success)
-                .frame(width: 8, height: 8)
-
-            VStack(alignment: .leading) {
-                Text("数据已同步")
-                    .font(VelaTheme.footnote())
-                    .foregroundStyle(VelaTheme.fg)
-                +
-                Text(" · \(lastSync)")
-                    .font(VelaTheme.footnote())
-                    .foregroundStyle(VelaTheme.muted)
-
-                if let device = device {
-                    Text(" · \(device)")
-                        .font(VelaTheme.footnote())
-                        .foregroundStyle(VelaTheme.meta)
-                }
-            }
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                .fill(VelaTheme.surface)
-        )
-    }
-}
-
 // MARK: - QuickEntryButton
 
 struct QuickEntryButton: View {

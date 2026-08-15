@@ -156,12 +156,16 @@ final class NotificationService {
     // MARK: - Morning Brief Notification
 
     /// Schedule a morning brief check. Called by MorningBriefScheduler after generation.
-    func scheduleMorningBriefCheck() {
+    /// PR11：通知正文取自已生成的报告（首个非标题正文行），不再固定泛化文案。
+    func scheduleMorningBriefCheck(headline: String? = nil) {
         guard morningBriefAlertsEnabled else {
             logger.info("Morning brief alerts disabled, skipping notification.")
             return
         }
-        let content = Self.morningBriefNotificationContent(language: AppLanguage.stored)
+        let content = Self.morningBriefNotificationContent(
+            language: AppLanguage.stored,
+            headline: headline
+        )
         sendNotification(
             title: content.title,
             body: content.body,
@@ -262,25 +266,35 @@ final class NotificationService {
 
     /// Send a local notification immediately.
     func sendNotification(title: String, body: String, category: VelaNotificationCategory?) {
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = .default
-        if let category {
-            content.categoryIdentifier = category.identifier
-        }
+        // 授权检查：被拒时静默丢弃会让用户以为通知正常（开了功能却收不到）。
+        center.getNotificationSettings { [weak self] settings in
+            guard settings.authorizationStatus == .authorized
+                    || settings.authorizationStatus == .provisional else {
+                self?.logger.warning(
+                    "Notification authorization is \(settings.authorizationStatus.rawValue); dropping '\(title)'."
+                )
+                return
+            }
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = body
+            content.sound = .default
+            if let category {
+                content.categoryIdentifier = category.identifier
+            }
 
-        let request = UNNotificationRequest(
-            identifier: UUID().uuidString,
-            content: content,
-            trigger: nil // immediate delivery
-        )
+            let request = UNNotificationRequest(
+                identifier: UUID().uuidString,
+                content: content,
+                trigger: nil // immediate delivery
+            )
 
-        center.add(request) { [weak self] error in
-            if let error {
-                self?.logger.error("Failed to send notification '\(title)': \(error.localizedDescription)")
-            } else {
-                self?.logger.info("Notification sent: '\(title)'")
+            self?.center.add(request) { [weak self] error in
+                if let error {
+                    self?.logger.error("Failed to send notification '\(title)': \(error.localizedDescription)")
+                } else {
+                    self?.logger.info("Notification sent: '\(title)'")
+                }
             }
         }
     }
@@ -309,8 +323,17 @@ final class NotificationService {
         return "\(metric)|\(formatter.string(from: date))"
     }
 
-    static func morningBriefNotificationContent(language: AppLanguage) -> (title: String, body: String) {
-        language.isChinese
+    static func morningBriefNotificationContent(
+        language: AppLanguage,
+        headline: String? = nil
+    ) -> (title: String, body: String) {
+        if let headline, !headline.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let clipped = String(headline.prefix(120))
+            return language.isChinese
+                ? ("晨间简报已生成", clipped)
+                : ("Your morning brief is ready", clipped)
+        }
+        return language.isChinese
             ? ("晨间简报已生成", "查看今天的恢复、睡眠和训练负荷建议。")
             : ("Your morning brief is ready", "Check today's recovery, sleep, and training guidance.")
     }

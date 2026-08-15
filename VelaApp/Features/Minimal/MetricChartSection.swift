@@ -209,7 +209,7 @@ struct MetricChartSection: View {
                 .accessibilityLabel("\(metricSubtitle)趋势图，共\(points.count)个真实读数")
                 .accessibilityValue(dynamicValueText)
                 .onChange(of: rawSelectedDate) { oldValue, newValue in
-                    if newValue != nil {
+                    if newValue != nil && oldValue == nil {
                         VelaHaptic.selection()
                     }
                 }

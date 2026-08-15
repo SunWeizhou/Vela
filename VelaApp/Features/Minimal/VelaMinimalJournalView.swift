@@ -6,9 +6,12 @@ struct VelaMeView: View {
     @Environment(\.colorScheme) private var cs
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var dashboardVM: DashboardViewModel
+    @EnvironmentObject private var services: VelaServices
     @ObservedObject private var appState = VelaAppState.shared
+    @ObservedObject private var backfill = HistoricalBackfillCoordinator.shared
 
-    private static let lookbackDays = 42
+    /// 身体模型与行为配对使用三年窗口（回填后立即拟合，而非等 42 天慢慢积累）。
+    private static let lookbackDays = 1100
     private var lookbackStart: Date {
         Calendar.current.date(byAdding: .day, value: -Self.lookbackDays, to: dashboardVM.selectedDate) ?? dashboardVM.selectedDate
     }
@@ -50,12 +53,23 @@ struct VelaMeView: View {
     }
 
     private func buildBodyModelState() -> BodyModelState {
-        BodyModelBuilder().build(
+        // 个人页自给自足：用自己拉取的三年每日记录计算长线基准，
+        // 不依赖 dashboard.longTermBaselines（缓存启动路径可能尚未刷新）。
+        let ownReport = LongTermBaselineEngine.compute(
+            points: dailySummaries.map(\.longTermBaselinePoint),
+            today: dashboard.date
+        )
+        let dashboardReport = dashboard.longTermBaselines
+        let report: LongTermBaselineReport? = (dashboardReport?.daysOfData ?? 0) >= ownReport.daysOfData
+            ? dashboardReport
+            : ownReport
+        return BodyModelBuilder().build(
             onboarding: onboarding,
-            dailySummaries: Array(dailySummaries.prefix(35)),
-            journalEntries: Array(journalEntries.prefix(100)),
-            strengthWorkouts: Array(strengthWorkouts.prefix(50)),
-            trainingResponses: Array(trainingResponses.prefix(50)),
+            dailySummaries: dailySummaries,
+            journalEntries: journalEntries,
+            strengthWorkouts: strengthWorkouts,
+            trainingResponses: trainingResponses,
+            longTermBaselines: report,
             asOf: dashboard.date
         )
     }
@@ -65,6 +79,7 @@ struct VelaMeView: View {
             LazyVStack(alignment: .leading, spacing: 32) {
                 profileHeader
                 bodyModelOverviewCard
+                dataHistorySection
                 coachMemoryCard
                 actionSettingsHub
             }
@@ -82,6 +97,7 @@ struct VelaMeView: View {
         }
         .task(id: isActiveSurface) {
             guard isActiveSurface else { return }
+            backfill.refreshState()
             loadMeData()
         }
         .onChange(of: dashboardVM.selectedDate) { _, _ in
@@ -90,7 +106,88 @@ struct VelaMeView: View {
         }
         .onChange(of: appState.localDataRevision) { _, _ in
             guard isActiveSurface else { return }
+            backfill.refreshState()
             loadMeData()
+        }
+    }
+
+    /// 三年健康数据：轨迹查看 + Apple 健康历史回填（入口 + 进度）。
+    private var dataHistorySection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VelaRhythmSectionHeader(
+                eyebrow: "",
+                title: "三年健康数据",
+                actionTitle: nil,
+                action: {}
+            )
+
+            VStack(spacing: 0) {
+                NavigationLink(destination: LongTermHealthTrendView()) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "chart.xyaxis.line")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(VelaTheme.rhythmDeep)
+                            .frame(width: 32, height: 32)
+                            .background(RoundedRectangle(cornerRadius: 10).fill(VelaTheme.rhythmMist.opacity(0.72)))
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("三年健康轨迹")
+                                .font(VelaTheme.body())
+                                .foregroundStyle(VelaTheme.rhythmInk)
+                            Text("静息心率 · HRV · 睡眠 · 体重 · 步数")
+                                .font(.system(size: 11))
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.6))
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                }
+                .buttonStyle(.cardPress)
+
+                Divider().padding(.leading, 54)
+
+                NavigationLink(destination: HistoricalBackfillView()) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "icloud.and.arrow.down")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(VelaTheme.rhythmDeep)
+                            .frame(width: 32, height: 32)
+                            .background(RoundedRectangle(cornerRadius: 10).fill(VelaTheme.rhythmMist.opacity(0.72)))
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("回填 Apple 健康历史")
+                                .font(VelaTheme.body())
+                                .foregroundStyle(VelaTheme.rhythmInk)
+                            Text(backfill.stateText)
+                                .font(.system(size: 11))
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        }
+
+                        Spacer()
+
+                        if backfill.isRunning {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.6))
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.cardPress)
+            }
+            .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
         }
     }
 
@@ -146,6 +243,9 @@ struct VelaMeView: View {
             HStack(spacing: 8) {
                 contextPill("\(bodyModelState.maturity.behaviorPairs) 个行为信号", icon: "circle.hexagongrid")
                 contextPill("\(bodyModelState.maturity.trainingSessions) 次训练事实", icon: "figure.strengthtraining.traditional")
+                if bodyModelState.claims.contains(where: { $0.id == "training_outcome_pairing" }) {
+                    contextPill("训练-结果已配对", icon: "arrow.trianglehead.2.clockwise.rotate.90")
+                }
             }
 
         }
@@ -186,147 +286,6 @@ struct VelaMeView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var bodyModelUnifiedCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(L10n.t("Body Model", "身体数据模型"))
-                    .font(VelaTheme.caption1())
-                    .fontWeight(.bold)
-                    .foregroundStyle(VelaTheme.muted)
-                    .textCase(.uppercase)
-                    .padding(.leading, 2)
-                
-                Spacer()
-                
-                NavigationLink(destination: BodyModelDetailView()) {
-                    HStack(spacing: 4) {
-                        Text("分析与校准")
-                        Image(systemName: "chevron.right")
-                    }
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(VelaTheme.accent)
-                }
-                .buttonStyle(.cardPress)
-            }
-
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 14))
-                        .foregroundStyle(Color(hex: "#FFCC00"))
-                        .padding(.top, 2)
-                    Text(hasCompletedOnboardingProfile ? "目标与训练偏好已建立" : "个人资料待设置")
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(VelaTheme.fg2)
-                        .lineSpacing(4)
-                }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).fill(cs == .dark ? VelaTheme.brandLeaf.opacity(0.08) : VelaTheme.brandLeaf.opacity(0.06)))
-                .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).stroke(cs == .dark ? VelaTheme.brandLeaf.opacity(0.15) : VelaTheme.brandLeaf.opacity(0.12), lineWidth: 0.5))
-
-                HStack(spacing: 12) {
-                    HStack(spacing: 8) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(L10n.t("GOAL", "训练目标"))
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(VelaTheme.muted)
-                            Text(profileGoalText)
-                                .font(.system(size: 15, weight: .bold, design: .rounded))
-                                .foregroundStyle(VelaTheme.fg)
-                            Text(profileExperienceText)
-                                .font(VelaTheme.caption2())
-                                .foregroundStyle(VelaTheme.muted)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "trophy.fill")
-                            .font(.system(size: 20))
-                            .foregroundStyle(cs == .dark ? Color(hex: "#D48463").opacity(0.6) : Color(hex: "#C56B4A").opacity(0.6))
-                    }
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).fill(cs == .dark ? Color(hex: "#D48463").opacity(0.08) : Color(hex: "#C56B4A").opacity(0.06)))
-                    .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).stroke(cs == .dark ? Color(hex: "#D48463").opacity(0.15) : Color(hex: "#C56B4A").opacity(0.12), lineWidth: 0.5))
-
-                    HStack(spacing: 8) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(L10n.t("TRAINING", "每周频次"))
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(VelaTheme.muted)
-                            Text(profileFrequencyText)
-                                .font(.system(size: 15, weight: .bold, design: .rounded))
-                                .foregroundStyle(VelaTheme.fg)
-                            Text(profileDurationText)
-                                .font(VelaTheme.caption2())
-                                .foregroundStyle(VelaTheme.muted)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "flame.fill")
-                            .font(.system(size: 20))
-                            .foregroundStyle(cs == .dark ? Color(hex: "#D0A050").opacity(0.6) : Color(hex: "#B8843E").opacity(0.6))
-                    }
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).fill(cs == .dark ? Color(hex: "#D0A050").opacity(0.08) : Color(hex: "#B8843E").opacity(0.06)))
-                    .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).stroke(cs == .dark ? Color(hex: "#D0A050").opacity(0.15) : Color(hex: "#B8843E").opacity(0.12), lineWidth: 0.5))
-                }
-
-                Divider()
-
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                    profileGridItem(
-                        title: "训练风格",
-                        value: hasCompletedOnboardingProfile
-                            ? displayTrainingStyle(onboarding?.trainingPreference.trainingStyle ?? "unknown")
-                            : "待设置",
-                        icon: "figure.run",
-                        color: VelaTheme.systemOrange
-                    )
-                    profileGridItem(
-                        title: "可用设备",
-                        value: equipmentText,
-                        icon: "dumbbell.fill",
-                        color: VelaTheme.infoBlue
-                    )
-                }
-                .padding(.vertical, 6)
-
-                if let missing = onboarding?.missingData, !missing.isEmpty {
-                    HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 11))
-                            .foregroundStyle(VelaTheme.systemOrange)
-                            .frame(width: 24, height: 24)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("待补充健康指标")
-                                .font(VelaTheme.caption1())
-                                .fontWeight(.bold)
-                                .foregroundStyle(VelaTheme.fg)
-                            Text(missing.joined(separator: ", "))
-                                .font(VelaTheme.caption2())
-                                .foregroundStyle(VelaTheme.muted)
-                        }
-                        Spacer()
-                    }
-                    .padding(.top, 4)
-                }
-                
-                Divider().padding(.vertical, 4)
-
-                bodyModelEvidencePanel(bodyModelState)
-            }
-            .padding(16)
-            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
-            .shadow(color: Color.black.opacity(0.015), radius: 10, y: 4)
-        }
-    }
-
-    private func calculateTopInsights() -> [HabitCorrelationInsight] {
-        let snapshots = (try? HealthSnapshotRepository(modelContext: modelContext).fetchSnapshots(days: 30)) ?? []
-        return JournalCorrelationEngine().calculateInsights(journalEntries: journalEntries, snapshots: snapshots)
     }
 
     private func bodyModelEvidencePanel(_ state: BodyModelState) -> some View {
@@ -532,7 +491,7 @@ struct VelaMeView: View {
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
 
-            Text(L10n.t("\(timeGreeting), Weizhou", "\(timeGreeting)，Weizhou"))
+            Text(timeGreeting)
                 .font(.system(size: 34, weight: .semibold, design: .default))
                 .tracking(-0.8)
                 .foregroundStyle(VelaTheme.rhythmInk)
@@ -568,7 +527,7 @@ struct VelaMeView: View {
             VStack(spacing: 0) {
                 hubActionCell(title: "健康手记", sub: journalSub, icon: "book.pages.fill", color: VelaTheme.systemOrange, destination: VelaJournalView())
                 Divider().padding(.leading, 58)
-                hubActionCell(title: "健康档案", sub: wikiSub, icon: "doc.text.fill", color: VelaTheme.muted, destination: UserWikiArchiveView())
+                hubActionCell(title: "档案资料", sub: wikiSub, icon: "doc.text.fill", color: VelaTheme.muted, destination: UserWikiArchiveView())
                 Divider().padding(.leading, 58)
                 if VelaFeatureFlags.biologicalAgeEnabled {
                     hubActionCell(title: "生物资料", sub: bioSub, icon: "person.text.rectangle.fill", color: Color(hex: "#00A896"), destination: BiologyView())
@@ -599,7 +558,7 @@ struct VelaMeView: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: icon)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(VelaTheme.rhythmDeep)
+                    .foregroundStyle(color)
                     .frame(width: 32, height: 32)
                     .background(RoundedRectangle(cornerRadius: 10).fill(VelaTheme.rhythmMist.opacity(0.72)))
                 
@@ -660,56 +619,6 @@ struct VelaMeView: View {
             .joined(separator: separator)
     }
 
-    private func profileLine(_ title: String, _ value: String, icon: String, color: Color) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 28, height: 28)
-                .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(color))
-            Text(title)
-                .font(VelaTheme.subheadline())
-                .foregroundStyle(VelaTheme.fg)
-            Spacer()
-            Text(value)
-                .font(VelaTheme.subheadline())
-                .fontWeight(.semibold)
-                .foregroundStyle(VelaTheme.muted)
-                .lineLimit(1)
-        }
-    }
-
-    private func settingsLink<Destination: View>(
-        _ title: String,
-        value: String,
-        icon: String,
-        color: Color,
-        destination: Destination
-    ) -> some View {
-        NavigationLink(destination: destination) {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 30, height: 30)
-                    .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(color))
-                Text(title)
-                    .font(VelaTheme.body())
-                    .foregroundStyle(VelaTheme.fg)
-                Spacer()
-                Text(value)
-                    .font(VelaTheme.subheadline())
-                    .foregroundStyle(VelaTheme.muted)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(VelaTheme.meta)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-        }
-        .buttonStyle(.plain)
-    }
-
     private func displayGoal(_ goal: String) -> String {
         switch goal {
         case "muscle_gain": return L10n.t("Muscle Gain", "增肌")
@@ -731,8 +640,11 @@ struct VelaMeView: View {
 
     private func displayTrainingStyle(_ style: String) -> String {
         switch style {
-        case "mixed": return L10n.t("Mixed", "混合训练")
         case "strength": return L10n.t("Strength", "力量训练")
+        case "hybrid": return L10n.t("Hybrid", "混合训练")
+        case "endurance": return L10n.t("Endurance", "耐力训练")
+        // 旧版遗留值兼容
+        case "mixed": return L10n.t("Mixed", "混合训练")
         case "cardio": return L10n.t("Cardio", "有氧训练")
         case "yoga": return L10n.t("Yoga", "瑜伽伸展")
         default: return L10n.t("Not set", "待设置")
@@ -741,9 +653,11 @@ struct VelaMeView: View {
 
     private func displayCoachingStyle(_ style: String) -> String {
         switch style {
-        case "explanatory": return L10n.t("Detailed", "详细解析")
-        case "encouraging": return L10n.t("Encouraging", "积极鼓励")
         case "direct": return L10n.t("Direct", "直截了当")
+        case "balanced": return L10n.t("Balanced", "平衡适中")
+        case "explanatory": return L10n.t("Detailed", "详细解析")
+        // 旧版遗留值兼容
+        case "encouraging": return L10n.t("Encouraging", "积极鼓励")
         default: return L10n.t("Not set", "待设置")
         }
     }
@@ -834,5 +748,111 @@ struct VelaMeView: View {
         )
         self.trainingResponses = (try? modelContext.fetch(responsesDesc)) ?? []
         self.cachedBodyModelState = buildBodyModelState()
+    }
+}
+
+// MARK: - Historical backfill page
+
+/// 三年 Apple 健康历史回填页面：进度条 + 开始/停止 + 错误提示。
+/// 任务由 HistoricalBackfillCoordinator.shared 持有，退出页面也会继续跑。
+struct HistoricalBackfillView: View {
+    @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var services: VelaServices
+    @ObservedObject private var coordinator = HistoricalBackfillCoordinator.shared
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(spacing: 12) {
+                    Image(systemName: "icloud.and.arrow.down")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                        .frame(width: 42, height: 42)
+                        .background(VelaTheme.rhythmMist, in: Circle())
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("回填三年健康历史")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(VelaTheme.rhythmInk)
+                        Text(coordinator.stateText)
+                            .font(.system(size: 12))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    }
+                    Spacer()
+                }
+                .padding(.bottom, 2)
+
+                Text("把 Apple 健康里近三年的静息心率、HRV、睡眠、步数、活动能量、体重与训练记录读入 Vela。回填后，长期趋势、今年 vs 去年对比与历年训练量立即可用。原始数据只留在本机。")
+                    .font(.system(size: 13))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    ProgressView(value: coordinator.progress.percent)
+                        .tint(VelaTheme.rhythmDeep)
+
+                    HStack {
+                        Text("\(coordinator.progress.completedDays) / \(coordinator.progress.totalDays) 天")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        Spacer()
+                        Text("可随时停止，进度已保存")
+                            .font(.system(size: 10))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.8))
+                    }
+                }
+                .padding(16)
+                .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+                }
+
+                if let error = coordinator.lastError {
+                    Text("回填中断：\(error)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(VelaTheme.statePoor)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Button {
+                    if coordinator.isRunning {
+                        coordinator.cancel()
+                    } else {
+                        coordinator.start(
+                            queryService: services.queryService,
+                            modelContext: modelContext
+                        )
+                    }
+                } label: {
+                    Text(coordinator.isRunning ? "停止回填" : "开始回填")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeepOn)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(VelaTheme.rhythmDeep, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
+                .buttonStyle(.cardPress)
+                .disabled(coordinator.progress.isComplete && !coordinator.isRunning)
+
+                if coordinator.progress.isComplete {
+                    Text("回填已完成。三年健康轨迹与历年训练量现在都已就绪。")
+                        .font(.system(size: 11))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(.horizontal, VelaTheme.pagePadding)
+            .padding(.top, 18)
+            .padding(.bottom, 44)
+        }
+        .scrollIndicators(.hidden)
+        .background(VelaTheme.rhythmCanvas)
+        .navigationTitle("历史回填")
+        .velaRhythmDetailChrome()
+        .onAppear {
+            coordinator.refreshState()
+        }
     }
 }

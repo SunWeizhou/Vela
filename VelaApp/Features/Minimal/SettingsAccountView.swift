@@ -43,30 +43,54 @@ struct AccountSettingsView: View {
                     TextField("年龄", text: $ageDraft)
                         .keyboardType(.numberPad)
                     Text("岁")
+                    profileSourceBadge(
+                        manual: UserProfileSettings.age() != nil,
+                        automatic: dashboardVM.dashboard.extendedMetrics.age != nil
+                            ? "Apple 健康"
+                            : (WikiFileService.getAgeFromWiki() != nil ? "档案" : nil)
+                    )
                 }
                 HStack {
                     TextField("体重", text: $weightDraft)
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing)
                     Text("kg")
+                    profileSourceBadge(
+                        manual: UserProfileSettings.weightKilograms() != nil,
+                        automatic: dashboardVM.dashboard.bodyMetrics.weightKilograms != nil ? "Apple 健康" : nil
+                    )
                 }
                 HStack {
                     TextField("身高", text: $heightDraft)
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing)
                     Text("cm")
+                    profileSourceBadge(
+                        manual: UserProfileSettings.heightCentimeters() != nil,
+                        automatic: dashboardVM.dashboard.extendedMetrics.heightCm != nil ? "Apple 健康" : nil
+                    )
                 }
                 HStack {
                     TextField("最大心率（可选）", text: $maxHeartRateDraft)
                         .keyboardType(.numberPad)
                     Text("bpm")
+                    profileSourceBadge(
+                        manual: UserProfileSettings.maxHeartRate() != nil,
+                        automatic: UserProfileSettings.maxHeartRate() == nil && inferredMaxHR != nil ? "按年龄推断" : nil
+                    )
                 }
 
-                Picker("生理性别", selection: $biologicalSex) {
-                    Text("未设置").tag("")
-                    Text("男性").tag("male")
-                    Text("女性").tag("female")
-                    Text("其他").tag("other")
+                HStack {
+                    Picker("生理性别", selection: $biologicalSex) {
+                        Text("未设置").tag("")
+                        Text("男性").tag("male")
+                        Text("女性").tag("female")
+                        Text("其他").tag("other")
+                    }
+                    profileSourceBadge(
+                        manual: !biologicalSex.isEmpty,
+                        automatic: biologicalSex.isEmpty && dashboardVM.dashboard.extendedMetrics.biologicalSex != nil ? "Apple 健康" : nil
+                    )
                 }
 
                 if let inferredMaxHR {
@@ -87,13 +111,16 @@ struct AccountSettingsView: View {
                 .frame(maxWidth: .infinity)
                 .fontWeight(.semibold)
             } footer: {
-                Text("已填写的数值优先于缺失字段的 Apple 健康数据；应用后会重新计算训练建议。")
+                Text("已填写的数值优先于 Apple 健康数据；清空字段即可恢复使用 Apple 健康。应用后会重新计算训练建议。")
             }
         }
         .navigationTitle("账户与特征基准")
         .velaRhythmFormSurface()
         .velaRhythmDetailChrome()
         .onAppear {
+            populateProfileDrafts()
+        }
+        .onChange(of: dashboardVM.dashboard) {
             populateProfileDrafts()
         }
         .alert("无法应用身体模型", isPresented: Binding(
@@ -108,9 +135,12 @@ struct AccountSettingsView: View {
 
     private func populateProfileDrafts() {
         let healthProfile = dashboardVM.dashboard
+        // 与 Coach 的年龄解析同源：手动 → Apple 健康 → wiki 档案。
         ageDraft = (10...100).contains(userAge)
             ? String(userAge)
-            : healthProfile.extendedMetrics.age.map(String.init) ?? ""
+            : healthProfile.extendedMetrics.age.map(String.init)
+                ?? WikiFileService.getAgeFromWiki().map(String.init)
+                ?? ""
         weightDraft = (25...350).contains(userWeight)
             ? String(format: "%.1f", userWeight)
             : healthProfile.bodyMetrics.weightKilograms.map { String(format: "%.1f", $0) } ?? ""
@@ -118,10 +148,26 @@ struct AccountSettingsView: View {
             ? String(format: "%.0f", userHeight)
             : healthProfile.extendedMetrics.heightCm.map { String(format: "%.0f", $0) } ?? ""
         maxHeartRateDraft = (100...240).contains(userMaxHR) ? String(userMaxHR) : ""
-        if biologicalSex.isEmpty,
-           let healthSex = healthProfile.extendedMetrics.biologicalSex,
-           ["male", "female", "other"].contains(healthSex) {
-            biologicalSex = healthSex
+        // 生理性别不再自动从 Apple 健康写入手填值：保持「未设置 = 跟随 Apple 健康」语义。
+    }
+
+    private func profileSourceBadge(manual: Bool, automatic: String?) -> some View {
+        Group {
+            if manual {
+                Text("手动")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(VelaTheme.accent)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(VelaTheme.accent.opacity(0.12), in: Capsule())
+            } else if let automatic {
+                Text(automatic)
+                    .font(.caption2)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(VelaTheme.rhythmMist.opacity(0.6), in: Capsule())
+            }
         }
     }
 
@@ -144,6 +190,10 @@ struct AccountSettingsView: View {
         userHeight = parsedHeight ?? 0
         userMaxHR = parsedMaxHeartRate ?? 0
         VelaAppState.shared.markLocalDataChanged()
+        // M3 修复：设置页改档案必须与 Coach 工具路径对称——同步回写 wiki 档案
+        // 与 SwiftData 记录，避免「账户与特征基准」和「健康档案」两处互相矛盾。
+        WikiProfileMaterializer.refreshPhysiologicalProfile(modelContext: modelContext)
+        WikiSyncManager.sync(modelContext: modelContext)
         Task {
             await dashboardVM.refresh(modelContext: modelContext, force: true)
         }
@@ -206,7 +256,7 @@ struct UserWikiArchiveView: View {
                         WikiSyncManager.sync(modelContext: modelContext)
                     }
                 } else {
-                    ForEach(wikiDocs) { doc in
+                    ForEach(wikiDocs.filter { $0.filename != "baselines.md" }) { doc in
                         Button {
                             selectedDoc = doc
                             editTitle = doc.title

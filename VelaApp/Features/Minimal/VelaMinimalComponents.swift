@@ -294,7 +294,7 @@ struct VelaMetricDetailView: View {
                         )
                         .background(
                             Circle()
-                                .fill(isSleep ? VelaTheme.inkDark.opacity(0.85) : Color.white.opacity(0.85))
+                                .fill(isSleep ? VelaTheme.inkDark.opacity(0.85) : VelaTheme.rhythmCanvasRaised)
                                 .frame(width: 140, height: 140)
                                 .shadow(color: isSleep ? .clear : Color.black.opacity(0.012), radius: 10, x: 0, y: 3)
                         )
@@ -309,14 +309,14 @@ struct VelaMetricDetailView: View {
                         )
                         .background(
                             Circle()
-                                .fill(isSleep ? VelaTheme.inkDark.opacity(0.85) : Color.white.opacity(0.85))
+                                .fill(isSleep ? VelaTheme.inkDark.opacity(0.85) : VelaTheme.rhythmCanvasRaised)
                                 .frame(width: 140, height: 140)
                                 .shadow(color: isSleep ? .clear : Color.black.opacity(0.012), radius: 10, x: 0, y: 3)
                         )
                     case .absoluteValue:
                         ZStack {
                             Circle()
-                                .fill(isSleep ? VelaTheme.inkDark.opacity(0.85) : Color.white.opacity(0.85))
+                                .fill(isSleep ? VelaTheme.inkDark.opacity(0.85) : VelaTheme.rhythmCanvasRaised)
                                 .frame(width: 140, height: 140)
                                 .shadow(color: isSleep ? .clear : Color.black.opacity(0.012), radius: 10, x: 0, y: 3)
 
@@ -531,9 +531,10 @@ struct VelaMetricDetailView: View {
             }
         }
 
+        // M2 修复：心率区间与引擎/展示同源——手动 → HealthKit → wiki。
         guard let age = UserProfileSettings.age()
-            ?? WikiFileService.getAgeFromWiki()
-            ?? dashboard.extendedMetrics.age,
+            ?? dashboard.extendedMetrics.age
+            ?? WikiFileService.getAgeFromWiki(),
               let restingHeartRate = dashboard.recoveryMetrics.restingHeartRate else {
             heartRateZoneSummary = nil
             return
@@ -777,5 +778,363 @@ struct DigitalTwinSimulatorCard: View {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
         )
+    }
+}
+
+// MARK: - Long-term health trend（三年健康轨迹）
+
+/// 长期趋势纯计算：按月均值聚合 + 今年 vs 去年同期对齐比较。
+enum LongTermTrendMath {
+    /// 逐日值 → 逐月均值（键为当月 1 号）。
+    static func monthlyAverages(
+        values: [(date: Date, value: Double)],
+        calendar: Calendar = .current
+    ) -> [(date: Date, value: Double)] {
+        var sums: [Date: Double] = [:]
+        var counts: [Date: Int] = [:]
+        for entry in values {
+            let monthKey = monthStart(of: entry.date, calendar: calendar)
+            sums[monthKey, default: 0] += entry.value
+            counts[monthKey, default: 0] += 1
+        }
+        return sums.keys.sorted().compactMap { key in
+            guard let count = counts[key], count > 0 else { return nil }
+            return (date: key, value: sums[key, default: 0] / Double(count))
+        }
+    }
+
+    /// 今年（1 月 1 日至今天）与去年同对齐时段的均值；不足 7 天样本返回 nil。
+    static func samePeriodComparison(
+        values: [(date: Date, value: Double)],
+        today: Date = Date(),
+        calendar: Calendar = .current
+    ) -> (thisYear: Double?, lastYear: Double?) {
+        let thisYearStart = yearStart(of: today, calendar: calendar)
+        let lastYearStart = yearStart(
+            of: calendar.date(byAdding: .year, value: -1, to: today) ?? today,
+            calendar: calendar
+        )
+        let thisYearEnd = calendar.startOfDay(for: today)
+        let lastYearEnd = calendar.date(byAdding: .year, value: -1, to: thisYearEnd) ?? thisYearEnd
+
+        func mean(_ include: (Date) -> Bool) -> Double? {
+            let vals = values.filter { include($0.date) }.map(\.value)
+            guard vals.count >= 7 else { return nil }
+            return vals.reduce(0, +) / Double(vals.count)
+        }
+        return (
+            thisYear: mean { $0 >= thisYearStart && $0 <= thisYearEnd },
+            lastYear: mean { $0 >= lastYearStart && $0 <= lastYearEnd }
+        )
+    }
+
+    private static func monthStart(of date: Date, calendar: Calendar) -> Date {
+        let components = calendar.dateComponents([.year, .month], from: date)
+        return calendar.date(from: components) ?? date
+    }
+
+    private static func yearStart(of date: Date, calendar: Calendar) -> Date {
+        let components = calendar.dateComponents([.year], from: date)
+        return calendar.date(from: components) ?? date
+    }
+}
+
+/// 三年健康轨迹：月均值曲线（点按标数值/拖动查看）+ 今年 vs 去年同期。
+/// 数据源 = 回填后的 DailyHealthSummaryRecord 原始字段。
+struct LongTermHealthTrendView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var cs
+
+    @State private var metric = LongTermMetric.restingHeartRate
+    @State private var monthlySeries: [(date: Date, value: Double)] = []
+    @State private var points: [CGPoint] = []
+    @State private var values: [Double] = []
+    @State private var dates: [Date] = []
+    @State private var comparison: (thisYear: Double?, lastYear: Double?) = (nil, nil)
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("三年健康轨迹")
+                        .font(.system(size: 28, weight: .semibold))
+                        .tracking(-0.65)
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                    Text("来自 Apple 健康的历史原始数据，按月均值呈现")
+                        .font(.system(size: 12))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                }
+                .padding(.bottom, 4)
+
+                metricPicker
+
+                chartCard
+
+                comparisonCard
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("数据来自本机回填", systemImage: "lock")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                    Text("只写入每日原始汇总（心率/睡眠/步数/体重等），不伪造旧日评分。历史不足时，先在个人页运行「回填 Apple 健康历史」。")
+                        .font(.system(size: 11))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        .lineSpacing(3)
+                }
+                .padding(14)
+                .background(VelaTheme.rhythmMist.opacity(0.5), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .padding(.horizontal, VelaTheme.pagePadding)
+            .padding(.top, 18)
+            .padding(.bottom, 44)
+        }
+        .scrollIndicators(.hidden)
+        .background(VelaTheme.rhythmCanvas)
+        .navigationTitle("长期趋势")
+        .velaRhythmDetailChrome()
+        .task { await load() }
+        .onChange(of: metric) { _, _ in rebuild() }
+    }
+
+    private var metricPicker: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(LongTermMetric.allCases) { item in
+                    Button {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+                            metric = item
+                        }
+                    } label: {
+                        Text(item.title)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(metric == item ? VelaTheme.rhythmDeepOn : VelaTheme.rhythmInkSecondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(
+                                metric == item ? VelaTheme.rhythmDeep : VelaTheme.rhythmMist.opacity(0.7),
+                                in: Capsule()
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var chartCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(metric.title)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                    Text("近三年 · 月均值")
+                        .font(.system(size: 11))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                }
+                Spacer()
+                Text(metric.unit)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            }
+
+            if points.count > 1 {
+                AreaChartCurveView(points: points, values: values, dates: dates)
+                    .frame(height: 150)
+                    .padding(.top, 6)
+
+                HStack {
+                    Text("三年前")
+                    Spacer()
+                    Text("一年半前")
+                    Spacer()
+                    Text("现在")
+                }
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                .padding(.top, 6)
+            } else {
+                emptyState
+            }
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
+    }
+
+    private var emptyState: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "chart.line.uptrend.xyaxis")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(VelaTheme.rhythmDeep)
+            Text("历史数据不足。请先在个人页运行「回填 Apple 健康历史」，再回来看轨迹。")
+                .font(.system(size: 13))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 18)
+    }
+
+    private var comparisonCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("今年 vs 去年同期")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                Spacer()
+                Text("1 月 1 日至今 · 对齐时段")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            }
+
+            if let this = comparison.thisYear, let last = comparison.lastYear {
+                HStack(spacing: 0) {
+                    comparisonMetric(title: "今年", value: format(this))
+                    Rectangle()
+                        .fill(VelaTheme.rhythmMist)
+                        .frame(width: 1, height: 44)
+                        .padding(.horizontal, 16)
+                    comparisonMetric(title: "去年", value: format(last))
+                    Spacer(minLength: 10)
+                    deltaChip(delta: this - last)
+                }
+            } else {
+                Text("回填后出现；对比需要两段各至少 7 天样本。")
+                    .font(.system(size: 12))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .padding(.vertical, 8)
+            }
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
+    }
+
+    private func comparisonMetric(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            Text(value)
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundStyle(VelaTheme.rhythmInk)
+        }
+    }
+
+    private func deltaChip(delta: Double) -> some View {
+        let improved = metric.improvementIsPositive ? delta > 0 : delta < 0
+        let text = String(format: "%+.0f", delta)
+        return Text("\(text) \(metric.unit)")
+            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .foregroundStyle(improved ? VelaTheme.rhythmDeep : VelaTheme.rhythmWarm)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background((improved ? VelaTheme.rhythmDeep : VelaTheme.rhythmWarm).opacity(0.12), in: Capsule())
+    }
+
+    private func format(_ value: Double) -> String {
+        if metric == .steps {
+            return value >= 1000 ? String(format: "%.1fk", value / 1000) : "\(Int(value.rounded()))"
+        }
+        return value.formatted(.number.precision(.fractionLength(metric == .sleep ? 1 : 0)))
+    }
+
+    private func load() async {
+        let all = (try? modelContext.fetch(
+            FetchDescriptor<DailyHealthSummaryRecord>(
+                sortBy: [SortDescriptor(\.date, order: .forward)]
+            )
+        )) ?? []
+        rebuild(from: all)
+    }
+
+    private func rebuild(from records: [DailyHealthSummaryRecord]? = nil) {
+        let calendar = Calendar.current
+        let cutoff = calendar.date(byAdding: .year, value: -3, to: Date()) ?? Date()
+        let source: [DailyHealthSummaryRecord]
+        if let records {
+            source = records
+        } else {
+            source = (try? modelContext.fetch(
+                FetchDescriptor<DailyHealthSummaryRecord>(
+                    sortBy: [SortDescriptor(\.date, order: .forward)]
+                )
+            )) ?? []
+        }
+
+        let pairs = source
+            .filter { $0.date >= cutoff }
+            .compactMap { record -> (date: Date, value: Double)? in
+                guard let value = metric.value(from: record), value > 0 else { return nil }
+                return (record.date, value)
+            }
+        let monthly = LongTermTrendMath.monthlyAverages(values: pairs, calendar: calendar)
+        monthlySeries = monthly
+        values = monthly.map(\.value)
+        dates = monthly.map(\.date)
+
+        let minV = values.min() ?? 0
+        let maxV = values.max() ?? 1
+        let diff = maxV - minV
+        var built: [CGPoint] = []
+        for (index, value) in values.enumerated() {
+            let x = values.count > 1 ? Double(index) / Double(values.count - 1) : 0.5
+            let normalized = diff > 0 ? (value - minV) / diff : 0.5
+            let y = 0.9 - (normalized * 0.78)
+            built.append(CGPoint(x: x, y: y))
+        }
+        points = built
+        comparison = LongTermTrendMath.samePeriodComparison(values: pairs, calendar: calendar)
+    }
+}
+
+enum LongTermMetric: String, CaseIterable, Identifiable {
+    case restingHeartRate
+    case hrv
+    case sleep
+    case weight
+    case steps
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .restingHeartRate: return "静息心率"
+        case .hrv: return "HRV"
+        case .sleep: return "睡眠时长"
+        case .weight: return "体重"
+        case .steps: return "步数"
+        }
+    }
+
+    var unit: String {
+        switch self {
+        case .restingHeartRate: return "bpm"
+        case .hrv: return "ms"
+        case .sleep: return "小时"
+        case .weight: return "kg"
+        case .steps: return "步"
+        }
+    }
+
+    /// 数值变大是否代表变好（用于同比色）。
+    var improvementIsPositive: Bool {
+        switch self {
+        case .restingHeartRate: return false
+        case .hrv: return true
+        case .sleep: return true
+        case .weight: return false
+        case .steps: return true
+        }
+    }
+
+    func value(from record: DailyHealthSummaryRecord) -> Double? {
+        switch self {
+        case .restingHeartRate: return record.restingHeartRate
+        case .hrv: return record.hrvAverage
+        case .sleep: return record.sleepHours
+        case .weight: return record.bodyWeight
+        case .steps: return record.steps
+        }
     }
 }

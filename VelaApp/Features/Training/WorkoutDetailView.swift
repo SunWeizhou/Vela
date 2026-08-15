@@ -376,7 +376,7 @@ struct WorkoutDetailView: View {
             HStack(spacing: 8) {
                 Image(systemName: "map.fill")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Color(hex: "#4CAF50"))
+                    .foregroundStyle(VelaTheme.accent)
                 
                 Text(L10n.t("GPS Workout Route", "GPS 运动轨迹"))
                     .font(.system(size: 16, weight: .bold))
@@ -400,7 +400,7 @@ struct WorkoutDetailView: View {
                     span: MKCoordinateSpan(latitudeDelta: 0.008, longitudeDelta: 0.008)
                 )))) {
                     MapPolyline(coordinates: routeCoordinates)
-                        .stroke(Color(hex: "#FF5722"), lineWidth: 4.5) // Reddish-orange loop like Apple Watch route!
+                        .stroke(VelaTheme.strainColor, lineWidth: 4.5) // Reddish-orange loop like Apple Watch route!
                     
                     if let first = routeCoordinates.first {
                         Annotation(L10n.t("Start", "起点"), coordinate: first) {
@@ -554,7 +554,7 @@ struct WorkoutDetailView: View {
             return VelaTheme.systemGreen
         }
         if lowName.contains("swim") {
-            return Color(hex: "#1E88E5")
+            return VelaTheme.sleepColor
         }
         if lowName.contains("strength") || lowName.contains("lift") || lowName.contains("weight") || lowName.contains("力量") {
             return Color(hex: "#7B61FF")
@@ -653,23 +653,31 @@ struct WorkoutDetailView: View {
             )
             let events = try modelContext.fetch(eventDescriptor)
             for event in events {
-                if let hkId = event.linkedHealthKitWorkoutId {
-                    modelContext.insert(DeletedWorkoutRecord(id: hkId.uuidString))
-                } else if event.source == "healthKit" {
-                    modelContext.insert(DeletedWorkoutRecord(id: event.id.uuidString))
-                }
                 if let strengthId = event.linkedStrengthWorkoutId {
                     let strDescriptor = FetchDescriptor<StrengthWorkoutRecord>(
                         predicate: #Predicate<StrengthWorkoutRecord> { $0.id == strengthId }
                     )
                     if let strWorkout = try modelContext.fetch(strDescriptor).first {
+                        // deleteStrengthWorkout 内部统一处理黑名单（查重）与计划日回滚。
                         try WorkoutAggregationService.shared.deleteStrengthWorkout(strWorkout, modelContext: modelContext)
+                    } else {
+                        WorkoutAggregationService.shared.blacklistWorkout(
+                            id: event.linkedHealthKitWorkoutId?.uuidString ?? event.id.uuidString,
+                            modelContext: modelContext
+                        )
+                        modelContext.delete(event)
                     }
+                } else {
+                    if let hkId = event.linkedHealthKitWorkoutId {
+                        WorkoutAggregationService.shared.blacklistWorkout(id: hkId.uuidString, modelContext: modelContext)
+                    } else if event.source == "healthKit" {
+                        WorkoutAggregationService.shared.blacklistWorkout(id: event.id.uuidString, modelContext: modelContext)
+                    }
+                    modelContext.delete(event)
                 }
-                modelContext.delete(event)
             }
             if workout.source == "healthKit" || workout.source == nil {
-                modelContext.insert(DeletedWorkoutRecord(id: workout.id.uuidString))
+                WorkoutAggregationService.shared.blacklistWorkout(id: workout.id.uuidString, modelContext: modelContext)
             }
             try modelContext.save()
             try? WorkoutAggregationService.shared.aggregateDay(date: workout.start, modelContext: modelContext)
@@ -761,7 +769,7 @@ struct WorkoutDetailView: View {
             "chest": "胸部",
             "back": "背部",
             "quads": "股四头肌",
-            "hamstrings": "蘘绳肌",
+            "hamstrings": "腘绳肌",
             "glutes": "臀部",
             "shoulders": "肩部",
             "biceps": "肱二头肌",
@@ -775,7 +783,7 @@ struct WorkoutDetailView: View {
         switch muscle {
         case "chest": return Color(hex: "#FF8A65")
         case "back": return Color(hex: "#4DB6AC")
-        case "quads", "hamstrings", "glutes": return Color(hex: "#66BB6A")
+        case "quads", "hamstrings", "glutes": return VelaTheme.accent
         case "shoulders": return VelaTheme.indigo
         case "biceps", "triceps": return Color(hex: "#AB47BC")
         case "core": return Color(hex: "#FFCA28")

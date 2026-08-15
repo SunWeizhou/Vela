@@ -76,13 +76,16 @@ enum VelaTheme {
     static let fg            = Color(uiColor: .label)
     static let fg2           = Color(uiColor: .secondaryLabel)
     static let muted         = Color(uiColor: .secondaryLabel)
-    static let meta          = Color(uiColor: .tertiaryLabel)
+    // tertiaryLabel 在暖灰绿画布上对比度仅 ~1.9:1（WCAG 不达标），
+    // 用自适配色保证至少 4.5:1。
+    static let meta          = adaptive("#6B726D", "#A6B0AA")
 
     // MARK: - Accent
 
     /// Vela 品牌绿:可识别、代表健康,与健康状态色中的「好」一致。
     static let accent        = adaptive("#17A35C", "#3FC97F")
-    static let accentOn      = adaptive("#FFFFFF", "#FFFFFF")
+    // 暗色下白字压在亮绿 #3FC97F 上仅 2.13:1，改用深墨（同 rhythmDeepOn 思路）。
+    static let accentOn      = adaptive("#FFFFFF", "#10201C")
     static let accentHover   = adaptive("#148F4F", "#5FD98F")
     static let accentActive  = adaptive("#0C7A44", "#2FA96A")
 

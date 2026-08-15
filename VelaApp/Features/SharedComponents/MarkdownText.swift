@@ -94,7 +94,23 @@ struct MarkdownText: View {
         // the paragraph while keeping inline markdown (bold, italic) working.
         var result: [AttributedString] = []
         for (index, group) in paragraphGroups.enumerated() {
-            let paraText = group.joined(separator: "\n")
+            // AttributedString(markdown:) 不渲染 "- " 列表符号与围栏代码块；
+            // 预处理：列表行改为 •，围栏改为缩进引用样式，保证视觉保真。
+            let rendered = group.map { line -> String in
+                if line.hasPrefix("```") {
+                    return line.dropFirst(3).trimmingCharacters(in: .whitespaces).isEmpty
+                        ? "```" : "    " + line
+                }
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if trimmed.hasPrefix("- ") {
+                    return line.replacingOccurrences(of: "- ", with: "• ", options: .anchored)
+                }
+                if trimmed.hasPrefix("* ") {
+                    return line.replacingOccurrences(of: "* ", with: "• ", options: .anchored)
+                }
+                return line
+            }
+            let paraText = rendered.joined(separator: "\n")
             let isLast = index == paragraphGroups.count - 1
 
             if let parsed = try? AttributedString(markdown: paraText) {

@@ -531,7 +531,9 @@ extension VelaMetricDetailView {
             return dashboard.strain.metrics["exercise_minutes_raw"].map { "\(Int($0))分钟" } ?? "--"
         case .sleep:
             if let bed = dashboard.sleepSummary.bedtime, let wake = dashboard.sleepSummary.wakeTime {
-                let diffMin = Int(wake.timeIntervalSince(bed) / 60)
+                // 卧床时间跨午夜（bed/wake 存同一日历日）时差值可为负，+24h 取模。
+                var diffMin = Int(wake.timeIntervalSince(bed) / 60)
+                if diffMin < 0 { diffMin += 24 * 60 }
                 return VelaMinimalFormatting.duration(minutes: diffMin)
             }
             return "--"
@@ -855,7 +857,7 @@ extension VelaMetricDetailView {
             return dashboard.energy.reasons
         case .weight, .bodyFat, .respiratoryRate, .bloodOxygen:
             return [
-                "生理体征偏离正常基线时，应当与睡眠、体能负荷 and 日间自觉症状综合关联评估。",
+                "生理体征偏离正常基线时，应当与睡眠、体能负荷与日间自觉症状综合关联评估。",
                 "确保每天在相近时间完成测量，以便建立可信度更高的趋势分析基线。"
             ]
         case .steps, .activeCalories, .activeMinutes:

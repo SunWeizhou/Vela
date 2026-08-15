@@ -91,6 +91,25 @@ struct SleepClockWheelView: View {
                 .foregroundStyle(VelaTheme.mistGray)
                 .offset(y: 12)
         }
+        // VoiceOver 组合摘要（此前只读得到散落的 12am/6am 装饰文本）。
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilitySummary)
+    }
+
+    private var accessibilitySummary: String {
+        let duration = VelaMinimalFormatting.duration(
+            minutes: VelaMinimalFormatting.sleepDurationMinutes(
+                bedtimeHour: bedtimeHour,
+                bedtimeMinute: bedtimeMinute,
+                wakeHour: wakeHour,
+                wakeMinute: wakeMinute
+            )
+        )
+        return String(
+            format: "就寝 %02d:%02d，起床 %02d:%02d，睡眠 %@；目标 %@",
+            bedtimeHour, bedtimeMinute, wakeHour, wakeMinute,
+            duration, VelaMinimalFormatting.duration(minutes: targetSleepMinutes)
+        )
     }
     
     private func dialHourText(_ label: String, angle: Double, radius: Double) -> some View {

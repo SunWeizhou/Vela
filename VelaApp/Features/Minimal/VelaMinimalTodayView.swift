@@ -34,8 +34,10 @@ struct VelaTodayView: View {
     }
 
     func makeTodayExperience() -> TodayExperienceModel {
+        // 兜底路径也要用真实力量训练数据，避免今日决策与训练页不一致。
+        let recentRecords = (try? modelContext.fetch(FetchDescriptor<StrengthWorkoutRecord>())) ?? []
         let recentStrengthSummary = TrainingAnalyticsService().buildRecentSummary(
-            workouts: [],
+            workouts: recentRecords.map { $0.dto },
             days: 7,
             endingAt: dashboardVM.selectedDate
         )
@@ -182,20 +184,19 @@ struct VelaTodayView: View {
         }
     }
 
-    @Query(sort: \ProactiveInsightRecord.priority) private var proactiveRecords: [ProactiveInsightRecord]
-
     // Sheets trigger states
     @State var showCalendarOverview = false
     @State var selectedInsightIndex = 0
     @State var selectedInsight: ProactiveInsight?
     @State var showTodayEvidence = false
     @State var showMetricDetail: VelaMetricDetailView.MetricType?
-    @State var animatedEnergyScore: Double = 0.0
-    @State var experienceFeedbackTick = 0
+        @State var experienceFeedbackTick = 0
     @State var dataCoverageSummary = DataCoverageSummaryModel.unknown
     @State var dailyDecisionFeedback: DailyDecisionFeedbackRecord?
     @State var showDailyDecisionFeedback = false
     @State private var lastScenePhaseSyncTime: Date?
+    // F2 修复：档案修改发生在非 Today 页面时记一笔，回到 Today 立即强制重算。
+    @State private var pendingLocalDataRefresh = false
 
     var decisionDataCoverageSummary: DataCoverageSummaryModel {
         guard dataCoverageSummary.status != .unknown,
@@ -267,6 +268,10 @@ struct VelaTodayView: View {
                     state: todayCommandState,
                     selectedDate: dashboardVM.selectedDate,
                     isToday: dashboardVM.isToday,
+                    restingHeartRate: dashboardVM.dashboard.recoveryMetrics.restingHeartRate,
+                    maxHeartRate: DailyHealthComputationProfile.current(
+                        ageFallback: dashboardVM.dashboard.extendedMetrics.age
+                    ).maxHeartRate,
                     onOpenPlan: { showTodayEvidence = true },
                     onAskCoach: { showCoach = true }
                 )
@@ -313,8 +318,8 @@ struct VelaTodayView: View {
         .simultaneousGesture(
             DragGesture(minimumDistance: 28)
                 .onEnded { value in
-                    let horizontal = value.predictedEndTranslation.width
-                    let vertical = value.predictedEndTranslation.height
+                    let horizontal = value.translation.width
+                    let vertical = value.translation.height
                     guard abs(horizontal) > 70,
                           abs(horizontal) > abs(vertical) * 1.35 else {
                         return
@@ -338,7 +343,8 @@ struct VelaTodayView: View {
                     showSimulationLabel: dashboard.source == .preview,
                     showCalendarOverview: $showCalendarOverview,
                     showSettings: $showSettings,
-                    requestWeatherUpdate: { requestWeatherUpdate() }
+                    requestWeatherUpdate: { requestWeatherUpdate() },
+                    settingsSynced: dashboardVM.lastUpdated != nil
                 )
                 .padding(.horizontal, VelaTheme.pagePadding)
                 .padding(.bottom, 6)
@@ -349,17 +355,20 @@ struct VelaTodayView: View {
         .task(id: isActiveSurface) {
             guard isActiveSurface else { return }
             await dashboardVM.hydrateFromCache(modelContext: modelContext)
-            loadRealNutritionData()
-            loadDynamicData()
             locationManager.startUpdating()
-            await refreshDashboard()
+            if pendingLocalDataRefresh {
+                pendingLocalDataRefresh = false
+                await refreshDashboard(force: true)
+            } else {
+                await refreshDashboard()
+            }
             await loadDataCoverageSummary()
             trackDailyDecisionViewed()
             withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) {
-                animatedEnergyScore = energyScore
             }
         }
         .refreshable {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
             await refreshDashboard(force: true)
             await loadDataCoverageSummary()
         }
@@ -389,18 +398,21 @@ struct VelaTodayView: View {
             Task {
                 await refreshDashboard()
                 withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) {
-                    animatedEnergyScore = energyScore
-                }
+                    }
             }
         }
         .onChange(of: energyScore) {
             withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) {
-                animatedEnergyScore = energyScore
             }
         }
         .onChange(of: appState.localDataRevision) {
-            guard isActiveSurface else { return }
-            Task { await dashboardVM.hydrateFromCache(modelContext: modelContext) }
+            // F2 修复：档案（年龄/体重/身高/maxHR/性别）修改后必须重算评分，
+            // 此前只 hydrateFromCache，15 分钟内分数与建议停留在旧档案口径。
+            if isActiveSurface {
+                Task { await refreshDashboard(force: true) }
+            } else {
+                pendingLocalDataRefresh = true
+            }
             loadRealNutritionData()
             loadDynamicData()
         }
@@ -532,6 +544,8 @@ struct VelaTodayView: View {
                 satisfactionRating: values.satisfactionRating,
                 note: values.note
             )
+            // 反馈保存后立即回灌：按同类决策的历史准确率重校准今日置信度。
+            dashboardVM.applyFeedbackCalibration(modelContext: modelContext)
             showDailyDecisionFeedback = false
             VelaAppState.shared.markLocalDataChanged()
         } catch {
@@ -561,6 +575,7 @@ struct TodayDateAndStatusHeader: View {
     @Binding var showCalendarOverview: Bool
     @Binding var showSettings: Bool
     var requestWeatherUpdate: () -> Void
+    let settingsSynced: Bool
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -623,7 +638,7 @@ struct TodayDateAndStatusHeader: View {
                         .frame(width: 44, height: 44)
                     }
                     .buttonStyle(.cardPress)
-                    .accessibilityLabel("个人设置,数据已同步")
+                    .accessibilityLabel(settingsSynced ? "个人设置,数据已同步" : "个人设置,数据待同步")
                 }
             }
 

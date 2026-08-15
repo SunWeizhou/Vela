@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import BackgroundTasks
 import AppIntents
+import UserNotifications
 
 @MainActor
 final class VelaAppState: ObservableObject {
@@ -217,8 +218,14 @@ struct OpenVelaFoodScannerIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        VelaAppState.shared.routeToFoodScanner(type: "camera")
-        return .result()
+        // 营养功能开关关闭时给出明确反馈，而非静默无响应。
+        let dialog: IntentDialog? = VelaFeatureFlags.nutritionEnabled
+            ? nil
+            : IntentDialog("餐食扫描功能当前未开启。")
+        if VelaFeatureFlags.nutritionEnabled {
+            VelaAppState.shared.routeToFoodScanner(type: "camera")
+        }
+        return .result(dialog: dialog ?? IntentDialog("已打开 Vela。"))
     }
 }
 
@@ -264,6 +271,9 @@ struct VelaApp: App {
             }
         }
 
+        // 前台收到本地通知时也要展示（此前无 delegate，前台通知被系统静默抑制）。
+        UNUserNotificationCenter.current().delegate = VelaNotificationDelegate.shared
+
         do {
             modelContainer = try VelaModelContainer.make()
         } catch {
@@ -293,5 +303,17 @@ struct VelaApp: App {
             AppCoordinator()
         }
         .modelContainer(modelContainer)
+    }
+}
+
+/// 前台通知展示委托：无此 delegate 时，立即投递的本地通知在前台被系统默认抑制。
+final class VelaNotificationDelegate: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
+    nonisolated(unsafe) static let shared = VelaNotificationDelegate()
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .sound]
     }
 }

@@ -47,7 +47,12 @@ struct AppCoordinator: View {
             value: appState.isFallbackStore || appState.isReadOnlySafetyMode
         )
         .task {
+            UserProfileSettings.migrateLegacyHydratedValuesIfNeeded()
+            // 已有用户一次性迁移：把建档资料写进 wiki（此前只存 SwiftData）。
+            WikiProfileMaterializer.materializeIfNeeded(modelContext: modelContext)
             BackgroundTaskManager.schedule()
+            // 健康数据后台更新时重排刷新（晨间睡眠段到达即可生成晨报）。
+            HealthKitBackgroundDelivery.registerObservers()
             guard !appState.isReadOnlySafetyMode else { return }
             try? await Task.sleep(for: .seconds(2))
             _ = try? RetentionPolicyService().prune(modelContext: modelContext)
