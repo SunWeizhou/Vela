@@ -637,3 +637,15 @@ P1-1 工具回调、P1-2 VO2max、41/42 天窗口、睡眠缺失误判 reduce、
 - **未来卡冲突注记**：AI 建议与本地推荐不一致时显示弱注记「Vela 与本地建议不同…本地轮转保持不变」（ADR 0008 一致性）。
 
 **测试**：v1 strain 键集契约测试按有意扩展更新（+4 键），全量 **410/410** 绿；已推送到 iPhone（databaseSequenceNumber 2924）。
+
+## 联通性专项批次 2（2026-08-15 · 个人模型三段式）✅ 已修并推送
+
+按用户确认的方向「收敛为一句洞察模式」实施：
+
+- **一句话 Personal Response Insight**：`DashboardSummary.bodyModelState` 挂载（loadDashboard 计算，BodyModelBuilder 全量拟合）；`BodyModelState.insightLine()` 按价值优先级取最强断言（剂量-反应 > 训练-结果配对 > 三年基线）。今日页 Hero 下方一行（点击 → `BodyModelDetailView` 证据页）；训练页「为什么」证据层展开区同样显示一行。
+- **证据页用户校准控件**：`ClaimRatingStore`（UserDefaults 存 claimId→正确/部分正确/不正确）+ `ClaimRatingControl` 三态按钮挂进每个断言卡——产品方向「反馈用于后续校准，一次评价不写成永久结论」的闭环落地。
+- **成熟度降级**：Me 页卡标题「个人上下文 · 稳定期」→「个人上下文」（不做成绩单；成熟度仅详情页内部说明）。
+- **wiki 清空残留修复**：`WikiProfileMaterializer.refreshPhysiologicalProfile` 对 UserDefaults 为 nil 的字段删除 profile.md 对应中英文别名行（`removeBullets`）——清空手填值后陈旧值不再经 getAgeFromWiki 复活；非生理手改内容仍受保护。
+- **AgentTool 改档案触发重算**：`UpdateUserProfileTool` 显式调 `VelaDailyOrchestrator.refresh`（不同步只重算）——在 Coach/Me 停留时改档案，评分与计划也立即按新档案口径更新。
+
+**测试**：wiki 契约测试 2 处按新语义更新（清空=删除生理行、手改备注仍保留），全量 **410/410** 绿；已推送到 iPhone（databaseSequenceNumber 2932）。

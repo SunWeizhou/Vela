@@ -19,6 +19,8 @@ struct DashboardSummary: Hashable, Sendable {
     var source: DataSource
     /// 三年长线基准报告（回填后可用）；评分修正、长线证据与 wiki 同源。
     var longTermBaselines: LongTermBaselineReport? = nil
+    /// 联通专项批次 2：身体模型状态（主流程一句话洞察/证据页共用；纯内存聚合体）。
+    var bodyModelState: BodyModelState? = nil
     
     private var _trainingDecision: TrainingDecision?
     var trainingDecision: TrainingDecision {
@@ -114,7 +116,8 @@ struct DashboardSummary: Hashable, Sendable {
         workouts: [WorkoutSummary],
         dailyInsight: String,
         source: DataSource,
-        longTermBaselines: LongTermBaselineReport? = nil
+        longTermBaselines: LongTermBaselineReport? = nil,
+        bodyModelState: BodyModelState? = nil
     ) {
         self.date = date
         self.sleepSummary = sleepSummary
@@ -132,6 +135,7 @@ struct DashboardSummary: Hashable, Sendable {
         self.dailyInsight = dailyInsight
         self.source = source
         self.longTermBaselines = longTermBaselines
+        self.bodyModelState = bodyModelState
         self._trainingDecision = nil
         self._bodyState = nil
     }

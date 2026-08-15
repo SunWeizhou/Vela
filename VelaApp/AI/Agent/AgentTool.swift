@@ -1805,6 +1805,18 @@ struct UpdateUserProfileTool: AgentTool {
             WikiProfileMaterializer.refreshPhysiologicalProfile(
                 modelContext: executionContext.modelContext
             )
+            // 联通专项批次 2：档案修改显式触发重算——此前只 markLocalDataChanged，
+            // 在 Coach/Me 停留时 F2 的视图监听不生效，评分与计划停留在旧档案口径。
+            let context = executionContext.modelContext
+            Task { @MainActor in
+                _ = try? await VelaDailyOrchestrator.refresh(
+                    for: Date(),
+                    modelContext: context,
+                    syncDays: 0,
+                    shouldSyncHealthData: false
+                )
+                VelaAppState.shared.markLocalDataChanged()
+            }
         }
         return "已更新个人档案：" + updated.joined(separator: "，") + "。评分与建议将按新档案重新计算。"
     }

@@ -219,6 +219,24 @@ struct BodyModelState: Codable, Hashable {
     var coachRules: [String]
 }
 
+extension BodyModelState {
+    /// 联通专项批次 2：主流程一句话洞察（产品方向「只在影响当前计划时显示一句
+    /// Personal Response Insight」）。按价值优先级取最强断言；点击进证据页。
+    func insightLine() -> String? {
+        let preferredIDs = [
+            "dose_response_curve",
+            "training_outcome_pairing",
+            "long_term_baseline"
+        ]
+        for id in preferredIDs {
+            if let claim = claims.first(where: { $0.id == id }) {
+                return claim.summary
+            }
+        }
+        return nil
+    }
+}
+
 struct BodyModelBuilder {
     static func profileSeedSummary(primaryGoal: String, trainingStyle: String, weeklyTrainingDays: Int) -> String {
         let goal = localizedOnboardingGoal(primaryGoal)
@@ -626,5 +644,32 @@ enum CoachSnapshotDirective {
         formatter.locale = AppLanguage.stored.isChinese ? Locale(identifier: "zh_CN") : Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd HH:mm XXX"
         return formatter.string(from: date)
+    }
+}
+
+// MARK: - 联通专项批次 2：个人模型断言校准（正确/部分正确/不正确）
+
+/// 用户对 BodyModelClaim 的标记（UserDefaults 存储；用于后续校准，
+/// 一次评价不写成永久结论——产品方向 DIRECTION:27）。
+enum ClaimRatingStore {
+    private static let key = "vela.claim_ratings.v1"
+
+    static func rating(for claimID: String, defaults: UserDefaults = .standard) -> String? {
+        all(defaults: defaults)[claimID]
+    }
+
+    static func set(_ rating: String, for claimID: String, defaults: UserDefaults = .standard) {
+        var ratings = all(defaults: defaults)
+        ratings[claimID] = rating
+        guard let data = try? JSONEncoder().encode(ratings) else { return }
+        defaults.set(data, forKey: key)
+    }
+
+    static func all(defaults: UserDefaults = .standard) -> [String: String] {
+        guard let data = defaults.data(forKey: key),
+              let ratings = try? JSONDecoder().decode([String: String].self, from: data) else {
+            return [:]
+        }
+        return ratings
     }
 }

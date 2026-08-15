@@ -86,6 +86,8 @@ struct JournalCorrelationSection: View {
                             Text("置信度 \(displayConfidence(claim.confidence.rawValue)) · n=\(claim.evidenceCount)")
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundStyle(confidenceColor(claim.confidence))
+                            // 联通专项批次 2：用户校准入口（正确/部分正确/不正确）。
+                            ClaimRatingControl(claimID: claim.id)
                         }
                         .padding(14)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -440,5 +442,45 @@ struct PersonalExperimentHubSheet: View {
             return "目前睡眠分与基线接近（\(String(format: "%+.1f", delta))）。这是方向性观察，不代表因果。"
         }
         return "目前实验期睡眠分较基线 \(delta > 0 ? "提高" : "降低") \(String(format: "%.1f", abs(delta))) 分。这是方向性观察，不代表因果。"
+    }
+}
+
+/// 联通专项批次 2：断言校准三态控件——用户标记「正确/部分正确/不正确」，
+/// 用于后续校准；一次评价不写成永久结论。
+struct ClaimRatingControl: View {
+    let claimID: String
+    @State private var rating: String = ""
+
+    private let options: [(value: String, label: String)] = [
+        ("accurate", "正确"),
+        ("partly", "部分正确"),
+        ("inaccurate", "不正确")
+    ]
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text("你的判断：")
+                .font(.system(size: 10))
+                .foregroundStyle(VelaTheme.muted)
+            ForEach(options, id: \.value) { option in
+                Button {
+                    rating = rating == option.value ? "" : option.value
+                    ClaimRatingStore.set(rating, for: claimID)
+                } label: {
+                    Text(option.label)
+                        .font(.system(size: 10, weight: rating == option.value ? .bold : .regular))
+                        .foregroundStyle(rating == option.value ? VelaTheme.accent : VelaTheme.muted)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule().fill(rating == option.value ? VelaTheme.accent.opacity(0.15) : VelaTheme.fillSoft)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .onAppear {
+            rating = ClaimRatingStore.rating(for: claimID) ?? ""
+        }
     }
 }

@@ -179,8 +179,10 @@ final class WikiMergeTests: XCTestCase {
                 WikiProfileMaterializer.materializeIfNeeded(modelContext: container.mainContext)
 
                 let content = try String(contentsOf: url, encoding: .utf8)
-                XCTAssertTrue(content.contains("- Age: 29"))
-                XCTAssertTrue(content.contains("旧伤"))
+                // 联通专项批次 2：生理字段以 UserDefaults 为事实来源——无手填值时
+                // 删除 wiki 陈旧生理行（此前只写不删，清空后经 getAgeFromWiki 复活）。
+                XCTAssertFalse(content.contains("- Age: 29"), content)
+                XCTAssertTrue(content.contains("旧伤"), "非生理手改内容仍受保护: \(content)")
                 XCTAssertFalse(content.contains("主要目标"), "用户手改内容不得被覆盖: \(content)")
             }
         }
@@ -212,11 +214,12 @@ final class WikiMergeTests: XCTestCase {
                 XCTAssertTrue(content.contains("- 自定义备注: 保持"), content)
                 XCTAssertFalse(content.contains("- 年龄: 30"), content)
 
-                // UserDefaults 无手动值时，保留既有行不动。
+                // UserDefaults 清空 → 删除 wiki 陈旧生理行（联通专项批次 2：清空残留修复）。
                 defaults.removeObject(forKey: UserProfileSettings.ageKey)
                 WikiProfileMaterializer.refreshPhysiologicalProfile(defaults: defaults)
                 let after = try String(contentsOf: url, encoding: .utf8)
-                XCTAssertTrue(after.contains("- 年龄: 32"), after)
+                XCTAssertFalse(after.contains("- 年龄: 32"), after)
+                XCTAssertTrue(after.contains("- 自定义备注: 保持"), after)
             }
         }
     }

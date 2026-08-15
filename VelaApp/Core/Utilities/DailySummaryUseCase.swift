@@ -389,6 +389,7 @@ final class DailySummaryUseCase {
         var recentTrainingResponses: [TrainingResponseRecord] = []
         var todayFoodLogs: [FoodLogRecord] = []
         var recentJournalEntries: [JournalEntryRecord] = []
+        var bodyModelState: BodyModelState? = nil
         if let modelContext {
             let activePlanFetch = FetchDescriptor<TrainingPlanRecord>(
                 predicate: #Predicate<TrainingPlanRecord> { $0.isActive }
@@ -438,6 +439,25 @@ final class DailySummaryUseCase {
                 sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
             )
             todayFoodLogs = (try? modelContext.fetch(foodFetch)) ?? []
+
+            // 联通专项批次 2：身体模型状态挂进 dashboard（主流程一句话洞察与
+            // 证据页共用；BodyModelBuilder 是 O(n) 轻量计算，全量记录与长线报告
+            // 已在上面取过同款数据，此处只补训练/响应/手记全量）。
+            let allStrengthForModel = (try? modelContext.fetch(FetchDescriptor<StrengthWorkoutRecord>())) ?? []
+            let allResponsesForModel = (try? modelContext.fetch(FetchDescriptor<TrainingResponseRecord>())) ?? []
+            let allJournalsForModel = (try? modelContext.fetch(FetchDescriptor<JournalEntryRecord>())) ?? []
+            let onboardingForModel = (try? modelContext.fetch(FetchDescriptor<OnboardingState>()))?.first
+            let allSummariesForModel = (try? modelContext.fetch(FetchDescriptor<DailyHealthSummaryRecord>())) ?? []
+            bodyModelState = BodyModelBuilder().build(
+                onboarding: onboardingForModel,
+                dailySummaries: allSummariesForModel,
+                journalEntries: allJournalsForModel,
+                strengthWorkouts: allStrengthForModel,
+                trainingResponses: allResponsesForModel,
+                longTermBaselines: longTermReport,
+                asOf: now,
+                calendar: calendar
+            )
         }
 
         var dashboard = DashboardSummary(
@@ -456,7 +476,8 @@ final class DailySummaryUseCase {
             workouts: context.strainToday.workouts,
             dailyInsight: dailyInsight(recovery: recovery, sleepScore: sleepScore, strain: strain, source: .healthKit),
             source: .healthKit,
-            longTermBaselines: longTermReport
+            longTermBaselines: longTermReport,
+            bodyModelState: bodyModelState
         )
         let activeStatus = ActiveStatusSettings.resolveCurrentStatus(now: now)
         let bodyState = BodyStateKernel().build(input: BodyStateInput(

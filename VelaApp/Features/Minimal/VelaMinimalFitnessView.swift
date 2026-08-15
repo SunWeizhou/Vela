@@ -112,6 +112,7 @@ struct VelaTrainingView: View {
                     futureRecommendations: rotationFutureDays,
                     aiFutureDays: aiFutureDays,
                     isPlanningWithAI: isPlanningWithAI,
+                    personalInsight: dashboardVM.dashboard.bodyModelState?.insightLine(),
                     onRequestAIPlan: { Task { await requestAIPlan() } },
                     onDiscussWithCoach: {
                         VelaAppState.shared.routeToCoach(question: trainingAnalysisQuestion)

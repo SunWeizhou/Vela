@@ -17,6 +17,8 @@ struct TrainingHeroSection: View {
     let futureRecommendations: [RotationDayRecommendation]
     let aiFutureDays: [RotationDayRecommendation]?
     let isPlanningWithAI: Bool
+    /// 联通专项批次 2：主流程一句话个人洞察（身体模型断言；nil = 不显示）。
+    let personalInsight: String?
     let onRequestAIPlan: () -> Void
     let onDiscussWithCoach: () -> Void
 
@@ -405,6 +407,22 @@ struct TrainingHeroSection: View {
 
             if showEvidence {
                 VStack(alignment: .leading, spacing: 8) {
+                    // 联通专项批次 2：主流程一句话个人洞察（身体模型断言）。
+                    if let personalInsight {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "waveform.path.ecg")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(VelaTheme.rhythmDeep)
+                                .padding(.top, 2)
+                            Text(personalInsight)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(VelaTheme.rhythmInk)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(VelaTheme.rhythmCanvasRaised.opacity(0.95), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
                     if !decisionReasons.isEmpty {
                         ForEach(Array(decisionReasons.enumerated()), id: \.offset) { _, reason in
                             HStack(alignment: .top, spacing: 8) {

@@ -350,6 +350,35 @@ struct VelaTodayView: View {
                         .padding(.top, 14)
                 }
 
+                // 联通专项批次 2：主流程一句 Personal Response Insight（点击进证据页）。
+                if dashboardVM.isToday, let insightLine = dashboard.bodyModelState?.insightLine() {
+                    NavigationLink(destination: BodyModelDetailView()) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "waveform.path.ecg")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(VelaTheme.rhythmDeep)
+                            Text(insightLine)
+                                .font(.system(size: 12))
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                                .lineSpacing(2)
+                                .lineLimit(2)
+                            Spacer(minLength: 6)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.6))
+                        }
+                        .padding(12)
+                        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+                        }
+                    }
+                    .buttonStyle(.cardPress)
+                    .padding(.horizontal, VelaTheme.pagePadding)
+                    .padding(.top, 8)
+                }
+
                 VStack(alignment: .leading, spacing: 34) {
                     VelaRhythmActionSequence(
                         actions: todayExperience.actions,

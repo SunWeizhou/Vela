@@ -622,24 +622,41 @@ enum WikiProfileMaterializer {
         var content = WikiFileService.localContent(for: filename)
 
         var updates: [(aliases: [String], line: String)] = []
+        // 联通专项批次 2：清空手填字段时删除 wiki 对应行——此前只写不删，
+        // 清空后陈旧值会在 HealthKit 也缺失时经 getAgeFromWiki 复活。
+        var removals: [[String]] = []
         if let age = UserProfileSettings.age(defaults: defaults) {
             updates.append((["年龄", "Age"], "- 年龄: \(age)"))
+        } else {
+            removals.append(["年龄", "Age"])
         }
         if let height = UserProfileSettings.heightCentimeters(defaults: defaults) {
             updates.append((["身高", "Height"], "- 身高: \(formatNumber(height)) cm"))
+        } else {
+            removals.append(["身高", "Height"])
         }
         if let weight = UserProfileSettings.weightKilograms(defaults: defaults) {
             updates.append((["体重", "Weight"], "- 体重: \(formatNumber(weight)) kg"))
+        } else {
+            removals.append(["体重", "Weight"])
         }
         if let maxHR = UserProfileSettings.maxHeartRate(defaults: defaults) {
             updates.append((["最大心率", "Max heart rate", "Max HR"], "- 最大心率: \(Int(maxHR)) bpm"))
+        } else {
+            removals.append(["最大心率", "Max heart rate", "Max HR"])
         }
         if let sex = UserProfileSettings.biologicalSex(defaults: defaults) {
             updates.append((["性别", "Sex"], "- 性别: \(sexLabel(sex))"))
+        } else {
+            removals.append(["性别", "Sex"])
         }
-        guard !updates.isEmpty else { return }
+        guard !updates.isEmpty || !removals.isEmpty else { return }
 
-        var updated = upsertBullets(in: content, updates: updates)
+        var updated = content
+        for aliases in removals {
+            updated = removeBullets(in: updated, aliases: aliases)
+        }
+        updated = upsertBullets(in: updated, updates: updates)
         let hasHeading = updated.components(separatedBy: .newlines)
             .contains(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("# ") })
         if !hasHeading {
@@ -675,6 +692,21 @@ enum WikiProfileMaterializer {
         key.trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
             .replacingOccurrences(of: " ", with: "")
+    }
+
+    /// 联通专项批次 2：删除命中别名（中英文标签均可）的条目行。
+    private static func removeBullets(in content: String, aliases: [String]) -> String {
+        let aliasSet = Set(aliases.map(normalizeKey))
+        return content.components(separatedBy: .newlines)
+            .filter { line in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") else { return true }
+                let body = String(trimmed.dropFirst(2))
+                guard let separatorIndex = body.firstIndex(where: { $0 == ":" || $0 == "：" }) else { return true }
+                let key = normalizeKey(String(body[..<separatorIndex]))
+                return !aliasSet.contains(key)
+            }
+            .joined(separator: "\n")
     }
 
     /// 按标签 upsert 条目：命中（中英文标签均可）则整行替换，未命中则插入到

@@ -254,7 +254,8 @@ struct VelaMeView: View {
                     .background(VelaTheme.rhythmMist.opacity(0.76), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("个人上下文 · \(bodyModelMaturityTitle(bodyModelState.maturity.overall))")
+                    // 联通专项批次 2：不把成熟度做成常驻标签（产品方向「不做成绩单」）。
+                    Text("个人上下文")
                         .font(.system(.headline, design: .default, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmInk)
                 }
