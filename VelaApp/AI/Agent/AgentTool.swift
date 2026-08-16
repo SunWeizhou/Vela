@@ -1723,7 +1723,7 @@ struct GetDecisionFeedbackTool: AgentTool {
                     (record.accuracyRating.map { " [\($0)]" } ?? "")
             }.suffix(8))
 
-            var summary: [String: Any] = [
+            let summary: [String: Any] = [
                 "days": days,
                 "total_feedback": recent.count,
                 "rated_feedback": withAccuracy.count,
