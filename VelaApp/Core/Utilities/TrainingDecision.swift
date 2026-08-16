@@ -36,6 +36,22 @@ enum TrainingDecisionFallback {
     }
 }
 
+struct DecisionFeedbackCalibration: Codable, Hashable, Sendable {
+    var completedFeedbackCount: Int
+    var volumeAdjustmentMultiplier: Double // e.g. +0.05 or -0.05
+    var note: String?
+
+    init(
+        completedFeedbackCount: Int = 0,
+        volumeAdjustmentMultiplier: Double = 0.0,
+        note: String? = nil
+    ) {
+        self.completedFeedbackCount = completedFeedbackCount
+        self.volumeAdjustmentMultiplier = volumeAdjustmentMultiplier
+        self.note = note
+    }
+}
+
 struct TrainingDecisionInput {
     var bodyState: BodyState
     var activePlan: TrainingPlanDTO?
@@ -46,6 +62,8 @@ struct TrainingDecisionInput {
     var workoutEvents: [WorkoutEventDTO]
     /// 三年训练量长线统计（Layer 2：本月训练量三年百分位信号；nil = 不启用）。
     var longTermTrainingVolume: TrainingVolumeLongTerm?
+    /// 用户反馈闭环校准（Layer 3：结合近期 14 天决策反馈微调容量偏置）。
+    var feedbackCalibration: DecisionFeedbackCalibration?
 
     init(
         bodyState: BodyState,
@@ -53,7 +71,8 @@ struct TrainingDecisionInput {
         trainingResponses: [TrainingResponseDTO] = [],
         userConstraints: [String] = [],
         workoutEvents: [WorkoutEventDTO] = [],
-        longTermTrainingVolume: TrainingVolumeLongTerm? = nil
+        longTermTrainingVolume: TrainingVolumeLongTerm? = nil,
+        feedbackCalibration: DecisionFeedbackCalibration? = nil
     ) {
         self.bodyState = bodyState
         self.activePlan = activePlan
@@ -61,6 +80,7 @@ struct TrainingDecisionInput {
         self.userConstraints = userConstraints
         self.workoutEvents = workoutEvents
         self.longTermTrainingVolume = longTermTrainingVolume
+        self.feedbackCalibration = feedbackCalibration
     }
 }
 
@@ -127,9 +147,7 @@ struct TrainingDecisionKernel: Sendable {
             let responseMuscles = response.primaryMuscleGroups.map { $0.lowercased() }
             let intersects = responseMuscles.contains { targetMuscles.contains($0) }
             if intersects {
-                let isPoor = (response.nextDayRecoveryDelta ?? 0) <= -8
-                    || (response.nextDayHRVDelta ?? 0) <= -10
-                    || (response.nextDayRHRDelta ?? 0) >= 5
+                let isPoor = Self.isPoorTrainingResponse(response)
                 if isPoor {
                     for m in responseMuscles {
                         if targetMuscles.contains(m) {
@@ -144,10 +162,8 @@ struct TrainingDecisionKernel: Sendable {
         }
         
         // 5. Decision logic tree
-        // 算法打通（批次 A）：本决策树是「今日/训练/计划」三处的唯一结论源。
-        // 睡眠/压力/能量/TSB/当日负荷门控此前只存在于 TodayCommandBuilder 或死代码
-        // （TrainingDecisionEngine / AdaptiveTrainingEngine.adjustToday），现统一在此，
-        // 且只向保守方向收紧（keep → reduce/rest；不新增激进分支）。
+        // 算法安全重构（Safety Guardrails First）：绝对禁忌与极端身体状况（生病/计划内休息/极低睡眠/急性高压）
+        // 必须置顶于数据缺失检查之前，杜绝因恢复数据未同步而将严重睡眠不足漏放至 reduce 训练。
         let thresholds = PersonalBaselineEngine.resolveThresholds()
         let stressIndex = state.stress.stressIndex
         let energyLevel = state.energy.currentEnergy
@@ -166,18 +182,6 @@ struct TrainingDecisionKernel: Sendable {
             cap = 2
             summary = "状态受限，今天优先恢复与休息。"
             reasons.append("活动状态: 标记为\(Self.localizedActiveStatus(state.activeStatus))，今天自动降低训练冒险度。")
-        } else if !state.recovery.hasData {
-            type = .reduce
-            multiplier = 0.60
-            cap = 7
-            summary = "恢复基线数据不足，先按保守方案执行。"
-            reasons.append("数据状态: 恢复基线数据不足，按保守方案执行。")
-        } else if state.readiness == .recovering {
-            type = .rest
-            multiplier = 0.0
-            cap = 2
-            summary = "状态受限，今天优先恢复与休息。"
-            reasons.append("生理状态: 恢复分数低于休息阈值，处于恢复期。")
         } else if todayScheduledDay?.focus.lowercased() == "rest" {
             type = .rest
             multiplier = 0.0
@@ -196,6 +200,18 @@ struct TrainingDecisionKernel: Sendable {
             cap = 2
             summary = "生理压力偏高，今天优先减压与恢复，避免叠加训练负荷。"
             reasons.append("压力偏高: 压力指数 \(Int(stressIndex.rounded()))（>75），先降压力再考虑负荷。")
+        } else if state.recovery.hasData, state.readiness == .recovering {
+            type = .rest
+            multiplier = 0.0
+            cap = 2
+            summary = "状态受限，今天优先恢复与休息。"
+            reasons.append("生理状态: 恢复分数低于休息阈值，处于恢复期。")
+        } else if !state.recovery.hasData {
+            type = .reduce
+            multiplier = 0.60
+            cap = 7
+            summary = "恢复基线数据不足，先按保守方案执行。"
+            reasons.append("数据状态: 恢复基线数据不足，按保守方案执行。")
         } else if !highFatigueTargetMuscles.isEmpty {
             type = .swap
             multiplier = 0.65
@@ -225,6 +241,14 @@ struct TrainingDecisionKernel: Sendable {
             cap = 7
             summary = "近期对 \(Self.localizedMuscleGroups(poorResponseTargetMuscles)) 训练的恢复响应欠佳，建议减量训练。"
             reasons.append("训练响应: 该肌群近期训练后次日恢复有下降趋势。")
+        } else if recentResponses.contains(where: { Self.isPoorTrainingResponse($0) }) {
+            // 即使没有计划目标肌群，近期训练后恢复反应明显变差也必须减量，
+            // 不能让 readiness 阈值或静态缓存污染把它漏放为 keep。
+            type = .reduce
+            multiplier = 0.70
+            cap = 7
+            summary = "近期训练后的恢复响应欠佳，建议今天减量训练。"
+            reasons.append("训练响应: 近期训练后次日恢复指标出现明显下降，先降低训练容量。")
         } else if state.energy.hasData, energyLevel < 30 {
             type = .reduce
             multiplier = 0.70
@@ -241,7 +265,7 @@ struct TrainingDecisionKernel: Sendable {
             type = .reduce
             multiplier = 0.75
             cap = 7
-            summary = "身体评分偏低，建议将今天训练容量减少至 75%，限制负荷上限。"
+            summary = "身体评分偏低，建议减量训练至 75% 容量，限制负荷上限。"
             reasons.append("生理评级: 恢复或睡眠分数偏低。")
         } else if state.strain.hasData, state.strain.score > Double(strainUpper) {
             type = .reduce
@@ -289,6 +313,22 @@ struct TrainingDecisionKernel: Sendable {
             }
         }
 
+        // Layer 3：用户决策反馈闭环微调（当近期 14 天反馈形成明确偏置时）
+        if (type == .keep || type == .reduce),
+           let feedback = input.feedbackCalibration,
+           feedback.completedFeedbackCount >= 3,
+           abs(feedback.volumeAdjustmentMultiplier) >= 0.02 {
+            let adjusted = max(0.50, min(1.0, multiplier + feedback.volumeAdjustmentMultiplier))
+            if abs(adjusted - multiplier) > 0.005 {
+                multiplier = adjusted
+                if let note = feedback.note {
+                    reasons.append("反馈校准: \(note)")
+                } else {
+                    reasons.append("反馈校准: 结合近期 \(feedback.completedFeedbackCount) 次决策反馈微调容量。")
+                }
+            }
+        }
+
         // Inject user constraints
         for constraint in input.userConstraints {
             if constraint.localizedCaseInsensitiveContains("injury") || constraint.localizedCaseInsensitiveContains("hurt") || constraint.localizedCaseInsensitiveContains("pain") {
@@ -322,6 +362,12 @@ struct TrainingDecisionKernel: Sendable {
         )
     }
     
+
+    private static func isPoorTrainingResponse(_ response: TrainingResponseDTO) -> Bool {
+        (response.nextDayRecoveryDelta ?? 0) <= -8
+            || (response.nextDayHRVDelta ?? 0) <= -10
+            || (response.nextDayRHRDelta ?? 0) >= 5
+    }
     private static func localizedActiveStatus(_ status: String) -> String {
         switch status.lowercased() {
         case "sick": return "生病"

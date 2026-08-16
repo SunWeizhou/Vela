@@ -220,12 +220,12 @@ struct BodyStateKernel: Sendable {
                 source: "BodyStateKernel"
             ))
         } else if ["sick", "injured", "resting"].contains(input.activeStatus)
-                    || dashboard.recovery.score < thresholds.recoveryRest {
+                    || (dashboard.recovery.hasData && dashboard.recovery.score < thresholds.recoveryRest) {
             readiness = .recovering
         } else if fatigue.values.contains(where: { $0.fatigueLevel == "high" })
                     || drivers.contains(where: { $0.kind == .trainingResponse })
-                    || dashboard.recovery.score < thresholds.recoveryCaution
-                    || dashboard.sleepScore.score < thresholds.sleepCaution {
+                    || (dashboard.recovery.hasData && dashboard.recovery.score < thresholds.recoveryCaution)
+                    || (dashboard.sleepScore.hasData && dashboard.sleepScore.score < thresholds.sleepCaution) {
             readiness = .caution
         } else {
             readiness = .ready

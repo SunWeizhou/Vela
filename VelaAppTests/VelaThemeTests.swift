@@ -2681,4 +2681,113 @@ final class VelaThemeTests: XCTestCase {
         ThresholdProposalGenerator.markProposed(date: now.addingTimeInterval(-8 * 86_400), defaults: defaults)
         XCTAssertTrue(ThresholdProposalGenerator.isDue(now: now, defaults: defaults), "8 天后应再次到期")
     }
+
+    // MARK: - 升级专项回归测试（安全守卫、AI解读、情境问答、反馈校准）
+
+    func testTrainingDecisionKernelSafetyGuardrailPreemptsMissingRecoveryData() {
+        let now = Date()
+        var dashboard = DashboardSummary.preview(date: now)
+        dashboard.recovery.value = nil
+        dashboard.sleepScore.value = 25 // 严重睡眠不足（< 休息阈值 35）
+
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: dashboard,
+            activeStatus: "active",
+            generatedAt: now
+        ))
+        let decision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(bodyState: bodyState))
+
+        // 关键断言：即使 recovery.hasData == false，严重睡眠不足必须触发 .rest，不能漏放为 .reduce
+        XCTAssertEqual(decision.decision, .rest)
+        XCTAssertTrue(decision.reasons.contains { $0.contains("睡眠不足") })
+    }
+
+    func testTrainingDecisionKernelSafetyGuardrailPreemptsHighStressOnMissingRecovery() {
+        let now = Date()
+        var dashboard = DashboardSummary.preview(date: now)
+        dashboard.recovery.value = nil
+        dashboard.stress.value = 82 // 急性高压 (> 75)
+        dashboard.sleepScore.value = 75
+
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: dashboard,
+            activeStatus: "active",
+            generatedAt: now
+        ))
+        let decision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(bodyState: bodyState))
+
+        XCTAssertEqual(decision.decision, .rest)
+        XCTAssertTrue(decision.reasons.contains { $0.contains("压力偏高") })
+    }
+
+    @MainActor
+    func testDailyDecisionFeedbackCalibrationAdjustsVolumeMultiplier() throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let now = Date()
+
+        for i in 0..<4 {
+            let record = DailyDecisionFeedbackRecord(
+                dayIdentifier: "2026-08-0\(i + 1)",
+                bodyStateHash: "hash-\(i)",
+                decisionType: "reduce",
+                decisionTitle: "减量训练",
+                adoptionStatus: "modified",
+                accuracyRating: "partly",
+                actualAction: "reduce",
+                energyRating: 5,
+                fatigueRating: 1,
+                satisfactionRating: 4,
+                createdAt: now
+            )
+            record.updatedAt = now
+            context.insert(record)
+        }
+        try context.save()
+
+        let calibration = DailyDecisionFeedbackService().calculateFeedbackCalibration(
+            modelContext: context,
+            periodDays: 14,
+            now: now
+        )
+
+        XCTAssertEqual(calibration.completedFeedbackCount, 4)
+        XCTAssertEqual(calibration.volumeAdjustmentMultiplier, 0.05, accuracy: 0.001)
+
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: .preview(date: now),
+            activeStatus: "active",
+            generatedAt: now
+        ))
+        var input = TrainingDecisionInput(bodyState: bodyState, feedbackCalibration: calibration)
+        input.bodyState.readiness = .caution // 触发 reduce
+        let decision = TrainingDecisionKernel().decide(input: input)
+
+        XCTAssertTrue(decision.reasons.contains { $0.contains("反馈校准") })
+    }
+
+    @MainActor
+    func testCoachChatVMContextualQuickQuestionsGeneratesDynamicStarters() {
+        let vm = CoachChatVM()
+        let now = Date()
+        var dashboard = DashboardSummary.preview(date: now)
+        dashboard.sleepScore.value = 30
+        dashboard.recovery.value = 20
+
+        let planRecord = DailyOperatingPlanRecord(
+            dayIdentifier: "2026-08-16",
+            bodyStateHash: "hash-today",
+            generatedAt: now,
+            primaryActionType: "rest",
+            title: "优先补觉与恢复",
+            payloadJSON: "{}",
+            reasonsJSON: "[]",
+            confidence: 0.9,
+            status: "active"
+        )
+
+        let questions = vm.contextualQuickQuestions(todayPlan: planRecord, dashboard: dashboard)
+        XCTAssertEqual(questions.count, 4)
+        XCTAssertTrue(questions.first?.contains("睡眠") == true || questions.first?.contains("恢复") == true)
+    }
 }

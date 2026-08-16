@@ -537,6 +537,9 @@ final class DailySummaryUseCase {
         if let matched = matchedExistingDecision {
             dailyTrainingDecision = matched
         } else {
+            let feedbackCalibration = modelContext.map {
+                DailyDecisionFeedbackService().calculateFeedbackCalibration(modelContext: $0, now: now)
+            }
             dailyTrainingDecision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
                 bodyState: bodyState,
                 activePlan: activePlan?.dto,
@@ -544,7 +547,8 @@ final class DailySummaryUseCase {
                 workoutEvents: planResolutionEvents.map { $0.dto },
                 // 算法打通（深度专项批次 1）：与展示路径同源，恢复此前被
                 // persistedDecision 遮蔽的「本月训练量三年 P85 → 减量」门控。
-                longTermTrainingVolume: longTermReport.trainingVolume
+                longTermTrainingVolume: longTermReport.trainingVolume,
+                feedbackCalibration: feedbackCalibration
             ))
         }
         

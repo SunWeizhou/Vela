@@ -172,20 +172,22 @@ struct VelaTrainingView: View {
                         .buttonStyle(.cardPress)
                     }
 
-                    VStack(alignment: .leading, spacing: 14) {
-                        VelaRhythmSectionHeader(
-                            eyebrow: "",
-                            title: "训练计划的建议",
-                            actionTitle: nil,
-                            action: {}
-                        )
+                    if !pendingPlanAdaptations.isEmpty {
+                        VStack(alignment: .leading, spacing: 14) {
+                            VelaRhythmSectionHeader(
+                                eyebrow: "",
+                                title: "计划调整建议",
+                                actionTitle: nil,
+                                action: {}
+                            )
 
-                        NavigationLink {
-                            VelaTrainingPlanView()
-                        } label: {
-                            TrainingProposalPortal(proposals: pendingPlanAdaptations)
+                            NavigationLink {
+                                VelaTrainingPlanView()
+                            } label: {
+                                TrainingProposalPortal(proposals: pendingPlanAdaptations)
+                            }
+                            .buttonStyle(.cardPress)
                         }
-                        .buttonStyle(.cardPress)
                     }
 
                     VStack(alignment: .leading, spacing: 14) {

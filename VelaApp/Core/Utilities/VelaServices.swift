@@ -419,6 +419,60 @@ struct DailyDecisionFeedbackService {
         )
     }
 
+    func calculateFeedbackCalibration(
+        modelContext: ModelContext,
+        periodDays: Int = 14,
+        now: Date = Date()
+    ) -> DecisionFeedbackCalibration {
+        let cutoff = now.addingTimeInterval(-Double(periodDays) * 86_400)
+        let feedback = (try? modelContext.fetch(FetchDescriptor<DailyDecisionFeedbackRecord>(
+            predicate: #Predicate { $0.updatedAt >= cutoff }
+        ))) ?? []
+        let completed = feedback.filter(\.isCompleted)
+        guard completed.count >= 3 else {
+            return DecisionFeedbackCalibration(completedFeedbackCount: completed.count, volumeAdjustmentMultiplier: 0.0)
+        }
+
+        var conservativeOverdrive = 0
+        var fatigueOverdrive = 0
+
+        for item in completed {
+            let energy = item.energyRating ?? 3
+            let fatigue = item.fatigueRating ?? 3
+            let satisfaction = item.satisfactionRating ?? 3
+
+            if (item.adoptionStatus == "modified" || item.adoptionStatus == "ignored") && energy >= 4 && fatigue <= 2 {
+                conservativeOverdrive += 1
+            } else if item.accuracyRating == "inaccurate" && energy >= 4 {
+                conservativeOverdrive += 1
+            }
+
+            if fatigue >= 4 || (satisfaction <= 2 && fatigue >= 3) {
+                fatigueOverdrive += 1
+            }
+        }
+
+        let count = completed.count
+        if Double(conservativeOverdrive) / Double(count) >= 0.50 {
+            return DecisionFeedbackCalibration(
+                completedFeedbackCount: count,
+                volumeAdjustmentMultiplier: 0.05,
+                note: "近期反馈显示精力充沛且多次主动加量，容量微调 +5%"
+            )
+        } else if Double(fatigueOverdrive) / Double(count) >= 0.50 {
+            return DecisionFeedbackCalibration(
+                completedFeedbackCount: count,
+                volumeAdjustmentMultiplier: -0.05,
+                note: "近期反馈疲劳感偏高，容量微调 -5%"
+            )
+        }
+
+        return DecisionFeedbackCalibration(
+            completedFeedbackCount: count,
+            volumeAdjustmentMultiplier: 0.0
+        )
+    }
+
     private func upsert(
         modelContext: ModelContext,
         dayIdentifier: String,

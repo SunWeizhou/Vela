@@ -27,8 +27,10 @@ struct CoachWelcomeWorkspace: View {
                     action: {}
                 )
 
+                let starters = vm.contextualQuickQuestions(todayPlan: todayOperatingPlan)
+
                 VStack(spacing: 0) {
-                    ForEach(Array(vm.quickQuestions.prefix(4).enumerated()), id: \.offset) { index, text in
+                    ForEach(Array(starters.prefix(4).enumerated()), id: \.offset) { index, text in
                         Button {
                             onSendMessage(text)
                         } label: {
@@ -48,7 +50,7 @@ struct CoachWelcomeWorkspace: View {
                         }
                         .buttonStyle(.plain)
 
-                        if index < min(vm.quickQuestions.count, 4) - 1 {
+                        if index < min(starters.count, 4) - 1 {
                             Rectangle()
                                 .fill(VelaTheme.rhythmMist)
                                 .frame(height: 0.75)

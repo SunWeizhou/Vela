@@ -830,6 +830,31 @@ final class ScoringEngineTests: XCTestCase {
         AppLanguage.stored = .simplifiedChinese
         defer { AppLanguage.stored = previousLanguage }
 
+        // 隔离阈值类静态污染：前置测试可能写 baselines.md / strategies.md 后未恢复。
+        let baselineURL = WikiFileService.localURL(for: "baselines.md")
+        let strategiesURL = WikiFileService.localURL(for: "strategies.md")
+        let baselineOriginal = try? Data(contentsOf: baselineURL)
+        let strategiesOriginal = try? Data(contentsOf: strategiesURL)
+        func restoreWikiFile(_ data: Data?, to url: URL) {
+            if let data {
+                try? FileManager.default.createDirectory(
+                    at: url.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try? data.write(to: url)
+            } else {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+        defer {
+            restoreWikiFile(baselineOriginal, to: baselineURL)
+            restoreWikiFile(strategiesOriginal, to: strategiesURL)
+            WikiFileService.invalidateDictionaryCache()
+        }
+        try? FileManager.default.removeItem(at: baselineURL)
+        try? FileManager.default.removeItem(at: strategiesURL)
+        WikiFileService.invalidateDictionaryCache()
+
         let now = Date()
         let response = TrainingResponseRecord(
             workoutId: UUID(),

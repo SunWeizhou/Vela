@@ -169,6 +169,72 @@ final class CoachChatVM: ObservableObject {
         L10n.t("Update my profile", "更新我的档案"),
     ]
 
+    func contextualQuickQuestions(
+        todayPlan: DailyOperatingPlanRecord? = nil,
+        dashboard: DashboardSummary? = nil
+    ) -> [String] {
+        var questions: [String] = []
+
+        let rawDecision = todayPlan?.trainingDecision?.decision
+        let planKind = dashboard?.trainingDecision.kind
+
+        let isRest = rawDecision == .rest || planKind == .rest || planKind == .recovery
+        let isSwap = rawDecision == .swap
+        let isReduce = rawDecision == .reduce || planKind == .downshift
+        let isKeep = rawDecision == .keep || planKind == .train || planKind == .maintain
+
+        let sleepScore = dashboard?.sleepScore.score ?? 0
+        let stressIndex = dashboard?.stress.stressIndex ?? 0
+        let recoveryScore = dashboard?.recovery.score ?? 0
+        let hasRecovery = dashboard?.recovery.hasData ?? false
+
+        // 1. 结合今日核心决策
+        if isRest {
+            if sleepScore > 0 && sleepScore < 60 {
+                questions.append("昨晚睡眠欠佳，今天如何科学补觉与安排恢复？")
+            } else if stressIndex > 65 {
+                questions.append("当前生理压力偏高，推荐哪些轻度放松和减压方式？")
+            } else {
+                questions.append("为什么今天建议优先恢复？帮我分析生理原因")
+            }
+        } else if isSwap {
+            questions.append("为什么今天建议替换训练肌群？该如何调整动作？")
+        } else if isReduce {
+            questions.append("今天建议减量执行，具体应该降低多少重量或组数？")
+        } else if isKeep {
+            questions.append("今天身体状态良好，针对目标训练部位有什么动作建议？")
+        }
+
+        // 2. 结合生理体征痛点
+        if hasRecovery && recoveryScore < 50 && !questions.contains(where: { $0.contains("恢复") }) {
+            questions.append("今天恢复分数偏低，背后的主要限制因子是什么？")
+        } else if sleepScore >= 80 && !questions.contains(where: { $0.contains("睡眠") }) {
+            questions.append("昨晚睡眠质量优良，帮我分析睡眠各阶段表现")
+        } else if (dashboard?.strain.score ?? 0) > 14 {
+            questions.append("今日累积运动负荷较高，今晚需要注意哪些恢复要点？")
+        }
+
+        // 3. 趋势与长线记忆
+        questions.append("分析我近期的健康节律与训练反应趋势")
+        questions.append("查看并更新我的个人健康档案与长期目标")
+
+        // 4. 兜底补齐到 4 个
+        let fallbacks = [
+            "今天的训练建议与执行细节",
+            "本周整体运动负荷与恢复平衡分析",
+            "根据我的近期数据给出饮食与作息建议",
+            "更新我的训练偏好与力量基准"
+        ]
+
+        for fallback in fallbacks {
+            if questions.count < 4 && !questions.contains(fallback) {
+                questions.append(fallback)
+            }
+        }
+
+        return Array(questions.prefix(4))
+    }
+
     // Delegated stores/helpers
     private let sessionStore = CoachSessionStore()
     private let assembler = CoachContextAssembler()
