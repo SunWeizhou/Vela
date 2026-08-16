@@ -42,7 +42,7 @@ struct JournalEntryCard: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(VelaTheme.muted)
                     .frame(width: 28, height: 28)
-                    .background(Circle().fill(VelaTheme.systemGroupedBackground))
+                    .background(Circle().fill(VelaTheme.rhythmMist.opacity(0.4)))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("删除手记：\(entry.uiDisplayTitle)")

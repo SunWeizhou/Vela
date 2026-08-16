@@ -154,7 +154,7 @@ struct VelaJournalView: View {
             .padding(.bottom, VelaFloatingNavigationMetrics.contentBottomPadding)
         }
         .scrollIndicators(.hidden)
-        .background(VelaTheme.systemGroupedBackground)
+        .background(VelaTheme.rhythmCanvas)
         .onAppear {
             loadRealJournalData()
         }
@@ -198,14 +198,14 @@ struct VelaJournalView: View {
                 saveQuickEntry(tags: ["caffeine", "咖啡因"], note: "摄入咖啡因 \(Int(amount)) mg", value: amount, unit: "mg")
             }
             .presentationDetents([.medium])
-            .presentationBackground(VelaTheme.systemGroupedBackground)
+            .presentationBackground(VelaTheme.rhythmCanvas)
         }
         .sheet(isPresented: $showWaterLogger) {
             WaterLoggerView { amount in
                 saveQuickEntry(tags: ["hydration", "补水"], note: "饮水 \(Int(amount)) ml", value: amount, unit: "ml")
             }
             .presentationDetents([.medium])
-            .presentationBackground(VelaTheme.systemGroupedBackground)
+            .presentationBackground(VelaTheme.rhythmCanvas)
         }
         .sheet(isPresented: $showMoodLogger) {
             MoodLoggerView { score, note in
@@ -213,14 +213,14 @@ struct VelaJournalView: View {
                 saveQuickEntry(tags: ["mood", "每日心情"], note: "心情: \(moodText). 备注: \(note)", value: score)
             }
             .presentationDetents([.medium])
-            .presentationBackground(VelaTheme.systemGroupedBackground)
+            .presentationBackground(VelaTheme.rhythmCanvas)
         }
         .sheet(isPresented: $showAlcoholLogger) {
             AlcoholLoggerView { amount in
                 saveQuickEntry(tags: ["alcohol", "酒"], note: "饮酒 \(amount) 标准杯", value: amount, unit: "杯")
             }
             .presentationDetents([.medium])
-            .presentationBackground(VelaTheme.systemGroupedBackground)
+            .presentationBackground(VelaTheme.rhythmCanvas)
         }
         .sheet(isPresented: $showBehaviorQuickNote) {
             BehaviorQuickNoteSheet { note in
@@ -228,7 +228,7 @@ struct VelaJournalView: View {
             }
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
-            .presentationBackground(VelaTheme.systemGroupedBackground)
+            .presentationBackground(VelaTheme.rhythmCanvas)
         }
         .sheet(isPresented: $showPersonalExperiment) {
             PersonalExperimentHubSheet(
@@ -239,7 +239,7 @@ struct VelaJournalView: View {
             )
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
-            .presentationBackground(VelaTheme.systemGroupedBackground)
+            .presentationBackground(VelaTheme.rhythmCanvas)
         }
         .sheet(isPresented: $showCustomHabitManager) {
             CustomJournalHabitSheet(habits: $customHabitsRaw)
@@ -603,7 +603,7 @@ struct VelaJournalView: View {
                 
                 segmentButton(title: title, index: 2, state: state)
             }
-            .background(VelaTheme.systemGroupedBackground)
+            .background(VelaTheme.rhythmMist.opacity(0.4))
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -681,7 +681,7 @@ struct VelaJournalView: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(VelaTheme.meta)
                         .frame(width: 28, height: 28)
-                        .background(Circle().fill(VelaTheme.systemGroupedBackground))
+                        .background(Circle().fill(VelaTheme.rhythmMist.opacity(0.4)))
                         .overlay(Circle().stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
                 }
             }

@@ -124,13 +124,13 @@ struct WorkoutDetailView: View {
             )
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
-            .presentationBackground(VelaTheme.systemGroupedBackground)
+            .presentationBackground(VelaTheme.rhythmCanvas)
         }
         .sheet(item: $selectedSet) { detail in
             StrengthSetDetailSheet(detail: detail)
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
-                .presentationBackground(VelaTheme.systemGroupedBackground)
+                .presentationBackground(VelaTheme.rhythmCanvas)
         }
         .confirmationDialog("确定要删除这条健身记录吗？", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
             Button("删除记录", role: .destructive) {

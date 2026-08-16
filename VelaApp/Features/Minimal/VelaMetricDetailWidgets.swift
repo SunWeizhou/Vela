@@ -391,6 +391,6 @@ struct MetricCustomWidgetsSection: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
-        .background(VelaTheme.secondaryGroupedBackground, in: RoundedRectangle(cornerRadius: VelaTheme.radiusSm, style: .continuous))
+        .background(VelaTheme.rhythmMist.opacity(0.35), in: RoundedRectangle(cornerRadius: VelaTheme.radiusSm, style: .continuous))
     }
 }

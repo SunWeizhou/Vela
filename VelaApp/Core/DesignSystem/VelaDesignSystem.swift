@@ -520,7 +520,7 @@ extension View {
         self
             .presentationDragIndicator(.visible)
             .presentationCornerRadius(VelaTheme.radiusSheet)
-            .presentationBackground(VelaTheme.systemGroupedBackground)
+            .presentationBackground(VelaTheme.rhythmCanvas)
     }
 }
 

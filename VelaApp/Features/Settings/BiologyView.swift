@@ -207,7 +207,7 @@ struct BiologyView: View {
                     .opacity(0.4)
             }
         }
-        .background(VelaTheme.systemGroupedBackground)
+        .background(VelaTheme.rhythmCanvas)
         .sheet(isPresented: $showLogSheet) {
             BloodLogSheetView()
                 .presentationDetents([.medium, .large])

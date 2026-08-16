@@ -41,8 +41,9 @@ struct WhatsNewSettingsView: View {
             }
             .padding(20)
         }
-        .background(VelaTheme.systemGroupedBackground)
+        .background(VelaTheme.rhythmCanvas)
         .navigationTitle("最新变化")
+        .velaRhythmDetailChrome()
     }
     
     private func featureUpdateBlock(title: String, desc: String) -> some View {

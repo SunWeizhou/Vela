@@ -153,9 +153,9 @@ struct StrengthSetDetailSheet: View {
                 Spacer()
             }
             .padding(18)
-            .background(VelaTheme.systemGroupedBackground)
+            .background(VelaTheme.rhythmCanvas)
             .navigationTitle("组详情")
-            .navigationBarTitleDisplayMode(.inline)
+            .velaRhythmDetailChrome()
         }
     }
 

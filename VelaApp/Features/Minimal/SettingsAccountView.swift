@@ -474,9 +474,9 @@ struct UserWikiArchiveView: View {
                     
                     Spacer(minLength: 16)
                 }
-                .background(VelaTheme.systemGroupedBackground)
+                .background(VelaTheme.rhythmCanvas)
                 .navigationTitle("编辑健康档案")
-                .navigationBarTitleDisplayMode(.inline)
+                .velaRhythmDetailChrome()
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
                         Button("取消") { showEditor = false }

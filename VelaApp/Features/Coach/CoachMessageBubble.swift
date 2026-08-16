@@ -14,6 +14,129 @@ struct CoachChatMessage: Identifiable, Hashable {
     var createdAt: Date = Date()
 }
 
+// MARK: - CoachThinkingParser
+
+struct ParsedMessageParts: Equatable {
+    var thinkingContent: String?
+    var mainContent: String
+    var isStillThinking: Bool
+}
+
+enum CoachThinkingParser {
+    /// 解析包含 `<think>...</think>` 的消息内容
+    static func parse(_ raw: String, isStreaming: Bool = false) -> ParsedMessageParts {
+        let thinkOpenTag = "<think>"
+        let thinkCloseTag = "</think>"
+
+        guard let openRange = raw.range(of: thinkOpenTag, options: .caseInsensitive) else {
+            return ParsedMessageParts(thinkingContent: nil, mainContent: raw, isStillThinking: false)
+        }
+
+        let afterOpen = raw[openRange.upperBound...]
+
+        if let closeRange = afterOpen.range(of: thinkCloseTag, options: .caseInsensitive) {
+            let thinkingText = String(afterOpen[..<closeRange.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let mainText = String(afterOpen[closeRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            return ParsedMessageParts(
+                thinkingContent: thinkingText.isEmpty ? nil : thinkingText,
+                mainContent: mainText,
+                isStillThinking: false
+            )
+        } else {
+            // 尚未闭合（仍在思考阶段）
+            let thinkingText = String(afterOpen).trimmingCharacters(in: .whitespacesAndNewlines)
+            return ParsedMessageParts(
+                thinkingContent: thinkingText.isEmpty ? nil : thinkingText,
+                mainContent: "",
+                isStillThinking: isStreaming
+            )
+        }
+    }
+}
+
+// MARK: - CoachThinkingView
+
+struct CoachThinkingView: View {
+    let thinkingText: String
+    let isStreaming: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isExpanded: Bool = false
+    @State private var pulse = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: isStreaming ? "brain.filled.head.profile" : "sparkle")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(isStreaming ? VelaTheme.accent : VelaTheme.rhythmInkSecondary)
+                        .scaleEffect(isStreaming && !reduceMotion ? (pulse ? 1.15 : 0.9) : 1.0)
+                        .animation(
+                            isStreaming && !reduceMotion
+                                ? .easeInOut(duration: 0.8).repeatForever(autoreverses: true)
+                                : nil,
+                            value: pulse
+                        )
+
+                    Text(isStreaming ? "深度思考中..." : "已深度思考")
+                        .font(VelaTheme.caption2().weight(.medium))
+                        .foregroundStyle(isStreaming ? VelaTheme.rhythmInk : VelaTheme.rhythmInkSecondary)
+
+                    Spacer(minLength: 4)
+
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(VelaTheme.rhythmMist.opacity(0.35))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.6)
+                )
+            }
+            .buttonStyle(.plain)
+            .onAppear {
+                if isStreaming {
+                    pulse = true
+                }
+            }
+            .onChange(of: isStreaming) { _, streaming in
+                pulse = streaming
+            }
+
+            if isExpanded {
+                HStack(alignment: .top, spacing: 8) {
+                    Rectangle()
+                        .fill(VelaTheme.accent.opacity(0.35))
+                        .frame(width: 2)
+                        .padding(.vertical, 2)
+
+                    MarkdownText(
+                        markdown: thinkingText,
+                        font: VelaTheme.caption2(),
+                        color: VelaTheme.rhythmInkSecondary,
+                        isStreaming: isStreaming
+                    )
+                    .lineSpacing(2)
+                }
+                .padding(.leading, 4)
+                .padding(.top, 6)
+                .padding(.bottom, 2)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+}
+
 // MARK: - CoachRecoveryActionButton
 struct CoachRecoveryActionButton: View {
     let action: LLMErrorRecoveryAction
@@ -105,21 +228,21 @@ struct AppleIntelligenceLoaderDots: View {
     @State private var pulse = false
     
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 5) {
             Circle()
-                .fill(Color(hex: "#9C5FF2"))
+                .fill(VelaTheme.rhythmDeep)
                 .frame(width: 6, height: 6)
-                .scaleEffect(reduceMotion ? 1 : (pulse ? 1.4 : 0.8))
+                .scaleEffect(reduceMotion ? 1 : (pulse ? 1.3 : 0.75))
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: pulse)
             Circle()
-                .fill(Color(hex: "#00A2FF"))
+                .fill(VelaTheme.accent)
                 .frame(width: 6, height: 6)
-                .scaleEffect(reduceMotion ? 1 : (pulse ? 1.4 : 0.8))
+                .scaleEffect(reduceMotion ? 1 : (pulse ? 1.3 : 0.75))
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.6).repeatForever(autoreverses: true).delay(0.2), value: pulse)
             Circle()
-                .fill(VelaTheme.systemPink)
+                .fill(VelaTheme.rhythmInkSecondary)
                 .frame(width: 6, height: 6)
-                .scaleEffect(reduceMotion ? 1 : (pulse ? 1.4 : 0.8))
+                .scaleEffect(reduceMotion ? 1 : (pulse ? 1.3 : 0.75))
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.6).repeatForever(autoreverses: true).delay(0.4), value: pulse)
         }
         .onAppear {

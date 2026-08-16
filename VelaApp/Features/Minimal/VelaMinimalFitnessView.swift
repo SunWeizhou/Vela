@@ -312,7 +312,7 @@ struct VelaTrainingView: View {
             )
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
-                .presentationBackground(VelaTheme.systemGroupedBackground)
+                .presentationBackground(VelaTheme.rhythmCanvas)
         }
         .alert("今日训练", isPresented: Binding(
             get: { trainingExecutionMessage != nil },
@@ -356,7 +356,7 @@ struct VelaTrainingView: View {
             )
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
-            .presentationBackground(VelaTheme.systemGroupedBackground)
+            .presentationBackground(VelaTheme.rhythmCanvas)
         }
         .toolbar(.hidden, for: .navigationBar)
     }

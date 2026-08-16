@@ -159,18 +159,52 @@ struct MessageBubble: View {
     let time: String
     var isStreaming = false
 
+    @State private var showCopiedIndicator = false
+
+    private var parsedParts: ParsedMessageParts {
+        if isUser {
+            return ParsedMessageParts(thinkingContent: nil, mainContent: text, isStillThinking: false)
+        }
+        return CoachThinkingParser.parse(text, isStreaming: isStreaming)
+    }
+
+    private var segments: [MessageSegment] {
+        parseMessageContent(parsedParts.mainContent)
+    }
+
     var body: some View {
         HStack(spacing: 0) {
-            if isUser { Spacer() }
+            if isUser { Spacer(minLength: 44) }
 
-            VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
+            VStack(alignment: isUser ? .trailing : .leading, spacing: 6) {
+                // 1. 推理思考过程卡片（若模型输出包含 <think>）
+                if let thinking = parsedParts.thinkingContent, !thinking.isEmpty {
+                    CoachThinkingView(
+                        thinkingText: thinking,
+                        isStreaming: parsedParts.isStillThinking
+                    )
+                }
+
+                // 2. 正文内容与嵌入式卡片
+                if !parsedParts.mainContent.isEmpty || parsedParts.thinkingContent == nil {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(segments) { segment in
+                            switch segment {
+                            case .text(let txt):
+                                if !txt.isEmpty {
                 MarkdownText(
-                    markdown: text,
+                                        markdown: txt,
                     font: VelaTheme.subheadline(),
                     color: isUser ? VelaTheme.rhythmDeepOn : VelaTheme.rhythmInk,
                     isStreaming: isStreaming
                 )
                     .lineSpacing(4)
+                                }
+                            case .artifact(let type, let key):
+                                ArtifactRendererView(type: type, key: key)
+                            }
+                        }
+                    }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                     .background(
@@ -201,19 +235,65 @@ struct MessageBubble: View {
                         )
                         .stroke(isUser ? Color.clear : VelaTheme.rhythmMist, lineWidth: 0.75)
                     )
-                    .shadow(color: .clear, radius: 0)
-                    .frame(maxWidth: 285, alignment: isUser ? .trailing : .leading)
+                }
 
+                // 3. 底部信息区与操作条（时间、复制、成功提示）
+                HStack(spacing: 8) {
+                    if isUser {
                 if !time.isEmpty {
                     Text(time)
                         .font(VelaTheme.caption2())
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                        .padding(.horizontal, 8)
+                        }
+                    } else {
+                        if !time.isEmpty {
+                            Text(time)
+                                .font(VelaTheme.caption2())
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        }
+
+                        if !isStreaming && !parsedParts.mainContent.isEmpty {
+                            Button {
+                                copyToClipboard()
+                            } label: {
+                                HStack(spacing: 3) {
+                                    Image(systemName: showCopiedIndicator ? "checkmark" : "doc.on.doc")
+                                        .font(.system(size: 10, weight: .medium))
+                                    if showCopiedIndicator {
+                                        Text("已复制")
+                                            .font(VelaTheme.caption2())
+                                    }
+                                }
+                                .foregroundStyle(showCopiedIndicator ? VelaTheme.accent : VelaTheme.rhythmInkSecondary.opacity(0.8))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .background(
+                                    Capsule()
+                                        .fill(VelaTheme.rhythmMist.opacity(showCopiedIndicator ? 0.6 : 0.3))
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
                 }
+            }
+                .padding(.horizontal, 4)
             }
             .transition(bubbleTransition)
 
-            if !isUser { Spacer() }
+            if !isUser { Spacer(minLength: 28) }
+        }
+    }
+
+    private func copyToClipboard() {
+        UIPasteboard.general.string = parsedParts.mainContent
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
+            showCopiedIndicator = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
+                showCopiedIndicator = false
+            }
         }
     }
 

@@ -311,7 +311,7 @@ struct VelaShell: View {
 
     private var legacyFloatingNavigation: some View {
         ZStack {
-            VelaTheme.systemGroupedBackground.ignoresSafeArea()
+            VelaTheme.rhythmCanvas.ignoresSafeArea()
 
             // Keep legacy primary surfaces mounted so cached SwiftData content
             // is already hydrated when the user switches tabs.

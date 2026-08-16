@@ -131,7 +131,7 @@ struct ProactiveInsightDetailSheet: View {
                 .padding(.top, 10)
                 .padding(.bottom, 24)
             }
-            .background(VelaTheme.systemGroupedBackground)
+            .background(VelaTheme.rhythmCanvas)
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 10) {
                     Button {
@@ -264,7 +264,7 @@ struct ActiveStatusSelectionSheetView: View {
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(VelaTheme.fg)
                         .frame(width: 36, height: 36)
-                        .background(Circle().fill(VelaTheme.systemGroupedBackground))
+                        .background(Circle().fill(VelaTheme.rhythmMist.opacity(0.4)))
                 }
                 .buttonStyle(.plain)
 
@@ -375,7 +375,7 @@ struct ActiveStatusSelectionSheetView: View {
             tempStatus = activeStatusRaw
             tempDuration = activeStatusDuration
         }
-        .background(VelaTheme.systemGroupedBackground.ignoresSafeArea())
+        .background(VelaTheme.rhythmCanvas.ignoresSafeArea())
     }
 
     private func statusOptionCard(id: String, title: String, desc: String, icon: String, colors: [Color]) -> some View {
@@ -518,7 +518,7 @@ struct CalendarOverviewSheetView: View {
                                 .padding(.vertical, 8)
                                 .background(
                                     Capsule()
-                                        .fill(selectedMetric == metric ? VelaTheme.fg : VelaTheme.systemGroupedBackground)
+                                        .fill(selectedMetric == metric ? VelaTheme.rhythmDeep : VelaTheme.rhythmMist.opacity(0.4))
                                 )
                                 .overlay(
                                     Capsule()

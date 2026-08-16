@@ -187,7 +187,7 @@ struct CoachHistoryDrawer: View {
         }
         .frame(width: width)
         .frame(maxHeight: .infinity)
-        .background(VelaTheme.systemGroupedBackground)
+        .background(VelaTheme.rhythmCanvas)
         .overlay(alignment: .trailing) {
             Rectangle()
                 .fill(VelaTheme.separatorSoft)

@@ -426,7 +426,7 @@ struct VelaNutritionView: View {
             .padding(.top, 12)
             .padding(.bottom, VelaTheme.bottomContentClearance)
         }
-        .background(VelaTheme.systemGroupedBackground)
+        .background(VelaTheme.rhythmCanvas)
         .safeAreaInset(edge: .top) {
             HStack {
                 VelaDetailBackButton(tint: VelaTheme.energyColor)

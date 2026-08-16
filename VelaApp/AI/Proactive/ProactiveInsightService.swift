@@ -86,10 +86,85 @@ struct ProactiveInsight: Identifiable, Hashable {
 }
 
 enum ProactiveInsightService {
-    static func evaluate(dashboard: DashboardSummary) -> [ProactiveInsight] {
+    static func evaluate(
+        dashboard: DashboardSummary,
+        bodyState: BodyState? = nil
+    ) -> [ProactiveInsight] {
         var insights: [ProactiveInsight] = []
         let isChinese = AppLanguage.stored.isChinese
         
+        // 0. Agent 多维健康数据协同推理（结合 48h 局部疲劳、28 天训练响应、手记自评与客观评分）
+        if let bodyState {
+            let fatigueDrivers = bodyState.drivers.filter { $0.kind == .localFatigue }
+            if let primaryFatigue = fatigueDrivers.first(where: { $0.impact <= -0.8 }) {
+                insights.append(ProactiveInsight(
+                    focus: .training,
+                    severity: .warning,
+                    title: isChinese ? "\(primaryFatigue.title)处于高疲劳窗口" : "Elevated local muscle fatigue",
+                    body: isChinese
+                        ? "\(primaryFatigue.detail)该肌群已进入超量疲劳累积期，强行加量容易产生代偿。"
+                        : "\(primaryFatigue.detail) This muscle group is in a high-fatigue window; adding volume may cause compensatory strain.",
+                    suggestedAction: isChinese
+                        ? "建议今天避开该部位的主项大重量训练，替换为拮抗肌群、核心稳定性或轻量活动度练习。"
+                        : "Avoid heavy compound lifts for this area today; swap to antagonist muscles or low-impact mobility.",
+                    relatedMetrics: ["strain", "muscle_fatigue"],
+                    evidence: [primaryFatigue.detail],
+                    priority: 9,
+                    coachPresetQuestion: isChinese
+                        ? "我当前\(primaryFatigue.title)偏高，今天训练应该如何针对性调整动作？"
+                        : "My \(primaryFatigue.title) is elevated. How should I adjust exercises today?"
+                ))
+            }
+
+            let responseDrivers = bodyState.drivers.filter { $0.kind == .trainingResponse }
+            if let costly = responseDrivers.first {
+                insights.append(ProactiveInsight(
+                    focus: .recovery,
+                    severity: .alert,
+                    title: isChinese ? "近期同类训练后恢复下降显著" : "Noticed post-workout recovery drop",
+                    body: isChinese
+                        ? "\(costly.detail)历史数据显示该部位训练对你当前自主神经与恢复系统的负荷较大。"
+                        : "\(costly.detail) Historical trends show this workout pattern placed high demand on your autonomic recovery.",
+                    suggestedAction: isChinese
+                        ? "今天若安排该肌群，建议将容量降低 20-30%，组间休息延长至 2-3 分钟，严格控制 RPE ≤ 7。"
+                        : "If training this group, reduce volume by 20-30%, rest 2-3 minutes between sets, and cap RPE at 7.",
+                    relatedMetrics: ["recovery", "hrv", "training_response"],
+                    evidence: [costly.detail],
+                    priority: 11,
+                    coachPresetQuestion: isChinese
+                        ? "我近期练完该部位后恢复明显下降，该如何优化组间休息和容量？"
+                        : "My recovery dropped after recent sessions for this muscle. How should I optimize rest and volume?"
+                ))
+            }
+
+            let journalDrivers = bodyState.drivers.filter { $0.kind == .journal }
+            if let lived = journalDrivers.first(where: { $0.impact < 0 }) {
+                let recScore = dashboard.recovery.score
+                if recScore >= 70 {
+                    insights.append(ProactiveInsight(
+                        focus: .readiness,
+                        severity: .warning,
+                        title: isChinese ? "主观体感与客观指标存在温差" : "Subjective feeling differs from metrics",
+                        body: isChinese
+                            ? "客观恢复评分良好（\(Int(recScore.rounded())) 分），但你的手记记录反映「\(lived.detail)」。生理数据可能存在滞后，建议以主观体感为准。"
+                            : "Objective recovery is high (\(Int(recScore.rounded()))), but your journal notes '\(lived.detail)'. Subjective feel should take priority.",
+                        suggestedAction: isChinese
+                            ? "先用轻重量热身组探底；若热身后依然感觉沉重或酸痛，果断下调今日负荷，不做预设冲刺。"
+                            : "Use light warm-up sets to gauge real readiness; if feeling sluggish, downshift load decisively.",
+                        relatedMetrics: ["recovery", "journal"],
+                        evidence: [
+                            isChinese ? "客观恢复 \(Int(recScore.rounded()))/100" : "Recovery \(Int(recScore.rounded()))/100",
+                            isChinese ? "主观手记反馈" : "Journal feedback"
+                        ],
+                        priority: 14,
+                        coachPresetQuestion: isChinese
+                            ? "我的身体评分很高但我感觉挺累的，今天应该按计划练还是减量？"
+                            : "My recovery score is high but I feel exhausted. Should I follow the plan or reduce?"
+                    ))
+                }
+            }
+        }
+
         // Rule 1: HRV significantly low (HRV Z-score < -1.5)
         if let hrvZScore = dashboard.recovery.metrics["hrv_z_score"], hrvZScore < -1.5 {
             insights.append(ProactiveInsight(
@@ -357,10 +432,10 @@ final class ProactiveIntelligenceOrchestrator: Sendable {
             // 1. Build current DashboardSummary
             // 深度专项批次 5：统一调度层——与 TodayView/后台任务共享同一次计算
             //（同 key 并发触发只跑一遍全量管线）。
-            let dashboard = (try? await VelaDailyOrchestrator.refresh(
+            let dashboard = try await VelaDailyOrchestrator.refresh(
                 for: date,
                 modelContext: modelContext
-            )) ?? DashboardSummary.empty(date: date)
+            )
             
             // 2. Evaluate Proactive Insights via ProactiveInsightService
             let evaluatedInsights = ProactiveInsightService.evaluate(dashboard: dashboard)

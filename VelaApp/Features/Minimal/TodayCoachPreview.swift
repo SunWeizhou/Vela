@@ -122,12 +122,12 @@ struct TodayCoachPreview: View {
                     Image(systemName: "arrow.up.right")
                 }
                 .font(VelaTheme.subheadline().weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(VelaTheme.rhythmDeepOn)
                 .padding(.horizontal, 14)
                 .frame(maxWidth: .infinity, minHeight: 46)
                 .background(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(VelaTheme.accent)
+                        .fill(VelaTheme.rhythmDeep)
                 )
             }
             .buttonStyle(.cardPress)
@@ -135,11 +135,11 @@ struct TodayCoachPreview: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
-                .fill(VelaTheme.cardBg)
+                .fill(VelaTheme.rhythmCanvasRaised)
         )
         .overlay(
             RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
-                .stroke(VelaTheme.accent.opacity(0.16), lineWidth: 0.75)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         )
     }
 }

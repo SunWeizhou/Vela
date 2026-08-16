@@ -112,12 +112,11 @@ struct TodayHeroCard: View {
                     .frame(maxWidth: .infinity)
             }
         }
-        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
-                .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         )
-        .shadow(color: Color.black.opacity(0.045), radius: 16, y: 8)
         .accessibilityElement(children: .contain)
     }
 

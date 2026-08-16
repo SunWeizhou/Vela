@@ -228,7 +228,7 @@ struct CaffeineLoggerView: View {
                 }
             }
         }
-        .background(VelaTheme.systemGroupedBackground.ignoresSafeArea())
+        .background(VelaTheme.rhythmCanvas.ignoresSafeArea())
     }
 }
 
@@ -356,7 +356,7 @@ struct WaterLoggerView: View {
                 }
             }
         }
-        .background(VelaTheme.systemGroupedBackground.ignoresSafeArea())
+        .background(VelaTheme.rhythmCanvas.ignoresSafeArea())
     }
 }
 
@@ -473,7 +473,7 @@ struct MoodLoggerView: View {
                 }
             }
         }
-        .background(VelaTheme.systemGroupedBackground.ignoresSafeArea())
+        .background(VelaTheme.rhythmCanvas.ignoresSafeArea())
     }
 }
 
@@ -586,6 +586,6 @@ struct AlcoholLoggerView: View {
                 }
             }
         }
-        .background(VelaTheme.systemGroupedBackground.ignoresSafeArea())
+        .background(VelaTheme.rhythmCanvas.ignoresSafeArea())
     }
 }
