@@ -720,7 +720,7 @@ struct VelaCoachView: View {
             await loadDataCoverageSummary()
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { note in
-            let height = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect)?.height ?? 0
+            _ = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect)?.height ?? 0
             withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                 isKeyboardVisible = true
             }
