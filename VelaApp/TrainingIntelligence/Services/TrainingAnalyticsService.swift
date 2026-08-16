@@ -116,37 +116,45 @@ struct TrainingAnalyticsService: Sendable {
         exerciseLibrary: [ExerciseDefinition] = ExerciseLibraryService.defaultDefinitionsDTO()
     ) -> RecentTrainingSummary {
         let start = endingAt.addingTimeInterval(-Double(days) * 86_400)
-        let recent = workouts.filter { $0.startedAt >= start && $0.startedAt <= endingAt }
-        guard !recent.isEmpty else { return .empty(days: days) }
+        let sorted = workouts.sorted { $0.startedAt < $1.startedAt }
+        let recentCount = sorted.lazy.filter { $0.startedAt >= start && $0.startedAt <= endingAt }.count
+        guard recentCount > 0 else { return .empty(days: days) }
+
         var totalSets = 0
         var totalVolume = 0.0
         var muscles: [String: Int] = [:]
         var records: [PersonalRecord] = []
-        for workout in recent {
-            let prior = workouts.filter { $0.startedAt < workout.startedAt }
-            let analysis = summarizeWorkout(workout, history: prior, exerciseLibrary: exerciseLibrary)
-            totalSets += analysis.effectiveSets
-            totalVolume += analysis.totalVolumeKg
-            records.append(contentsOf: analysis.personalRecords)
-            for (muscle, count) in analysis.muscleGroupSets {
-                muscles[muscle, default: 0] += count
+        var prior: [StrengthWorkoutDTO] = []
+        var latestRecentSummary: String?
+
+        // 按 startedAt 分组推进先例集合：同一时刻的训练彼此不进入历史比较，
+        // 与旧实现 `startedAt < current.startedAt` 语义一致，但整体从 O(n²) 降为 O(n log n)。
+        let groupedByStart = Dictionary(grouping: sorted, by: { $0.startedAt })
+        for start in groupedByStart.keys.sorted() {
+            let batch = groupedByStart[start] ?? []
+            for workout in batch {
+                let isRecent = workout.startedAt >= start && workout.startedAt <= endingAt
+                guard isRecent else { continue }
+                let analysis = summarizeWorkout(workout, history: prior, exerciseLibrary: exerciseLibrary)
+                totalSets += analysis.effectiveSets
+                totalVolume += analysis.totalVolumeKg
+                records.append(contentsOf: analysis.personalRecords)
+                for (muscle, count) in analysis.muscleGroupSets {
+                    muscles[muscle, default: 0] += count
+                }
+                latestRecentSummary = analysis.summaryText
             }
+            prior.append(contentsOf: batch)
         }
-        let latest = recent.max { $0.startedAt < $1.startedAt }
+
         return RecentTrainingSummary(
             days: days,
-            sessions: recent.count,
+            sessions: recentCount,
             effectiveSets: totalSets,
             volumeKg: totalVolume,
             muscleGroupSets: muscles,
             recentPRs: records,
-            lastWorkoutSummary: latest.map { latestWorkout in
-                summarizeWorkout(
-                    latestWorkout,
-                    history: workouts.filter { $0.startedAt < latestWorkout.startedAt },
-                    exerciseLibrary: exerciseLibrary
-                ).summaryText
-            },
+            lastWorkoutSummary: latestRecentSummary ?? "No strength training sessions logged in the past \(days) days.",
             localFatigue: computeLocalFatigue(workouts: workouts, endingAt: endingAt, exerciseLibrary: exerciseLibrary)
         )
     }
@@ -274,7 +282,7 @@ struct XunjiImportSummary: Codable, Hashable, Sendable {
 }
 
 struct XunjiTrainingAPIClient: Sendable {
-    private let baseURL = URL(string: "https://trains.xunjiapp.cn")!
+    private let baseURL = URL(string: "https://trains.xunjiapp.cn") ?? URL(fileURLWithPath: "/")
     private let session: URLSession
 
     init(session: URLSession = .shared) {

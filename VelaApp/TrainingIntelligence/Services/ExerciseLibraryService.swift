@@ -47,19 +47,21 @@ enum ExerciseLibraryService {
         exerciseSpecs.map(exercise)
     }
 
+    private static let cachedDefaultDTOs: [ExerciseDefinition] = exerciseSpecs.map { spec in
+        ExerciseDefinition(
+            id: stableID(for: spec.key),
+            canonicalKey: spec.key,
+            name: spec.name,
+            aliases: spec.aliases,
+            primaryMuscleGroup: spec.primary,
+            secondaryMuscleGroups: spec.secondary,
+            equipment: spec.equipment,
+            movementPattern: spec.pattern
+        )
+    }
+
     static func defaultDefinitionsDTO() -> [ExerciseDefinition] {
-        exerciseSpecs.map { spec in
-            ExerciseDefinition(
-                id: stableID(for: spec.key),
-                canonicalKey: spec.key,
-                name: spec.name,
-                aliases: spec.aliases,
-                primaryMuscleGroup: spec.primary,
-                secondaryMuscleGroups: spec.secondary,
-                equipment: spec.equipment,
-                movementPattern: spec.pattern
-            )
-        }
+        cachedDefaultDTOs
     }
 
     // Stable deterministic UUID for a canonical key, so a given exercise always

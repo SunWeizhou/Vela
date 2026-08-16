@@ -66,6 +66,8 @@ struct VelaTrainingView: View {
     @State private var targetComparison: TrainingTargetComparison = .unavailable
     /// 训练节律热力图的每日快照记录（约 6 周窗口）。
     @State private var heatmapRecords: [DailyHealthSummaryRecord] = []
+    /// 热力图周数据缓存：数据加载后计算一次，body 重渲染不再重复聚合。
+    @State private var memoHeatmapWeeks: [TrainingHeatmapWeek] = []
     /// Coach 参与的未来三天规划（nil = 未请求，显示本地推荐）。
     @State private var aiFutureDays: [RotationDayRecommendation]?
     @State private var isPlanningWithAI = false
@@ -484,6 +486,11 @@ struct VelaTrainingView: View {
     /// 训练类型数据源用 SwiftData 事件（同步即用，含 HealthKit 镜像）——
     /// 此前用异步 recentWorkouts，同步完成前点击格子恒显示「休息」。
     private var heatmapWeeks: [TrainingHeatmapWeek] {
+        if !memoHeatmapWeeks.isEmpty { return memoHeatmapWeeks }
+        return makeHeatmapWeeks()
+    }
+
+    private func makeHeatmapWeeks() -> [TrainingHeatmapWeek] {
         TrainingHeatmapData.weeks(
             endingAt: dashboardVM.selectedDate,
             weeks: 5,
@@ -1157,6 +1164,7 @@ struct VelaTrainingView: View {
         self.localWorkoutEvents = planEvents.filter {
             $0.startedAt >= startLimit && $0.startedAt <= endLimit
         }
+        self.memoHeatmapWeeks = makeHeatmapWeeks()
 
         // 训练计划的建议入口：把「计划与轮转」门户接到真实提案表。
         // 同一提案区也承接练后 AI 边界建议；只有未来未完成训练日的 proposed 才计数。

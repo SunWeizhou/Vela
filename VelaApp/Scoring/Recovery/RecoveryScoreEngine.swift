@@ -267,9 +267,16 @@ public struct RecoveryScoreEngine: ScoreEngine {
         let rmssdToday = input.hrvRmssdToday ?? input.hrvToday
         if let rmssdToday {
             let lnToday = log(max(rmssdToday, 1.0))
-            let rmssdHistoryToUse = !input.hrvRmssdHistory.isEmpty
-                ? input.hrvRmssdHistory
-                : (input.hrvRmssdBaseline != nil ? [input.hrvRmssdBaseline!] : (input.hrvHistory.count >= 5 ? input.hrvHistory : [input.hrvBaseline ?? rmssdToday]))
+            let rmssdHistoryToUse: [Double]
+            if !input.hrvRmssdHistory.isEmpty {
+                rmssdHistoryToUse = input.hrvRmssdHistory
+            } else if let rmssdBaseline = input.hrvRmssdBaseline {
+                rmssdHistoryToUse = [rmssdBaseline]
+            } else if input.hrvHistory.count >= 5 {
+                rmssdHistoryToUse = input.hrvHistory
+            } else {
+                rmssdHistoryToUse = [input.hrvBaseline ?? rmssdToday]
+            }
             let lnHistory = rmssdHistoryToUse.map { log(max($0, 1.0)) }
 
             if let lnBaseline = PersonalBaselineEngine.median(lnHistory) {

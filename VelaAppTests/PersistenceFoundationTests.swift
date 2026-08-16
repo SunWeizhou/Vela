@@ -857,6 +857,36 @@ final class PersistenceFoundationTests: XCTestCase {
         XCTAssertEqual(plan.days.first?.durationMinutes, 60)
     }
 
+    func testKeepAdaptationCanBeAcceptedWithoutMutatingPlan() {
+        let day = TrainingDay(
+            weekNumber: 1,
+            dayNumber: 1,
+            title: "Keep Day",
+            description: "",
+            focus: "strength",
+            durationMinutes: 60,
+            intensity: "high"
+        )
+        let plan = TrainingPlanRecord(
+            title: "Keep Plan",
+            goalDescription: "",
+            isActive: true,
+            days: [day]
+        )
+        let proposal = TrainingPlanAdaptationRecord(
+            planId: plan.id,
+            dayId: day.id,
+            adjustment: .keep,
+            reason: "维持计划但遵守容量/RPE 边界。",
+            status: .proposed,
+            originalDayTitle: day.title
+        )
+
+        XCTAssertTrue(AdaptiveTrainingManager().applyAdaptation(proposal, to: plan))
+        XCTAssertEqual(plan.days.first?.title, "Keep Day")
+        XCTAssertEqual(plan.days.first?.durationMinutes, 60)
+    }
+
     func testTrainingPlanReviewCombinesExecutionAdherenceAndRecoveryCost() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
