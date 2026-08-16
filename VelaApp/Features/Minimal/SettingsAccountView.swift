@@ -572,7 +572,7 @@ struct UserWikiArchiveView: View {
             finalContent = editText
         }
         
-        try? WikiFileService.updateSection(filename: doc.filename, content: finalContent, mode: .replace)
+        _ = try? WikiFileService.updateSection(filename: doc.filename, content: finalContent, mode: .replace)
         WikiSyncManager.sync(modelContext: modelContext)
     }
 }

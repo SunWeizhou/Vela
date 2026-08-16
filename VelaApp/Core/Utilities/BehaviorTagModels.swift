@@ -450,7 +450,9 @@ struct BodyModelBuilder {
         calendar: Calendar = .current,
         asOf: Date = Date()
     ) -> TrainingOutcomePairing? {
-        let byDay = Dictionary(uniqueKeysWithValues: dailySummaries.map { (calendar.startOfDay(for: $0.date), $0) })
+        let byDay = dailySummaries.reduce(into: [Date: DailyHealthSummaryRecord]()) { result, record in
+            result[calendar.startOfDay(for: record.date)] = record
+        }
         let sortedDays = byDay.keys.filter { $0 <= calendar.startOfDay(for: asOf) }.sorted()
         guard sortedDays.count >= 10 else { return nil }
 
@@ -520,7 +522,9 @@ struct BodyModelBuilder {
         calendar: Calendar = .current,
         asOf: Date = Date()
     ) -> DoseResponseCurve? {
-        let byDay = Dictionary(uniqueKeysWithValues: dailySummaries.map { (calendar.startOfDay(for: $0.date), $0) })
+        let byDay = dailySummaries.reduce(into: [Date: DailyHealthSummaryRecord]()) { result, record in
+            result[calendar.startOfDay(for: record.date)] = record
+        }
         let sortedDays = byDay.keys.filter { $0 <= calendar.startOfDay(for: asOf) }.sorted()
         var pairs: [(dose: Double, hrvDelta: Double?, rhrDelta: Double?)] = []
         for day in sortedDays {

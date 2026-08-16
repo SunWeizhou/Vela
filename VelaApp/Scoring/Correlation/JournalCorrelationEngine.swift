@@ -432,7 +432,9 @@ extension JournalCorrelationEngine {
         snapshots: [DailyHealthSnapshot],
         calendar: Calendar = .current
     ) -> [HabitCorrelationInsight] {
-        let byDay = Dictionary(uniqueKeysWithValues: snapshots.map { (calendar.startOfDay(for: $0.date), $0) })
+        let byDay = snapshots.reduce(into: [Date: DailyHealthSnapshot]()) { result, snapshot in
+            result[calendar.startOfDay(for: snapshot.date)] = snapshot
+        }
         let days = byDay.keys.sorted()
         guard days.count >= 30 else { return [] }
 

@@ -34,6 +34,97 @@ enum WikiFileService {
     /// 共用同一集合，防止 LLM 提供的文件名逃逸 user_wiki 目录（路径穿越）。
     static let allowedFilenames = Set(filenames.map(\.filename))
 
+    private static let defaultContentsByFilename: [String: String] = filenames.reduce(into: [:]) {
+        $0[$1.filename] = defaultContent(for: $1.filename)
+    }
+
+    // MARK: - Dictionary read cache
+
+    private struct WikiFileSignature: Equatable {
+        var modificationDate: Date?
+        var fileSize: UInt64
+    }
+
+    private final class WikiDictionaryCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var cachedDictionary: [String: String]?
+        private var cachedInitialized: [String: Bool]?
+        private var cachedDocuments: [WikiDocument]?
+        private var cachedSignature: [String: WikiFileSignature]?
+
+        func value(for signature: [String: WikiFileSignature]) -> [String: String]? {
+            lock.lock()
+            defer { lock.unlock() }
+            guard cachedSignature == signature, let cachedDictionary else { return nil }
+            return cachedDictionary
+        }
+
+        func initialized(for signature: [String: WikiFileSignature]) -> [String: Bool]? {
+            lock.lock()
+            defer { lock.unlock() }
+            guard cachedSignature == signature, let cachedInitialized else { return nil }
+            return cachedInitialized
+        }
+
+        func documents(for signature: [String: WikiFileSignature]) -> [WikiDocument]? {
+            lock.lock()
+            defer { lock.unlock() }
+            guard cachedSignature == signature, let cachedDocuments else { return nil }
+            return cachedDocuments
+        }
+
+        func store(
+            _ dictionary: [String: String],
+            initialized: [String: Bool],
+            signature: [String: WikiFileSignature]
+        ) {
+            lock.lock()
+            defer { lock.unlock() }
+            cachedDictionary = dictionary
+            cachedInitialized = initialized
+            cachedSignature = signature
+        }
+
+        func storeDocuments(_ documents: [WikiDocument], signature: [String: WikiFileSignature]) {
+            lock.lock()
+            defer { lock.unlock() }
+            cachedDocuments = documents
+            cachedSignature = signature
+        }
+
+        func invalidate() {
+            lock.lock()
+            defer { lock.unlock() }
+            cachedDictionary = nil
+            cachedInitialized = nil
+            cachedDocuments = nil
+            cachedSignature = nil
+        }
+    }
+
+    private static let dictionaryCache = WikiDictionaryCache()
+
+    private static func fileSignature(for url: URL) -> WikiFileSignature {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else {
+            return WikiFileSignature(modificationDate: nil, fileSize: 0)
+        }
+        return WikiFileSignature(
+            modificationDate: attributes[.modificationDate] as? Date,
+            fileSize: (attributes[.size] as? NSNumber)?.uint64Value ?? 0
+        )
+    }
+
+    private static func currentFileSignatures() -> [String: WikiFileSignature] {
+        filenames.reduce(into: [:]) { result, entry in
+            result[entry.filename] = fileSignature(for: localURL(for: entry.filename))
+        }
+    }
+
+    /// 测试或外部代码直接写盘后，可调用此方法强制下一次 loadDictionary 重读文件。
+    static func invalidateDictionaryCache() {
+        dictionaryCache.invalidate()
+    }
+
     private static func levenshteinDistance(_ s1: String, _ s2: String) -> Int {
         let empty = [Int](repeating: 0, count: s2.count + 1)
         var last = [Int](0...s2.count)
@@ -83,7 +174,11 @@ enum WikiFileService {
     }
 
     static func loadAllDocuments() -> [WikiDocument] {
-        filenames.compactMap { entry in
+        let signature = currentFileSignatures()
+        if let cached = dictionaryCache.documents(for: signature) {
+            return cached
+        }
+        let documents = filenames.compactMap { entry in
             let url = localURL(for: entry.filename)
             let localContent = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
             let updatedAt = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
@@ -102,27 +197,65 @@ enum WikiFileService {
                 updatedAt: updatedAt ?? Date()
             )
         }
+        dictionaryCache.storeDocuments(documents, signature: signature)
+        return documents
     }
 
-    /// Load documents as a simple [filename: content] dictionary for AI context
+    /// Load documents as a simple [filename: content] dictionary for AI context.
+    /// 带文件签名缓存：内容未变化时直接复用上一次读取结果；
+    /// updateSection / sync 写入后会主动失效，外部直接写盘则靠签名自动失效。
     static func loadDictionary() -> [String: String] {
-        filenames.reduce(into: [:]) { result, entry in
+        let signature = currentFileSignatures()
+        if let cached = dictionaryCache.value(for: signature) {
+            return cached
+        }
+        var dictionary: [String: String] = [:]
+        var initialized: [String: Bool] = [:]
+        for entry in filenames {
             let url = localURL(for: entry.filename)
             let localContent = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
             let bundled = bundledContent(for: entry.filename)
-            result[entry.filename] = canonicalContent(
+            dictionary[entry.filename] = canonicalContent(
                 localContent: localContent,
                 bundledContent: bundled,
                 filename: entry.filename
             )
+            initialized[entry.filename] = Self.isInitialized(
+                localContent: localContent,
+                filename: entry.filename
+            )
         }
+        dictionaryCache.store(dictionary, initialized: initialized, signature: signature)
+        return dictionary
+    }
+
+    /// 只根据「本地文件内容」判断是否已初始化；与 `isUninitialized` 同口径，
+    /// 但可复用 loadDictionary 读取过的 localContent，不重复读盘。
+    private static func isInitialized(localContent: String, filename: String) -> Bool {
+        let trimmedLocal = localContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedLocal.isEmpty else { return false }
+        let defaultContent = defaultContentsByFilename[filename]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedLocal != defaultContent
     }
 
     /// 仅返回「已初始化」文件的字典（空/默认模板文件被剔除）。
     /// AI 上下文专用（A5）：避免把 14 个文件的英文空模板样板发给模型、
     /// 浪费 token 并让模型误以为档案字段已填写。
     static func loadPopulatedDictionary() -> [String: String] {
-        loadDictionary().filter { !isUninitialized($0.key) }
+        // 复用 loadDictionary 的签名缓存和初始化标记，完全不重复读盘。
+        let signature = currentFileSignatures()
+        let dictionary: [String: String]
+        let initialized: [String: Bool]
+        if let cached = dictionaryCache.value(for: signature),
+           let cachedInitialized = dictionaryCache.initialized(for: signature) {
+            dictionary = cached
+            initialized = cachedInitialized
+        } else {
+            dictionary = loadDictionary()
+            initialized = dictionaryCache.initialized(for: signature) ?? [:]
+        }
+        return dictionary.filter { initialized[$0.key] == true }
     }
 
     private static func canonicalContent(localContent: String, bundledContent: String, filename: String) -> String {
@@ -200,6 +333,7 @@ enum WikiFileService {
         }
 
         try newContent.write(to: url, atomically: true, encoding: .utf8)
+        dictionaryCache.invalidate()
         return true
     }
 
@@ -530,6 +664,7 @@ public enum WikiSyncManager {
                 if !isTemplate {
                     try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
                     try? doc.content.write(to: url, atomically: true, encoding: .utf8)
+                    WikiFileService.invalidateDictionaryCache()
                 }
             }
             
@@ -619,7 +754,7 @@ enum WikiProfileMaterializer {
         modelContext: ModelContext? = nil
     ) {
         let filename = "profile.md"
-        var content = WikiFileService.localContent(for: filename)
+        let content = WikiFileService.localContent(for: filename)
 
         var updates: [(aliases: [String], line: String)] = []
         // 联通专项批次 2：清空手填字段时删除 wiki 对应行——此前只写不删，

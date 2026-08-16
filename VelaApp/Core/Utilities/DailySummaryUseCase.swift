@@ -180,21 +180,9 @@ final class DailySummaryUseCase {
             snapshots42 = []
         }
 
-        // 2b. 三年长线基准（Layer 1/2/3 同源）：全量每日记录 → LongTermBaselineEngine。
-        // 回填后约 1100 行，中位/分位/同比计算在毫秒级；未回填时自动退化为空报告。
-        // 全量记录只取一次，后面 BodyModelBuilder 复用同一份，避免重复全表 fetch。
+        // 2b. 三年长线基准延后到确认今日快照存在后再计算：空启动/无今日数据时
+        // 不必先全表抓 1100 天记录再返回空 dashboard。
         var allDailySummaryRecords: [DailyHealthSummaryRecord] = []
-        let longTermReport: LongTermBaselineReport
-        if let modelContext {
-            allDailySummaryRecords = (try? modelContext.fetch(FetchDescriptor<DailyHealthSummaryRecord>())) ?? []
-            longTermReport = LongTermBaselineEngine.compute(
-                points: allDailySummaryRecords.map(\.longTermBaselinePoint),
-                today: now,
-                calendar: calendar
-            )
-        } else {
-            longTermReport = LongTermBaselineEngine.compute(points: [], today: now, calendar: calendar)
-        }
         
         // 3. Locate today's snapshot
         let todaySnapshot = snapshots42.first(where: { calendar.isDate($0.date, inSameDayAs: now) })
@@ -226,6 +214,20 @@ final class DailySummaryUseCase {
             #endif
         }
         
+        // 4b. 三年长线基准（Layer 1/2/3 同源）：全量每日记录只取一次，
+        // 后面 BodyModelBuilder 复用同一份，避免重复全表 fetch。
+        let longTermReport: LongTermBaselineReport
+        if let modelContext {
+            allDailySummaryRecords = (try? modelContext.fetch(FetchDescriptor<DailyHealthSummaryRecord>())) ?? []
+            longTermReport = LongTermBaselineEngine.compute(
+                points: allDailySummaryRecords.map(\.longTermBaselinePoint),
+                today: now,
+                calendar: calendar
+            )
+        } else {
+            longTermReport = LongTermBaselineEngine.compute(points: [], today: now, calendar: calendar)
+        }
+
         // 5. Build clean DailyHealthContext and historical rolling baselines from snapshots
         let baselineSnapshots = snapshots42.filter {
             !calendar.isDate($0.date, inSameDayAs: now)

@@ -248,7 +248,7 @@ enum PersonalBaselineEngine {
         if let longTerm {
             markdown += "\n" + LongTermBaselineEngine.formatForWiki(longTerm)
         }
-        try? WikiFileService.updateSection(filename: "baselines.md", content: markdown, mode: .replace)
+        _ = try? WikiFileService.updateSection(filename: "baselines.md", content: markdown, mode: .replace)
     }
 
     // MARK: - Load from Wiki

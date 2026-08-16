@@ -412,7 +412,7 @@ struct WikiProfileView: View {
             fieldValues: fieldValues,
             preferredOrder: draftFields.map(\.label)
         )
-        try? WikiFileService.updateSection(filename: doc.filename, content: newContent, mode: .replace)
+        _ = try? WikiFileService.updateSection(filename: doc.filename, content: newContent, mode: .replace)
         
         WikiSyncManager.sync(modelContext: modelContext)
         
