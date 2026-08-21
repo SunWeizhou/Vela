@@ -166,17 +166,16 @@ struct MetricTrendsSection: View {
     let items: [TrendItem]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             Text("趋势")
-                .font(VelaTheme.footnote())
-                .fontWeight(.bold)
-                .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
+                .font(VelaTheme.footnote().weight(.bold))
+                .foregroundStyle(VelaTheme.rhythmInk)
             
             VStack(spacing: 0) {
                 if items.isEmpty {
                     Label("积累更多数据后显示长期变化", systemImage: "chart.line.uptrend.xyaxis")
                         .font(VelaTheme.footnote())
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(16)
                 } else {
@@ -186,11 +185,10 @@ struct MetricTrendsSection: View {
                                 HStack(spacing: 6) {
                                     Image(systemName: item.icon)
                                         .font(.system(size: 12))
-                                        .foregroundStyle(VelaTheme.muted)
+                                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                     Text(item.title)
-                                        .font(VelaTheme.caption1())
-                                        .fontWeight(.semibold)
-                                        .foregroundStyle(VelaTheme.muted)
+                                        .font(VelaTheme.caption1().weight(.semibold))
+                                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                     Spacer()
                                 }
                                 
@@ -199,7 +197,7 @@ struct MetricTrendsSection: View {
                                         Text(item.value)
                                             .font(.system(size: 20, weight: .bold, design: .rounded))
                                             .monospacedDigit()
-                                            .foregroundStyle(VelaTheme.fg)
+                                            .foregroundStyle(VelaTheme.rhythmInk)
                                         Text(item.statusLabel)
                                             .font(.system(size: 10, weight: .bold))
                                             .foregroundStyle(item.statusColor)
@@ -212,7 +210,7 @@ struct MetricTrendsSection: View {
                                     } else {
                                         Text("无可用趋势")
                                             .font(VelaTheme.caption2())
-                                            .foregroundStyle(VelaTheme.muted)
+                                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                             .frame(width: 85, height: 32)
                                     }
                                 }
@@ -226,10 +224,10 @@ struct MetricTrendsSection: View {
                     }
                 }
             }
-            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
+                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
             )
         }
     }

@@ -18,17 +18,17 @@ struct JournalEntryCard: View {
                 HStack(spacing: 6) {
                     Text(entry.uiDisplayTitle)
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(VelaTheme.fg)
+                        .foregroundStyle(VelaTheme.rhythmInk)
                     
                     Text(entry.createdAt.formatted(.dateTime.hour().minute()))
                         .font(.system(size: 11))
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 
                 if !entry.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(entry.note)
                         .font(.system(size: 12))
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .lineLimit(2)
                 }
             }
@@ -40,7 +40,7 @@ struct JournalEntryCard: View {
             } label: {
                 Image(systemName: "trash")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .frame(width: 28, height: 28)
                     .background(Circle().fill(VelaTheme.rhythmMist.opacity(0.4)))
             }
@@ -50,11 +50,11 @@ struct JournalEntryCard: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(VelaTheme.cardBg)
-        .clipShape(RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
+        .background(VelaTheme.rhythmCanvasRaised)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         )
     }
 }

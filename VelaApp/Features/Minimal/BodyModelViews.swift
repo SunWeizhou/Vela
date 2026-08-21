@@ -8,6 +8,9 @@ struct BodyModelEditView: View {
     
     @Query(sort: \OnboardingState.updatedAt, order: .reverse)
     private var onboardingStates: [OnboardingState]
+
+    @Query(sort: \TrainingResponseRecord.date, order: .reverse)
+    private var trainingResponses: [TrainingResponseRecord]
     
     private var onboarding: OnboardingState? { onboardingStates.first }
     
@@ -16,6 +19,7 @@ struct BodyModelEditView: View {
     @State private var weeklyTrainingDays = 3
     @State private var sessionDurationMinutes = 45
     @State private var experienceLevel = "intermediate"
+    @State private var nextRotationFocus = "back"
     @State private var coachStyle = "direct"
     @State private var hasGym = true
     @State private var hasHomeEquipment = true
@@ -71,6 +75,17 @@ struct BodyModelEditView: View {
                     }
                 }
             }
+
+            Section(header: Text("训练轮转")) {
+                LabeledContent("轮转顺序", value: "背 · 胸 · 肩 · 腿 · 手臂核心")
+
+                Picker("下一站", selection: $nextRotationFocus) {
+                    ForEach(TrainingRotationResolver.defaultFocuses, id: \.self) { focus in
+                        Text(TrainingRotationResolver.title(for: focus)).tag(focus)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
             
             Section(header: Text("训练设备")) {
                 Toggle(localizedOnboardingEquipment("gym"), isOn: $hasGym)
@@ -124,6 +139,10 @@ struct BodyModelEditView: View {
         trainingStyle = state.trainingPreference.trainingStyle
         weeklyTrainingDays = state.trainingPreference.weeklyTrainingDays
         sessionDurationMinutes = state.trainingPreference.sessionDurationMinutes
+        nextRotationFocus = TrainingRotationResolver.nextFocus(
+            profile: state.trainingPreference,
+            recentResponses: trainingResponses.map(\.dto)
+        )
         
         let equip = state.equipmentProfile.equipment
         hasGym = equip.contains("gym")
@@ -137,16 +156,17 @@ struct BodyModelEditView: View {
         let state = onboarding ?? OnboardingState()
         state.goalProfile = UserGoalProfile(
             primaryGoal: primaryGoal,
-            // 训练风格属于 trainingPreference，不应混入「次要目标」。
-            secondaryGoals: [],
+            secondaryGoals: state.goalProfile.secondaryGoals,
             experienceLevel: experienceLevel,
-            bodyConcerns: []
+            bodyConcerns: state.goalProfile.bodyConcerns
         )
         state.trainingPreference = TrainingPreferenceProfile(
             trainingStyle: trainingStyle,
             weeklyTrainingDays: weeklyTrainingDays,
             sessionDurationMinutes: sessionDurationMinutes,
-            preferredTrainingDays: []
+            preferredTrainingDays: state.trainingPreference.preferredTrainingDays,
+            rotationFocuses: TrainingRotationResolver.defaultFocuses,
+            nextRotationFocus: nextRotationFocus
         )
         
         var equip: [String] = []
@@ -198,23 +218,23 @@ struct BaselineRangeIndicator: View {
                 if let baseVal = baseline {
                     Text("基线: \(Int(baseVal))\(unit)")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 } else {
-                    Text("个人基线积累中（至少 7 天）")
-                        .font(.system(size: 11))
-                        .foregroundStyle(VelaTheme.muted)
+                    Text("基线积累中")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 
                 Spacer()
                 
                 if let todayVal = today {
-                    Text("今日当前: \(Int(todayVal))\(unit)")
+                    Text("今日: \(Int(todayVal))\(unit)")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(VelaTheme.accent)
+                        .foregroundStyle(VelaTheme.rhythmDeep)
                 } else {
-                    Text("今日当前: --")
-                        .font(.system(size: 11))
-                        .foregroundStyle(VelaTheme.muted)
+                    Text("今日: --")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
             }
             
@@ -222,19 +242,19 @@ struct BaselineRangeIndicator: View {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         Capsule()
-                            .fill(VelaTheme.separatorSoft)
+                            .fill(VelaTheme.rhythmMist)
                             .frame(height: 6)
 
                         let width = geo.size.width
                         let startPct = 0.35
                         let endPct = 0.65
                         Capsule()
-                            .fill(VelaTheme.accent.opacity(0.18))
+                            .fill(VelaTheme.rhythmDeep.opacity(0.18))
                             .frame(width: width * (endPct - startPct), height: 6)
                             .offset(x: width * startPct)
                         
                         Rectangle()
-                            .fill(VelaTheme.muted)
+                            .fill(VelaTheme.rhythmInkSecondary)
                             .frame(width: 1.5, height: 10)
                             .offset(x: width * 0.5, y: -2)
                         
@@ -242,18 +262,14 @@ struct BaselineRangeIndicator: View {
                             let pct = 0.5 + (tod - base) / (base * 0.4)
                             let clampedPct = min(max(pct, 0.05), 0.95)
                             Circle()
-                                .fill(VelaTheme.accent)
+                                .fill(VelaTheme.rhythmDeep)
                                 .frame(width: 10, height: 10)
-                                .shadow(color: VelaTheme.accent.opacity(0.5), radius: 3)
+                                .shadow(color: VelaTheme.rhythmDeep.opacity(0.4), radius: 3)
                                 .offset(x: width * clampedPct - 5, y: -2)
                         }
                     }
                 }
                 .frame(height: 10)
-            } else {
-                Text("收集到足够的历史有效样本后，会在这里显示个人范围。")
-                    .font(.system(size: 10))
-                    .foregroundStyle(VelaTheme.muted)
             }
         }
     }
@@ -408,11 +424,11 @@ struct BodyModelDetailView: View {
         HStack {
             Text(title)
                 .font(.system(size: 14))
-                .foregroundStyle(VelaTheme.fg)
+                .foregroundStyle(VelaTheme.rhythmInk)
             Spacer()
             Text(value)
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(VelaTheme.muted)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -422,13 +438,13 @@ struct BodyModelDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("生理稳态系统标定 (28天生理基线)")
                 .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(VelaTheme.muted)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
             
             VStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("自主神经张力基线 (HRV / 心率变异性)")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(VelaTheme.fg)
+                        .foregroundStyle(VelaTheme.rhythmInk)
                     BaselineRangeIndicator(
                         today: dashboard.recoveryMetrics.hrvMilliseconds,
                         baseline: dashboard.recoveryBaseline.hrvMilliseconds,
@@ -441,7 +457,7 @@ struct BodyModelDetailView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("心脏负荷恢复基线 (RHR / 静息心率)")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(VelaTheme.fg)
+                        .foregroundStyle(VelaTheme.rhythmInk)
                     BaselineRangeIndicator(
                         today: dashboard.recoveryMetrics.restingHeartRate,
                         baseline: dashboard.recoveryBaseline.restingHeartRate,
@@ -454,7 +470,7 @@ struct BodyModelDetailView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("自主神经呼吸恢复 (Respiratory Rate / 呼吸频率)")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(VelaTheme.fg)
+                        .foregroundStyle(VelaTheme.rhythmInk)
                     BaselineRangeIndicator(
                         today: dashboard.recoveryMetrics.respiratoryRate,
                         baseline: dashboard.recoveryBaseline.respiratoryRate,
@@ -467,22 +483,22 @@ struct BodyModelDetailView: View {
                 HStack {
                     Text("最大摄氧量标定 (VO2 Max)")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(VelaTheme.fg)
+                        .foregroundStyle(VelaTheme.rhythmInk)
                     Spacer()
                     if let vo2Max = dashboard.bodyMetrics.vo2Max {
                         Text("\(String(format: "%.1f", vo2Max)) mL/kg/min")
                             .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundStyle(VelaTheme.accent)
+                            .foregroundStyle(VelaTheme.rhythmDeep)
                     } else {
                         Text("暂无数据 (Apple Watch 户外跑/步行校准)")
                             .font(.system(size: 12))
-                            .foregroundStyle(VelaTheme.muted)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                 }
             }
             .padding(16)
-            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+            .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
         }
     }
     

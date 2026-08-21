@@ -40,12 +40,9 @@ struct TodayCoachPreview: View {
                 .frame(width: 38, height: 38)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Vela 教练 · 今日解读")
+                    Text("Vela 洞察")
                         .font(VelaTheme.headline().weight(.bold))
-                        .foregroundStyle(VelaTheme.fg)
-                    Text("已读取今日身体状态与训练决策")
-                        .font(VelaTheme.caption2())
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInk)
                 }
 
                 Spacer(minLength: 8)
@@ -58,7 +55,7 @@ struct TodayCoachPreview: View {
 
             Text(model.coachPreview)
                 .font(VelaTheme.subheadline())
-                .foregroundStyle(VelaTheme.fg2)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -68,10 +65,10 @@ struct TodayCoachPreview: View {
                         ForEach(Array(model.evidenceChips.prefix(4)), id: \.self) { evidence in
                             Label(localizedReason(evidence), systemImage: "waveform.path.ecg")
                                 .font(VelaTheme.caption2().weight(.semibold))
-                                .foregroundStyle(VelaTheme.fg2)
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                 .padding(.horizontal, 9)
                                 .padding(.vertical, 6)
-                                .background(VelaTheme.fillSoft, in: Capsule())
+                                .background(VelaTheme.rhythmMist.opacity(0.4), in: Capsule())
                         }
                     }
                 }
@@ -82,7 +79,7 @@ struct TodayCoachPreview: View {
 
             Text("继续问 Vela")
                 .font(VelaTheme.caption1().weight(.bold))
-                .foregroundStyle(VelaTheme.muted)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
 
             ScrollView(.horizontal) {
                 HStack(spacing: 8) {
@@ -92,16 +89,16 @@ struct TodayCoachPreview: View {
                         } label: {
                             Label(prompt.label, systemImage: prompt.icon)
                                 .font(VelaTheme.footnote().weight(.semibold))
-                                .foregroundStyle(VelaTheme.fg)
+                                .foregroundStyle(VelaTheme.rhythmInk)
                                 .padding(.horizontal, 12)
                                 .frame(height: 38)
                                 .background(
                                     RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                                        .fill(VelaTheme.surface)
+                                        .fill(VelaTheme.rhythmCanvas)
                                 )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                                        .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+                                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
                                 )
                         }
                         .buttonStyle(.cardPress)

@@ -459,7 +459,9 @@ struct VelaOnboardingView: View {
             trainingStyle: trainingStyle,
             weeklyTrainingDays: weeklyTrainingDays,
             sessionDurationMinutes: sessionDurationMinutes,
-            preferredTrainingDays: []
+            preferredTrainingDays: [],
+            rotationFocuses: TrainingRotationResolver.defaultFocuses,
+            nextRotationFocus: TrainingRotationResolver.defaultFocuses.first
         )
         state.equipmentProfile = EquipmentProfile(
             equipment: selectedEquipment,

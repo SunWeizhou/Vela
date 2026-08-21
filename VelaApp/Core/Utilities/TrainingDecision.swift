@@ -64,6 +64,9 @@ struct TrainingDecisionInput {
     var longTermTrainingVolume: TrainingVolumeLongTerm?
     /// 用户反馈闭环校准（Layer 3：结合近期 14 天决策反馈微调容量偏置）。
     var feedbackCalibration: DecisionFeedbackCalibration?
+    /// The next focus in the user's lightweight rotation when no multi-week plan
+    /// is active. This lets Apple Watch remain the execution surface.
+    var rotationFocus: String?
 
     init(
         bodyState: BodyState,
@@ -72,7 +75,8 @@ struct TrainingDecisionInput {
         userConstraints: [String] = [],
         workoutEvents: [WorkoutEventDTO] = [],
         longTermTrainingVolume: TrainingVolumeLongTerm? = nil,
-        feedbackCalibration: DecisionFeedbackCalibration? = nil
+        feedbackCalibration: DecisionFeedbackCalibration? = nil,
+        rotationFocus: String? = nil
     ) {
         self.bodyState = bodyState
         self.activePlan = activePlan
@@ -81,6 +85,90 @@ struct TrainingDecisionInput {
         self.workoutEvents = workoutEvents
         self.longTermTrainingVolume = longTermTrainingVolume
         self.feedbackCalibration = feedbackCalibration
+        self.rotationFocus = rotationFocus
+    }
+}
+
+enum TrainingRotationResolver {
+    static let defaultFocuses = ["back", "chest", "shoulders", "legs", "accessories"]
+
+    static func focuses(for profile: TrainingPreferenceProfile?) -> [String] {
+        let configured = profile?.rotationFocuses?
+            .map(normalize)
+            .filter { defaultFocuses.contains($0) } ?? []
+        return configured.isEmpty ? defaultFocuses : Array(configured.uniqued())
+    }
+
+    static func nextFocus(
+        profile: TrainingPreferenceProfile?,
+        recentResponses: [TrainingResponseDTO]
+    ) -> String {
+        let order = focuses(for: profile)
+        if let explicit = profile?.nextRotationFocus.map(normalize), order.contains(explicit) {
+            return explicit
+        }
+        // An optional check-in with no selected focus is not evidence that the
+        // rotation restarted. Keep looking for the latest meaningful focus tag.
+        guard let latest = recentResponses
+            .filter({ !$0.primaryMuscleGroups.isEmpty })
+            .max(by: { $0.date < $1.date }) else {
+            return order[0]
+        }
+        return focus(after: latest.primaryMuscleGroups, order: order)
+    }
+
+    static func focus(
+        after completedGroups: [String],
+        profile: TrainingPreferenceProfile?
+    ) -> String {
+        focus(after: completedGroups, order: focuses(for: profile))
+    }
+
+    static func focus(after completedGroups: [String], order: [String]) -> String {
+        let normalized = Set(completedGroups.map(normalize))
+        guard let index = order.firstIndex(where: normalized.contains) else {
+            return order[0]
+        }
+        return order[(index + 1) % order.count]
+    }
+
+    static func title(for focus: String) -> String {
+        switch normalize(focus) {
+        case "back": return "背部"
+        case "chest": return "胸部"
+        case "shoulders": return "肩部"
+        case "legs": return "腿部"
+        case "accessories": return "手臂与核心"
+        default: return "自由训练"
+        }
+    }
+
+    static func muscleKeys(for focus: String) -> Set<String> {
+        switch normalize(focus) {
+        case "back": return ["back"]
+        case "chest": return ["chest"]
+        case "shoulders": return ["shoulders"]
+        case "legs": return ["legs", "quads", "hamstrings", "glutes"]
+        case "accessories": return ["accessories", "arms", "biceps", "triceps", "core", "abs"]
+        default: return []
+        }
+    }
+
+    static func normalize(_ raw: String) -> String {
+        let value = raw.lowercased()
+        if ["back", "pull", "背"].contains(where: value.contains) { return "back" }
+        if ["chest", "push", "胸"].contains(where: value.contains) { return "chest" }
+        if ["shoulder", "deltoid", "肩"].contains(where: value.contains) { return "shoulders" }
+        if ["leg", "quad", "hamstring", "glute", "腿"].contains(where: value.contains) { return "legs" }
+        if ["accessories", "arm", "biceps", "triceps", "core", "abs", "手臂", "腹", "核心"].contains(where: value.contains) { return "accessories" }
+        return value
+    }
+}
+
+private extension Sequence where Element: Hashable {
+    func uniqued() -> [Element] {
+        var seen = Set<Element>()
+        return filter { seen.insert($0).inserted }
     }
 }
 
@@ -126,6 +214,8 @@ struct TrainingDecisionKernel: Sendable {
                     }
                 }
             }
+        } else if let rotationFocus = input.rotationFocus {
+            targetMuscles.formUnion(TrainingRotationResolver.muscleKeys(for: rotationFocus))
         }
         
         // 3. Compare target muscles with local fatigue
@@ -347,7 +437,10 @@ struct TrainingDecisionKernel: Sendable {
         case .unavailable: 0.3
         }
         
-        let finalTitle = todayScheduledDay?.title ?? activePlan?.title ?? "自由训练"
+        let finalTitle = todayScheduledDay?.title
+            ?? activePlan?.title
+            ?? input.rotationFocus.map(TrainingRotationResolver.title)
+            ?? "自由训练"
         
         return DailyTrainingDecision(
             decision: type,
@@ -357,7 +450,7 @@ struct TrainingDecisionKernel: Sendable {
             reasons: reasons,
             userFacingSummary: summary,
             confidence: confidence,
-            source: "BodyStateKernel + TrainingDecisionKernel v2",
+            source: "BodyStateKernel + TrainingDecisionKernel v3",
             safetyNotice: "仅提供一般健康与训练建议，不构成医疗诊断；如出现异常症状，请停止训练并寻求专业帮助。"
         )
     }

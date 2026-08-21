@@ -54,6 +54,18 @@ struct VelaTodayView: View {
         dashboardVM.todayExperience ?? makeTodayExperience()
     }
 
+    private var primarySignalCards: [TodayExperienceSignalCard] {
+        let ids: [String] = switch todayCommandState.readinessDecision.decision {
+        case .keep: ["recovery", "sleep", "energy"]
+        case .reduce: ["recovery", "strain", "sleep"]
+        case .swap: ["strain", "recovery", "stress"]
+        case .recover: ["recovery", "sleep", "stress"]
+        }
+        return ids.compactMap { id in
+            todayExperience.signalCards.first(where: { $0.id == id })
+        }
+    }
+
     /// 兜底路径也要用真实力量训练数据，避免今日决策与训练页不一致。
     func fallbackKernelDecision() -> DailyTrainingDecision {
         return TrainingDecisionKernel().decide(input: TrainingDecisionInput(
@@ -86,44 +98,68 @@ struct VelaTodayView: View {
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Image(systemName: "sparkles")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(conflicted ? VelaTheme.rhythmInkSecondary : VelaTheme.rhythmDeep)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(
+                        conflicted
+                            ? VelaTheme.rhythmInkSecondary
+                            : VelaTheme.rhythmDeep
+                    )
                 Text("AI 增强 · 今日解读")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(conflicted ? VelaTheme.rhythmInkSecondary : VelaTheme.rhythmDeep)
                 Spacer()
             }
+
             Text(insight.interpretation)
-                .font(.system(size: 13))
+                .font(.system(size: 13, weight: .regular))
                 .foregroundStyle(conflicted ? VelaTheme.rhythmInkSecondary.opacity(0.8) : VelaTheme.rhythmInk)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
+
             if conflicted {
                 Label("AI 与本机判断不一致，以本机今日决定为准", systemImage: "exclamationmark.triangle")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(VelaTheme.stressColor)
             } else if !insight.evidence.isEmpty {
-                ForEach(insight.evidence.prefix(3), id: \.self) { line in
-                    HStack(alignment: .top, spacing: 7) {
-                        Circle()
-                            .fill(VelaTheme.rhythmDeep.opacity(0.6))
-                            .frame(width: 5, height: 5)
-                            .padding(.top, 5)
-                        Text(line)
-                            .font(.system(size: 12))
-                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                            .lineSpacing(2)
-                            .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(insight.evidence.prefix(3), id: \.self) { line in
+                        HStack(alignment: .top, spacing: 7) {
+                            Circle()
+                                .fill(VelaTheme.rhythmDeep.opacity(0.7))
+                                .frame(width: 4, height: 4)
+                                .padding(.top, 6)
+                            Text(line)
+                                .font(.system(size: 12))
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                                .lineSpacing(2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
+                .padding(.top, 2)
             }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(VelaTheme.rhythmCanvasRaised)
+        )
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Color.purple.opacity(0.35),
+                            Color.pink.opacity(0.30),
+                            Color.cyan.opacity(0.30),
+                            Color.mint.opacity(0.35)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1.0
+                )
         }
     }
 
@@ -235,6 +271,45 @@ struct VelaTodayView: View {
         return "\(dateHeaderString(for: dashboardVM.selectedDate))\n恢复 \(recoveryText) · 睡眠 \(sleepText) · 负荷 \(strainText)\n\(coachMessage)"
     }
 
+    private func signalAccentColor(_ accent: DailyPlanAccent) -> Color {
+        switch accent {
+        case .recovery: return VelaTheme.recoveryColor
+        case .sleep:    return VelaTheme.sleepColor
+        case .strain:   return VelaTheme.strainColor
+        case .stress:   return VelaTheme.stressColor
+        case .energy:   return VelaTheme.energyColor
+        }
+    }
+
+    @ViewBuilder
+    private var personalResponseInsightView: some View {
+        if dashboardVM.isToday, let insightLine = dashboard.bodyModelState?.insightLine() {
+            NavigationLink(destination: BodyModelDetailView()) {
+                HStack(spacing: 8) {
+                    Image(systemName: "waveform.path.ecg")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                    Text(insightLine)
+                        .font(.system(size: 12))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        .lineSpacing(2)
+                        .lineLimit(2)
+                    Spacer(minLength: 6)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.6))
+                }
+                .padding(12)
+                .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+                }
+            }
+            .buttonStyle(.cardPress)
+        }
+    }
+
     // Dynamic Weather Sync States
     @State var weatherTemp: String = "--"
     @State var weatherLocation: String = "天气数据待同步"
@@ -299,23 +374,23 @@ struct VelaTodayView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(VelaTheme.systemRed)
+                        .foregroundStyle(VelaTheme.stressColor)
                     Text(errorMessage)
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(VelaTheme.fg)
+                        .foregroundStyle(VelaTheme.rhythmInk)
                 }
                 if let suggestion = dashboardVM.currentError?.recoverySuggestion {
                     Text(suggestion)
                         .font(.system(size: 12))
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 16).fill(VelaTheme.cardBg))
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
             .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(VelaTheme.systemRed.opacity(0.3), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(VelaTheme.stressColor.opacity(0.3), lineWidth: 1)
             )
         }
     }
@@ -329,6 +404,7 @@ struct VelaTodayView: View {
                         .padding(.bottom, 8)
                 }
 
+                // ─── Block 1: Integrated Rhythm Horizon Hero (Tri-Dials + Headline + CTA + Curve) ───
                 VelaRhythmHorizonHero(
                     model: todayExperience,
                     state: todayCommandState,
@@ -341,65 +417,50 @@ struct VelaTodayView: View {
                     onOpenPlan: { showTodayEvidence = true },
                     onAskCoach: { showCoach = true }
                 )
+                .padding(.horizontal, VelaTheme.pagePadding)
+                .padding(.top, 4)
 
-                // 深度专项批次 4（管线 A）：AI 今日解读——本机结论永远优先；
-                // AI 与本机不一致时整卡降级并标注。
-                if dashboardVM.isToday, let insight = todayAIInsight {
-                    aiInsightCard(insight)
-                        .padding(.horizontal, VelaTheme.pagePadding)
-                        .padding(.top, 14)
-                }
-
-                // 联通专项批次 2：主流程一句 Personal Response Insight（点击进证据页）。
-                if dashboardVM.isToday, let insightLine = dashboard.bodyModelState?.insightLine() {
-                    NavigationLink(destination: BodyModelDetailView()) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "waveform.path.ecg")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(VelaTheme.rhythmDeep)
-                            Text(insightLine)
-                                .font(.system(size: 12))
-                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                                .lineSpacing(2)
-                                .lineLimit(2)
-                            Spacer(minLength: 6)
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.6))
-                        }
-                        .padding(12)
-                        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+                // ─── Block 2: Key Vital Stats (HRV / RHR / SpO₂ / Sleep 2×2 Grid) ───
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("关键体征")
+                        .font(VelaTheme.headline())
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                    TodayVitalsGrid(cards: vitalCards) { kind in
+                        switch kind {
+                        case .hrv:   showMetricDetail = .hrv
+                        case .rhr:   showMetricDetail = .rhr
+                        case .spo2:  showMetricDetail = .bloodOxygen
+                        case .sleep: showMetricDetail = .sleep
                         }
                     }
-                    .buttonStyle(.cardPress)
-                    .padding(.horizontal, VelaTheme.pagePadding)
-                    .padding(.top, 8)
                 }
+                .padding(.horizontal, VelaTheme.pagePadding)
+                .padding(.top, 24)
 
-                VStack(alignment: .leading, spacing: 34) {
+                VStack(alignment: .leading, spacing: 30) {
+                    // ─── Block 3: Action Sequence (今天的重点) ───
                     VelaRhythmActionSequence(
                         actions: todayExperience.actions,
                         onAction: { performExperienceAction($0) },
                         onEvidence: { showTodayEvidence = true }
                     )
 
-                    VelaRhythmSignalLandscape(
-                        signals: todayExperience.signalCards,
-                        onSignal: { signal in
-                            switch signal.id {
-                            case "recovery": showMetricDetail = .recovery
-                            case "sleep": showMetricDetail = .sleep
-                            case "strain": showMetricDetail = .strain
-                            case "stress": showMetricDetail = .stress
-                            case "energy": showMetricDetail = .energy
-                            default: showTodayEvidence = true
-                            }
-                        }
+                    // ─── Block 4: Stress & Energy Gauge Cards ───
+                    TodaySignalGrid(
+                        model: todayExperience,
+                        freshness: dataCoverageSummary.status == .unknown ? .missing : .today,
+                        accentColor: signalAccentColor
                     )
 
+                    // ─── Block 5: AI Insight Card ───
+                    if dashboardVM.isToday, let insight = todayAIInsight {
+                        aiInsightCard(insight)
+                    }
+
+                    // ─── Block 6: Personal Response Insight ───
+                    personalResponseInsightView
+
+                    // ─── Block 7: Feedback + Data Coverage ───
                     if persistedOperatingPlan != nil {
                         DailyDecisionFeedbackCard(
                             record: dailyDecisionFeedback,

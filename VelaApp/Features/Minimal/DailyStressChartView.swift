@@ -136,18 +136,18 @@ struct DailyStressChartView: View {
                 .chartXAxis {
                     AxisMarks(values: .stride(by: .hour, count: 4)) { _ in
                         AxisValueLabel(format: .dateTime.hour())
-                            .foregroundStyle(VelaTheme.muted)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                 }
                 .chartYAxis {
                     AxisMarks(position: .leading, values: [0, 50, 100]) { value in
-                        AxisGridLine().foregroundStyle(VelaTheme.borderSoft)
+                        AxisGridLine().foregroundStyle(VelaTheme.rhythmMist)
                         AxisValueLabel {
                             if let score = value.as(Int.self) {
                                 Text("\(score)")
                             }
                         }
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                 }
                 .accessibilityLabel(metric == .stress ? "日内压力趋势" : "日内能量趋势")
@@ -156,14 +156,10 @@ struct DailyStressChartView: View {
                 VStack(spacing: 8) {
                     Image(systemName: "chart.line.uptrend.xyaxis")
                         .font(.system(size: 24, weight: .medium))
-                        .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.5))
                     Text(metric.emptyTitle)
                         .font(VelaTheme.subheadline().weight(.semibold))
-                        .foregroundStyle(isSleep ? VelaTheme.sleepText : VelaTheme.fg)
-                    Text("Apple 健康提供足够的逐点心率与活动数据后显示。")
-                        .font(VelaTheme.caption2())
-                        .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
-                        .multilineTextAlignment(.center)
+                        .foregroundStyle(VelaTheme.rhythmInk)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }

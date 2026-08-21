@@ -289,6 +289,14 @@ struct CoachContextAssembler {
                 let coaching = onboarding.coachingPreference
                 var profileParts = ["训练目标 \(goal.primaryGoal)", "训练风格 \(training.trainingStyle)"]
                 if training.weeklyTrainingDays > 0 { profileParts.append("每周 \(training.weeklyTrainingDays) 次") }
+                let rotation = TrainingRotationResolver.focuses(for: training)
+                    .map(TrainingRotationResolver.title)
+                    .joined(separator: "→")
+                profileParts.append("训练轮转 \(rotation)")
+                let nextFocus = training.nextRotationFocus
+                    ?? TrainingRotationResolver.focuses(for: training).first
+                    ?? "back"
+                profileParts.append("下一训练部位 \(TrainingRotationResolver.title(for: nextFocus))")
                 profileParts.append("教练风格 \(coaching.style)")
                 casualProfile += "\n\n## 用户身体模型\n" + profileParts.joined(separator: "，")
             }

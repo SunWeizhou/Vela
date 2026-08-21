@@ -13,6 +13,9 @@ struct VelaTrainingView: View {
     @EnvironmentObject private var services: VelaServices
     @ObservedObject private var appState = VelaAppState.shared
 
+    @Query(sort: \OnboardingState.updatedAt, order: .reverse)
+    private var onboardingStates: [OnboardingState]
+
     private static let lookbackDays = 90
     private var trainingLookbackStart: Date {
         Calendar.current.date(byAdding: .day, value: -Self.lookbackDays, to: dashboardVM.selectedDate) ?? dashboardVM.selectedDate
@@ -33,6 +36,16 @@ struct VelaTrainingView: View {
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
     private var activePlan: TrainingPlanRecord? {
         trainingPlans.first(where: { $0.isActive })
+    }
+    private var trainingPreference: TrainingPreferenceProfile? {
+        onboardingStates.first?.trainingPreference
+    }
+    private var rotationFocus: String? {
+        guard activePlan == nil else { return nil }
+        return TrainingRotationResolver.nextFocus(
+            profile: trainingPreference,
+            recentResponses: trainingResponses.map(\.dto)
+        )
     }
     private var todayPlan: DailyOperatingPlanRecord? {
         let identifier = DailyHealthSummaryRecord.dayIdentifier(for: dashboardVM.selectedDate)
@@ -116,6 +129,8 @@ struct VelaTrainingView: View {
                     todaySession: todaySession,
                     todayPlan: todayPlan,
                     activePlan: activePlan,
+                    rotationFocus: rotationFocus,
+                    preferredSessionMinutes: trainingPreference?.sessionDurationMinutes ?? 60,
                     summary: strengthSummary,
                     evidenceMetrics: trainingEvidenceMetrics,
                     heatmapWeeks: heatmapWeeks,
@@ -137,13 +152,6 @@ struct VelaTrainingView: View {
                             )
                         }
                     }
-
-                    TrainingStatusSection(
-                        decision: todayDecision,
-                        onDiscussWithCoach: {
-                            VelaAppState.shared.routeToCoach(question: trainingAnalysisQuestion)
-                        }
-                    )
 
                     TrainingMuscleLandscape(
                         summary: strengthSummary,
@@ -533,6 +541,8 @@ struct VelaTrainingView: View {
             recoveryScore: dashboardVM.dashboard.recovery.hasData
                 ? dashboardVM.dashboard.recovery.score
                 : nil,
+            rotationFocuses: TrainingRotationResolver.focuses(for: trainingPreference),
+            currentFocus: rotationFocus,
             days: 2
         )
     }
@@ -1354,8 +1364,6 @@ private struct TrainingDeepAnalysisView: View {
                     recentWorkouts: recentWorkouts,
                     strengthWorkout: strengthWorkout
                 )
-
-                VelaHealthSyncNote()
             }
             .padding(.horizontal, VelaTheme.pagePadding)
             .padding(.top, 18)

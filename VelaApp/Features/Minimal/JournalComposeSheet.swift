@@ -18,36 +18,42 @@ struct BehaviorQuickNoteSheet: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Label("随手记", systemImage: "text.bubble.fill")
                             .font(.system(size: 18, weight: .bold))
-                            .foregroundStyle(VelaTheme.fg)
+                            .foregroundStyle(VelaTheme.rhythmInk)
                         Text("记录你觉得可能影响恢复、睡眠或训练的行为。这里不估算热量、克重或宏量营养，只给 Body Model 留低摩擦信号。")
                             .font(.system(size: 13))
-                            .foregroundStyle(VelaTheme.muted)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .lineSpacing(3)
                     }
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
+                    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+                    )
 
                     VStack(alignment: .leading, spacing: 10) {
                         TextEditor(text: $note)
                             .frame(minHeight: 120)
                             .padding(10)
                             .scrollContentBackground(.hidden)
-                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
-                            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.rhythmCanvas))
+                            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
 
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
                                 ForEach(templates, id: \.self) { template in
                                     Button {
+                                        VelaHaptic.selection()
                                         note = note.isEmpty ? template : "\(note)，\(template)"
                                     } label: {
                                         Text(template)
                                             .font(.system(size: 12, weight: .semibold))
-                                            .foregroundStyle(VelaTheme.fg)
+                                            .foregroundStyle(VelaTheme.rhythmInk)
                                             .padding(.horizontal, 10)
                                             .padding(.vertical, 7)
-                                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
+                                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.rhythmCanvas))
+                                            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.5))
                                     }
                                     .buttonStyle(.plain)
                                 }
@@ -59,20 +65,24 @@ struct BehaviorQuickNoteSheet: View {
                                 ForEach(signals) { signal in
                                     Text("\(signal.tag.displayTitle) · \(signal.intensity.rawValue)")
                                         .font(.system(size: 11, weight: .bold))
-                                        .foregroundStyle(VelaTheme.accent)
+                                        .foregroundStyle(VelaTheme.rhythmDeep)
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 5)
-                                        .background(RoundedRectangle(cornerRadius: 10).fill(VelaTheme.accent.opacity(0.12)))
+                                        .background(RoundedRectangle(cornerRadius: 10).fill(VelaTheme.rhythmDeep.opacity(0.12)))
                                 }
                             }
                         } else {
                             Text("保存后仍会作为普通手记进入上下文；识别不到标签时不会强行编造。")
                                 .font(.system(size: 11))
-                                .foregroundStyle(VelaTheme.muted)
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         }
                     }
                     .padding(16)
-                    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
+                    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+                    )
 
                     Button {
                         UINotificationFeedbackGenerator().notificationOccurred(.success)
@@ -81,10 +91,10 @@ struct BehaviorQuickNoteSheet: View {
                     } label: {
                         Text("保存随手记")
                             .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(VelaTheme.rhythmDeepOn)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
-                            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.fg))
+                            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.rhythmDeep))
                     }
                     .disabled(note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .buttonStyle(.plain)
@@ -216,11 +226,10 @@ struct CaffeineLoggerView: View {
                     } label: {
                         Text("保存")
                             .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(VelaTheme.rhythmDeepOn)
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
-                            .background(RoundedRectangle(cornerRadius: 25, style: .continuous).fill(VelaTheme.accent))
-                            .shadow(color: VelaTheme.accent.opacity(0.2), radius: 6, y: 3)
+                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.rhythmDeep))
                     }
                     .buttonStyle(.plain)
                     .padding(.horizontal, 20)
@@ -345,10 +354,10 @@ struct WaterLoggerView: View {
                     } label: {
                         Text("保存")
                             .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(VelaTheme.rhythmDeepOn)
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
-                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.accent))
+                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.rhythmDeep))
                     }
                     .buttonStyle(.plain)
                     .padding(.horizontal, 20)
@@ -378,21 +387,21 @@ struct MoodLoggerView: View {
     var body: some View {
         VStack(spacing: 24) {
             Capsule()
-                .fill(VelaTheme.separator)
+                .fill(VelaTheme.rhythmMist)
                 .frame(width: 36, height: 5)
                 .padding(.top, 8)
             
             HStack {
                 Text("记录心情")
                     .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(VelaTheme.fg)
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Button {
                     dismiss()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 24))
-                        .foregroundStyle(VelaTheme.meta)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 .buttonStyle(.plain)
             }
@@ -402,7 +411,7 @@ struct MoodLoggerView: View {
                 VStack(spacing: 24) {
                     Text("记录今天你的整体情绪感受。AI 会基于心率变异性(HRV)等生理指标与心境波动建立深度习惯网络模型。")
                         .font(.system(size: 14))
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .lineSpacing(4)
                         .padding(.horizontal, 20)
                     
@@ -417,19 +426,18 @@ struct MoodLoggerView: View {
                                         .font(.system(size: 32))
                                     Text(label)
                                         .font(.system(size: 11, weight: .bold))
-                                        .foregroundStyle(selectedScore == score ? VelaTheme.fg : VelaTheme.meta)
+                                        .foregroundStyle(selectedScore == score ? VelaTheme.rhythmInk : VelaTheme.rhythmInkSecondary)
                                 }
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 80)
                                 .background(
                                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .fill(selectedScore == score ? Color.white : VelaTheme.hairline.opacity(0.2))
+                                        .fill(selectedScore == score ? VelaTheme.rhythmCanvasRaised : VelaTheme.rhythmCanvas)
                                 )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .stroke(selectedScore == score ? VelaTheme.accent : Color.clear, lineWidth: 1.5)
+                                        .stroke(selectedScore == score ? VelaTheme.rhythmDeep : VelaTheme.rhythmMist, lineWidth: selectedScore == score ? 1.5 : 0.75)
                                 )
-                                .shadow(color: Color.black.opacity(selectedScore == score ? 0.03 : 0.0), radius: 4, y: 2)
                             }
                             .buttonStyle(.plain)
                         }
@@ -439,16 +447,16 @@ struct MoodLoggerView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("今日备注 (可选)")
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(VelaTheme.muted)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .padding(.leading, 4)
                         
                         TextField("记录一些让你开心或焦虑的小事...", text: $noteText)
                             .font(.system(size: 14))
                             .padding(14)
-                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.cardBg))
+                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
+                                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
                             )
                     }
                     .padding(.horizontal, 20)
@@ -461,11 +469,10 @@ struct MoodLoggerView: View {
                     } label: {
                         Text("保存")
                             .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(VelaTheme.rhythmDeepOn)
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
-                            .background(RoundedRectangle(cornerRadius: 25, style: .continuous).fill(VelaTheme.accent))
-                            .shadow(color: VelaTheme.accent.opacity(0.2), radius: 6, y: 3)
+                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.rhythmDeep))
                     }
                     .buttonStyle(.plain)
                     .padding(.horizontal, 20)
@@ -526,22 +533,24 @@ struct AlcoholLoggerView: View {
                         
                         HStack(spacing: 40) {
                             Button {
+                                VelaHaptic.selection()
                                 if customDrinks > 0 {
                                     customDrinks -= 0.5
                                 }
                             } label: {
                                 Image(systemName: "minus.circle.fill")
                                     .font(.system(size: 36))
-                                    .foregroundStyle(VelaTheme.muted)
+                                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             }
                             .buttonStyle(.plain)
                             
                             Button {
+                                VelaHaptic.selection()
                                 customDrinks += 0.5
                             } label: {
                                 Image(systemName: "plus.circle.fill")
                                     .font(.system(size: 36))
-                                    .foregroundStyle(VelaTheme.accent)
+                                    .foregroundStyle(VelaTheme.rhythmDeep)
                             }
                             .buttonStyle(.plain)
                         }
@@ -554,31 +563,32 @@ struct AlcoholLoggerView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("标准杯换算")
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(VelaTheme.fg)
+                            .foregroundStyle(VelaTheme.rhythmInk)
                         
                         Text("本页按约 10 克纯酒精记为 1 标准杯，便于统一记录。不同地区的标准不同，实际酒精量应以饮品容量和酒精度为准：\n· 普通啤酒约 330 ml、4.5%\n· 红葡萄酒约 150 ml、12%\n· 烈性酒约 45 ml、40%")
                             .font(.system(size: 12))
-                            .foregroundStyle(VelaTheme.muted)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .lineSpacing(5)
                     }
                     .padding(18)
                     .velaNativeCard(radius: 16)
                     .overlay(
                         RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
-                            .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
+                            .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
                     )
                     .padding(.horizontal, 20)
                     
                     Button {
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
                         onSave(customDrinks)
                         dismiss()
                     } label: {
                         Text("保存")
                             .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(VelaTheme.rhythmDeepOn)
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
-                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.stressColor))
+                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.rhythmDeep))
                     }
                     .buttonStyle(.plain)
                     .padding(.horizontal, 20)

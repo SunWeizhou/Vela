@@ -53,10 +53,9 @@ struct TodayEvidenceSheet: View {
                 Circle()
                     .fill(VelaTheme.rhythmDeep)
                     .frame(width: 7, height: 7)
-                Text("VELA DECISION")
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(1.3)
-                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                Text("状态判断")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(VelaTheme.rhythmDeep)
                 Spacer()
                 Text(confidenceLabel)
                     .font(.system(size: 11, weight: .semibold))
@@ -93,7 +92,7 @@ struct TodayEvidenceSheet: View {
     private var signalEvidence: some View {
         VStack(alignment: .leading, spacing: 14) {
             VelaRhythmSectionHeader(
-                eyebrow: "EVIDENCE",
+                eyebrow: "",
                 title: "哪些信号影响了判断",
                 actionTitle: nil,
                 action: {}
@@ -134,12 +133,10 @@ struct TodayEvidenceSheet: View {
         }
     }
 
-    /// 健康权限的恢复入口：拒绝权限后主流程没有重新授权按钮，
-    /// 这里始终提供「打开系统设置」的直达路径。
     private var permissionEntry: some View {
         VStack(alignment: .leading, spacing: 14) {
             VelaRhythmSectionHeader(
-                eyebrow: "PERMISSIONS",
+                eyebrow: "",
                 title: "健康数据权限",
                 actionTitle: nil,
                 action: {}
@@ -170,7 +167,7 @@ struct TodayEvidenceSheet: View {
     private var reasoningEvidence: some View {
         VStack(alignment: .leading, spacing: 14) {
             VelaRhythmSectionHeader(
-                eyebrow: "REASONING",
+                eyebrow: "",
                 title: "判断逻辑",
                 actionTitle: nil,
                 action: {}
@@ -196,7 +193,7 @@ struct TodayEvidenceSheet: View {
     private func insightEvidence(_ insights: [ProactiveInsight]) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             VelaRhythmSectionHeader(
-                eyebrow: "PERSONAL MODEL",
+                eyebrow: "",
                 title: "可能与你有关的规律",
                 actionTitle: nil,
                 action: {}

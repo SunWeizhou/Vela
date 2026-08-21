@@ -231,7 +231,7 @@ struct VelaMeView: View {
     private var bodyModelOverviewCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             VelaRhythmSectionHeader(
-                eyebrow: "PERSONAL CONTEXT",
+                eyebrow: "",
                 title: "Vela 如何认识你",
                 actionTitle: nil,
                 action: {}
@@ -333,7 +333,7 @@ struct VelaMeView: View {
     private var coachMemoryCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             VelaRhythmSectionHeader(
-                eyebrow: "DECISION HISTORY",
+                eyebrow: "",
                 title: "建议与记忆",
                 actionTitle: nil,
                 action: {}
@@ -518,23 +518,12 @@ struct VelaMeView: View {
     }
 
     private var profileHeader: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(VelaTheme.rhythmDeep)
-                    .frame(width: 6, height: 6)
-                Text("PRIVATE HEALTH CONTEXT")
-                    .font(.system(size: 10, weight: .bold))
-                    .tracking(1.45)
-                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
-            }
-
+        VStack(alignment: .leading, spacing: 8) {
             Text(timeGreeting)
-                .font(.system(size: 34, weight: .semibold, design: .default))
-                .tracking(-0.8)
+                .font(.system(size: 32, weight: .bold, design: .rounded))
                 .foregroundStyle(VelaTheme.rhythmInk)
-
         }
+        .padding(.top, 4)
     }
 
     private var actionSettingsHub: some View {
@@ -556,7 +545,7 @@ struct VelaMeView: View {
 
         return VStack(alignment: .leading, spacing: 12) {
             VelaRhythmSectionHeader(
-                eyebrow: "LIBRARY & CONTROL",
+                eyebrow: "",
                 title: "资料与设置",
                 actionTitle: nil,
                 action: {}

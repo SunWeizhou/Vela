@@ -12,19 +12,11 @@ struct MetricEvidenceSection: View {
     let items: [EvidenceItem]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("数据依据")
-                    .font(VelaTheme.footnote())
-                    .fontWeight(.bold)
-                    .foregroundStyle(isSleep ? VelaTheme.sleepText : VelaTheme.fg)
-                    .padding(.leading, 4)
-
-                Text("用于解释当前指标的原始读数与评分组成")
-                    .font(VelaTheme.caption2())
-                    .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
-                    .padding(.leading, 4)
-            }
+        VStack(alignment: .leading, spacing: 10) {
+            Text("数据依据")
+                .font(VelaTheme.footnote().weight(.bold))
+                .foregroundStyle(VelaTheme.rhythmInk)
+                .padding(.leading, 4)
 
             VStack(spacing: 0) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
@@ -32,7 +24,7 @@ struct MetricEvidenceSection: View {
                         title: item.title,
                         detail: item.detail,
                         value: item.value,
-                        tint: isSleep ? VelaTheme.sleepColor : VelaTheme.accent
+                        tint: isSleep ? VelaTheme.sleepColor : VelaTheme.rhythmDeep
                     )
 
                     if index < items.count - 1 {
@@ -40,10 +32,10 @@ struct MetricEvidenceSection: View {
                     }
                 }
             }
-            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
+            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
-                    .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
             )
         }
     }

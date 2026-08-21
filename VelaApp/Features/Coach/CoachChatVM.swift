@@ -235,6 +235,33 @@ final class CoachChatVM: ObservableObject {
         return Array(questions.prefix(4))
     }
 
+    /// 根据助手最近一次的回答内容动态生成 2-3 个跟进提问建议（Gemini Mobile 交互风格）。
+    func followUpSuggestions(for lastAssistantMessage: String) -> [String] {
+        var suggestions: [String] = []
+        let lower = lastAssistantMessage.lowercased()
+
+        if lower.contains("训练") || lower.contains("workout") || lower.contains("计划") || lower.contains("容量") {
+            suggestions.append("细化今天的热身与主组动作")
+            suggestions.append("如果感觉疲劳，推荐哪些替代动作？")
+        } else if lower.contains("睡眠") || lower.contains("sleep") || lower.contains("深睡") || lower.contains("入睡") {
+            suggestions.append("推荐改善入睡的呼吸法或习惯")
+            suggestions.append("分析睡眠对近期力量表现的影响")
+        } else if lower.contains("恢复") || lower.contains("hrv") || lower.contains("心率") || lower.contains("压力") {
+            suggestions.append("说明 HRV 变化背后的生理原因")
+            suggestions.append("今天需要把 RPE 控制在多少以内？")
+        } else if lower.contains("饮食") || lower.contains("热量") || lower.contains("营养") || lower.contains("蛋白") {
+            suggestions.append("训练日前后该如何安排碳水和蛋白质？")
+            suggestions.append("推荐一份轻负担的高蛋白餐食组合")
+        }
+
+        if suggestions.isEmpty {
+            suggestions.append("把上述建议转化为 3 个具体行动")
+            suggestions.append("有哪些需要注意的潜在限制因素？")
+        }
+
+        return Array(suggestions.prefix(2))
+    }
+
     // Delegated stores/helpers
     private let sessionStore = CoachSessionStore()
     private let assembler = CoachContextAssembler()

@@ -15,10 +15,10 @@ struct JournalTagInsights: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("模型成熟度：\(bodyModelMaturityTitle(state.maturity.overall))")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(VelaTheme.fg)
+                        .foregroundStyle(VelaTheme.rhythmInk)
                     Text("\(state.maturity.baselineDays) 天基线 · \(state.maturity.behaviorPairs) 条行为信号 · \(state.maturity.trainingSessions) 次训练事实")
                         .font(.system(size: 11))
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 Spacer()
             }
@@ -31,18 +31,19 @@ struct JournalTagInsights: View {
                         .padding(.top, 2)
                     Text("\(claim.title)：\(claim.summary)")
                         .font(.system(size: 11))
-                        .foregroundStyle(VelaTheme.fg2)
+                        .foregroundStyle(VelaTheme.rhythmInk)
                         .lineLimit(2)
                 }
             } else if !state.uncertainAreas.isEmpty {
                 Text("仍有 \(state.uncertainAreas.count) 类证据不足，积累更多记录后再形成结论。")
                     .font(.system(size: 11))
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).fill(VelaTheme.secondaryGroupedBackground))
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
     }
 
     private func bodyModelMaturityTitle(_ level: BodyModelMaturityLevel) -> String {

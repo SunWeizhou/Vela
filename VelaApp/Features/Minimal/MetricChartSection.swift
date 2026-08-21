@@ -77,12 +77,13 @@ struct MetricChartSection: View {
             // Value and Status
             VStack(alignment: .leading, spacing: 4) {
                 Text(dynamicValueText)
-                    .font(.largeTitle.weight(.bold).monospacedDigit())
-                    .foregroundStyle(isSleep ? VelaTheme.sleepText : VelaTheme.fg)
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 
                 Text(rawSelectedDate != nil ? "选定读数" : metricSubtitle)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
             .padding(.horizontal, 16)
             
@@ -91,14 +92,14 @@ struct MetricChartSection: View {
                 VelaStateCard(
                     state: selectedRange == .day ? .empty : .calibrating,
                     message: selectedRange == .day
-                        ? "今天尚无可绘制的真实读数，可切换至 7 天查看历史趋势。"
-                        : "继续佩戴设备并同步数据，Vela 不会用插值伪造缺失趋势。"
+                        ? "今天尚无读数，可切换至 7 天查看趋势。"
+                        : "继续佩戴设备并同步数据以建立趋势。"
                 )
                 .padding(.horizontal, 14)
             } else if points.count < 3 {
                 VelaStateCard(
                     state: .calibrating,
-                    message: "目前只有 \(points.count) 个真实读数；达到 3 个后显示方向与个人基线。"
+                    message: "目前已有 \(points.count) 个读数，累计 3 个后展示个人基线。"
                 )
                 .padding(.horizontal, 14)
             } else {
@@ -119,7 +120,7 @@ struct MetricChartSection: View {
 
                     if let effectiveBaseline {
                         RuleMark(y: .value("Personal baseline", effectiveBaseline))
-                            .foregroundStyle(VelaTheme.muted.opacity(0.58))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.5))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                     }
 
@@ -139,7 +140,7 @@ struct MetricChartSection: View {
                                     series: .value("Segment", segmentIndex)
                                 )
                                 .foregroundStyle(metricColor)
-                                .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                                .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
                                 .interpolationMethod(.catmullRom)
 
                                 AreaMark(
@@ -149,7 +150,7 @@ struct MetricChartSection: View {
                                 )
                                 .foregroundStyle(
                                     LinearGradient(
-                                        gradient: Gradient(colors: [metricColor.opacity(0.20), metricColor.opacity(0.0)]),
+                                        colors: [metricColor.opacity(0.24), metricColor.opacity(0.0)],
                                         startPoint: .top,
                                         endPoint: .bottom
                                     )
@@ -179,27 +180,21 @@ struct MetricChartSection: View {
                     }
                 }
                 .chartXAxis {
-                    if selectedRange == .day {
-                        AxisMarks(values: .stride(by: .hour, count: 4)) { value in
-                            AxisValueLabel(format: .dateTime.hour(.twoDigits(amPM: .omitted)), centered: true)
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundStyle(VelaTheme.muted)
-                        }
-                    } else {
-                        AxisMarks(values: .stride(by: .day, count: points.count > 10 ? points.count / 5 : 2)) { value in
-                            AxisValueLabel(format: .dateTime.month().day(), centered: true)
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundStyle(VelaTheme.muted)
-                        }
+                    AxisMarks(values: .automatic) { _ in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                            .foregroundStyle(VelaTheme.rhythmMist)
+                        AxisValueLabel()
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                 }
                 .chartYAxis {
-                    AxisMarks(position: .trailing) { value in
-                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 2]))
-                            .foregroundStyle(VelaTheme.separatorSoft)
+                    AxisMarks(position: .leading, values: .automatic) { _ in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                            .foregroundStyle(VelaTheme.rhythmMist)
                         AxisValueLabel()
                             .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(VelaTheme.muted)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                 }
                 .chartXSelection(value: $rawSelectedDate)
@@ -216,10 +211,10 @@ struct MetricChartSection: View {
             }
         }
         .padding(.vertical, 14)
-        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         )
     }
 
@@ -233,13 +228,13 @@ struct MetricChartSection: View {
                     VelaHaptic.selection()
                 } label: {
                     Text(range.title)
-                        .font(VelaTheme.caption2().weight(.semibold))
-                        .foregroundStyle(selectedRange == range ? VelaTheme.fg : VelaTheme.muted)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(selectedRange == range ? VelaTheme.rhythmInk : VelaTheme.rhythmInkSecondary)
                         .padding(.horizontal, 10)
-                        .frame(minHeight: 32)
+                        .frame(minHeight: 28)
                         .background(
                             Capsule(style: .continuous)
-                                .fill(selectedRange == range ? VelaTheme.cardBg : Color.clear)
+                                .fill(selectedRange == range ? VelaTheme.rhythmCanvasRaised : Color.clear)
                         )
                 }
                 .buttonStyle(.cardPress)
@@ -247,7 +242,7 @@ struct MetricChartSection: View {
             }
         }
         .padding(3)
-        .background(VelaTheme.secondaryGroupedBackground, in: Capsule(style: .continuous))
+        .background(VelaTheme.rhythmMist.opacity(0.4), in: Capsule(style: .continuous))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("时间区间")
     }

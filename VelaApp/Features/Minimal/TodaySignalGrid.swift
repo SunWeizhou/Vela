@@ -1,7 +1,12 @@
 import SwiftUI
 
+// MARK: - TodaySignalGrid
+// Stress and Energy displayed as horizontal bar gauges for intuitive at-a-glance reading.
+// Design: horizontal progress bar (0–100) + numeric value + 7-day sparkline trend below.
+
 struct TodaySignalGrid: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let model: TodayExperienceModel
     let freshness: DataFreshness
@@ -13,31 +18,28 @@ struct TodaySignalGrid: View {
     }
 
     var body: some View {
-        return VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+            // Section header
             HStack {
                 Text("压力和能量")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(VelaTheme.fg)
+                    .font(VelaTheme.headline())
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 DataFreshnessIndicator(freshness: freshness)
             }
 
-            Text("查看你的身体如何响应今天的活动与恢复。")
-                .font(VelaTheme.footnote())
-                .foregroundStyle(VelaTheme.fg2)
-                .lineSpacing(2)
-
+            // Two gauge cards side by side (or stacked under accessibility sizes)
             Group {
                 if dynamicTypeSize.isAccessibilitySize {
                     VStack(spacing: 10) {
                         ForEach(liveStateCards) { card in
-                            liveStateSignalLink(card)
+                            gaugeSignalLink(card)
                         }
                     }
                 } else {
                     HStack(spacing: 10) {
                         ForEach(liveStateCards) { card in
-                            liveStateSignalLink(card)
+                            gaugeSignalLink(card)
                                 .frame(maxWidth: .infinity)
                         }
                     }
@@ -46,88 +48,148 @@ struct TodaySignalGrid: View {
         }
     }
 
-    private func liveStateSignalLink(_ card: TodayExperienceSignalCard) -> some View {
+    // MARK: - Navigation wrapper
+    private func gaugeSignalLink(_ card: TodayExperienceSignalCard) -> some View {
         Group {
             if let metric = detailMetric(for: card.id) {
                 NavigationLink {
                     VelaMetricDetailView(metric: metric)
                 } label: {
-                    liveStateSignalCard(card)
+                    gaugeSignalCard(card)
                 }
             } else {
-                liveStateSignalCard(card)
+                gaugeSignalCard(card)
             }
         }
         .buttonStyle(.cardPress)
         .accessibilityHint("查看\(card.title)评分依据、个人趋势和建议")
     }
 
-    private func liveStateSignalCard(_ card: TodayExperienceSignalCard) -> some View {
+    // MARK: - Horizontal bar gauge card
+    private func gaugeSignalCard(_ card: TodayExperienceSignalCard) -> some View {
         let accent = accentColor(card.accent)
+        let scoreValue: Double? = card.value == "--" ? nil : Double(card.value)
+        let progress = scoreValue.map { min(1.0, max(0.0, $0 / 100.0)) } ?? 0.0
+        let iconName = card.id == "stress" ? "waveform.path.ecg" : "bolt.batteryblock.fill"
+
         return VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(card.title)
-                        .font(VelaTheme.caption1().weight(.bold))
-                        .foregroundStyle(VelaTheme.fg)
-                    Text(card.directionLabel)
-                        .font(VelaTheme.caption2().weight(.medium))
+            // Row 1: Icon squircle + Title + score value
+            HStack(alignment: .center) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(accent.opacity(0.12))
+                    Image(systemName: iconName)
+                        .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(accent)
                 }
-                Spacer(minLength: 6)
-                HStack(alignment: .firstTextBaseline, spacing: 2) {
-                    Text(card.value)
-                        .font(.system(size: 25, weight: .bold, design: .rounded))
-                        .foregroundStyle(VelaTheme.fg)
+                .frame(width: 20, height: 20)
+
+                Text(card.title)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+
+                Spacer(minLength: 4)
+
+                HStack(alignment: .firstTextBaseline, spacing: 1) {
+                    Text(card.value == "--" ? "--" : card.value)
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundStyle(VelaTheme.rhythmInk)
                         .monospacedDigit()
                     if card.value != "--" {
                         Text("/100")
-                            .font(VelaTheme.caption2().weight(.semibold))
-                            .foregroundStyle(VelaTheme.muted)
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                     Image(systemName: "chevron.right")
-                        .font(VelaTheme.caption2().weight(.bold))
-                        .foregroundStyle(VelaTheme.muted)
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.4))
+                        .padding(.leading, 2)
                 }
             }
 
+            // Row 2: Horizontal bar gauge with gradient fill
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    // Track
+                    Capsule()
+                        .fill(VelaTheme.rhythmMist)
+                        .frame(height: 6)
+
+                    // Fill
+                    if scoreValue != nil {
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [accent.opacity(0.7), accent],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: max(6, geo.size.width * CGFloat(progress)), height: 6)
+                            .animation(
+                                reduceMotion ? .none : .spring(response: 1.0, dampingFraction: 0.85),
+                                value: progress
+                            )
+                    }
+                }
+            }
+            .frame(height: 6)
+
+            // Row 3: Status label + direction
+            HStack(spacing: 4) {
+                Text(card.directionLabel)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(accent)
+
+                if !card.subtitle.isEmpty {
+                    Text("·")
+                        .font(.system(size: 11))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.5))
+                    Text(localizedReason(card.subtitle))
+                        .font(.system(size: 11))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        .lineLimit(1)
+                }
+            }
+
+            // Row 4: 7-day sparkline trend
             if card.trend.count > 1 {
                 TodayMiniSparkline(values: card.trend, color: accent)
-                    .frame(height: 24)
+                    .frame(height: 20)
             } else {
                 Capsule()
-                    .fill(VelaTheme.borderSoft)
+                    .fill(VelaTheme.rhythmMist)
                     .frame(height: 2)
-                    .padding(.vertical, 11)
+                    .padding(.vertical, 9)
                     .accessibilityHidden(true)
             }
 
-            Text(localizedReason(card.subtitle))
-                .font(VelaTheme.caption2())
-                .lineLimit(2)
-                .foregroundStyle(VelaTheme.fg2)
-
+            // Row 5: Evidence chips
             HStack(spacing: 6) {
                 scoreEvidenceChip(card.confidenceLabel, accent: accent)
                 scoreEvidenceChip(card.coverageLabel, accent: accent)
             }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 158, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.cardBg))
-        .overlay(
-            RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
-                .stroke(accent.opacity(0.14), lineWidth: 0.75)
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 148, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(VelaTheme.rhythmCanvasRaised)
         )
-        .contentShape(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(card.title)，\(card.value)，\(card.directionLabel)，\(card.confidenceLabel)，\(card.coverageLabel)")
     }
 
+    // MARK: - Evidence chip
     private func scoreEvidenceChip(_ label: String, accent: Color) -> some View {
         Text(label)
             .font(VelaTheme.caption2().weight(.semibold))
-            .foregroundStyle(VelaTheme.fg2)
+            .foregroundStyle(VelaTheme.rhythmInkSecondary)
             .padding(.horizontal, 7)
             .padding(.vertical, 4)
             .background(
@@ -136,29 +198,31 @@ struct TodaySignalGrid: View {
             )
     }
 
+    // MARK: - Helpers
     private func detailMetric(for cardID: String) -> VelaMetricDetailView.MetricType? {
         switch cardID {
         case "recovery": return .recovery
-        case "sleep": return .sleep
-        case "strain": return .strain
-        case "stress": return .stress
-        case "energy": return .energy
-        default: return nil
+        case "sleep":    return .sleep
+        case "strain":   return .strain
+        case "stress":   return .stress
+        case "energy":   return .energy
+        default:         return nil
         }
     }
 
     private func metricDomain(for cardID: String) -> VelaMetricDomain {
         switch cardID {
         case "recovery": .recovery
-        case "sleep": .sleep
-        case "strain": .strain
-        case "stress": .stress
-        case "energy": .energy
-        default: .neutral
+        case "sleep":    .sleep
+        case "strain":   .strain
+        case "stress":   .stress
+        case "energy":   .energy
+        default:         .neutral
         }
     }
 }
 
+// MARK: - TodayMiniSparkline
 private struct TodayMiniSparkline: View {
     let values: [Double]
     let color: Color
@@ -171,11 +235,12 @@ private struct TodayMiniSparkline: View {
                 placeholder.addLine(to: CGPoint(x: size.width, y: size.height * 0.5))
                 context.stroke(
                     placeholder,
-                    with: .color(VelaTheme.border),
+                    with: .color(color.opacity(0.3)),
                     style: StrokeStyle(lineWidth: 1.4, lineCap: .round, dash: [4, 5])
                 )
                 return
             }
+
             let minValue = values.min() ?? 0
             let maxValue = values.max() ?? 100
             let span = max(maxValue - minValue, 1)
@@ -204,27 +269,31 @@ private struct TodayMiniSparkline: View {
                 }
             }
 
+            // Area fill
             var closedPath = path
             closedPath.addLine(to: CGPoint(x: size.width, y: size.height))
             closedPath.addLine(to: CGPoint(x: 0, y: size.height))
             closedPath.closeSubpath()
-
-            let fillGradient = GraphicsContext.Shading.linearGradient(
-                Gradient(colors: [color.opacity(0.24), color.opacity(0.01)]),
-                startPoint: .zero,
-                endPoint: CGPoint(x: 0, y: size.height)
+            context.fill(
+                closedPath,
+                with: .linearGradient(
+                    Gradient(colors: [color.opacity(0.22), color.opacity(0.01)]),
+                    startPoint: .zero,
+                    endPoint: CGPoint(x: 0, y: size.height)
+                )
             )
-            context.fill(closedPath, with: fillGradient)
 
+            // Line
             context.stroke(
                 path,
                 with: .color(color),
-                style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round)
+                style: StrokeStyle(lineWidth: 2.0, lineCap: .round, lineJoin: .round)
             )
 
+            // End dot
             if let lastPoint = points.last {
                 context.fill(
-                    Path(ellipseIn: CGRect(x: lastPoint.x - 3, y: lastPoint.y - 3, width: 6, height: 6)),
+                    Path(ellipseIn: CGRect(x: lastPoint.x - 2.5, y: lastPoint.y - 2.5, width: 5, height: 5)),
                     with: .color(color)
                 )
             }

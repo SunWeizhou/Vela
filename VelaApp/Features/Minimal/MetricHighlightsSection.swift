@@ -71,7 +71,7 @@ struct MetricHighlightsSection: View {
                     if let rightSub = rightSubtitle {
                         Text(rightSub)
                             .font(VelaTheme.caption2())
-                            .foregroundStyle(VelaTheme.muted)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .lineLimit(1)
                     } else {
                         Spacer().frame(height: 10)
@@ -83,10 +83,10 @@ struct MetricHighlightsSection: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         )
     }
 }
@@ -110,13 +110,13 @@ struct MetricInterpretationSection: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("今日建议")
                         .font(VelaTheme.caption1().weight(.bold))
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     Text(title)
                         .font(VelaTheme.headline())
-                        .foregroundStyle(VelaTheme.fg)
+                        .foregroundStyle(VelaTheme.rhythmInk)
                     Text(detail)
                         .font(VelaTheme.subheadline())
-                        .foregroundStyle(VelaTheme.fg2)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -124,14 +124,14 @@ struct MetricInterpretationSection: View {
 
             Label(evidence, systemImage: "checkmark.seal")
                 .font(VelaTheme.caption1().weight(.semibold))
-                .foregroundStyle(VelaTheme.muted)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
-                .background(VelaTheme.surface, in: Capsule(style: .continuous))
+                .background(VelaTheme.rhythmMist.opacity(0.4), in: Capsule(style: .continuous))
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(tint.opacity(0.22), lineWidth: 0.75)
@@ -151,7 +151,7 @@ struct MetricTrustSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("如何解读")
                 .font(VelaTheme.footnote().weight(.bold))
-                .foregroundStyle(VelaTheme.fg)
+                .foregroundStyle(VelaTheme.rhythmInk)
 
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 8) {
@@ -171,21 +171,21 @@ struct MetricTrustSection: View {
                 Text(updatedAt)
             }
             .font(VelaTheme.caption2())
-            .foregroundStyle(VelaTheme.muted)
+            .foregroundStyle(VelaTheme.rhythmInkSecondary)
 
             if let missingSummary {
                 Label(missingSummary, systemImage: "exclamationmark.circle")
                     .font(VelaTheme.caption1())
-                    .foregroundStyle(VelaTheme.fg2)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         )
     }
 
@@ -193,14 +193,15 @@ struct MetricTrustSection: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
                 .font(VelaTheme.caption2())
-                .foregroundStyle(VelaTheme.muted)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
             Text(value)
                 .font(VelaTheme.caption1().weight(.semibold))
-                .foregroundStyle(VelaTheme.fg)
-                .lineLimit(2)
+                .foregroundStyle(VelaTheme.rhythmInk)
         }
-        .padding(10)
-        .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
-        .background(VelaTheme.surface, in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(VelaTheme.rhythmCanvas)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }

@@ -38,14 +38,9 @@ struct VelaVitalsView: View {
     // MARK: - Vitals Title Header
     private var vitalsHeader: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("体征")
-                    .font(VelaTheme.title1())
-                    .foregroundStyle(VelaTheme.fg)
-                Text("健康信号与核心指标")
-                    .font(VelaTheme.caption1())
-                    .foregroundStyle(VelaTheme.muted)
-            }
+            Text("体征")
+                .font(VelaTheme.title1())
+                .foregroundStyle(VelaTheme.rhythmInk)
             
             Spacer()
             
@@ -54,7 +49,7 @@ struct VelaVitalsView: View {
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .frame(width: 36, height: 36)
             }
             .buttonStyle(.plain)
@@ -85,7 +80,7 @@ struct VelaVitalsView: View {
                 vitalsHeader
                     .padding(.horizontal, 16)
                     .padding(.bottom, 12)
-                    .background(VelaTheme.bg.opacity(0.97))
+                    .background(VelaTheme.rhythmCanvas.opacity(0.97))
                 
                 Divider()
                     .opacity(0.4)
@@ -185,16 +180,16 @@ struct VelaVitalsView: View {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: isPhenoAge ? "cross.case.fill" : "waveform.path.ecg")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(VelaTheme.accent)
+                            .foregroundStyle(VelaTheme.rhythmDeep)
                             .frame(width: 36, height: 36)
-                            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(VelaTheme.accent.opacity(0.12)))
+                            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(VelaTheme.rhythmMist.opacity(0.6)))
                         VStack(alignment: .leading, spacing: 3) {
                             Text(isPhenoAge ? "生物年龄估算" : "健康信号参考")
                                 .font(.system(size: 16, weight: .bold))
-                                .foregroundStyle(VelaTheme.fg)
+                                .foregroundStyle(VelaTheme.rhythmInk)
                             Text(selectedDateText)
                                 .font(.system(size: 11))
-                                .foregroundStyle(VelaTheme.muted)
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         }
                         Spacer()
                         Button {
@@ -202,7 +197,7 @@ struct VelaVitalsView: View {
                         } label: {
                             Image(systemName: "plus")
                                 .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(VelaTheme.accent)
+                                .foregroundStyle(VelaTheme.rhythmDeep)
                                 .frame(width: 32, height: 32)
                         }
                         .buttonStyle(.plain)
@@ -210,26 +205,21 @@ struct VelaVitalsView: View {
                     }
 
                     Divider()
+                        .overlay(VelaTheme.rhythmMist)
 
-                    HStack(alignment: .firstTextBaseline, spacing: 18) {
+                    HStack(alignment: .center, spacing: 18) {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(isPhenoAge ? String(format: "%.1f", result.biologicalAge) : "\(Int(result.overallScore.rounded()))")
                                 .font(.system(size: 34, weight: .bold, design: .rounded))
-                                .foregroundStyle(VelaTheme.fg)
+                                .foregroundStyle(VelaTheme.rhythmInk)
                             Text(isPhenoAge ? "岁（估算）" : "信号评分")
                                 .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(VelaTheme.muted)
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         }
                         VStack(alignment: .leading, spacing: 4) {
                             Text(deltaText)
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.system(size: 14, weight: .semibold))
                                 .foregroundStyle(deltaColor)
-                            Text(isPhenoAge
-                                 ? "基于完整生物标志物输入的研究模型估算。"
-                                 : "仅汇总可用的静息心率、睡眠、活动等信号，不等同于生物年龄。")
-                                .font(.system(size: 11))
-                                .foregroundStyle(VelaTheme.muted)
-                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
 
@@ -238,15 +228,16 @@ struct VelaVitalsView: View {
                         Text("参考积极 \(result.optimalCount)")
                         if result.suboptimalCount > 0 {
                             Text("待关注 \(result.suboptimalCount)")
+                                .foregroundStyle(VelaTheme.strainColor)
                         }
                     }
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                     .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
-                    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
+                    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+                    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
                 } else {
                     biologicalAgeUnavailableCard
                 }
@@ -261,17 +252,17 @@ struct VelaVitalsView: View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: "heart.text.square")
                 .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(VelaTheme.accent)
+                .foregroundStyle(VelaTheme.rhythmDeep)
                 .frame(width: 42, height: 42)
-                .background(Circle().fill(VelaTheme.accent.opacity(0.12)))
+                .background(Circle().fill(VelaTheme.rhythmMist.opacity(0.5)))
 
             VStack(alignment: .leading, spacing: 5) {
                 Text("健康信号尚未生成")
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(VelaTheme.fg)
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Text("填写年龄，并积累静息心率、睡眠或活动等核心信号后再生成参考趋势。")
                     .font(.system(size: 12))
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .lineSpacing(2)
             }
 
@@ -279,33 +270,112 @@ struct VelaVitalsView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         )
     }
 
     // MARK: - Other Biomarkers Section
     private var otherBiomarkersSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("其他生物标志物")
+                Text("生物标志物与体征")
                     .font(VelaTheme.headline())
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInk)
 
                 Spacer()
 
-                Button("编辑") {
+                Button("编辑记录") {
                     VelaAppState.shared.triggerBloodLog = true
                 }
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(VelaTheme.accent) // Brand Accent
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(VelaTheme.rhythmDeep)
             }
             .padding(.horizontal, 2)
 
-            VStack(spacing: 0) {
-                // Card 1: 体重 (Weight)
+            // Group 1: 心血管 (Cardiovascular)
+            biomarkerGroupCard(title: "心血管", icon: "heart.fill") {
+                // Card: HRV 基线 (HRV Baseline)
+                let hrvEval = evaluateBiomarker(.hrv, latestValue: rawHrvHistory.last, history: rawHrvHistory)
+                NavigationLink(destination: VelaMetricDetailView(metric: .hrv)) {
+                    biomarkerRow(
+                        title: "心率变异性 (HRV)",
+                        trendText: hrvEval.text,
+                        trendIcon: hrvEval.icon,
+                        valueText: hrvValueText,
+                        valueColor: hrvEval.color,
+                        history: hrvHistoryData,
+                        graphColor: hrvEval.color,
+                        freshness: freshness(for: rawHrvHistory.last)
+                    )
+                }
+                .buttonStyle(.cardPress)
+
+                Divider()
+                    .overlay(VelaTheme.rhythmMist.opacity(0.6))
+                    .padding(.leading, 16)
+
+                // Card: RHR 基线 (RHR Baseline)
+                let rhrEval = evaluateBiomarker(.rhr, latestValue: rawRhrHistory.last, history: rawRhrHistory)
+                NavigationLink(destination: VelaMetricDetailView(metric: .rhr)) {
+                    biomarkerRow(
+                        title: "静息心率 (RHR)",
+                        trendText: rhrEval.text,
+                        trendIcon: rhrEval.icon,
+                        valueText: rhrValueText,
+                        valueColor: rhrEval.color,
+                        history: rhrHistoryData,
+                        graphColor: rhrEval.color,
+                        freshness: freshness(for: rawRhrHistory.last)
+                    )
+                }
+                .buttonStyle(.cardPress)
+            }
+
+            // Group 2: 呼吸与氧合 (Respiratory & Oxygen)
+            biomarkerGroupCard(title: "呼吸与氧合", icon: "wind") {
+                // Card: 呼吸率 (Respiratory Rate)
+                let respEval = evaluateBiomarker(.respiratoryRate, latestValue: rawRespiratoryRateHistory.last, history: rawRespiratoryRateHistory)
+                NavigationLink(destination: VelaMetricDetailView(metric: .respiratoryRate)) {
+                    biomarkerRow(
+                        title: "呼吸频率",
+                        trendText: respEval.text,
+                        trendIcon: respEval.icon,
+                        valueText: respiratoryRateValueText,
+                        valueColor: respEval.color,
+                        history: respiratoryRateHistoryData,
+                        graphColor: respEval.color,
+                        freshness: freshness(for: rawRespiratoryRateHistory.last)
+                    )
+                }
+                .buttonStyle(.cardPress)
+
+                Divider()
+                    .overlay(VelaTheme.rhythmMist.opacity(0.6))
+                    .padding(.leading, 16)
+
+                // Card: 血氧 (Blood Oxygen)
+                let o2Eval = evaluateBiomarker(.bloodOxygen, latestValue: rawBloodOxygenHistory.last, history: rawBloodOxygenHistory)
+                NavigationLink(destination: VelaMetricDetailView(metric: .bloodOxygen)) {
+                    biomarkerRow(
+                        title: "血氧饱和度 (SpO₂)",
+                        trendText: o2Eval.text,
+                        trendIcon: o2Eval.icon,
+                        valueText: bloodOxygenValueText,
+                        valueColor: o2Eval.color,
+                        history: bloodOxygenHistoryData,
+                        graphColor: o2Eval.color,
+                        freshness: freshness(for: rawBloodOxygenHistory.last)
+                    )
+                }
+                .buttonStyle(.cardPress)
+            }
+
+            // Group 3: 身体成分 (Body Composition)
+            biomarkerGroupCard(title: "身体成分", icon: "figure.arms.open") {
+                // Card: 体重 (Weight)
                 let weightEval = evaluateBiomarker(.weight, latestValue: rawWeightHistory.last, history: rawWeightHistory)
                 NavigationLink(destination: VelaMetricDetailView(metric: .weight)) {
                     biomarkerRow(
@@ -320,81 +390,16 @@ struct VelaVitalsView: View {
                     )
                 }
                 .buttonStyle(.cardPress)
-                Divider().padding(.leading, 16)
 
-                // Card 2: HRV 基线 (HRV Baseline) - Open HRV Detail
-                let hrvEval = evaluateBiomarker(.hrv, latestValue: rawHrvHistory.last, history: rawHrvHistory)
-                NavigationLink(destination: VelaMetricDetailView(metric: .hrv)) {
-                    biomarkerRow(
-                        title: "HRV 基线",
-                        trendText: hrvEval.text,
-                        trendIcon: hrvEval.icon,
-                        valueText: hrvValueText,
-                        valueColor: hrvEval.color,
-                        history: hrvHistoryData,
-                        graphColor: hrvEval.color,
-                        freshness: freshness(for: rawHrvHistory.last)
-                    )
-                }
-                .buttonStyle(.cardPress)
-                Divider().padding(.leading, 16)
+                Divider()
+                    .overlay(VelaTheme.rhythmMist.opacity(0.6))
+                    .padding(.leading, 16)
 
-                // Card 3: RHR 基线 (RHR Baseline) - Open RHR Detail
-                let rhrEval = evaluateBiomarker(.rhr, latestValue: rawRhrHistory.last, history: rawRhrHistory)
-                NavigationLink(destination: VelaMetricDetailView(metric: .rhr)) {
-                    biomarkerRow(
-                        title: "RHR 基线",
-                        trendText: rhrEval.text,
-                        trendIcon: rhrEval.icon,
-                        valueText: rhrValueText,
-                        valueColor: rhrEval.color,
-                        history: rhrHistoryData,
-                        graphColor: rhrEval.color,
-                        freshness: freshness(for: rawRhrHistory.last)
-                    )
-                }
-                .buttonStyle(.cardPress)
-                Divider().padding(.leading, 16)
-
-                // Card 4: 呼吸率 (Respiratory Rate)
-                let respEval = evaluateBiomarker(.respiratoryRate, latestValue: rawRespiratoryRateHistory.last, history: rawRespiratoryRateHistory)
-                NavigationLink(destination: VelaMetricDetailView(metric: .respiratoryRate)) {
-                    biomarkerRow(
-                        title: "呼吸率",
-                        trendText: respEval.text,
-                        trendIcon: respEval.icon,
-                        valueText: respiratoryRateValueText,
-                        valueColor: respEval.color,
-                        history: respiratoryRateHistoryData,
-                        graphColor: respEval.color,
-                        freshness: freshness(for: rawRespiratoryRateHistory.last)
-                    )
-                }
-                .buttonStyle(.cardPress)
-                Divider().padding(.leading, 16)
-
-                // Card 5: 血氧 (Blood Oxygen)
-                let o2Eval = evaluateBiomarker(.bloodOxygen, latestValue: rawBloodOxygenHistory.last, history: rawBloodOxygenHistory)
-                NavigationLink(destination: VelaMetricDetailView(metric: .bloodOxygen)) {
-                    biomarkerRow(
-                        title: "血氧",
-                        trendText: o2Eval.text,
-                        trendIcon: o2Eval.icon,
-                        valueText: bloodOxygenValueText,
-                        valueColor: o2Eval.color,
-                        history: bloodOxygenHistoryData,
-                        graphColor: o2Eval.color,
-                        freshness: freshness(for: rawBloodOxygenHistory.last)
-                    )
-                }
-                .buttonStyle(.cardPress)
-                Divider().padding(.leading, 16)
-
-                // Card 6: 体脂 (Body Fat)
+                // Card: 体脂 (Body Fat)
                 let fatEval = evaluateBiomarker(.bodyFat, latestValue: rawFatHistory.last, history: rawFatHistory)
                 NavigationLink(destination: VelaMetricDetailView(metric: .bodyFat)) {
                     biomarkerRow(
-                        title: "体脂",
+                        title: "体脂率",
                         trendText: fatEval.text,
                         trendIcon: fatEval.icon,
                         valueText: fatValueText,
@@ -406,12 +411,37 @@ struct VelaVitalsView: View {
                 }
                 .buttonStyle(.cardPress)
             }
-            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
-            )
         }
+    }
+
+    // MARK: - Biomarker Group Card Container
+    private func biomarkerGroupCard<Content: View>(
+        title: String,
+        icon: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(VelaTheme.rhythmDeep)
+                Text(title)
+                    .font(.system(size: 11, weight: .bold))
+                    .tracking(0.5)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 6)
+
+            content()
+        }
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+        )
     }
 
     // MARK: - Row builder
@@ -425,14 +455,21 @@ struct VelaVitalsView: View {
         graphColor: Color,
         freshness: DataFreshness
     ) -> some View {
-        HStack(alignment: .center) {
+        let isAnomaly = valueColor == VelaTheme.strainColor || trendIcon.contains("exclamationmark")
+        return HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(title)
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(VelaTheme.fg)
+                        .foregroundStyle(VelaTheme.rhythmInk)
                     
                     DataFreshnessIndicator(freshness: freshness, showText: false)
+
+                    if isAnomaly {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(VelaTheme.strainColor)
+                    }
                 }
 
                 HStack(spacing: 4) {
@@ -440,27 +477,36 @@ struct VelaVitalsView: View {
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(valueColor)
 
-                    Text("\(trendText) · \(valueText)")
-                        .font(.system(size: 13, weight: .medium))
+                    Text(trendText)
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(valueColor)
                 }
             }
 
-            Spacer()
+            Spacer(minLength: 8)
 
-            if history.isEmpty {
-                Text("暂无趋势")
-                    .font(.system(size: 11))
-                    .foregroundStyle(VelaTheme.muted)
-                    .frame(width: 90, alignment: .trailing)
-                    .padding(.trailing, 4)
-            } else {
-                SparklineLineGraph(data: history, color: graphColor, height: 38, width: 90)
-                    .padding(.trailing, 4)
+            HStack(alignment: .center, spacing: 10) {
+                Text(valueText)
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(VelaTheme.rhythmInk)
+
+                if history.isEmpty {
+                    Capsule()
+                        .fill(VelaTheme.rhythmMist)
+                        .frame(width: 54, height: 2)
+                        .accessibilityHidden(true)
+                } else {
+                    SparklineLineGraph(data: history, color: graphColor, height: 30, width: 54)
+                }
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.35))
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.vertical, 13)
         .contentShape(Rectangle())
     }
 

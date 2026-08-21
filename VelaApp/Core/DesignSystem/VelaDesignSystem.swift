@@ -132,19 +132,20 @@ struct ActionPill: View {
                 .fontWeight(.semibold)
                 .lineLimit(1)
         }
-        .foregroundStyle(isPrimary ? .white : VelaTheme.fg)
+        .foregroundStyle(isPrimary ? VelaTheme.rhythmDeepOn : VelaTheme.rhythmInk)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(
             Capsule(style: .continuous)
-                .fill(isPrimary ? VelaTheme.accent : VelaTheme.surface)
+                .fill(isPrimary ? VelaTheme.rhythmDeep : VelaTheme.rhythmMist.opacity(0.4))
         )
         .overlay(
             Capsule(style: .continuous)
-                .stroke(isPrimary ? Color.clear : VelaTheme.borderSoft, lineWidth: 0.5)
+                .stroke(isPrimary ? Color.clear : VelaTheme.rhythmMist, lineWidth: 0.75)
         )
         .contentShape(Capsule())
         .onTapGesture {
+            VelaHaptic.selection()
             VelaAppState.shared.logDebug("[ActionPill] Direct tap triggered: \(title)")
             action()
         }
@@ -160,13 +161,13 @@ struct EmptyStateView: View {
         VStack(spacing: 10) {
             Image(systemName: icon)
                 .font(.system(size: 26, weight: .semibold))
-                .foregroundStyle(VelaTheme.meta)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
             Text(title)
                 .font(VelaTheme.headline())
-                .foregroundStyle(VelaTheme.fg)
+                .foregroundStyle(VelaTheme.rhythmInk)
             Text(subtitle)
                 .font(VelaTheme.subheadline())
-                .foregroundStyle(VelaTheme.muted)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 .multilineTextAlignment(.center)
         }
         .padding(24)
@@ -401,18 +402,17 @@ struct VelaNativeCardModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .background(VelaTheme.cardBg)
+            .background(VelaTheme.rhythmCanvasRaised)
             .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .stroke(
                         colorSchemeContrast == .increased
-                            ? VelaTheme.border
-                            : VelaTheme.borderSoft.opacity(0.42),
-                        lineWidth: colorSchemeContrast == .increased ? 1 : 0.5
+                            ? VelaTheme.rhythmInk
+                            : VelaTheme.rhythmMist,
+                        lineWidth: colorSchemeContrast == .increased ? 1 : 0.75
                     )
             )
-            .shadow(color: VelaTheme.cardShadow(colorScheme), radius: 12, y: 5)
     }
 }
 

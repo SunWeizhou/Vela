@@ -358,3 +358,45 @@ struct ArtifactRendererView: View {
         }
     }
 }
+
+// MARK: - CoachFollowUpChipsView
+
+struct CoachFollowUpChipsView: View {
+    let suggestions: [String]
+    let onSelect: (String) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(suggestions, id: \.self) { suggestion in
+                Button {
+                    VelaHaptic.selection()
+                    onSelect(suggestion)
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(VelaTheme.rhythmDeep)
+                        Text(suggestion)
+                            .font(VelaTheme.caption2().weight(.medium))
+                            .foregroundStyle(VelaTheme.rhythmInk)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule()
+                            .fill(VelaTheme.rhythmCanvasRaised)
+                    )
+                    .overlay(
+                        Capsule()
+                            .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.leading, 8)
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
+    }
+}

@@ -395,6 +395,7 @@ final class DailySummaryUseCase {
         var todayFoodLogs: [FoodLogRecord] = []
         var recentJournalEntries: [JournalEntryRecord] = []
         var bodyModelState: BodyModelState? = nil
+        var trainingPreference: TrainingPreferenceProfile? = nil
         if let modelContext {
             let activePlanFetch = FetchDescriptor<TrainingPlanRecord>(
                 predicate: #Predicate<TrainingPlanRecord> { $0.isActive }
@@ -470,6 +471,7 @@ final class DailySummaryUseCase {
             let allResponsesForModel = (try? modelContext.fetch(FetchDescriptor<TrainingResponseRecord>())) ?? []
             let allJournalsForModel = (try? modelContext.fetch(FetchDescriptor<JournalEntryRecord>())) ?? []
             let onboardingForModel = (try? modelContext.fetch(FetchDescriptor<OnboardingState>()))?.first
+            trainingPreference = onboardingForModel?.trainingPreference
             bodyModelState = BodyModelBuilder().build(
                 onboarding: onboardingForModel,
                 dailySummaries: allDailySummaryRecords,
@@ -522,13 +524,21 @@ final class DailySummaryUseCase {
         ))
         
         let dayId = DailyHealthSummaryRecord.dayIdentifier(for: now, calendar: calendar)
+        let rotationFocus = activePlan == nil
+            ? TrainingRotationResolver.nextFocus(
+                profile: trainingPreference,
+                recentResponses: recentTrainingResponses.map(\.dto)
+            )
+            : nil
+        let expectedRotationTitle = rotationFocus.map(TrainingRotationResolver.title)
         var matchedExistingDecision: DailyTrainingDecision? = nil
         if let modelContext {
             let opPlanDescriptor = FetchDescriptor<DailyOperatingPlanRecord>(
                 predicate: #Predicate<DailyOperatingPlanRecord> { $0.dayIdentifier == dayId }
             )
             if let existingPlan = (try? modelContext.fetch(opPlanDescriptor))?.first,
-               existingPlan.bodyStateHash == bodyState.hash {
+               existingPlan.bodyStateHash == bodyState.hash,
+               expectedRotationTitle == nil || existingPlan.operatingPlanPayload?.targetSessionTitle == expectedRotationTitle {
                 matchedExistingDecision = existingPlan.trainingDecision
             }
         }
@@ -548,7 +558,8 @@ final class DailySummaryUseCase {
                 // 算法打通（深度专项批次 1）：与展示路径同源，恢复此前被
                 // persistedDecision 遮蔽的「本月训练量三年 P85 → 减量」门控。
                 longTermTrainingVolume: longTermReport.trainingVolume,
-                feedbackCalibration: feedbackCalibration
+                feedbackCalibration: feedbackCalibration,
+                rotationFocus: rotationFocus
             ))
         }
         

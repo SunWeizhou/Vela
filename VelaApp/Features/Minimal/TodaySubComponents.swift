@@ -97,11 +97,11 @@ struct ProactiveGuidanceCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
-                    .fill(VelaTheme.cardBg)
+                    .fill(VelaTheme.rhythmCanvasRaised)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
-                    .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.5)
             )
             .contentShape(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous))
         }
@@ -188,10 +188,10 @@ struct TodayStateRingsStrip: View {
             }
         }
         .padding(.vertical, 13)
-        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         )
         .accessibilityElement(children: .contain)
     }
@@ -208,7 +208,7 @@ struct TodayStateRingsStrip: View {
             )
             Text(card.title)
                 .font(VelaTheme.caption2().weight(.semibold))
-                .foregroundStyle(VelaTheme.fg2)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
         }
     }
 }
@@ -231,7 +231,7 @@ struct TodayReadinessHero: View {
                         .font(VelaTheme.callout().weight(.bold))
                         .foregroundStyle(VelaTheme.muted)
                 }
-                Text("READY · \(stateText)")
+                Text(stateText)
                     .font(VelaTheme.caption1().weight(.bold))
                     .foregroundStyle(VelaTheme.color(for: state))
             }
@@ -325,10 +325,10 @@ struct TodayGuidanceCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         )
     }
 }
@@ -373,42 +373,85 @@ struct TodayVitalsGrid: View {
 struct TodayVitalCard: View {
     let card: TodayVitalCardModel
 
+    private var iconName: String {
+        switch card.kind {
+        case .hrv:   return "heart.fill"
+        case .rhr:   return "waveform.path.ecg"
+        case .spo2:  return "lungs.fill"
+        case .sleep: return "bed.double.fill"
+        }
+    }
+
+    private var accentColor: Color {
+        switch card.kind {
+        case .hrv:   return VelaTheme.recoveryColor
+        case .rhr:   return VelaTheme.rhythmDeep
+        case .spo2:  return VelaTheme.accent
+        case .sleep: return VelaTheme.sleepColor
+        }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
+        VStack(alignment: .leading, spacing: 8) {
+            // Row 1: Icon + Title + Chevron
+            HStack(spacing: 6) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(accentColor.opacity(0.12))
+                    Image(systemName: iconName)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(accentColor)
+                }
+                .frame(width: 20, height: 20)
+
                 Text(card.label)
-                    .font(VelaTheme.caption2().weight(.semibold))
-                    .foregroundStyle(VelaTheme.fg2)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
                     .lineLimit(1)
-                    .frame(height: 14)            // 固定标签高 → 四格对齐
-                Spacer(minLength: 4)
+
+                Spacer(minLength: 2)
+
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(VelaTheme.meta)
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.4))
             }
+
+            // Row 2: Large monospaced value + unit
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(card.value)
-                    .font(VelaTheme.vitalValue())
-                    .foregroundStyle(VelaTheme.fg)
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Text(card.unit)
-                    .font(VelaTheme.caption2().weight(.semibold))
-                    .foregroundStyle(VelaTheme.muted)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
-            .frame(height: 26, alignment: .bottom)  // 数值同基线 → 对齐
-            Text(card.status)
-                .font(VelaTheme.caption2().weight(.bold))
-                .foregroundStyle(card.isGood ? VelaTheme.stateGood : VelaTheme.stateModerate)
-            TodayHeroSparkline(values: card.trend, color: VelaTheme.brand)
-                .frame(height: 24)
+            .frame(height: 24, alignment: .bottom)
+
+            // Row 3: Status text & Sparkline
+            HStack(alignment: .center) {
+                Text(card.status)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(card.isGood ? VelaTheme.stateGood : VelaTheme.stateModerate)
+                    .lineLimit(1)
+
+                Spacer(minLength: 4)
+
+                TodayHeroSparkline(values: card.trend, color: accentColor)
+                    .frame(width: 48, height: 18)
+            }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
-                .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(VelaTheme.rhythmCanvasRaised)
         )
-        .contentShape(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 
@@ -439,15 +482,15 @@ struct TodayWeeklyLoadCard: View {
                     HStack(spacing: 4) {
                         Text("本周负荷")
                             .font(VelaTheme.subheadline().weight(.bold))
-                            .foregroundStyle(VelaTheme.fg)
+                            .foregroundStyle(VelaTheme.rhythmInk)
                         Image(systemName: "chevron.right")
                             .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(VelaTheme.meta)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                     Spacer()
                     Text(acwrText.isEmpty ? "ACWR 稳定" : acwrText)
                         .font(VelaTheme.caption2().weight(.semibold))
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 HStack(alignment: .bottom, spacing: 6) {
                     ForEach(Array(displayLoads.enumerated()), id: \.offset) { index, load in
@@ -457,7 +500,7 @@ struct TodayWeeklyLoadCard: View {
                                 .frame(height: max(6, 52 * CGFloat(load / maxLoad)))
                             Text(index < dayLabels.count ? dayLabels[index] : "\(index + 1)")
                                 .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(VelaTheme.meta)
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         }
                         .frame(maxWidth: .infinity)
                     }
@@ -465,10 +508,10 @@ struct TodayWeeklyLoadCard: View {
                 .frame(height: 64)
             }
             .padding(14)
-            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
             )
         }
         .buttonStyle(.cardPress)

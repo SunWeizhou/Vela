@@ -423,9 +423,6 @@ struct TrainingCalendarView: View {
                         review.averageRecoveryDelta.map { String(format: "%+.1f", $0) } ?? "待积累"
                     )
                 }
-                Text("基于计划执行、训练记录和次日反馈的观察性总结，不代表因果关系。")
-                    .font(.caption2)
-                    .foregroundStyle(VelaTheme.muted)
             }
         }
     }
@@ -555,11 +552,11 @@ struct TrainingCalendarView: View {
         .padding(.horizontal, 16)
         .background(
             RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
-                .fill(day.isCompleted ? VelaTheme.surface.opacity(0.4) : VelaTheme.surface)
+                .fill(day.isCompleted ? VelaTheme.rhythmCanvasRaised.opacity(0.65) : VelaTheme.rhythmCanvasRaised)
         )
         .overlay(
             RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
-                .stroke(day.isCompleted ? VelaTheme.recoveryColor.opacity(0.12) : Color.black.opacity(0.04), lineWidth: 0.5)
+                .stroke(day.isCompleted ? VelaTheme.rhythmDeep.opacity(0.2) : VelaTheme.rhythmMist, lineWidth: 0.75)
         )
         .appleIntelligenceGlow(isHighlighted: hasPendingAdaptation, radius: VelaTheme.radiusCardLarge)
     }
@@ -571,24 +568,23 @@ struct TrainingCalendarView: View {
             
             ZStack {
                 Circle()
-                    .fill(VelaTheme.accent.opacity(0.08))
+                    .fill(VelaTheme.rhythmDeep.opacity(0.08))
                     .frame(width: 80, height: 80)
                 
                 Image(systemName: "calendar.badge.clock")
                     .font(.system(size: 32))
-                    .foregroundStyle(VelaTheme.accent)
-                    .shadow(color: VelaTheme.accent.opacity(0.4), radius: 6)
+                    .foregroundStyle(VelaTheme.rhythmDeep)
             }
 
             VelaGlassCard(padding: 24, cornerRadius: 20) {
                 VStack(spacing: 16) {
                     Text(L10n.t("Your Training Schedule", "你的智能课表"))
                         .font(.system(.title3, design: .rounded).weight(.bold))
-                        .foregroundStyle(VelaTheme.fg)
+                        .foregroundStyle(VelaTheme.rhythmInk)
                     
                     Text(L10n.t("No active training plan. Ask your Coach Agent to generate a multi-week athletic progression program tailored to your recovery, sleep, and fitness goals.", "当前没有激活的训练课表。让你的 AI 教练根据你的恢复、睡眠以及运动目标，为你定制一份长期的多周智能训练计划吧！"))
                         .font(.subheadline)
-                        .foregroundStyle(VelaTheme.fg2)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .multilineTextAlignment(.center)
                         .lineSpacing(4)
                 }
@@ -609,11 +605,10 @@ struct TrainingCalendarView: View {
                     Text(L10n.t("Ask AI Coach to Generate Plan", "让 AI 教练制定专属课表"))
                         .font(.system(size: 14, weight: .bold))
                 }
-                .foregroundStyle(Color.black)
+                .foregroundStyle(VelaTheme.rhythmDeepOn)
                 .padding(.horizontal, 24)
                 .padding(.vertical, 14)
-                .background(Capsule().fill(VelaTheme.accent))
-                .shadow(color: VelaTheme.accent.opacity(0.3), radius: 8)
+                .background(Capsule().fill(VelaTheme.rhythmDeep))
             }
             .buttonStyle(.cardPress)
 

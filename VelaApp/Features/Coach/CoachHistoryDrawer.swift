@@ -31,7 +31,7 @@ struct CoachHistoryDrawer: View {
             HStack {
                 Text("历史对话")
                     .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(VelaTheme.fg)
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Button {
                     withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
@@ -40,7 +40,7 @@ struct CoachHistoryDrawer: View {
                 } label: {
                     Image(systemName: "sidebar.left")
                         .font(.system(size: 16))
-                        .foregroundStyle(VelaTheme.accent)
+                        .foregroundStyle(VelaTheme.rhythmDeep)
                 }
                 .buttonStyle(.cardPress)
             }
@@ -61,30 +61,30 @@ struct CoachHistoryDrawer: View {
                     Text("新建对话")
                         .font(.system(size: 14, weight: .bold))
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(VelaTheme.rhythmDeepOn)
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
-                .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).fill(VelaTheme.accent))
+                .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.rhythmDeep))
             }
             .buttonStyle(.cardPress)
             .padding(.horizontal, 20)
-            .padding(.bottom, 20)
+            .padding(.bottom, 16)
 
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 TextField("搜索标题或对话内容", text: $searchText)
                     .textInputAutocapitalization(.never)
                 if !searchText.isEmpty {
                     Button { searchText = "" } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(VelaTheme.muted)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(10)
-            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
+            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .padding(.horizontal, 20)
             .padding(.bottom, 12)
             
@@ -97,17 +97,17 @@ struct CoachHistoryDrawer: View {
                         HStack(spacing: 12) {
                             Image(systemName: "bubble.left.and.bubble.right.fill")
                                 .font(.system(size: 13))
-                                .foregroundStyle(vm.currentSession?.id == session.id ? VelaTheme.accent : VelaTheme.muted)
+                                .foregroundStyle(vm.currentSession?.id == session.id ? VelaTheme.rhythmDeep : VelaTheme.rhythmInkSecondary)
                             
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(session.title.isEmpty ? "新对话" : session.title)
                                     .font(.system(size: 14, weight: .bold))
-                                    .foregroundStyle(VelaTheme.fg)
+                                    .foregroundStyle(VelaTheme.rhythmInk)
                                     .lineLimit(1)
                                 
                                 Text(session.updatedAt.formatted(.dateTime.month().day().hour().minute()))
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(VelaTheme.muted)
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             }
                             
                             Spacer()
@@ -120,7 +120,7 @@ struct CoachHistoryDrawer: View {
                                 } label: {
                                     Image(systemName: "pencil")
                                         .font(.system(size: 12))
-                                        .foregroundStyle(VelaTheme.accent)
+                                        .foregroundStyle(VelaTheme.rhythmDeep)
                                         .frame(width: 24, height: 24)
                                 }
                                 .buttonStyle(.cardPress)
@@ -130,7 +130,7 @@ struct CoachHistoryDrawer: View {
                                 } label: {
                                     Image(systemName: "trash")
                                         .font(.system(size: 12))
-                                        .foregroundStyle(VelaTheme.danger)
+                                        .foregroundStyle(VelaTheme.stressColor)
                                         .frame(width: 24, height: 24)
                                 }
                                 .buttonStyle(.cardPress)
@@ -140,10 +140,10 @@ struct CoachHistoryDrawer: View {
                         .padding(.vertical, 12)
                         .background(
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(vm.currentSession?.id == session.id ? VelaTheme.cardBg : Color.clear)
+                                .fill(vm.currentSession?.id == session.id ? VelaTheme.rhythmCanvasRaised : Color.clear)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .stroke(vm.currentSession?.id == session.id ? VelaTheme.accent.opacity(0.3) : Color.clear, lineWidth: 1)
+                                        .stroke(vm.currentSession?.id == session.id ? VelaTheme.rhythmDeep.opacity(0.3) : Color.clear, lineWidth: 1)
                                 )
                         )
                         .padding(.horizontal, 14)
@@ -162,36 +162,36 @@ struct CoachHistoryDrawer: View {
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
-                        .fill(VelaTheme.accent)
-                        .frame(width: 36, height: 36)
+                        .fill(VelaTheme.rhythmDeep)
+                        .frame(width: 34, height: 34)
                     
                     Image(systemName: "person.fill")
-                        .font(.system(size: 16))
-                        .foregroundStyle(.white)
+                        .font(.system(size: 15))
+                        .foregroundStyle(VelaTheme.rhythmDeepOn)
                 }
                 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("本机健康资料")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(VelaTheme.fg)
+                        .foregroundStyle(VelaTheme.rhythmInk)
                     Text("本机优先存储")
                         .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(VelaTheme.accent)
+                        .foregroundStyle(VelaTheme.rhythmDeep)
                 }
                 Spacer()
             }
             .padding(.horizontal, 20)
             .padding(.top, 12)
             .padding(.bottom, 48)
-            .background(VelaTheme.surface)
+            .background(VelaTheme.rhythmCanvasRaised)
         }
         .frame(width: width)
         .frame(maxHeight: .infinity)
         .background(VelaTheme.rhythmCanvas)
         .overlay(alignment: .trailing) {
             Rectangle()
-                .fill(VelaTheme.separatorSoft)
-                .frame(width: 0.5)
+                .fill(VelaTheme.rhythmMist)
+                .frame(width: 0.75)
         }
     }
 }

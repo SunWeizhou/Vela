@@ -10,7 +10,9 @@ enum VelaFeatureFlags {
     /// train–recover loop; Biological Age is hidden because it needs 9 blood-panel
     /// inputs most users never have. Code paths stay intact behind these flags.
     static let nutritionEnabled = false
-    static let biologicalAgeEnabled = false
+    // Wearable-only mode: BiologicalAgeEngine falls back to "健康信号参考" when
+    // blood biomarkers are unavailable (isPhenoAge == false). No lab panel required.
+    static let biologicalAgeEnabled = true
 
     static func bevelParityInterfaceEnabled(
         defaults: UserDefaults = .standard,

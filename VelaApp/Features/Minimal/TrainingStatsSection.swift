@@ -741,22 +741,16 @@ struct PersonalRecordsCard: View {
 
 struct RecentWorkoutsSection: View {
     let recentWorkouts: [WorkoutSummary]
-    /// nil = 显示全部；默认 12 条用于深入分析入口。
     var limit: Int? = 12
-    /// Resolves a HealthKit/merged summary back to a locally-logged strength
-    /// workout record, if any, so strength workouts open the rich detail view.
     var strengthWorkout: (WorkoutSummary) -> StrengthWorkoutRecord?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("训练记录")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
-                Text("Apple + 训记自动合并")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
 
             if recentWorkouts.isEmpty {
@@ -768,10 +762,6 @@ struct RecentWorkoutsSection: View {
                     .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
             } else {
                 ForEach(recentWorkouts.prefix(limit ?? recentWorkouts.count)) { workout in
-                    // Strength workouts that were logged locally open the rich
-                    // strength detail (PR trophies, muscle distribution, edit/delete).
-                    // Previously ALL workouts opened the generic HealthKit detail, so
-                    // this entire feature was unreachable.
                     NavigationLink(destination: destination(for: workout)) {
                         workoutRow(workout)
                     }
@@ -793,9 +783,10 @@ struct RecentWorkoutsSection: View {
     private func workoutRow(_ workout: WorkoutSummary) -> some View {
         HStack(spacing: 12) {
             Image(systemName: workoutListIcon(workout.activityName))
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmDeep)
-                .frame(width: 36, height: 36)
-                .background(Circle().fill(VelaTheme.rhythmMist))
+                .frame(width: 38, height: 38)
+                .background(VelaTheme.rhythmMist.opacity(0.6), in: Circle())
             VStack(alignment: .leading, spacing: 4) {
                 Text(workout.activityName)
                     .font(.system(size: 14, weight: .semibold))
@@ -879,14 +870,9 @@ struct StrengthWorkoutsSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("力量训练记录")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(VelaTheme.rhythmInk)
-                    Text("动作、器械、组次与训练容量")
-                        .font(.system(size: 11))
-                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                }
+                Text("力量训练记录")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Button {
                     startStrengthWorkout()

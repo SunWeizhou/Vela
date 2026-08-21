@@ -38,7 +38,7 @@ struct VelaMetricScoreRing: View {
             ZStack {
                 Circle()
                     .stroke(
-                        VelaTheme.borderSoft,
+                        VelaTheme.rhythmMist,
                         style: StrokeStyle(
                             lineWidth: ringWidth,
                             lineCap: .round,
@@ -85,7 +85,7 @@ struct VelaMetricScoreRing: View {
 
                 Text(valueText)
                     .font(.system(size: size * 0.28, weight: .bold, design: .rounded))
-                    .foregroundStyle(VelaTheme.fg)
+                    .foregroundStyle(VelaTheme.rhythmInk)
                     .monospacedDigit()
                     .minimumScaleFactor(0.7)
             }
@@ -95,7 +95,7 @@ struct VelaMetricScoreRing: View {
             if showsLabel {
                 Text(label)
                     .font(VelaTheme.caption1().weight(.semibold))
-                    .foregroundStyle(VelaTheme.fg2)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .lineLimit(1)
             }
         }
@@ -171,10 +171,10 @@ struct VelaTimelineCard: View {
         }
         .padding(VelaTheme.compactCardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
-                .stroke(VelaTheme.borderSoft.opacity(0.65), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         )
     }
 }
@@ -194,7 +194,7 @@ private struct VelaTimelineItemRow: View {
 
                 if showsConnector {
                     Rectangle()
-                        .fill(VelaTheme.borderSoft)
+                        .fill(VelaTheme.rhythmMist)
                         .frame(width: 1.5)
                         .frame(minHeight: 18)
                 }
@@ -204,10 +204,10 @@ private struct VelaTimelineItemRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.title)
                     .font(VelaTheme.subheadline().weight(.semibold))
-                    .foregroundStyle(VelaTheme.fg)
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Text(item.subtitle)
                     .font(VelaTheme.caption1())
-                    .foregroundStyle(VelaTheme.fg2)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
             .padding(.top, 4)
 
@@ -324,7 +324,7 @@ struct DottedCircleGauge: View {
         ZStack {
             // Dotted circle track
             Circle()
-                .stroke(VelaTheme.borderSoft, style: StrokeStyle(lineWidth: 4.5, lineCap: .round, dash: [1.5, 4]))
+                .stroke(VelaTheme.rhythmMist, style: StrokeStyle(lineWidth: 4.5, lineCap: .round, dash: [1.5, 4]))
                 .frame(width: size, height: size)
             
             // Colored active dots matching score
@@ -337,7 +337,7 @@ struct DottedCircleGauge: View {
             VStack(spacing: 1) {
                 Text("\(Int(animatedScore))")
                     .font(.system(size: 20, weight: .bold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(VelaTheme.fg)
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Text(labelText)
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(color)
@@ -373,7 +373,7 @@ struct SegmentedBatteryBar: View {
             ForEach(0..<barCount, id: \.self) { idx in
                 let activeCount = Int(animatedPercentage * Double(barCount))
                 RoundedRectangle(cornerRadius: 1)
-                    .fill(idx < activeCount ? color : VelaTheme.borderSoft)
+                    .fill(idx < activeCount ? color : VelaTheme.rhythmMist)
                     .frame(width: 4, height: 14)
             }
         }

@@ -65,10 +65,10 @@ struct WorkoutHeartRateInsightSheet: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text("心率区间")
                     .font(.system(size: 22, weight: .bold))
-                    .foregroundStyle(VelaTheme.fg)
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Text(intensityText)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
 
             HStack(spacing: 10) {
@@ -88,11 +88,11 @@ struct WorkoutHeartRateInsightSheet: View {
                             .frame(width: 9, height: 9)
                         Text(segment.label)
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(VelaTheme.fg)
+                            .foregroundStyle(VelaTheme.rhythmInk)
                         Spacer()
                         Text("\(Int((Double(segment.count) / Double(totalCount) * 100).rounded()))%")
                             .font(.system(size: 13, weight: .bold, design: .rounded))
-                            .foregroundStyle(VelaTheme.muted)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                 }
             }
@@ -106,16 +106,17 @@ struct WorkoutHeartRateInsightSheet: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(value)
                 .font(.system(size: 15, weight: .bold, design: .rounded))
-                .foregroundStyle(VelaTheme.fg)
+                .foregroundStyle(VelaTheme.rhythmInk)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
             Text(title)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(VelaTheme.muted)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.cardBg))
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
     }
 }
 
@@ -138,9 +139,10 @@ struct StrengthSetDetailSheet: View {
             VStack(alignment: .leading, spacing: 14) {
                 Text(detail.exerciseName)
                     .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Text("第 \(detail.setIndex) 组")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
 
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                     metric("重量", "\(detail.set.weightKilograms.formatted(.number.precision(.fractionLength(0...1)))) kg")
@@ -163,14 +165,15 @@ struct StrengthSetDetailSheet: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(value)
                 .font(.system(size: 18, weight: .bold, design: .rounded))
-                .foregroundStyle(VelaTheme.fg)
+                .foregroundStyle(VelaTheme.rhythmInk)
             Text(title)
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(VelaTheme.muted)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.cardBg))
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
     }
 }
 
@@ -181,9 +184,9 @@ struct WorkoutExerciseListView: View {
     let strengthWorkouts: [StrengthWorkoutRecord]
     @Binding var selectedSet: StrengthSetDetail?
 
-    private var bodyTextColor: Color { VelaTheme.fg }
-    private var mutedColor: Color { VelaTheme.muted }
-    private var accentColor: Color { VelaTheme.accent }
+    private var bodyTextColor: Color { VelaTheme.rhythmInk }
+    private var mutedColor: Color { VelaTheme.rhythmInkSecondary }
+    private var accentColor: Color { VelaTheme.rhythmDeep }
 
     var body: some View {
         let analysis = TrainingAnalyticsService().summarizeWorkout(
@@ -194,7 +197,7 @@ struct WorkoutExerciseListView: View {
         return VStack(alignment: .leading, spacing: 12) {
             Text("动作与组次")
                 .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(VelaTheme.fg)
+                .foregroundStyle(VelaTheme.rhythmInk)
 
             ForEach(strength.exercises) { exercise in
                 VStack(alignment: .leading, spacing: 12) {
@@ -254,7 +257,7 @@ struct WorkoutExerciseListView: View {
                     }
                 }
                 .padding(16)
-                .velaNativeCard(radius: 16)
+                .velaNativeCard(radius: 18)
             }
         }
     }
@@ -263,9 +266,9 @@ struct WorkoutExerciseListView: View {
         HStack(spacing: 12) {
             Text(set.isWarmup ? "热" : "\(index + 1)")
                 .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundStyle(Color.white)
+                .foregroundStyle(set.isWarmup ? Color.white : VelaTheme.rhythmDeepOn)
                 .frame(width: 24, height: 24)
-                .background(Circle().fill(set.isWarmup ? VelaTheme.systemOrange : VelaTheme.accent))
+                .background(Circle().fill(set.isWarmup ? VelaTheme.systemOrange : VelaTheme.rhythmDeep))
                 .frame(width: 32, alignment: .leading)
 
             Text("\(set.weightKilograms.formatted(.number.precision(.fractionLength(0...1)))) kg")
@@ -282,12 +285,19 @@ struct WorkoutExerciseListView: View {
 
             Text(set.rpe.map { "\(Int($0))" } ?? "—")
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(set.rpe != nil ? VelaTheme.accent : mutedColor)
+                .foregroundStyle(set.rpe != nil ? VelaTheme.rhythmDeep : mutedColor)
                 .frame(width: 44, height: 26)
-                .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(VelaTheme.elevatedBg))
+                .background(
+                    RoundedRectangle(cornerRadius: VelaTheme.radiusSm)
+                        .fill(VelaTheme.rhythmCanvas)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: VelaTheme.radiusSm)
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+                )
 
             Image(systemName: (set.isCompleted ?? true) ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle((set.isCompleted ?? true) ? VelaTheme.success : mutedColor)
+                .foregroundStyle((set.isCompleted ?? true) ? VelaTheme.rhythmDeep : mutedColor)
                 .font(.system(size: 20))
                 .frame(width: 32, alignment: .trailing)
         }
@@ -302,16 +312,16 @@ struct WorkoutNotesCardView: View {
 
     var body: some View {
         if !strength.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            VelaGlassCard(padding: 16, cornerRadius: 20) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("训练备注", systemImage: "note.text")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(VelaTheme.fg)
-                    Text(strength.notes)
-                        .font(.system(size: 13))
-                        .foregroundStyle(VelaTheme.fg2)
-                }
+            VStack(alignment: .leading, spacing: 8) {
+                Label("训练备注", systemImage: "note.text")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                Text(strength.notes)
+                    .font(.system(size: 13))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
+            .padding(16)
+            .velaNativeCard(radius: 18)
         }
     }
 }

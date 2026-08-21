@@ -11,22 +11,22 @@ struct TodayNutritionStrip: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("营养")
                         .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(VelaTheme.fg)
+                        .foregroundStyle(VelaTheme.rhythmInk)
                     Text(nutrition.macroText)
                         .font(.system(size: 12))
-                        .foregroundStyle(VelaTheme.fg2)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 Spacer()
                 Text(nutrition.calorieText)
                     .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundStyle(VelaTheme.energyColor)
+                    .foregroundStyle(VelaTheme.rhythmInk)
             }
 
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(VelaTheme.borderSoft)
+                    Capsule().fill(VelaTheme.rhythmMist)
                     Capsule()
-                        .fill(VelaTheme.energyColor)
+                        .fill(VelaTheme.rhythmDeep)
                         .frame(width: max(8, proxy.size.width * nutrition.calorieProgress))
                 }
             }
@@ -41,19 +41,19 @@ struct TodayNutritionStrip: View {
                     onAddClick()
                 } label: {
                     Image(systemName: "plus")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.white)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(VelaTheme.rhythmDeepOn)
                         .frame(width: 30, height: 30)
-                        .background(Circle().fill(VelaTheme.energyColor))
+                        .background(Circle().fill(VelaTheme.rhythmDeep))
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm, style: .continuous).fill(VelaTheme.cardBg))
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
         .overlay(
-            RoundedRectangle(cornerRadius: VelaTheme.radiusSm, style: .continuous)
-                .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         )
     }
 
@@ -66,11 +66,11 @@ struct TodayNutritionStrip: View {
                 .background(Circle().fill(color.opacity(0.12)))
             Text("\(value)g")
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(VelaTheme.fg)
+                .foregroundStyle(VelaTheme.rhythmInk)
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 3)
-        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(VelaTheme.surface))
+        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(VelaTheme.rhythmCanvas))
     }
 }
 
@@ -84,7 +84,7 @@ struct TodayDailyModuleLinks: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("今日记录")
                 .font(VelaTheme.headline())
-                .foregroundStyle(VelaTheme.fg)
+                .foregroundStyle(VelaTheme.rhythmInk)
 
             NavigationLink {
                 VelaVitalsView()
@@ -99,22 +99,22 @@ struct TodayDailyModuleLinks: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("健康监测")
                             .font(VelaTheme.subheadline().weight(.semibold))
-                            .foregroundStyle(VelaTheme.fg)
+                            .foregroundStyle(VelaTheme.rhythmInk)
                         Text(monitorSummary)
                             .font(VelaTheme.caption2())
-                            .foregroundStyle(VelaTheme.muted)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .lineLimit(1)
                     }
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(VelaTheme.caption2().weight(.bold))
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
-                .padding(12)
-                .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
+                .padding(14)
+                .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
-                        .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
                 )
             }
             .buttonStyle(.cardPress)
@@ -134,13 +134,13 @@ struct TodayDailyModuleLinks: View {
                     Image(systemName: "chevron.right")
                 }
                 .font(VelaTheme.caption1().weight(.semibold))
-                .foregroundStyle(VelaTheme.energyColor)
-                .padding(.horizontal, 12)
+                .foregroundStyle(VelaTheme.rhythmDeep)
+                .padding(.horizontal, 14)
                 .frame(minHeight: VelaTheme.minimumHitTarget)
-                .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
+                .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
                 )
             }
             .buttonStyle(.cardPress)
@@ -155,10 +155,10 @@ struct TodayDailyModuleLinks: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("日志")
                             .font(VelaTheme.subheadline().weight(.semibold))
-                            .foregroundStyle(VelaTheme.fg)
+                            .foregroundStyle(VelaTheme.rhythmInk)
                         Text("记录体感、习惯和今天发生的事情")
                             .font(VelaTheme.caption2())
-                            .foregroundStyle(VelaTheme.muted)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                     Spacer()
                     Image(systemName: "plus")
@@ -166,12 +166,13 @@ struct TodayDailyModuleLinks: View {
                         .foregroundStyle(VelaTheme.sleepColor)
                         .frame(width: VelaTheme.minimumHitTarget, height: VelaTheme.minimumHitTarget)
                 }
-                .padding(.leading, 12)
-                .padding(.trailing, 4)
-                .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
+                .padding(.leading, 14)
+                .padding(.trailing, 6)
+                .padding(.vertical, 10)
+                .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
-                        .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
                 )
             }
             .buttonStyle(.cardPress)
@@ -514,10 +515,10 @@ struct VelaNutritionView: View {
             }
         }
         .padding(16)
-        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusFeature, style: .continuous))
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: VelaTheme.radiusFeature, style: .continuous)
-                .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         )
     }
 
@@ -552,10 +553,10 @@ struct VelaNutritionView: View {
             }
             .foregroundStyle(VelaTheme.energyColor)
             .frame(maxWidth: .infinity, minHeight: 60)
-            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
+            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                    .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
             )
         }
         .buttonStyle(.cardPress)
@@ -597,21 +598,24 @@ struct VelaNutritionView: View {
             }
             .padding(13)
             .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
-            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
+            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
 
             VStack(alignment: .leading, spacing: 6) {
                 Label("食物质量", systemImage: "leaf.fill")
                     .font(VelaTheme.caption1().weight(.semibold))
-                    .foregroundStyle(VelaTheme.fg2)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 Text(overview.qualityScore.map(String.init) ?? "—")
                     .font(VelaTheme.cardValue().monospacedDigit())
-                Text(overview.qualityScore == nil ? "记录没有质量分级，不作推断" : "仅汇总已保存的 A–E 分级")
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                Text(overview.qualityScore == nil ? "记录没有质量分级" : "已保存的 A–E 分级")
                     .font(VelaTheme.caption2())
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
             .padding(13)
             .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
-            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
+            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
         }
     }
 
@@ -622,16 +626,17 @@ struct VelaNutritionView: View {
             HStack {
                 Text("微量营养素")
                     .font(VelaTheme.headline())
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Text("包装标签数据")
                     .font(VelaTheme.caption2())
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
             if values.isEmpty {
                 VelaStateCard(
                     state: .partial,
                     title: "暂无可靠微量数据",
-                    message: "扫描包含钠、钾、钙、铁或维生素标签的条码后显示；不会根据餐食照片猜测。"
+                    message: "扫描包含钠、钾、钙、铁或维生素标签的条码后显示。"
                 )
             } else {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
@@ -639,21 +644,20 @@ struct VelaNutritionView: View {
                         VStack(alignment: .leading, spacing: 5) {
                             Text(nutrient.label)
                                 .font(VelaTheme.caption2().weight(.semibold))
-                                .foregroundStyle(VelaTheme.muted)
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             Text(nutrient.formattedValue)
                                 .font(VelaTheme.subheadline().weight(.bold).monospacedDigit())
+                                .foregroundStyle(VelaTheme.rhythmInk)
                             Text(nutrient.source)
                                 .font(.system(size: 9))
-                                .foregroundStyle(VelaTheme.muted)
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         }
                         .padding(11)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
+                        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
                     }
                 }
-                Text("仅合计今日已保存且标签明确提供的数值；不自动换算为个人医学目标。")
-                    .font(VelaTheme.caption2())
-                    .foregroundStyle(VelaTheme.muted)
             }
         }
     }
@@ -724,16 +728,17 @@ struct VelaNutritionView: View {
                 .foregroundStyle(VelaTheme.fg)
             Text(title)
                 .font(VelaTheme.caption2())
-                .foregroundStyle(VelaTheme.muted)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
             if let target {
                 Text("/ \(target)")
                     .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
         }
         .padding(10)
         .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
-        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
     }
 
     @ViewBuilder
@@ -741,6 +746,7 @@ struct VelaNutritionView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("今日餐食")
                 .font(VelaTheme.headline())
+                .foregroundStyle(VelaTheme.rhythmInk)
             if dayRecords.isEmpty {
                 VelaStateCard(
                     state: .empty,
@@ -761,19 +767,19 @@ struct VelaNutritionView: View {
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(record.mealName)
                                         .font(VelaTheme.subheadline().weight(.semibold))
-                                        .foregroundStyle(VelaTheme.fg)
+                                        .foregroundStyle(VelaTheme.rhythmInk)
                                     Text(record.summaryLine)
                                         .font(VelaTheme.caption2())
-                                        .foregroundStyle(VelaTheme.muted)
+                                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                         .lineLimit(1)
                                 }
                                 Spacer()
                                 Text("\(record.totalCalories) kcal")
                                     .font(VelaTheme.caption1().weight(.bold).monospacedDigit())
-                                    .foregroundStyle(VelaTheme.fg)
+                                    .foregroundStyle(VelaTheme.rhythmInk)
                                 Image(systemName: "chevron.right")
                                     .font(VelaTheme.caption2().weight(.bold))
-                                    .foregroundStyle(VelaTheme.muted)
+                                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             }
                             .padding(.vertical, 11)
                         }
@@ -782,7 +788,8 @@ struct VelaNutritionView: View {
                     }
                 }
                 .padding(.horizontal, 12)
-                .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
+                .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
             }
         }
     }
@@ -794,6 +801,7 @@ struct VelaNutritionView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("收藏与常用食物")
                     .font(VelaTheme.headline())
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 ScrollView(.horizontal) {
                     HStack(spacing: 9) {
                         ForEach(unique, id: \.id) { record in
@@ -803,23 +811,24 @@ struct VelaNutritionView: View {
                                 VStack(alignment: .leading, spacing: 5) {
                                     Text(record.foods.first?.name ?? record.mealName)
                                         .font(VelaTheme.caption1().weight(.semibold))
-                                        .foregroundStyle(VelaTheme.fg)
+                                        .foregroundStyle(VelaTheme.rhythmInk)
                                         .lineLimit(1)
                                     Text("\(record.totalCalories) kcal")
                                         .font(VelaTheme.caption2().monospacedDigit())
-                                        .foregroundStyle(VelaTheme.muted)
+                                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                     Label("再次记录", systemImage: "plus")
                                         .font(.system(size: 9, weight: .semibold))
                                         .foregroundStyle(VelaTheme.energyColor)
                                     if favoriteIDs.contains(record.id) {
                                         Label("已收藏", systemImage: "star.fill")
                                             .font(.system(size: 9, weight: .semibold))
-                                            .foregroundStyle(VelaTheme.warn)
+                                            .foregroundStyle(VelaTheme.rhythmWarm)
                                     }
                                 }
                                 .padding(12)
                                 .frame(width: 132, alignment: .leading)
-                                .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
+                                .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
                             }
                             .buttonStyle(.cardPress)
                         }
@@ -831,11 +840,7 @@ struct VelaNutritionView: View {
     }
 
     private var methodology: some View {
-        Text("营养评分仅反映已记录内容，不代表医学营养评估。未记录的餐食不会被推断；照片和条码结果保存前应以包装或实际份量核对。")
-            .font(VelaTheme.caption2())
-            .foregroundStyle(VelaTheme.muted)
-            .padding(14)
-            .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
+        EmptyView()
     }
 
     private var uniqueRecentFoods: [FoodLogRecord] {

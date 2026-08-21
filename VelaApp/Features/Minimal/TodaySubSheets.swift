@@ -112,19 +112,15 @@ struct ProactiveInsightDetailSheet: View {
 
                                 Text(actionText)
                                     .font(.system(size: 15, weight: .semibold))
-                                    .foregroundStyle(VelaTheme.fg)
+                                    .foregroundStyle(VelaTheme.rhythmInk)
                                     .lineSpacing(4)
 
                                 Spacer()
                             }
-
-                            Text("这不是医疗诊断；Vela 会把建议限制在训练、恢复、睡眠和日常节奏调整上。")
-                                .font(.system(size: 12, weight: .regular))
-                                .foregroundStyle(VelaTheme.meta)
-                                .lineSpacing(3)
                         }
                         .padding(16)
-                        .velaNativeCard(radius: 18)
+                        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
                     }
                 }
                 .padding(.horizontal, 18)
@@ -337,17 +333,17 @@ struct ActiveStatusSelectionSheetView: View {
                                 HStack(spacing: 4) {
                                     Text(tempDuration)
                                         .font(.system(size: 14, weight: .bold))
-                                        .foregroundStyle(VelaTheme.fg2)
+                                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                     Image(systemName: "chevron.right")
                                         .font(.system(size: 12, weight: .bold))
-                                        .foregroundStyle(VelaTheme.meta)
+                                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                 }
                             }
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 14)
-                        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.cardBg))
-                        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+                        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+                        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
                     }
@@ -360,10 +356,10 @@ struct ActiveStatusSelectionSheetView: View {
                     } label: {
                         Text("更新")
                             .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(VelaTheme.rhythmDeepOn)
                             .frame(maxWidth: .infinity)
                             .frame(height: 52)
-                            .background(RoundedRectangle(cornerRadius: 26, style: .continuous).fill(VelaTheme.accent))
+                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.rhythmDeep))
                             .padding(.horizontal, 16)
                             .padding(.top, 16)
                     }
@@ -373,56 +369,55 @@ struct ActiveStatusSelectionSheetView: View {
         }
         .onAppear {
             tempStatus = activeStatusRaw
-            tempDuration = activeStatusDuration
+            tempDuration = activeStatusDuration.isEmpty ? "直至关闭" : activeStatusDuration
         }
-        .background(VelaTheme.rhythmCanvas.ignoresSafeArea())
+        .presentationDetents([.height(400)])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(VelaTheme.rhythmCanvas)
     }
 
     private func statusOptionCard(id: String, title: String, desc: String, icon: String, colors: [Color]) -> some View {
         Button {
             tempStatus = id
         } label: {
-            HStack(spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .frame(width: 44, height: 44)
-
-                    Image(systemName: icon)
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(.white)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 20))
+                    .foregroundStyle(colors.first ?? VelaTheme.rhythmDeep)
+                    .frame(width: 32)
+                
+                VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(VelaTheme.fg)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
                     Text(desc)
                         .font(.system(size: 12))
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
-
+                
                 Spacer()
-
-                ZStack {
-                    Circle()
-                        .stroke(tempStatus == id ? VelaTheme.accent : VelaTheme.borderSoft, lineWidth: 1.5)
-                        .frame(width: 20, height: 20)
-
-                    if tempStatus == id {
+                
+                if tempStatus == id {
+                    ZStack {
                         Circle()
-                            .fill(VelaTheme.accent)
-                            .frame(width: 10, height: 10)
+                            .fill(VelaTheme.rhythmDeep)
+                            .frame(width: 20, height: 20)
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: 8, height: 8)
                     }
+                } else {
+                    Circle()
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 1.5)
+                        .frame(width: 20, height: 20)
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.cardBg))
-            .shadow(color: Color.black.opacity(tempStatus == id ? 0.02 : 0.0), radius: 6, y: 3)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
             .overlay(
-                RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
-                    .stroke(tempStatus == id ? VelaTheme.accent : Color.clear, lineWidth: 1.5)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(tempStatus == id ? VelaTheme.rhythmDeep : VelaTheme.rhythmMist, lineWidth: tempStatus == id ? 1.5 : 0.75)
             )
             .padding(.horizontal, 16)
         }
@@ -449,7 +444,7 @@ struct CalendarOverviewSheetView: View {
     var body: some View {
         VStack(spacing: 16) {
             Capsule()
-                .fill(VelaTheme.borderSoft)
+                .fill(VelaTheme.rhythmMist)
                 .frame(width: 36, height: 5)
                 .padding(.top, 8)
 
@@ -466,10 +461,10 @@ struct CalendarOverviewSheetView: View {
                     HStack(spacing: 6) {
                         Text(verbatim: VelaMinimalFormatting.calendarTitle(year: calendarYear, month: calendarMonth))
                             .font(.system(size: 22, weight: .bold))
-                            .foregroundStyle(VelaTheme.fg)
+                            .foregroundStyle(VelaTheme.rhythmInk)
                         Image(systemName: "chevron.down")
                             .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(VelaTheme.fg)
+                            .foregroundStyle(VelaTheme.rhythmInk)
                     }
                 }
 
@@ -481,10 +476,10 @@ struct CalendarOverviewSheetView: View {
                     } label: {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(VelaTheme.muted)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .frame(width: 32, height: 32)
-                            .background(Circle().fill(VelaTheme.cardBg))
-                            .shadow(color: Color.black.opacity(0.015), radius: 3, y: 1.5)
+                            .background(Circle().fill(VelaTheme.rhythmCanvasRaised))
+                            .overlay(Circle().stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
                     }
                     .buttonStyle(.plain)
 
@@ -493,10 +488,10 @@ struct CalendarOverviewSheetView: View {
                     } label: {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(VelaTheme.muted)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .frame(width: 32, height: 32)
-                            .background(Circle().fill(VelaTheme.cardBg))
-                            .shadow(color: Color.black.opacity(0.015), radius: 3, y: 1.5)
+                            .background(Circle().fill(VelaTheme.rhythmCanvasRaised))
+                            .overlay(Circle().stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
                     }
                     .buttonStyle(.plain)
                     .disabled(!canMoveToNextMonth)
@@ -608,10 +603,10 @@ struct CalendarOverviewSheetView: View {
                 } label: {
                     Text("今天")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(VelaTheme.accent)
+                        .foregroundStyle(VelaTheme.rhythmDeepOn)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 10)
-                        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous).fill(VelaTheme.accent.opacity(0.12)))
+                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.rhythmDeep))
                 }
                 .buttonStyle(.plain)
 
@@ -622,16 +617,17 @@ struct CalendarOverviewSheetView: View {
                 } label: {
                     Image(systemName: "info.circle")
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .frame(width: 36, height: 36)
-                        .background(Circle().fill(VelaTheme.cardBg))
+                        .background(Circle().fill(VelaTheme.rhythmCanvasRaised))
+                        .overlay(Circle().stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
                 }
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 16)
         }
-        .background(Color(hex: "#F2F2F7").ignoresSafeArea())
+        .background(VelaTheme.rhythmCanvas.ignoresSafeArea())
         .onAppear {
             calendarYear = Calendar.current.component(.year, from: dashboardVM.selectedDate)
             calendarMonth = Calendar.current.component(.month, from: dashboardVM.selectedDate)
@@ -649,7 +645,7 @@ struct CalendarOverviewSheetView: View {
         .alert("日历指标说明", isPresented: $showCalendarInfo) {
             Button("知道了", role: .cancel) {}
         } message: {
-            Text("选择顶部指标可查看每日趋势。圆环越完整，表示该指标分数越高；没有圆环表示当天缺少对应数据。")
+            Text("圆环越完整表示分数越高，点击可查看每日详情。")
         }
     }
 
@@ -818,21 +814,13 @@ struct PostWorkoutCheckInSheet: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("OPTIONAL REFLECTION")
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(1.35)
-                .foregroundStyle(VelaTheme.rhythmInkSecondary)
-            Text(workout?.title ?? workoutEvent?.title ?? "训练后复盘")
-                .font(.system(size: 28, weight: .semibold))
+        VStack(alignment: .leading, spacing: 6) {
+            Text("训练后复盘")
+                .font(.system(size: 26, weight: .bold, design: .rounded))
                 .tracking(-0.6)
                 .foregroundStyle(VelaTheme.rhythmInk)
-            Text("全部选填。你的体感会与 Apple Watch 训练事实一起进入个人响应模型；没有精力时直接关闭即可。")
-                .font(.system(size: 13))
-                .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                .lineSpacing(3)
         }
-        .padding(.bottom, 8)
+        .padding(.bottom, 6)
     }
 
     private var tagGrid: some View {
@@ -1075,6 +1063,20 @@ struct PostWorkoutCheckInSheet: View {
             }
 
             if let rpe { workout?.sessionRPE = rpe }
+
+            // A single optional focus tap is enough to advance the lightweight
+            // split. No exercise/set logging is required during the workout.
+            if !selectedMuscleGroups.isEmpty,
+               let onboarding = try modelContext.fetch(FetchDescriptor<OnboardingState>()).first {
+                var preference = onboarding.trainingPreference
+                preference.rotationFocuses = TrainingRotationResolver.focuses(for: preference)
+                preference.nextRotationFocus = TrainingRotationResolver.focus(
+                    after: Array(selectedMuscleGroups),
+                    profile: preference
+                )
+                onboarding.trainingPreference = preference
+                onboarding.updatedAt = Date()
+            }
             try modelContext.save()
             VelaAppState.shared.markLocalDataChanged()
             let wID = workoutID
@@ -1155,52 +1157,45 @@ struct PostWorkoutImpactSheet: View {
             Text(impact?.title ?? "训练后恢复影响")
                 .font(VelaTheme.title2())
                 .fontWeight(.bold)
-                .foregroundStyle(VelaTheme.fg)
+                .foregroundStyle(VelaTheme.rhythmInk)
                 .lineLimit(2)
-            Text("这里看的是训练结束后 2 小时内的恢复、耗力和电量趋势，以及次日恢复反应。")
-                .font(VelaTheme.subheadline())
-                .foregroundStyle(VelaTheme.muted)
-                .lineSpacing(3)
         }
         .padding(16)
-        .velaNativeCard(radius: 18)
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
     }
 
     private func summaryGrid(_ impact: PostWorkoutImpact) -> some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
             impactCard(title: "训练负荷估算", value: impact.strainCostText, caption: impact.strainSourceText)
             impactCard(title: "能量消耗", value: impact.energyText, caption: "训练记录")
-            impactCard(title: "训练后心率", value: impact.postHeartRateText, caption: "0-2 小时实测均值")
+            impactCard(title: "训练后心率", value: impact.postHeartRateText, caption: "0-2 小时均值")
         }
     }
 
     private func trendSection(_ impact: PostWorkoutImpact) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("训练后心率")
-                    .font(VelaTheme.headline())
-                    .foregroundStyle(VelaTheme.fg)
-                Text("仅展示训练结束后 2 小时内 Apple 健康实际采集的心率，不补全或推算缺失时段。")
-                    .font(VelaTheme.caption1())
-                    .foregroundStyle(VelaTheme.muted)
-            }
+            Text("训练后心率")
+                .font(VelaTheme.headline())
+                .foregroundStyle(VelaTheme.rhythmInk)
 
             if impact.postWorkoutHeartRateTrend.count >= 2 {
                 observedHeartRateTrendCard(impact)
             } else {
-                Text("训练结束后尚无足够的心率采样。同步完成后，这里只会补充实际记录。")
+                Text("训练结束后尚无足够的心率采样。")
                     .font(VelaTheme.subheadline())
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
                     .background(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(VelaTheme.elevatedBg)
+                            .fill(VelaTheme.rhythmCanvas)
                     )
             }
         }
         .padding(16)
-        .velaNativeCard(radius: 18)
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
     }
 
     private func observedHeartRateTrendCard(_ impact: PostWorkoutImpact) -> some View {
@@ -1710,7 +1705,7 @@ struct WorkoutLogSheetView: View {
                 }
             }
         }
-        .background(VelaTheme.bg.ignoresSafeArea())
+        .background(VelaTheme.rhythmCanvas.ignoresSafeArea())
         .alert("无法保存活动", isPresented: Binding(
             get: { saveError != nil },
             set: { if !$0 { saveError = nil } }
@@ -1815,10 +1810,11 @@ struct FoodSearchSheetView: View {
                     .foregroundStyle(VelaTheme.muted)
                 TextField("搜索膳食...", text: $searchText)
                     .font(.system(size: 15))
+                    .foregroundStyle(VelaTheme.rhythmInk)
             }
             .padding(12)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.cardBg))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
             .padding(.horizontal, 20)
             
             ScrollView {
@@ -1832,24 +1828,24 @@ struct FoodSearchSheetView: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(name)
                                         .font(.system(size: 15, weight: .bold))
-                                        .foregroundStyle(VelaTheme.fg)
+                                        .foregroundStyle(VelaTheme.rhythmInk)
                                     Text("P: \(prot)g · C: \(carb)g · F: \(fat)g")
                                         .font(.system(size: 11))
-                                        .foregroundStyle(VelaTheme.muted)
+                                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                 }
                                 
                                 Spacer()
                                 
                                 Text("\(cal) kcal")
                                     .font(.system(size: 14, weight: .bold, design: .rounded))
-                                    .foregroundStyle(VelaTheme.accent)
+                                    .foregroundStyle(VelaTheme.rhythmInk)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 6)
-                                    .background(Capsule().fill(VelaTheme.accent.opacity(0.12)))
+                                    .background(Capsule().fill(VelaTheme.rhythmMist.opacity(0.8)))
                             }
                             .padding(14)
-                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.cardBg))
-                            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+                            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
                             .padding(.horizontal, 20)
                         }
                         .buttonStyle(.plain)
@@ -1858,7 +1854,7 @@ struct FoodSearchSheetView: View {
                 .padding(.bottom, 20)
             }
         }
-        .background(VelaTheme.bg.ignoresSafeArea())
+        .background(VelaTheme.rhythmCanvas.ignoresSafeArea())
     }
     
     private func logFoodItem(name: String, cal: Int, prot: Int, carb: Int, fat: Int) {
@@ -1982,7 +1978,7 @@ struct FoodScannerView: View {
                 .buttonStyle(.plain)
             }
         }
-        .background(VelaTheme.bg.ignoresSafeArea())
+        .background(VelaTheme.rhythmCanvas.ignoresSafeArea())
         .sheet(isPresented: $showImagePicker) {
             ImagePicker(sourceType: imagePickerSourceType, selectedImage: $selectedImage)
                 .ignoresSafeArea()
@@ -2012,13 +2008,7 @@ struct FoodScannerView: View {
 
             Text(scannedBarcode.map { "已识别条码：\($0)" } ?? "将包装条码放入取景框内")
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(VelaTheme.muted)
-
-            Text("营养数据来自 Open Food Facts。记录前请核对包装标示。")
-                .font(.system(size: 12))
-                .multilineTextAlignment(.center)
-                .foregroundStyle(VelaTheme.muted)
-                .padding(.horizontal, 20)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
 
             if scannedBarcode != nil {
                 Button("重新扫描") {
@@ -2055,18 +2045,18 @@ struct FoodScannerView: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.cardBg))
-            .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
             .padding(.horizontal, 20)
 
             Button("确认并记录") {
                 save(result: result)
             }
             .font(.system(size: 16, weight: .bold))
-            .foregroundStyle(.white)
+            .foregroundStyle(VelaTheme.rhythmDeepOn)
             .frame(maxWidth: .infinity)
             .frame(height: 50)
-            .background(RoundedRectangle(cornerRadius: 25, style: .continuous).fill(VelaTheme.systemGreen))
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.rhythmDeep))
             .padding(.horizontal, 20)
             .buttonStyle(.plain)
 

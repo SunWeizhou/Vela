@@ -107,6 +107,73 @@ final class VelaThemeTests: XCTestCase {
         XCTAssertEqual(recommendations[1].groups, ["chest"])
     }
 
+    func testTrainingRotationInfersNextFocusFromOptionalPostWorkoutTag() throws {
+        let profile = TrainingPreferenceProfile(
+            trainingStyle: "strength",
+            weeklyTrainingDays: 5,
+            sessionDurationMinutes: 70
+        )
+        let chestResponse = TrainingResponseDTO(
+            id: UUID(),
+            date: Date(),
+            workoutId: UUID(),
+            primaryMuscleGroups: ["chest"],
+            totalEffectiveSets: 0,
+            totalVolumeKg: 0,
+            sessionRPE: nil,
+            nextDayRecoveryDelta: nil,
+            nextDayHRVDelta: nil,
+            nextDayRHRDelta: nil
+        )
+        let newerEmptyResponse = TrainingResponseDTO(
+            id: UUID(),
+            date: Date().addingTimeInterval(60),
+            workoutId: UUID(),
+            primaryMuscleGroups: [],
+            totalEffectiveSets: 0,
+            totalVolumeKg: 0,
+            sessionRPE: 4,
+            nextDayRecoveryDelta: nil,
+            nextDayHRVDelta: nil,
+            nextDayRHRDelta: nil
+        )
+
+        XCTAssertEqual(
+            TrainingRotationResolver.nextFocus(
+                profile: profile,
+                recentResponses: [newerEmptyResponse, chestResponse]
+            ),
+            "shoulders"
+        )
+
+        let legacyJSON = #"{"trainingStyle":"strength","weeklyTrainingDays":3,"sessionDurationMinutes":70,"preferredTrainingDays":[]}"#
+        let legacy = try JSONDecoder().decode(TrainingPreferenceProfile.self, from: Data(legacyJSON.utf8))
+        XCTAssertNil(legacy.rotationFocuses, "旧资料 JSON 不应因新增轮转字段而解码失败")
+    }
+
+    func testTrainingDecisionUsesRotationFocusWithoutMultiweekPlan() {
+        let decision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
+            bodyState: controlledBodyState(),
+            rotationFocus: "shoulders"
+        ))
+
+        XCTAssertEqual(decision.targetSessionTitle, "肩部")
+        XCTAssertEqual(decision.decision, .keep)
+
+        var fatiguedLegState = controlledBodyState()
+        fatiguedLegState.localFatigue["quads"] = LocalMuscleFatigue(
+            muscleGroup: "quads",
+            setsLast48h: 14,
+            setsLast7d: 20,
+            volumeLast7d: 8_000
+        )
+        let legDecision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
+            bodyState: fatiguedLegState,
+            rotationFocus: "legs"
+        ))
+        XCTAssertEqual(legDecision.decision, .swap, "腿日应识别股四头肌的局部疲劳")
+    }
+
     func testPersonalRecordBestRecordsKeepsHighestPerExerciseAndKind() {
         // 个人纪录聚合回归：同一动作 × 类型只保留最高值；数值相同时保留带
         // previousValue（即「打破前纪录」）的那条。

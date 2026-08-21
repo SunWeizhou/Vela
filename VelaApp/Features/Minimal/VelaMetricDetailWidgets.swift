@@ -111,12 +111,11 @@ struct MetricCustomWidgetsSection: View {
                 .padding(14)
                 .background(
                     RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .fill(VelaTheme.cardBg)
-                        .shadow(color: Color.black.opacity(isSleep ? 0.0 : 0.01), radius: 8, y: 2)
+                        .fill(VelaTheme.rhythmCanvasRaised)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .stroke(isSleep ? Color.white.opacity(0.08) : VelaTheme.hairline, lineWidth: 0.5)
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
                 )
             }
 
@@ -218,44 +217,30 @@ struct MetricCustomWidgetsSection: View {
         case .stress:
             // --- Stress Custom Views ---
             VStack(alignment: .leading, spacing: VelaTheme.cardGap) {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(selectedFullDateText)
-                                .font(VelaTheme.caption2())
-                                .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
-                            Text("今天的压力")
-                                .font(VelaTheme.footnote())
-                                .fontWeight(.bold)
-                                .foregroundStyle(isSleep ? VelaTheme.sleepText : VelaTheme.fg)
-                        }
-                        Spacer()
-                        Image(systemName: "moon.fill")
-                            .font(.system(size: 14))
-                            .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
-                    }
+                // Stress Trend and Components Card
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("全天压力趋势")
+                        .font(VelaTheme.footnote().weight(.bold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
 
                     DailyStressChartView(
                         metric: .stress,
                         selectedDate: dashboard.date,
-                        restingHeartRate: dashboard.recoveryBaseline.restingHeartRate
-                            ?? dashboard.recoveryMetrics.restingHeartRate,
+                        restingHeartRate: dashboard.recoveryBaseline.restingHeartRate ?? dashboard.recoveryMetrics.restingHeartRate,
                         morningEnergy: dashboard.energy.morningEnergy,
                         currentEnergy: dashboard.energy.value,
                         isSleep: isSleep
                     )
-                        .frame(height: 145)
-                        .padding(.vertical, 8)
+                    .frame(height: 140)
                 }
                 .padding(16)
                 .background(
                     RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .fill(VelaTheme.cardBg)
-                        .shadow(color: Color.black.opacity(isSleep ? 0.0 : 0.01), radius: 8, y: 2)
+                        .fill(VelaTheme.rhythmCanvasRaised)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .stroke(isSleep ? Color.white.opacity(0.08) : VelaTheme.hairline, lineWidth: 0.5)
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
                 )
             }
 
@@ -296,10 +281,10 @@ struct MetricCustomWidgetsSection: View {
                     }
                 }
                 .padding(16)
-                .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
+                .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
                 )
             }
 
@@ -327,12 +312,11 @@ struct MetricCustomWidgetsSection: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .fill(VelaTheme.cardBg)
-                        .shadow(color: Color.black.opacity(isSleep ? 0.0 : 0.01), radius: 8, y: 2)
+                        .fill(VelaTheme.rhythmCanvasRaised)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .stroke(isSleep ? Color.white.opacity(0.08) : VelaTheme.hairline, lineWidth: 0.5)
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
                 )
             }
         }
@@ -350,14 +334,14 @@ struct MetricCustomWidgetsSection: View {
         return VStack(alignment: .leading, spacing: 7) {
             Text(title)
                 .font(VelaTheme.caption1().weight(.semibold))
-                .foregroundStyle(VelaTheme.fg)
+                .foregroundStyle(VelaTheme.rhythmInk)
             Text(current.map { "\(Int($0.rounded())) \(unit)" } ?? "--")
                 .font(VelaTheme.cardValue())
-                .foregroundStyle(VelaTheme.fg)
+                .foregroundStyle(VelaTheme.rhythmInk)
                 .monospacedDigit()
             Text(baseline.map { "基线 \(Int($0.rounded())) \(unit)" } ?? "个人基线建立中")
                 .font(VelaTheme.caption2())
-                .foregroundStyle(VelaTheme.muted)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
             if let delta, let isPositive {
                 Label(
                     "\(delta >= 0 ? "+" : "")\(String(format: "%.1f", delta))",
@@ -369,10 +353,10 @@ struct MetricCustomWidgetsSection: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, minHeight: 128, alignment: .topLeading)
-        .background(VelaTheme.cardBg, in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                .stroke(VelaTheme.borderSoft, lineWidth: 0.5)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         )
     }
 

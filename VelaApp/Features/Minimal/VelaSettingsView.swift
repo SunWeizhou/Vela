@@ -28,7 +28,7 @@ struct VelaSettingsView: View {
             LazyVStack(alignment: .leading, spacing: 32) {
                 profileCardRow
 
-                settingsGroup(eyebrow: "PERSONAL MODEL", title: "个人模型") {
+                settingsGroup(eyebrow: "", title: "个人模型") {
                     VStack(spacing: 0) {
                         NavigationLink(destination: AccountSettingsView()) {
                             settingsRow(icon: "person.crop.circle", title: "基本资料", value: "本机保存")
@@ -48,7 +48,7 @@ struct VelaSettingsView: View {
                     }
                 }
 
-                settingsGroup(eyebrow: "EVIDENCE & CONTROL", title: "证据与控制") {
+                settingsGroup(eyebrow: "", title: "证据与控制") {
                     VStack(spacing: 0) {
                         NavigationLink(destination: DataSourceSettingsView()) {
                             settingsRow(icon: "applewatch", title: "数据来源", value: "Apple 健康")
@@ -72,7 +72,7 @@ struct VelaSettingsView: View {
                     }
                 }
 
-                settingsGroup(eyebrow: "EXPERIENCE", title: "体验偏好") {
+                settingsGroup(eyebrow: "", title: "体验偏好") {
                     VStack(spacing: 0) {
                         NavigationLink(destination: CustomizationSettingsView()) {
                             settingsRow(icon: "scope", title: "健康目标", value: "\(dailyCalorieTarget) kcal · \(SleepTargetSettings.displayHours(sleepTargetHours))")
@@ -104,7 +104,7 @@ struct VelaSettingsView: View {
                     }
                 }
 
-                settingsGroup(eyebrow: "ADVANCED", title: "高级设置") {
+                settingsGroup(eyebrow: "", title: "高级设置") {
                     VStack(spacing: 0) {
                         NavigationLink(destination: AIModelSettingsView()) {
                             settingsRow(icon: "cpu", title: "AI 模型与网络", value: textModel)
@@ -131,7 +131,7 @@ struct VelaSettingsView: View {
                     }
                 }
 
-                settingsGroup(eyebrow: "ABOUT", title: "关于 Vela") {
+                settingsGroup(eyebrow: "", title: "关于 Vela") {
                     VStack(spacing: 0) {
                         NavigationLink(destination: WhatsNewSettingsView()) {
                             settingsRow(icon: "sparkles", title: "最新变化", value: VelaAppMetadata.marketingVersion)
@@ -220,38 +220,12 @@ struct VelaSettingsView: View {
     }
     
     private var profileCardRow: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(VelaTheme.rhythmDeep)
-                    .frame(width: 6, height: 6)
-                Text("LOCAL FIRST")
-                    .font(.system(size: 10, weight: .bold))
-                    .tracking(1.5)
-                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text("你的健康系统\n由你掌控")
-                    .font(.system(size: 30, weight: .semibold, design: .default))
-                    .tracking(-0.8)
-                    .foregroundStyle(VelaTheme.rhythmInk)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Text("Apple 健康提供事实，Vela 在本机形成判断；AI 只解释或提出变更，重要修改始终由你确认。")
-                    .font(.system(.subheadline, design: .default, weight: .regular))
-                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                    .lineSpacing(4)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            HStack(spacing: 8) {
-                settingsPill("Apple 健康", icon: "applewatch")
-                settingsPill("本机模型", icon: "iphone")
-                settingsPill("确认后变更", icon: "checkmark.shield")
-            }
+        VStack(alignment: .leading, spacing: 6) {
+            Text("设置与偏好")
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .foregroundStyle(VelaTheme.rhythmInk)
         }
-        .padding(.vertical, 8)
+        .padding(.top, 4)
     }
 
     private func settingsPill(_ title: String, icon: String) -> some View {

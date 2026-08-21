@@ -521,6 +521,8 @@ final class DashboardViewModel: ObservableObject {
             predicate: #Predicate<TrainingPlanRecord> { $0.isActive },
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )))?.first
+        let trainingPreference = (try? modelContext.fetch(FetchDescriptor<OnboardingState>()))?
+            .first?.trainingPreference
 
         let strengthDesc = FetchDescriptor<StrengthWorkoutRecord>(
             predicate: #Predicate<StrengthWorkoutRecord> { $0.startedAt >= trainingStartLimit && $0.startedAt <= endLimit },
@@ -606,6 +608,7 @@ final class DashboardViewModel: ObservableObject {
                 coachArtifacts: artifactValues,
                 activePlan: activePlanDTO,
                 persistedDecision: persistedDecision,
+                trainingPreference: trainingPreference,
                 confirmedObservations: observationSummaries
             )
         }.value
@@ -689,6 +692,7 @@ enum SecondaryDataAssembler {
         coachArtifacts: [CoachArtifact],
         activePlan: TrainingPlanDTO?,
         persistedDecision: DailyTrainingDecision?,
+        trainingPreference: TrainingPreferenceProfile? = nil,
         confirmedObservations: [String] = []
     ) -> SecondaryDataAssembly {
         let startOfDayRef = calendar.startOfDay(for: refDate)
@@ -719,7 +723,15 @@ enum SecondaryDataAssembler {
             endingAt: refDate
         )
         let dailyTrainingDecision: DailyTrainingDecision
-        if let persistedDecision {
+        let rotationFocus = activePlan == nil
+            ? TrainingRotationResolver.nextFocus(
+                profile: trainingPreference,
+                recentResponses: trainingResponses
+            )
+            : nil
+        let expectedRotationTitle = rotationFocus.map(TrainingRotationResolver.title)
+        if let persistedDecision,
+           expectedRotationTitle == nil || persistedDecision.targetSessionTitle == expectedRotationTitle {
             dailyTrainingDecision = persistedDecision
         } else {
             dailyTrainingDecision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
@@ -727,7 +739,8 @@ enum SecondaryDataAssembler {
                 activePlan: activePlan,
                 trainingResponses: trainingResponses,
                 workoutEvents: workoutEvents,
-                longTermTrainingVolume: dashboard.longTermBaselines?.trainingVolume
+                longTermTrainingVolume: dashboard.longTermBaselines?.trainingVolume,
+                rotationFocus: rotationFocus
             ))
         }
 

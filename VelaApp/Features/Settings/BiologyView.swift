@@ -518,16 +518,13 @@ struct BiologyView: View {
                 HStack(spacing: 10) {
                     projectionMetric("现在", biological: bioAgeResult.biologicalAge, chronological: Double(chronologicalAge ?? 0))
                     Image(systemName: "arrow.right")
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     projectionMetric("20 年情景", biological: bioAgeResult.biologicalAge + 20, chronological: Double(chronologicalAge ?? 0) + 20)
                 }
-                Text("情景假设当前年龄差 \(String(format: "%+.1f", gap)) 岁保持不变；它不是寿命预测或医学结论。")
-                    .font(VelaTheme.caption2())
-                    .foregroundStyle(VelaTheme.muted)
             }
             .padding(16)
-            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge).fill(VelaTheme.cardBg))
-            .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
             .padding(.horizontal, VelaTheme.pagePadding)
         }
     }
@@ -1317,8 +1314,8 @@ struct BloodLogSheetView: View {
                             .foregroundStyle(VelaTheme.fg)
                             .padding(14)
                             .background(
-                                RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                                    .fill(VelaTheme.cardBg.opacity(0.6))
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(VelaTheme.rhythmCanvasRaised)
                             )
                         }
 
@@ -1484,20 +1481,20 @@ struct StyledTextField: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
                 .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(VelaTheme.muted)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 .tracking(1)
 
             TextField(placeholder, text: $text)
                 .padding(14)
                 .background(
-                    RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .fill(VelaTheme.cardBg.opacity(0.6))
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(VelaTheme.rhythmCanvasRaised)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                        .stroke(VelaTheme.borderSoft, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
                 )
-                .foregroundStyle(VelaTheme.fg)
+                .foregroundStyle(VelaTheme.rhythmInk)
         }
     }
 }

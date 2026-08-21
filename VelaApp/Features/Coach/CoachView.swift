@@ -600,6 +600,15 @@ struct VelaCoachView: View {
                                         }
                                         .padding(.leading, 8)
                                     }
+
+                                    if msg.id == vm.messages.last?.id, msg.role == .assistant, !vm.isStreaming {
+                                        let followUps = vm.followUpSuggestions(for: msg.content)
+                                        if !followUps.isEmpty {
+                                            CoachFollowUpChipsView(suggestions: followUps) { suggestion in
+                                                sendMessage(suggestion)
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
@@ -1083,6 +1092,7 @@ struct VelaCoachView: View {
                     }
 
                 Button {
+                    VelaHaptic.selection()
                     if dictation.isRecording {
                         dictation.stop()
                     } else {
@@ -1101,10 +1111,12 @@ struct VelaCoachView: View {
                 Button {
                     if vm.isStreaming {
                         // Stop the in-flight reply instead of sending.
+                        VelaHaptic.medium()
                         vm.cancelActiveResponse()
                         return
                     }
                     guard !inputText.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                    VelaHaptic.light()
                     sendMessage(inputText)
                 } label: {
                     Image(systemName: vm.isStreaming ? "stop.fill" : "arrow.up")
@@ -1128,7 +1140,7 @@ struct VelaCoachView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
+        .background(VelaTheme.rhythmCanvas)
     }
 
     // MARK: - Actions

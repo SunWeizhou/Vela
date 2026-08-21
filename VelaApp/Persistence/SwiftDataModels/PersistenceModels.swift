@@ -1393,22 +1393,30 @@ struct UserGoalProfile: Codable, Hashable {
     }
 }
 
-struct TrainingPreferenceProfile: Codable, Hashable {
+struct TrainingPreferenceProfile: Codable, Hashable, Sendable {
     var trainingStyle: String
     var weeklyTrainingDays: Int
     var sessionDurationMinutes: Int
     var preferredTrainingDays: [String]
+    /// Lightweight split context for people who execute with Apple Watch rather
+    /// than a set-by-set phone logger. Optional keeps older profile JSON decodable.
+    var rotationFocuses: [String]?
+    var nextRotationFocus: String?
 
     init(
         trainingStyle: String = "mixed",
         weeklyTrainingDays: Int = 3,
         sessionDurationMinutes: Int = 45,
-        preferredTrainingDays: [String] = []
+        preferredTrainingDays: [String] = [],
+        rotationFocuses: [String]? = nil,
+        nextRotationFocus: String? = nil
     ) {
         self.trainingStyle = trainingStyle
         self.weeklyTrainingDays = weeklyTrainingDays
         self.sessionDurationMinutes = sessionDurationMinutes
         self.preferredTrainingDays = preferredTrainingDays
+        self.rotationFocuses = rotationFocuses
+        self.nextRotationFocus = nextRotationFocus
     }
 }
 

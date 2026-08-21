@@ -62,15 +62,15 @@ struct JournalCorrelationSection: View {
                         .foregroundStyle(VelaTheme.muted)
                     Text("继续用「随手记」记录酒精、咖啡因、晚餐时间、吃撑、补水等低摩擦信号。Vela 会先积累样本，再把它们和次日睡眠、HRV、RHR、恢复进行配对。")
                         .font(.system(size: 11))
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 16)
                     bodyModelStatsRow(bodyModelState)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 30)
-                .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+                .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
             } else {
                 VStack(spacing: 12) {
                     bodyModelStatsRow(bodyModelState)
@@ -78,10 +78,10 @@ struct JournalCorrelationSection: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(claim.title)
                                 .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(VelaTheme.fg)
+                                .foregroundStyle(VelaTheme.rhythmInk)
                             Text(claim.summary)
                                 .font(.system(size: 12))
-                                .foregroundStyle(VelaTheme.muted)
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                 .lineSpacing(3)
                             Text("置信度 \(displayConfidence(claim.confidence.rawValue)) · n=\(claim.evidenceCount)")
                                 .font(.system(size: 10, weight: .semibold))
@@ -91,8 +91,8 @@ struct JournalCorrelationSection: View {
                         }
                         .padding(14)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.cardBg))
-                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
                     }
                 }
             }
@@ -148,14 +148,14 @@ struct JournalCorrelationSection: View {
                         .foregroundStyle(VelaTheme.warn)
                     Spacer()
                     Text("仅探索性证据")
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 .font(.system(size: 10, weight: .semibold))
             }
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.cardBg))
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
         .accessibilityElement(children: .contain)
     }
 
@@ -172,22 +172,22 @@ struct JournalCorrelationSection: View {
         VStack(spacing: 2) {
             Text(value)
                 .font(.system(size: 15, weight: .bold, design: .rounded))
-                .foregroundStyle(VelaTheme.fg)
+                .foregroundStyle(VelaTheme.rhythmInk)
             Text(title)
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(VelaTheme.muted)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous).fill(VelaTheme.secondaryGroupedBackground))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(VelaTheme.rhythmCanvas))
     }
 
     private func confidenceColor(_ conf: DataConfidence) -> Color {
         switch conf {
-        case .high: return VelaTheme.success
-        case .medium: return VelaTheme.accent
-        case .low: return VelaTheme.systemOrange
-        case .unavailable: return VelaTheme.muted
+        case .high: return VelaTheme.rhythmDeep
+        case .medium: return VelaTheme.rhythmWarm
+        case .low: return VelaTheme.statePoor
+        case .unavailable: return VelaTheme.rhythmInkSecondary
         }
     }
 
@@ -226,25 +226,25 @@ struct PersonalExperimentCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(experiment?.title ?? "开始一个个人实验")
                         .font(VelaTheme.subheadline().weight(.semibold))
-                        .foregroundStyle(VelaTheme.fg)
+                        .foregroundStyle(VelaTheme.rhythmInk)
                     Text(cardSubtitle)
                         .font(VelaTheme.caption2())
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .lineLimit(2)
                 }
                 Spacer()
                 if todayCheckIn != nil {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(VelaTheme.success)
+                        .foregroundStyle(VelaTheme.rhythmDeep)
                 } else {
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
             }
             .padding(14)
-            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg).fill(VelaTheme.cardBg))
-            .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusLg).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(experiment == nil ? "开始个人实验" : "查看个人实验")
@@ -312,30 +312,34 @@ struct PersonalExperimentHubSheet: View {
                 .font(VelaTheme.title2())
             Text(experiment.hypothesis)
                 .font(VelaTheme.subheadline())
-                .foregroundStyle(VelaTheme.fg2)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
             Text(experiment.protocolText)
                 .font(VelaTheme.subheadline().weight(.semibold))
+                .foregroundStyle(VelaTheme.rhythmInk)
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 14).fill(VelaTheme.cardBg))
+                .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
         }
 
         let today = checkIns.first { $0.experimentID == experiment.id && Calendar.current.isDateInToday($0.date) }
         VStack(alignment: .leading, spacing: 12) {
             Text("今天执行了吗？")
                 .font(VelaTheme.headline())
+                .foregroundStyle(VelaTheme.rhythmInk)
             if let today {
                 Label(today.followedProtocol ? "已完成今天的方案" : "已记录今天未完成", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(today.followedProtocol ? VelaTheme.success : VelaTheme.warn)
+                    .foregroundStyle(today.followedProtocol ? VelaTheme.rhythmDeep : VelaTheme.rhythmWarm)
             } else {
                 HStack(spacing: 10) {
-                    checkInButton("完成了", followed: true, experiment: experiment, color: VelaTheme.success)
-                    checkInButton("今天没有", followed: false, experiment: experiment, color: VelaTheme.warn)
+                    checkInButton("完成了", followed: true, experiment: experiment, color: VelaTheme.rhythmDeep)
+                    checkInButton("今天没有", followed: false, experiment: experiment, color: VelaTheme.rhythmWarm)
                 }
             }
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg).fill(VelaTheme.cardBg))
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
 
         previousOutcomeContent(experiment)
     }
@@ -345,9 +349,10 @@ struct PersonalExperimentHubSheet: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text("一次只改变一个变量")
                     .font(VelaTheme.title2())
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Text("先使用已有 7 天作为基线，再连续执行 14 天。Vela 会比较睡眠分变化，但不会把相关变化表述为医学因果。")
                     .font(VelaTheme.subheadline())
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
 
             ForEach(PersonalExperimentService.templates) { template in
@@ -363,19 +368,19 @@ struct PersonalExperimentHubSheet: View {
                         HStack {
                             Text(template.title)
                                 .font(VelaTheme.headline())
-                                .foregroundStyle(VelaTheme.fg)
+                                .foregroundStyle(VelaTheme.rhythmInk)
                             Spacer()
                             Image(systemName: "arrow.right.circle.fill")
-                                .foregroundStyle(VelaTheme.accent)
+                                .foregroundStyle(VelaTheme.rhythmDeep)
                         }
                         Text(template.hypothesis)
                             .font(VelaTheme.caption1())
-                            .foregroundStyle(VelaTheme.muted)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .multilineTextAlignment(.leading)
                     }
                     .padding(15)
-                    .background(RoundedRectangle(cornerRadius: 16).fill(VelaTheme.cardBg))
-                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
                 }
                 .buttonStyle(.plain)
             }
@@ -391,6 +396,7 @@ struct PersonalExperimentHubSheet: View {
         return VStack(alignment: .leading, spacing: 10) {
             Text("当前证据")
                 .font(VelaTheme.headline())
+                .foregroundStyle(VelaTheme.rhythmInk)
             HStack(spacing: 10) {
                 experimentStat("基线", outcome.baselineAverage.map { String(format: "%.0f", $0) } ?? "--", "n=\(outcome.baselineSampleCount)")
                 experimentStat("实验期", outcome.experimentAverage.map { String(format: "%.0f", $0) } ?? "--", "n=\(outcome.experimentSampleCount)")
@@ -398,10 +404,11 @@ struct PersonalExperimentHubSheet: View {
             }
             Text(outcome.hasEnoughEvidence ? resultSentence(outcome) : "仍在积累样本：至少需要 3 个基线夜晚和 5 个实验夜晚，才展示方向性比较。")
                 .font(VelaTheme.caption1())
-                .foregroundStyle(VelaTheme.muted)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg).fill(VelaTheme.cardBg))
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
     }
 
     private func checkInButton(_ title: String, followed: Bool, experiment: PersonalExperimentRecord, color: Color) -> some View {

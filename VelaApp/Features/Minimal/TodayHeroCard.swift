@@ -55,7 +55,7 @@ struct TodayHeroCard: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("指导")
                             .font(VelaTheme.caption2().weight(.semibold))
-                            .foregroundStyle(VelaTheme.muted)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         Spacer()
                         Label(model.hero.confidenceLabel, systemImage: evidenceIcon)
                             .font(VelaTheme.caption2().weight(.semibold))
@@ -66,12 +66,12 @@ struct TodayHeroCard: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(model.hero.decisionTitle)
                                 .font(VelaTheme.headline())
-                                .foregroundStyle(VelaTheme.fg)
+                                .foregroundStyle(VelaTheme.rhythmInk)
                                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
 
                             Text(model.hero.summary)
                                 .font(VelaTheme.caption1())
-                                .foregroundStyle(VelaTheme.fg2)
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                 .lineSpacing(2)
                                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                         }
@@ -80,7 +80,7 @@ struct TodayHeroCard: View {
 
                         Image(systemName: "chevron.right")
                             .font(VelaTheme.caption1().weight(.bold))
-                            .foregroundStyle(VelaTheme.muted)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .padding(.top, 3)
                     }
 
@@ -224,10 +224,10 @@ struct TodayHeroCard: View {
         VStack(alignment: .center, spacing: 1) {
             Text(signal.title)
                 .font(VelaTheme.caption1().weight(.semibold))
-                .foregroundStyle(VelaTheme.fg)
+                .foregroundStyle(VelaTheme.rhythmInk)
             Text(signal.value == "--" ? "待同步" : signal.directionLabel)
                 .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(VelaTheme.muted)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 .lineLimit(1)
         }
     }
@@ -531,6 +531,7 @@ struct VelaRhythmHorizonHero: View {
     @State private var rhythmMetric = "recovery"
     @State private var rhythmGranularity: RhythmGranularity = .day
     @State private var rhythmHourlyMetric: RhythmHourlyMetric = .heartRate
+    @State private var showRhythm = false
 
     private var decision: ReadinessDecisionKind {
         state.readinessDecision.decision
@@ -546,134 +547,140 @@ struct VelaRhythmHorizonHero: View {
     }
 
     private var eyebrow: String {
-        if state.dataConfidence == .unavailable { return "正在建立你的节律" }
-        return "今日节律 · \(model.hero.confidenceLabel)"
-    }
-
-    private var primaryAction: TodayExperienceAction? {
-        model.actions.first(where: \.isPrimary) ?? model.actions.first
-    }
-
-    /// B2：数据覆盖度徽标——低覆盖时显式标注「按保守方案」。
-    private var coverageBadge: (label: String, color: Color)? {
-        guard model.signalCards.count >= 5 else { return nil }
-        let available = model.signalCards.filter { $0.value != "--" && !$0.value.isEmpty }.count
-        switch available {
-        case 5: return ("数据覆盖 · 完整", VelaTheme.rhythmDeep)
-        case 3...4: return ("数据覆盖 · 中等", VelaTheme.energyColor)
-        default: return ("数据覆盖 · 有限，按保守方案", VelaTheme.strainColor)
-        }
+        "今日节律"
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 16) {
+            // Header row: Eyebrow + Coach button
             HStack(spacing: 8) {
                 Circle()
                     .fill(VelaTheme.rhythmDeep)
                     .frame(width: 7, height: 7)
                     .shadow(color: VelaTheme.rhythmGlow.opacity(0.55), radius: 6)
 
-                Text(eyebrow.uppercased())
-                    .font(.system(size: 11, weight: .semibold))
-                    .tracking(1.15)
+                Text(eyebrow)
+                    .font(.system(size: 11, weight: .bold))
+                    .tracking(0.5)
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
-
-                if let badge = coverageBadge {
-                    Text(badge.label)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(badge.color)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(badge.color.opacity(0.12), in: Capsule())
-                        .accessibilityLabel("数据覆盖度：" + badge.label)
-                }
 
                 Spacer(minLength: 8)
 
                 Button(action: onAskCoach) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(VelaTheme.rhythmInk)
-                        .frame(width: 42, height: 42)
-                        .background(VelaTheme.rhythmCanvasRaised.opacity(0.68), in: Circle())
+                    HStack(spacing: 5) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("问 Vela")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(VelaTheme.rhythmCanvas.opacity(0.7), in: Capsule())
+                    .overlay(Capsule().stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
                 }
                 .buttonStyle(.cardPress)
                 .accessibilityLabel("询问 Vela")
             }
 
-            RhythmHorizonVisualization(
-                signals: model.signalCards,
-                decision: decision,
-                selectedDate: selectedDate,
-                isToday: isToday,
-                selectedMetric: $rhythmMetric,
-                granularity: rhythmGranularity,
-                selectedHourlyMetric: $rhythmHourlyMetric,
-                restingHeartRate: restingHeartRate,
-                maxHeartRate: maxHeartRate,
-                revealProgress: isRevealed ? 1 : 0
-            )
-            .frame(height: dynamicTypeSize.isAccessibilitySize ? 176 : 206)
-            .padding(.top, 4)
-            .accessibilityHidden(true)
+            // Headline
+            Text(headline)
+                .font(.system(size: 24, weight: .bold, design: .rounded))
+                .tracking(-0.5)
+                .foregroundStyle(VelaTheme.rhythmInk)
+                .fixedSize(horizontal: false, vertical: true)
 
-            rhythmMetricChips
-                .padding(.top, 10)
+            // Core 3-Ring Dials (Recovery / Sleep / Strain)
+            triDialsView
 
-            VStack(alignment: .leading, spacing: 10) {
-                Text(headline)
-                    .font(.system(.largeTitle, design: .default, weight: .semibold))
-                    .tracking(-1.2)
-                    .foregroundStyle(VelaTheme.rhythmInk)
-                    .fixedSize(horizontal: false, vertical: true)
-
-            }
-
+            // Primary Action Button
             Button(action: onOpenPlan) {
-                HStack(spacing: 13) {
+                HStack(spacing: 12) {
                     ZStack {
                         Circle()
                             .fill(VelaTheme.rhythmDeep)
                         Image(systemName: actionIcon)
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmDeepOn)
                     }
-                    .frame(width: 38, height: 38)
+                    .frame(width: 34, height: 34)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(primaryAction?.title ?? "查看今日安排")
-                            .font(.system(size: 16, weight: .semibold))
+                        Text("查看今日安排")
+                            .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmInk)
                     }
 
                     Spacer(minLength: 8)
 
                     Image(systemName: "arrow.up.right")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmDeep)
                 }
-                .padding(.horizontal, 13)
-                .padding(.vertical, 11)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .stroke(Color.white.opacity(0.42), lineWidth: 0.75)
                 }
-                .shadow(color: Color.black.opacity(0.08), radius: 24, y: 12)
-                .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             }
             .buttonStyle(.cardPress)
-            .padding(.top, 18)
+
+            // Accordion toggle
+            Button {
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.92)) {
+                    showRhythm.toggle()
+                }
+            } label: {
+                HStack {
+                    Text("健康节律 (24小时 / 7天)")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        .rotationEffect(.degrees(showRhythm ? 180 : 0))
+                }
+                .padding(.top, 2)
+            }
+            .buttonStyle(.plain)
+
+            if showRhythm {
+                VStack(spacing: 0) {
+                    RhythmHorizonVisualization(
+                        signals: model.signalCards,
+                        decision: decision,
+                        selectedDate: selectedDate,
+                        isToday: isToday,
+                        selectedMetric: $rhythmMetric,
+                        granularity: rhythmGranularity,
+                        selectedHourlyMetric: $rhythmHourlyMetric,
+                        restingHeartRate: restingHeartRate,
+                        maxHeartRate: maxHeartRate,
+                        revealProgress: isRevealed ? 1 : 0
+                    )
+                    .frame(height: dynamicTypeSize.isAccessibilitySize ? 176 : 206)
+                    .accessibilityHidden(true)
+
+                    rhythmMetricChips
+                        .padding(.top, 10)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
-        .padding(.horizontal, VelaTheme.pagePadding)
-        .padding(.top, 4)
-        .padding(.bottom, 22)
-        .background(alignment: .top) {
-            RhythmAmbientField(decision: decision)
-                .frame(height: 480)
-                .allowsHitTesting(false)
-        }
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(VelaTheme.rhythmCanvasRaised)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+        )
         .accessibilityElement(children: .contain)
         .onAppear {
             guard !isRevealed else { return }
@@ -685,6 +692,96 @@ struct VelaRhythmHorizonHero: View {
                 }
             }
         }
+    }
+
+    // MARK: - Core Tri-Dials (Recovery, Sleep, Strain)
+    private var triDialsView: some View {
+        let coreIDs = ["recovery", "sleep", "strain"]
+        let cards = coreIDs.compactMap { id in model.signalCards.first(where: { $0.id == id }) }
+
+        return HStack(spacing: 10) {
+            ForEach(cards) { card in
+                let metricType: VelaMetricDetailView.MetricType? = {
+                    switch card.id {
+                    case "recovery": return .recovery
+                    case "sleep":    return .sleep
+                    case "strain":   return .strain
+                    default:         return nil
+                    }
+                }()
+                let color: Color = {
+                    switch card.id {
+                    case "recovery": return VelaTheme.recoveryColor
+                    case "sleep":    return VelaTheme.sleepColor
+                    case "strain":   return VelaTheme.strainColor
+                    default:         return VelaTheme.accent
+                    }
+                }()
+                let domain: VelaMetricDomain = {
+                    switch card.id {
+                    case "recovery": return .recovery
+                    case "sleep":    return .sleep
+                    case "strain":   return .strain
+                    default:         return .neutral
+                    }
+                }()
+
+                Group {
+                    if let metricType {
+                        NavigationLink {
+                            VelaMetricDetailView(metric: metricType)
+                        } label: {
+                            heroDialTile(card: card, color: color, domain: domain)
+                        }
+                        .buttonStyle(.cardPress)
+                    } else {
+                        heroDialTile(card: card, color: color, domain: domain)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private func heroDialTile(card: TodayExperienceSignalCard, color: Color, domain: VelaMetricDomain) -> some View {
+        let scoreValue: Double? = card.value == "--" ? nil : Double(card.value)
+
+        return VStack(spacing: 6) {
+            VelaMetricScoreRing(
+                score: scoreValue,
+                label: card.title,
+                domain: domain,
+                size: 56,
+                accent: color,
+                allowsOverflow: card.id == "strain",
+                showsLabel: false,
+                direction: card.directionLabel,
+                confidence: card.confidenceLabel,
+                dataState: card.coverageLabel
+            )
+
+            VStack(spacing: 2) {
+                Text(card.title)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+
+                Text(card.value == "--" ? "待同步" : (card.directionLabel.isEmpty ? "\(card.value)分" : card.directionLabel))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(VelaTheme.rhythmCanvas.opacity(0.65))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(VelaTheme.rhythmMist.opacity(0.8), lineWidth: 0.75)
+        )
     }
 
     private var actionIcon: String {
@@ -1469,10 +1566,10 @@ struct VelaRhythmActionSequence: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VelaRhythmSectionHeader(
-                eyebrow: "TODAY",
-                title: "今天只做这几件事",
-                actionTitle: "查看依据",
-                action: onEvidence
+                eyebrow: "",
+                title: "今天的重点",
+                actionTitle: nil,
+                action: {}
             )
             .padding(.bottom, 12)
 
@@ -1523,7 +1620,7 @@ struct VelaRhythmSignalLandscape: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VelaRhythmSectionHeader(
-                eyebrow: "SIGNALS",
+                eyebrow: "",
                 title: "身体信号",
                 actionTitle: nil,
                 action: {}
