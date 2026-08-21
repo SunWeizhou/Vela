@@ -32,35 +32,44 @@ struct CoachWelcomeWorkspace: View {
             }
 
             VStack(alignment: .leading, spacing: 12) {
-                Text("快捷提问")
+                Text("健康分析能力")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .padding(.leading, 2)
 
-                let starters = vm.contextualQuickQuestions(todayPlan: todayOperatingPlan)
-
                 VStack(spacing: 0) {
-                    ForEach(Array(starters.prefix(4).enumerated()), id: \.offset) { index, text in
+                    ForEach(Array(healthAnalysisCapabilities.enumerated()), id: \.offset) { index, item in
                         Button {
-                            onSendMessage(text)
+                            onSendMessage(item.query)
                         } label: {
                             HStack(spacing: 12) {
-                                Text(text)
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundStyle(VelaTheme.rhythmInk)
-                                    .multilineTextAlignment(.leading)
+                                Image(systemName: item.icon)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(VelaTheme.rhythmDeep)
+                                    .frame(width: 24)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.title)
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(VelaTheme.rhythmInk)
+                                    Text(item.subtitle)
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                                }
+
                                 Spacer(minLength: 8)
+
                                 Image(systemName: "arrow.up.right")
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             }
                             .padding(.horizontal, 16)
-                            .padding(.vertical, 14)
+                            .padding(.vertical, 12)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
 
-                        if index < min(starters.count, 4) - 1 {
+                        if index < healthAnalysisCapabilities.count - 1 {
                             Rectangle()
                                 .fill(VelaTheme.rhythmMist)
                                 .frame(height: 0.75)
@@ -77,13 +86,23 @@ struct CoachWelcomeWorkspace: View {
         }
     }
 
+    private var healthAnalysisCapabilities: [(title: String, subtitle: String, icon: String, query: String)] {
+        [
+            ("分析今日身体状态", "全面剖析恢复、睡眠、心率与压力状态", "sparkles", "请全面分析我今天的身体状态，结合各项体征和个人基线，指出当前身体最重要的生理特征。"),
+            ("最近 30 天变化", "识别近期各项指标趋势与显著偏离", "chart.xyaxis.line", "请帮我梳理最近 30 天的身体数据变化趋势，有哪些指标明显上升或下降？"),
+            ("关键指标偏离分析", "找出偏离个人基准的指标及生理考量", "waveform.path.ecg", "我最近有哪些体征偏离了个人正常基线？这种偏离可能意味着什么？"),
+            ("睡眠与压力相关性", "探讨跨系统协同影响与因果联系", "moon.stars.fill", "我的睡眠质量、日常压力和心率之间表现出什么关联？"),
+            ("转化为训练建议", "基于当前生理窗口给出运动强度指导", "figure.run", "基于我目前的身体状态与恢复节奏，今天以及未来几天我应该怎样安排训练？")
+        ]
+    }
+
     private var welcomeHeader: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: "sparkles")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmDeep)
-                Text("Vela 教练")
+                Text("Vela AI 健康分析师")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmDeep)
             }
@@ -91,9 +110,13 @@ struct CoachWelcomeWorkspace: View {
             .padding(.vertical, 5)
             .background(VelaTheme.rhythmDeep.opacity(0.08), in: Capsule())
 
-            Text("今天有什么想讨论的？")
+            Text("健康分析工作台")
                 .font(.system(size: 26, weight: .bold, design: .rounded))
                 .foregroundStyle(VelaTheme.rhythmInk)
+
+            Text("基于 Apple 健康与长期基线，探索身体状态与趋势。")
+                .font(.system(size: 13))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
         }
         .padding(.top, 4)
     }

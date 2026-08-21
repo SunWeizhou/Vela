@@ -875,9 +875,11 @@ final class VelaThemeTests: XCTestCase {
 
     func testTabSelectionOnlyActivatesTheCurrentSurface() {
         XCTAssertTrue(VelaTabSelection.isActive(.today, selectedTab: 0))
+        XCTAssertTrue(VelaTabSelection.isActive(.trends, selectedTab: 1))
         XCTAssertTrue(VelaTabSelection.isActive(.coach, selectedTab: 2))
+        XCTAssertTrue(VelaTabSelection.isActive(.training, selectedTab: 3))
         XCTAssertFalse(VelaTabSelection.isActive(.training, selectedTab: 0))
-        XCTAssertFalse(VelaTabSelection.isActive(.me, selectedTab: 2))
+        XCTAssertFalse(VelaTabSelection.isActive(.trends, selectedTab: 2))
     }
 
     func testFloatingNavigationReservesEnoughBottomContentClearance() {

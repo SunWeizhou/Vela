@@ -557,6 +557,77 @@ struct HealthTrendTool: AgentTool {
                 sortBy: [SortDescriptor(\.date)]
             )
             let records = (try? executionContext.modelContext.fetch(descriptor)) ?? []
+
+            var metricFindings: [String: Any] = [:]
+            for metricStr in request.metrics {
+                guard let coreMetric = CoreHealthMetric(rawValue: metricStr) else { continue }
+                let valuesWithDate: [(date: Date, value: Double)] = records.compactMap { record in
+                    let val: Double? = {
+                        switch coreMetric {
+                        case .hrv: return record.hrvAverage
+                        case .restingHeartRate: return record.restingHeartRate
+                        case .sleepDuration: return record.sleepHours
+                        case .recovery: return record.recoveryScore
+                        case .strain: return record.strainScore
+                        case .stress: return record.stressIndex
+                        case .energy: return record.currentEnergy
+                        default: return nil
+                        }
+                    }()
+                    guard let v = val else { return nil }
+                    return (date: record.date, value: v)
+                }
+                guard !valuesWithDate.isEmpty else { continue }
+                let rawValues = valuesWithDate.map(\.value)
+                let sampleCount = rawValues.count
+                let sortedValues = rawValues.sorted()
+                let medianVal: Double = sortedValues.count % 2 == 1
+                    ? sortedValues[sortedValues.count / 2]
+                    : (sortedValues[sortedValues.count / 2 - 1] + sortedValues[sortedValues.count / 2]) / 2.0
+                let latest = rawValues.last ?? medianVal
+
+                let halfCount = sampleCount / 2
+                let firstHalf = Array(rawValues.prefix(halfCount))
+                let secondHalf = Array(rawValues.suffix(sampleCount - halfCount))
+                let m1 = firstHalf.isEmpty ? medianVal : (firstHalf.sorted()[firstHalf.count / 2])
+                let m2 = secondHalf.isEmpty ? medianVal : (secondHalf.sorted()[secondHalf.count / 2])
+                let trendDelta = m2 - m1
+                let trendDeltaPercent = m1 > 0 ? (trendDelta / m1) * 100 : 0
+
+                let curDev = latest - medianVal
+                let curDevPercent = medianVal > 0 ? (curDev / medianVal) * 100 : 0
+
+                let direction: String = {
+                    if abs(trendDeltaPercent) < 3.5 { return "stable" }
+                    if trendDeltaPercent > 0 {
+                        switch coreMetric.polarity {
+                        case .higherIsBetter: return "improving"
+                        case .lowerIsBetter: return "declining"
+                        case .contextual: return "elevated"
+                        }
+                    } else {
+                        switch coreMetric.polarity {
+                        case .higherIsBetter: return "declining"
+                        case .lowerIsBetter: return "improving"
+                        case .contextual: return "suppressed"
+                        }
+                    }
+                }()
+
+                let isNotable = abs(curDevPercent) >= 12.0 || abs(trendDeltaPercent) >= 10.0
+
+                metricFindings[metricStr] = [
+                    "sampleCount": sampleCount,
+                    "baselineMedian": round(medianVal * 10) / 10,
+                    "latestValue": round(latest * 10) / 10,
+                    "currentDeviation": round(curDev * 10) / 10,
+                    "currentDeviationPercent": round(curDevPercent * 10) / 10,
+                    "temporalTrendDeltaPercent": round(trendDeltaPercent * 10) / 10,
+                    "direction": direction,
+                    "isNotable": isNotable
+                ]
+            }
+
             let points = records.map { record -> [String: Any] in
                 var item: [String: Any] = [
                     "date": ISO8601DateFormatter().string(from: record.date),
@@ -579,6 +650,7 @@ struct HealthTrendTool: AgentTool {
             let payload: [String: Any] = [
                 "days": request.days,
                 "metrics": request.metrics,
+                "findings": metricFindings,
                 "source": "DailyHealthSummaryRecord",
                 "confidence": records.isEmpty ? "unavailable" : "measured_and_derived",
                 "safety": "General wellness guidance only; not a medical diagnosis.",
@@ -598,7 +670,7 @@ struct HealthTrendTool: AgentTool {
             return (14, ["hrv", "rhr", "sleep", "recovery", "strain", "stress", "energy"])
         }
         let requestedDays = json["days"] as? Int ?? 14
-        let days = [7, 14, 30].contains(requestedDays) ? requestedDays : 14
+        let days = [7, 14, 30, 180].contains(requestedDays) ? requestedDays : 14
         let supported = Set(["hrv", "rhr", "sleep", "recovery", "strain", "stress", "energy"])
         let metrics = (json["metrics"] as? [String] ?? Array(supported)).filter { supported.contains($0) }
         return (days, metrics)

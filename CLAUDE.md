@@ -18,7 +18,10 @@ This is a single-context repository: read `CONTEXT.md` and relevant decisions in
 
 ## 项目概述
 
-Vela 是一个 local-first 的 iOS 健康 App（SwiftUI + SwiftData + HealthKit），当前处于 **Personal Edition 阶段**：只为产品作者本人服务的主动式健康调节教练——结合 Apple 健康、训练事实与生活上下文，每天给出一个明确、可执行、可解释的决定，帮助维持可持续的训练、睡眠、饮食与工作恢复节奏。产品方向以 `docs/VELA_PERSONAL_PRODUCT_DIRECTION.md`（2026-08-13）与 `docs/adr/0004-0009` 为准。原始健康数据留在设备本地，只有结构化摘要通过 DeepSeek API 直接发送给 LLM（不经过中间服务器）。
+Vela 是建立在 Apple 健康之上的个人身体面板与 AI 健康分析助手：帮助用户看见当前身体状态和长期趋势，理解变化原因，并将这种理解转化为训练与生活调整建议。
+
+> **核心原则**：不做只陈列指标、不能解释个人状态和变化的健康数据面板。  
+> **价值层级**：1. 看见身体数据 → 2. 理解当前状态与长期趋势 → 3. 由 Agent 解释原因并联系不同信号 → 4. 在需要时给出训练与生活建议。
 
 - **Target**: `Vela`
 - **Scheme**: `Vela`
@@ -27,24 +30,30 @@ Vela 是一个 local-first 的 iOS 健康 App（SwiftUI + SwiftData + HealthKit�
 - **Project**: `/Users/sunweizhou/Developer/Vela/Vela.xcodeproj`
 - **Backend**: `/Users/sunweizhou/Developer/Vela/VelaBackend` (Vapor 4, SQLite) — **当前未启用**，iOS 端直连 DeepSeek API
 - **LLM Provider**: DeepSeek (`deepseek-v4-flash` / `deepseek-v4-pro`)，API key 存在 iOS Keychain
-- **Current Branch**: `main`（构建与诊断均基于此；已推送至 origin 的 checkpoint `bd7785c2`）
+- **Current Branch**: `main`
 - **GitHub**: `https://github.com/SunWeizhou/Vela`
 
-### 范围决策（2026-08，经用户确认）
+### 范围决策与导航结构
 
-- **功能开关**：Nutrition（营养）与 Biological Age（生物年龄）的用户可见入口已通过 `VelaFeatureFlags.nutritionEnabled / biologicalAgeEnabled`（默认 `false`，见 `VelaApp/App/VelaRootView.swift`）隐藏，底层代码全部保留——改回 `true` 即恢复。入口消失是**有意为之**，勿当作 bug 或重新加回。
-- **Bevel parity 已冻结**：像素级 1:1 视觉对标停止，降级为信息架构参考，不再追 Bevel 版本。
-- **导航以代码为准**：顶层为 4 Tab（今日 / 训练 / Vela / 个人，`VelaTab` 枚举见 `VelaMinimalShell.swift`；Tab 2 标签为 "Vela"，即原教练）。仓库中的 5 Tab parity 模式（`ParityTab`）与旧设计稿（figma `today-os` 的单一 Readiness 总分）均已冻结/过时，勿以它们为准。
+- **顶层 4 Tab 导航**（`VelaTab` 枚举见 `VelaMinimalShell.swift`）：
+  - Tab 0: **今日 (Today)** —— 我的身体现在怎么样？今天有什么值得知道？
+  - Tab 1: **趋势 (Trends)** —— 我的身体最近和长期发生了什么变化？（整合体征与三年轨迹）
+  - Tab 2: **Vela** —— 为什么？这些数据之间可能有什么关系？（健康分析工作台）
+  - Tab 3: **训练 (Training)** —— 基于身体状态和训练节奏，我应该怎么练？
+  - 个人设置、三年回填与数据覆盖移入右上角设置入口。
+- **北极星指标**：**`Trusted Health Brief Day`**（可信身体简报日：帮助用户明确“我现在怎么样、最近有何变化、是否需要行动”）。状态平稳且无需调整计划的一天同样具有完整价值。
+- **功能开关**：Nutrition 与 Biological Age 已通过 `VelaFeatureFlags` 隐藏，底层代码完好。
 
-### 产品方向（2026-08-13，以工作区文档为准）
+### 产品方向
 
-- **单人 Daily Driver 阶段**（ADR 0009）：只为产品作者本人优化，28 天验证期的北极星是 `Trusted Decision Day`（计划确认或改变一个有意义的健康选择，事后判断建议准确或基本合适），不以打开率/聊天条数/分数变化为北极星。
-- **Daily Operating Plan 跨域但有界**（ADR 0007）：一个主行动 + 最多两个支持行动，覆盖训练/活动/饮食节奏/压力恢复/睡眠；不管科研工作日程。
-- **AI 提议、用户确认**（ADR 0008）：本机规则生成正式计划，AI 只能提出 `Plan Proposal`，重要变更必须用户显式确认后才生效；AI 不能静默覆盖分数、安全边界或正式计划。
-- **Health Rhythm 优先**（ADR 0005）：不处方代偿行为（惩罚性有氧/极端节食抵消暴食）；饮食按行为节奏理解，不做强制卡路里记账（ADR 0006）。
-- **训练执行留在 Apple Watch**（ADR 0004）：Vela 负责训练前决定与训练后观察/校准，不要求训练中操作手机。
-- **主观与客观并立**：`Lived State`（每日自评，可跳过）与 `Body State` 不一致时记录差异、降低确定性；未填写不能解释为状态正常。
-- 方向文档：`docs/VELA_PERSONAL_PRODUCT_DIRECTION.md`（2026-08-13）、`CONTEXT.md` 领域语言、`docs/adr/0004-0009`。
+- **单人 Daily Driver 阶段**（ADR 0009）：只为产品作者本人优化，以 `Trusted Health Brief Day` 为北极星。
+- **Personal Health Brief 核心**：规范化身体简报对象，由 `HealthTrendEngine` 计算并供 Today、趋势页、Agent 及训练决策消费。
+- **Daily Operating Plan 跨域但有界**（ADR 0007）：一个主行动 + 最多两个支持行动，覆盖训练/活动/饮食节奏/压力恢复/睡眠。
+- **AI 提议、用户确认**（ADR 0008）：本机规则生成正式计划，AI 只能提出 `Plan Proposal`，重要变更必须用户显式确认后才生效。
+- **Health Rhythm 优先**（ADR 0005）：不处方代偿行为；饮食按行为节奏理解。
+- **训练执行留在 Apple Watch**（ADR 0004）：Vela 负责训练前决定与训练后观察/校准。
+- **主观与客观并立**：`Lived State` 与 `Body State` 不一致时记录差异、降低确定性。
+- 方向文档：`CONTEXT.md` 领域语言、`docs/PRD.md`、`docs/TECH_ARCHITECTURE.md`、`docs/adr/0004-0009`。
 
 ## 构建与推送
 

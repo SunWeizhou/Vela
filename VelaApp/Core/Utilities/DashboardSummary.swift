@@ -21,6 +21,9 @@ struct DashboardSummary: Hashable, Sendable {
     var longTermBaselines: LongTermBaselineReport? = nil
     /// 联通专项批次 2：身体模型状态（主流程一句话洞察/证据页共用；纯内存聚合体）。
     var bodyModelState: BodyModelState? = nil
+    /// 规范产品层：统一身体简报与多尺度趋势发现
+    var personalHealthBrief: PersonalHealthBrief? = nil
+    var healthTrends: [HealthTrendFinding] = []
     
     private var _trainingDecision: TrainingDecision?
     var trainingDecision: TrainingDecision {

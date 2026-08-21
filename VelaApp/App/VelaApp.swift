@@ -7,8 +7,9 @@ import UserNotifications
 @MainActor
 final class VelaAppState: ObservableObject {
     static let todayTabIndex = 0
-    static let trainingTabIndex = 1
+    static let trendsTabIndex = 1
     static let coachTabIndex = 2
+    static let trainingTabIndex = 3
     static let meTabIndex = 3
     nonisolated private static let validTabIndices = 0...3
 
@@ -110,12 +111,20 @@ final class VelaAppState: ObservableObject {
         selectedTab = tab
     }
 
+    func routeToToday() {
+        routeToTab(Self.todayTabIndex)
+    }
+
+    func routeToTrends() {
+        routeToTab(Self.trendsTabIndex)
+    }
+
     func routeToTraining() {
         routeToTab(Self.trainingTabIndex)
     }
 
     func routeToMe() {
-        routeToTab(Self.meTabIndex)
+        showSettings = true
     }
 
     func routeToAdaptiveTrainingStart() {

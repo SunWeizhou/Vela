@@ -160,24 +160,24 @@ final class DailySummaryUseCase {
             }
         }
         
-        // 2. Query today's snapshot and 42-day history from SwiftData
-        let snapshots42: [DailyHealthSnapshot]
+        // 2. Query today's snapshot and 180-day history from SwiftData (supports 7d, 30d, 6m multi-scale trends)
+        let snapshots180: [DailyHealthSnapshot]
         if let modelContext {
             let snapshotRepo = HealthSnapshotRepository(modelContext: modelContext, calendar: calendar)
             do {
-                snapshots42 = try snapshotRepo.fetchSnapshots(days: 42, endingAt: now)
+                snapshots180 = try snapshotRepo.fetchSnapshots(days: 180, endingAt: now)
             } catch {
                 PipelineDiagnosticsLogger.log(
                     modelContext: modelContext,
                     stage: "DailySummaryUseCase.loadDashboard.fetchSnapshots",
                     isSuccess: false,
-                    summary: "Failed to fetch 42-day snapshot history.",
+                    summary: "Failed to fetch 180-day snapshot history.",
                     error: error
                 )
-                snapshots42 = []
+                snapshots180 = []
             }
         } else {
-            snapshots42 = []
+            snapshots180 = []
         }
 
         // 2b. 三年长线基准延后到确认今日快照存在后再计算：空启动/无今日数据时
@@ -185,7 +185,7 @@ final class DailySummaryUseCase {
         var allDailySummaryRecords: [DailyHealthSummaryRecord] = []
         
         // 3. Locate today's snapshot
-        let todaySnapshot = snapshots42.first(where: { calendar.isDate($0.date, inSameDayAs: now) })
+        let todaySnapshot = snapshots180.first(where: { calendar.isDate($0.date, inSameDayAs: now) })
         
         // 4. Require today's snapshot with real HealthKit-synced data. A debug
         // demo seed is opt-in through a launch argument; a normal device must
@@ -229,7 +229,7 @@ final class DailySummaryUseCase {
         }
 
         // 5. Build clean DailyHealthContext and historical rolling baselines from snapshots
-        let baselineSnapshots = snapshots42.filter {
+        let baselineSnapshots = snapshots180.filter {
             !calendar.isDate($0.date, inSameDayAs: now)
         }
         let hrvHistory = baselineSnapshots.compactMap(\.hrvAverage)
@@ -347,7 +347,7 @@ final class DailySummaryUseCase {
         pipelineSnapshot.remSleepMinutes = pipelineSnapshot.remSleepMinutes ?? context.sleepSummary?.stageMinutes[.rem].map { Double($0) }
         pipelineSnapshot.awakeEpisodeCount = pipelineSnapshot.awakeEpisodeCount ?? context.sleepSummary?.segments.filter { $0.stage == .awake && $0.end.timeIntervalSince($0.start) >= 120 }.count
 
-        let historicalSnapshots = snapshots42.filter { !calendar.isDate($0.date, inSameDayAs: now) }
+        let historicalSnapshots = snapshots180.filter { !calendar.isDate($0.date, inSameDayAs: now) }
         // F10 修复：历史日评分用日末评估时刻（与同步引擎一致），
         // 避免 hoursSinceWake / 训练恢复窗口在午夜与日末之间漂移。
         let evaluationNow = calendar.isDateInToday(now)
@@ -543,6 +543,17 @@ final class DailySummaryUseCase {
             }
         }
         
+        dashboard.bodyState = bodyState
+        let trendAnalysis = HealthTrendEngine().analyze(
+            dashboard: dashboard,
+            snapshots: snapshots180,
+            longTermBaselines: longTermReport,
+            today: now,
+            calendar: calendar
+        )
+        dashboard.personalHealthBrief = trendAnalysis.brief
+        dashboard.healthTrends = trendAnalysis.findings
+
         let dailyTrainingDecision: DailyTrainingDecision
         if let matched = matchedExistingDecision {
             dailyTrainingDecision = matched
@@ -562,8 +573,7 @@ final class DailySummaryUseCase {
                 rotationFocus: rotationFocus
             ))
         }
-        
-        dashboard.bodyState = bodyState
+
         dashboard.trainingDecision = TrainingDecision.compatibilityView(
             of: dailyTrainingDecision,
             bodyState: bodyState

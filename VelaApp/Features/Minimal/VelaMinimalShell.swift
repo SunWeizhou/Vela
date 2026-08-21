@@ -89,9 +89,9 @@ struct VelaShell: View {
 
     enum VelaTab: Int, CaseIterable, Hashable {
         case today = 0
-        case training = 1
+        case trends = 1
         case coach = 2
-        case me = 3
+        case training = 3
     }
 
     enum ParityTab: Int, CaseIterable, Hashable {
@@ -122,12 +122,12 @@ struct VelaShell: View {
         .onReceive(appState.$selectedTab) { selectedTab in
             guard parityInterfaceEnabled else { return }
             switch selectedTab {
+            case VelaAppState.trendsTabIndex:
+                paritySelectedTab = ParityTab.biology.rawValue
             case VelaAppState.trainingTabIndex:
                 paritySelectedTab = ParityTab.fitness.rawValue
             case VelaAppState.coachTabIndex:
                 showCoach = true
-            case VelaAppState.meTabIndex:
-                paritySelectedTab = ParityTab.biology.rawValue
             default:
                 paritySelectedTab = ParityTab.home.rawValue
             }
@@ -281,11 +281,11 @@ struct VelaShell: View {
             }
             .tag(0)
 
-            nativeTabSurface(.training) {
-                VelaTrainingView()
+            nativeTabSurface(.trends) {
+                VelaTrendsView()
             }
             .tabItem {
-                Label(label(for: .training), systemImage: iconName(for: .training))
+                Label(label(for: .trends), systemImage: iconName(for: .trends))
             }
             .tag(1)
 
@@ -297,11 +297,11 @@ struct VelaShell: View {
             }
             .tag(2)
 
-            nativeTabSurface(.me) {
-                VelaMeView()
+            nativeTabSurface(.training) {
+                VelaTrainingView()
             }
             .tabItem {
-                Label(label(for: .me), systemImage: iconName(for: .me))
+                Label(label(for: .training), systemImage: iconName(for: .training))
             }
             .tag(3)
         }
@@ -319,8 +319,8 @@ struct VelaShell: View {
                 tabSurface(.today) {
                     VelaTodayView(showCoach: $showCoach, showSettings: $appState.showSettings)
                 }
-                tabSurface(.training) {
-                    VelaTrainingView()
+                tabSurface(.trends) {
+                    VelaTrendsView()
                 }
                 tabSurface(.coach) {
                     VelaCoachView(
@@ -329,10 +329,8 @@ struct VelaShell: View {
                         vm: services.coachChat
                     )
                 }
-                tabSurface(.me) {
-                    NavigationStack {
-                        VelaMeView()
-                    }
+                tabSurface(.training) {
+                    VelaTrainingView()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -431,18 +429,18 @@ struct VelaShell: View {
     private func iconName(for tab: VelaTab) -> String {
         switch tab {
         case .today:    "sun.max"
-        case .training: "figure.run"
+        case .trends:   "waveform.path.ecg"
         case .coach:    "sparkles"
-        case .me:       "person.crop.circle"
+        case .training: "figure.run"
         }
     }
 
     private func label(for tab: VelaTab) -> String {
         switch tab {
         case .today:    L10n.t("Today", "今日")
-        case .training: L10n.t("Training", "训练")
+        case .trends:   L10n.t("Trends", "趋势")
         case .coach:    "Vela"
-        case .me:       L10n.t("Me", "个人")
+        case .training: L10n.t("Training", "训练")
         }
     }
 
@@ -468,7 +466,7 @@ enum VelaTabSelection {
         var shouldPresentQuickActions: Bool
     }
 
-    static let contentTabs: [VelaShell.VelaTab] = [.today, .training, .coach, .me]
+    static let contentTabs: [VelaShell.VelaTab] = [.today, .trends, .coach, .training]
 
     static func isActive(_ tab: VelaShell.VelaTab, selectedTab: Int) -> Bool {
         tab.rawValue == selectedTab

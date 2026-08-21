@@ -108,21 +108,25 @@ struct TodayExperienceModel: Codable, Hashable {
         // 而 readiness 投影自 TrainingDecisionKernel 的同一结论（rest↔recover 归一）；
         // Kernel 提供量化细节（容量/RPE）。同屏不再出现「标题说恢复、细节说 100%」的矛盾。
         let effectiveReadiness = readiness ?? Self.readinessMapping(for: trainingDecision)
+        let brief = dashboard.personalHealthBrief
         let hero = TodayExperienceHero(
             scoreTitle: scoreTitle(dashboard),
             decisionTitle: decisionTitle(
                 effectiveReadiness,
+                brief: brief,
                 hasReadinessData: hasReadinessData
             ),
             summary: summary(
                 dashboard: dashboard,
                 bodyState: bodyState,
                 decision: trainingDecision,
+                brief: brief,
                 hasReadinessData: hasReadinessData
             ),
             confidenceLabel: confidenceDetail,
             primaryActionTitle: primaryActionTitle(
                 effectiveReadiness,
+                brief: brief,
                 hasReadinessData: hasReadinessData
             )
         )
@@ -228,27 +232,35 @@ struct TodayExperienceModel: Codable, Hashable {
 
     private static func decisionTitle(
         _ readiness: ReadinessDecisionKind,
+        brief: PersonalHealthBrief?,
         hasReadinessData: Bool
     ) -> String {
         guard hasReadinessData else { return "先建立身体基线" }
+        if let brief = brief, !brief.headline.isEmpty {
+            return brief.headline
+        }
         switch readiness {
         case .keep: return "按计划训练"
         case .reduce: return "控制训练量"
-        case .swap: return "换练其他部位"
+        case .swap: return "换练调整"
         case .recover: return "恢复优先"
         }
     }
 
     private static func primaryActionTitle(
         _ readiness: ReadinessDecisionKind,
+        brief: PersonalHealthBrief?,
         hasReadinessData: Bool
     ) -> String {
         guard hasReadinessData else { return "同步健康数据" }
+        if let brief = brief, let actionHeadline = brief.actionHeadline, !actionHeadline.isEmpty {
+            return "查看\(actionHeadline)"
+        }
         switch readiness {
         case .keep: return "查看今日训练建议"
-        case .reduce: return "查看减量建议"
-        case .swap: return "查看替代建议"
-        case .recover: return "执行恢复计划"
+        case .reduce: return "查看负荷调节建议"
+        case .swap: return "查看换练建议"
+        case .recover: return "查看恢复建议"
         }
     }
 
@@ -265,10 +277,14 @@ struct TodayExperienceModel: Codable, Hashable {
         dashboard: DashboardSummary,
         bodyState: BodyState,
         decision: DailyTrainingDecision,
+        brief: PersonalHealthBrief?,
         hasReadinessData: Bool
     ) -> String {
         guard hasReadinessData else {
-            return "当前缺少恢复基线，Vela 会先按保守训练窗口处理，并优先引导同步数据。"
+            return "当前缺少恢复基线，Vela 会先按保守健康窗口处理，并优先引导同步数据。"
+        }
+        if let brief = brief, !brief.subheadline.isEmpty {
+            return brief.subheadline
         }
         let sleep = dashboard.sleepScore.hasData ? "\(Int(dashboard.sleepScore.score.rounded()))" : "--"
         let strain = dashboard.strain.hasData ? "\(Int(dashboard.strain.score.rounded()))" : "--"
@@ -418,8 +434,8 @@ struct TodayExperienceModel: Codable, Hashable {
     ) -> [TodayExperienceAction] {
         guard hasReadinessData else {
             return [
-                .init(id: "sync_health", title: "同步健康数据", detail: "更新 HRV、静息心率、睡眠和训练负荷。", destination: "sync", isPrimary: true, evidence: "恢复、睡眠和负荷尚不可用"),
-                .init(id: "log_status", title: "记录身体状态", detail: "补充疲劳、酸痛、压力或生病状态。", destination: "journal", isPrimary: false),
+                .init(id: "sync_health", title: "同步健康数据", detail: "更新 HRV、静息心率、睡眠和日常活动。", destination: "sync", isPrimary: true, evidence: "体征数据尚在同步"),
+                .init(id: "log_status", title: "记录身体状态", detail: "补充疲劳、酸痛、压力或主观感受。", destination: "journal", isPrimary: false),
                 .init(id: "ask_coach", title: "询问 Vela", detail: "用当前有限数据生成保守建议。", destination: "coach", isPrimary: false)
             ]
         }
@@ -428,10 +444,40 @@ struct TodayExperienceModel: Codable, Hashable {
             bodyState: bodyState,
             decision: decision
         )
-        // 量化细节（容量/RPE）仅在 Kernel 与 readiness 同向时采用，
-        // 否则使用保守默认值，避免「标题恢复、行动带训练数字」的矛盾。
         let volume = decision.decision == .reduce ? decision.volumeMultiplier : 0.75
         let cap = decision.decision == .reduce ? decision.intensityCap : 7
+
+        if let brief = dashboard.personalHealthBrief {
+            switch brief.overallState {
+            case .optimal:
+                return [
+                    .init(id: "maintain_rhythm", title: "按计划开展活动", detail: "各项核心体征处于良好水平，支持正常开展日常工作与训练节奏。", destination: "training", isPrimary: true, evidence: evidence),
+                    .init(id: "protect_sleep", title: "保持睡眠节律", detail: "保持固定作息时间，规律入睡。", destination: "journal", isPrimary: false),
+                    .init(id: "ask_coach", title: "问 Vela 身体分析", detail: "了解近期体征规律与状态演进。", destination: "coach", isPrimary: false)
+                ]
+            case .stable:
+                return [
+                    .init(id: "review_training", title: "保持日常节奏", detail: "体征平稳运行在基线区间，可正常执行既定活动与训练计划。", destination: "training", isPrimary: true, evidence: evidence),
+                    .init(id: "protect_sleep", title: "保护今晚睡眠", detail: "固定入睡时间，避免过晚进食。", destination: "journal", isPrimary: false),
+                    .init(id: "ask_coach", title: "问 Vela 趋势洞察", detail: "查看近期体征对比与趋势细节。", destination: "coach", isPrimary: false)
+                ]
+            case .strained:
+                return [
+                    .init(id: "reduce_training", title: "适度控制负荷", detail: "在 Apple Watch 开始训练；容量 \(Int((volume * 100).rounded()))%，RPE 上限 \(cap)。", destination: "training", isPrimary: true, evidence: evidence),
+                    .init(id: "recovery_block", title: "安排主动恢复", detail: "补充水分、安排轻度散步与放松。", destination: "recovery", isPrimary: false),
+                    .init(id: "protect_sleep", title: "今晚提前睡眠", detail: "减少晚间刺激，优先保证睡眠时长。", destination: "journal", isPrimary: false)
+                ]
+            case .recovering:
+                return [
+                    .init(id: "recovery_day", title: "优先休整调节", detail: "体征处于恢复窗口，建议停止高强度刺激，安排充分休息。", destination: "recovery", isPrimary: true, evidence: evidence),
+                    .init(id: "sleep_plan", title: "今晚提前入睡", detail: "把睡眠修复放在高强度活动之前。", destination: "journal", isPrimary: false),
+                    .init(id: "ask_coach", title: "问 Vela 恢复建议", detail: "获取个性化放松与生活调整建议。", destination: "coach", isPrimary: false)
+                ]
+            case .insufficientData:
+                break
+            }
+        }
+
         switch readiness {
         case .keep:
             return [

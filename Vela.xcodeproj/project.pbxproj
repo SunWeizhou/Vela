@@ -26,6 +26,7 @@
 		0B0000330000000000000033 /* ScoringEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000340000000000000034 /* ScoringEngineTests.swift */; };
 		0B26A0010000000000000001 /* DataCoverageAndEvidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B26A0020000000000000002 /* DataCoverageAndEvidenceTests.swift */; };
 		0B26A0050000000000000005 /* Milestone1ChallengeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B26A0060000000000000006 /* Milestone1ChallengeTests.swift */; };
+		0B9900080000000000000008 /* HealthTrendAndBriefTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9900070000000000000007 /* HealthTrendAndBriefTests.swift */; };
 		0B1000010000000000000001 /* VelaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001010000000000000001 /* VelaApp.swift */; };
 		0B1000020000000000000002 /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001020000000000000002 /* AppCoordinator.swift */; };
 		0B1000030000000000000003 /* VelaRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001030000000000000003 /* VelaRootView.swift */; };
@@ -62,6 +63,9 @@
 		0B1000400000000000000040 /* EnergyBankEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001410000000000000041 /* EnergyBankEngine.swift */; };
 		0B1000410000000000000041 /* HealthAgeTrendEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001420000000000000042 /* HealthAgeTrendEngine.swift */; };
 		0B1000420000000000000042 /* DashboardSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001430000000000000043 /* DashboardSummary.swift */; };
+		0B9900020000000000000002 /* PersonalHealthBrief.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9900010000000000000001 /* PersonalHealthBrief.swift */; };
+		0B9900040000000000000004 /* HealthTrendEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9900030000000000000003 /* HealthTrendEngine.swift */; };
+		0B9900060000000000000006 /* VelaTrendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9900050000000000000005 /* VelaTrendsView.swift */; };
 		0B25D0700000000000000070 /* BodyState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1700000000000000070 /* BodyState.swift */; };
 		0B25D0710000000000000071 /* TrainingDecision.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1710000000000000071 /* TrainingDecision.swift */; };
 		0B25D0720000000000000072 /* DailyOperatingPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1720000000000000072 /* DailyOperatingPlan.swift */; };
@@ -247,6 +251,7 @@
 		0B0000340000000000000034 /* ScoringEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoringEngineTests.swift; sourceTree = "<group>"; };
 		0B26A0020000000000000002 /* DataCoverageAndEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataCoverageAndEvidenceTests.swift; sourceTree = "<group>"; };
 		0B26A0060000000000000006 /* Milestone1ChallengeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Milestone1ChallengeTests.swift; sourceTree = "<group>"; };
+		0B9900070000000000000007 /* HealthTrendAndBriefTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthTrendAndBriefTests.swift; sourceTree = "<group>"; };
 		0B1001010000000000000001 /* VelaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/VelaApp.swift; sourceTree = "<group>"; };
 		0B1001020000000000000002 /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/AppCoordinator.swift; sourceTree = "<group>"; };
 		0B1001030000000000000003 /* VelaRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/VelaRootView.swift; sourceTree = "<group>"; };
@@ -292,6 +297,9 @@
 		0B1001410000000000000041 /* EnergyBankEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/EnergyBank/EnergyBankEngine.swift; sourceTree = "<group>"; };
 		0B1001420000000000000042 /* HealthAgeTrendEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/HealthAge/HealthAgeTrendEngine.swift; sourceTree = "<group>"; };
 		0B1001430000000000000043 /* DashboardSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/DashboardSummary.swift; sourceTree = "<group>"; };
+		0B9900010000000000000001 /* PersonalHealthBrief.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/PersonalHealthBrief.swift; sourceTree = "<group>"; };
+		0B9900030000000000000003 /* HealthTrendEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/HealthTrendEngine.swift; sourceTree = "<group>"; };
+		0B9900050000000000000005 /* VelaTrendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Trends/VelaTrendsView.swift; sourceTree = "<group>"; };
 		0B25D1700000000000000070 /* BodyState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/BodyState.swift; sourceTree = "<group>"; };
 		0B25D1710000000000000071 /* TrainingDecision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/TrainingDecision.swift; sourceTree = "<group>"; };
 		0B25D1720000000000000072 /* DailyOperatingPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/DailyOperatingPlan.swift; sourceTree = "<group>"; };
@@ -507,6 +515,9 @@
 				0B1001050000000000000005 /* AppDocumentation.swift */,
 				0B1001240000000000000024 /* DateRangeQuery.swift */,
 				0B1001430000000000000043 /* DashboardSummary.swift */,
+				0B9900010000000000000001 /* PersonalHealthBrief.swift */,
+				0B9900030000000000000003 /* HealthTrendEngine.swift */,
+				0B9900050000000000000005 /* VelaTrendsView.swift */,
 				0B25D1700000000000000070 /* BodyState.swift */,
 				0B25D1710000000000000071 /* TrainingDecision.swift */,
 				0B25D1720000000000000072 /* DailyOperatingPlan.swift */,
@@ -686,6 +697,7 @@
 				0B0000340000000000000034 /* ScoringEngineTests.swift */,
 				0B26A0020000000000000002 /* DataCoverageAndEvidenceTests.swift */,
 				0B26A0060000000000000006 /* Milestone1ChallengeTests.swift */,
+				0B9900070000000000000007 /* HealthTrendAndBriefTests.swift */,
 				6B3FF1E44A844CECACC8727E /* WikiMergeTests.swift */,
 				9D3C95453E2F4CA38EF8BCC8 /* AgentActionParserTests.swift */,
 				8D2B5FDE2C894A4E932CD4DB /* ContextBuilderTests.swift */,
@@ -900,6 +912,9 @@
 				0B1000050000000000000005 /* AppDocumentation.swift in Sources */,
 				0B1000230000000000000023 /* DateRangeQuery.swift in Sources */,
 				0B1000420000000000000042 /* DashboardSummary.swift in Sources */,
+				0B9900020000000000000002 /* PersonalHealthBrief.swift in Sources */,
+				0B9900040000000000000004 /* HealthTrendEngine.swift in Sources */,
+				0B9900060000000000000006 /* VelaTrendsView.swift in Sources */,
 				0B25D0700000000000000070 /* BodyState.swift in Sources */,
 				0B25D0710000000000000071 /* TrainingDecision.swift in Sources */,
 				0B25D0720000000000000072 /* DailyOperatingPlan.swift in Sources */,
@@ -1080,6 +1095,7 @@
 				0B0000330000000000000033 /* ScoringEngineTests.swift in Sources */,
 				0B26A0010000000000000001 /* DataCoverageAndEvidenceTests.swift in Sources */,
 				0B26A0050000000000000005 /* Milestone1ChallengeTests.swift in Sources */,
+				0B9900080000000000000008 /* HealthTrendAndBriefTests.swift in Sources */,
 				FE760BA0280B448DB02489E4 /* WikiMergeTests.swift in Sources */,
 				BB4501256E114FAC859D914B /* AgentActionParserTests.swift in Sources */,
 				1586C9ADAE4F4253BDE1C34C /* ContextBuilderTests.swift in Sources */,

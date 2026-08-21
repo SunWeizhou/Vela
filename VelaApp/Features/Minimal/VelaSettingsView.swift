@@ -69,6 +69,14 @@ struct VelaSettingsView: View {
                         NavigationLink(destination: HealthDataResyncSettingsView()) {
                             settingsRow(icon: "arrow.clockwise.icloud", title: "健康数据重同步", value: "最近 90 天")
                         }
+                        settingsDivider
+                        NavigationLink(destination: HistoricalBackfillView()) {
+                            settingsRow(icon: "icloud.and.arrow.down", title: "三年 Apple 健康回填", value: "长期基准")
+                        }
+                        settingsDivider
+                        NavigationLink(destination: XunjiHistoryBackfillView()) {
+                            settingsRow(icon: "dumbbell.fill", title: "训记训练历史回填", value: "力量负荷")
+                        }
                     }
                 }
 

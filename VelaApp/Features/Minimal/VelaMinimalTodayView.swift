@@ -282,6 +282,92 @@ struct VelaTodayView: View {
     }
 
     @ViewBuilder
+    private var notableChangeCard: some View {
+        if let notable = dashboard.personalHealthBrief?.notableChanges.first {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                    Text("最值得关注的变化")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                    Spacer()
+                    Button {
+                        appState.routeToTrends()
+                    } label: {
+                        HStack(spacing: 2) {
+                            Text("查看趋势")
+                            Image(systemName: "chevron.right")
+                        }
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    }
+                }
+
+                Text(notable.summary)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                    .lineSpacing(2)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+            )
+            .padding(.horizontal, VelaTheme.pagePadding)
+            .padding(.top, 16)
+        }
+    }
+
+    @ViewBuilder
+    private var velaInterpretationSection: some View {
+        if let insight = todayAIInsight {
+            aiInsightCard(insight)
+        } else if let brief = dashboard.personalHealthBrief, !brief.subheadline.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                    Text("Vela 解读")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                    Spacer()
+                }
+
+                Text(brief.subheadline)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                    .lineSpacing(3)
+
+                if let insightLine = dashboard.bodyModelState?.insightLine() {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(VelaTheme.rhythmDeep.opacity(0.7))
+                            .frame(width: 4, height: 4)
+                        Text(insightLine)
+                            .font(.system(size: 12))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    }
+                    .padding(.top, 2)
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+            )
+        } else {
+            personalResponseInsightView
+        }
+    }
+
+    @ViewBuilder
     private var personalResponseInsightView: some View {
         if dashboardVM.isToday, let insightLine = dashboard.bodyModelState?.insightLine() {
             NavigationLink(destination: BodyModelDetailView()) {
@@ -420,7 +506,10 @@ struct VelaTodayView: View {
                 .padding(.horizontal, VelaTheme.pagePadding)
                 .padding(.top, 4)
 
-                // ─── Block 2: Key Vital Stats (HRV / RHR / SpO₂ / Sleep 2×2 Grid) ───
+                // ─── Block 2: Today's Most Notable Change (if present) ───
+                notableChangeCard
+
+                // ─── Block 3: Key Vital Stats (HRV / RHR / SpO₂ / Sleep 2×2 Grid) ───
                 VStack(alignment: .leading, spacing: 10) {
                     Text("关键体征")
                         .font(VelaTheme.headline())
@@ -435,30 +524,27 @@ struct VelaTodayView: View {
                     }
                 }
                 .padding(.horizontal, VelaTheme.pagePadding)
-                .padding(.top, 24)
+                .padding(.top, 20)
 
-                VStack(alignment: .leading, spacing: 30) {
-                    // ─── Block 3: Action Sequence (今天的重点) ───
-                    VelaRhythmActionSequence(
-                        actions: todayExperience.actions,
-                        onAction: { performExperienceAction($0) },
-                        onEvidence: { showTodayEvidence = true }
-                    )
+                VStack(alignment: .leading, spacing: 24) {
+                    // ─── Block 4: Vela Interpretation (Unified AI & Response Brief) ───
+                    velaInterpretationSection
 
-                    // ─── Block 4: Stress & Energy Gauge Cards ───
+                    // ─── Block 5: Downstream Action Sequence (建议行动) ───
+                    if !todayExperience.actions.isEmpty {
+                        VelaRhythmActionSequence(
+                            actions: todayExperience.actions,
+                            onAction: { performExperienceAction($0) },
+                            onEvidence: { showTodayEvidence = true }
+                        )
+                    }
+
+                    // ─── Block 6: Stress & Energy Gauge Cards ───
                     TodaySignalGrid(
                         model: todayExperience,
                         freshness: dataCoverageSummary.status == .unknown ? .missing : .today,
                         accentColor: signalAccentColor
                     )
-
-                    // ─── Block 5: AI Insight Card ───
-                    if dashboardVM.isToday, let insight = todayAIInsight {
-                        aiInsightCard(insight)
-                    }
-
-                    // ─── Block 6: Personal Response Insight ───
-                    personalResponseInsightView
 
                     // ─── Block 7: Feedback + Data Coverage ───
                     if persistedOperatingPlan != nil {
@@ -474,7 +560,7 @@ struct VelaTodayView: View {
                     )
                 }
                 .padding(.horizontal, VelaTheme.pagePadding)
-                .padding(.top, 26)
+                .padding(.top, 24)
                 .padding(.bottom, VelaTheme.bottomContentClearance)
             }
         }

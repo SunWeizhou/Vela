@@ -244,4 +244,7 @@ struct AgentFactSnapshot: Codable, Hashable, Sendable {
     /// A1：完整 Daily Operating Plan（主行动/支持行动/理由/置信度）。
     /// 此前 LLM 只拿到 trainingDecision 切片，无法讨论跨域计划的完整内容。
     var dailyOperatingPlan: [String: String]?
+    /// 规范产品层：统一身体简报与多尺度趋势发现，让 Agent 解释 UI 当前显示的同一份事实
+    var personalHealthBrief: PersonalHealthBrief?
+    var healthTrends: [HealthTrendFinding]?
 }

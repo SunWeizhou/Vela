@@ -1,0 +1,653 @@
+import Foundation
+
+// MARK: - Health Trend Engine
+
+struct HealthTrendEngine: Sendable {
+
+    init() {}
+
+    func analyze(
+        dashboard: DashboardSummary,
+        snapshots: [DailyHealthSnapshot],
+        longTermBaselines: LongTermBaselineReport?,
+        today: Date = Date(),
+        calendar: Calendar = .current
+    ) -> (brief: PersonalHealthBrief, findings: [HealthTrendFinding]) {
+        let hasCoreData = dashboard.recovery.hasData || dashboard.sleepScore.hasData || dashboard.recoveryMetrics.hrvMilliseconds != nil || dashboard.recoveryMetrics.restingHeartRate != nil
+        guard hasCoreData else {
+            let emptyBrief = PersonalHealthBrief.empty(date: today)
+            return (emptyBrief, [])
+        }
+
+        let sortedSnapshots = snapshots.sorted { $0.date < $1.date }
+        var allFindings: [HealthTrendFinding] = []
+
+        // Compute findings for each core metric across all 4 horizons
+        let metrics: [CoreHealthMetric] = [
+            .hrv, .restingHeartRate, .sleepDuration, .recovery,
+            .strain, .stress, .energy, .respiratoryRate,
+            .oxygenSaturation, .bodyWeight, .bodyFat, .steps, .activeCalories
+        ]
+
+        for metric in metrics {
+            let findingsForMetric = computeFindings(
+                for: metric,
+                dashboard: dashboard,
+                snapshots: sortedSnapshots,
+                longTermBaselines: longTermBaselines,
+                today: today,
+                calendar: calendar
+            )
+            allFindings.append(contentsOf: findingsForMetric)
+        }
+
+        let notableChanges = allFindings.filter { $0.isNotable && $0.isAvailable }
+        let stableSignals = allFindings.filter { !$0.isNotable && $0.isAvailable && $0.horizon == .thirtyDays && $0.currentValue != nil }
+
+        let overallState = determineOverallState(
+            dashboard: dashboard,
+            notableChanges: notableChanges,
+            snapshots: sortedSnapshots
+        )
+
+        let headline = generateHeadline(
+            state: overallState,
+            dashboard: dashboard,
+            notableChanges: notableChanges
+        )
+
+        let subheadline = generateSubheadline(
+            state: overallState,
+            dashboard: dashboard,
+            notableChanges: notableChanges,
+            stableSignals: stableSignals
+        )
+
+        let possibleDrivers = inferDrivers(
+            dashboard: dashboard,
+            notableChanges: notableChanges
+        )
+
+        let actionEvaluation = evaluateAction(
+            state: overallState,
+            dashboard: dashboard,
+            notableChanges: notableChanges
+        )
+
+        let brief = PersonalHealthBrief(
+            date: today,
+            overallState: overallState,
+            headline: headline,
+            subheadline: subheadline,
+            notableChanges: notableChanges,
+            stableSignals: stableSignals,
+            multiscaleTrends: allFindings,
+            possibleDrivers: possibleDrivers,
+            confidence: dashboard.bodyState.confidence,
+            confidenceLabel: confidenceText(for: dashboard.bodyState.confidence),
+            needsAction: actionEvaluation.needsAction,
+            suggestedActionCategory: actionEvaluation.category,
+            actionHeadline: actionEvaluation.headline,
+            actionDetail: actionEvaluation.detail,
+            lifestyleSuggestions: actionEvaluation.lifestyleSuggestions,
+            generatedAt: today
+        )
+
+        return (brief, allFindings)
+    }
+
+    // MARK: - Metric Findings Computation
+
+    private func computeFindings(
+        for metric: CoreHealthMetric,
+        dashboard: DashboardSummary,
+        snapshots: [DailyHealthSnapshot],
+        longTermBaselines: LongTermBaselineReport?,
+        today: Date,
+        calendar: Calendar
+    ) -> [HealthTrendFinding] {
+        var results: [HealthTrendFinding] = []
+
+        let currentValue = currentValue(for: metric, dashboard: dashboard)
+        let formattedCurrent = formatValue(currentValue, metric: metric)
+
+        // 7-day Horizon (requires >= 4 samples)
+        let finding7d = computeHorizonFinding(
+            metric: metric,
+            horizon: .sevenDays,
+            days: 7,
+            currentValue: currentValue,
+            currentFormatted: formattedCurrent,
+            snapshots: snapshots,
+            today: today,
+            calendar: calendar
+        )
+        results.append(finding7d)
+
+        // 30-day Horizon (requires >= 14 samples)
+        let finding30d = computeHorizonFinding(
+            metric: metric,
+            horizon: .thirtyDays,
+            days: 30,
+            currentValue: currentValue,
+            currentFormatted: formattedCurrent,
+            snapshots: snapshots,
+            today: today,
+            calendar: calendar
+        )
+        results.append(finding30d)
+
+        // 6-month Horizon (requires >= 60 samples, ~180 days)
+        let finding6m = computeHorizonFinding(
+            metric: metric,
+            horizon: .sixMonths,
+            days: 180,
+            currentValue: currentValue,
+            currentFormatted: formattedCurrent,
+            snapshots: snapshots,
+            today: today,
+            calendar: calendar
+        )
+        results.append(finding6m)
+
+        // 3-Year Horizon (from longTermBaselines)
+        if let ltMetric = longTermMetric(for: metric),
+           let ltBaseline = longTermBaselines?.baselines[ltMetric],
+           ltBaseline.sampleCount >= 60,
+           let pMedian = ltBaseline.threeYearMedian,
+           let cur = currentValue {
+            let deviation = pMedian > 0 ? (cur - pMedian) / pMedian * 100 : 0
+            let direction: HealthTrendDirection = {
+                if abs(deviation) < 3.5 { return .stable }
+                switch metric.polarity {
+                case .higherIsBetter:
+                    return deviation > 0 ? .improving : .declining
+                case .lowerIsBetter:
+                    return deviation > 0 ? .declining : .improving
+                case .contextual:
+                    return deviation > 0 ? .elevated : .suppressed
+                }
+            }()
+
+            let percentile = calculatePercentilePosition(value: cur, baseline: ltBaseline)
+            let devSummary = abs(deviation) < 3.5 ? "与三年基线基本持平" : (deviation > 0 ? String(format: "较三年基线偏高 %.1f%%", deviation) : String(format: "较三年基线偏低 %.1f%%", abs(deviation)))
+            let trendSummary = generate3YSummary(
+                metric: metric,
+                cur: cur,
+                median: pMedian,
+                percentile: percentile,
+                trendLabel: ltBaseline.trendLabel
+            )
+            let summary = "\(devSummary)，\(trendSummary)"
+            let isNotable = abs(deviation) >= 12.0
+
+            results.append(HealthTrendFinding(
+                metric: metric,
+                horizon: .threeYears,
+                direction: direction,
+                currentValue: cur,
+                currentValueFormatted: formattedCurrent,
+                baselineValue: pMedian,
+                baselineValueFormatted: formatValue(pMedian, metric: metric),
+                currentDeviationValue: cur - pMedian,
+                currentDeviationPercent: deviation,
+                temporalTrendDelta: nil,
+                temporalTrendDeltaPercent: nil,
+                historicalPercentile: percentile,
+                sampleCount: ltBaseline.sampleCount,
+                requiredSampleCount: 60,
+                isAvailable: true,
+                confidence: .high,
+                deviationSummary: devSummary,
+                temporalTrendSummary: trendSummary,
+                summary: summary,
+                isNotable: isNotable
+            ))
+        } else {
+            let existingCount = (longTermMetric(for: metric).flatMap { longTermBaselines?.baselines[$0]?.sampleCount }) ?? 0
+            results.append(HealthTrendFinding.unavailable(
+                metric: metric,
+                horizon: .threeYears,
+                sampleCount: existingCount
+            ))
+        }
+
+        return results
+    }
+
+    private func computeHorizonFinding(
+        metric: CoreHealthMetric,
+        horizon: HealthTrendHorizon,
+        days: Int,
+        currentValue: Double?,
+        currentFormatted: String,
+        snapshots: [DailyHealthSnapshot],
+        today: Date,
+        calendar: Calendar
+    ) -> HealthTrendFinding {
+        let start = calendar.date(byAdding: .day, value: -days, to: today) ?? today
+        let windowSnapshots = snapshots.filter { $0.date >= start && $0.date <= today }
+        let windowValuesWithDate: [(date: Date, value: Double)] = windowSnapshots.compactMap { snap in
+            guard let val = value(for: metric, snapshot: snap) else { return nil }
+            return (date: snap.date, value: val)
+        }
+
+        let sampleCount = windowValuesWithDate.count
+        guard sampleCount >= horizon.requiredSampleCount else {
+            return HealthTrendFinding.unavailable(metric: metric, horizon: horizon, sampleCount: sampleCount)
+        }
+
+        let rawValues = windowValuesWithDate.map(\.value)
+        guard let baselineMedian = median(of: rawValues) else {
+            return HealthTrendFinding.unavailable(metric: metric, horizon: horizon, sampleCount: sampleCount)
+        }
+
+        // Temporal Trend: Half-window median comparison
+        let halfCount = sampleCount / 2
+        let firstHalfValues = Array(rawValues.prefix(halfCount))
+        let secondHalfValues = Array(rawValues.suffix(sampleCount - halfCount))
+
+        let m1 = median(of: firstHalfValues) ?? baselineMedian
+        let m2 = median(of: secondHalfValues) ?? baselineMedian
+        let trendDelta = m2 - m1
+        let trendDeltaPercent = m1 > 0 ? (trendDelta / m1) * 100 : 0
+
+        // Current Baseline Deviation
+        let curDev: Double? = currentValue.map { $0 - baselineMedian }
+        let curDevPercent: Double? = currentValue.flatMap { baselineMedian > 0 ? (($0 - baselineMedian) / baselineMedian) * 100 : 0 }
+
+        // Direction mapping based on metric polarity
+        let direction: HealthTrendDirection
+        let trendThresholdPercent: Double = 3.5
+        if abs(trendDeltaPercent) < trendThresholdPercent {
+            direction = .stable
+        } else if trendDeltaPercent > 0 {
+            switch metric.polarity {
+            case .higherIsBetter: direction = .improving
+            case .lowerIsBetter: direction = .declining
+            case .contextual: direction = .elevated
+            }
+        } else {
+            switch metric.polarity {
+            case .higherIsBetter: direction = .declining
+            case .lowerIsBetter: direction = .improving
+            case .contextual: direction = .suppressed
+            }
+        }
+
+        // Deviation Summary
+        let devSummary: String
+        if let devPct = curDevPercent {
+            if abs(devPct) < 3.5 {
+                devSummary = "较基线基本持平"
+            } else if devPct > 0 {
+                devSummary = String(format: "较基线偏高 %.1f%%", devPct)
+            } else {
+                devSummary = String(format: "较基线偏低 %.1f%%", abs(devPct))
+            }
+        } else {
+            devSummary = "基线中位数 \(formatValue(baselineMedian, metric: metric))"
+        }
+
+        // Temporal Trend Summary
+        let trendSummary: String
+        if abs(trendDeltaPercent) < 3.5 {
+            trendSummary = "\(horizon.title)基本平稳"
+        } else if trendDeltaPercent > 0 {
+            trendSummary = metric.polarity == .higherIsBetter ? "\(horizon.title)呈上升改善" : "\(horizon.title)呈上升走势"
+        } else {
+            trendSummary = metric.polarity == .higherIsBetter ? "\(horizon.title)呈回落趋势" : "\(horizon.title)呈下降改善"
+        }
+
+        // Notable check
+        let isNotable: Bool
+        let devMagnitude = curDevPercent.map(abs) ?? 0
+        let trendMagnitude = abs(trendDeltaPercent)
+        switch metric {
+        case .hrv:
+            isNotable = devMagnitude >= 12.0 || trendMagnitude >= 10.0
+        case .restingHeartRate:
+            let absDelta = curDev.map(abs) ?? 0
+            isNotable = absDelta >= 3.0 || trendMagnitude >= 6.0
+        case .sleepDuration:
+            let absSleepDelta = curDev.map(abs) ?? 0
+            isNotable = absSleepDelta >= 0.75 || trendMagnitude >= 10.0
+        case .recovery:
+            isNotable = devMagnitude >= 15.0 || trendMagnitude >= 12.0
+        case .strain:
+            isNotable = devMagnitude >= 20.0 || trendMagnitude >= 15.0
+        default:
+            isNotable = devMagnitude >= 15.0 || trendMagnitude >= 12.0
+        }
+
+        let summary = "\(devSummary)，\(trendSummary)"
+
+        return HealthTrendFinding(
+            metric: metric,
+            horizon: horizon,
+            direction: direction,
+            currentValue: currentValue,
+            currentValueFormatted: currentFormatted,
+            baselineValue: baselineMedian,
+            baselineValueFormatted: formatValue(baselineMedian, metric: metric),
+            currentDeviationValue: curDev,
+            currentDeviationPercent: curDevPercent,
+            temporalTrendDelta: trendDelta,
+            temporalTrendDeltaPercent: trendDeltaPercent,
+            historicalPercentile: nil,
+            sampleCount: sampleCount,
+            requiredSampleCount: horizon.requiredSampleCount,
+            isAvailable: true,
+            confidence: sampleCount >= (days * 2 / 3) ? .high : .medium,
+            deviationSummary: devSummary,
+            temporalTrendSummary: trendSummary,
+            summary: summary,
+            isNotable: isNotable
+        )
+    }
+
+    // MARK: - State & Narrative Synthesizers
+
+    private func determineOverallState(
+        dashboard: DashboardSummary,
+        notableChanges: [HealthTrendFinding],
+        snapshots: [DailyHealthSnapshot]
+    ) -> BodyGeneralState {
+        guard let recoveryScore = dashboard.recovery.value else {
+            // Recovery score is absent: check sleep and stress without assuming 0
+            if let sleepScore = dashboard.sleepScore.value {
+                if sleepScore >= 75 { return .stable }
+                if sleepScore < 50 { return .recovering }
+            }
+            return .insufficientData
+        }
+
+        let hrvFinding = notableChanges.first { $0.metric == .hrv }
+        let rhrFinding = notableChanges.first { $0.metric == .restingHeartRate }
+        let sleepFinding = notableChanges.first { $0.metric == .sleepDuration }
+
+        if recoveryScore >= 67 && hrvFinding?.direction != .declining && rhrFinding?.direction != .declining {
+            return .optimal
+        }
+
+        if recoveryScore < 35 || (hrvFinding?.direction == .declining && rhrFinding?.direction == .declining) {
+            return .recovering
+        }
+
+        // Strain is 0-100 scale: high strain is >= 70
+        let strainScore = dashboard.strain.value ?? 0
+        if strainScore >= 70 || (sleepFinding?.direction == .declining && recoveryScore < 50) {
+            return .strained
+        }
+
+        return .stable
+    }
+
+    private func generateHeadline(
+        state: BodyGeneralState,
+        dashboard: DashboardSummary,
+        notableChanges: [HealthTrendFinding]
+    ) -> String {
+        switch state {
+        case .optimal:
+            return "身体机能处于良好水平"
+        case .stable:
+            if notableChanges.isEmpty {
+                return "身体状态总体稳定"
+            } else if let notable = notableChanges.first {
+                return "\(notable.metric.shortTitle)出现短期波动，整体可控"
+            } else {
+                return "身体状态总体稳定"
+            }
+        case .strained:
+            return "生理负荷有所累积，建议关注恢复"
+        case .recovering:
+            return "身体处于恢复调节状态"
+        case .insufficientData:
+            return "正在建立个人健康基线"
+        }
+    }
+
+    private func generateSubheadline(
+        state: BodyGeneralState,
+        dashboard: DashboardSummary,
+        notableChanges: [HealthTrendFinding],
+        stableSignals: [HealthTrendFinding]
+    ) -> String {
+        var parts: [String] = []
+
+        if let rec = dashboard.recovery.value {
+            if rec >= 67 {
+                parts.append("恢复得分达 \(Int(rec.rounded()))%，各项核心体征处于基线良好区间")
+            } else if rec >= 35 {
+                parts.append("恢复得分保持在 \(Int(rec.rounded()))% 基准区间")
+            } else {
+                parts.append("恢复得分处于 \(Int(rec.rounded()))% 较低区间，提示生理负荷有所累积")
+            }
+        }
+
+        if let sleep = notableChanges.first(where: { $0.metric == .sleepDuration }) {
+            if sleep.direction == .declining {
+                parts.append("近两周睡眠时长较平时基线略有减少")
+            }
+        } else if let hrv = notableChanges.first(where: { $0.metric == .hrv }) {
+            if hrv.direction == .improving {
+                parts.append("HRV 呈现向上改善走势")
+            } else if hrv.direction == .declining {
+                parts.append("HRV 较近期基线偏低")
+            }
+        } else if let rhr = notableChanges.first(where: { $0.metric == .restingHeartRate }) {
+            if rhr.direction == .declining {
+                parts.append("静息心率较基线略有升高")
+            }
+        }
+
+        if parts.isEmpty {
+            return "各项核心体征平稳运行在个人基线范围内。"
+        }
+        return parts.joined(separator: "，") + "。"
+    }
+
+    private func inferDrivers(
+        dashboard: DashboardSummary,
+        notableChanges: [HealthTrendFinding]
+    ) -> [String] {
+        var drivers: [String] = []
+
+        let hrvLow = notableChanges.contains { $0.metric == .hrv && $0.direction == .declining }
+        let rhrHigh = notableChanges.contains { $0.metric == .restingHeartRate && $0.direction == .declining }
+        let sleepLow = notableChanges.contains { $0.metric == .sleepDuration && $0.direction == .declining }
+        let strainHigh = (dashboard.strain.value ?? 0) >= 70
+
+        if hrvLow && rhrHigh {
+            drivers.append("观察到 HRV 偏低与静息心率升高在近期协同出现，提示生理恢复负荷有所累积")
+        }
+        if sleepLow {
+            drivers.append("近两周睡眠时长偏离个人中位数，可能与恢复感受变化相关")
+        }
+        if strainHigh {
+            drivers.append("近期日常活动与训练负荷相对较高，构成当前体征波动的潜在背景")
+        }
+
+        return drivers
+    }
+
+    private struct ActionEval {
+        var needsAction: Bool
+        var category: HealthActionCategory
+        var headline: String?
+        var detail: String?
+        var lifestyleSuggestions: [String]
+    }
+
+    private func evaluateAction(
+        state: BodyGeneralState,
+        dashboard: DashboardSummary,
+        notableChanges: [HealthTrendFinding]
+    ) -> ActionEval {
+        switch state {
+        case .optimal:
+            return ActionEval(
+                needsAction: false,
+                category: .training,
+                headline: "机能充沛",
+                detail: "体征处于基线良好区间，可按个人节奏正常开展日常工作与训练活动。",
+                lifestyleSuggestions: ["保持规律作息与水分摄入"]
+            )
+        case .stable:
+            return ActionEval(
+                needsAction: false,
+                category: .none,
+                headline: "节奏良好",
+                detail: "各项身体指标平稳，无须大幅调整日常计划。",
+                lifestyleSuggestions: []
+            )
+        case .strained:
+            return ActionEval(
+                needsAction: true,
+                category: .recovery,
+                headline: "建议关注恢复",
+                detail: "近期生理负荷有所累积，建议今晚提前准备休息或安排轻度放松活动。",
+                lifestyleSuggestions: ["建议今晚提前 20-30 分钟准备睡眠", "注意水分与电解质补充"]
+            )
+        case .recovering:
+            return ActionEval(
+                needsAction: true,
+                category: .sleep,
+                headline: "休整调节优先",
+                detail: "身体处于恢复调节窗口，建议优先保障睡眠时长与放松减压。",
+                lifestyleSuggestions: ["保持充足睡眠与舒适作息", "避免高强度疲劳刺激"]
+            )
+        case .insufficientData:
+            return ActionEval(
+                needsAction: false,
+                category: .none,
+                headline: "持续记录中",
+                detail: "继续佩戴 Apple Watch 记录睡眠与日常活动，以积累个人基线。",
+                lifestyleSuggestions: []
+            )
+        }
+    }
+
+    // MARK: - Helper Methods
+
+    private func currentValue(for metric: CoreHealthMetric, dashboard: DashboardSummary) -> Double? {
+        switch metric {
+        case .hrv: return dashboard.recoveryMetrics.hrvMilliseconds
+        case .restingHeartRate: return dashboard.recoveryMetrics.restingHeartRate
+        case .sleepDuration:
+            if dashboard.sleepSummary.totalSleepMinutes > 0 { return Double(dashboard.sleepSummary.totalSleepMinutes) / 60.0 }
+            return nil
+        case .recovery: return dashboard.recovery.value
+        case .strain: return dashboard.strain.value
+        case .stress: return dashboard.stress.value
+        case .energy: return dashboard.energy.value
+        case .respiratoryRate: return dashboard.recoveryMetrics.respiratoryRate
+        case .oxygenSaturation: return dashboard.extendedMetrics.oxygenSaturation
+        case .bodyWeight: return dashboard.bodyMetrics.weightKilograms ?? dashboard.extendedMetrics.bodyWeightKg
+        case .bodyFat: return dashboard.bodyMetrics.bodyFatPercentage ?? dashboard.extendedMetrics.bodyFatPercent
+        case .steps:
+            return dashboard.strain.metrics["steps_raw"]
+        case .activeCalories:
+            return dashboard.strain.metrics["active_calories_raw"]
+        }
+    }
+
+    private func value(for metric: CoreHealthMetric, snapshot: DailyHealthSnapshot) -> Double? {
+        switch metric {
+        case .hrv: return snapshot.hrvAverage
+        case .restingHeartRate: return snapshot.restingHeartRate
+        case .sleepDuration: return snapshot.sleepHours
+        case .recovery: return snapshot.recoveryScore
+        case .strain: return snapshot.strainScore
+        case .stress: return snapshot.stressIndex
+        case .energy: return snapshot.currentEnergy ?? snapshot.energyBank
+        case .respiratoryRate: return snapshot.respiratoryRate
+        case .oxygenSaturation: return snapshot.oxygenSaturation
+        case .bodyWeight: return snapshot.bodyWeight
+        case .bodyFat: return snapshot.bodyFatPercent
+        case .steps: return snapshot.steps
+        case .activeCalories: return snapshot.activeCalories
+        }
+    }
+
+    private func formatValue(_ value: Double?, metric: CoreHealthMetric) -> String {
+        guard let val = value else { return "--" }
+        switch metric {
+        case .hrv:
+            return "\(Int(val.rounded())) ms"
+        case .restingHeartRate:
+            return "\(Int(val.rounded())) bpm"
+        case .sleepDuration:
+            return String(format: "%.1f h", val)
+        case .recovery, .energy, .oxygenSaturation, .bodyFat:
+            return "\(Int(val.rounded()))%"
+        case .strain, .stress:
+            return "\(Int(val.rounded()))"
+        case .respiratoryRate:
+            return String(format: "%.1f 次/分", val)
+        case .bodyWeight:
+            return String(format: "%.1f kg", val)
+        case .steps:
+            return "\(Int(val.rounded())) 步"
+        case .activeCalories:
+            return "\(Int(val.rounded())) kcal"
+        }
+    }
+
+    private func median(of values: [Double]) -> Double? {
+        guard !values.isEmpty else { return nil }
+        let sorted = values.sorted()
+        let count = sorted.count
+        if count % 2 == 1 {
+            return sorted[count / 2]
+        } else {
+            return (sorted[count / 2 - 1] + sorted[count / 2]) / 2.0
+        }
+    }
+
+    private func longTermMetric(for metric: CoreHealthMetric) -> LongTermBaselineMetric? {
+        switch metric {
+        case .hrv: return .hrv
+        case .restingHeartRate: return .restingHeartRate
+        case .sleepDuration: return .sleepHours
+        case .bodyWeight: return .bodyWeight
+        case .bodyFat: return .bodyFatPercent
+        case .steps: return .steps
+        case .activeCalories: return .activeCalories
+        default: return nil
+        }
+    }
+
+    private func calculatePercentilePosition(value: Double, baseline: LongTermMetricBaseline) -> Double {
+        if let p10 = baseline.percentile10, value <= p10 { return 0.10 }
+        if let p25 = baseline.percentile25, value <= p25 { return 0.25 }
+        if let med = baseline.threeYearMedian, value <= med { return 0.50 }
+        if let p75 = baseline.percentile75, value <= p75 { return 0.75 }
+        if let p90 = baseline.percentile90, value <= p90 { return 0.90 }
+        return 0.95
+    }
+
+    private func generate3YSummary(
+        metric: CoreHealthMetric,
+        cur: Double,
+        median: Double?,
+        percentile: Double,
+        trendLabel: String?
+    ) -> String {
+        let pText = "处于三年历史 P\(Int(percentile * 100))"
+        if let trend = trendLabel, !trend.isEmpty {
+            return "\(trend)，\(pText)"
+        }
+        return pText
+    }
+
+    private func confidenceText(for confidence: DataConfidence) -> String {
+        switch confidence {
+        case .high: return "数据充足"
+        case .medium: return "数据部分"
+        case .low: return "数据较少"
+        case .unavailable: return "数据不足"
+        }
+    }
+}

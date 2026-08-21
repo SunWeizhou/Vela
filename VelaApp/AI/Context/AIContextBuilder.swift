@@ -376,7 +376,9 @@ struct AIContextBuilder {
             userWiki: Dictionary(uniqueKeysWithValues: mergedUserWiki.map { key, value in
                 (key, ContextBudget.trimWiki(value, maxChars: 3000))
             }),
-            dailyOperatingPlan: dailyOperatingPlan
+            dailyOperatingPlan: dailyOperatingPlan,
+            personalHealthBrief: dashboard.personalHealthBrief,
+            healthTrends: dashboard.healthTrends
         )
 
         let hash = canonicalContentHash(context)

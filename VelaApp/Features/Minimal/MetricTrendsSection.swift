@@ -17,21 +17,31 @@ enum CoreMetricTrendMapper {
     ) -> CoreMetricTrendSeries? {
         let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: endDate)) ?? endDate
         let start = calendar.date(byAdding: .day, value: -30, to: end) ?? end
-        let values = snapshots
+        let valuesWithDate = snapshots
             .filter { $0.date >= start && $0.date < end }
             .sorted { $0.date < $1.date }
-            .compactMap { value(for: metric, snapshot: $0) }
+            .compactMap { snap -> (Date, Double)? in
+                guard let v = value(for: metric, snapshot: snap) else { return nil }
+                return (snap.date, v)
+            }
 
-        guard let first = values.first, let latest = values.last else { return nil }
-        let delta = latest - first
-        let unit = unitSuffix(for: metric)
-        // 阈值按指标相对化：体重/HRV 等不同量纲不能共用 0.05 一刀切。
-        let threshold = max(abs(first) * 0.02, 0.05)
+        let values = valuesWithDate.map(\.1)
+        guard !values.isEmpty, let latest = values.last else { return nil }
+
+        let sorted = values.sorted()
+        let medianVal = sorted.count % 2 == 1
+            ? sorted[sorted.count / 2]
+            : (sorted[sorted.count / 2 - 1] + sorted[sorted.count / 2]) / 2.0
+
+        let delta = latest - medianVal
+        let deltaPercent = medianVal > 0 ? (delta / medianVal) * 100 : 0
         let statusLabel: String
-        if abs(delta) < threshold {
+        if abs(deltaPercent) < 3.5 {
             statusLabel = "近30天基本稳定"
+        } else if deltaPercent > 0 {
+            statusLabel = String(format: "较基线偏高 +%.1f%%", deltaPercent)
         } else {
-            statusLabel = String(format: "近30天 %+.1f%@", delta, unit)
+            statusLabel = String(format: "较基线偏低 -%.1f%%", abs(deltaPercent))
         }
 
         return CoreMetricTrendSeries(

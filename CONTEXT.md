@@ -1,6 +1,9 @@
 # Vela Health Intelligence
 
-Vela turns local health, training, nutrition, and journal facts into conservative daily guidance. The context exists to keep every surface and AI workflow aligned to the same measured evidence and uncertainty rules.
+Vela 是建立在 Apple 健康之上的个人身体面板与 AI 健康分析助手：帮助用户看见当前身体状态和长期趋势，理解变化原因，并将这种理解转化为训练与生活调整建议。
+
+> 核心原则：不做只陈列指标、不能解释个人状态和变化的健康数据面板。
+> 价值层级：1. 看见身体数据 → 2. 理解当前状态与长期趋势 → 3. 由 Agent 解释原因并联系不同信号 → 4. 在需要时给出训练与生活建议。
 
 ## Language
 
@@ -10,9 +13,9 @@ Vela turns local health, training, nutrition, and journal facts into conservativ
 The owner-developer whose real Apple Watch, training, research-work, eating, and recovery routines define Vela's current product requirements. Hypothetical general users do not outweigh observed Primary User behavior during the personal Daily Driver phase.
 _Avoid_: Target persona, early adopter cohort, average user
 
-**Trusted Decision Day**:
-A day when the Primary User sees the Daily Operating Plan, uses it to confirm or change a meaningful health choice, and later judges the guidance accurate or substantially appropriate. It is Vela's current North Star outcome, not a requirement to complete every check-in.
-_Avoid_: Active day, engagement day, compliant day
+**Trusted Health Brief Day**:
+A day when Vela reliably answers three fundamental questions for the Primary User: (1) How am I overall right now? (2) What has changed recently? (3) Do I need to take action? A day where state is stable and no plan change is needed is just as valuable as a day requiring a decision.
+_Avoid_: Active day, engagement day, compliant day, decision-only day
 
 ### Health evidence
 
@@ -45,6 +48,14 @@ _Avoid_: Overall health score, readiness total, wellness grade
 **Body State**:
 A conservative interpretation of current recovery, load, sleep, stress, and reported constraints derived from scored health evidence.
 _Avoid_: Readiness score, diagnosis, physical condition
+
+**Health Trend Finding**:
+A multi-scale (7d, 30d, 6m, 3y) statistical finding for a specific health metric, capturing direction, magnitude, baseline deviation, historical percentile position, and uncertainty.
+_Avoid_: Raw difference, isolated daily variance
+
+**Personal Health Brief**:
+The canonical, structured daily intelligence object answering "How am I overall? What is changing? Is it noteworthy? What might be driving it? Does it need action?". Consumed synchronously by Today, Trends, Agent, and Training.
+_Avoid_: Workout prescription, isolated score summary
 
 **Lived State**:
 The Primary User's self-reported felt experience at a point in time, including mental stress, training motivation, soreness, perceived energy, appetite disruption, and felt recovery. It is subjective evidence that may agree or disagree with Body State; neither silently replaces the other.
