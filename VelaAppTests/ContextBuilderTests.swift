@@ -398,6 +398,102 @@ final class ContextBuilderTests: XCTestCase {
         XCTAssertEqual(first.metadata.hash, second.metadata.hash)
     }
 
+    func testCanonicalContentHashRemainsStableWhenPersonalHealthBriefTimestampChanges() {
+        let baseDate = makeDate()
+        var dashboard1 = DashboardSummary.preview(date: baseDate)
+        var dashboard2 = dashboard1
+
+        let brief1 = PersonalHealthBrief(
+            date: baseDate,
+            overallState: .optimal,
+            headline: "状态良好",
+            subheadline: "恢复优秀",
+            notableChanges: [],
+            stableSignals: [],
+            confidence: .high,
+            confidenceLabel: "高",
+            needsAction: false,
+            suggestedActionCategory: .training,
+            actionHeadline: nil,
+            actionDetail: nil,
+            lifestyleSuggestions: [],
+            generatedAt: baseDate
+        )
+
+        let brief2 = PersonalHealthBrief(
+            date: baseDate.addingTimeInterval(3600),
+            overallState: .optimal,
+            headline: "状态良好",
+            subheadline: "恢复优秀",
+            notableChanges: [],
+            stableSignals: [],
+            confidence: .high,
+            confidenceLabel: "高",
+            needsAction: false,
+            suggestedActionCategory: .training,
+            actionHeadline: nil,
+            actionDetail: nil,
+            lifestyleSuggestions: [],
+            generatedAt: baseDate.addingTimeInterval(7200)
+        )
+
+        dashboard1.personalHealthBrief = brief1
+        dashboard2.personalHealthBrief = brief2
+
+        let fixedBodyState = dashboard1.bodyState
+        let decision = DailyTrainingDecision(
+            decision: .keep,
+            volumeMultiplier: 1.0,
+            intensityCap: 85,
+            reasons: ["状态良好"],
+            userFacingSummary: "按计划执行",
+            confidence: 1.0,
+            source: "test",
+            safetyNotice: "注意热身"
+        )
+
+        let first = AIContextBuilder().buildFacts(
+            dashboard: dashboard1,
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:],
+            bodyState: fixedBodyState,
+            trainingDecision: decision,
+            generatedAt: baseDate
+        )
+        let second = AIContextBuilder().buildFacts(
+            dashboard: dashboard2,
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:],
+            bodyState: fixedBodyState,
+            trainingDecision: decision,
+            generatedAt: baseDate
+        )
+
+        XCTAssertEqual(first.snapshot.bodyState, second.snapshot.bodyState, "bodyState must match")
+        XCTAssertEqual(first.snapshot.trainingDecision, second.snapshot.trainingDecision, "trainingDecision must match")
+        XCTAssertEqual(first.snapshot.dataCoverage, second.snapshot.dataCoverage, "dataCoverage must match")
+        XCTAssertEqual(first.snapshot.recovery, second.snapshot.recovery, "recovery must match")
+        XCTAssertEqual(first.snapshot.sleep, second.snapshot.sleep, "sleep must match")
+        XCTAssertEqual(first.snapshot.strain, second.snapshot.strain, "strain must match")
+        XCTAssertEqual(first.snapshot.stress, second.snapshot.stress, "stress must match")
+        XCTAssertEqual(first.snapshot.energyBank, second.snapshot.energyBank, "energyBank must match")
+        XCTAssertEqual(first.snapshot.training, second.snapshot.training, "training must match")
+        XCTAssertEqual(first.snapshot.nutrition, second.snapshot.nutrition, "nutrition must match")
+        XCTAssertEqual(first.snapshot.extendedMetrics, second.snapshot.extendedMetrics, "extendedMetrics must match")
+        XCTAssertEqual(first.snapshot.strengthTraining, second.snapshot.strengthTraining, "strengthTraining must match")
+        XCTAssertEqual(first.snapshot.recentTrends, second.snapshot.recentTrends, "recentTrends must match")
+        XCTAssertEqual(first.snapshot.weeklyTrends, second.snapshot.weeklyTrends, "weeklyTrends must match")
+        XCTAssertEqual(first.snapshot.journalEntries, second.snapshot.journalEntries, "journalEntries must match")
+        XCTAssertEqual(first.snapshot.historicalReports, second.snapshot.historicalReports, "historicalReports must match")
+        XCTAssertEqual(first.snapshot.userWiki, second.snapshot.userWiki, "userWiki must match")
+        XCTAssertEqual(first.snapshot.dailyOperatingPlan, second.snapshot.dailyOperatingPlan, "dailyOperatingPlan must match")
+        XCTAssertEqual(first.snapshot.healthTrends, second.snapshot.healthTrends, "healthTrends must match")
+
+        XCTAssertEqual(first.snapshot.contextHash, second.snapshot.contextHash, "Brief timestamps must be normalized in canonicalContentHash")
+    }
+
     func testCanonicalContentHashChangesWhenAHealthSignalChanges() {
         let generatedAt = makeDate()
         let dashboard = DashboardSummary.preview(date: generatedAt)

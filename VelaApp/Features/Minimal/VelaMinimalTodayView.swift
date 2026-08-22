@@ -22,14 +22,22 @@ struct VelaTodayView: View {
 
     var bodyState: BodyState { dashboard.bodyState }
     var trainingDecision: TrainingDecision { dashboard.trainingDecision }
+    /// The only typed daily decision shown by Today. During the short cache/load
+    /// gap, prefer an explicit conservative state over running a second kernel.
+    var canonicalTrainingDecision: DailyTrainingDecision {
+        dashboardVM.dailyTrainingDecision
+            ?? TrainingDecisionFallback.conservative(targetSessionTitle: nil)
+    }
     var persistedOperatingPlan: DailyOperatingPlanRecord? { dashboardVM.persistedOperatingPlan }
     var latestTodayArtifact: CoachArtifact? { dashboardVM.latestTodayArtifact }
     
     var todayCommandState: TodayCommandState {
-        // 兜底路径同样投影 kernel 结论（算法打通批次 A：今日页不再跑第二套判定树）。
+        // The loading fallback is a projection of an explicit conservative value;
+        // it never recomputes a competing decision inside the surface Adapter.
         dashboardVM.todayCommandState ?? TodayCommandBuilder.build(
             from: dashboard,
-            trainingDecision: fallbackKernelDecision()
+            generatedAt: dashboardVM.selectedDate,
+            trainingDecision: canonicalTrainingDecision
         )
     }
 
@@ -66,28 +74,20 @@ struct VelaTodayView: View {
         }
     }
 
-    /// 兜底路径也要用真实力量训练数据，避免今日决策与训练页不一致。
-    func fallbackKernelDecision() -> DailyTrainingDecision {
-        return TrainingDecisionKernel().decide(input: TrainingDecisionInput(
-            bodyState: bodyState,
-            activePlan: nil,
-            trainingResponses: []
-        ))
-    }
-
     func makeTodayExperience() -> TodayExperienceModel {
-        let dailyTrainingDecision = fallbackKernelDecision()
         return TodayExperienceModel.build(
             dashboard: dashboard,
             bodyState: bodyState,
-            trainingDecision: dailyTrainingDecision,
+            trainingDecision: canonicalTrainingDecision,
+            generatedAt: dashboardVM.selectedDate,
             nutrition: TodayExperienceNutrition(
                 calories: todayCalories,
                 calorieTarget: dailyCalorieTarget,
                 protein: todayProtein,
                 carbs: todayCarbs,
                 fat: todayFat
-            )
+            ),
+            operatingPlan: persistedOperatingPlan?.operatingPlanPayload
         )
     }
 
@@ -147,19 +147,7 @@ struct VelaTodayView: View {
         )
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(
-                    LinearGradient(
-                        colors: [
-                            Color.purple.opacity(0.35),
-                            Color.pink.opacity(0.30),
-                            Color.cyan.opacity(0.30),
-                            Color.mint.opacity(0.35)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1.0
-                )
+                .stroke(VelaTheme.rhythmDeep.opacity(0.35), lineWidth: 1.0)
         }
     }
 
@@ -416,6 +404,7 @@ struct VelaTodayView: View {
     @State var selectedInsightIndex = 0
     @State var selectedInsight: ProactiveInsight?
     @State var showTodayEvidence = false
+    @State var showLivedStateCheckIn = false
     @State var showMetricDetail: VelaMetricDetailView.MetricType?
         @State var experienceFeedbackTick = 0
     @State var dataCoverageSummary = DataCoverageSummaryModel.unknown
@@ -505,6 +494,16 @@ struct VelaTodayView: View {
                 )
                 .padding(.horizontal, VelaTheme.pagePadding)
                 .padding(.top, 4)
+
+                if dashboardVM.isToday {
+                    livedStatePrompt
+                        .padding(.horizontal, VelaTheme.pagePadding)
+                        .padding(.top, 12)
+
+                    TodayTrainingPlanAdaptationCard()
+                        .padding(.horizontal, VelaTheme.pagePadding)
+                        .padding(.top, 12)
+                }
 
                 // ─── Block 2: Today's Most Notable Change (if present) ───
                 notableChangeCard
@@ -678,6 +677,9 @@ struct VelaTodayView: View {
             NavigationStack {
                 VelaMetricDetailView(metric: metric)
             }
+            .environmentObject(dashboardVM)
+            .presentationDetents([.large])
+            .velaSheetSurface()
         }
         .sheet(item: $selectedInsight) { insight in
             ProactiveInsightDetailSheet(insight: insight) { question in
@@ -709,10 +711,12 @@ struct VelaTodayView: View {
                 .velaSheetSurface()
             }
         }
-        .sheet(isPresented: $showSettings) {
-            NavigationStack {
-                VelaSettingsView()
+        .sheet(isPresented: $showLivedStateCheckIn) {
+            LivedStateCheckInSheet {
+                appState.markLocalDataChanged()
             }
+            .presentationDetents([.large])
+            .velaSheetSurface()
         }
         .toolbar(.hidden, for: .navigationBar)
     }
@@ -724,7 +728,7 @@ struct VelaTodayView: View {
         case "training":
             appState.routeToTraining()
         case "journal":
-            appState.triggerJournal = true
+            showLivedStateCheckIn = true
         case "coach":
             VelaAppState.shared.routeToCoach(question: action.detail)
         case "recovery", "sync", "evidence":
@@ -732,6 +736,44 @@ struct VelaTodayView: View {
         default:
             showTodayEvidence = true
         }
+    }
+
+    private var livedStatePrompt: some View {
+        Button {
+            VelaHaptic.selection()
+            showLivedStateCheckIn = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "waveform.path.ecg")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(VelaTheme.rhythmDeep)
+                    .frame(width: 36, height: 36)
+                    .background(VelaTheme.rhythmMist.opacity(0.72), in: Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("你现在感觉如何？")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                    Text("10 秒校准压力、精力、酸痛与训练动力")
+                        .font(.footnote)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 8)
+
+                Text("快速自评")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(VelaTheme.rhythmDeep)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, minHeight: VelaTheme.minimumHitTarget, alignment: .leading)
+            .background(VelaTheme.rhythmMist.opacity(0.34), in: RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous))
+        }
+        .buttonStyle(.cardPress)
+        .accessibilityLabel("快速自评当前状态")
+        .accessibilityHint("记录压力、精力、酸痛与训练动力，并刷新今天的建议")
     }
 
     func trackDailyDecisionViewed() {
@@ -1016,5 +1058,178 @@ struct DataCoverageCompactCard: View {
         if percent >= 80 { return VelaTheme.energyColor }
         if percent >= 50 { return VelaTheme.accent }
         return VelaTheme.strainColor
+    }
+}
+
+// MARK: - Lived State Check-in
+
+/// A 10-second subjective calibration. It writes through the existing journal
+/// Adapter, then Today refreshes the shared Daily Intelligence Module.
+struct LivedStateCheckInSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    var onSaved: () -> Void
+
+    @State private var stress = 1
+    @State private var energy = 1
+    @State private var soreness = 0
+    @State private var motivation = 1
+    @State private var note = ""
+    @State private var saveError: String?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("让客观数据听见你的感受")
+                            .font(.title2.weight(.semibold))
+                            .foregroundStyle(VelaTheme.rhythmInk)
+                        Text("主观状态只会让建议更保守，不会覆盖 Apple 健康数据。保存后会立即刷新今日 Brief 与训练边界。")
+                            .font(.body)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    VStack(spacing: 20) {
+                        ratingRow(
+                            title: "压力",
+                            detail: "此刻的心理与生活压力",
+                            labels: ["低", "适中", "高"],
+                            selection: $stress
+                        )
+                        Divider().overlay(VelaTheme.rhythmMist)
+                        ratingRow(
+                            title: "精力",
+                            detail: "现在的清醒度与身体能量",
+                            labels: ["低", "稳定", "充足"],
+                            selection: $energy
+                        )
+                        Divider().overlay(VelaTheme.rhythmMist)
+                        ratingRow(
+                            title: "酸痛",
+                            detail: "肌肉或关节的主观不适",
+                            labels: ["无", "轻微", "明显"],
+                            selection: $soreness
+                        )
+                        Divider().overlay(VelaTheme.rhythmMist)
+                        ratingRow(
+                            title: "训练动力",
+                            detail: "今天投入训练的意愿",
+                            labels: ["低", "稳定", "强"],
+                            selection: $motivation
+                        )
+                    }
+                    .padding(18)
+                    .velaNativeCard(radius: VelaTheme.radiusCardLarge)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("补充说明（可选）")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(VelaTheme.rhythmInk)
+                        TextField("例如：左肩有刺痛，昨晚临时加班", text: $note, axis: .vertical)
+                            .font(.body)
+                            .lineLimit(2...5)
+                            .padding(14)
+                            .background(
+                                VelaTheme.rhythmCanvasRaised,
+                                in: RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
+                            )
+                            .overlay {
+                                RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
+                                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+                            }
+                    }
+                }
+                .padding(.horizontal, VelaTheme.pagePadding)
+                .padding(.top, 20)
+                .padding(.bottom, 120)
+            }
+            .scrollIndicators(.hidden)
+            .background(VelaTheme.rhythmCanvas)
+            .navigationTitle("校准今日状态")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                Button(action: save) {
+                    Text("保存并刷新今日建议")
+                        .font(.headline)
+                        .foregroundStyle(VelaTheme.rhythmDeepOn)
+                        .frame(maxWidth: .infinity, minHeight: 50)
+                        .background(
+                            VelaTheme.rhythmDeep,
+                            in: RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
+                        )
+                }
+                .buttonStyle(.cardPress)
+                .padding(.horizontal, VelaTheme.pagePadding)
+                .padding(.vertical, 10)
+                .background(.ultraThinMaterial)
+            }
+        }
+        .alert("无法保存自评", isPresented: Binding(
+            get: { saveError != nil },
+            set: { if !$0 { saveError = nil } }
+        )) {
+            Button("好", role: .cancel) { saveError = nil }
+        } message: {
+            Text(saveError ?? "请稍后重试。")
+        }
+    }
+
+    private func ratingRow(
+        title: String,
+        detail: String,
+        labels: [String],
+        selection: Binding<Int>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            }
+
+            Picker(title, selection: selection) {
+                ForEach(labels.indices, id: \.self) { index in
+                    Text(labels[index]).tag(index)
+                }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityLabel(title)
+        }
+    }
+
+    private func save() {
+        let checkIn = LivedStateCheckIn(
+            stress: stress,
+            energy: energy,
+            soreness: soreness,
+            motivation: motivation,
+            note: note
+        )
+        modelContext.insert(JournalEntryRecord(
+            createdAt: Date(),
+            tags: checkIn.journalTags,
+            note: checkIn.journalNote,
+            value: 1 - checkIn.conservativeSeverity,
+            unit: "lived_state_0_1"
+        ))
+        do {
+            try modelContext.save()
+            VelaHaptic.success()
+            onSaved()
+            dismiss()
+        } catch {
+            saveError = error.localizedDescription
+        }
     }
 }

@@ -1095,8 +1095,9 @@ final class ScoringEngineTests: XCTestCase {
         )
 
         XCTAssertEqual(model.hero.scoreTitle, "恢复 --")
-        XCTAssertEqual(model.hero.decisionTitle, "先建立身体基线")
+        XCTAssertEqual(model.hero.decisionTitle, "正在同步身体数据")
         XCTAssertEqual(model.hero.confidenceLabel, "数据不足")
+        XCTAssertEqual(model.hero.primaryActionTitle, "检查数据连接")
         XCTAssertTrue(model.evidenceChips.contains("等待 HealthKit"))
         XCTAssertEqual(model.actions.first?.title, "同步健康数据")
         XCTAssertEqual(model.signalCards.filter { $0.value == "--" }.count, 5)
@@ -1292,6 +1293,93 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertEqual(model.sessionTitle, "Upper strength")
         XCTAssertTrue(model.guidance.contains("25%"))
         XCTAssertEqual(model.intensityCapText, "RPE <= 7")
+    }
+
+    func testDailyOperatingPlanBuildsBoundedCrossDomainActionSequence() throws {
+        let now = Date(timeIntervalSince1970: 1_781_654_400)
+        var dashboard = DashboardSummary.preview(date: now)
+        dashboard.recovery.value = 48
+        dashboard.sleepScore.value = 52
+        dashboard.stress.value = 86
+        dashboard.energy.value = 42
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: dashboard,
+            activeStatus: "active",
+            generatedAt: now
+        ))
+        let decision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
+            bodyState: bodyState
+        ))
+
+        let payload = DailyOperatingPlanBuilder.build(
+            bodyState: bodyState,
+            decision: decision,
+            brief: dashboard.personalHealthBrief,
+            language: .simplifiedChinese
+        )
+
+        let primary = try XCTUnwrap(payload.primaryAction)
+        XCTAssertEqual(payload.schemaVersion, DailyOperatingPlanPayload.currentSchemaVersion)
+        XCTAssertTrue(payload.hasCanonicalActionSequence)
+        XCTAssertLessThanOrEqual(payload.supportingActions.count, 2)
+        XCTAssertFalse(payload.supportingActions.contains { $0.domain == primary.domain })
+        XCTAssertEqual(Set(payload.supportingActions.map(\.domain)).count, payload.supportingActions.count)
+        XCTAssertTrue(payload.supportingActions.contains { $0.domain == .sleep })
+
+        let experience = TodayExperienceModel.build(
+            dashboard: dashboard,
+            bodyState: bodyState,
+            trainingDecision: decision,
+            operatingPlan: payload
+        )
+        XCTAssertEqual(experience.actions.first?.id, primary.id)
+        XCTAssertEqual(experience.actions.first?.isPrimary, true)
+        XCTAssertEqual(experience.actions.dropFirst().map(\.id), payload.supportingActions.map(\.id))
+    }
+
+    func testDailyOperatingPlanLegacyPayloadDecodesAndAwaitsMigration() throws {
+        let legacyJSON = #"{"decision":"reduce","volumeMultiplier":0.75,"intensityCap":7,"summary":"Reduce safely","targetSessionTitle":null}"#
+        let payload = try JSONDecoder().decode(
+            DailyOperatingPlanPayload.self,
+            from: try XCTUnwrap(legacyJSON.data(using: .utf8))
+        )
+
+        XCTAssertEqual(payload.schemaVersion, 1)
+        XCTAssertEqual(payload.decision, .reduce)
+        XCTAssertNil(payload.primaryAction)
+        XCTAssertTrue(payload.supportingActions.isEmpty)
+        XCTAssertFalse(payload.hasCanonicalActionSequence)
+    }
+
+    func testDailyOperatingPlanDropsDuplicateAndOverflowSupportingDomains() {
+        let primary = DailyOperatingPlanAction(
+            id: "primary",
+            domain: .training,
+            title: "Train",
+            detail: "Primary",
+            destination: "training",
+            evidence: nil
+        )
+        let actions = [
+            DailyOperatingPlanAction(id: "same", domain: .training, title: "Duplicate", detail: "", destination: "training", evidence: nil),
+            DailyOperatingPlanAction(id: "sleep-1", domain: .sleep, title: "Sleep", detail: "", destination: "evidence", evidence: nil),
+            DailyOperatingPlanAction(id: "sleep-2", domain: .sleep, title: "Sleep again", detail: "", destination: "evidence", evidence: nil),
+            DailyOperatingPlanAction(id: "move", domain: .movement, title: "Move", detail: "", destination: "recovery", evidence: nil),
+            DailyOperatingPlanAction(id: "eat", domain: .eatingRhythm, title: "Eat", detail: "", destination: "evidence", evidence: nil)
+        ]
+
+        let payload = DailyOperatingPlanPayload(
+            decision: .keep,
+            volumeMultiplier: 1,
+            intensityCap: 8,
+            summary: "Keep",
+            targetSessionTitle: nil,
+            primaryAction: primary,
+            supportingActions: actions
+        )
+
+        XCTAssertEqual(payload.supportingActions.map(\.id), ["sleep-1", "move"])
+        XCTAssertTrue(payload.hasCanonicalActionSequence)
     }
 
     func testTrainingSurfaceSummaryStaysConservativeWithoutHealthData() {

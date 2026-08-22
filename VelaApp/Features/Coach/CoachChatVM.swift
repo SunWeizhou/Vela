@@ -658,7 +658,7 @@ final class CoachChatVM: ObservableObject {
         messages.append(ChatMsg(id: assistantId, role: .assistant, content: "", isStreaming: true))
 
         do {
-            let chatMessages = await assembler.buildChatMessages(
+            let requestContext = await assembler.buildRequestContext(
                 userText: userText,
                 dashboard: dashboard,
                 journalEntries: journalEntries,
@@ -668,14 +668,20 @@ final class CoachChatVM: ObservableObject {
                 messages: messages,
                 coverageSummary: coverageSummary
             )
+            let chatMessages = requestContext.messages
 
-            let contextHash = ContentHash.hash(chatMessages.map { $0.content }.joined(separator: "\n"))
+            // Non-casual Coach artifacts and interactions must point at the
+            // canonical facts used by this request. Casual compatibility
+            // requests have no snapshot and retain the message-content hash.
+            let contextHash = requestContext.agentFactSnapshot?.contextHash
+                ?? ContentHash.hash(chatMessages.map { $0.content }.joined(separator: "\n"))
 
             let loopResult = try await runner.runRequest(
                 userText: userText,
                 apiKey: apiKey,
                 chatMessages: chatMessages,
                 dashboard: dashboard,
+                agentFactSnapshot: requestContext.agentFactSnapshot,
                 modelContext: modelContext,
                 services: services,
                 isGhostMode: isGhostMode,

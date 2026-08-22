@@ -1,12 +1,343 @@
 import Foundation
 import SwiftData
 
-struct DailyOperatingPlanPayload: Codable, Hashable {
+enum DailyOperatingPlanActionDomain: String, Codable, Hashable, Sendable {
+    case training
+    case movement
+    case eatingRhythm = "eating_rhythm"
+    case stressRecovery = "stress_recovery"
+    case sleep
+}
+
+/// A reviewable action in the canonical Daily Operating Plan.
+///
+/// The action stores its user-facing copy because the same persisted plan is consumed by
+/// Today, Training, Vela, notifications, and the Watch projection. `destination` is a
+/// stable navigation hint; it is not an instruction to perform a side effect silently.
+struct DailyOperatingPlanAction: Codable, Hashable, Identifiable, Sendable {
+    var id: String
+    var domain: DailyOperatingPlanActionDomain
+    var title: String
+    var detail: String
+    var destination: String
+    var evidence: String?
+}
+
+struct DailyOperatingPlanPayload: Codable, Hashable, Sendable {
+    static let currentSchemaVersion = 2
+
+    var schemaVersion: Int
     var decision: DailyTrainingDecisionType
     var volumeMultiplier: Double
     var intensityCap: Int
     var summary: String
     var targetSessionTitle: String?
+    var primaryAction: DailyOperatingPlanAction?
+    var supportingActions: [DailyOperatingPlanAction]
+
+    init(
+        schemaVersion: Int = Self.currentSchemaVersion,
+        decision: DailyTrainingDecisionType,
+        volumeMultiplier: Double,
+        intensityCap: Int,
+        summary: String,
+        targetSessionTitle: String?,
+        primaryAction: DailyOperatingPlanAction? = nil,
+        supportingActions: [DailyOperatingPlanAction] = []
+    ) {
+        self.schemaVersion = schemaVersion
+        self.decision = decision
+        self.volumeMultiplier = volumeMultiplier
+        self.intensityCap = intensityCap
+        self.summary = summary
+        self.targetSessionTitle = targetSessionTitle
+        self.primaryAction = primaryAction
+        self.supportingActions = Self.boundedSupportingActions(
+            supportingActions,
+            excluding: primaryAction?.domain
+        )
+    }
+
+    /// True only for the versioned, bounded cross-domain contract. Legacy payloads still
+    /// decode and continue to provide their training boundary while the next refresh
+    /// upgrades them through `DailyOperatingPlanCoordinator`.
+    var hasCanonicalActionSequence: Bool {
+        guard schemaVersion >= Self.currentSchemaVersion,
+              let primaryAction else {
+            return false
+        }
+        let domains = supportingActions.map(\.domain)
+        return supportingActions.count <= 2
+            && !domains.contains(primaryAction.domain)
+            && Set(domains).count == domains.count
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case decision
+        case volumeMultiplier
+        case intensityCap
+        case summary
+        case targetSessionTitle
+        case primaryAction
+        case supportingActions
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try values.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        decision = try values.decode(DailyTrainingDecisionType.self, forKey: .decision)
+        volumeMultiplier = try values.decode(Double.self, forKey: .volumeMultiplier)
+        intensityCap = try values.decode(Int.self, forKey: .intensityCap)
+        summary = try values.decode(String.self, forKey: .summary)
+        targetSessionTitle = try values.decodeIfPresent(String.self, forKey: .targetSessionTitle)
+        primaryAction = try values.decodeIfPresent(DailyOperatingPlanAction.self, forKey: .primaryAction)
+        let decodedSupporting = try values.decodeIfPresent(
+            [DailyOperatingPlanAction].self,
+            forKey: .supportingActions
+        ) ?? []
+        supportingActions = Self.boundedSupportingActions(
+            decodedSupporting,
+            excluding: primaryAction?.domain
+        )
+    }
+
+    private static func boundedSupportingActions(
+        _ actions: [DailyOperatingPlanAction],
+        excluding primaryDomain: DailyOperatingPlanActionDomain?
+    ) -> [DailyOperatingPlanAction] {
+        var seen = Set<DailyOperatingPlanActionDomain>()
+        return Array(actions.filter { action in
+            guard action.domain != primaryDomain,
+                  seen.insert(action.domain).inserted else {
+                return false
+            }
+            return true
+        }.prefix(2))
+    }
+}
+
+/// Deterministic Implementation of ADR-0007's bounded, cross-domain plan contract.
+/// Training remains the downstream decision source; this builder coordinates the rest
+/// of the day without introducing an aggregate health score or a general task manager.
+enum DailyOperatingPlanBuilder {
+    static func build(
+        bodyState: BodyState,
+        decision: DailyTrainingDecision,
+        brief: PersonalHealthBrief?,
+        language: AppLanguage
+    ) -> DailyOperatingPlanPayload {
+        let isChinese = language.isChinese
+        let primary = primaryAction(for: decision, isChinese: isChinese)
+        let candidates = supportCandidates(
+            bodyState: bodyState,
+            decision: decision,
+            brief: brief,
+            isChinese: isChinese
+        )
+        let supports = candidates
+            .sorted { lhs, rhs in
+                if lhs.priority == rhs.priority { return lhs.action.id < rhs.action.id }
+                return lhs.priority > rhs.priority
+            }
+            .map(\.action)
+
+        return DailyOperatingPlanPayload(
+            decision: decision.decision,
+            volumeMultiplier: decision.volumeMultiplier,
+            intensityCap: decision.intensityCap,
+            summary: decision.userFacingSummary,
+            targetSessionTitle: decision.targetSessionTitle,
+            primaryAction: primary,
+            supportingActions: supports
+        )
+    }
+
+    private struct Candidate {
+        var priority: Int
+        var action: DailyOperatingPlanAction
+    }
+
+    private static func primaryAction(
+        for decision: DailyTrainingDecision,
+        isChinese: Bool
+    ) -> DailyOperatingPlanAction {
+        let evidence = decision.reasons.first
+        let volume = Int((decision.volumeMultiplier * 100).rounded())
+        switch decision.decision {
+        case .keep:
+            return DailyOperatingPlanAction(
+                id: "primary_keep_training",
+                domain: .training,
+                title: isChinese ? "按计划开展训练" : "Follow today's training plan",
+                detail: isChinese
+                    ? "在 Apple Watch 开始训练，RPE 不超过 \(decision.intensityCap)，动作质量下降时及时收尾。"
+                    : "Start on Apple Watch, stay at or below RPE \(decision.intensityCap), and stop adding work if technique declines.",
+                destination: "training",
+                evidence: evidence
+            )
+        case .reduce:
+            return DailyOperatingPlanAction(
+                id: "primary_reduce_training",
+                domain: .training,
+                title: isChinese ? "执行减量训练" : "Run a reduced session",
+                detail: isChinese
+                    ? "保留关键刺激，将容量控制在 \(volume)%，RPE 不超过 \(decision.intensityCap)。"
+                    : "Keep the key stimulus, limit volume to \(volume)%, and stay at or below RPE \(decision.intensityCap).",
+                destination: "training",
+                evidence: evidence
+            )
+        case .swap:
+            return DailyOperatingPlanAction(
+                id: "primary_swap_training",
+                domain: .training,
+                title: isChinese ? "替换今日训练内容" : "Swap today's session",
+                detail: isChinese
+                    ? "避开高疲劳部位，保留约 \(volume)% 的低风险刺激，RPE 不超过 \(decision.intensityCap)。"
+                    : "Avoid highly fatigued areas, keep about \(volume)% of the lower-risk stimulus, and cap RPE at \(decision.intensityCap).",
+                destination: "training",
+                evidence: evidence
+            )
+        case .rest:
+            return DailyOperatingPlanAction(
+                id: "primary_recovery_day",
+                domain: .stressRecovery,
+                title: isChinese ? "安排恢复日" : "Make today a recovery day",
+                detail: isChinese
+                    ? "停止追求训练量，把今天留给休息、放松和不费力的日常活动。"
+                    : "Stop chasing training volume and leave today for rest, downshifting, and effortless daily activity.",
+                destination: "recovery",
+                evidence: evidence
+            )
+        }
+    }
+
+    private static func supportCandidates(
+        bodyState: BodyState,
+        decision: DailyTrainingDecision,
+        brief: PersonalHealthBrief?,
+        isChinese: Bool
+    ) -> [Candidate] {
+        var candidates: [Candidate] = []
+        let sleepNeedsSupport = (bodyState.sleep.hasData && bodyState.sleep.score < 75)
+            || brief?.suggestedActionCategory == .sleep
+        if sleepNeedsSupport {
+            let scoreEvidence = bodyState.sleep.hasData
+                ? (isChinese
+                    ? "睡眠评分 \(Int(bodyState.sleep.score.rounded()))"
+                    : "Sleep score \(Int(bodyState.sleep.score.rounded()))")
+                : brief?.actionDetail
+            candidates.append(Candidate(
+                priority: 95,
+                action: DailyOperatingPlanAction(
+                    id: "support_protect_sleep",
+                    domain: .sleep,
+                    title: isChinese ? "保护今晚睡眠" : "Protect tonight's sleep",
+                    detail: isChinese
+                        ? "固定结束时间，减少晚间刺激，为今晚留出完整睡眠窗口。"
+                        : "Set a clear stopping time, reduce late stimulation, and preserve a full sleep window.",
+                    destination: "evidence",
+                    evidence: scoreEvidence
+                )
+            ))
+        }
+
+        let negativeLivedState = bodyState.drivers.contains {
+            $0.kind == .journal && $0.impact < 0
+        }
+        let stressNeedsSupport = (bodyState.stress.hasData && bodyState.stress.score > 70)
+            || bodyState.drivers.contains { $0.kind == .stress && $0.impact < 0 }
+            || negativeLivedState
+            || brief?.suggestedActionCategory == .recovery
+            || brief?.suggestedActionCategory == .lifestyle
+        if stressNeedsSupport {
+            let stressEvidence: String? = bodyState.drivers.first {
+                ($0.kind == .stress || $0.kind == .journal) && $0.impact < 0
+            }?.detail ?? (bodyState.stress.hasData
+                ? (isChinese
+                    ? "压力评分 \(Int(bodyState.stress.score.rounded()))"
+                    : "Stress score \(Int(bodyState.stress.score.rounded()))")
+                : brief?.actionDetail)
+            candidates.append(Candidate(
+                priority: 90,
+                action: DailyOperatingPlanAction(
+                    id: "support_downshift",
+                    domain: .stressRecovery,
+                    title: isChinese ? "安排降压恢复块" : "Schedule a downshift block",
+                    detail: isChinese
+                        ? "留出 10–20 分钟散步、呼吸或安静休息，不把它变成额外训练。"
+                        : "Use 10–20 minutes for a walk, breathing, or quiet rest without turning it into extra training.",
+                    destination: "recovery",
+                    evidence: stressEvidence
+                )
+            ))
+        }
+
+        if decision.decision != .keep {
+            candidates.append(Candidate(
+                priority: decision.decision == .rest ? 85 : 70,
+                action: DailyOperatingPlanAction(
+                    id: "support_light_movement",
+                    domain: .movement,
+                    title: isChinese ? "用轻量活动维持节律" : "Keep rhythm with light movement",
+                    detail: isChinese
+                        ? "只做能轻松交谈的步行或活动度练习；感觉变差就停止。"
+                        : "Choose only conversational-pace walking or mobility work, and stop if you feel worse.",
+                    destination: "recovery",
+                    evidence: isChinese
+                        ? "今日训练决定：\(localizedDecision(decision.decision, isChinese: true))"
+                        : "Today's training decision: \(localizedDecision(decision.decision, isChinese: false))"
+                )
+            ))
+        }
+
+        // A recovery-oriented plan may include a neutral Eating Rhythm guardrail. It is
+        // deliberately non-quantified and non-compensatory (ADR-0005/0006).
+        if decision.decision == .rest || decision.decision == .reduce {
+            candidates.append(Candidate(
+                priority: 40,
+                action: DailyOperatingPlanAction(
+                    id: "support_normal_eating_rhythm",
+                    domain: .eatingRhythm,
+                    title: isChinese ? "维持正常进食节律" : "Keep a normal eating rhythm",
+                    detail: isChinese
+                        ? "按平常节奏进食和补水，不因一次波动额外限制或安排补偿性运动。"
+                        : "Eat and hydrate on your normal rhythm; do not add restriction or compensatory exercise for a single disruption.",
+                    destination: "evidence",
+                    evidence: isChinese ? "恢复优先，不做补偿" : "Recovery first; no compensation"
+                )
+            ))
+        }
+
+        if candidates.isEmpty {
+            candidates.append(Candidate(
+                priority: 30,
+                action: DailyOperatingPlanAction(
+                    id: "support_preserve_sleep_rhythm",
+                    domain: .sleep,
+                    title: isChinese ? "保持今晚睡眠节律" : "Preserve tonight's sleep rhythm",
+                    detail: isChinese
+                        ? "保持稳定作息，让今天的正常节奏延续到明天。"
+                        : "Keep a stable bedtime so today's rhythm carries into tomorrow.",
+                    destination: "evidence",
+                    evidence: brief?.confidenceLabel
+                )
+            ))
+        }
+        return candidates
+    }
+
+    private static func localizedDecision(
+        _ decision: DailyTrainingDecisionType,
+        isChinese: Bool
+    ) -> String {
+        switch decision {
+        case .keep: return isChinese ? "按计划" : "keep"
+        case .reduce: return isChinese ? "减量" : "reduce"
+        case .swap: return isChinese ? "替换" : "swap"
+        case .rest: return isChinese ? "恢复" : "rest"
+        }
+    }
 }
 
 struct DailyOperatingPlanDisplayModel: Codable, Hashable {
@@ -14,6 +345,8 @@ struct DailyOperatingPlanDisplayModel: Codable, Hashable {
     var actionLabel: String
     var statusTitle: String
     var summary: String
+    var primaryActionTitle: String
+    var supportingActionLines: [String]
     var evidenceLine: String
     var confidenceLabel: String
 
@@ -56,6 +389,11 @@ struct DailyOperatingPlanDisplayModel: Codable, Hashable {
             actionLabel: actionLabel(for: decision, isChinese: isChinese),
             statusTitle: statusTitle(for: decision, intensityCap: intensityCap, isChinese: isChinese),
             summary: summary,
+            primaryActionTitle: payload?.primaryAction?.title
+                ?? actionLabel(for: decision, isChinese: isChinese),
+            supportingActionLines: (payload?.supportingActions ?? []).map {
+                "\($0.title)：\($0.detail)"
+            },
             evidenceLine: evidence,
             confidenceLabel: evidenceLabel
         )
@@ -149,19 +487,20 @@ enum DailyOperatingPlanCoordinator {
     static func upsert(
         bodyState: BodyState,
         decision: DailyTrainingDecision,
+        brief: PersonalHealthBrief? = nil,
         modelContext: ModelContext,
         calendar: Calendar = .current
     ) throws -> DailyOperatingPlanRecord {
         let dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: bodyState.date, calendar: calendar)
-        let payload = DailyOperatingPlanPayload(
-            decision: decision.decision,
-            volumeMultiplier: decision.volumeMultiplier,
-            intensityCap: decision.intensityCap,
-            summary: decision.userFacingSummary,
-            targetSessionTitle: decision.targetSessionTitle
+        let payload = DailyOperatingPlanBuilder.build(
+            bodyState: bodyState,
+            decision: decision,
+            brief: brief,
+            language: AppLanguage.stored
         )
         let payloadJSON = Self.json(payload)
         let reasonsJSON = Self.json(decision.reasons)
+        let planTitle = payload.primaryAction?.title ?? title(for: decision.decision)
         // 算法打通（批次 C）：计划置信度与今日页 readiness 吃同一份反馈校准
         // （DecisionFeedbackCalibrator，rest↔recover 已归一）。每次 upsert 从
         // kernel 原始置信度重新校准，不会因历史记录累积缩放。
@@ -180,7 +519,7 @@ enum DailyOperatingPlanCoordinator {
             record.bodyStateHash = bodyState.hash
             record.generatedAt = Date()
             record.primaryActionType = decision.decision.rawValue
-            record.title = title(for: decision.decision)
+            record.title = planTitle
             record.payloadJSON = payloadJSON
             record.reasonsJSON = reasonsJSON
             record.confidence = storedConfidence
@@ -192,7 +531,7 @@ enum DailyOperatingPlanCoordinator {
                 dayIdentifier: dayIdentifier,
                 bodyStateHash: bodyState.hash,
                 primaryActionType: decision.decision.rawValue,
-                title: title(for: decision.decision),
+                title: planTitle,
                 payloadJSON: payloadJSON,
                 reasonsJSON: reasonsJSON,
                 confidence: storedConfidence,

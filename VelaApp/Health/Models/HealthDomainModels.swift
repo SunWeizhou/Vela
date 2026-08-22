@@ -1,6 +1,6 @@
 import Foundation
 
-struct DailyHealthSnapshot: Identifiable, Hashable {
+struct DailyHealthSnapshot: Identifiable, Hashable, Sendable {
     let id = UUID()
     var date: Date
     var createdAt: Date = Date()

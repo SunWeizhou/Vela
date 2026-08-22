@@ -173,11 +173,73 @@ struct MessageBubble: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            if isUser { Spacer(minLength: 44) }
+        Group {
+            if isUser {
+                userMessage
+            } else {
+                analystMessage
+            }
+        }
+        .transition(bubbleTransition)
+    }
 
-            VStack(alignment: isUser ? .trailing : .leading, spacing: 6) {
-                // 1. 推理思考过程卡片（若模型输出包含 <think>）
+    private var userMessage: some View {
+        HStack(spacing: 0) {
+            Spacer(minLength: 44)
+            VStack(alignment: .trailing, spacing: 4) {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(segments) { segment in
+                        switch segment {
+                        case .text(let content):
+                            if !content.isEmpty {
+                                MarkdownText(
+                                    markdown: content,
+                                    font: VelaTheme.body(),
+                                    color: VelaTheme.rhythmDeepOn,
+                                    isStreaming: isStreaming
+                                )
+                                .lineSpacing(4)
+                            }
+                        case .artifact(let type, let key):
+                            ArtifactRendererView(type: type, key: key)
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(VelaTheme.rhythmDeep)
+                .clipShape(
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: VelaTheme.radiusLg,
+                        bottomLeadingRadius: VelaTheme.radiusLg,
+                        bottomTrailingRadius: VelaTheme.radiusLg,
+                        topTrailingRadius: 4,
+                        style: .continuous
+                    )
+                )
+
+                if !time.isEmpty {
+                    Text(time)
+                        .font(.caption2)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        .padding(.horizontal, 4)
+                }
+            }
+        }
+    }
+
+    /// Vela's answer is an analysis document, not a second chat bubble. Text is
+    /// full-width; artifacts remain independent cards in the reading flow.
+    private var analystMessage: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "waveform.path.ecg")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(VelaTheme.rhythmDeep)
+                .frame(width: 28, height: 28)
+                .background(VelaTheme.rhythmMist.opacity(0.72), in: Circle())
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 10) {
                 if let thinking = parsedParts.thinkingContent, !thinking.isEmpty {
                     CoachThinkingView(
                         thinkingText: thinking,
@@ -185,102 +247,62 @@ struct MessageBubble: View {
                     )
                 }
 
-                // 2. 正文内容与嵌入式卡片
                 if !parsedParts.mainContent.isEmpty || parsedParts.thinkingContent == nil {
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 14) {
                         ForEach(segments) { segment in
                             switch segment {
-                            case .text(let txt):
-                                if !txt.isEmpty {
-                MarkdownText(
-                                        markdown: txt,
-                    font: VelaTheme.subheadline(),
-                    color: isUser ? VelaTheme.rhythmDeepOn : VelaTheme.rhythmInk,
-                    isStreaming: isStreaming
-                )
-                    .lineSpacing(4)
+                            case .text(let content):
+                                if !content.isEmpty {
+                                    MarkdownText(
+                                        markdown: content,
+                                        font: VelaTheme.body(),
+                                        color: VelaTheme.rhythmInk,
+                                        isStreaming: isStreaming
+                                    )
+                                    .lineSpacing(6)
                                 }
                             case .artifact(let type, let key):
                                 ArtifactRendererView(type: type, key: key)
                             }
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(
-                        Group {
-                            if isUser {
-                                VelaTheme.rhythmDeep
-                            } else {
-                                VelaTheme.rhythmCanvasRaised
-                            }
-                        }
-                    )
-                    .clipShape(
-                        UnevenRoundedRectangle(
-                            topLeadingRadius: isUser ? VelaTheme.radiusLg : 4,
-                            bottomLeadingRadius: VelaTheme.radiusLg,
-                            bottomTrailingRadius: VelaTheme.radiusLg,
-                            topTrailingRadius: isUser ? 4 : VelaTheme.radiusLg,
-                            style: .continuous
-                        )
-                    )
-                    .overlay(
-                        UnevenRoundedRectangle(
-                            topLeadingRadius: isUser ? VelaTheme.radiusLg : 4,
-                            bottomLeadingRadius: VelaTheme.radiusLg,
-                            bottomTrailingRadius: VelaTheme.radiusLg,
-                            topTrailingRadius: isUser ? 4 : VelaTheme.radiusLg,
-                            style: .continuous
-                        )
-                        .stroke(isUser ? Color.clear : VelaTheme.rhythmMist, lineWidth: 0.75)
-                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                // 3. 底部信息区与操作条（时间、复制、成功提示）
-                HStack(spacing: 8) {
-                    if isUser {
-                if !time.isEmpty {
-                    Text(time)
-                        .font(VelaTheme.caption2())
-                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                        }
-                    } else {
-                        if !time.isEmpty {
-                            Text(time)
-                                .font(VelaTheme.caption2())
-                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                        }
-
-                        if !isStreaming && !parsedParts.mainContent.isEmpty {
-                            Button {
-                                copyToClipboard()
-                            } label: {
-                                HStack(spacing: 3) {
-                                    Image(systemName: showCopiedIndicator ? "checkmark" : "doc.on.doc")
-                                        .font(.system(size: 10, weight: .medium))
-                                    if showCopiedIndicator {
-                                        Text("已复制")
-                                            .font(VelaTheme.caption2())
-                                    }
-                                }
-                                .foregroundStyle(showCopiedIndicator ? VelaTheme.accent : VelaTheme.rhythmInkSecondary.opacity(0.8))
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 3)
-                                .background(
-                                    Capsule()
-                                        .fill(VelaTheme.rhythmMist.opacity(showCopiedIndicator ? 0.6 : 0.3))
-                                )
-                            }
-                            .buttonStyle(.plain)
-                        }
+                if !isStreaming || !time.isEmpty {
+                    analystControls
                 }
             }
-                .padding(.horizontal, 4)
-            }
-            .transition(bubbleTransition)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityElement(children: .contain)
+    }
 
-            if !isUser { Spacer(minLength: 28) }
+    private var analystControls: some View {
+        HStack(spacing: 4) {
+            if !time.isEmpty {
+                Text(time)
+                    .font(.caption2)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            }
+
+            Spacer(minLength: 4)
+
+            if !isStreaming && !parsedParts.mainContent.isEmpty {
+                Button(action: copyToClipboard) {
+                    Label(
+                        showCopiedIndicator ? "已复制" : "复制",
+                        systemImage: showCopiedIndicator ? "checkmark" : "doc.on.doc"
+                    )
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(showCopiedIndicator ? VelaTheme.rhythmDeep : VelaTheme.rhythmInkSecondary)
+                    .padding(.horizontal, 8)
+                    .frame(minHeight: VelaTheme.minimumHitTarget)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.cardPress)
+                .accessibilityHint("复制这条 Vela 回复")
+            }
         }
     }
 

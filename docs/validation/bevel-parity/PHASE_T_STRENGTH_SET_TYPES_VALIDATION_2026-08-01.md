@@ -1,3 +1,11 @@
+# VALIDATION EVIDENCE
+
+> Status: Supporting
+> Last verified: 2026-08-21
+> Scope: 历史视觉与功能验证证据（仅作历史测试回归参考）
+
+---
+
 # Phase T · Strength Set Types · 2026-08-01
 
 ## Outcome

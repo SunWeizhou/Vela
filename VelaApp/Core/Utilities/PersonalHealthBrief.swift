@@ -36,6 +36,15 @@ public enum HealthTrendHorizon: String, Codable, Hashable, CaseIterable, Sendabl
         case .threeYears: return 60
         }
     }
+
+    public var windowDays: Int {
+        switch self {
+        case .sevenDays: return 7
+        case .thirtyDays: return 30
+        case .sixMonths: return 180
+        case .threeYears: return 1095
+        }
+    }
 }
 
 public enum HealthTrendDirection: String, Codable, Hashable, Sendable {
@@ -176,6 +185,47 @@ public enum CoreHealthMetric: String, Codable, Hashable, CaseIterable, Sendable,
     }
 }
 
+public enum TrendValueDirection: String, Codable, Hashable, Sendable {
+    case rising = "rising"
+    case falling = "falling"
+    case stable = "stable"
+    case unknown = "unknown"
+
+    public var icon: String {
+        switch self {
+        case .rising: return "arrow.up.right"
+        case .falling: return "arrow.down.right"
+        case .stable: return "arrow.right"
+        case .unknown: return "minus"
+        }
+    }
+
+    public var label: String {
+        switch self {
+        case .rising: return "上升"
+        case .falling: return "下降"
+        case .stable: return "持平"
+        case .unknown: return "积累中"
+        }
+    }
+}
+
+public enum TrendAssessment: String, Codable, Hashable, Sendable {
+    case favorable = "favorable"
+    case unfavorable = "unfavorable"
+    case neutral = "neutral"
+    case insufficientData = "insufficientData"
+
+    public var label: String {
+        switch self {
+        case .favorable: return "改善"
+        case .unfavorable: return "偏弱"
+        case .neutral: return "平稳"
+        case .insufficientData: return "数据积累中"
+        }
+    }
+}
+
 // MARK: - Health Trend Finding
 
 public struct HealthTrendFinding: Codable, Hashable, Identifiable, Sendable {
@@ -183,6 +233,8 @@ public struct HealthTrendFinding: Codable, Hashable, Identifiable, Sendable {
     public var metric: CoreHealthMetric
     public var horizon: HealthTrendHorizon
     public var direction: HealthTrendDirection
+    public var valueDirection: TrendValueDirection
+    public var assessment: TrendAssessment
     public var currentValue: Double?
     public var currentValueFormatted: String
     public var baselineValue: Double?
@@ -205,6 +257,8 @@ public struct HealthTrendFinding: Codable, Hashable, Identifiable, Sendable {
         metric: CoreHealthMetric,
         horizon: HealthTrendHorizon,
         direction: HealthTrendDirection,
+        valueDirection: TrendValueDirection = .stable,
+        assessment: TrendAssessment = .neutral,
         currentValue: Double?,
         currentValueFormatted: String,
         baselineValue: Double? = nil,
@@ -226,6 +280,8 @@ public struct HealthTrendFinding: Codable, Hashable, Identifiable, Sendable {
         self.metric = metric
         self.horizon = horizon
         self.direction = direction
+        self.valueDirection = valueDirection
+        self.assessment = assessment
         self.currentValue = currentValue
         self.currentValueFormatted = currentValueFormatted
         self.baselineValue = baselineValue
@@ -254,6 +310,8 @@ public struct HealthTrendFinding: Codable, Hashable, Identifiable, Sendable {
             metric: metric,
             horizon: horizon,
             direction: .insufficientData,
+            valueDirection: .unknown,
+            assessment: .insufficientData,
             currentValue: nil,
             currentValueFormatted: "--",
             baselineValue: nil,

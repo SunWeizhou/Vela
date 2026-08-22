@@ -48,6 +48,7 @@ struct StrengthWorkoutDetailView: View {
         .background(detailBackground.ignoresSafeArea())
         .navigationTitle("力量训练详情")
         .navigationBarTitleDisplayMode(.inline)
+        .velaRhythmDetailChrome()
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 12) {
@@ -447,33 +448,24 @@ struct StrengthWorkoutDetailView: View {
     }
 
     private var detailBackground: some View {
-        ZStack {
-            VelaTheme.systemGroupedBackground
-            LinearGradient(
-                colors: [Color(hex: "#EAF3FF"), VelaTheme.systemGroupedBackground, Color(hex: "#EEF7F4")],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
+        VelaTheme.rhythmCanvas
     }
 
     private var heroBackground: some View {
         RoundedRectangle(cornerRadius: 24, style: .continuous)
-            .fill(VelaTheme.cardBg.opacity(colorScheme == .dark ? 0.62 : 0.92))
-            .shadow(color: VelaTheme.nativeShadow(colorScheme), radius: 10, y: 3)
+            .fill(VelaTheme.rhythmCanvasRaised)
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
+                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
             )
     }
 
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .fill(VelaTheme.cardBg)
-            .shadow(color: VelaTheme.nativeShadow(colorScheme), radius: 8, y: 2)
+            .fill(VelaTheme.rhythmCanvasRaised)
             .overlay(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(VelaTheme.separatorSoft, lineWidth: 0.5)
+                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
             )
     }
 

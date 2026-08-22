@@ -73,6 +73,11 @@ final class HealthTrendAndBriefTests: XCTestCase {
         // Verify notable findings exist for HRV, RHR or Recovery
         let notableMetrics = Set(result.brief.notableChanges.map(\.metric))
         XCTAssertTrue(notableMetrics.contains(.hrv) || notableMetrics.contains(.restingHeartRate) || notableMetrics.contains(.recovery))
+        XCTAssertEqual(
+            result.brief.notableChanges.map(\.metric).count,
+            notableMetrics.count,
+            "Personal Health Brief must expose at most one notable finding per metric"
+        )
     }
 
     func testSixMonthTrendCalculationAndNoSilentHorizonFallback() {
@@ -216,6 +221,77 @@ final class HealthTrendAndBriefTests: XCTestCase {
         XCTAssertNotEqual(result.brief.overallState, .strained, "Strain of 45/100 is normal moderate load, not strained")
     }
 
+    func testHighStrainIsNotHiddenByOptimalRecovery() {
+        let today = Date()
+        var dashboard = DashboardSummary.empty(date: today)
+        dashboard.recovery = MetricResult(
+            domain: .recovery, name: "Recovery", value: 80.0, band: .high, confidence: .high,
+            components: [:], componentWeights: [:], reasons: [], missingInputs: [],
+            dataWindow: DateInterval(start: today, duration: 86400), source: .healthKit,
+            algorithmVersion: "1.0", lastUpdated: today
+        )
+        dashboard.strain = MetricResult(
+            domain: .strain, name: "Strain", value: 85.0, band: .high, confidence: .high,
+            components: [:], componentWeights: [:], reasons: [], missingInputs: [],
+            dataWindow: DateInterval(start: today, duration: 86400), source: .healthKit,
+            algorithmVersion: "1.0", lastUpdated: today
+        )
+
+        let result = HealthTrendEngine().analyze(
+            dashboard: dashboard,
+            snapshots: [],
+            longTermBaselines: nil,
+            today: today
+        )
+
+        XCTAssertEqual(result.brief.overallState, .strained)
+    }
+
+    func testThreeYearFindingPublishesValueDirectionAndAssessment() {
+        let today = Date()
+        var dashboard = DashboardSummary.empty(date: today)
+        dashboard.recovery = MetricResult(
+            domain: .recovery, name: "Recovery", value: 70.0, band: .normal, confidence: .high,
+            components: [:], componentWeights: [:], reasons: [], missingInputs: [],
+            dataWindow: DateInterval(start: today, duration: 86400), source: .healthKit,
+            algorithmVersion: "1.0", lastUpdated: today
+        )
+        dashboard.recoveryMetrics.hrvMilliseconds = 40.0
+
+        let hrvBaseline = LongTermMetricBaseline(
+            metric: .hrv,
+            sampleCount: 90,
+            threeYearMedian: 60.0,
+            percentile10: 45.0,
+            percentile25: 52.0,
+            percentile75: 68.0,
+            percentile90: 75.0,
+            recent30DayMean: 40.0,
+            longTermDeviationPercent: -33.3,
+            yearOverYearDelta: nil,
+            trendLabel: "worsening"
+        )
+        let report = LongTermBaselineReport(
+            calculatedAt: today,
+            daysOfData: 90,
+            earliestDate: today.addingTimeInterval(-90 * 86400),
+            latestDate: today,
+            baselines: [.hrv: hrvBaseline]
+        )
+
+        let result = HealthTrendEngine().analyze(
+            dashboard: dashboard,
+            snapshots: [],
+            longTermBaselines: report,
+            today: today
+        )
+        let finding = result.findings.first { $0.metric == .hrv && $0.horizon == .threeYears }
+
+        XCTAssertEqual(finding?.direction, .declining)
+        XCTAssertEqual(finding?.valueDirection, .falling)
+        XCTAssertEqual(finding?.assessment, .unfavorable)
+    }
+
     func testMetricPolaritiesAreCorrectlyDefined() {
         XCTAssertEqual(CoreHealthMetric.bodyWeight.polarity, .contextual)
         XCTAssertEqual(CoreHealthMetric.bodyFat.polarity, .contextual)
@@ -235,7 +311,7 @@ final class HealthTrendAndBriefTests: XCTestCase {
         var dashboard = DashboardSummary.empty(date: today)
         dashboard.strain = MetricResult(
             domain: .strain, name: "Strain", value: 30.0, band: .normal, confidence: .high,
-            components: ["steps_raw": 10450.0, "active_calories_raw": 580.0],
+            components: ["steps_raw": 10450.0, "active_energy_raw": 580.0],
             componentWeights: [:], reasons: [], missingInputs: [],
             dataWindow: DateInterval(start: today, duration: 86400), source: .healthKit,
             algorithmVersion: "1.0", lastUpdated: today
@@ -267,6 +343,98 @@ final class HealthTrendAndBriefTests: XCTestCase {
         XCTAssertNotNil(stepFinding)
         XCTAssertTrue(stepFinding?.isAvailable == true)
         XCTAssertEqual(stepFinding?.currentValue, 10450)
+
+        let calorieFinding = result.findings.first { $0.metric == .activeCalories && $0.horizon == .sevenDays }
+        XCTAssertNotNil(calorieFinding, "activeCalories finding must exist")
+        XCTAssertTrue(calorieFinding?.isAvailable == true, "activeCalories finding must be available")
+        XCTAssertEqual(calorieFinding?.currentValue, 580.0, "activeCalories should be 580.0 from active_energy_raw")
+    }
+
+    func testDecoupledValueDirectionAndAssessmentForRestingHeartRate() {
+        let calendar = Calendar.current
+        let today = Date()
+
+        var snapshots: [DailyHealthSnapshot] = []
+        for i in (0..<30).reversed() {
+            let d = calendar.date(byAdding: .day, value: -i, to: today)!
+            var s = DailyHealthSnapshot(date: d)
+            // First half: 55 bpm, second half: 65 bpm (RHR value rises)
+            s.restingHeartRate = (i > 15) ? 55.0 : 65.0
+            snapshots.append(s)
+        }
+
+        var dashboard = DashboardSummary.empty(date: today)
+        dashboard.recoveryMetrics.restingHeartRate = 65.0
+        dashboard.recovery = MetricResult(
+            domain: .recovery, name: "Recovery", value: 50.0, band: .normal, confidence: .high,
+            components: [:], componentWeights: [:], reasons: [], missingInputs: [],
+            dataWindow: DateInterval(start: today, duration: 86400), source: .healthKit,
+            algorithmVersion: "1.0", lastUpdated: today
+        )
+
+        let engine = HealthTrendEngine()
+        let result = engine.analyze(
+            dashboard: dashboard,
+            snapshots: snapshots,
+            longTermBaselines: nil,
+            today: today
+        )
+
+        let rhr30d = result.findings.first { $0.metric == .restingHeartRate && $0.horizon == .thirtyDays }
+        XCTAssertNotNil(rhr30d)
+        XCTAssertTrue(rhr30d?.isAvailable == true)
+        // Numerical value went UP
+        XCTAssertEqual(rhr30d?.valueDirection, .rising, "RHR value went up, so valueDirection must be rising")
+        // Health assessment is unfavorable because lower is better for RHR
+        XCTAssertEqual(rhr30d?.assessment, .unfavorable, "RHR rising is unfavorable for health")
+    }
+
+    func testSixMonthTrendRejectsClusteredSamplesWithInsufficientTimeSpan() {
+        let calendar = Calendar.current
+        let today = Date()
+
+        var snapshots: [DailyHealthSnapshot] = []
+        // 60 samples but all within the last 30 days (e.g. 2 samples per day or tight span)
+        for i in 0..<60 {
+            let d = calendar.date(byAdding: .day, value: -(i % 30), to: today)!
+            var s = DailyHealthSnapshot(date: d)
+            s.hrvAverage = 65.0
+            snapshots.append(s)
+        }
+
+        var dashboard = DashboardSummary.empty(date: today)
+        dashboard.recoveryMetrics.hrvMilliseconds = 65.0
+        dashboard.recovery = MetricResult(
+            domain: .recovery, name: "Recovery", value: 70.0, band: .normal, confidence: .high,
+            components: [:], componentWeights: [:], reasons: [], missingInputs: [],
+            dataWindow: DateInterval(start: today, duration: 86400), source: .healthKit,
+            algorithmVersion: "1.0", lastUpdated: today
+        )
+        let engine = HealthTrendEngine()
+        let result = engine.analyze(
+            dashboard: dashboard,
+            snapshots: snapshots,
+            longTermBaselines: nil,
+            today: today
+        )
+
+        let hrv6m = result.findings.first { $0.metric == .hrv && $0.horizon == .sixMonths }
+        XCTAssertNotNil(hrv6m)
+        XCTAssertFalse(hrv6m?.isAvailable == true, "6-month trend must reject samples with less than 90 days span")
+    }
+
+    func testEmptyDashboardProducesSafePendingDecisionInKernel() {
+        let today = Date()
+        let dashboard = DashboardSummary.empty(date: today)
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(dashboard: dashboard))
+
+        let decision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
+            bodyState: bodyState,
+            personalHealthBrief: dashboard.personalHealthBrief
+        ))
+
+        XCTAssertEqual(decision.userFacingSummary, "暂不评估今日身体状态，等待数据同步")
+        XCTAssertEqual(decision.confidence, 0.0)
     }
 
     func testRobustHalfWindowMedianRejectsSingleDaySpike() {
@@ -352,4 +520,3 @@ final class HealthTrendAndBriefTests: XCTestCase {
         XCTAssertEqual(experience.hero.summary, "恢复得分达 80%，各项核心体征处于基线良好区间。")
     }
 }
-

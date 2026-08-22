@@ -8,6 +8,235 @@ enum BodyReadiness: String, Codable, Hashable, Sendable {
     case unknown
 }
 
+/// A low-friction subjective snapshot stored through the existing journal Adapter.
+/// Values use 0...2 so the model stays stable while the UI can localize labels.
+struct LivedStateCheckIn: Codable, Hashable, Sendable {
+    var stress: Int       // 0 low, 1 balanced, 2 high
+    var energy: Int       // 0 low, 1 steady, 2 high
+    var soreness: Int     // 0 none, 1 mild, 2 marked
+    var motivation: Int   // 0 low, 1 steady, 2 high
+    var note: String
+
+    init(stress: Int, energy: Int, soreness: Int, motivation: Int, note: String = "") {
+        self.stress = Self.clamp(stress)
+        self.energy = Self.clamp(energy)
+        self.soreness = Self.clamp(soreness)
+        self.motivation = Self.clamp(motivation)
+        self.note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var journalTags: [String] {
+        [
+            "lived_state",
+            "stress_\(Self.stressTokens[stress])",
+            "energy_\(Self.energyTokens[energy])",
+            "soreness_\(Self.sorenessTokens[soreness])",
+            "motivation_\(Self.motivationTokens[motivation])"
+        ]
+    }
+
+    var journalNote: String {
+        let summary = [
+            "压力\(Self.stressLabels[stress])",
+            "精力\(Self.energyLabels[energy])",
+            "酸痛\(Self.sorenessLabels[soreness])",
+            "动力\(Self.motivationLabels[motivation])"
+        ].joined(separator: " · ")
+        return note.isEmpty ? summary : "\(summary)\n\(note)"
+    }
+
+    /// Only conservative signals lower readiness; positive self-report never
+    /// silently overrides objective health evidence.
+    var conservativeSeverity: Double {
+        max(
+            stress == 2 ? 0.65 : 0,
+            energy == 0 ? 0.50 : 0,
+            soreness == 2 ? 0.80 : (soreness == 1 ? 0.35 : 0),
+            motivation == 0 ? 0.35 : 0
+        )
+    }
+
+    init?(tags: [String], note: String) {
+        let values = Set(tags.map { $0.lowercased() })
+        guard values.contains("lived_state") else { return nil }
+        self.init(
+            stress: Self.index(in: values, prefix: "stress_", tokens: ["low", "balanced", "high"], fallback: 1),
+            energy: Self.index(in: values, prefix: "energy_", tokens: ["low", "steady", "high"], fallback: 1),
+            soreness: Self.index(in: values, prefix: "soreness_", tokens: ["none", "mild", "marked"], fallback: 0),
+            motivation: Self.index(in: values, prefix: "motivation_", tokens: ["low", "steady", "high"], fallback: 1),
+            note: note
+        )
+    }
+
+    private static func clamp(_ value: Int) -> Int { min(2, max(0, value)) }
+
+    private static let stressTokens = ["low", "balanced", "high"]
+    private static let energyTokens = ["low", "steady", "high"]
+    private static let sorenessTokens = ["none", "mild", "marked"]
+    private static let motivationTokens = ["low", "steady", "high"]
+    private static let stressLabels = ["低", "适中", "高"]
+    private static let energyLabels = ["低", "稳定", "充足"]
+    private static let sorenessLabels = ["无", "轻微", "明显"]
+    private static let motivationLabels = ["低", "稳定", "强"]
+
+    private static func index(
+        in values: Set<String>,
+        prefix: String,
+        tokens: [String],
+        fallback: Int
+    ) -> Int {
+        tokens.enumerated().first(where: { values.contains(prefix + $0.element) })?.offset ?? fallback
+    }
+}
+
+// MARK: - Daily Intelligence Assembly Module (shared Seam)
+
+/// The shared Seam for daily cognitive assembly. Adapters own fetches,
+/// persistence and side effects; this Module owns the deterministic ordering
+/// Body State -> Personal Health Brief -> downstream Training Decision.
+struct DailyIntelligenceAssemblyInput: Sendable {
+    var dashboard: DashboardSummary
+    var selectedDay: Date
+    var calendar: Calendar
+    var dailySummary: DailyHealthSummaryDTO?
+    var bodyStateWorkoutEvents: [WorkoutEventDTO]
+    var decisionWorkoutEvents: [WorkoutEventDTO]?
+    var strengthWorkouts: [StrengthWorkoutDTO]
+    var trainingResponses: [TrainingResponseDTO]
+    var foodLogs: [FoodLogDTO]
+    var journalEntries: [JournalEntryDTO]
+    var activePlan: TrainingPlanDTO?
+    var activeStatus: String
+    var snapshots: [DailyHealthSnapshot]
+    var feedbackCalibration: DecisionFeedbackCalibration?
+    var trainingPreference: TrainingPreferenceProfile?
+    var persistedDecision: DailyTrainingDecision?
+    var persistedBodyStateHash: String?
+    /// Adapter-provided persisted rotation title; the operating-plan payload is
+    /// the authoritative title when it is available.
+    var persistedTargetSessionTitle: String?
+
+    init(
+        dashboard: DashboardSummary,
+        selectedDay: Date,
+        calendar: Calendar,
+        dailySummary: DailyHealthSummaryDTO? = nil,
+        bodyStateWorkoutEvents: [WorkoutEventDTO] = [],
+        decisionWorkoutEvents: [WorkoutEventDTO]? = nil,
+        strengthWorkouts: [StrengthWorkoutDTO] = [],
+        trainingResponses: [TrainingResponseDTO] = [],
+        foodLogs: [FoodLogDTO] = [],
+        journalEntries: [JournalEntryDTO] = [],
+        activePlan: TrainingPlanDTO? = nil,
+        activeStatus: String = "active",
+        snapshots: [DailyHealthSnapshot] = [],
+        feedbackCalibration: DecisionFeedbackCalibration? = nil,
+        trainingPreference: TrainingPreferenceProfile? = nil,
+        persistedDecision: DailyTrainingDecision? = nil,
+        persistedBodyStateHash: String? = nil,
+        persistedTargetSessionTitle: String? = nil
+    ) {
+        self.dashboard = dashboard
+        self.selectedDay = selectedDay
+        self.calendar = calendar
+        self.dailySummary = dailySummary
+        self.bodyStateWorkoutEvents = bodyStateWorkoutEvents
+        self.decisionWorkoutEvents = decisionWorkoutEvents
+        self.strengthWorkouts = strengthWorkouts
+        self.trainingResponses = trainingResponses
+        self.foodLogs = foodLogs
+        self.journalEntries = journalEntries
+        self.activePlan = activePlan
+        self.activeStatus = activeStatus
+        self.snapshots = snapshots
+        self.feedbackCalibration = feedbackCalibration
+        self.trainingPreference = trainingPreference
+        self.persistedDecision = persistedDecision
+        self.persistedBodyStateHash = persistedBodyStateHash
+        self.persistedTargetSessionTitle = persistedTargetSessionTitle
+    }
+}
+
+struct DailyIntelligenceAssembly: Sendable {
+    var bodyState: BodyState
+    var trainingDecision: DailyTrainingDecision
+    var dashboard: DashboardSummary
+    var usedPersistedDecision: Bool
+}
+
+enum DailyIntelligenceAssemblyModule {
+    /// Deep Module implementation: all input is value typed and all three
+    /// projections are computed through one deterministic Interface.
+    static nonisolated func assemble(
+        _ input: DailyIntelligenceAssemblyInput
+    ) -> DailyIntelligenceAssembly {
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: input.dashboard,
+            dailySummary: input.dailySummary,
+            workoutEvents: input.bodyStateWorkoutEvents,
+            strengthWorkouts: input.strengthWorkouts,
+            trainingResponses: input.trainingResponses,
+            foodLogs: input.foodLogs,
+            journalEntries: input.journalEntries,
+            activePlan: input.activePlan,
+            activeStatus: input.activeStatus,
+            generatedAt: input.selectedDay,
+            calendar: input.calendar
+        ))
+
+        var dashboard = input.dashboard
+        dashboard.bodyState = bodyState
+        let trendAnalysis = HealthTrendEngine().analyze(
+            dashboard: dashboard,
+            snapshots: input.snapshots,
+            longTermBaselines: dashboard.longTermBaselines,
+            today: input.selectedDay,
+            calendar: input.calendar
+        )
+        dashboard.personalHealthBrief = trendAnalysis.brief
+        dashboard.healthTrends = trendAnalysis.findings
+
+        let rotationFocus = input.activePlan == nil
+            ? TrainingRotationResolver.nextFocus(
+                profile: input.trainingPreference,
+                recentResponses: input.trainingResponses
+            )
+            : nil
+        let expectedRotationTitle = rotationFocus.map(TrainingRotationResolver.title)
+        let canReusePersisted = input.persistedDecision != nil
+            && input.persistedBodyStateHash == bodyState.hash
+            && (expectedRotationTitle == nil || (input.persistedTargetSessionTitle ?? input.persistedDecision?.targetSessionTitle) == expectedRotationTitle)
+
+        let trainingDecision: DailyTrainingDecision
+        if canReusePersisted, let persistedDecision = input.persistedDecision {
+            trainingDecision = persistedDecision
+        } else {
+            trainingDecision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
+                bodyState: bodyState,
+                activePlan: input.activePlan,
+                trainingResponses: input.trainingResponses,
+                workoutEvents: input.decisionWorkoutEvents ?? input.bodyStateWorkoutEvents,
+                longTermTrainingVolume: dashboard.longTermBaselines?.trainingVolume,
+                feedbackCalibration: input.feedbackCalibration,
+                rotationFocus: rotationFocus,
+                personalHealthBrief: trendAnalysis.brief,
+                calendar: input.calendar
+            ))
+        }
+        dashboard.trainingDecision = TrainingDecision.compatibilityView(
+            of: trainingDecision,
+            bodyState: bodyState
+        )
+
+        return DailyIntelligenceAssembly(
+            bodyState: bodyState,
+            trainingDecision: trainingDecision,
+            dashboard: dashboard,
+            usedPersistedDecision: canReusePersisted
+        )
+    }
+}
+
 struct BodyStateDriver: Codable, Hashable, Identifiable, Sendable {
     enum Kind: String, Codable, Hashable, Sendable {
         case recovery
@@ -61,6 +290,8 @@ struct BodyStateInput {
     var activePlan: TrainingPlanDTO?
     var activeStatus: String
     var generatedAt: Date
+    /// Calendar is part of the temporal contract for deterministic historical assembly.
+    var calendar: Calendar
 
     init(
         dashboard: DashboardSummary,
@@ -72,7 +303,8 @@ struct BodyStateInput {
         journalEntries: [JournalEntryDTO] = [],
         activePlan: TrainingPlanDTO? = nil,
         activeStatus: String = "active",
-        generatedAt: Date = Date()
+        generatedAt: Date = Date(),
+        calendar: Calendar = .current
     ) {
         self.dashboard = dashboard
         self.dailySummary = dailySummary
@@ -84,6 +316,7 @@ struct BodyStateInput {
         self.activePlan = activePlan
         self.activeStatus = activeStatus
         self.generatedAt = generatedAt
+        self.calendar = calendar
     }
 }
 
@@ -139,7 +372,7 @@ struct BodyStateKernel: Sendable {
             ))
         }
 
-        let dayStart = Calendar.current.startOfDay(for: input.generatedAt)
+        let dayStart = input.calendar.startOfDay(for: input.generatedAt)
         let todayFood = input.foodLogs.filter { $0.createdAt >= dayStart }
         if !todayFood.isEmpty {
             let calories = todayFood.reduce(0) { $0 + $1.totalCalories }
@@ -200,7 +433,8 @@ struct BodyStateKernel: Sendable {
         let freshness = Self.freshness(
             referenceDate: input.dailySummary?.updatedAt ?? dashboard.date,
             generatedAt: input.generatedAt,
-            hasData: dashboard.source != .empty
+            hasData: dashboard.source != .empty,
+            calendar: input.calendar
         )
         // Lived State 与 Body State 相悖（自评负面但客观信号良好）→ 确定性降级。
         let livedConflict = lived.severity >= 0.5
@@ -266,7 +500,7 @@ struct BodyStateKernel: Sendable {
             .sorted()
             .joined(separator: "|")
         let hashInput = [
-            DailyHealthSummaryRecord.dayIdentifier(for: dashboard.date),
+            DailyHealthSummaryRecord.dayIdentifier(for: dashboard.date, calendar: input.calendar),
             readiness.rawValue,
             "\(dashboard.recovery.score)",
             "\(dashboard.sleepScore.score)",
@@ -384,6 +618,10 @@ struct BodyStateKernel: Sendable {
         guard let latest = entries.max(by: { $0.createdAt < $1.createdAt }) else {
             return (false, 0, "")
         }
+        if let structured = LivedStateCheckIn(tags: latest.tags, note: latest.note) {
+            let evidence = latest.note.isEmpty ? structured.journalNote : latest.note
+            return (true, structured.conservativeSeverity, evidence)
+        }
         let text = (latest.note + " " + latest.tags.joined(separator: " ")).lowercased()
         let strong = ["疼痛", "剧痛", "受伤", "生病", "pain", "injur", "sick"]
         let medium = ["很累", "非常累", "疲劳", "酸痛", "睡不好", "失眠", "熬夜", "压力大",
@@ -401,11 +639,11 @@ struct BodyStateKernel: Sendable {
         return (true, severity, evidence.isEmpty ? "已记录主观状态" : evidence)
     }
 
-    private static func freshness(referenceDate: Date, generatedAt: Date, hasData: Bool) -> DataFreshness {
+    private static func freshness(referenceDate: Date, generatedAt: Date, hasData: Bool, calendar: Calendar) -> DataFreshness {
         guard hasData else { return .missing }
         let age = generatedAt.timeIntervalSince(referenceDate)
         if age <= 2 * 3_600 { return .live }
-        if Calendar.current.isDate(referenceDate, inSameDayAs: generatedAt) { return .today }
+        if calendar.isDate(referenceDate, inSameDayAs: generatedAt) { return .today }
         if age <= 3 * 86_400 { return .recent }
         return .stale
     }

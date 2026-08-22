@@ -374,14 +374,15 @@ struct BodyModelDetailView: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text("身体模型校准状态")
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(VelaTheme.fg)
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Text(maturityTitle)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
+            Spacer()
         }
         .padding(14)
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
     }
@@ -391,7 +392,7 @@ struct BodyModelDetailView: View {
             HStack {
                 Text("静态约束与倾向")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 Spacer()
                 NavigationLink(destination: BodyModelEditView()) {
                     HStack(spacing: 4) {

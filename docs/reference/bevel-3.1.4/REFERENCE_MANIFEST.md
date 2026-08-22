@@ -1,5 +1,8 @@
 # Bevel 3.1.4 Reference Manifest
 
+> Status: Supporting
+> Last verified: 2026-08-21
+> Scope: 外部竞品视觉与状态参考（仅供灵感参考，不是当前需求来源）
 > Capture date: 2026-07-31  
 > Device: iPhone 16 Pro  
 > Locale: Simplified Chinese  

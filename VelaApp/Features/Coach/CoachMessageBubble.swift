@@ -168,6 +168,8 @@ struct CoachDataCoverageStrip: View {
     let model: DataCoverageSummaryModel
     var action: () -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
@@ -179,16 +181,18 @@ struct CoachDataCoverageStrip: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(model.compactDisplayTitle)
-                        .font(.system(size: 12, weight: .bold))
+                        .font(VelaTheme.footnote().weight(.bold))
                         .foregroundStyle(VelaTheme.rhythmInk)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(model.status == .low
                          ? "低覆盖时 Coach 会保守回答"
                          : model.topBlockers.isEmpty ? "关键数据可用于本轮判断" : "缺口：\(model.topBlockers.joined(separator: "、"))")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(VelaTheme.caption1().weight(.medium))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                    .lineLimit(1)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .layoutPriority(1)
                 }
 
                 Spacer(minLength: 4)
@@ -366,36 +370,32 @@ struct CoachFollowUpChipsView: View {
     let onSelect: (String) -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
-            ForEach(suggestions, id: \.self) { suggestion in
-                Button {
-                    VelaHaptic.selection()
-                    onSelect(suggestion)
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(VelaTheme.rhythmDeep)
-                        Text(suggestion)
-                            .font(VelaTheme.caption2().weight(.medium))
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ForEach(suggestions, id: \.self) { suggestion in
+                    Button {
+                        VelaHaptic.selection()
+                        onSelect(suggestion)
+                    } label: {
+                        Label(suggestion, systemImage: "arrow.turn.down.right")
+                            .font(.footnote.weight(.medium))
                             .foregroundStyle(VelaTheme.rhythmInk)
-                            .lineLimit(1)
+                            .padding(.horizontal, 12)
+                            .frame(minHeight: VelaTheme.minimumHitTarget)
+                            .background(
+                                Capsule()
+                                    .fill(VelaTheme.rhythmCanvasRaised)
+                            )
+                            .overlay(
+                                Capsule()
+                                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+                            )
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(
-                        Capsule()
-                            .fill(VelaTheme.rhythmCanvasRaised)
-                    )
-                    .overlay(
-                        Capsule()
-                            .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
-                    )
+                    .buttonStyle(.cardPress)
                 }
-                .buttonStyle(.plain)
             }
-            Spacer(minLength: 0)
         }
+        .scrollIndicators(.hidden)
         .padding(.leading, 8)
         .transition(.opacity.combined(with: .move(edge: .bottom)))
     }

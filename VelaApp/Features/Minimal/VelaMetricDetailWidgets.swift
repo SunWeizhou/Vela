@@ -34,7 +34,7 @@ struct MetricCustomWidgetsSection: View {
             VStack(alignment: .leading, spacing: VelaTheme.cardGap) {
                 Text("恢复基线")
                     .font(VelaTheme.footnote().weight(.bold))
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInk)
 
                 HStack(spacing: 10) {
                     recoveryBaselineMetric(
@@ -55,7 +55,7 @@ struct MetricCustomWidgetsSection: View {
 
                 Text("恢复分会结合睡眠、HRV、静息心率及前一日负荷；每项都与个人基线比较。")
                     .font(VelaTheme.caption2())
-                    .foregroundStyle(VelaTheme.muted)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .padding(.horizontal, 2)
             }
 
@@ -65,9 +65,8 @@ struct MetricCustomWidgetsSection: View {
                 // Timeline
                 HStack {
                     Text("时间线")
-                        .font(VelaTheme.footnote())
-                        .fontWeight(.bold)
-                        .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
+                        .font(VelaTheme.footnote().weight(.bold))
+                        .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.rhythmInk)
                     Spacer()
                 }
                 
@@ -89,9 +88,8 @@ struct MetricCustomWidgetsSection: View {
                 // Heart Rate Zones
                 VStack(alignment: .leading, spacing: 10) {
                     Text("心率区间")
-                        .font(VelaTheme.footnote())
-                        .fontWeight(.bold)
-                        .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
+                        .font(VelaTheme.footnote().weight(.bold))
+                        .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.rhythmInk)
 
                     if isLoadingHeartRateZones {
                         ProgressView()
@@ -124,30 +122,29 @@ struct MetricCustomWidgetsSection: View {
             VStack(alignment: .leading, spacing: VelaTheme.cardGap) {
                 // Bedtime Circular Dial Wheel Widget
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("分析")
-                        .font(VelaTheme.footnote())
-                        .fontWeight(.bold)
-                        .foregroundStyle(VelaTheme.inkGray)
+                    Text("睡眠节奏与时钟")
+                        .font(VelaTheme.footnote().weight(.bold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
                     
                     VStack(spacing: 16) {
                         // Bedtime target labels
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("卧床")
+                                Text("入睡时间")
                                     .font(VelaTheme.caption2())
-                                    .foregroundStyle(VelaTheme.inkGray)
+                                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                 Text(bedtimeText)
-                                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                                    .foregroundStyle(VelaTheme.sleepText)
+                                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                                    .foregroundStyle(VelaTheme.rhythmInk)
                             }
                             Spacer()
                             VStack(alignment: .trailing, spacing: 4) {
-                                Text("目标睡觉时间")
+                                Text("目标就寝时间")
                                     .font(VelaTheme.caption2())
-                                    .foregroundStyle(VelaTheme.inkGray)
+                                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                 Text(targetBedtimeText)
-                                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                                    .foregroundStyle(VelaTheme.sleepText)
+                                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                                    .foregroundStyle(VelaTheme.sleepColor)
                             }
                         }
                         
@@ -163,27 +160,30 @@ struct MetricCustomWidgetsSection: View {
                         } else {
                             Text("暂无完整睡眠起止时间，无法绘制睡眠时钟。")
                                 .font(VelaTheme.caption1())
-                                .foregroundStyle(VelaTheme.inkGray)
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                 .frame(maxWidth: .infinity, minHeight: 100)
                         }
                         
-                        Divider().background(Color(hex: "#2E2B25"))
+                        Divider().background(VelaTheme.rhythmMist)
                         
                         HStack {
                             Text("起床时间: \(wakeTimeText)")
                                 .font(VelaTheme.caption1())
-                                .foregroundStyle(VelaTheme.mistGray)
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                            Spacer()
+                            Text("目标: \(VelaMinimalFormatting.duration(minutes: sleepTargetMinutes))")
+                                .font(VelaTheme.caption1().weight(.semibold))
+                                .foregroundStyle(VelaTheme.rhythmInk)
                         }
                     }
                     .padding(16)
                     .background(
                         RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                            .fill(VelaTheme.inkDark)
-                            .shadow(color: Color.black.opacity(0.0), radius: 10, y: 4)
+                            .fill(VelaTheme.rhythmCanvasRaised)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                            .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
+                            .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
                     )
                 }
 
@@ -191,9 +191,8 @@ struct MetricCustomWidgetsSection: View {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         Text("时间线")
-                            .font(VelaTheme.footnote())
-                            .fontWeight(.bold)
-                            .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.muted)
+                            .font(VelaTheme.footnote().weight(.bold))
+                            .foregroundStyle(isSleep ? VelaTheme.inkGray : VelaTheme.rhythmInk)
                         Spacer()
                     }
                     
@@ -251,10 +250,10 @@ struct MetricCustomWidgetsSection: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text("能量变化")
                                 .font(VelaTheme.footnote().weight(.bold))
-                                .foregroundStyle(VelaTheme.fg)
+                                .foregroundStyle(VelaTheme.rhythmInk)
                             Text("从早间储备到当前状态")
                                 .font(VelaTheme.caption2())
-                                .foregroundStyle(VelaTheme.muted)
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         }
                         Spacer()
                         Text("\(Int(dashboard.energy.morningEnergy.rounded())) → \(dashboard.energy.formattedScore)")

@@ -124,31 +124,32 @@ struct ActionPill: View {
     var action: () -> Void
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: systemImage)
-                .font(.system(size: 12, weight: .bold))
-            Text(title)
-                .font(VelaTheme.caption1())
-                .fontWeight(.semibold)
-                .lineLimit(1)
-        }
-        .foregroundStyle(isPrimary ? VelaTheme.rhythmDeepOn : VelaTheme.rhythmInk)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(
-            Capsule(style: .continuous)
-                .fill(isPrimary ? VelaTheme.rhythmDeep : VelaTheme.rhythmMist.opacity(0.4))
-        )
-        .overlay(
-            Capsule(style: .continuous)
-                .stroke(isPrimary ? Color.clear : VelaTheme.rhythmMist, lineWidth: 0.75)
-        )
-        .contentShape(Capsule())
-        .onTapGesture {
+        Button {
             VelaHaptic.selection()
             VelaAppState.shared.logDebug("[ActionPill] Direct tap triggered: \(title)")
             action()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.caption.weight(.bold))
+                Text(title)
+                    .font(.footnote.weight(.semibold))
+            }
+            .foregroundStyle(isPrimary ? VelaTheme.rhythmDeepOn : VelaTheme.rhythmInk)
+            .padding(.horizontal, 12)
+            .frame(minHeight: VelaTheme.minimumHitTarget)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(isPrimary ? VelaTheme.rhythmDeep : VelaTheme.rhythmMist.opacity(0.4))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(isPrimary ? Color.clear : VelaTheme.rhythmMist, lineWidth: 0.75)
+            )
+            .contentShape(Capsule())
         }
+        .buttonStyle(.cardPress)
+        .accessibilityLabel(title)
     }
 }
 
@@ -525,6 +526,65 @@ extension View {
 }
 
 // MARK: - Screen Wrapper
+
+/// Shared chrome for the four canonical primary surfaces. It owns title
+/// hierarchy, Dynamic Type reflow, spacing, and optional trailing actions.
+struct VelaSurfaceHeader<Trailing: View>: View {
+    let title: String
+    let subtitle: String?
+    @ViewBuilder let trailing: () -> Trailing
+
+    init(
+        title: String,
+        subtitle: String? = nil,
+        @ViewBuilder trailing: @escaping () -> Trailing
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.trailing = trailing
+    }
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 12) {
+                labels
+                Spacer(minLength: 12)
+                trailing()
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                labels
+                HStack {
+                    Spacer(minLength: 0)
+                    trailing()
+                }
+            }
+        }
+        .padding(.horizontal, VelaTheme.pagePadding)
+        .padding(.vertical, 8)
+    }
+
+    private var labels: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.title2.weight(.semibold))
+                .tracking(-0.35)
+                .foregroundStyle(VelaTheme.rhythmInk)
+            if let subtitle, !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(.footnote)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+extension VelaSurfaceHeader where Trailing == EmptyView {
+    init(title: String, subtitle: String? = nil) {
+        self.init(title: title, subtitle: subtitle) { EmptyView() }
+    }
+}
 
 // MARK: - Section Header
 

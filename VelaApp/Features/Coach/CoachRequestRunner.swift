@@ -8,6 +8,7 @@ final class CoachRequestRunner {
         apiKey: String,
         chatMessages: [ChatMessage],
         dashboard: DashboardSummary,
+        agentFactSnapshot: AgentFactSnapshot? = nil,
         modelContext: ModelContext,
         services: VelaServices?,
         isGhostMode: Bool = false,
@@ -27,7 +28,8 @@ final class CoachRequestRunner {
             modelContext: modelContext,
             dashboard: dashboard,
             readOnly: isGhostMode,
-            outboundPolicy: CoachOutboundDataPolicy.stored
+            outboundPolicy: CoachOutboundDataPolicy.stored,
+            agentFactSnapshot: agentFactSnapshot
         )
         
         if policy == .casual {
@@ -52,7 +54,8 @@ final class CoachRequestRunner {
                 executedTools: [],
                 finalResponse: fullResponse,
                 contextHash: ContentHash.hash(chatMessages.map(\.content).joined(separator: "\n")),
-                schemaVersion: "agentTrace.v1",
+                contextHashSource: "message_content",
+                schemaVersion: "agentTrace.v2",
                 providerCallCount: 1
             )
             return AgentLoopResult(
@@ -71,13 +74,15 @@ final class CoachRequestRunner {
                 toolRegistry: toolRegistry,
                 onConfirmToolCall: onConfirmToolCall
             )
-            let snapshotVersion = ContentHash.hash("\(dashboard.date.timeIntervalSince1970)-\(dashboard.source.rawValue)")
             return try await agentLoop.run(
                 messages: chatMessages,
                 onStreamDelta: { delta in
                     onStreamDelta(delta)
                 },
-                initialDataVersion: snapshotVersion
+                // A missing snapshot is an explicit compatibility mode: the
+                // loop records a message-content hash, never a dashboard/date
+                // hash masquerading as canonical facts.
+                initialDataVersion: agentFactSnapshot?.contextHash
             )
         }
     }

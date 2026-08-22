@@ -1,6 +1,8 @@
 # Issue tracker: GitHub
 
-Issues and PRDs for this repository live in GitHub Issues at `SunWeizhou/Vela`. Use the `gh` CLI for all operations.
+> Status: Supporting
+> Last verified: 2026-08-21
+> Scope: GitHub Issues 规范与 gh CLI 操作契约
 
 ## Conventions
 

@@ -1,22 +1,25 @@
-# AI_AGENT_SPEC.md
 # Vela AI Health Coach Specification
 
-> Updated: 2026-06-09
-> Target: Vela 4.0 Active Coach OS with multi-step tools, auditable runs, shared BodyState, and rendered artifacts.
+> Status: Canonical
+> Last verified: 2026-08-21
+> Scope: AI Agent 上下文协议、能力分层、Agent Fact Snapshot、Wiki 记忆机制与安全边界
+> Does not define: 本地评分算法实现（见 [SCORING_SYSTEM_V1_0.md](SCORING_SYSTEM_V1_0.md)）、产品需求总纲（见 [PRD.md](PRD.md)）
 
-## 1. Agent 定位
+---
+
+## 1. Agent 定位与边界
 
 Vela AI Health Coach 是一个：
 - 个性化健康数据解释者；
 - 日常恢复与训练建议助手；
-- 长期趋势总结器；
-- 能结合并维护用户 Wiki 的私人健康教练；
-- 能生成训练计划、食物日志、图表/表格 artifact、主动 check-in 的健康操作层。
+- 长期趋势与跨体征关联总结器；
+- 能够结合并维护用户 Wiki 的私人健康分析师；
+- 能够生成训练调整提案、食物日志、结构化图表/表格 artifact 的操作层。
 
 它不是：
-- 医生；
-- 医疗诊断系统；
-- 紧急健康风险判断工具；
+- 医生或医疗诊断系统；
+- 独立计算健康分数的引擎（**禁止重算本地分数**）；
+- 生理因果断言者（**仅解释关联与候选影响因素**）；
 - 替代专业医疗意见的服务。
 
 ---
@@ -114,6 +117,21 @@ Agent 不直接读取原始 HealthKit 数据，而读取 App 构造的结构化�
 - Enforce a bounded maximum iteration count, then request a final response with tools disabled.
 - Persist `AgentRunRecord` with context hash, tool names, arguments, results, final response, status, and timestamps.
 - Coach conversation history is stored in `CoachInteractionRecord`; it must not create Journal entries or enter Journal correlation analysis.
+
+The non-casual Coach request builds one `AgentFactSnapshot` while assembling
+the prompt, then passes that same value through `ToolExecutionContext` to the
+`ToolRegistry`/`AgentLoop`. `HealthTrendTool` reads canonical findings from
+that snapshot; it only reads `DailyHealthSummaryRecord` for requested daily
+points. Casual requests do not enable tools and therefore intentionally have
+no snapshot. Compatibility callers may omit the snapshot, in which case the
+tool uses the dashboard's existing canonical trend projection and returns
+explicitly unavailable (`null`) snapshot hash/time metadata.
+The current snapshot schema has one request timestamp (`generatedAt`), so the
+tool's `as_of` value is that same timestamp rather than an invented second
+clock.
+Coach artifacts and interaction records use the canonical snapshot hash when
+it exists. The Agent run audit also persists whether its hash came from
+`agent_fact_snapshot` or the casual `message_content` compatibility path.
 
 ### 3.3 Recommendation Contract
 

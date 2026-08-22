@@ -1,9 +1,9 @@
-# SCORING_SYSTEM_V1_0.md
-# Project Vela — Core Metrics Scoring Specification v1.0
+# Vela Core Metrics Scoring Specification v1.0
 
-> Status: Full product / engineering algorithm specification for the premium Vela build  
-> Version: v1.0 (Supersedes v0.1)  
-> Core Thesis: Local-first, explainable, robust baseline-focused scoring model that converts multi-domain wearable data and lab biomarkers into actionable wellness indicators.  
+> Status: Canonical
+> Last verified: 2026-08-21
+> Scope: 核心生理评分算法（Sleep, Recovery, Strain, Stress, Energy, HealthAge）数学模型、基线逻辑与输入协议
+> Does not define: 产品业务层级（见 [PRD.md](PRD.md)）、AI 交互协议（见 [AI_AGENT_SPEC.md](AI_AGENT_SPEC.md)）
 > Medical Disclaimer: **Not a medical diagnostic system**. All scores are wellness proxies intended for personal lifestyle interpretation, athletic self-tracking, and trend observation.
 
 ---
@@ -153,7 +153,7 @@ SleepScore = DurationScore (0-50) + ConsistencyScore (0-30) + InterruptionScore 
   - `0.60–0.85`：**Below (略低负荷)** ➡️ 建议逐步提升。
   - `0.85–1.20`：**Optimal (最佳区间)** ➡️ 黄金增载适应区，既保证心肺刺激又防范受伤。
   - `1.20–1.50`：**Elevated (负荷高企)** ➡️ 建议短期维持或轻度休息。
-  - `> 1.50`：**High Risk (高受伤风险)** ➡️ 生理负荷急剧激增，强烈发出防受伤警告，建议立即减载。
+  - `> 1.50`：**High Load Signal (高负荷信号)** ➡️ 生理负荷快速上升，建议短期减载并观察恢复；该信号不等同于受伤风险诊断。
 
 ---
 

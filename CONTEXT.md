@@ -1,4 +1,9 @@
-# Vela Health Intelligence
+# Vela Health Intelligence — Domain Glossary
+
+> Status: Canonical
+> Last verified: 2026-08-21
+> Scope: Vela 全局唯一领域术语定义与受控词汇表（Domain Ubiquitous Language）
+> Does not define: 页面结构与 UI 组件（见 [docs/PRD.md](docs/PRD.md)）、代码实现细节（见 [docs/TECH_ARCHITECTURE.md](docs/TECH_ARCHITECTURE.md)）
 
 Vela 是建立在 Apple 健康之上的个人身体面板与 AI 健康分析助手：帮助用户看见当前身体状态和长期趋势，理解变化原因，并将这种理解转化为训练与生活调整建议。
 

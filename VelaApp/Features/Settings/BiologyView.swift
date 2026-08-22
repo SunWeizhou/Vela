@@ -514,7 +514,6 @@ struct BiologyView: View {
                     )
                 }
 
-                let gap = bioAgeResult.biologicalAge - Double(chronologicalAge ?? 0)
                 HStack(spacing: 10) {
                     projectionMetric("现在", biological: bioAgeResult.biologicalAge, chronological: Double(chronologicalAge ?? 0))
                     Image(systemName: "arrow.right")

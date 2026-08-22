@@ -60,13 +60,17 @@ struct TrainingDecisionInput {
     /// 已落库的训练事件：用于解析「今天实际应执行的计划日」。
     /// 与训练页 `TrainingScheduleResolver` 同源，避免遗漏已完成/逾期日。
     var workoutEvents: [WorkoutEventDTO]
-    /// 三年训练量长线统计（Layer 2：本月训练量三年百分位信号；nil = 不启用）。
+    /// 长期训练量长线统计（Layer 2：本月训练量三年百分位信号；nil = 不启用）。
     var longTermTrainingVolume: TrainingVolumeLongTerm?
     /// 用户反馈闭环校准（Layer 3：结合近期 14 天决策反馈微调容量偏置）。
     var feedbackCalibration: DecisionFeedbackCalibration?
     /// The next focus in the user's lightweight rotation when no multi-week plan
     /// is active. This lets Apple Watch remain the execution surface.
     var rotationFocus: String?
+    /// 唯一事实源身体简报（Layer 1：作为上游身体状态基准输入）。
+    var personalHealthBrief: PersonalHealthBrief?
+    /// Calendar is explicit so schedule resolution is deterministic for a selected day.
+    var calendar: Calendar
 
     init(
         bodyState: BodyState,
@@ -76,7 +80,9 @@ struct TrainingDecisionInput {
         workoutEvents: [WorkoutEventDTO] = [],
         longTermTrainingVolume: TrainingVolumeLongTerm? = nil,
         feedbackCalibration: DecisionFeedbackCalibration? = nil,
-        rotationFocus: String? = nil
+        rotationFocus: String? = nil,
+        personalHealthBrief: PersonalHealthBrief? = nil,
+        calendar: Calendar = .current
     ) {
         self.bodyState = bodyState
         self.activePlan = activePlan
@@ -86,6 +92,8 @@ struct TrainingDecisionInput {
         self.longTermTrainingVolume = longTermTrainingVolume
         self.feedbackCalibration = feedbackCalibration
         self.rotationFocus = rotationFocus
+        self.personalHealthBrief = personalHealthBrief
+        self.calendar = calendar
     }
 }
 
@@ -180,7 +188,7 @@ struct TrainingDecisionKernel: Sendable {
         // 1. Resolve today's scheduled TrainingDay with the same resolver used by
         // the Training page. A simplistic weekday lookup missed completed days
         // linked through WorkoutEventRecord and overdue-day carry-over.
-        let calendar = Calendar.current
+        let calendar = input.calendar
         let todayScheduledDay: TrainingDay?
         if let activePlan {
             todayScheduledDay = TrainingScheduleResolver.resolve(
@@ -272,18 +280,39 @@ struct TrainingDecisionKernel: Sendable {
             cap = 2
             summary = "状态受限，今天优先恢复与休息。"
             reasons.append("活动状态: 标记为\(Self.localizedActiveStatus(state.activeStatus))，今天自动降低训练冒险度。")
-        } else if todayScheduledDay?.focus.lowercased() == "rest" {
-            type = .rest
-            multiplier = 0.0
-            cap = 2
-            summary = "今天是计划内的休息日，建议做好恢复工作。"
-            reasons.append("日程安排: 计划内休息。")
-        } else if state.sleep.hasData, state.sleep.score < thresholds.sleepRest {
-            type = .rest
-            multiplier = 0.0
-            cap = 2
-            summary = "睡眠明显不足，今天优先恢复与补觉，避免高强度训练。"
-            reasons.append("睡眠不足: 睡眠分数 \(Int(state.sleep.score.rounded())) 低于休息阈值 \(Int(thresholds.sleepRest.rounded()))。")
+        } else {
+            // 0. 未同步 / 纯空数据场景安全防御：不给出虚假的确定性训练建议
+            let isUnsyncedData = state.confidence == .unavailable || input.personalHealthBrief?.overallState == .insufficientData || (!state.recovery.hasData && !state.sleep.hasData && !state.strain.hasData)
+            if isUnsyncedData {
+                let sessionTitle = todayScheduledDay?.title
+                    ?? activePlan?.title
+                    ?? input.rotationFocus.map(TrainingRotationResolver.title)
+                    ?? "自由训练"
+                return DailyTrainingDecision(
+                    decision: .keep,
+                    targetSessionTitle: sessionTitle,
+                    volumeMultiplier: 1.0,
+                    intensityCap: 9,
+                    reasons: ["体征数据尚在同步"],
+                    userFacingSummary: "暂不评估今日身体状态，等待数据同步",
+                    confidence: 0.0,
+                    source: "TrainingDecisionKernel",
+                    safetyNotice: "一般健康与训练建议，不构成医疗诊断。"
+                )
+            }
+
+            if todayScheduledDay?.focus.lowercased() == "rest" {
+                type = .rest
+                multiplier = 0.0
+                cap = 2
+                summary = "今天是计划内的休息日，建议做好恢复工作。"
+                reasons.append("日程安排: 计划内休息。")
+            } else if state.sleep.hasData, state.sleep.score < thresholds.sleepRest {
+                type = .rest
+                multiplier = 0.0
+                cap = 2
+                summary = "睡眠明显不足，今天优先恢复与补觉，避免高强度训练。"
+                reasons.append("睡眠不足: 睡眠分数 \(Int(state.sleep.score.rounded())) 低于休息阈值 \(Int(thresholds.sleepRest.rounded()))。")
         } else if state.stress.hasData, stressIndex > 75 {
             type = .rest
             multiplier = 0.0
@@ -296,6 +325,18 @@ struct TrainingDecisionKernel: Sendable {
             cap = 2
             summary = "状态受限，今天优先恢复与休息。"
             reasons.append("生理状态: 恢复分数低于休息阈值，处于恢复期。")
+        } else if input.personalHealthBrief?.overallState == .recovering {
+            type = .rest
+            multiplier = 0.0
+            cap = 2
+            summary = "身体处于恢复调节窗口，今天优先安排休整。"
+            reasons.append("身体简报: 综合生理状态处于恢复调节窗口。")
+        } else if input.personalHealthBrief?.overallState == .strained {
+            type = .reduce
+            multiplier = 0.65
+            cap = 7
+            summary = "近期生理负荷有所累积，建议适当控制训练强度。"
+            reasons.append("身体简报: 综合生理负荷偏高，建议控制训练量。")
         } else if !state.recovery.hasData {
             type = .reduce
             multiplier = 0.60
@@ -375,6 +416,7 @@ struct TrainingDecisionKernel: Sendable {
             cap = 9
             summary = "可以按计划训练，但建议保留 1-2 次余力，并根据动作质量自我调节。"
             reasons.append("生理评级: 身体信号优良，支持正常训练。")
+        }
         }
         
         // Layer 2：本月训练量处于三年月分布 P85 以上时，长期视角建议减量。

@@ -69,10 +69,19 @@ struct ToolRegistry {
 final class ToolExecutionContext: @unchecked Sendable {
     let modelContext: ModelContext
     let dashboard: DashboardSummary
+    /// Canonical facts captured by the same Coach request that created the
+    /// messages. Tools may use SwiftData for detail points, but must not
+    /// reconstruct canonical findings from those records.
+    let agentFactSnapshot: AgentFactSnapshot?
 
-    init(modelContext: ModelContext, dashboard: DashboardSummary) {
+    init(
+        modelContext: ModelContext,
+        dashboard: DashboardSummary,
+        agentFactSnapshot: AgentFactSnapshot? = nil
+    ) {
         self.modelContext = modelContext
         self.dashboard = dashboard
+        self.agentFactSnapshot = agentFactSnapshot
     }
 }
 
@@ -527,7 +536,10 @@ struct StrengthWorkoutHistoryTool: AgentTool {
 
 struct HealthTrendTool: AgentTool {
     let name = "get_health_trends"
-    let description = "Return 7, 14, or 30-day trends for HRV, resting heart rate, sleep, recovery, strain, stress, and energy from local daily summaries."
+    // The canonical trend model publishes 7d and 30d findings (plus 6m/3y
+    // baselines). Do not advertise a 14-day request that would be mislabeled
+    // as the 30d finding.
+    let description = "Return 7- or 30-day trends for HRV, resting heart rate, sleep, recovery, strain, stress, and energy from local daily summaries."
     let executionContext: ToolExecutionContext
 
     var parameters: [String: Value] {
@@ -536,7 +548,7 @@ struct HealthTrendTool: AgentTool {
             "properties": .object([
                 "days": .object([
                     "type": .string("integer"),
-                    "enum": .array([.number(7), .number(14), .number(30)])
+                    "enum": .array([.number(7), .number(30)])
                 ]),
                 "metrics": .object([
                     "type": .string("array"),
@@ -549,83 +561,58 @@ struct HealthTrendTool: AgentTool {
     func execute(arguments: String) async throws -> String {
         let request = Self.request(from: arguments)
         return await MainActor.run {
+            let asOf = executionContext.agentFactSnapshot?.generatedAt ?? executionContext.dashboard.date
             let start = Calendar.current.startOfDay(
-                for: Date().addingTimeInterval(-Double(request.days - 1) * 86_400)
+                for: asOf.addingTimeInterval(-Double(request.days - 1) * 86_400)
             )
             let descriptor = FetchDescriptor<DailyHealthSummaryRecord>(
-                predicate: #Predicate<DailyHealthSummaryRecord> { $0.date >= start },
+                predicate: #Predicate<DailyHealthSummaryRecord> { $0.date >= start && $0.date <= asOf },
                 sortBy: [SortDescriptor(\.date)]
             )
             let records = (try? executionContext.modelContext.fetch(descriptor)) ?? []
 
+            let horizon: HealthTrendHorizon = {
+                if request.days <= 7 { return .sevenDays }
+                if request.days <= 30 { return .thirtyDays }
+                if request.days <= 180 { return .sixMonths }
+                return .threeYears
+            }()
+
+            // Findings are canonical facts from this request's AgentFactSnapshot.
+            // The dashboard projection remains a compatibility fallback for
+            // callers that predate the snapshot-to-tool Seam. Daily records are
+            // intentionally never used to recompute findings here.
+            let allFindings: [HealthTrendFinding]
+            let findingSource: String
+            if let snapshot = executionContext.agentFactSnapshot,
+               let snapshotFindings = snapshot.healthTrends {
+                allFindings = snapshotFindings
+                findingSource = "AgentFactSnapshot"
+            } else {
+                allFindings = executionContext.dashboard.healthTrends
+                findingSource = "DashboardSummary.healthTrends"
+            }
+
             var metricFindings: [String: Any] = [:]
             for metricStr in request.metrics {
                 guard let coreMetric = CoreHealthMetric(rawValue: metricStr) else { continue }
-                let valuesWithDate: [(date: Date, value: Double)] = records.compactMap { record in
-                    let val: Double? = {
-                        switch coreMetric {
-                        case .hrv: return record.hrvAverage
-                        case .restingHeartRate: return record.restingHeartRate
-                        case .sleepDuration: return record.sleepHours
-                        case .recovery: return record.recoveryScore
-                        case .strain: return record.strainScore
-                        case .stress: return record.stressIndex
-                        case .energy: return record.currentEnergy
-                        default: return nil
-                        }
-                    }()
-                    guard let v = val else { return nil }
-                    return (date: record.date, value: v)
+                if let finding = allFindings.first(where: { $0.metric == coreMetric && $0.horizon == horizon }) {
+                    metricFindings[metricStr] = [
+                        "sampleCount": finding.sampleCount,
+                        "requiredSampleCount": finding.requiredSampleCount,
+                        "isAvailable": finding.isAvailable,
+                        "baselineMedian": finding.baselineValue.map { round($0 * 10) / 10 } as Any,
+                        "latestValue": finding.currentValue.map { round($0 * 10) / 10 } as Any,
+                        "currentDeviation": finding.currentDeviationValue.map { round($0 * 10) / 10 } as Any,
+                        "currentDeviationPercent": finding.currentDeviationPercent.map { round($0 * 10) / 10 } as Any,
+                        "temporalTrendDeltaPercent": finding.temporalTrendDeltaPercent.map { round($0 * 10) / 10 } as Any,
+                        "valueDirection": finding.valueDirection.rawValue,
+                        "assessment": finding.assessment.rawValue,
+                        "direction": finding.direction.rawValue,
+                        "summary": finding.summary,
+                        "isNotable": finding.isNotable
+                    ]
                 }
-                guard !valuesWithDate.isEmpty else { continue }
-                let rawValues = valuesWithDate.map(\.value)
-                let sampleCount = rawValues.count
-                let sortedValues = rawValues.sorted()
-                let medianVal: Double = sortedValues.count % 2 == 1
-                    ? sortedValues[sortedValues.count / 2]
-                    : (sortedValues[sortedValues.count / 2 - 1] + sortedValues[sortedValues.count / 2]) / 2.0
-                let latest = rawValues.last ?? medianVal
-
-                let halfCount = sampleCount / 2
-                let firstHalf = Array(rawValues.prefix(halfCount))
-                let secondHalf = Array(rawValues.suffix(sampleCount - halfCount))
-                let m1 = firstHalf.isEmpty ? medianVal : (firstHalf.sorted()[firstHalf.count / 2])
-                let m2 = secondHalf.isEmpty ? medianVal : (secondHalf.sorted()[secondHalf.count / 2])
-                let trendDelta = m2 - m1
-                let trendDeltaPercent = m1 > 0 ? (trendDelta / m1) * 100 : 0
-
-                let curDev = latest - medianVal
-                let curDevPercent = medianVal > 0 ? (curDev / medianVal) * 100 : 0
-
-                let direction: String = {
-                    if abs(trendDeltaPercent) < 3.5 { return "stable" }
-                    if trendDeltaPercent > 0 {
-                        switch coreMetric.polarity {
-                        case .higherIsBetter: return "improving"
-                        case .lowerIsBetter: return "declining"
-                        case .contextual: return "elevated"
-                        }
-                    } else {
-                        switch coreMetric.polarity {
-                        case .higherIsBetter: return "declining"
-                        case .lowerIsBetter: return "improving"
-                        case .contextual: return "suppressed"
-                        }
-                    }
-                }()
-
-                let isNotable = abs(curDevPercent) >= 12.0 || abs(trendDeltaPercent) >= 10.0
-
-                metricFindings[metricStr] = [
-                    "sampleCount": sampleCount,
-                    "baselineMedian": round(medianVal * 10) / 10,
-                    "latestValue": round(latest * 10) / 10,
-                    "currentDeviation": round(curDev * 10) / 10,
-                    "currentDeviationPercent": round(curDevPercent * 10) / 10,
-                    "temporalTrendDeltaPercent": round(trendDeltaPercent * 10) / 10,
-                    "direction": direction,
-                    "isNotable": isNotable
-                ]
             }
 
             let points = records.map { record -> [String: Any] in
@@ -651,9 +638,16 @@ struct HealthTrendTool: AgentTool {
                 "days": request.days,
                 "metrics": request.metrics,
                 "findings": metricFindings,
+                // Preserve the established source field for the returned
+                // point series; identify canonical finding provenance
+                // separately so consumers cannot confuse the two.
                 "source": "DailyHealthSummaryRecord",
+                "finding_source": findingSource,
                 "confidence": records.isEmpty ? "unavailable" : "measured_and_derived",
                 "safety": "General wellness guidance only; not a medical diagnosis.",
+                "context_hash": executionContext.agentFactSnapshot.map { $0.contextHash } ?? NSNull(),
+                "generated_at": executionContext.agentFactSnapshot.map { ISO8601DateFormatter().string(from: $0.generatedAt) } ?? NSNull(),
+                "as_of": executionContext.agentFactSnapshot.map { ISO8601DateFormatter().string(from: $0.generatedAt) } ?? NSNull(),
                 "points": points
             ]
             guard JSONSerialization.isValidJSONObject(payload),
@@ -667,10 +661,10 @@ struct HealthTrendTool: AgentTool {
     private static func request(from arguments: String) -> (days: Int, metrics: [String]) {
         guard let data = arguments.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return (14, ["hrv", "rhr", "sleep", "recovery", "strain", "stress", "energy"])
+            return (30, ["hrv", "rhr", "sleep", "recovery", "strain", "stress", "energy"])
         }
-        let requestedDays = json["days"] as? Int ?? 14
-        let days = [7, 14, 30, 180].contains(requestedDays) ? requestedDays : 14
+        let requestedDays = json["days"] as? Int ?? 30
+        let days = [7, 30].contains(requestedDays) ? requestedDays : 30
         let supported = Set(["hrv", "rhr", "sleep", "recovery", "strain", "stress", "energy"])
         let metrics = (json["metrics"] as? [String] ?? Array(supported)).filter { supported.contains($0) }
         return (days, metrics)

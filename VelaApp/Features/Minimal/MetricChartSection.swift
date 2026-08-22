@@ -2,23 +2,23 @@ import SwiftUI
 import Charts
 
 enum DetailTimeRange: String, CaseIterable, Identifiable {
-    case day, week, month, halfYear
+    case week, month, halfYear, day
     
     var id: String { rawValue }
     var days: Int {
         switch self {
-        case .day: return 1
         case .week: return 7
         case .month: return 30
         case .halfYear: return 180
+        case .day: return 1
         }
     }
     var title: String {
         switch self {
-        case .day: return "今天"
         case .week: return "7天"
         case .month: return "30天"
         case .halfYear: return "6个月"
+        case .day: return "今天"
         }
     }
 }
@@ -60,30 +60,51 @@ struct MetricChartSection: View {
     var targetRange: ClosedRange<Double>? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 14) {
+            // Header Top Bar: Range Picker & Active Date
+            HStack(spacing: 8) {
                 rangePicker
                 Spacer()
 
                 if rawSelectedDate != nil {
-                    Text(displayDateText)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(VelaTheme.fg2)
-                        .padding(.trailing, 4)
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(metricColor)
+                            .frame(width: 6, height: 6)
+                        Text(displayDateText)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(VelaTheme.rhythmInk)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(metricColor.opacity(0.12)))
                 }
             }
             .padding(.horizontal, 14)
             
-            // Value and Status
+            // Value and Status Row
             VStack(alignment: .leading, spacing: 4) {
-                Text(dynamicValueText)
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(VelaTheme.rhythmInk)
-                
-                Text(rawSelectedDate != nil ? "选定读数" : metricSubtitle)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                HStack(alignment: .lastTextBaseline, spacing: 8) {
+                    Text(dynamicValueText)
+                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(VelaTheme.rhythmInk)
+
+                    if rawSelectedDate == nil {
+                        Text(metricSubtitle)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(metricColor)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(
+                                Capsule().fill(metricColor.opacity(0.12))
+                            )
+                    } else {
+                        Text("按住滑动查看历史")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    }
+                }
             }
             .padding(.horizontal, 16)
             
@@ -92,16 +113,18 @@ struct MetricChartSection: View {
                 VelaStateCard(
                     state: selectedRange == .day ? .empty : .calibrating,
                     message: selectedRange == .day
-                        ? "今天尚无读数，可切换至 7 天查看趋势。"
+                        ? "今天尚无读数，可在上方切换至 7 天或 30 天查看趋势。"
                         : "继续佩戴设备并同步数据以建立趋势。"
                 )
                 .padding(.horizontal, 14)
-            } else if points.count < 3 {
+                .padding(.vertical, 8)
+            } else if points.count < 3 && selectedRange != .day {
                 VelaStateCard(
                     state: .calibrating,
-                    message: "目前已有 \(points.count) 个读数，累计 3 个后展示个人基线。"
+                    message: "目前已有 \(points.count) 个读数，累计 3 个后展示个人基线与区间。"
                 )
                 .padding(.horizontal, 14)
+                .padding(.vertical, 8)
             } else {
                 Chart {
                     let unit: Calendar.Component = selectedRange == .day ? .hour : .day
@@ -122,6 +145,12 @@ struct MetricChartSection: View {
                         RuleMark(y: .value("Personal baseline", effectiveBaseline))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.5))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                            .annotation(position: .trailing, alignment: .trailing) {
+                                Text("基线")
+                                    .font(.system(size: 8, weight: .semibold))
+                                    .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.8))
+                                    .padding(.trailing, 2)
+                            }
                     }
 
                     ForEach(Array(chartSegments.enumerated()), id: \.offset) { segmentIndex, segment in
@@ -131,8 +160,8 @@ struct MetricChartSection: View {
                                     x: .value("Date", pt.date, unit: unit),
                                     y: .value("Value", pt.value)
                                 )
-                                .foregroundStyle(metricColor)
-                                .cornerRadius(3)
+                                .foregroundStyle(metricColor.gradient)
+                                .cornerRadius(4)
                             } else {
                                 LineMark(
                                     x: .value("Date", pt.date, unit: unit),
@@ -150,7 +179,7 @@ struct MetricChartSection: View {
                                 )
                                 .foregroundStyle(
                                     LinearGradient(
-                                        colors: [metricColor.opacity(0.24), metricColor.opacity(0.0)],
+                                        colors: [metricColor.opacity(0.24), metricColor.opacity(0.01)],
                                         startPoint: .top,
                                         endPoint: .bottom
                                     )
@@ -168,7 +197,7 @@ struct MetricChartSection: View {
                         RuleMark(
                             x: .value("SelectedDate", selectedPoint.date, unit: unit)
                         )
-                        .foregroundStyle(isSleep ? Color.white.opacity(0.25) : Color.black.opacity(0.12))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.3))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
                         
                         PointMark(
@@ -176,13 +205,13 @@ struct MetricChartSection: View {
                             y: .value("SelectedValuePoint", selectedPoint.value)
                         )
                         .foregroundStyle(metricColor)
-                        .symbolSize(80)
+                        .symbolSize(88)
                     }
                 }
                 .chartXAxis {
                     AxisMarks(values: .automatic) { _ in
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                            .foregroundStyle(VelaTheme.rhythmMist)
+                            .foregroundStyle(VelaTheme.rhythmMist.opacity(0.6))
                         AxisValueLabel()
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
@@ -191,14 +220,14 @@ struct MetricChartSection: View {
                 .chartYAxis {
                     AxisMarks(position: .leading, values: .automatic) { _ in
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                            .foregroundStyle(VelaTheme.rhythmMist)
+                            .foregroundStyle(VelaTheme.rhythmMist.opacity(0.6))
                         AxisValueLabel()
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                 }
                 .chartXSelection(value: $rawSelectedDate)
-                .frame(height: 160)
+                .frame(height: 175)
                 .padding(.horizontal, 12)
                 .padding(.bottom, 6)
                 .accessibilityLabel("\(metricSubtitle)趋势图，共\(points.count)个真实读数")

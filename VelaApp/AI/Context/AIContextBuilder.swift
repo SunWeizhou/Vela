@@ -364,7 +364,7 @@ struct AIContextBuilder {
             strengthTraining: buildStrengthTrainingFacts(
                 strengthWorkouts,
                 trainingResponses: trainingResponses,
-                dashboard: dashboard,
+                decision: agentTrainingDecision,
                 generatedAt: generatedAt
             ),
             // A12：recentTrends 占位符移除——与 weeklyTrends 同源，避免固定死字节。
@@ -402,6 +402,12 @@ struct AIContextBuilder {
         var semantic = context
         semantic.contextHash = ""
         semantic.generatedAt = Date(timeIntervalSince1970: 0)
+        semantic.bodyState.contextHash = ""
+        if var brief = semantic.personalHealthBrief {
+            brief.date = Date(timeIntervalSince1970: 0)
+            brief.generatedAt = Date(timeIntervalSince1970: 0)
+            semantic.personalHealthBrief = brief
+        }
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -560,14 +566,14 @@ struct AIContextBuilder {
     private func buildStrengthTrainingFacts(
         _ workouts: [StrengthWorkoutRecord],
         trainingResponses: [TrainingResponseRecord],
-        dashboard: DashboardSummary,
+        decision: AgentTrainingDecisionContext,
         generatedAt: Date
     ) -> StrengthTrainingContext {
         let analytics = TrainingAnalyticsService()
         let dtoWorkouts = workouts.map { $0.dto }
         let recent7d = analytics.buildRecentSummary(workouts: dtoWorkouts, days: 7, endingAt: generatedAt)
         let recent14d = analytics.buildRecentSummary(workouts: dtoWorkouts, days: 14, endingAt: generatedAt)
-        let adaptation = trainingAdaptationSummary(dashboard: dashboard)
+        let adaptation = trainingAdaptationSummary(decision: decision)
         let response = trainingResponseSummary(trainingResponses, generatedAt: generatedAt)
         return StrengthTrainingContext(
             sessions7d: recent7d.sessions,
@@ -675,6 +681,17 @@ struct AIContextBuilder {
                 estimated1RMPeakKg: stats.max1RM
             )
         }.sorted(by: { $0.exerciseName < $1.exerciseName })
+    }
+
+    private func trainingAdaptationSummary(decision: AgentTrainingDecisionContext) -> String {
+        return [
+            decision.readinessGuidance,
+            "\(Int((decision.volumeMultiplier * 100).rounded()))% volume.",
+            "\(decision.maxIntensity) cap.",
+            decision.reasons
+        ]
+        .filter { !$0.isEmpty }
+        .joined(separator: " ")
     }
 
     private func trainingAdaptationSummary(dashboard: DashboardSummary) -> String {
@@ -801,6 +818,14 @@ struct AIContextBuilder {
             dict["summary"] = payload.summary
             if let target = payload.targetSessionTitle {
                 dict["target_session_title"] = target
+            }
+            if let primary = payload.primaryAction {
+                dict["primary_action"] = "\(primary.domain.rawValue): \(primary.title) — \(primary.detail)"
+            }
+            if !payload.supportingActions.isEmpty {
+                dict["supporting_actions"] = payload.supportingActions.prefix(2).map {
+                    "\($0.domain.rawValue): \($0.title) — \($0.detail)"
+                }.joined(separator: " | ")
             }
         }
         if let source = plan.source { dict["source"] = source }

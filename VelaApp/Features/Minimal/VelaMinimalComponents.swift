@@ -120,11 +120,8 @@ struct VelaMetricDetailView: View {
     @State var heartRateZoneSummary: HeartRateZoneSummary?
     @State var isLoadingHeartRateZones = false
     
-    // Default to a range that actually renders: `.day` returns an intentionally
-    // empty chart (the metric pages are daily snapshots), so every detail page
-    // opened showing "保持记录以显示趋势" even with months of history. Month (30d)
-    // shows a real trend immediately.
-    @State var selectedRange: DetailTimeRange = .month
+    // Default to 7 days (.week) for immediate momentum and responsive trend viewing
+    @State var selectedRange: DetailTimeRange = .week
     @State var rawSelectedDate: Date? = nil
 
     var dashboard: DashboardSummary { dashboardVM.dashboard }
@@ -136,40 +133,37 @@ struct VelaMetricDetailView: View {
     }
 
     var body: some View {
-        // Every metric follows the user's system appearance. Sleep keeps its
-        // semantic indigo accent without forcing an unrelated dark sub-theme.
-        let isSleep = false
+        let isSleep = (metric == .sleep)
         
         ZStack {
             VelaTheme.rhythmCanvas.ignoresSafeArea()
 
             ScrollView {
                 VStack(spacing: 16) {
-                        // 1. Procedural Chart Header Card (Apple Style)
-                        chartHeaderSection(isSleep: isSleep)
-                            .padding(.top, 8)
+                    // 1. Interactive Chart Header Card (Default 7-Day Range, Apple Style)
+                    chartHeaderSection(isSleep: isSleep)
+                        .padding(.top, 8)
 
-                        // 2. Double Highlight metrics
-                        doubleHighlightsSection(isSleep: isSleep)
+                    // 2. Double Highlight key comparison metrics
+                    doubleHighlightsSection(isSleep: isSleep)
 
-                        // 3. Deterministic interpretation and next action
-                        guidanceSection(isSleep: isSleep)
+                    // 3. Multi-scale Trend & Momentum Matrix (7d, 30d, 6m)
+                    trendsSection(isSleep: isSleep)
 
-                        // 4. Continue from the deterministic interpretation into
-                        // a screen-aware Coach conversation while context is fresh.
-                        coreMetricCoachCard
+                    // 4. Deterministic interpretation and next action
+                    guidanceSection(isSleep: isSleep)
 
-                        // 5. Direction, confidence, coverage, and freshness
-                        trustSection
+                    // 5. Custom Widgets & Physiological Breakdown based on Metric Type
+                    customWidgetsSection(isSleep: isSleep)
 
-                        // 6. Score inputs and supporting raw data
-                        supportingEvidenceSection(isSleep: isSleep)
+                    // 6. Continue from deterministic interpretation into screen-aware Coach
+                    coreMetricCoachCard
 
-                        // 7. Custom Widgets & Timeline based on Metric Type
-                        customWidgetsSection(isSleep: isSleep)
+                    // 7. Direction, confidence, coverage, and freshness
+                    trustSection
 
-                        // 8. Trend Sparkline Cards List
-                        trendsSection(isSleep: isSleep)
+                    // 8. Score inputs and supporting raw data
+                    supportingEvidenceSection(isSleep: isSleep)
                 }
                 .padding(.horizontal, VelaTheme.pagePadding)
                 .padding(.bottom, 56)

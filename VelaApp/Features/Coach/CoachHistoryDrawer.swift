@@ -45,7 +45,7 @@ struct CoachHistoryDrawer: View {
                 .buttonStyle(.cardPress)
             }
             .padding(.horizontal, 20)
-            .padding(.top, 64)
+            .padding(.top, 16)
             .padding(.bottom, 16)
             
             // New Chat Button
@@ -185,6 +185,7 @@ struct CoachHistoryDrawer: View {
             .padding(.bottom, 48)
             .background(VelaTheme.rhythmCanvasRaised)
         }
+        .safeAreaPadding(.top)
         .frame(width: width)
         .frame(maxHeight: .infinity)
         .background(VelaTheme.rhythmCanvas)

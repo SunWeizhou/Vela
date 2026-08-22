@@ -5,6 +5,7 @@ enum ActiveStatusSettings {
     static let statusKey = "vela_active_status"
     static let durationKey = "vela_active_status_duration"
     static let expiresAtKey = "vela_active_status_expires_at"
+    static let startedAtKey = "vela_active_status_started_at"
     private static let validStatuses: Set<String> = ["active", "sick", "injured", "resting"]
 
     static func update(
@@ -18,8 +19,10 @@ enum ActiveStatusSettings {
         guard status != "active" else {
             defaults.removeObject(forKey: durationKey)
             defaults.removeObject(forKey: expiresAtKey)
+            defaults.removeObject(forKey: startedAtKey)
             return
         }
+        defaults.set(now, forKey: startedAtKey)
         defaults.set(duration, forKey: durationKey)
         if let expiresAt = expirationDate(for: duration, now: now, calendar: calendar) {
             defaults.set(expiresAt, forKey: expiresAtKey)
@@ -47,6 +50,39 @@ enum ActiveStatusSettings {
            expiresAt <= now {
             defaults.set("active", forKey: statusKey)
             defaults.removeObject(forKey: expiresAtKey)
+            return "active"
+        }
+        return storedStatus
+    }
+
+    /// Resolve a status for a selected day without leaking a newer current
+    /// status into historical BodyState calculations. Older installs may not
+    /// have a start timestamp; in that case non-active status is conservatively
+    /// limited to today until the user updates it again.
+    static func resolveStatus(
+        at date: Date,
+        now: Date = Date(),
+        defaults: UserDefaults = .standard,
+        calendar: Calendar = .current
+    ) -> String {
+        let storedStatus = defaults.string(forKey: statusKey) ?? "active"
+        guard validStatuses.contains(storedStatus), storedStatus != "active" else {
+            return "active"
+        }
+
+        // Dashboard dates are normally start-of-day values. Compare calendar
+        // days rather than instants so a status started later today applies to
+        // today's snapshot, while a newer status cannot leak into history.
+        let selectedDay = calendar.startOfDay(for: date)
+        if let startedAt = defaults.object(forKey: startedAtKey) as? Date {
+            let startedDay = calendar.startOfDay(for: startedAt)
+            guard startedDay <= selectedDay else { return "active" }
+        } else if !calendar.isDate(selectedDay, inSameDayAs: now) {
+            return "active"
+        }
+
+        if let expiresAt = defaults.object(forKey: expiresAtKey) as? Date,
+           calendar.startOfDay(for: expiresAt) <= selectedDay {
             return "active"
         }
         return storedStatus
@@ -99,6 +135,9 @@ final class DailySummaryUseCase {
         shouldSyncHealthData: Bool = true
     ) async throws -> DashboardSummary {
         let now = date
+        // `now` is the selected dashboard day (and may be historical). Keep a
+        // separate wall-clock instant for resolving the currently stored status.
+        let statusEvaluationNow = Date()
         
         // 1. Do not fan out HealthKit reads before the user has seen the initial
         // authorization request. This keeps an empty first launch responsive.
@@ -503,81 +542,61 @@ final class DailySummaryUseCase {
             longTermBaselines: longTermReport,
             bodyModelState: bodyModelState
         )
-        let activeStatus = ActiveStatusSettings.resolveCurrentStatus(now: now)
+        let activeStatus = ActiveStatusSettings.resolveStatus(
+            at: now,
+            now: statusEvaluationNow,
+            calendar: calendar
+        )
         // 合并计划事件与近 48h 事件：hash 要覆盖计划完成事件，近期活动证据也要完整。
         var bodyStateEvents = planResolutionEvents
         let planEventIDs = Set(planResolutionEvents.map(\.id))
         for event in recentWorkoutEvents where !planEventIDs.contains(event.id) {
             bodyStateEvents.append(event)
         }
-        let bodyState = BodyStateKernel().build(input: BodyStateInput(
-            dashboard: dashboard,
-            dailySummary: currentDailySummary?.dto,
-            workoutEvents: bodyStateEvents.map { $0.dto },
-            strengthWorkouts: recentStrengthWorkouts.map { $0.dto },
-            trainingResponses: recentTrainingResponses.map { $0.dto },
-            foodLogs: todayFoodLogs.map { $0.dto },
-            journalEntries: recentJournalEntries.map { $0.dto },
-            activePlan: activePlan?.dto,
-            activeStatus: activeStatus,
-            generatedAt: now
-        ))
-        
         let dayId = DailyHealthSummaryRecord.dayIdentifier(for: now, calendar: calendar)
-        let rotationFocus = activePlan == nil
-            ? TrainingRotationResolver.nextFocus(
-                profile: trainingPreference,
-                recentResponses: recentTrainingResponses.map(\.dto)
-            )
-            : nil
-        let expectedRotationTitle = rotationFocus.map(TrainingRotationResolver.title)
-        var matchedExistingDecision: DailyTrainingDecision? = nil
+        var persistedDecision: DailyTrainingDecision?
+        var persistedBodyStateHash: String?
+        var persistedTargetSessionTitle: String?
+        var persistedOperatingPlanPayload: DailyOperatingPlanPayload?
         if let modelContext {
             let opPlanDescriptor = FetchDescriptor<DailyOperatingPlanRecord>(
                 predicate: #Predicate<DailyOperatingPlanRecord> { $0.dayIdentifier == dayId }
             )
-            if let existingPlan = (try? modelContext.fetch(opPlanDescriptor))?.first,
-               existingPlan.bodyStateHash == bodyState.hash,
-               expectedRotationTitle == nil || existingPlan.operatingPlanPayload?.targetSessionTitle == expectedRotationTitle {
-                matchedExistingDecision = existingPlan.trainingDecision
+            if let existingPlan = (try? modelContext.fetch(opPlanDescriptor))?.first {
+                persistedDecision = existingPlan.trainingDecision
+                persistedBodyStateHash = existingPlan.bodyStateHash
+                persistedOperatingPlanPayload = existingPlan.operatingPlanPayload
+                persistedTargetSessionTitle = persistedOperatingPlanPayload?.targetSessionTitle
             }
         }
-        
-        dashboard.bodyState = bodyState
-        let trendAnalysis = HealthTrendEngine().analyze(
-            dashboard: dashboard,
-            snapshots: snapshots180,
-            longTermBaselines: longTermReport,
-            today: now,
-            calendar: calendar
-        )
-        dashboard.personalHealthBrief = trendAnalysis.brief
-        dashboard.healthTrends = trendAnalysis.findings
-
-        let dailyTrainingDecision: DailyTrainingDecision
-        if let matched = matchedExistingDecision {
-            dailyTrainingDecision = matched
-        } else {
-            let feedbackCalibration = modelContext.map {
-                DailyDecisionFeedbackService().calculateFeedbackCalibration(modelContext: $0, now: now)
-            }
-            dailyTrainingDecision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
-                bodyState: bodyState,
-                activePlan: activePlan?.dto,
+        let feedbackCalibration = modelContext.map {
+            DailyDecisionFeedbackService().calculateFeedbackCalibration(modelContext: $0, now: now)
+        }
+        let intelligence = DailyIntelligenceAssemblyModule.assemble(
+            DailyIntelligenceAssemblyInput(
+                dashboard: dashboard,
+                selectedDay: now,
+                calendar: calendar,
+                dailySummary: currentDailySummary?.dto,
+                bodyStateWorkoutEvents: bodyStateEvents.map { $0.dto },
+                decisionWorkoutEvents: planResolutionEvents.map { $0.dto },
+                strengthWorkouts: recentStrengthWorkouts.map { $0.dto },
                 trainingResponses: recentTrainingResponses.map { $0.dto },
-                workoutEvents: planResolutionEvents.map { $0.dto },
-                // 算法打通（深度专项批次 1）：与展示路径同源，恢复此前被
-                // persistedDecision 遮蔽的「本月训练量三年 P85 → 减量」门控。
-                longTermTrainingVolume: longTermReport.trainingVolume,
+                foodLogs: todayFoodLogs.map { $0.dto },
+                journalEntries: recentJournalEntries.map { $0.dto },
+                activePlan: activePlan?.dto,
+                activeStatus: activeStatus,
+                snapshots: snapshots180,
                 feedbackCalibration: feedbackCalibration,
-                rotationFocus: rotationFocus
-            ))
-        }
-
-        dashboard.trainingDecision = TrainingDecision.compatibilityView(
-            of: dailyTrainingDecision,
-            bodyState: bodyState
+                trainingPreference: trainingPreference,
+                persistedDecision: persistedDecision,
+                persistedBodyStateHash: persistedBodyStateHash,
+                persistedTargetSessionTitle: persistedTargetSessionTitle
+            )
         )
+        let bodyState = intelligence.bodyState
+        let dailyTrainingDecision = intelligence.trainingDecision
+        dashboard = intelligence.dashboard
         
         let persistedSnapshot = makeSnapshot(
             from: dashboard,
@@ -606,11 +625,14 @@ final class DailySummaryUseCase {
                 )
                 try modelContext.save()
                 
-                // Only upsert plan if it was recalculated
-                if matchedExistingDecision == nil {
+                // Reuse the canonical decision when hashes match, but still migrate a
+                // legacy training-only payload to ADR-0007's bounded action sequence.
+                if !intelligence.usedPersistedDecision
+                    || persistedOperatingPlanPayload?.hasCanonicalActionSequence != true {
                     try DailyOperatingPlanCoordinator.upsert(
                         bodyState: bodyState,
                         decision: dailyTrainingDecision,
+                        brief: dashboard.personalHealthBrief,
                         modelContext: modelContext,
                         calendar: calendar
                     )

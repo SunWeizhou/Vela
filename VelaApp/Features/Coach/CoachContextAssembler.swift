@@ -165,13 +165,22 @@ struct CoachOutboundDataPolicy: Equatable {
 }
 
 @MainActor
+struct CoachContextBuildResult {
+    let messages: [ChatMessage]
+    /// Non-casual requests carry the exact canonical facts rendered into the
+    /// prompt. Casual requests intentionally leave this unavailable because
+    /// they do not enable tools.
+    let agentFactSnapshot: AgentFactSnapshot?
+}
+
+@MainActor
 struct CoachContextAssembler {
     /// 深度专项批次 6：相关性结果会话内 memo（≤5 条，快照日期/手记变化自动失效）。
     private static var correlationMemo: [String: String] = [:]
     private static var latestSnapshotEpoch: Int = 0
     /// 联通专项批次 1：身体模型状态 memo（≤5 条；训练/手记/快照变化自动失效）。
     private static var bodyModelMemo: [String: BodyModelState] = [:]
-    func buildChatMessages(
+    func buildRequestContext(
         userText: String,
         dashboard: DashboardSummary,
         journalEntries: [JournalEntryRecord],
@@ -180,7 +189,7 @@ struct CoachContextAssembler {
         modelContext: ModelContext,
         messages: [CoachChatVM.ChatMsg],
         coverageSummary: DataCoverageSummaryModel? = nil
-    ) async -> [ChatMessage] {
+    ) async -> CoachContextBuildResult {
         let outboundPolicy = CoachOutboundDataPolicy.stored
         // A5：只注入已初始化的 wiki 文件，空模板不进 AI 上下文。
         let wiki = outboundPolicy.wiki ? WikiFileService.loadPopulatedDictionary() : [:]
@@ -326,7 +335,7 @@ struct CoachContextAssembler {
                 ))
             }
             result.append(ChatMessage(role: .user, content: userText))
-            return result
+            return CoachContextBuildResult(messages: result, agentFactSnapshot: nil)
         }
 
         let contextAsOf = Date()
@@ -562,7 +571,7 @@ struct CoachContextAssembler {
         }
 
         result.append(ChatMessage(role: .user, content: userText))
-        return result
+        return CoachContextBuildResult(messages: result, agentFactSnapshot: canonical)
     }
 
     /// 联通专项批次 1：构造身体模型状态（memo 化；训练/手记/快照变化自动失效）。

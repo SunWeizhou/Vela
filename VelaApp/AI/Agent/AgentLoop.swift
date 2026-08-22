@@ -555,7 +555,8 @@ struct AgentLoop {
             },
             finalResponse: sanitizeForTrace(finalResponse),
             contextHash: resolvedHash,
-            schemaVersion: "agentTrace.v1",
+            contextHashSource: contextHash == nil ? "message_content" : "agent_fact_snapshot",
+            schemaVersion: "agentTrace.v2",
             providerCallCount: providerCallCount
         )
     }
@@ -721,6 +722,9 @@ struct AgentRunTrace: Codable {
     var executedTools: [ExecutedToolSnapshot]
     var finalResponse: String
     var contextHash: String
+    /// Distinguishes the canonical snapshot hash from the independent
+    /// message-content hash used by compatibility/casual callers.
+    var contextHashSource: String? = nil
     var schemaVersion: String
     var providerCallCount: Int?
 

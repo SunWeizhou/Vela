@@ -711,25 +711,12 @@ extension VelaMetricDetailView {
     }
 
     var trendItems: [TrendItem] {
-        guard let series = CoreMetricTrendMapper.series(
+        CoreMetricTrendMapper.seriesList(
             for: metric,
+            findings: dashboardVM.dashboard.healthTrends,
             snapshots: dailyRecords.map { $0.toSnapshot() },
             endingAt: dashboardVM.selectedDate
-        ) else {
-            return []
-        }
-
-        return [
-            TrendItem(
-                title: series.title,
-                value: series.valueText,
-                icon: series.icon,
-                statusLabel: series.statusLabel,
-                statusColor: metricColor,
-                graphColor: metricColor,
-                history: series.history
-            )
-        ]
+        )
     }
 
     var evidenceItems: [EvidenceItem] {

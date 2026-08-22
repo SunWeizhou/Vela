@@ -46,7 +46,9 @@ final class CoachPersistenceWriter {
             startedAt: trace.startedAt,
             endedAt: trace.endedAt,
             status: .success,
-            reason: trace.schemaVersion,
+            reason: [trace.schemaVersion, trace.contextHashSource]
+                .compactMap { $0 }
+                .joined(separator: ":"),
             inputContextHash: trace.contextHash,
             outputSummary: trace.finalResponse,
             toolCallsJSON: toolCallsJSON

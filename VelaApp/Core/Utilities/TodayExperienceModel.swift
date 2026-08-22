@@ -100,7 +100,8 @@ struct TodayExperienceModel: Codable, Hashable {
         readiness: ReadinessDecisionKind? = nil,
         generatedAt: Date = Date(),
         nutrition: TodayExperienceNutrition = .empty,
-        history: [DailyHealthSummaryDTO] = []
+        history: [DailyHealthSummaryDTO] = [],
+        operatingPlan: DailyOperatingPlanPayload? = nil
     ) -> TodayExperienceModel {
         let hasReadinessData = dashboard.recovery.hasData
         let confidenceDetail = hasReadinessData ? label(for: bodyState.confidence) : "数据不足"
@@ -109,7 +110,7 @@ struct TodayExperienceModel: Codable, Hashable {
         // Kernel 提供量化细节（容量/RPE）。同屏不再出现「标题说恢复、细节说 100%」的矛盾。
         let effectiveReadiness = readiness ?? Self.readinessMapping(for: trainingDecision)
         let brief = dashboard.personalHealthBrief
-        let hero = TodayExperienceHero(
+        var hero = TodayExperienceHero(
             scoreTitle: scoreTitle(dashboard),
             decisionTitle: decisionTitle(
                 effectiveReadiness,
@@ -130,6 +131,10 @@ struct TodayExperienceModel: Codable, Hashable {
                 hasReadinessData: hasReadinessData
             )
         )
+        if let primaryAction = operatingPlan?.primaryAction,
+           operatingPlan?.hasCanonicalActionSequence == true {
+            hero.primaryActionTitle = primaryAction.title
+        }
 
         let signals = [
             signal(
@@ -209,13 +214,13 @@ struct TodayExperienceModel: Codable, Hashable {
                 decision: trainingDecision,
                 hasReadinessData: hasReadinessData
             ),
-            actions: actionPlan(
-                dashboard: dashboard,
-                bodyState: bodyState,
-                decision: trainingDecision,
-                readiness: effectiveReadiness,
-                hasReadinessData: hasReadinessData
-            ),
+            actions: canonicalActions(from: operatingPlan) ?? actionPlan(
+                    dashboard: dashboard,
+                    bodyState: bodyState,
+                    decision: trainingDecision,
+                    readiness: effectiveReadiness,
+                    hasReadinessData: hasReadinessData
+                ),
             nutrition: nutrition,
             coachPreview: coachPreview(
                 dashboard: dashboard,
@@ -224,6 +229,38 @@ struct TodayExperienceModel: Codable, Hashable {
                 hasReadinessData: hasReadinessData
             )
         )
+    }
+
+    /// Today is an Adapter over the persisted Daily Operating Plan. Legacy payloads
+    /// intentionally fall back to the deterministic local projection until the next
+    /// coordinator refresh migrates them to schema v2.
+    private static func canonicalActions(
+        from operatingPlan: DailyOperatingPlanPayload?
+    ) -> [TodayExperienceAction]? {
+        guard let operatingPlan,
+              operatingPlan.hasCanonicalActionSequence,
+              let primary = operatingPlan.primaryAction else {
+            return nil
+        }
+        let primaryProjection = TodayExperienceAction(
+            id: primary.id,
+            title: primary.title,
+            detail: primary.detail,
+            destination: primary.destination,
+            isPrimary: true,
+            evidence: primary.evidence
+        )
+        let supportProjections = operatingPlan.supportingActions.prefix(2).map { action in
+            TodayExperienceAction(
+                id: action.id,
+                title: action.title,
+                detail: action.detail,
+                destination: action.destination,
+                isPrimary: false,
+                evidence: action.evidence
+            )
+        }
+        return [primaryProjection] + supportProjections
     }
 
     private static func scoreTitle(_ dashboard: DashboardSummary) -> String {
@@ -235,7 +272,7 @@ struct TodayExperienceModel: Codable, Hashable {
         brief: PersonalHealthBrief?,
         hasReadinessData: Bool
     ) -> String {
-        guard hasReadinessData else { return "先建立身体基线" }
+        guard hasReadinessData else { return "正在同步身体数据" }
         if let brief = brief, !brief.headline.isEmpty {
             return brief.headline
         }
@@ -252,7 +289,7 @@ struct TodayExperienceModel: Codable, Hashable {
         brief: PersonalHealthBrief?,
         hasReadinessData: Bool
     ) -> String {
-        guard hasReadinessData else { return "同步健康数据" }
+        guard hasReadinessData else { return "检查数据连接" }
         if let brief = brief, let actionHeadline = brief.actionHeadline, !actionHeadline.isEmpty {
             return "查看\(actionHeadline)"
         }
@@ -444,8 +481,8 @@ struct TodayExperienceModel: Codable, Hashable {
             bodyState: bodyState,
             decision: decision
         )
-        let volume = decision.decision == .reduce ? decision.volumeMultiplier : 0.75
-        let cap = decision.decision == .reduce ? decision.intensityCap : 7
+        let volume = decision.volumeMultiplier
+        let cap = decision.intensityCap
 
         if let brief = dashboard.personalHealthBrief {
             switch brief.overallState {

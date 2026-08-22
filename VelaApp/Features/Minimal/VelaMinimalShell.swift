@@ -81,6 +81,7 @@ struct VelaShell: View {
     @State private var keyboardVisible = false
     @State private var paritySelectedTab = ParityTab.home.rawValue
     @State private var previousParityTab = ParityTab.home.rawValue
+    @State private var mountedLegacyTabs: Set<VelaTab> = [.today]
 
     @ObservedObject private var appState = VelaAppState.shared
     @Namespace private var tabAnimation
@@ -102,16 +103,16 @@ struct VelaShell: View {
         case intelligence = 4
     }
 
-    init(parityInterfaceEnabled: Bool = true) {
+    /// Rhythm's four canonical surfaces are the safe default. The parity Adapter
+    /// is opt-in for regression capture only.
+    init(parityInterfaceEnabled: Bool = false) {
         self.parityInterfaceEnabled = parityInterfaceEnabled
     }
 
     // MARK: - Body
 
     var body: some View {
-        NavigationStack {
-            navigationSurface
-        }
+        navigationSurface
         .onReceive(appState.$showCoachHub) { show in
             if show {
                 showPlusSheet = false
@@ -313,24 +314,33 @@ struct VelaShell: View {
         ZStack {
             VelaTheme.rhythmCanvas.ignoresSafeArea()
 
-            // Keep legacy primary surfaces mounted so cached SwiftData content
-            // is already hydrated when the user switches tabs.
+            // Mount each legacy surface on first visit, then preserve its navigation
+            // and scroll state. This avoids eagerly initializing four SwiftData trees
+            // at launch while keeping normal tab-return behavior after the first visit.
             ZStack {
-                tabSurface(.today) {
-                    VelaTodayView(showCoach: $showCoach, showSettings: $appState.showSettings)
+                if mountedLegacyTabs.contains(.today) {
+                    tabSurface(.today) {
+                        VelaTodayView(showCoach: $showCoach, showSettings: $appState.showSettings)
+                    }
                 }
-                tabSurface(.trends) {
-                    VelaTrendsView()
+                if mountedLegacyTabs.contains(.trends) {
+                    tabSurface(.trends) {
+                        VelaTrendsView()
+                    }
                 }
-                tabSurface(.coach) {
-                    VelaCoachView(
-                        presentation: .embedded,
-                        usesOverlayNavigation: true,
-                        vm: services.coachChat
-                    )
+                if mountedLegacyTabs.contains(.coach) {
+                    tabSurface(.coach) {
+                        VelaCoachView(
+                            presentation: .embedded,
+                            usesOverlayNavigation: true,
+                            vm: services.coachChat
+                        )
+                    }
                 }
-                tabSurface(.training) {
-                    VelaTrainingView()
+                if mountedLegacyTabs.contains(.training) {
+                    tabSurface(.training) {
+                        VelaTrainingView()
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -342,6 +352,18 @@ struct VelaShell: View {
                     .padding(.bottom, VelaFloatingNavigationMetrics.navBottomPadding)
                     .transition(bottomBarTransition)
             }
+        }
+        .onAppear {
+            mountedLegacyTabs = VelaLegacySurfaceMountPolicy.including(
+                selectedTab: appState.selectedTab,
+                in: mountedLegacyTabs
+            )
+        }
+        .onChange(of: appState.selectedTab) { _, selectedTab in
+            mountedLegacyTabs = VelaLegacySurfaceMountPolicy.including(
+                selectedTab: selectedTab,
+                in: mountedLegacyTabs
+            )
         }
     }
 
@@ -375,16 +397,18 @@ struct VelaShell: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         let isActive = VelaTabSelection.isActive(tab, selectedTab: appState.selectedTab)
-        return content()
-            .environment(\.velaSurfaceIsActive, isActive)
-            .opacity(isActive ? 1 : 0)
-            .allowsHitTesting(isActive)
-            .accessibilityHidden(!isActive)
-            .zIndex(isActive ? 1 : 0)
-            .animation(
-                .easeOut(duration: reduceMotion ? 0.12 : VelaNavigationMotion.destinationFadeDuration),
-                value: isActive
-            )
+        return NavigationStack {
+            content()
+        }
+        .environment(\.velaSurfaceIsActive, isActive)
+        .opacity(isActive ? 1 : 0)
+        .allowsHitTesting(isActive)
+        .accessibilityHidden(!isActive)
+        .zIndex(isActive ? 1 : 0)
+        .animation(
+            .easeOut(duration: reduceMotion ? 0.12 : VelaNavigationMotion.destinationFadeDuration),
+            value: isActive
+        )
     }
 
     private func customTabButton(_ tab: VelaTab) -> some View {
@@ -479,4 +503,16 @@ enum VelaTabSelection {
         Result(selectedTab: candidate, shouldPresentQuickActions: false)
     }
 
+}
+
+enum VelaLegacySurfaceMountPolicy {
+    static func including(
+        selectedTab: Int,
+        in mountedTabs: Set<VelaShell.VelaTab>
+    ) -> Set<VelaShell.VelaTab> {
+        guard let selected = VelaShell.VelaTab(rawValue: selectedTab) else {
+            return mountedTabs
+        }
+        return mountedTabs.union([selected])
+    }
 }

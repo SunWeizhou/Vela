@@ -15,9 +15,14 @@ enum ToolFactory {
         modelContext: ModelContext,
         dashboard: DashboardSummary,
         readOnly: Bool = false,
-        outboundPolicy: CoachOutboundDataPolicy = .all
+        outboundPolicy: CoachOutboundDataPolicy = .all,
+        agentFactSnapshot: AgentFactSnapshot? = nil
     ) -> ToolRegistry {
-        let tools = allTools(modelContext: modelContext, dashboard: dashboard)
+        let tools = allTools(
+            modelContext: modelContext,
+            dashboard: dashboard,
+            agentFactSnapshot: agentFactSnapshot
+        )
             .filter { toolIsAllowed($0.name, policy: outboundPolicy) }
         return ToolRegistry(tools: readOnly ? tools.filter { $0.riskLevel == .read } : tools)
     }
@@ -46,9 +51,14 @@ enum ToolFactory {
     @MainActor
     static func allTools(
         modelContext: ModelContext,
-        dashboard: DashboardSummary
+        dashboard: DashboardSummary,
+        agentFactSnapshot: AgentFactSnapshot? = nil
     ) -> [AgentTool] {
-        let executionContext = ToolExecutionContext(modelContext: modelContext, dashboard: dashboard)
+        let executionContext = ToolExecutionContext(
+            modelContext: modelContext,
+            dashboard: dashboard,
+            agentFactSnapshot: agentFactSnapshot
+        )
         return [
             WebSearchTool(),
             UpdateWikiTool(executionContext: executionContext),

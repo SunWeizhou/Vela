@@ -162,6 +162,207 @@ final class Milestone1ChallengeTests: XCTestCase {
         XCTAssertEqual(assembly.todayFat, 0)
     }
 
+    func testSecondaryAssemblerDoesNotReuseDecisionWithMismatchedBodyStateHash() {
+        let refDate = Date()
+        let persisted = DailyTrainingDecision(
+            decision: .keep,
+            targetSessionTitle: nil,
+            volumeMultiplier: 1.0,
+            intensityCap: 10,
+            reasons: ["stale"],
+            userFacingSummary: "stale persisted decision",
+            confidence: 1.0,
+            source: "stale-persisted-plan",
+            safetyNotice: "test"
+        )
+
+        let assembly = SecondaryDataAssembler.assemble(
+            dashboard: .empty(date: refDate),
+            refDate: refDate,
+            calendar: .current,
+            dailySummaries: [],
+            workoutEvents: [],
+            strengthWorkouts: [],
+            trainingResponses: [],
+            foodLogs: [],
+            journalEntries: [],
+            coachArtifacts: [],
+            activePlan: nil,
+            persistedDecision: persisted,
+            persistedBodyStateHash: "stale-body-state"
+        )
+
+        XCTAssertNotEqual(assembly.dailyTrainingDecision.source, "stale-persisted-plan")
+        XCTAssertNotEqual(assembly.dailyTrainingDecision.userFacingSummary, "stale persisted decision")
+    }
+
+    func testSecondaryAssemblerSharesDailyIntelligenceModuleProjection() {
+        let refDate = Date(timeIntervalSince1970: 1_800_000_000)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let input = DailyIntelligenceAssemblyInput(
+            dashboard: .empty(date: refDate),
+            selectedDay: refDate,
+            calendar: calendar,
+            dailySummary: nil,
+            bodyStateWorkoutEvents: [],
+            decisionWorkoutEvents: [],
+            strengthWorkouts: [],
+            trainingResponses: [],
+            foodLogs: [],
+            journalEntries: [],
+            activePlan: nil,
+            activeStatus: "active",
+            snapshots: [],
+            feedbackCalibration: nil,
+            trainingPreference: nil,
+            persistedDecision: nil,
+            persistedBodyStateHash: nil
+        )
+
+        // SecondaryDataAssembler must preserve the shared Module Interface's
+        // Body State, canonical Brief projection, and downstream Decision.
+        let direct = DailyIntelligenceAssemblyModule.assemble(input)
+        let secondary = SecondaryDataAssembler.assemble(
+            dashboard: input.dashboard,
+            refDate: input.selectedDay,
+            calendar: input.calendar,
+            dailySummaries: [],
+            workoutEvents: [],
+            strengthWorkouts: [],
+            trainingResponses: [],
+            foodLogs: [],
+            journalEntries: [],
+            coachArtifacts: [],
+            activePlan: nil,
+            persistedDecision: nil,
+            activeStatus: input.activeStatus
+        )
+
+        XCTAssertEqual(direct.bodyState, secondary.bodyState)
+        XCTAssertEqual(direct.dashboard.personalHealthBrief, secondary.updatedDashboard.personalHealthBrief)
+        XCTAssertEqual(direct.trainingDecision, secondary.dailyTrainingDecision)
+        XCTAssertEqual(direct.dashboard.personalHealthBrief?.overallState, .insufficientData)
+        XCTAssertEqual(direct.trainingDecision.confidence, 0.0)
+    }
+
+    func testDailyIntelligenceModuleOnlyReusesMatchingBodyStateHash() {
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        let base = DailyIntelligenceAssemblyModule.assemble(
+            DailyIntelligenceAssemblyInput(
+                dashboard: .empty(date: date),
+                selectedDay: date,
+                calendar: .current
+            )
+        )
+        let matching = DailyIntelligenceAssemblyModule.assemble(
+            DailyIntelligenceAssemblyInput(
+                dashboard: .empty(date: date),
+                selectedDay: date,
+                calendar: .current,
+                persistedDecision: base.trainingDecision,
+                persistedBodyStateHash: base.bodyState.hash
+            )
+        )
+        let stale = DailyIntelligenceAssemblyModule.assemble(
+            DailyIntelligenceAssemblyInput(
+                dashboard: .empty(date: date),
+                selectedDay: date,
+                calendar: .current,
+                persistedDecision: base.trainingDecision,
+                persistedBodyStateHash: "stale"
+            )
+        )
+
+        XCTAssertTrue(matching.usedPersistedDecision)
+        XCTAssertFalse(stale.usedPersistedDecision)
+        XCTAssertEqual(matching.trainingDecision, base.trainingDecision)
+    }
+
+    func testLivedStateCheckInRoundTripsStableTagsAndConservativeSeverity() {
+        let checkIn = LivedStateCheckIn(
+            stress: 2,
+            energy: 0,
+            soreness: 2,
+            motivation: 0,
+            note: "左肩今天明显不适"
+        )
+
+        XCTAssertEqual(checkIn.conservativeSeverity, 0.80, accuracy: 0.001)
+        XCTAssertTrue(checkIn.journalTags.contains("lived_state"))
+        XCTAssertTrue(checkIn.journalTags.contains("stress_high"))
+        XCTAssertTrue(checkIn.journalTags.contains("energy_low"))
+        XCTAssertTrue(checkIn.journalTags.contains("soreness_marked"))
+
+        let decoded = LivedStateCheckIn(tags: checkIn.journalTags, note: checkIn.note)
+        XCTAssertEqual(decoded?.stress, 2)
+        XCTAssertEqual(decoded?.energy, 0)
+        XCTAssertEqual(decoded?.soreness, 2)
+        XCTAssertEqual(decoded?.motivation, 0)
+    }
+
+    func testStructuredLivedStateFeedsSharedBodyStateProjection() {
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        let checkIn = LivedStateCheckIn(
+            stress: 2,
+            energy: 0,
+            soreness: 1,
+            motivation: 1
+        )
+        let assembly = DailyIntelligenceAssemblyModule.assemble(
+            DailyIntelligenceAssemblyInput(
+                dashboard: .empty(date: date),
+                selectedDay: date,
+                calendar: .current,
+                journalEntries: [
+                    JournalEntryDTO(
+                        createdAt: date,
+                        note: checkIn.journalNote,
+                        tags: checkIn.journalTags,
+                        value: 1 - checkIn.conservativeSeverity
+                    )
+                ]
+            )
+        )
+
+        let driver = assembly.bodyState.drivers.first(where: { $0.id == "lived-state" })
+        XCTAssertNotNil(driver)
+        XCTAssertEqual(driver?.impact ?? 0, -0.65, accuracy: 0.001)
+        XCTAssertTrue(driver?.detail.contains("压力高") == true)
+    }
+
+    func testSecondaryAssemblerRejectsPersistedRotationTitleDrift() {
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        let direct = DailyIntelligenceAssemblyModule.assemble(
+            DailyIntelligenceAssemblyInput(
+                dashboard: .empty(date: date),
+                selectedDay: date,
+                calendar: .current
+            )
+        )
+        var stale = direct.trainingDecision
+        stale.source = "persisted-with-wrong-rotation"
+
+        let secondary = SecondaryDataAssembler.assemble(
+            dashboard: .empty(date: date),
+            refDate: date,
+            calendar: .current,
+            dailySummaries: [],
+            workoutEvents: [],
+            strengthWorkouts: [],
+            trainingResponses: [],
+            foodLogs: [],
+            journalEntries: [],
+            coachArtifacts: [],
+            activePlan: nil,
+            persistedDecision: stale,
+            persistedBodyStateHash: direct.bodyState.hash,
+            persistedTargetSessionTitle: "错误轮转"
+        )
+
+        XCTAssertNotEqual(secondary.dailyTrainingDecision.source, "persisted-with-wrong-rotation")
+    }
+
     func testFoodLogAggregationMultipleMealsOnSameDay() {
         let calendar = Calendar.current
         let refDate = Date()

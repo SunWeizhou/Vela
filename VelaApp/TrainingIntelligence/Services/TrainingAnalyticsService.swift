@@ -1153,7 +1153,9 @@ enum TrainingPlanReviewService {
     }
 }
 
-struct TrainingSessionDraft: Equatable {
+struct TrainingSessionDraft: Equatable, Identifiable {
+    var id: UUID { planDayId }
+
     enum Action: String, Equatable {
         case strength
         case cardio

@@ -40,6 +40,7 @@ final class PersistenceFoundationTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: ActiveStatusSettings.statusKey), "active")
         XCTAssertNil(defaults.string(forKey: ActiveStatusSettings.durationKey))
         XCTAssertNil(defaults.object(forKey: ActiveStatusSettings.expiresAtKey))
+        XCTAssertNil(defaults.object(forKey: ActiveStatusSettings.startedAtKey))
     }
 
     func testExpiredActiveStatusResetsStoredValueToActive() {
@@ -59,6 +60,87 @@ final class PersistenceFoundationTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: ActiveStatusSettings.statusKey), "active")
         XCTAssertNil(defaults.object(forKey: ActiveStatusSettings.expiresAtKey))
         XCTAssertTrue(ActiveStatusSettings.journalFlags(now: now, defaults: defaults).isEmpty)
+    }
+
+    func testActiveStatusResolutionDoesNotLeakIntoEarlierSelectedDay() {
+        let suiteName = "ActiveStatusHistorical-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        ActiveStatusSettings.update(
+            status: "resting",
+            duration: "7天",
+            now: now,
+            defaults: defaults
+        )
+
+        XCTAssertEqual(
+            ActiveStatusSettings.resolveStatus(
+                at: now.addingTimeInterval(-86_400),
+                now: now,
+                defaults: defaults
+            ),
+            "active"
+        )
+        XCTAssertEqual(
+            ActiveStatusSettings.resolveStatus(at: now, now: now, defaults: defaults),
+            "resting"
+        )
+    }
+
+    func testActiveStatusStartedLaterTodayAppliesToTodayStartOfDay() {
+        let suiteName = "ActiveStatusTodayBoundary-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let todayAtNoon = calendar.date(from: DateComponents(
+            year: 2026, month: 8, day: 21, hour: 12
+        ))!
+        let evaluationNow = calendar.date(from: DateComponents(
+            year: 2026, month: 8, day: 21, hour: 18
+        ))!
+        let todayStart = calendar.startOfDay(for: evaluationNow)
+        let yesterdayStart = calendar.date(byAdding: .day, value: -1, to: todayStart)!
+        let expiryDay = calendar.date(byAdding: .day, value: 7, to: todayStart)!
+
+        ActiveStatusSettings.update(
+            status: "resting",
+            duration: "7天",
+            now: todayAtNoon,
+            defaults: defaults,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(
+            ActiveStatusSettings.resolveStatus(
+                at: todayStart,
+                now: evaluationNow,
+                defaults: defaults,
+                calendar: calendar
+            ),
+            "resting"
+        )
+        XCTAssertEqual(
+            ActiveStatusSettings.resolveStatus(
+                at: yesterdayStart,
+                now: evaluationNow,
+                defaults: defaults,
+                calendar: calendar
+            ),
+            "active"
+        )
+        XCTAssertEqual(
+            ActiveStatusSettings.resolveStatus(
+                at: expiryDay,
+                now: evaluationNow,
+                defaults: defaults,
+                calendar: calendar
+            ),
+            "active"
+        )
     }
 
     func testModelContainerSchemaCreatedSuccessfully() {
@@ -546,6 +628,13 @@ final class PersistenceFoundationTests: XCTestCase {
         XCTAssertEqual(artifacts.count, 1)
         XCTAssertEqual(plans.first?.bodyStateHash, bodyState.hash)
         XCTAssertTrue(plans.first?.safetyNotice?.contains("不构成医疗诊断") == true)
+        let payload = try XCTUnwrap(plans.first?.operatingPlanPayload)
+        XCTAssertTrue(payload.hasCanonicalActionSequence)
+        XCTAssertNotNil(payload.primaryAction)
+        XCTAssertLessThanOrEqual(payload.supportingActions.count, 2)
+        let compact = try XCTUnwrap(AIContextBuilder.compactDailyOperatingPlan(plans.first))
+        XCTAssertNotNil(compact["primary_action"])
+        XCTAssertNotNil(compact["supporting_actions"])
     }
 
     @MainActor

@@ -488,6 +488,7 @@ struct VelaCoachView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     @EnvironmentObject private var services: VelaServices
     @ObservedObject private var appState = VelaAppState.shared
@@ -610,6 +611,7 @@ struct VelaCoachView: View {
                                         }
                                     }
                                 }
+                                .id(msg.id)
                             }
 
                             if vm.isStreaming {
@@ -642,7 +644,7 @@ struct VelaCoachView: View {
                     .scrollDismissesKeyboard(.immediately)
                     .nearBottomTracking($isNearBottom)
                     .onChange(of: vm.messages.count) { _, _ in
-                        scrollToBottom(using: proxy, animated: true)
+                        revealLatestMessage(using: proxy)
                     }
                     .onChange(of: vm.isStreaming) { _, streaming in
                         guard streaming else { return }
@@ -885,17 +887,18 @@ struct VelaCoachView: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(vm.isGhostMode ? "私密对话" : ((vm.currentSession?.title.isEmpty ?? true) ? "Vela" : (vm.currentSession?.title ?? "Vela")))
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.headline)
                     .tracking(-0.25)
                     .foregroundStyle(VelaTheme.rhythmInk)
                     .lineLimit(1)
 
-                HStack(spacing: 4) {
-                    Circle().fill(VelaTheme.rhythmDeep).frame(width: 5, height: 5)
-                    Text(vm.isGhostMode ? "不保存 · 只读" : (vm.isReady ? "解释与调整工作台" : "本机解释可用"))
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                        .lineLimit(1)
+                if !dynamicTypeSize.isAccessibilitySize {
+                    HStack(spacing: 5) {
+                        Circle().fill(VelaTheme.rhythmDeep).frame(width: 5, height: 5)
+                        Text(vm.isGhostMode ? "不保存 · 只读" : (vm.isReady ? "解释与调整工作台" : "本机解释可用"))
+                            .font(.caption)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    }
                 }
             }
 
@@ -1073,8 +1076,10 @@ struct VelaCoachView: View {
                 .accessibilityLabel("添加 Coach 上下文")
 
                 TextField(vm.isReady ? "解释、质疑或调整今天的决定…" : "请 Vela 解释本机建议…", text: $inputText, axis: .vertical)
-                    .font(.system(size: 14))
-                    .lineLimit(1...5)
+                    .font(VelaTheme.body())
+                    .lineLimit(1...(dynamicTypeSize.isAccessibilitySize ? 6 : 5))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .layoutPriority(1)
                     .focused($isFocused)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
@@ -1149,11 +1154,28 @@ struct VelaCoachView: View {
         Task { @MainActor in
             await Task.yield()
             if animated && !reduceMotion {
-                withAnimation(VelaTheme.interfaceAnimation(reduceMotion: false)) {
+                withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                     proxy.scrollTo(CoachChatLayout.bottomAnchorID, anchor: .bottom)
                 }
             } else {
                 proxy.scrollTo(CoachChatLayout.bottomAnchorID, anchor: .bottom)
+            }
+        }
+    }
+
+    /// A long completed answer opens at its beginning. Pinning every new answer
+    /// to the bottom made the top half look clipped beneath the header.
+    private func revealLatestMessage(using proxy: ScrollViewProxy) {
+        guard let latest = vm.messages.last else { return }
+        Task { @MainActor in
+            await Task.yield()
+            let anchor: UnitPoint = latest.role == .assistant ? .top : .bottom
+            if reduceMotion {
+                proxy.scrollTo(latest.id, anchor: anchor)
+            } else {
+                withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
+                    proxy.scrollTo(latest.id, anchor: anchor)
+                }
             }
         }
     }
@@ -1471,10 +1493,13 @@ enum LocalCoachGuidanceBuilder {
                 isChinese: isChinese
             )
             if isChinese {
+                let supportText = display.supportingActionLines.isEmpty
+                    ? ""
+                    : "\n\n辅助行动：\n" + display.supportingActionLines.map { "- \($0)" }.joined(separator: "\n")
                 return """
                 **\(display.statusTitle)**
 
-                \(display.summary)
+                \(display.summary)\(supportText)
 
                 - \(display.confidenceLabel)
                 - \(display.evidenceLine)
@@ -1483,10 +1508,13 @@ enum LocalCoachGuidanceBuilder {
                 当前回答由本机规则与已同步数据生成；连接 AI 后可继续追问更细的解释。
                 """
             }
+            let supportText = display.supportingActionLines.isEmpty
+                ? ""
+                : "\n\nSupporting actions:\n" + display.supportingActionLines.map { "- \($0)" }.joined(separator: "\n")
             return """
             **\(display.statusTitle)**
 
-            \(display.summary)
+            \(display.summary)\(supportText)
 
             - \(display.confidenceLabel)
             - \(display.evidenceLine)

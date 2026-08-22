@@ -76,23 +76,23 @@ struct FitnessActivitySummaryDetailView: View {
     }
 
     var body: some View {
-        ZStack {
-            VelaBackground()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    summaryHero
-                    activityStats
-                    workoutHeartRateCard
-                    trendCard
-                    guidanceCard
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-                .padding(.bottom, 96)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                summaryHero
+                activityStats
+                workoutHeartRateCard
+                trendCard
+                guidanceCard
             }
-            .scrollIndicators(.hidden)
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 96)
         }
-        .navigationTitle("")
+        .scrollIndicators(.hidden)
+        .background(VelaTheme.rhythmCanvas.ignoresSafeArea())
+        .navigationTitle("活动摘要")
+        .navigationBarTitleDisplayMode(.inline)
+        .velaRhythmDetailChrome()
         .task(id: dashboardVM.selectedDate) {
             let calendar = Calendar.current
             let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: dashboardVM.selectedDate))
@@ -108,40 +108,6 @@ struct FitnessActivitySummaryDetailView: View {
                 sortBy: [SortDescriptor(\.startedAt, order: .forward)]
             )
             workoutEvents = (try? modelContext.fetch(eventsDescriptor)) ?? []
-        }
-        .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .top) {
-            VStack(spacing: 0) {
-                HStack(alignment: .center) {
-                    Button(action: dismiss.callAsFunction) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(VelaTheme.accent)
-                            .frame(width: 38, height: 38)
-                            .background(Circle().fill(VelaTheme.surface))
-                            .overlay(Circle().stroke(VelaTheme.borderSoft, lineWidth: 0.5))
-                    }
-                    .buttonStyle(.cardPress)
-                    .accessibilityLabel("返回")
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("活动摘要")
-                            .font(.system(size: 21, weight: .bold, design: .rounded))
-                            .foregroundStyle(VelaTheme.fg)
-                        Text("过去 30 天")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(VelaTheme.fg2)
-                    }
-                    Spacer()
-                    Image(systemName: "figure.run.circle.fill")
-                        .font(.system(size: 28, weight: .semibold))
-                        .foregroundStyle(VelaTheme.accent)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(.ultraThinMaterial)
-                Divider().opacity(0.4)
-            }
         }
     }
 

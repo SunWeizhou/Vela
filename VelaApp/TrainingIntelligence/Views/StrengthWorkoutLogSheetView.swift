@@ -113,9 +113,10 @@ struct StrengthWorkoutLogSheetView: View {
                 .padding(.bottom, 24)
             }
             .scrollContentBackground(.hidden)
-            .background(VelaTheme.systemGroupedBackground)
+            .background(VelaTheme.rhythmCanvas)
             .navigationTitle(editingWorkout != nil ? "编辑力量训练" : "记录力量训练")
             .navigationBarTitleDisplayMode(.inline)
+            .velaRhythmDetailChrome()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(editingWorkout == nil ? "关闭" : "取消") { requestClose() }

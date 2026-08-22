@@ -1,6 +1,8 @@
-# Domain docs
+# Domain Docs
 
-Vela uses a single domain context.
+> Status: Supporting
+> Last verified: 2026-08-21
+> Scope: Agent 领域上下文阅读规范
 
 ## Read before exploring
 

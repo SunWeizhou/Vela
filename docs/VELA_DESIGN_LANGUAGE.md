@@ -1,47 +1,72 @@
 # Vela Design Language — Calm Rhythm
 
-> Updated: 2026-08-13（对齐 Personal Edition 产品方向，见 `docs/VELA_PERSONAL_PRODUCT_DIRECTION.md` 视觉方向一节）
+> Status: Canonical
+> Last verified: 2026-08-21
+> Scope: Vela 视觉系统、排版层级、颜色规范、交互原则与设计质量门禁
+> Does not define: 数据计算算法（见 [SCORING_SYSTEM_V1_0.md](SCORING_SYSTEM_V1_0.md)）、产品业务需求（见 [PRD.md](PRD.md)）
 
-Vela should feel like a private health intelligence product, not a dashboard template. The interface is native to iOS, quiet enough for daily use, and decisive when the user needs to act.
+Vela 致力于提供高度私密、沉浸、克制且有生命感的个人身体智能体验，而非通用的数据仪表盘模板。界面完全基于 iOS 原生设计规范，在日常使用中保持安静，在需要行动时清晰笃定。
 
-## Product principles
+---
 
-1. **One screen, one answer.** Every primary surface should answer one question before presenting supporting detail.
-2. **Content before containers.** Use spacing and typography for grouping; add a card only when it represents a distinct object or action.
-3. **Action before explanation.** Show the recommended next step first, then evidence, confidence, and methodology on demand.
-4. **Calm, not empty.** Minimal interfaces still need warmth, useful empty states, and a clear path forward.
-5. **Confidence is part of the data.** Missing or uncertain health data must change the recommendation, not merely add a warning badge.
-6. **Native by default.** Prefer system navigation, typography, sheets, controls, Dynamic Type, and SF Symbols.
-7. **Motion explains change.** Animate transitions and state changes only; avoid ambient animation and decorative blur.
+## 1. 核心交互原则（Product Principles）
 
-## Visual identity
+1. **一个页面先回答一个问题（One screen, one answer）**：每个一级工作区必须优先回答该视图最核心的一个问题，再按需展开支持细节。
+2. **内容优先于容器（Content before containers）**：优先使用间距与排版字阶进行视觉分组；仅在表达独立对象或主要行动时使用卡片容器，避免卡片上层层叠卡片。
+3. **行动优先于解释（Action before explanation）**：先呈现建议的下一步行动与边界，将完整的证据链、可信度与统计方法下沉至二级展开层。
+4. **克制而非空洞（Calm, not empty）**：极简界面仍需具备温度与明确的下一步指引；空状态保持紧凑，并始终提供有价值的下一步操作。
+5. **缺失不能伪装成正常（Confidence is part of the data）**：数据缺失或未授权时，必须客观反映并调整建议边界，严禁使用虚假数值或伪造正常状态。
+6. **原生优先（Native by default）**：优先使用 iOS 系统导航、标准排版层级、Sheets、原生手势、Dynamic Type 与 SF Symbols。
+7. **动效服务于解释变化（Motion explains change）**：动效仅用于解释数据状态迁移；开启 Reduce Motion 时转为短淡入或静态呈现，禁止无意义的纯装饰循环动画。
 
-Vela uses its own visual identity: 暖灰绿画布（`rhythmCanvas` `#F2F5F1`）、深墨文字（`rhythmInk` `#10201C`）与低饱和节律绿品牌色（`accent` `#17A35C`）。品牌气质为安静、可信、私人且有生命感；状态颜色只用于有意义的变化，不让五个领域色同时争夺注意力。
+---
 
-品牌主对象是 **Rhythm Horizon（健康地平线）**：一条随时间展开、由睡眠、恢复、压力、负荷和能量共同塑形的容量窗口。它表达趋势与可承受范围，不是总分，也不冒充精确预测。Training 延续同一视觉语法，以 Training Rhythm（训练节律）展示背、胸、肩、腿和手臂/核心的柔性路径。
+## 2. 视觉识别系统（Visual Identity）
 
-## Visual rules
+Vela 采用专属的 **Rhythm（节律）** 视觉体系：
+- **画布背景**：暖灰绿画布（`rhythmCanvas` `#F2F5F1` / Dark `#0E1412`）
+- **文字体系**：深墨文字（`rhythmInk` `#10201C` / Dark `#E8F0EC`）
+- **品牌与核心行动色**：低饱和节律绿（`accent` `#17A35C` / Dark `#3FC97F`）
+- **品牌主对象**：
+  - **健康地平线（Rhythm Horizon）**：随时间展开的恢复、负荷与能量可承受容量窗口，表达趋势与承受范围；
+  - **训练节律（Training Rhythm）**：展示背、胸、肩、腿、手臂/核心的柔性轮转路径。
 
-- 暖灰绿画布背景；深墨主文字；节律绿只用于主行动、选中态与“智能”信号——不作装饰。
-- Semantic health colors are muted and never replace a text label.
-- Apple 原生排版（SF Pro）；数字使用等宽字，行动与解释使用自然语言，不以巨型数字制造权威感。
-- Prefer 16–20 pt page margins and an 8 pt spacing rhythm.
-- Hero 先显示今日节奏决定，再显示最多三个证据锚点与一个计划入口；详细评分、可信度、样本与推理下沉到证据层。
-- 同一层级不超过三个视觉重点；首页是一个连续环境，内容优先于容器。
-- 半透明材质只用于导航、底部行动入口和可展开证据 Sheet，不在卡片上继续叠卡片。
-- Avoid nested cards, tinted boxes inside tinted boxes, and more than one filled button per section.
-- 数据变化使用临界阻尼、可中断的连续运动；开启 Reduce Motion 时改为静态呈现或短淡入。不使用无意义循环动画。
-- 所有缺失数据显示 `--`、待同步或覆盖度说明，不显示伪造的健康数字。
-- Use sentence case. Avoid uppercase section labels in Chinese.
-- Empty states should be compact and always offer a useful action.
+---
 
-## Primary surfaces（四工作区：Today / Training / Vela / Me）
+## 3. 四大一级工作区设计规范（Primary Surfaces）
 
-- **Today（决定优先）：** 日期与数据新鲜度 → Hero 今日最重要的健康节奏决定与唯一主按钮 → 2–3 个关键证据锚点 → 最多两项辅助行动 → 一句 Coach 解释。
-- **Training（决策与边界优先）：** 下一站练哪里、为何这样安排、当天容量/RPE/时长边界 → 训练中由 Apple Watch 记录，Vela 不要求训练中操作手机 → 训练后快速体感确认 + 选填明细。
-- **Vela（原 Coach，解释与调整）：** Decision Studio 首屏默认解释 Today 决定，明确区分本机建议与联网 AI 增强；AI 提出 Plan Proposal，重要变更需用户显式确认。
-- **Me（设置与信任）：** 个人上下文、建议历史与必要入口，不呈现健康成绩单；旧版日志与生理能力作为证据详情与资料库，不与每日决定平级。
+```text
+Today (今日状态与地平线) ── Trends (多尺度趋势) ── Vela (AI 解释工作台) ── Training (训练决策与负荷)
+                                                                       └── Settings (数据/权限/控制)
+```
 
-## Quality gate
+### 3.1 Tab 0 · Today（今日状态与健康地平线）
+- **核心问题**：“我现在身体怎么样？今天最重要的决定是什么？”
+- **层级流**：日期与新鲜度 → Rhythm Horizon 地平线 → 今日首要节奏决定（唯一主按键）→ 2–3 个关键支持证据 → 最多两项辅助行动 → 一句话晨间简报。
 
-Every screen must be checked in light/dark mode, default and accessibility text sizes, with complete and missing data, on the smallest supported iPhone and a current Pro Max device.
+### 3.2 Tab 1 · Trends（多尺度趋势与指标详情）
+- **核心问题**：“最近身体发生了什么长期变化？”
+- **层级流**：多尺度时间切换（7d / 30d / 6m / 3y）→ 核心指标卡片（恢复、睡眠、负荷、压力、能量）→ 基线偏离标记 → 二级详情高精图表与分布统计。
+
+### 3.3 Tab 2 · Vela（AI 分析工作台与对话）
+- **核心问题**：“为什么会发生这种变化？如何联系不同体征？”
+- **层级流**：情境问候 → 动态分析提问气泡 → 结构化事实对话流 → 顶层收敛的健康记忆（Wiki）与历史分析报告入口。
+
+### 3.4 Tab 3 · Training（训练负荷与智能决策）
+- **核心问题**：“今天适合怎么练？肌群恢复就绪度如何？”
+- **层级流**：今日决策与 3 大生理边界 Hero → 3 日轮转预测 → Apple Watch 自动同步运动卡片复盘 → 局部肌群近 7 天组数负荷图谱（可练/留量/避开）→ 5 周热力图。
+
+### 3.5 Settings（设置、权限与控制）
+- **定位**：二级 Sheet / 导航子页，不占用一级 Tab；
+- **内容**：Apple Health 权限、数据覆盖度、API Key 管理、数据导出与安全控制。
+
+---
+
+## 4. 设计质量门禁（Quality Gate）
+
+每个页面在发布前必须满足以下验收标准：
+1. **模式适配**：同时通过 Light / Dark 模式的色彩对比度校验；
+2. **文字缩放**：完整支持 Dynamic Type 大号字阶，无文本截断或布局重叠；
+3. **动效适配**：在开启 Reduce Motion 时，所有过渡平滑降级为静态或淡入；
+4. **数据状态**：分别在“数据完整”与“数据缺失（`--`）”两种状态下验证布局的稳健性；
+5. **设备尺寸**：在最小受支持设备（iPhone SE/13 mini）与 Pro Max 尺寸上通过布局测试。

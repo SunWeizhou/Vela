@@ -1,37 +1,76 @@
-# Vela Documentation
+# Vela 文档导航与权威层级（Documentation Map）
 
-This directory is the source of truth for product, architecture, scoring, AI, reuse, and design decisions.
+> Status: Canonical
+> Last verified: 2026-08-21
+> Scope: Vela 仓库文档信息架构、权威层级、阅读顺序与冲突裁决原则
+> Does not define: 产品业务细节、代码实现细节
 
-## Current build direction (2026-08-13)
+---
 
-Vela 进入 **Personal Edition 阶段**：只为产品作者本人服务的主动式健康调节教练。28 天 Daily Driver 验证期的北极星是 `Trusted Decision Day`；Daily Operating Plan 跨域但有界（一个主行动 + 最多两个支持行动）；AI 提议计划变更、用户显式确认；Health Rhythm 优先，不处方代偿行为。Bevel parity 已冻结，仅保留为内部视觉回归开关。
+## 1. 快速入门：Agent 推荐阅读顺序
 
-**方向以以下文档为准**（均为 2026-08-13 更新）：
+任何进入本仓库的新 Agent 或开发者，必须严格按以下顺序建立认知：
 
-- `VELA_PERSONAL_PRODUCT_DIRECTION.md` — 产品方向总纲（定位、北极星、四个工作区、视觉方向、部署优先级）。
-- `../CONTEXT.md` — 领域语言规范（Primary User、Trusted Decision Day、Health Rhythm、Eating Rhythm、Lived State、Plan Proposal 等）。
-- `adr/0004-0009` — 方向性决策：训练执行留在 Apple Watch（0004）、Health Rhythm 优先于代偿（0005）、饮食行为优先（0006）、跨域 Daily Operating Plan（0007）、AI 提议用户确认（0008）、单用户优先（0009）。
+```text
+1. docs/PRD.md                  # 第一步：理解唯一当前产品规格、北极星与业务边界
+       ↓
+2. CONTEXT.md                   # 第二步：掌握唯一领域术语表与认知概念
+       ↓
+3. docs/adr/README.md (及 ADRs) # 第三步：理解核心技术与架构决策背景
+       ↓
+4. docs/TECH_ARCHITECTURE.md    # 第四步：掌握真实代码架构与数据流管道
+       ↓
+5. 专项文档 (AI/评分/设计)       # 第五步：查阅对应模块的实现与协议
+   ├── docs/VELA_DESIGN_LANGUAGE.md
+   ├── docs/AI_AGENT_SPEC.md
+   └── docs/SCORING_SYSTEM_V1_0.md
+```
 
-## 当前文档
+---
 
-- `PRD.md` — 产品需求文档（历史主线，2026-08-13 起以 Personal Edition 方向为准）。
-- `TECH_ARCHITECTURE.md` — 技术架构（模块、数据流、评分引擎、AI Agent）。
-- `AI_AGENT_SPEC.md` — AI Agent / Coach / Wiki 记忆系统规格。
-- `SCORING_SYSTEM_V1_0.md` — 评分系统 V1.0 规格。
-- `VELA_TRAINING_INTELLIGENCE_V3.md` — Training Intelligence v3 模块设计。
-- `VELA_DESIGN_LANGUAGE.md` — 视觉设计语言（Rhythm：暖灰绿画布 + 节律绿）。
-- `STITCH_DESIGN_BRIEF.md` — Stitch 设计参考简报（历史）。
-- `agents/` — Agent 工作流文档（issue-tracker / triage-labels / domain）。
-- `validation/` — 视觉验证与 rhythm-horizon 素材。
+## 2. 文档权威层级与分类清单
 
-## 已冻结 / 历史文档
+### 2.1 权威核心规范（Canonical Specifications）
+当产品或技术细节存在疑问时，以下文档拥有最终决定权：
 
-Bevel parity 阶段文档已冻结，仅作历史参考，不作为方向依据：
+| 文档 | 职责范围 | 状态 |
+| :--- | :--- | :--- |
+| [`docs/PRD.md`](PRD.md) | **唯一当前产品规格**：产品定位、Primary User、四大 Tab、北极星指标、功能与非目标 | Canonical |
+| [`CONTEXT.md`](../CONTEXT.md) | **唯一领域术语表**：Health Signal, Baseline, Brief, Body State, Lived State, Training Decision 等语言定义 | Canonical |
+| [`docs/TECH_ARCHITECTURE.md`](TECH_ARCHITECTURE.md) | **技术实现架构**：实际代码架构、SwiftData/HealthKit 数据流、状态管理与管道 | Canonical |
+| [`docs/VELA_DESIGN_LANGUAGE.md`](VELA_DESIGN_LANGUAGE.md) | **设计系统与交互规范**：Rhythm 视觉语言、色板、排版、组件规范、动效与无障碍原则 | Canonical |
+| [`docs/AI_AGENT_SPEC.md`](AI_AGENT_SPEC.md) | **AI Agent 与上下文规格**：Canonical Fact Snapshot、Prompting、Wiki 记忆体系与安全协议 | Canonical |
+| [`docs/SCORING_SYSTEM_V1_0.md`](SCORING_SYSTEM_V1_0.md) | **健康评分与算法协议**：Recovery, Sleep, Strain, Stress, Energy 算法公式与基线定义 | Canonical |
+| [`docs/adr/README.md`](adr/README.md) | **架构决策记录索引**：ADR 0001–0010 架构演进与决策依据 | Canonical |
 
-- `BEVEL_3_1_4_PARITY_EXECUTION_PLAN_2026-07-31.md` — Bevel 3.1.4 parity 执行计划（已停止）。
-- `BEVEL_PARITY_GAP_TRACKER.md` — Bevel parity 差距追踪（已冻结）。
-- `FRONTEND_FREEZE_AND_BACKEND_ALIGNMENT.md` — 前端冻结与后端对齐（已过时）。
-- `VELA_FULL_STRENGTH_PRODUCT_BLUEPRINT.md` — Bevel 3.0 级产品蓝图（已由 Personal Edition 方向取代）。
-- `VELA_3_AUDIT.md` / `VELA_4_STABILIZATION_REPORT.md` / `VELA_UI_AUDIT.md` — 历史审计与稳定化报告。
-- `archive/` — Vela 2.0 时代文档。
-- `reference/bevel-3.1.4` — Bevel 参考素材。
+### 2.2 辅助材料（Supporting Materials）
+为特定工作流、外部参考和测试证据提供支持，不定义产品需求：
+
+| 目录 / 文档 | 职责范围 |
+| :--- | :--- |
+| [`docs/agents/`](agents/) | Agent 工作流配置（Issue Tracker 规范、分类标签、领域定义） |
+| [`docs/reference/`](reference/) | 外部竞品设计与 Token 参考素材（**仅供灵感参考，不是功能需求**） |
+| [`docs/validation/`](validation/) | 真机测试截图、回归验证报告、UI 证据库 |
+
+### 2.3 归档历史档案（Archived Documents）
+所有历史版本、已废弃路线图、历史审计报告与过往交付记录已移入 `docs/archive/`。**严禁将其作为当前代码实现的依据**：
+
+| 归档子目录 | 包含内容 |
+| :--- | :--- |
+| [`docs/archive/product-eras/`](archive/product-eras/) | 历史 PRD、旧蓝图（`VELA_FULL_STRENGTH_PRODUCT_BLUEPRINT`、`TRAINING_INTELLIGENCE_V3`）、旧方向文档 |
+| [`docs/archive/audits/`](archive/audits/) | 历史稳定性审计与 UI 走查报告（`VELA_3_AUDIT`、`VELA_4_STABILIZATION_REPORT` 等） |
+| [`docs/archive/handoffs/`](archive/handoffs/) | 历史 Agent 交接记录（`AGENT_HANDOFF_*`） |
+| [`docs/archive/plans/`](archive/plans/) | 历史 Bevel 对标计划、已完成或废弃的实施计划（`superpowers-plans` 等） |
+| [`docs/archive/v2/`](archive/v2/) | Vela 2.0 时代历史架构与规格文档 |
+
+---
+
+## 3. 文档冲突裁决规则（Conflict Resolution）
+
+当不同文档之间出现描述不一致时，严格遵循以下优先级判定：
+
+1. **产品定位与需求冲突**：以 [`docs/PRD.md`](PRD.md) 为最高准则；
+2. **术语与概念冲突**：以 [`CONTEXT.md`](../CONTEXT.md) 为最高准则；
+3. **实现与代码冲突**：以当前代码实际实现与 [`docs/TECH_ARCHITECTURE.md`](TECH_ARCHITECTURE.md) 为准；
+4. **架构决策背书**：以 [`docs/adr/`](adr/) 最新有效 ADR 为准；
+5. **归档文档无效原则**：任何位于 `docs/archive/` 下的内容若与当前 Canonical 文档冲突，一律视归档内容为已废弃历史。

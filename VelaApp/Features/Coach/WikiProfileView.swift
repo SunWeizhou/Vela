@@ -17,55 +17,31 @@ struct WikiProfileView: View {
     ) private var pendingProposals: [MemoryEventRecord]
 
     var body: some View {
-        ZStack {
-            VelaBackground()
+        ScrollView {
+            VStack(spacing: 16) {
+                profileHeaderCard
 
-            ScrollView {
-                VStack(spacing: 16) {
-                    profileHeaderCard
-
-                    if let baselineDoc {
-                        baselineSummaryCard(baselineDoc)
-                    }
-
-                    if !pendingProposals.isEmpty {
-                        pendingMemoriesSection
-                    }
-
-                    ForEach(documents) { doc in
-                        wikiFileCard(doc)
-                    }
+                if let baselineDoc {
+                    baselineSummaryCard(baselineDoc)
                 }
-                .padding(VelaTheme.pagePadding)
-                .padding(.top, 4)
-                .padding(.bottom, 40)
+
+                if !pendingProposals.isEmpty {
+                    pendingMemoriesSection
+                }
+
+                ForEach(documents) { doc in
+                    wikiFileCard(doc)
+                }
             }
+            .padding(VelaTheme.pagePadding)
+            .padding(.top, 8)
+            .padding(.bottom, 40)
         }
-        .navigationTitle("")
+        .scrollIndicators(.hidden)
+        .background(VelaTheme.rhythmCanvas.ignoresSafeArea())
+        .navigationTitle(L10n.t("My Profile", "健康档案"))
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .top) {
-            VStack(spacing: 0) {
-                HStack(alignment: .center) {
-                    VelaDetailBackButton(label: L10n.t("Back to Settings", "返回设置"))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(L10n.t("My Profile", "我的档案"))
-                            .font(.system(size: 21, weight: .bold, design: .rounded))
-                            .foregroundStyle(VelaTheme.fg)
-                        Text(L10n.t("Health memory & knowledge base", "健康记忆与知识档案库"))
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(VelaTheme.fg2)
-                    }
-                    Spacer()
-                    Image(systemName: "brain.head.profile")
-                        .font(.system(size: 24))
-                        .foregroundStyle(VelaTheme.accent)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(.ultraThinMaterial)
-                Divider().opacity(0.4)
-            }
-        }
+        .velaRhythmDetailChrome()
         .task {
             WikiSyncManager.sync(modelContext: modelContext)
             let allDocs = WikiFileService.loadAllDocuments()

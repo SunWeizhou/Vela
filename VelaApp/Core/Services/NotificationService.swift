@@ -267,10 +267,12 @@ final class NotificationService {
     /// Send a local notification immediately.
     func sendNotification(title: String, body: String, category: VelaNotificationCategory?) {
         // 授权检查：被拒时静默丢弃会让用户以为通知正常（开了功能却收不到）。
-        center.getNotificationSettings { [weak self] settings in
+        let notificationCenter = center
+        let callbackLogger = logger
+        notificationCenter.getNotificationSettings { settings in
             guard settings.authorizationStatus == .authorized
                     || settings.authorizationStatus == .provisional else {
-                self?.logger.warning(
+                callbackLogger.warning(
                     "Notification authorization is \(settings.authorizationStatus.rawValue); dropping '\(title)'."
                 )
                 return
@@ -289,11 +291,11 @@ final class NotificationService {
                 trigger: nil // immediate delivery
             )
 
-            self?.center.add(request) { [weak self] error in
+            notificationCenter.add(request) { error in
                 if let error {
-                    self?.logger.error("Failed to send notification '\(title)': \(error.localizedDescription)")
+                    callbackLogger.error("Failed to send notification '\(title)': \(error.localizedDescription)")
                 } else {
-                    self?.logger.info("Notification sent: '\(title)'")
+                    callbackLogger.info("Notification sent: '\(title)'")
                 }
             }
         }

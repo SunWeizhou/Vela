@@ -127,33 +127,29 @@ struct CaffeineLoggerView: View {
     ]
     
     var body: some View {
-        VStack(spacing: 24) {
-            Capsule()
-                .fill(VelaTheme.separator)
-                .frame(width: 36, height: 5)
-                .padding(.top, 8)
-            
+        VStack(spacing: 20) {
             HStack {
                 Text("记录咖啡因")
                     .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(VelaTheme.fg)
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Button {
                     dismiss()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 24))
-                        .foregroundStyle(VelaTheme.meta)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 20)
+            .padding(.top, 16)
             
             ScrollView {
                 VStack(spacing: 24) {
                     Text("输入或选择摄入的咖啡因量。这会有助于 AI 预测它对你深度睡眠和能量水平的长期影响。")
                         .font(.system(size: 14))
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .lineSpacing(4)
                         .padding(.horizontal, 20)
                     
@@ -255,33 +251,29 @@ struct WaterLoggerView: View {
     ]
     
     var body: some View {
-        VStack(spacing: 24) {
-            Capsule()
-                .fill(VelaTheme.hairline)
-                .frame(width: 36, height: 5)
-                .padding(.top, 8)
-            
+        VStack(spacing: 20) {
             HStack {
                 Text("记录补水")
                     .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(VelaTheme.fg)
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Button {
                     dismiss()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 24))
-                        .foregroundStyle(VelaTheme.meta)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 20)
+            .padding(.top, 16)
             
             ScrollView {
                 VStack(spacing: 24) {
                     Text("记录今天摄入的水分，帮助你回顾补水习惯与后续状态。")
                         .font(.system(size: 14))
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .lineSpacing(4)
                         .padding(.horizontal, 20)
                     
@@ -385,12 +377,7 @@ struct MoodLoggerView: View {
     ]
     
     var body: some View {
-        VStack(spacing: 24) {
-            Capsule()
-                .fill(VelaTheme.rhythmMist)
-                .frame(width: 36, height: 5)
-                .padding(.top, 8)
-            
+        VStack(spacing: 20) {
             HStack {
                 Text("记录心情")
                     .font(.system(size: 20, weight: .bold))
@@ -406,6 +393,7 @@ struct MoodLoggerView: View {
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 20)
+            .padding(.top, 16)
             
             ScrollView {
                 VStack(spacing: 24) {
@@ -491,33 +479,29 @@ struct AlcoholLoggerView: View {
     @State private var customDrinks: Double = 1.0
     
     var body: some View {
-        VStack(spacing: 24) {
-            Capsule()
-                .fill(VelaTheme.hairline)
-                .frame(width: 36, height: 5)
-                .padding(.top, 8)
-            
+        VStack(spacing: 20) {
             HStack {
                 Text("记录饮酒")
                     .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(VelaTheme.fg)
+                    .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Button {
                     dismiss()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 24))
-                        .foregroundStyle(VelaTheme.meta)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 20)
+            .padding(.top, 16)
             
             ScrollView {
                 VStack(spacing: 24) {
                     Text("饮酒可能影响睡眠连续性、夜间心率和次日恢复。影响程度会随摄入量、饮酒时间、睡眠和个体差异而变化；记录后可结合自己的趋势回看。")
                         .font(.system(size: 14))
-                        .foregroundStyle(VelaTheme.muted)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .lineSpacing(4)
                         .padding(.horizontal, 20)
                     

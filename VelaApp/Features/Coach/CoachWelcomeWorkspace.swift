@@ -11,143 +11,185 @@ struct CoachWelcomeWorkspace: View {
     @Binding var showWikiProfile: Bool
     let onSendMessage: (String) -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ObservedObject private var appState = VelaAppState.shared
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            welcomeHeader
+    private var greetingTimeText: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        if hour < 6 { return "夜深了" }
+        if hour < 11 { return "早安" }
+        if hour < 14 { return "中午好" }
+        if hour < 18 { return "下午好" }
+        return "晚上好"
+    }
 
-            HStack(spacing: 10) {
-                Button {
-                    showWikiProfile = true
-                } label: {
-                    shortcutCard(title: "健康档案", subtitle: "长期记忆", icon: "books.vertical.fill")
-                }
-                .buttonStyle(.plain)
-
-                NavigationLink(destination: VelaReportsView()) {
-                    shortcutCard(title: "历史报告", subtitle: "自动分析", icon: "doc.text.fill")
-                }
-                .buttonStyle(.plain)
+    private var dynamicBriefingText: String {
+        if let plan = todayOperatingPlan?.operatingPlanPayload {
+            switch plan.decision {
+            case .keep:
+                return "今日生理就绪度良好，恢复节奏平稳，适合按计划推进。"
+            case .reduce:
+                return "今日身体处于轻度恢复窗口，建议适当降低训练负荷与强度。"
+            case .swap:
+                return "根据局部肌群疲劳与体征反馈，建议调整今日训练焦点。"
+            case .rest:
+                return "生理负荷处于较高位，今日建议优先安排轻量恢复与拉伸。"
             }
+        }
+        return "已连接健康数据与个人生理基线，随时与我探讨身体状态、睡眠与训练。"
+    }
 
-            VStack(alignment: .leading, spacing: 12) {
-                Text("健康分析能力")
-                    .font(.system(size: 13, weight: .bold))
+    var body: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            // 1. Context-First Welcome Greeting
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(VelaTheme.rhythmDeep)
+                        .frame(width: 7, height: 7)
+                        .shadow(color: VelaTheme.rhythmGlow.opacity(0.6), radius: 5)
+                    Text("Vela 智能顾问")
+                        .font(VelaTheme.caption1().weight(.bold))
+                        .tracking(0.5)
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(VelaTheme.rhythmDeep.opacity(0.08), in: Capsule())
+
+                Text("\(greetingTimeText)，想聊聊什么？")
+                    .font(VelaTheme.title1())
+                    .tracking(-0.6)
+                    .foregroundStyle(VelaTheme.rhythmInk)
+
+                Text(dynamicBriefingText)
+                    .font(VelaTheme.body())
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.top, 4)
+
+            // 2. Compact Top Shortcuts (档案 & 报告)
+            topShortcuts
+
+            // 3. Dynamic Contextual Smart Prompt Chips
+            VStack(alignment: .leading, spacing: 10) {
+                Text("灵感与深度分析")
+                    .font(VelaTheme.caption1().weight(.bold))
+                    .tracking(0.3)
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .padding(.leading, 2)
 
-                VStack(spacing: 0) {
-                    ForEach(Array(healthAnalysisCapabilities.enumerated()), id: \.offset) { index, item in
+                VStack(spacing: 9) {
+                    ForEach(contextualPromptCards, id: \.title) { item in
                         Button {
                             onSendMessage(item.query)
                         } label: {
                             HStack(spacing: 12) {
-                                Image(systemName: item.icon)
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(VelaTheme.rhythmDeep)
-                                    .frame(width: 24)
+                                ZStack {
+                                    Circle()
+                                        .fill(VelaTheme.rhythmDeep.opacity(0.10))
+                                        .frame(width: 32, height: 32)
+                                    Image(systemName: item.icon)
+                                        .font(VelaTheme.footnote().weight(.semibold))
+                                        .foregroundStyle(VelaTheme.rhythmDeep)
+                                }
 
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(item.title)
-                                        .font(.system(size: 14, weight: .semibold))
+                                        .font(VelaTheme.body().weight(.semibold))
                                         .foregroundStyle(VelaTheme.rhythmInk)
+                                        .fixedSize(horizontal: false, vertical: true)
                                     Text(item.subtitle)
-                                        .font(.system(size: 11))
+                                        .font(VelaTheme.footnote())
                                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                                        .fixedSize(horizontal: false, vertical: true)
                                 }
 
                                 Spacer(minLength: 8)
 
                                 Image(systemName: "arrow.up.right")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                                    .font(VelaTheme.footnote().weight(.semibold))
+                                    .foregroundStyle(VelaTheme.rhythmDeep)
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .contentShape(Rectangle())
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 11)
+                            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+                            )
                         }
-                        .buttonStyle(.plain)
-
-                        if index < healthAnalysisCapabilities.count - 1 {
-                            Rectangle()
-                                .fill(VelaTheme.rhythmMist)
-                                .frame(height: 0.75)
-                                .padding(.leading, 16)
-                        }
+                        .buttonStyle(.cardPress)
                     }
                 }
-                .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
-                )
             }
         }
     }
 
-    private var healthAnalysisCapabilities: [(title: String, subtitle: String, icon: String, query: String)] {
-        [
-            ("分析今日身体状态", "全面剖析恢复、睡眠、心率与压力状态", "sparkles", "请全面分析我今天的身体状态，结合各项体征和个人基线，指出当前身体最重要的生理特征。"),
-            ("最近 30 天变化", "识别近期各项指标趋势与显著偏离", "chart.xyaxis.line", "请帮我梳理最近 30 天的身体数据变化趋势，有哪些指标明显上升或下降？"),
-            ("关键指标偏离分析", "找出偏离个人基准的指标及生理考量", "waveform.path.ecg", "我最近有哪些体征偏离了个人正常基线？这种偏离可能意味着什么？"),
-            ("睡眠与压力相关性", "探讨跨系统协同影响与因果联系", "moon.stars.fill", "我的睡眠质量、日常压力和心率之间表现出什么关联？"),
-            ("转化为训练建议", "基于当前生理窗口给出运动强度指导", "figure.run", "基于我目前的身体状态与恢复节奏，今天以及未来几天我应该怎样安排训练？")
-        ]
-    }
-
-    private var welcomeHeader: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(VelaTheme.rhythmDeep)
-                Text("Vela AI 健康分析师")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(VelaTheme.rhythmDeep)
+    @ViewBuilder
+    private var topShortcuts: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: 10) {
+                wikiShortcut
+                reportsShortcut
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(VelaTheme.rhythmDeep.opacity(0.08), in: Capsule())
-
-            Text("健康分析工作台")
-                .font(.system(size: 26, weight: .bold, design: .rounded))
-                .foregroundStyle(VelaTheme.rhythmInk)
-
-            Text("基于 Apple 健康与长期基线，探索身体状态与趋势。")
-                .font(.system(size: 13))
-                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+        } else {
+            HStack(spacing: 10) {
+                wikiShortcut
+                reportsShortcut
+            }
         }
-        .padding(.top, 4)
     }
 
-    private func shortcutCard(title: String, subtitle: String, icon: String) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .semibold))
+    private var wikiShortcut: some View {
+        Button {
+            showWikiProfile = true
+        } label: {
+            shortcutLabel(title: "健康记忆档案", systemImage: "brain.head.profile")
+        }
+        .buttonStyle(.cardPress)
+    }
+
+    private var reportsShortcut: some View {
+        NavigationLink(destination: VelaReportsView()) {
+            shortcutLabel(title: "历史分析报告", systemImage: "doc.text.fill")
+        }
+        .buttonStyle(.cardPress)
+    }
+
+    private func shortcutLabel(title: String, systemImage: String) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: systemImage)
+                .font(VelaTheme.footnote().weight(.semibold))
                 .foregroundStyle(VelaTheme.rhythmDeep)
-                .frame(width: 32, height: 32)
-                .background(VelaTheme.rhythmMist, in: Circle())
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(VelaTheme.rhythmInk)
-                Text(subtitle)
-                    .font(VelaTheme.caption2())
-                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
-            }
+            Text(title)
+                .font(VelaTheme.footnote().weight(.semibold))
+                .foregroundStyle(VelaTheme.rhythmInk)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Image(systemName: "chevron.right")
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                .font(VelaTheme.caption2().weight(.bold))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.6))
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, minHeight: 60)
-        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         )
+    }
+
+    private var contextualPromptCards: [(title: String, subtitle: String, icon: String, query: String)] {
+        [
+            ("分析今日身体状态与恢复", "结合静息心率、HRV 与睡眠深度综合评估", "sparkles", "请全面分析我今天的身体状态，结合各项体征和个人基线，指出当前身体最重要的生理特征。"),
+            ("评估训练容量与强度建议", "根据当前生理就绪度计算最佳 RPE 与组数", "figure.run", "基于我目前的身体状态与恢复节奏，今天以及未来几天我应该怎样安排训练？"),
+            ("睡眠质量与日间压力关联", "探讨深睡时长、压力波动与心率因果联系", "moon.stars.fill", "我的睡眠质量、日常压力和心率之间表现出什么关联？"),
+            ("梳理近 30 天体征变化趋势", "识别近期偏离个人稳态的异常指标并给出建议", "chart.xyaxis.line", "请帮我梳理最近 30 天的身体数据变化趋势，有哪些指标明显上升或下降？")
+        ]
     }
 
     private func displayModel(for plan: DailyOperatingPlanRecord) -> DailyOperatingPlanDisplayModel {

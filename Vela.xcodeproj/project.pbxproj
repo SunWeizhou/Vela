@@ -24,6 +24,7 @@
 		0B0000290000000000000029 /* HealthFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000300000000000000030 /* HealthFoundationTests.swift */; };
 		0B0000310000000000000031 /* PersistenceFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000320000000000000032 /* PersistenceFoundationTests.swift */; };
 		0B0000330000000000000033 /* ScoringEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000340000000000000034 /* ScoringEngineTests.swift */; };
+		0B0000350000000000000035 /* TrainingPlanAdaptationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000360000000000000036 /* TrainingPlanAdaptationTests.swift */; };
 		0B26A0010000000000000001 /* DataCoverageAndEvidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B26A0020000000000000002 /* DataCoverageAndEvidenceTests.swift */; };
 		0B26A0050000000000000005 /* Milestone1ChallengeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B26A0060000000000000006 /* Milestone1ChallengeTests.swift */; };
 		0B9900080000000000000008 /* HealthTrendAndBriefTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9900070000000000000007 /* HealthTrendAndBriefTests.swift */; };
@@ -112,6 +113,8 @@
 		0B1000750000000000000075 /* JournalCorrelationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001750000000000000075 /* JournalCorrelationEngine.swift */; };
 		0B1000860000000000000086 /* TrainingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001860000000000000086 /* TrainingView.swift */; };
 		0B1000870000000000000087 /* TrainingCalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001870000000000000087 /* TrainingCalendarView.swift */; };
+		0B1000E100000000000000E1 /* TrainingPlanEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001E100000000000000E1 /* TrainingPlanEditorSheet.swift */; };
+		0B1000E200000000000000E2 /* TrainingQuickLogSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001E200000000000000E2 /* TrainingQuickLogSheet.swift */; };
 		0B1000880000000000000088 /* BiologyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001880000000000000088 /* BiologyView.swift */; };
 		0B10008A000000000000008A /* CorrelationArtifactView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B10018A000000000000008A /* CorrelationArtifactView.swift */; };
 		0B10008B000000000000008B /* CoachPersonality.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B10018B000000000000008B /* CoachPersonality.swift */; };
@@ -139,6 +142,7 @@
 		0B2000030000000000000003 /* VelaMinimalTodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B2001030000000000000003 /* VelaMinimalTodayView.swift */; };
 		0B2000040000000000000004 /* VelaMinimalVitalsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B2001040000000000000004 /* VelaMinimalVitalsView.swift */; };
 		0B2000050000000000000005 /* VelaMinimalFitnessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B2001050000000000000005 /* VelaMinimalFitnessView.swift */; };
+		0B2000080000000000000008 /* TodayTrainingPlanAdaptationCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B2001080000000000000008 /* TodayTrainingPlanAdaptationCard.swift */; };
 		0B2000060000000000000006 /* VelaMinimalJournalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B2001060000000000000006 /* VelaMinimalJournalView.swift */; };
 		0B25D0430000000000000043 /* TodaySubSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1430000000000000043 /* TodaySubSheets.swift */; };
 		0B25D0440000000000000044 /* TodaySubComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1440000000000000044 /* TodaySubComponents.swift */; };
@@ -249,6 +253,7 @@
 		0B0000300000000000000030 /* HealthFoundationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthFoundationTests.swift; sourceTree = "<group>"; };
 		0B0000320000000000000032 /* PersistenceFoundationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceFoundationTests.swift; sourceTree = "<group>"; };
 		0B0000340000000000000034 /* ScoringEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoringEngineTests.swift; sourceTree = "<group>"; };
+		0B0000360000000000000036 /* TrainingPlanAdaptationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingPlanAdaptationTests.swift; sourceTree = "<group>"; };
 		0B26A0020000000000000002 /* DataCoverageAndEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataCoverageAndEvidenceTests.swift; sourceTree = "<group>"; };
 		0B26A0060000000000000006 /* Milestone1ChallengeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Milestone1ChallengeTests.swift; sourceTree = "<group>"; };
 		0B9900070000000000000007 /* HealthTrendAndBriefTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthTrendAndBriefTests.swift; sourceTree = "<group>"; };
@@ -351,6 +356,8 @@
 		0B10018D000000000000008D /* WeatherService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Services/WeatherService.swift; sourceTree = "<group>"; };
 		0B1001860000000000000086 /* TrainingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Training/TrainingView.swift; sourceTree = "<group>"; };
 		0B1001870000000000000087 /* TrainingCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Training/TrainingCalendarView.swift; sourceTree = "<group>"; };
+		0B1001E100000000000000E1 /* TrainingPlanEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Training/TrainingPlanEditorSheet.swift; sourceTree = "<group>"; };
+		0B1001E200000000000000E2 /* TrainingQuickLogSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Training/TrainingQuickLogSheet.swift; sourceTree = "<group>"; };
 		0B1001880000000000000088 /* BiologyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Settings/BiologyView.swift; sourceTree = "<group>"; };
 		0B10018A000000000000008A /* CorrelationArtifactView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/SharedComponents/CorrelationArtifactView.swift; sourceTree = "<group>"; };
 		0B10018B000000000000008B /* CoachPersonality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/CoachPersonality.swift; sourceTree = "<group>"; };
@@ -374,6 +381,7 @@
 		0B2001030000000000000003 /* VelaMinimalTodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/VelaMinimalTodayView.swift; sourceTree = "<group>"; };
 		0B2001040000000000000004 /* VelaMinimalVitalsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/VelaMinimalVitalsView.swift; sourceTree = "<group>"; };
 		0B2001050000000000000005 /* VelaMinimalFitnessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/VelaMinimalFitnessView.swift; sourceTree = "<group>"; };
+		0B2001080000000000000008 /* TodayTrainingPlanAdaptationCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/TodayTrainingPlanAdaptationCard.swift; sourceTree = "<group>"; };
 		0B2001060000000000000006 /* VelaMinimalJournalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/VelaMinimalJournalView.swift; sourceTree = "<group>"; };
 		0B25D1250000000000000025 /* VelaTrainingPlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/VelaTrainingPlanView.swift; sourceTree = "<group>"; };
 		0B25D1430000000000000043 /* TodaySubSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/TodaySubSheets.swift; sourceTree = "<group>"; };
@@ -542,6 +550,7 @@
 				0B2001030000000000000003 /* VelaMinimalTodayView.swift */,
 				0B2001040000000000000004 /* VelaMinimalVitalsView.swift */,
 				0B2001050000000000000005 /* VelaMinimalFitnessView.swift */,
+				0B2001080000000000000008 /* TodayTrainingPlanAdaptationCard.swift */,
 				0B25D1250000000000000025 /* VelaTrainingPlanView.swift */,
 				0B2001060000000000000006 /* VelaMinimalJournalView.swift */,
 				0B25D1430000000000000043 /* TodaySubSheets.swift */,
@@ -663,6 +672,8 @@
 				0B10018D000000000000008D /* WeatherService.swift */,
 				0B1001860000000000000086 /* TrainingView.swift */,
 				0B1001870000000000000087 /* TrainingCalendarView.swift */,
+				0B1001E100000000000000E1 /* TrainingPlanEditorSheet.swift */,
+				0B1001E200000000000000E2 /* TrainingQuickLogSheet.swift */,
 				0B1001880000000000000088 /* BiologyView.swift */,
 				0B10018A000000000000008A /* CorrelationArtifactView.swift */,
 				0B10018B000000000000008B /* CoachPersonality.swift */,
@@ -695,6 +706,7 @@
 				0B0000300000000000000030 /* HealthFoundationTests.swift */,
 				0B0000320000000000000032 /* PersistenceFoundationTests.swift */,
 				0B0000340000000000000034 /* ScoringEngineTests.swift */,
+				0B0000360000000000000036 /* TrainingPlanAdaptationTests.swift */,
 				0B26A0020000000000000002 /* DataCoverageAndEvidenceTests.swift */,
 				0B26A0060000000000000006 /* Milestone1ChallengeTests.swift */,
 				0B9900070000000000000007 /* HealthTrendAndBriefTests.swift */,
@@ -939,6 +951,7 @@
 				0B2000030000000000000003 /* VelaMinimalTodayView.swift in Sources */,
 				0B2000040000000000000004 /* VelaMinimalVitalsView.swift in Sources */,
 				0B2000050000000000000005 /* VelaMinimalFitnessView.swift in Sources */,
+				0B2000080000000000000008 /* TodayTrainingPlanAdaptationCard.swift in Sources */,
 				0B25D0250000000000000025 /* VelaTrainingPlanView.swift in Sources */,
 				0B2000060000000000000006 /* VelaMinimalJournalView.swift in Sources */,
 				0B25D0430000000000000043 /* TodaySubSheets.swift in Sources */,
@@ -1059,6 +1072,8 @@
 				0B1001890000000000000089 /* WeatherService.swift in Sources */,
 				0B1000860000000000000086 /* TrainingView.swift in Sources */,
 				0B1000870000000000000087 /* TrainingCalendarView.swift in Sources */,
+				0B1000E100000000000000E1 /* TrainingPlanEditorSheet.swift in Sources */,
+				0B1000E200000000000000E2 /* TrainingQuickLogSheet.swift in Sources */,
 				0B1000880000000000000088 /* BiologyView.swift in Sources */,
 				0B10008A000000000000008A /* CorrelationArtifactView.swift in Sources */,
 				0B10008B000000000000008B /* CoachPersonality.swift in Sources */,
@@ -1093,6 +1108,7 @@
 				0B0000290000000000000029 /* HealthFoundationTests.swift in Sources */,
 				0B0000310000000000000031 /* PersistenceFoundationTests.swift in Sources */,
 				0B0000330000000000000033 /* ScoringEngineTests.swift in Sources */,
+				0B0000350000000000000035 /* TrainingPlanAdaptationTests.swift in Sources */,
 				0B26A0010000000000000001 /* DataCoverageAndEvidenceTests.swift in Sources */,
 				0B26A0050000000000000005 /* Milestone1ChallengeTests.swift in Sources */,
 				0B9900080000000000000008 /* HealthTrendAndBriefTests.swift in Sources */,

@@ -4,6 +4,18 @@ import SwiftData
 @testable import Vela
 
 final class VelaThemeTests: XCTestCase {
+    func testStatusBarAppearanceIsNotGloballyForcedToDarkContent() {
+        XCTAssertNotEqual(
+            Bundle.main.object(forInfoDictionaryKey: "UIViewControllerBasedStatusBarAppearance") as? Bool,
+            false,
+            "SwiftUI must be allowed to adapt status-bar contrast to the selected color scheme."
+        )
+        XCTAssertNil(
+            Bundle.main.object(forInfoDictionaryKey: "UIStatusBarStyle"),
+            "A global dark-content status bar becomes unreadable in Vela's dark appearance."
+        )
+    }
+
     func testRhythmTrendSourceUsesRealHistoricalTrendNotFabricatedSeries() {
         // 节律曲线回归：数据源必须是 signal card 自带的真实历史趋势，
         // 而不是把 5 个截面分数平铺到假时间轴。
@@ -880,6 +892,18 @@ final class VelaThemeTests: XCTestCase {
         XCTAssertTrue(VelaTabSelection.isActive(.training, selectedTab: 3))
         XCTAssertFalse(VelaTabSelection.isActive(.training, selectedTab: 0))
         XCTAssertFalse(VelaTabSelection.isActive(.trends, selectedTab: 2))
+    }
+
+    func testLegacyNavigationLazilyMountsVisitedSurfacesWithoutDroppingState() {
+        var mounted: Set<VelaShell.VelaTab> = [.today]
+        mounted = VelaLegacySurfaceMountPolicy.including(selectedTab: 3, in: mounted)
+        mounted = VelaLegacySurfaceMountPolicy.including(selectedTab: 2, in: mounted)
+
+        XCTAssertEqual(mounted, [.today, .training, .coach])
+        XCTAssertEqual(
+            VelaLegacySurfaceMountPolicy.including(selectedTab: 99, in: mounted),
+            mounted
+        )
     }
 
     func testFloatingNavigationReservesEnoughBottomContentClearance() {

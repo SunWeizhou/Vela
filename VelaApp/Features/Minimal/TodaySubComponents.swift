@@ -351,26 +351,44 @@ struct TodayVitalCardModel: Identifiable {
 }
 
 struct TodayVitalsGrid: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let cards: [TodayVitalCardModel]
     let onTap: (TodayVitalKind) -> Void
 
     private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+    private let accessibilityColumns = [GridItem(.flexible())]
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 10) {
-            ForEach(cards) { card in
-                Button { onTap(card.kind) } label: {
-                    TodayVitalCard(card: card)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                LazyVGrid(columns: accessibilityColumns, spacing: 10) {
+                    vitalCards
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(card.label) \(card.value)\(card.unit),\(card.status)")
-                .accessibilityHint("查看\(card.label)详情")
+            } else {
+                LazyVGrid(columns: columns, spacing: 10) {
+                    vitalCards
+                }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var vitalCards: some View {
+        ForEach(cards) { card in
+            Button { onTap(card.kind) } label: {
+                TodayVitalCard(card: card)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(card.label) \(card.value)\(card.unit),\(card.status)")
+            .accessibilityHint("查看\(card.label)详情")
         }
     }
 }
 
 struct TodayVitalCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let card: TodayVitalCardModel
 
     private var iconName: String {
@@ -405,9 +423,9 @@ struct TodayVitalCard: View {
                 .frame(width: 20, height: 20)
 
                 Text(card.label)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(VelaTheme.caption1().weight(.semibold))
                     .foregroundStyle(VelaTheme.rhythmInk)
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Spacer(minLength: 2)
 
@@ -419,26 +437,28 @@ struct TodayVitalCard: View {
             // Row 2: Large monospaced value + unit
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(card.value)
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .font(VelaTheme.title3().weight(.bold))
                     .monospacedDigit()
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Text(card.unit)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(VelaTheme.caption1().weight(.semibold))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
-            .frame(height: 24, alignment: .bottom)
 
             // Row 3: Status text & Sparkline
-            HStack(alignment: .center) {
-                Text(card.status)
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(card.isGood ? VelaTheme.stateGood : VelaTheme.stateModerate)
-                    .lineLimit(1)
-
-                Spacer(minLength: 4)
-
-                TodayHeroSparkline(values: card.trend, color: accentColor)
-                    .frame(width: 48, height: 18)
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 6) {
+                        statusText
+                        sparkline
+                    }
+                } else {
+                    HStack(alignment: .top) {
+                        statusText
+                        Spacer(minLength: 4)
+                        sparkline
+                    }
+                }
             }
         }
         .padding(12)
@@ -452,6 +472,18 @@ struct TodayVitalCard: View {
                 .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         )
         .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private var statusText: some View {
+        Text(card.status)
+            .font(VelaTheme.caption2().weight(.bold))
+            .foregroundStyle(card.isGood ? VelaTheme.stateGood : VelaTheme.stateModerate)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var sparkline: some View {
+        TodayHeroSparkline(values: card.trend, color: accentColor)
+            .frame(width: 48, height: 18)
     }
 }
 

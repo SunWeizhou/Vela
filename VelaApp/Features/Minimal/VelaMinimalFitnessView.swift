@@ -6,6 +6,7 @@ import Combine
 // The phone decides and explains. Apple Watch records the training itself.
 
 struct VelaTrainingView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.velaSurfaceIsActive) private var isActiveSurface
     @Environment(\.colorScheme) private var cs
     @Environment(\.modelContext) private var modelContext
@@ -60,9 +61,8 @@ struct VelaTrainingView: View {
         )
     }
     private var todayDecision: DailyTrainingDecision? {
-        todayPlan?.trainingDecision
+        dashboardVM.dailyTrainingDecision ?? todayPlan?.trainingDecision
     }
-    private let xunjiKeychainAccount = "xunji_open_api_key"
 
     @State private var previousMonthActiveTiers: [Int: Int] = [:]
     @State private var currentMonthActiveTiers: [Int: Int] = [:]
@@ -100,19 +100,6 @@ struct VelaTrainingView: View {
     @State private var memoLongTermHRVMedian: Double?
     /// 长线基线按「浏览日 + 本地数据版本」懒加载，避免每次进入训练页都全表抓 1100 天快照。
     @State private var longTermMediansCacheKey: String?
-    @State private var showStrengthWorkoutLog = false
-    @State private var selectedTemplateID: UUID?
-    @State private var selectedSessionDraft: TrainingSessionDraft?
-    @State private var trainingExecutionMessage: String?
-    @State private var templatePendingDeletion: WorkoutTemplateRecord?
-    @State private var templateMutationError: String?
-    @State private var showXunjiImport = false
-    @State private var xunjiImportDate = Date()
-    @State private var xunjiAPIKey = ""
-    @State private var xunjiIncludeFullData = false
-    @State private var isImportingXunji = false
-    @State private var xunjiImportMessage: String?
-    @State private var isAutoImportingXunji = false
     @State private var selectedAnalyticsTab = 0
     @State private var handledAdaptiveTrainingStartRequest = 0
 
@@ -122,29 +109,31 @@ struct VelaTrainingView: View {
             workouts: recentWorkouts,
             endingAt: dashboardVM.selectedDate
         )
+        let hero = TrainingHeroSection(
+            todaySession: todaySession,
+            todayPlan: todayPlan,
+            dailyDecision: todayDecision,
+            activePlan: activePlan,
+            rotationFocus: rotationFocus,
+            preferredSessionMinutes: trainingPreference?.sessionDurationMinutes ?? 60,
+            summary: strengthSummary,
+            evidenceMetrics: trainingEvidenceMetrics,
+            heatmapWeeks: heatmapWeeks,
+            futureRecommendations: rotationFutureDays,
+            aiFutureDays: aiFutureDays,
+            isPlanningWithAI: isPlanningWithAI,
+            personalInsight: dashboardVM.dashboard.bodyModelState?.insightLine(),
+            onRequestAIPlan: { Task { await requestAIPlan() } },
+            onDiscussWithCoach: {
+                VelaAppState.shared.routeToCoach(question: trainingAnalysisQuestion)
+            }
+        )
 
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                TrainingHeroSection(
-                    todaySession: todaySession,
-                    todayPlan: todayPlan,
-                    activePlan: activePlan,
-                    rotationFocus: rotationFocus,
-                    preferredSessionMinutes: trainingPreference?.sessionDurationMinutes ?? 60,
-                    summary: strengthSummary,
-                    evidenceMetrics: trainingEvidenceMetrics,
-                    heatmapWeeks: heatmapWeeks,
-                    futureRecommendations: rotationFutureDays,
-                    aiFutureDays: aiFutureDays,
-                    isPlanningWithAI: isPlanningWithAI,
-                    personalInsight: dashboardVM.dashboard.bodyModelState?.insightLine(),
-                    onRequestAIPlan: { Task { await requestAIPlan() } },
-                    onDiscussWithCoach: {
-                        VelaAppState.shared.routeToCoach(question: trainingAnalysisQuestion)
-                    }
-                )
+            LazyVStack(alignment: .leading, spacing: 20) {
+                hero
 
-                VStack(alignment: .leading, spacing: 34) {
+                VStack(alignment: .leading, spacing: 24) {
                     if let workout = postWorkoutPromptWorkout {
                         TrainingPostWorkoutPrompt(workout: workout) {
                             appState.routeToPostWorkoutCheckIn(
@@ -153,32 +142,17 @@ struct VelaTrainingView: View {
                         }
                     }
 
+                    hero.futureRecommendationStrip
+
+                    syncedWorkoutsSection
+
                     TrainingMuscleLandscape(
                         summary: strengthSummary,
                         muscleDailySets: memoMuscleDailySets,
                         endingAt: dashboardVM.selectedDate
                     )
 
-                    VStack(alignment: .leading, spacing: 14) {
-                        VelaRhythmSectionHeader(
-                            eyebrow: "",
-                            title: "训练历史",
-                            actionTitle: recentWorkouts.isEmpty ? nil : "问 Vela",
-                            action: {
-                                VelaAppState.shared.routeToCoach(question: trainingAnalysisQuestion)
-                            }
-                        )
-
-                        NavigationLink {
-                            TrainingHistoryView(
-                                recentWorkouts: recentWorkouts,
-                                strengthWorkout: { workout in self.strengthWorkout(for: workout) }
-                            )
-                        } label: {
-                            TrainingHistoryPortal(workouts: recentWorkouts)
-                        }
-                        .buttonStyle(.cardPress)
-                    }
+                    hero.rhythmDisclosure
 
                     if !pendingPlanAdaptations.isEmpty {
                         VStack(alignment: .leading, spacing: 14) {
@@ -280,15 +254,11 @@ struct VelaTrainingView: View {
         .task(id: isActiveSurface) {
             guard isActiveSurface else { return }
             loadRealFitnessData()
-            loadXunjiAPIKey()
             consumeAdaptiveTrainingStartIfNeeded()
             try? ExerciseLibraryService.seedDefaultsIfNeeded(modelContext: modelContext)
             await syncRealFitnessData()
-            await autoImportRecentXunjiTraining()
         }
         .refreshable {
-            // 只刷健康数据；训记自动导入是机会型任务（切到训练页时已执行），
-            // 不再让下拉刷新等待最多 3 天的网络往返。
             await syncRealFitnessData(force: true)
         }
         .onChange(of: dashboardVM.selectedDate) { _, _ in
@@ -310,66 +280,138 @@ struct VelaTrainingView: View {
         .onChange(of: appState.adaptiveTrainingStartRequest) { _, _ in
             consumeAdaptiveTrainingStartIfNeeded()
         }
-        .sheet(isPresented: $showStrengthWorkoutLog, onDismiss: {
-            selectedTemplateID = nil
-            selectedSessionDraft = nil
-        }) {
-            StrengthWorkoutLogSheetView(
-                startingTemplateID: selectedTemplateID,
-                initialDraft: selectedSessionDraft
-            )
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(VelaTheme.rhythmCanvas)
-        }
-        .alert("今日训练", isPresented: Binding(
-            get: { trainingExecutionMessage != nil },
-            set: { if !$0 { trainingExecutionMessage = nil } }
-        )) {
-            Button("好", role: .cancel) { trainingExecutionMessage = nil }
-        } message: {
-            Text(trainingExecutionMessage ?? "")
-        }
-        .confirmationDialog("删除训练模板？", isPresented: Binding(
-            get: { templatePendingDeletion != nil },
-            set: { if !$0 { templatePendingDeletion = nil } }
-        ), titleVisibility: .visible) {
-            Button("删除模板", role: .destructive) {
-                if let templatePendingDeletion {
-                    deleteTemplate(templatePendingDeletion)
-                }
-            }
-            Button("取消", role: .cancel) { templatePendingDeletion = nil }
-        } message: {
-            Text("删除后将无法从模板库直接开始这套训练。")
-        }
-        .alert("无法删除模板", isPresented: Binding(
-            get: { templateMutationError != nil },
-            set: { if !$0 { templateMutationError = nil } }
-        )) {
-            Button("好", role: .cancel) { templateMutationError = nil }
-        } message: {
-            Text(templateMutationError ?? "")
-        }
-        .sheet(isPresented: $showXunjiImport) {
-            XunjiImportSheet(
-                apiKey: $xunjiAPIKey,
-                selectedDate: $xunjiImportDate,
-                includeFullData: $xunjiIncludeFullData,
-                isImporting: isImportingXunji,
-                message: xunjiImportMessage,
-                onImport: {
-                    Task { await importXunjiTraining() }
-                }
-            )
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
-            .presentationBackground(VelaTheme.rhythmCanvas)
-        }
         .toolbar(.hidden, for: .navigationBar)
     }
 
+    // MARK: - Synced Workouts Section
+    private var syncedWorkoutsSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VelaRhythmSectionHeader(
+                eyebrow: "",
+                title: "运动记录与复盘",
+                actionTitle: recentWorkouts.isEmpty ? nil : "全部记录",
+                action: {
+                    // Handled by history navigation
+                }
+            )
 
+            if recentWorkouts.isEmpty {
+                HStack(spacing: 14) {
+                    ZStack {
+                        Circle()
+                            .fill(VelaTheme.rhythmDeep.opacity(0.12))
+                            .frame(width: 44, height: 44)
+                        Image(systemName: "applewatch")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(VelaTheme.rhythmDeep)
+                    }
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Apple Watch 自动同步")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(VelaTheme.rhythmInk)
+                        Text("手表记录运动完成后，将在此自动生成生理负荷与心率区间复盘。")
+                            .font(.system(size: 12))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                            .lineLimit(2)
+                    }
+                    Spacer()
+                }
+                .padding(16)
+                .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+                )
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(Array(recentWorkouts.prefix(3))) { workout in
+                        NavigationLink {
+                            if let strength = strengthWorkout(for: workout) {
+                                StrengthWorkoutDetailView(workout: strength)
+                            } else {
+                                FitnessActivitySummaryDetailView()
+                            }
+                        } label: {
+                            workoutRow(workout)
+                        }
+                        .buttonStyle(.cardPress)
+                    }
+                }
+            }
+        }
+    }
+
+    private func workoutRow(_ workout: WorkoutSummary) -> some View {
+        let durationMinutes = max(1, Int(workout.end.timeIntervalSince(workout.start) / 60))
+        return HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(VelaTheme.rhythmDeep.opacity(0.12))
+                    .frame(width: 40, height: 40)
+                Image(systemName: workoutIcon(for: workout.activityName))
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmDeep)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(workout.activityName)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+
+                Text(workoutTimeSubtitle(workout))
+                    .font(.system(size: 12))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 3) {
+                Text("\(durationMinutes) 分钟")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                if let energy = workout.energyKilocalories, energy > 0 {
+                    Text("\(Int(energy)) kcal")
+                        .font(.system(size: 11))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                }
+            }
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.5))
+        }
+        .padding(14)
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+        )
+    }
+
+    private func workoutIcon(for activity: String) -> String {
+        if activity.contains("跑") || activity.lowercased().contains("run") {
+            return "figure.run"
+        } else if activity.contains("力量") || activity.contains("举重") || activity.lowercased().contains("strength") {
+            return "figure.strengthtraining.traditional"
+        } else if activity.contains("骑") || activity.lowercased().contains("cycl") {
+            return "figure.outdoor.cycle"
+        } else if activity.contains("游") || activity.lowercased().contains("swim") {
+            return "figure.pool.swim"
+        } else if activity.contains("高强度") || activity.lowercased().contains("hiit") {
+            return "figure.highintensity.intervaltraining"
+        } else if activity.contains("走") || activity.lowercased().contains("walk") {
+            return "figure.walk"
+        }
+        return "figure.mixed.cardio"
+    }
+
+    private func workoutTimeSubtitle(_ workout: WorkoutSummary) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "M月d日 HH:mm"
+        return formatter.string(from: workout.start)
+    }
 
     // MARK: - Training Title Header
     private var fitnessHeader: some View {
@@ -380,48 +422,23 @@ struct VelaTrainingView: View {
                 .foregroundStyle(VelaTheme.rhythmInk)
 
             Spacer()
-            
-            HStack(spacing: 12) {
-                Button {
-                    VelaAppState.shared.routeToCoach(question: trainingAnalysisQuestion)
-                } label: {
+
+            Button {
+                VelaAppState.shared.routeToCoach(question: trainingAnalysisQuestion)
+            } label: {
+                HStack(spacing: 6) {
                     Image(systemName: "sparkles")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(VelaTheme.rhythmDeep)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Circle())
+                        .font(.system(size: 13, weight: .semibold))
+                    Text("问 Vela")
+                        .font(.system(size: 13, weight: .semibold))
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("让 Coach 分析训练")
-
-                Menu {
-                    Button {
-                        // Detailed logging is an optional post-workout action. It
-                        // should never inherit today's recommendation or block on
-                        // an incomplete plan.
-                        selectedTemplateID = nil
-                        selectedSessionDraft = nil
-                        showStrengthWorkoutLog = true
-                    } label: {
-                        Label("补录动作与组数", systemImage: "square.and.pencil")
-                    }
-
-                    Button {
-                        xunjiImportDate = dashboardVM.selectedDate
-                        xunjiImportMessage = nil
-                        showXunjiImport = true
-                    } label: {
-                        Label("导入训记", systemImage: "tray.and.arrow.down")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Circle())
-                }
-                .accessibilityLabel("更多训练操作")
+                .foregroundStyle(VelaTheme.rhythmDeep)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(VelaTheme.rhythmDeep.opacity(0.12), in: Capsule())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("让 Coach 分析训练")
         }
     }
 
@@ -663,49 +680,6 @@ struct VelaTrainingView: View {
         memoPersonalRecords
     }
 
-    private func startStrengthWorkout(templateID: UUID? = nil) {
-        if let templateID {
-            selectedTemplateID = templateID
-            selectedSessionDraft = nil
-            showStrengthWorkoutLog = true
-            return
-        }
-
-        guard let day = todaySession else {
-            // A plan is optional. The primary action and the blank-template action
-            // must always open the full logger instead of sending users to a dead end.
-            selectedTemplateID = nil
-            selectedSessionDraft = nil
-            showStrengthWorkoutLog = true
-            return
-        }
-        let decision = todayDecision ?? TrainingDecisionFallback.conservative(targetSessionTitle: day.title)
-        let draft = TrainingSessionDraftBuilder().build(
-            day: day,
-            decision: decision,
-            history: strengthWorkouts,
-            scheduledAt: Date()
-        )
-        switch draft.action {
-        case .strength:
-            guard !draft.exercises.isEmpty else {
-                trainingExecutionMessage = "该力量训练日还没有配置动作，请先在训练计划中补充动作。"
-                return
-            }
-            selectedSessionDraft = draft
-            selectedTemplateID = nil
-            showStrengthWorkoutLog = true
-        case .cardio:
-            trainingExecutionMessage = "今天是有氧训练：\(day.description.isEmpty ? "\(day.durationMinutes) 分钟" : day.description)。请使用 Apple Watch 或 Apple 健康记录本次训练。"
-        case .flexibility:
-            trainingExecutionMessage = "今天是灵活性/活动度训练：\(day.description.isEmpty ? "\(day.durationMinutes) 分钟" : day.description)。"
-        case .rest:
-            trainingExecutionMessage = "今天是休息日。无需打开力量训练记录。"
-        case .unsupported:
-            trainingExecutionMessage = "暂不支持直接执行“\(day.focus)”类型的计划日，请在计划中改为力量、有氧、灵活性或休息。"
-        }
-    }
-
     private func consumeAdaptiveTrainingStartIfNeeded() {
         let request = appState.adaptiveTrainingStartRequest
         guard request > handledAdaptiveTrainingStartRequest else { return }
@@ -715,184 +689,7 @@ struct VelaTrainingView: View {
         VelaAppState.shared.routeToCoach(question: trainingAnalysisQuestion)
     }
 
-    private func deleteTemplate(_ template: WorkoutTemplateRecord) {
-        modelContext.insert(DeletedWorkoutRecord(id: "template:\(template.title)"))
-        modelContext.delete(template)
-        do {
-            try modelContext.save()
-            templatePendingDeletion = nil
-            VelaAppState.shared.markLocalDataChanged()
-            loadRealFitnessData()
-        } catch {
-            modelContext.rollback()
-            templateMutationError = "模板未删除。请稍后重试。"
-        }
-    }
-
     // MARK: - SwiftData and HealthKit loader
-    @MainActor
-    private func importXunjiTraining() async {
-        let datestr = xunjiDateString(xunjiImportDate)
-        let key = storedXunjiAPIKey()
-        guard !key.isEmpty else {
-            xunjiImportMessage = "请先填写训记密钥。"
-            return
-        }
-
-        isImportingXunji = true
-        xunjiImportMessage = "正在读取 \(datestr) 的训记训练..."
-        defer { isImportingXunji = false }
-
-        await services.syncCoordinator.run(source: .xunji, force: true) {
-            do {
-                let responseData = try await xunjiResponseData(
-                    apiKey: key,
-                    datestr: datestr,
-                    includeFullData: xunjiIncludeFullData
-                )
-                let summary = try XunjiTrainingImportService().importResponseData(
-                    responseData,
-                    datestr: datestr,
-                    modelContext: modelContext
-                )
-                loadRealFitnessData()
-                await dashboardVM.refresh(modelContext: modelContext)
-                loadRealFitnessData()
-                if summary.importedCount == 0, summary.updatedCount == 0 {
-                    xunjiImportMessage = "没有可导入的训练。"
-                } else {
-                    let titles = summary.importedTitles.prefix(3).joined(separator: "、")
-                    xunjiImportMessage = "已合并 \(summary.importedCount) 条新训练，更新 \(summary.updatedCount) 条。\(titles.isEmpty ? "" : " \(titles)")"
-                    VelaAppState.shared.markLocalDataChanged()
-                }
-            } catch {
-                xunjiImportMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            }
-        }
-    }
-
-    @MainActor
-    private func autoImportRecentXunjiTraining() async {
-        guard !isAutoImportingXunji else { return }
-        let key = storedXunjiAPIKey()
-        guard !key.isEmpty else { return }
-
-        isAutoImportingXunji = true
-        defer { isAutoImportingXunji = false }
-
-        await services.syncCoordinator.run(source: .xunji, force: false) {
-            let calendar = Calendar.current
-            var changed = false
-            var failedDays: [String] = []
-            for offset in 0..<3 {
-                guard let date = calendar.date(byAdding: .day, value: -offset, to: Date()) else { continue }
-                let datestr = xunjiDateString(date)
-                do {
-                    let responseData = try await xunjiResponseData(
-                        apiKey: key,
-                        datestr: datestr,
-                        includeFullData: true
-                    )
-                    let summary = try XunjiTrainingImportService().importResponseData(
-                        responseData,
-                        datestr: datestr,
-                        modelContext: modelContext
-                    )
-                    changed = changed || summary.importedCount > 0 || summary.updatedCount > 0
-                } catch {
-                    // 不再静默吞错：记录失败日并进入诊断管线，手动导入路径可复查。
-                    failedDays.append(datestr)
-                    PipelineDiagnosticsLogger.log(
-                        modelContext: modelContext,
-                        stage: "XunjiAutoImport",
-                        isSuccess: false,
-                        summary: "自动导入 \(datestr) 失败",
-                        error: error
-                    )
-                }
-            }
-            if !failedDays.isEmpty {
-                xunjiImportMessage = AppLanguage.stored.isChinese
-                    ? "近 3 天训记自动同步有 \(failedDays.count) 天未完成，可稍后在训练页手动重试。"
-                    : "Xunji auto-sync missed \(failedDays.count) of the last 3 days. You can retry manually on the Training page."
-            }
-
-            if changed {
-                loadRealFitnessData()
-                await dashboardVM.refresh(modelContext: modelContext)
-                loadRealFitnessData()
-                VelaAppState.shared.markLocalDataChanged()
-            }
-        }
-    }
-
-    @MainActor
-    private func xunjiResponseData(
-        apiKey: String,
-        datestr: String,
-        includeFullData: Bool
-    ) async throws -> Data {
-        var desc = FetchDescriptor<XunjiDailyCacheRecord>(
-            predicate: #Predicate<XunjiDailyCacheRecord> { $0.datestr == datestr }
-        )
-        desc.fetchLimit = 1
-        let caches = (try? modelContext.fetch(desc)) ?? []
-
-        if let cache = caches.first, XunjiCachePolicy.shouldReuse(cache, datestr: datestr, includeFullData: includeFullData) {
-            return cache.responseData
-        }
-
-        let data = try await XunjiTrainingAPIClient().fetchTraining(
-            apiKey: apiKey,
-            datestr: datestr,
-            includeFullData: includeFullData
-        )
-
-        if let cache = caches.first {
-            cache.fetchedAt = Date()
-            cache.includeFullData = includeFullData
-            cache.responseData = data
-        } else {
-            modelContext.insert(XunjiDailyCacheRecord(
-                datestr: datestr,
-                includeFullData: includeFullData,
-                responseData: data
-            ))
-        }
-        try modelContext.save()
-        return data
-    }
-
-    private func xunjiDateString(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: date)
-    }
-
-    @MainActor
-    private func loadXunjiAPIKey() {
-        if let saved = try? KeychainService.shared.read(account: xunjiKeychainAccount), !saved.isEmpty {
-            xunjiAPIKey = saved
-        }
-    }
-
-    @MainActor
-    private func storedXunjiAPIKey() -> String {
-        let typed = xunjiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !typed.isEmpty {
-            try? KeychainService.shared.save(typed, account: xunjiKeychainAccount)
-            return typed
-        }
-        do {
-            return try KeychainService.shared.read(account: xunjiKeychainAccount)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        } catch {
-            return ""
-        }
-    }
-
     private func syncRealFitnessData(force: Bool = false) async {
         await services.syncCoordinator.run(source: .healthKit, force: force) {
             loadRealFitnessData()

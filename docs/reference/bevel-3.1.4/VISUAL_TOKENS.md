@@ -1,6 +1,8 @@
 # Bevel 3.1.4 Observed Visual Tokens
 
-> These values are implementation targets inferred from the frozen iPhone 16 Pro captures. They are not Bevel source values. Final acceptance uses overlays against the reference images, not token values alone.
+> Status: Supporting
+> Last verified: 2026-08-21
+> Scope: 外部竞品设计 Token 观察参考（仅供灵感参考，不是当前需求来源）
 
 ## Layout
 

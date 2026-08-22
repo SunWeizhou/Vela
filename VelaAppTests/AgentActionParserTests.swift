@@ -133,7 +133,10 @@ final class AgentActionParserTests: XCTestCase {
         ])
         let loop = AgentLoop(provider: provider, toolRegistry: registry, maxIterations: 3)
 
-        let result = try await loop.run(messages: [ChatMessage(role: .user, content: "run tools")])
+        let result = try await loop.run(
+            messages: [ChatMessage(role: .user, content: "run tools")],
+            initialDataVersion: "canonical-snapshot-hash"
+        )
 
         XCTAssertEqual(result.response, "final answer")
         XCTAssertEqual(result.executedTools.map(\.name), ["first_tool", "second_tool"])
@@ -141,11 +144,12 @@ final class AgentActionParserTests: XCTestCase {
         XCTAssertEqual(result.finalMessages.filter { $0.role == .tool }.map(\.content), ["first result", "second result"])
         XCTAssertEqual(result.trace.executedTools.map(\.name), ["first_tool", "second_tool"])
         XCTAssertEqual(result.trace.finalResponse, "final answer")
-        XCTAssertFalse(result.trace.contextHash.isEmpty)
+        XCTAssertEqual(result.trace.contextHash, "canonical-snapshot-hash")
+        XCTAssertEqual(result.trace.contextHashSource, "agent_fact_snapshot")
     }
 
     @MainActor
-    func testHealthTrendToolReturnsRequestedMetricsAndWindow() async throws {
+    func testHealthTrendToolNormalizesLegacyFourteenDayRequestToCanonicalThirtyDayWindow() async throws {
         let container = try VelaModelContainer.make(inMemory: true)
         let context = container.mainContext
         let now = Date()
@@ -165,10 +169,98 @@ final class AgentActionParserTests: XCTestCase {
             executionContext: ToolExecutionContext(modelContext: context, dashboard: .preview(date: now))
         ).execute(arguments: #"{"days":14,"metrics":["hrv","rhr","sleep","recovery","stress","energy"]}"#)
 
-        XCTAssertTrue(output.contains(#""days" : 14"#))
+        // 14d is not a published HealthTrendHorizon. Legacy callers are
+        // normalized to the complete canonical 30d window instead of
+        // returning a 14-point series labeled 30d.
+        XCTAssertTrue(output.contains(#""days" : 30"#))
         XCTAssertTrue(output.contains(#""hrv" : 51"#))
         XCTAssertTrue(output.contains(#""recovery" : 72"#))
         XCTAssertTrue(output.contains(#""source" : "DailyHealthSummaryRecord""#))
+        XCTAssertTrue(output.contains(#""context_hash" : null"#))
+        XCTAssertTrue(output.contains(#""generated_at" : null"#))
+        XCTAssertTrue(output.contains(#""as_of" : null"#))
+    }
+
+    @MainActor
+    func testHealthTrendToolUsesRequestSnapshotFindingAndRecordPointsSeparately() async throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let generatedAt = now.addingTimeInterval(1_234)
+        context.insert(DailyHealthSummaryRecord(
+            dayIdentifier: DailyHealthSummaryRecord.dayIdentifier(for: now),
+            date: now,
+            recoveryScore: 72,
+            hrvAverage: 51,
+            restingHeartRate: 57,
+            sleepHours: 7.4
+        ))
+        try context.save()
+
+        // Deliberately disagree with the raw record. The tool must return this
+        // canonical finding and must not invoke HealthTrendEngine again.
+        var dashboard = DashboardSummary.preview(date: now)
+        dashboard.healthTrends = [HealthTrendFinding(
+            metric: .hrv,
+            horizon: .thirtyDays,
+            direction: .improving,
+            valueDirection: .rising,
+            assessment: .favorable,
+            currentValue: 99,
+            currentValueFormatted: "99 ms",
+            baselineValue: 88,
+            currentDeviationValue: 11,
+            currentDeviationPercent: 12.5,
+            temporalTrendDeltaPercent: 20,
+            sampleCount: 30,
+            requiredSampleCount: 14,
+            summary: "canonical snapshot finding",
+            isNotable: true
+        )]
+        let snapshot = AIContextBuilder().buildFacts(
+            dashboard: dashboard,
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:],
+            generatedAt: generatedAt
+        ).snapshot
+
+        let output = try await HealthTrendTool(
+            executionContext: ToolExecutionContext(
+                modelContext: context,
+                dashboard: dashboard,
+                agentFactSnapshot: snapshot
+            )
+        ).execute(arguments: #"{"days":30,"metrics":["hrv"]}"#)
+
+        XCTAssertTrue(output.contains("canonical snapshot finding"))
+        XCTAssertTrue(output.contains(#""latestValue" : 99"#))
+        XCTAssertTrue(output.contains(#""hrv" : 51"#), "points remain sourced from raw DailyHealthSummaryRecord")
+        XCTAssertTrue(output.contains(#""finding_source" : "AgentFactSnapshot""#))
+        XCTAssertTrue(output.contains(snapshot.contextHash))
+        XCTAssertTrue(output.contains(ISO8601DateFormatter().string(from: generatedAt)))
+    }
+
+    @MainActor
+    func testHealthTrendToolMalformedArgumentsDefaultToCanonicalThirtyDayWindow() async throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let now = Date()
+        let output = try await HealthTrendTool(
+            executionContext: ToolExecutionContext(modelContext: container.mainContext, dashboard: .preview(date: now))
+        ).execute(arguments: "not-json")
+
+        XCTAssertTrue(output.contains(#""days" : 30"#))
+    }
+
+    @MainActor
+    func testHealthTrendToolEmptyArgumentsDefaultToCanonicalThirtyDayWindow() async throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let now = Date()
+        let output = try await HealthTrendTool(
+            executionContext: ToolExecutionContext(modelContext: container.mainContext, dashboard: .preview(date: now))
+        ).execute(arguments: "")
+
+        XCTAssertTrue(output.contains(#""days" : 30"#))
     }
 
     @MainActor

@@ -85,23 +85,24 @@ struct TodaySignalGrid: View {
                 .frame(width: 20, height: 20)
 
                 Text(card.title)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(VelaTheme.caption1().weight(.bold))
                     .foregroundStyle(VelaTheme.rhythmInk)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Spacer(minLength: 4)
 
                 HStack(alignment: .firstTextBaseline, spacing: 1) {
                     Text(card.value == "--" ? "--" : card.value)
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .font(VelaTheme.title3().weight(.bold))
                         .foregroundStyle(VelaTheme.rhythmInk)
                         .monospacedDigit()
                     if card.value != "--" {
                         Text("/100")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(VelaTheme.caption2().weight(.semibold))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 8, weight: .bold))
+                        .font(VelaTheme.caption2().weight(.bold))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.4))
                         .padding(.leading, 2)
                 }
@@ -136,21 +137,7 @@ struct TodaySignalGrid: View {
             .frame(height: 6)
 
             // Row 3: Status label + direction
-            HStack(spacing: 4) {
-                Text(card.directionLabel)
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(accent)
-
-                if !card.subtitle.isEmpty {
-                    Text("·")
-                        .font(.system(size: 11))
-                        .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.5))
-                    Text(localizedReason(card.subtitle))
-                        .font(.system(size: 11))
-                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                        .lineLimit(1)
-                }
-            }
+            statusRow(card, accent: accent)
 
             // Row 4: 7-day sparkline trend
             if card.trend.count > 1 {
@@ -171,7 +158,11 @@ struct TodaySignalGrid: View {
             }
         }
         .padding(12)
-        .frame(maxWidth: .infinity, minHeight: 148, alignment: .topLeading)
+        .frame(
+            maxWidth: .infinity,
+            minHeight: dynamicTypeSize.isAccessibilitySize ? nil : 148,
+            alignment: .topLeading
+        )
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(VelaTheme.rhythmCanvasRaised)
@@ -183,6 +174,37 @@ struct TodaySignalGrid: View {
         .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(card.title)，\(card.value)，\(card.directionLabel)，\(card.confidenceLabel)，\(card.coverageLabel)")
+    }
+
+    @ViewBuilder
+    private func statusRow(_ card: TodayExperienceSignalCard, accent: Color) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 4) {
+                statusText(card, accent: accent)
+            }
+        } else {
+            HStack(spacing: 4) {
+                statusText(card, accent: accent)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func statusText(_ card: TodayExperienceSignalCard, accent: Color) -> some View {
+        Text(card.directionLabel)
+            .font(VelaTheme.caption2().weight(.bold))
+            .foregroundStyle(accent)
+            .fixedSize(horizontal: false, vertical: true)
+
+        if !card.subtitle.isEmpty {
+            Text("·")
+                .font(VelaTheme.caption2())
+                .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.5))
+            Text(localizedReason(card.subtitle))
+                .font(VelaTheme.caption2())
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     // MARK: - Evidence chip

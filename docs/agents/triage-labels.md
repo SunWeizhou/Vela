@@ -1,5 +1,9 @@
 # Triage labels
 
+> Status: Supporting
+> Last verified: 2026-08-21
+> Scope: GitHub 标签分诊规范
+
 | Canonical role | GitHub label | Meaning |
 | --- | --- | --- |
 | `needs-triage` | `needs-triage` | Maintainer evaluation required |

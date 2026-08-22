@@ -3,12 +3,16 @@ import SwiftData
 
 struct TrainingCalendarView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var dashboardVM: DashboardViewModel
+
     @Query(sort: \TrainingPlanRecord.createdAt, order: .reverse)
     private var plans: [TrainingPlanRecord]
     @Query(sort: \WorkoutEventRecord.startedAt, order: .reverse)
     private var workoutEvents: [WorkoutEventRecord]
     @Query(sort: \TrainingResponseRecord.date, order: .reverse)
     private var trainingResponses: [TrainingResponseRecord]
+    @Query(sort: \StrengthWorkoutRecord.startedAt, order: .reverse)
+    private var strengthWorkouts: [StrengthWorkoutRecord]
     @Query(
         filter: #Predicate<TrainingPlanAdaptationRecord> { $0.status == "proposed" },
         sort: \TrainingPlanAdaptationRecord.createdAt,
@@ -18,13 +22,16 @@ struct TrainingCalendarView: View {
 
     @State private var selectedWeek: Int = 1
     @State private var selectedDayForSheet: TrainingDay? = nil
+    @State private var editingDay: TrainingDay? = nil
+    @State private var showPlanEditor = false
+    @State private var planToEdit: TrainingPlanRecord? = nil
+    @State private var activeStrengthDraft: TrainingSessionDraft? = nil
     @State private var mutationError: String?
 
     private var activePlan: TrainingPlanRecord? {
-        plans.first(where: { $0.isActive })
+        plans.first(where: { $0.isActive }) ?? plans.first
     }
 
-    /// Filter pending adaptations to only those matching the active plan.
     private func adaptationsForPlan(_ plan: TrainingPlanRecord) -> [TrainingPlanAdaptationRecord] {
         pendingAdaptations.filter { $0.planId == plan.id }
     }
@@ -49,16 +56,38 @@ struct TrainingCalendarView: View {
         }
         .sheet(item: $selectedDayForSheet) { day in
             if let plan = activePlan {
-                WorkoutDetailSheet(day: day, plan: plan, onToggle: {
-                    toggleCompletion(for: day, in: plan)
-                    // Refresh sheet data by updating selected item if still showing
-                    if let idx = plan.days.firstIndex(where: { $0.id == day.id }) {
-                        selectedDayForSheet = plan.days[idx]
+                WorkoutDetailSheet(
+                    day: day,
+                    plan: plan,
+                    onToggle: {
+                        toggleCompletion(for: day, in: plan)
+                        if let idx = plan.days.firstIndex(where: { $0.id == day.id }) {
+                            selectedDayForSheet = plan.days[idx]
+                        }
+                    },
+                    onEdit: {
+                        editingDay = day
+                    },
+                    onStartWorkout: {
+                        startWorkoutSession(for: day, in: plan)
                     }
-                })
+                )
             }
         }
-        .alert("无法更新训练计划", isPresented: Binding(
+        .sheet(item: $editingDay) { day in
+            if let plan = activePlan {
+                TrainingDayEditorSheet(day: day) { updatedDay in
+                    updateDay(updatedDay, in: plan)
+                }
+            }
+        }
+        .sheet(isPresented: $showPlanEditor) {
+            TrainingPlanEditorSheet(plan: planToEdit)
+        }
+        .sheet(item: $activeStrengthDraft) { draft in
+            StrengthWorkoutLogSheetView(initialDraft: draft)
+        }
+        .alert("操作未完成", isPresented: Binding(
             get: { mutationError != nil },
             set: { if !$0 { mutationError = nil } }
         )) {
@@ -79,314 +108,372 @@ struct TrainingCalendarView: View {
         }
     }
 
+    // MARK: - Active Plan View
+    private func activePlanView(_ plan: TrainingPlanRecord) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Plan Header Card
+            planHeroCard(plan)
+
+            // Pending Adaptations Banner
+            pendingAdaptationsBanner(plan: plan)
+
+            // Review Card
+            planReviewCard(plan)
+
+            // Week Selector Pills
+            weekSelectorPills(plan: plan)
+
+            // Days for Current Week
+            let daysForWeek = plan.days.filter { $0.weekNumber == selectedWeek }.sorted(by: { $0.dayNumber < $1.dayNumber })
+
+            VStack(spacing: 12) {
+                ForEach(daysForWeek) { day in
+                    workoutCard(day: day, plan: plan)
+                }
+
+                // Add Day Button
+                Button {
+                    let nextDayNum = (daysForWeek.map(\.dayNumber).max() ?? 0) + 1
+                    let newDay = TrainingDay(
+                        id: UUID(),
+                        weekNumber: selectedWeek,
+                        dayNumber: min(nextDayNum, 7),
+                        title: "自定义训练日",
+                        description: "添加训练内容或动作",
+                        focus: "strength",
+                        durationMinutes: 45,
+                        intensity: "moderate",
+                        isCompleted: false,
+                        plannedExercisesJSON: "[]"
+                    )
+                    var currentDays = plan.days
+                    currentDays.append(newDay)
+                    plan.days = currentDays
+                    plan.updatedAt = Date()
+                    try? modelContext.save()
+                    editingDay = newDay
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 14, weight: .bold))
+                        Text("添加第 \(selectedWeek) 周训练日")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundStyle(VelaTheme.rhythmDeep)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(VelaTheme.rhythmCanvasRaised)
+                    .cornerRadius(12)
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
+                }
+                .buttonStyle(.cardPress)
+                .padding(.top, 4)
+            }
+        }
+    }
+
+    private func planHeroCard(_ plan: TrainingPlanRecord) -> some View {
+        let totalCount = plan.days.count
+        let completedCount = plan.days.filter(\.isCompleted).count
+        let progressRatio = totalCount > 0 ? Double(completedCount) / Double(totalCount) : 0.0
+        let percent = Int(progressRatio * 100)
+
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(plan.title)
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+
+                    if !plan.goalDescription.isEmpty {
+                        Text(plan.goalDescription)
+                            .font(.system(size: 12))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                            .lineLimit(2)
+                    }
+                }
+
+                Spacer()
+
+                Button {
+                    planToEdit = plan
+                    showPlanEditor = true
+                } label: {
+                    Label("编辑", systemImage: "pencil")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(VelaTheme.rhythmCanvas)
+                        .cornerRadius(8)
+                }
+            }
+
+            // Progress Bar
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("周期执行进度")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+
+                    Spacer()
+
+                    Text("\(completedCount)/\(totalCount) 天已打卡 (\(percent)%)")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundStyle(VelaTheme.recoveryColor)
+                }
+
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(VelaTheme.rhythmMist)
+                            .frame(height: 6)
+
+                        Capsule()
+                            .fill(VelaTheme.rhythmDeep)
+                            .frame(width: geo.size.width * CGFloat(progressRatio), height: 6)
+                    }
+                }
+                .frame(height: 6)
+            }
+        }
+        .padding(16)
+        .background(VelaTheme.rhythmCanvasRaised)
+        .cornerRadius(18)
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
+    }
+
+    private func weekSelectorPills(plan: TrainingPlanRecord) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(1...max(1, plan.weeksCount), id: \.self) { week in
+                    let weekDays = plan.days.filter { $0.weekNumber == week }
+                    let weekCompleted = weekDays.filter(\.isCompleted).count
+                    let isSelected = selectedWeek == week
+
+                    Button {
+                        selectedWeek = week
+                        let generator = UIImpactFeedbackGenerator(style: .light)
+                        generator.impactOccurred()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text("第 \(week) 周")
+                                .font(.system(size: 13, weight: .semibold))
+                            if !weekDays.isEmpty {
+                                Text("\(weekCompleted)/\(weekDays.count)")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(isSelected ? Color.white.opacity(0.8) : VelaTheme.rhythmInkSecondary)
+                            }
+                        }
+                        .foregroundStyle(isSelected ? Color.white : VelaTheme.rhythmInk)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule().fill(isSelected ? VelaTheme.rhythmDeep : VelaTheme.rhythmCanvasRaised)
+                        )
+                        .overlay(
+                            Capsule().stroke(VelaTheme.rhythmMist, lineWidth: isSelected ? 0 : 0.75)
+                        )
+                    }
+                    .buttonStyle(.cardPress)
+                }
+            }
+            .padding(.horizontal, 2)
+        }
+    }
+
     // MARK: - Pending Adaptations
     private func pendingAdaptationsBanner(plan: TrainingPlanRecord) -> some View {
         let filtered = adaptationsForPlan(plan)
         guard !filtered.isEmpty else { return AnyView(EmptyView()) }
-        return AnyView(VelaHeroSurface(tint: VelaTheme.energyColor) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 12) {
+        return AnyView(
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 10) {
                     Image(systemName: "sparkles")
-                        .font(.title3.weight(.semibold))
+                        .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(VelaTheme.energyColor)
-                        .frame(width: 38, height: 38)
-                        .background(Circle().fill(VelaTheme.energyColor.opacity(0.12)))
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(AppLanguage.stored.isChinese
-                             ? "Vela 建议调整你的计划"
-                             : "Vela suggests adjusting your plan"
-                        )
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(VelaTheme.fg)
-                        Text(AppLanguage.stored.isChinese
-                             ? "\(filtered.count) 项训练与今天的身体状态不完全匹配。"
-                             : "\(filtered.count) sessions do not fully match today's body state."
-                        )
-                        .font(.subheadline)
-                        .foregroundStyle(VelaTheme.fg2)
+                        .frame(width: 32, height: 32)
+                        .background(Circle().fill(VelaTheme.energyColor.opacity(0.14)))
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Vela 智能体建议自适应调整")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(VelaTheme.rhythmInk)
+                        Text("\(filtered.count) 项课表与近期的生理恢复状态不完全匹配。")
+                            .font(.system(size: 12))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                     Spacer()
-                    VelaStatusBadge(label: AppLanguage.stored.isChinese ? "待确认" : "Pending", systemImage: "clock.fill", tint: VelaTheme.energyColor)
                 }
 
                 ForEach(filtered.prefix(3)) { adaptation in
                     adaptationRow(adaptation, plan: plan)
                 }
-
-                if filtered.count > 3 {
-                    Text(AppLanguage.stored.isChinese
-                         ? "还有 \(filtered.count - 3) 项调整..."
-                         : "\(filtered.count - 3) more adjustments..."
-                    )
-                    .font(.caption)
-                    .foregroundStyle(VelaTheme.muted)
-                }
             }
-        }.appleIntelligenceGlow(isHighlighted: true, radius: 24))
+            .padding(14)
+            .background(VelaTheme.rhythmCanvasRaised)
+            .cornerRadius(16)
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(VelaTheme.energyColor.opacity(0.35), lineWidth: 1))
+        )
     }
 
     private func adaptationRow(_ adaptation: TrainingPlanAdaptationRecord, plan: TrainingPlanRecord) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                Image(systemName: iconForAdjustment(adaptation.adjustment))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(VelaTheme.energyColor)
-                    .frame(width: 28, height: 28)
-                    .background(Circle().fill(VelaTheme.energyColor.opacity(0.12)))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(adaptation.originalDayTitle)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(VelaTheme.fg)
-                    Text(labelForAdjustment(adaptation.adjustment))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(VelaTheme.energyColor)
-                }
-
-                Spacer()
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                trainingAdaptationDetail(
-                    title: AppLanguage.stored.isChinese ? "原因" : "Reason",
-                    value: adaptation.reason,
-                    icon: "list.bullet.clipboard"
-                )
-                if let alternative = adaptation.suggestedAlternative, !alternative.isEmpty {
-                    trainingAdaptationDetail(
-                        title: AppLanguage.stored.isChinese ? "建议替代" : "Suggested alternative",
-                        value: alternative,
-                        icon: "arrow.triangle.swap"
-                    )
-                }
-            }
+        VStack(alignment: .leading, spacing: 6) {
+            Text(adaptation.reason)
+                .font(.system(size: 12))
+                .foregroundStyle(VelaTheme.rhythmInk)
+                .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 10) {
-                Button {
-                    acceptAdaptation(adaptation, plan: plan)
-                } label: {
-                    Label(AppLanguage.stored.isChinese ? "接受调整" : "Accept", systemImage: "checkmark.circle.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.black)
-                        .frame(maxWidth: .infinity, minHeight: 34)
-                        .background(Capsule().fill(VelaTheme.accent))
+                Button("采纳调整") {
+                    applyAdaptation(adaptation, plan: plan)
                 }
-                .buttonStyle(.cardPress)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(VelaTheme.energyColor))
 
-                Button {
-                    rejectAdaptation(adaptation)
-                } label: {
-                    Label(AppLanguage.stored.isChinese ? "保留原计划" : "Keep original", systemImage: "xmark.circle")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(VelaTheme.fg)
-                        .frame(maxWidth: .infinity, minHeight: 34)
-                        .background(Capsule().fill(VelaTheme.elevatedBg))
-                        .overlay(Capsule().stroke(VelaTheme.borderSoft, lineWidth: 0.7))
+                Button("忽略") {
+                    dismissAdaptation(adaptation)
                 }
-                .buttonStyle(.cardPress)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
         }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(VelaTheme.cardBg)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(VelaTheme.energyColor.opacity(0.35), lineWidth: 1.0)
-        )
-        .shadow(color: VelaTheme.energyColor.opacity(0.08), radius: 6, y: 2)
+        .padding(10)
+        .background(VelaTheme.rhythmCanvas)
+        .cornerRadius(10)
     }
 
-    private func trainingAdaptationDetail(title: String, value: String, icon: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: icon)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(VelaTheme.energyColor)
-                .frame(width: 18)
+    // MARK: - Workout Card
+    private func workoutCard(day: TrainingDay, plan: TrainingPlanRecord) -> some View {
+        let focusColor = getFocusColor(day.focus)
+        let focusSymbol = getFocusSymbol(day.focus)
+        let hasPendingAdaptation = pendingAdaptation(for: day, plan: plan) != nil
+        let exerciseCount = exercisesInDay(day).count
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(VelaTheme.muted)
-                Text(value)
-                    .font(.caption)
-                    .foregroundStyle(VelaTheme.fg2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
+        return HStack(spacing: 12) {
+            Button {
+                selectedDayForSheet = day
+            } label: {
+                HStack(spacing: 12) {
+                    // Left color bar
+                    Rectangle()
+                        .fill(day.isCompleted ? VelaTheme.recoveryColor : focusColor)
+                        .frame(width: 4)
+                        .cornerRadius(2)
 
-    private func acceptAdaptation(_ adaptation: TrainingPlanAdaptationRecord, plan: TrainingPlanRecord) {
-        guard adaptation.planId == plan.id else { return }
-        let previousDays = plan.days
-        let previousStatus = adaptation.status
-        let previousAcceptedAt = adaptation.acceptedAt
-        do {
-            let manager = AdaptiveTrainingManager()
-            guard manager.applyAdaptation(adaptation, to: plan) else {
-                mutationError = "当前计划没有可执行的调整位置，原训练计划保持不变。"
-                return
-            }
-            adaptation.status = AdaptationStatus.accepted.rawValue
-            adaptation.acceptedAt = Date()
-            try modelContext.save()
-            VelaAppState.shared.markLocalDataChanged()
-        } catch {
-            plan.days = previousDays
-            adaptation.status = previousStatus
-            adaptation.acceptedAt = previousAcceptedAt
-            mutationError = "本次调整未能保存，原训练计划保持不变。"
-        }
-    }
+                    // Main info
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            Text("第 \(day.dayNumber) 天 • \(dayName(day.dayNumber))")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
 
-    private func rejectAdaptation(_ adaptation: TrainingPlanAdaptationRecord) {
-        let previousStatus = adaptation.status
-        let previousRejectedAt = adaptation.rejectedAt
-        adaptation.status = AdaptationStatus.rejected.rawValue
-        adaptation.rejectedAt = Date()
-        do {
-            try modelContext.save()
-            VelaAppState.shared.markLocalDataChanged()
-        } catch {
-            adaptation.status = previousStatus
-            adaptation.rejectedAt = previousRejectedAt
-            mutationError = "未能保留原计划，请稍后重试。"
-        }
-    }
+                            Spacer()
 
-    private func iconForAdjustment(_ a: String) -> String {
-        switch a {
-        case "rest": return "bed.double.fill"
-        case "reduce": return "arrow.down.circle.fill"
-        case "swap": return "arrow.triangle.swap"
-        case "reschedule": return "calendar.badge.clock"
-        case "deloadWeek": return "arrow.down.heart.fill"
-        default: return "checkmark.circle.fill"
-        }
-    }
+                            HStack(spacing: 3) {
+                                Image(systemName: focusSymbol)
+                                    .font(.system(size: 8))
+                                Text(focusName(day.focus))
+                                    .font(.system(size: 9, weight: .bold))
+                            }
+                            .foregroundStyle(focusColor)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(focusColor.opacity(0.12)))
 
-    private func labelForAdjustment(_ a: String) -> String {
-        switch a {
-        case "rest": return AppLanguage.stored.isChinese ? "建议休息" : "Rest"
-        case "reduce": return AppLanguage.stored.isChinese ? "建议减量" : "Reduce"
-        case "swap": return AppLanguage.stored.isChinese ? "建议替换" : "Swap"
-        case "reschedule": return AppLanguage.stored.isChinese ? "建议改期" : "Reschedule"
-        case "deloadWeek": return AppLanguage.stored.isChinese ? "建议减载周" : "Deload Week"
-        default: return a
-        }
-    }
+                            if hasPendingAdaptation {
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(VelaTheme.energyColor)
+                            }
+                        }
 
-    
-    // MARK: - Active Plan View
-    private func activePlanView(_ plan: TrainingPlanRecord) -> some View {
-        let completedCount = plan.days.filter { $0.isCompleted }.count
-        let totalCount = plan.days.count
-        let progressRatio = totalCount > 0 ? Double(completedCount) / Double(totalCount) : 0
-        let percent = Int(progressRatio * 100)
+                        Text(day.title)
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .foregroundStyle(day.isCompleted ? VelaTheme.rhythmInkSecondary : VelaTheme.rhythmInk)
+                            .strikethrough(day.isCompleted, color: VelaTheme.rhythmInkSecondary)
 
-        return VStack(alignment: .leading, spacing: 20) {
-            // Pending Adaptations Banner
-            if !adaptationsForPlan(plan).isEmpty {
-                pendingAdaptationsBanner(plan: plan)
-            }
+                        HStack(spacing: 8) {
+                            if day.focus != "rest" {
+                                Text("\(day.durationMinutes)分钟 · \(intensityName(day.intensity))")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
 
-            // Plan Header Card
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(plan.title)
-                            .font(.system(.title3, design: .rounded).weight(.bold))
-                            .foregroundStyle(VelaTheme.fg)
-                        
-                        Text(plan.goalDescription)
-                            .font(.subheadline)
-                            .foregroundStyle(VelaTheme.fg2)
-                            .lineLimit(2)
-                    }
-                    Spacer()
-                }
-
-                Divider().background(Color.black.opacity(0.08))
-
-                // Progress Bar
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text(L10n.t("Overall Plan Progress", "课表总进度"))
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(VelaTheme.muted)
-                        
-                        Spacer()
-                        
-                        Text("\(completedCount) / \(totalCount) \(L10n.t("Completed", "已完成")) (\(percent)%)")
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundStyle(VelaTheme.recoveryColor)
-                    }
-
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule()
-                                .fill(Color.black.opacity(0.06))
-                                .frame(height: 6)
-                            
-                            Capsule()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [VelaTheme.accent, VelaTheme.recoveryColor],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                                .frame(width: geo.size.width * CGFloat(progressRatio), height: 6)
-                                .shadow(color: VelaTheme.recoveryColor.opacity(0.3), radius: 3)
+                                if exerciseCount > 0 {
+                                    Text("· \(exerciseCount) 个动作")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(VelaTheme.rhythmDeep)
+                                }
+                            } else {
+                                Text("充分休息与放松")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                            }
                         }
                     }
-                    .frame(height: 6)
                 }
             }
-            .padding(16)
-            .velaNativeCard(radius: 20)
+            .buttonStyle(.plain)
 
-            planReviewCard(plan)
+            Spacer()
 
-            // Week Selector Horizontal Pills
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(1...plan.weeksCount, id: \.self) { week in
-                        Button(action: {
-                            selectedWeek = week
-                            let generator = UIImpactFeedbackGenerator(style: .light)
-                            generator.impactOccurred()
-                        }) {
-                            Text(L10n.t("Week \(week)", "第 \(week) 周"))
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(selectedWeek == week ? Color.black : VelaTheme.fg2)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .background(
-                                    Capsule()
-                                        .fill(selectedWeek == week ? VelaTheme.accent : VelaTheme.surface)
-                                )
-                                .overlay(
-                                    Capsule()
-                                        .stroke(Color.white.opacity(selectedWeek == week ? 0 : 0.05), lineWidth: 0.5)
-                                )
-                        }
-                        .buttonStyle(.cardPress)
+            // Actions: Quick toggle or Context Menu
+            Menu {
+                if day.focus == "strength" {
+                    Button {
+                        startWorkoutSession(for: day, in: plan)
+                    } label: {
+                        Label("开始本次力量训练", systemImage: "play.fill")
                     }
                 }
-                .padding(.horizontal, 2)
+
+                Button {
+                    editingDay = day
+                } label: {
+                    Label("编辑此日课表", systemImage: "pencil")
+                }
+
+                Button {
+                    swapDayWithNext(day, in: plan)
+                } label: {
+                    Label("与下一天日程互换", systemImage: "arrow.up.arrow.down")
+                }
+
+                Button {
+                    toggleCompletion(for: day, in: plan)
+                } label: {
+                    Label(day.isCompleted ? "取消打卡" : "标记为已完成", systemImage: day.isCompleted ? "circle" : "checkmark.circle.fill")
+                }
+
+                Button(role: .destructive) {
+                    deleteDay(day, in: plan)
+                } label: {
+                    Label("删除此日", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.system(size: 18))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .frame(width: 32, height: 32)
             }
 
-            // Days List
-            let daysForWeek = plan.days.filter { $0.weekNumber == selectedWeek }.sorted(by: { $0.dayNumber < $1.dayNumber })
-            
-            VStack(spacing: 12) {
-                ForEach(daysForWeek) { day in
-                    workoutCard(day: day, plan: plan)
-                }
+            Button {
+                toggleCompletion(for: day, in: plan)
+            } label: {
+                Image(systemName: day.isCompleted ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(day.isCompleted ? VelaTheme.recoveryColor : VelaTheme.rhythmMist)
+                    .frame(width: 32, height: 32)
             }
+            .buttonStyle(.cardPress)
         }
+        .padding(14)
+        .background(VelaTheme.rhythmCanvasRaised)
+        .cornerRadius(16)
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
     }
 
     private func planReviewCard(_ plan: TrainingPlanRecord) -> some View {
@@ -395,274 +482,255 @@ struct TrainingCalendarView: View {
             events: workoutEvents.map { $0.dto },
             responses: trainingResponses.map { $0.dto }
         )
-        return VelaHeroSurface(tint: VelaTheme.recoveryColor) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Label("周期复盘", systemImage: "chart.line.uptrend.xyaxis")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(VelaTheme.fg)
-                    Spacer()
-                    Text("\(review.completedSessions)/\(review.scheduledSessions)")
-                        .font(.caption.weight(.bold).monospacedDigit())
-                        .foregroundStyle(VelaTheme.recoveryColor)
-                }
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("周期复盘与依从度", systemImage: "chart.line.uptrend.xyaxis")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                Spacer()
+                Text("\(review.completedSessions)/\(review.scheduledSessions) 次完成")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(VelaTheme.recoveryColor)
+            }
 
-                Text(review.statusTitle)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(VelaTheme.fg)
-                Text(review.recommendation)
-                    .font(.subheadline)
-                    .foregroundStyle(VelaTheme.fg2)
-                    .fixedSize(horizontal: false, vertical: true)
+            Text(review.recommendation)
+                .font(.system(size: 12))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                .lineSpacing(2)
 
-                HStack(spacing: 8) {
-                    reviewMetric("执行率", "\(Int((review.completionRate * 100).rounded()))%")
-                    reviewMetric("有效反馈", "\(review.measuredResponses) 次")
-                    reviewMetric(
-                        "恢复变化",
-                        review.averageRecoveryDelta.map { String(format: "%+.1f", $0) } ?? "待积累"
-                    )
-                }
+            HStack(spacing: 8) {
+                reviewMetric("执行率", "\(Int((review.completionRate * 100).rounded()))%")
+                reviewMetric("有效响应", "\(review.measuredResponses) 次")
+                reviewMetric("恢复影响", review.averageRecoveryDelta.map { String(format: "%+.1f", $0) } ?? "稳定")
             }
         }
+        .padding(14)
+        .background(VelaTheme.rhythmCanvasRaised)
+        .cornerRadius(16)
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
     }
 
     private func reviewMetric(_ title: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(.caption2)
-                .foregroundStyle(VelaTheme.muted)
+                .font(.system(size: 10))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
             Text(value)
-                .font(.caption.weight(.bold).monospacedDigit())
-                .foregroundStyle(VelaTheme.fg)
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(VelaTheme.rhythmInk)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(8)
-        .background(VelaTheme.elevatedBg, in: RoundedRectangle(cornerRadius: 10))
+        .background(VelaTheme.rhythmCanvas)
+        .cornerRadius(8)
     }
 
-    // MARK: - Workout Card
-    private func workoutCard(day: TrainingDay, plan: TrainingPlanRecord) -> some View {
-        let focusColor = getFocusColor(day.focus)
-        let focusSymbol = getFocusSymbol(day.focus)
-        let hasPendingAdaptation = pendingAdaptation(for: day, plan: plan) != nil
-        
-        return HStack(spacing: 14) {
-            Button(action: {
-                selectedDayForSheet = day
-            }) {
-                HStack(spacing: 14) {
-                    // Left color-gated bar
-                    Rectangle()
-                        .fill(day.isCompleted ? VelaTheme.recoveryColor : focusColor)
-                        .frame(width: 4)
-                        .cornerRadius(2)
-
-                    // Card Body
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 8) {
-                            // Day and Focus Label
-                            Text(L10n.t("Day \(day.dayNumber) • \(dayName(day.dayNumber))", "第 \(day.dayNumber) 天 • \(dayName(day.dayNumber))"))
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(VelaTheme.muted)
-
-                            Spacer()
-
-                            // Focus Pill
-                            HStack(spacing: 3) {
-                                Image(systemName: focusSymbol)
-                                    .font(.system(size: 8))
-                                Text(focusName(day.focus))
-                                    .font(.system(size: 8, weight: .bold))
-                            }
-                            .foregroundStyle(focusColor)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(focusColor.opacity(0.12)))
-                        }
-
-                        if hasPendingAdaptation {
-                            VelaStatusBadge(
-                                label: AppLanguage.stored.isChinese ? "Vela 建议调整" : "Suggested",
-                                systemImage: "sparkles",
-                                tint: VelaTheme.energyColor
-                            )
-                        }
-
-                        // Session Title
-                        Text(day.title)
-                            .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                            .foregroundStyle(day.isCompleted ? VelaTheme.muted : VelaTheme.fg)
-                            .strikethrough(day.isCompleted, color: VelaTheme.muted)
-
-                        // Subtitle / Timing
-                        if day.focus == "rest" {
-                            Text(L10n.t("Rest & Restore Energy", "休息以恢复能量储蓄"))
-                                .font(.caption2)
-                                .foregroundStyle(VelaTheme.muted)
-                        } else {
-                            HStack(spacing: 8) {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "clock")
-                                        .font(.system(size: 10))
-                                    Text("\(day.durationMinutes) \(L10n.t("mins", "分钟"))")
-                                }
-                                
-                                Text("•")
-                                
-                                Text(intensityName(day.intensity))
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 1)
-                                    .background(Capsule().fill(getIntensityColor(day.intensity).opacity(0.12)))
-                                    .foregroundStyle(getIntensityColor(day.intensity))
-                            }
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(VelaTheme.fg2)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            .buttonStyle(.cardPress)
-
-            // Checkbox Circle
-            Button(action: {
-                toggleCompletion(for: day, in: plan)
-            }) {
-                ZStack {
-                    Circle()
-                        .stroke(day.isCompleted ? VelaTheme.recoveryColor : Color.black.opacity(0.15), lineWidth: 1.5)
-                        .frame(width: 24, height: 24)
-                    
-                    if day.isCompleted {
-                        Circle()
-                            .fill(VelaTheme.recoveryColor)
-                            .frame(width: 24, height: 24)
-                        
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(Color.black)
-                    }
-                }
-            }
-            .buttonStyle(.plain)
-            .padding(.trailing, 4)
-        }
-        .padding(.vertical, 14)
-        .padding(.horizontal, 16)
-        .background(
-            RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
-                .fill(day.isCompleted ? VelaTheme.rhythmCanvasRaised.opacity(0.65) : VelaTheme.rhythmCanvasRaised)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
-                .stroke(day.isCompleted ? VelaTheme.rhythmDeep.opacity(0.2) : VelaTheme.rhythmMist, lineWidth: 0.75)
-        )
-        .appleIntelligenceGlow(isHighlighted: hasPendingAdaptation, radius: VelaTheme.radiusCardLarge)
-    }
-
-    // MARK: - Empty Plan View (Bevel CTA Style)
+    // MARK: - Empty Plan View
     private var emptyPlanView: some View {
-        VStack(spacing: 24) {
-            Spacer().frame(height: 20)
-            
-            ZStack {
-                Circle()
-                    .fill(VelaTheme.rhythmDeep.opacity(0.08))
-                    .frame(width: 80, height: 80)
-                
-                Image(systemName: "calendar.badge.clock")
-                    .font(.system(size: 32))
-                    .foregroundStyle(VelaTheme.rhythmDeep)
+        VStack(spacing: 18) {
+            Image(systemName: "calendar.badge.plus")
+                .font(.system(size: 40))
+                .foregroundStyle(VelaTheme.rhythmDeep)
+                .frame(width: 70, height: 70)
+                .background(Circle().fill(VelaTheme.rhythmDeep.opacity(0.12)))
+
+            VStack(spacing: 6) {
+                Text("建立你的个性化自适应计划")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                Text("选择经典分化模板、由 AI 智能生成，或完全自定义创建。")
+                    .font(.system(size: 13))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .multilineTextAlignment(.center)
             }
 
-            VelaGlassCard(padding: 24, cornerRadius: 20) {
-                VStack(spacing: 16) {
-                    Text(L10n.t("Your Training Schedule", "你的智能课表"))
-                        .font(.system(.title3, design: .rounded).weight(.bold))
-                        .foregroundStyle(VelaTheme.rhythmInk)
-                    
-                    Text(L10n.t("No active training plan. Ask your Coach Agent to generate a multi-week athletic progression program tailored to your recovery, sleep, and fitness goals.", "当前没有激活的训练课表。让你的 AI 教练根据你的恢复、睡眠以及运动目标，为你定制一份长期的多周智能训练计划吧！"))
-                        .font(.subheadline)
-                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                        .multilineTextAlignment(.center)
-                        .lineSpacing(4)
-                }
-            }
-
-            Button(action: {
-                let generator = UIImpactFeedbackGenerator(style: .medium)
-                generator.impactOccurred()
-                
-                VelaAppState.shared.routeToCoach(question: L10n.t(
-                    "I want to start a personalized training program. Can you create a 4-week athletic progression plan tailored to my fitness level and save it using your tool?",
-                    "我想开始一份专属训练计划，你能根据我的身体状况为我量身定制一份 4 周的智能训练课表，并用工具帮我保存和启用吗？"
-                ))
-            }) {
-                HStack(spacing: 8) {
-                    Image(systemName: "sparkles")
+            VStack(spacing: 10) {
+                Button {
+                    planToEdit = nil
+                    showPlanEditor = true
+                } label: {
+                    Label("从经典模板快速导入", systemImage: "sparkles")
                         .font(.system(size: 14, weight: .bold))
-                    Text(L10n.t("Ask AI Coach to Generate Plan", "让 AI 教练制定专属课表"))
-                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Color.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(VelaTheme.rhythmDeep)
+                        .cornerRadius(14)
                 }
-                .foregroundStyle(VelaTheme.rhythmDeepOn)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 14)
-                .background(Capsule().fill(VelaTheme.rhythmDeep))
-            }
-            .buttonStyle(.cardPress)
+                .buttonStyle(.cardPress)
 
-            Spacer().frame(height: 40)
+                Button {
+                    VelaAppState.shared.routeToCoach(question: "请根据我当前准备度、近期负荷、睡眠、目标和限制，生成 7 天自适应训练计划。")
+                } label: {
+                    Label("让 Vela AI 智能生成", systemImage: "bubble.left.and.text.bubble.right.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(VelaTheme.rhythmCanvasRaised)
+                        .cornerRadius(14)
+                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
+                }
+                .buttonStyle(.cardPress)
+            }
+            .padding(.top, 6)
         }
-        .padding(.horizontal, 10)
+        .padding(24)
+        .background(VelaTheme.rhythmCanvasRaised)
+        .cornerRadius(20)
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
     }
 
-    // MARK: - Toggle Database Completion
+    // MARK: - Actions
     private func toggleCompletion(for day: TrainingDay, in plan: TrainingPlanRecord) {
-        var updatedDays = plan.days
-        if let index = updatedDays.firstIndex(where: { $0.id == day.id }) {
-            let previousDays = plan.days
-            let wasCompleted = updatedDays[index].isCompleted
-            updatedDays[index].isCompleted.toggle()
-            updatedDays[index].completedAt = updatedDays[index].isCompleted ? Date() : nil
-            plan.days = updatedDays
-
-            do {
-                try modelContext.save()
-                VelaAppState.shared.markLocalDataChanged()
-                if !wasCompleted {
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                } else {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                }
-            } catch {
-                plan.days = previousDays
-                mutationError = "训练完成状态未能保存，请稍后重试。"
+        var days = plan.days
+        guard let idx = days.firstIndex(where: { $0.id == day.id }) else { return }
+        days[idx].isCompleted.toggle()
+        days[idx].completedAt = days[idx].isCompleted ? Date() : nil
+        plan.days = days
+        plan.updatedAt = Date()
+        do {
+            try modelContext.save()
+            Task { @MainActor in
+                await dashboardVM.refresh(modelContext: modelContext)
             }
+        } catch {
+            mutationError = "打卡状态保存失败：\(error.localizedDescription)"
         }
     }
 
-    // MARK: - Helpers
+    private func updateDay(_ updatedDay: TrainingDay, in plan: TrainingPlanRecord) {
+        var days = plan.days
+        if let idx = days.firstIndex(where: { $0.id == updatedDay.id }) {
+            days[idx] = updatedDay
+        } else {
+            days.append(updatedDay)
+        }
+        plan.days = days
+        plan.updatedAt = Date()
+        do {
+            try modelContext.save()
+            Task { @MainActor in
+                await dashboardVM.refresh(modelContext: modelContext)
+            }
+        } catch {
+            mutationError = "课表保存失败：\(error.localizedDescription)"
+        }
+    }
+
+    private func swapDayWithNext(_ day: TrainingDay, in plan: TrainingPlanRecord) {
+        var days = plan.days
+        guard let idx = days.firstIndex(where: { $0.id == day.id }) else { return }
+        let nextDays = days.filter { $0.weekNumber == day.weekNumber && $0.dayNumber > day.dayNumber }.sorted(by: { $0.dayNumber < $1.dayNumber })
+        guard let nextDay = nextDays.first, let nextIdx = days.firstIndex(where: { $0.id == nextDay.id }) else {
+            mutationError = "该日已是当前周最后一天，无法与后一日交换"
+            return
+        }
+
+        let tempDayNumber = days[idx].dayNumber
+        days[idx].dayNumber = days[nextIdx].dayNumber
+        days[nextIdx].dayNumber = tempDayNumber
+
+        plan.days = days
+        plan.updatedAt = Date()
+        try? modelContext.save()
+    }
+
+    private func deleteDay(_ day: TrainingDay, in plan: TrainingPlanRecord) {
+        var days = plan.days
+        days.removeAll(where: { $0.id == day.id })
+        plan.days = days
+        plan.updatedAt = Date()
+        try? modelContext.save()
+    }
+
+    private func startWorkoutSession(for day: TrainingDay, in plan: TrainingPlanRecord) {
+        let decision = dashboardVM.dailyTrainingDecision
+            ?? TrainingDecisionFallback.conservative(targetSessionTitle: day.title)
+
+        let draft = TrainingSessionDraftBuilder().build(
+            day: day,
+            decision: decision,
+            history: strengthWorkouts,
+            scheduledAt: Date()
+        )
+        activeStrengthDraft = draft
+    }
+
+    private func applyAdaptation(_ adaptation: TrainingPlanAdaptationRecord, plan: TrainingPlanRecord) {
+        // Apply modification to day
+        var days = plan.days
+        if let idx = days.firstIndex(where: { $0.id == adaptation.dayId }) {
+            // Apply recommended modification
+            if adaptation.adjustment.contains("rest") {
+                days[idx].focus = "rest"
+                days[idx].durationMinutes = 0
+                days[idx].intensity = "low"
+            } else if adaptation.adjustment.contains("reduce") {
+                days[idx].durationMinutes = max(20, Int(Double(days[idx].durationMinutes) * 0.8))
+                days[idx].intensity = "moderate"
+            }
+            plan.days = days
+            plan.updatedAt = Date()
+        }
+        adaptation.status = "accepted"
+        adaptation.acceptedAt = Date()
+        try? modelContext.save()
+    }
+
+    private func dismissAdaptation(_ adaptation: TrainingPlanAdaptationRecord) {
+        adaptation.status = "rejected"
+        adaptation.rejectedAt = Date()
+        try? modelContext.save()
+    }
+
+    private func exercisesInDay(_ day: TrainingDay) -> [WorkoutTemplateExercise] {
+        guard let data = day.plannedExercisesJSON.data(using: .utf8),
+              let list = try? JSONDecoder().decode([WorkoutTemplateExercise].self, from: data) else {
+            return []
+        }
+        return list
+    }
+
     private func dayName(_ dayNumber: Int) -> String {
         switch dayNumber {
-        case 1: return L10n.t("Monday", "周一")
-        case 2: return L10n.t("Tuesday", "周二")
-        case 3: return L10n.t("Wednesday", "周三")
-        case 4: return L10n.t("Thursday", "周四")
-        case 5: return L10n.t("Friday", "周五")
-        case 6: return L10n.t("Saturday", "周六")
-        case 7: return L10n.t("Sunday", "周日")
+        case 1: return "周一"
+        case 2: return "周二"
+        case 3: return "周三"
+        case 4: return "周四"
+        case 5: return "周五"
+        case 6: return "周六"
+        case 7: return "周日"
         default: return ""
+        }
+    }
+
+    private func focusName(_ focus: String) -> String {
+        switch focus.lowercased() {
+        case "cardio": return "有氧"
+        case "strength": return "力量"
+        case "flexibility": return "柔韧"
+        case "rest": return "休息"
+        default: return "综合"
+        }
+    }
+
+    private func intensityName(_ intensity: String) -> String {
+        switch intensity.lowercased() {
+        case "low": return "低强度"
+        case "moderate": return "中强度"
+        case "high": return "高强度"
+        default: return intensity.capitalized
         }
     }
 
     private func getFocusColor(_ focus: String) -> Color {
         switch focus.lowercased() {
-        case "cardio": return VelaTheme.strainColor
-        case "strength": return VelaTheme.energyColor
-        case "flexibility": return VelaTheme.accent
+        case "cardio": return VelaTheme.energyColor
+        case "strength": return VelaTheme.strainColor
+        case "flexibility": return VelaTheme.recoveryColor
         case "rest": return VelaTheme.sleepColor
-        default: return VelaTheme.accent
+        default: return VelaTheme.rhythmDeep
         }
     }
 
@@ -673,34 +741,6 @@ struct TrainingCalendarView: View {
         case "flexibility": return "figure.cooldown"
         case "rest": return "moon.zzz.fill"
         default: return "figure.run"
-        }
-    }
-
-    private func focusName(_ focus: String) -> String {
-        switch focus.lowercased() {
-        case "cardio": return L10n.t("Cardio", "有氧")
-        case "strength": return L10n.t("Strength", "力量")
-        case "flexibility": return L10n.t("Flexibility", "拉伸")
-        case "rest": return L10n.t("Rest", "休息")
-        default: return focus.capitalized
-        }
-    }
-
-    private func intensityName(_ intensity: String) -> String {
-        switch intensity.lowercased() {
-        case "low": return L10n.t("Low", "低强度")
-        case "moderate": return L10n.t("Moderate", "中强度")
-        case "high": return L10n.t("High", "高强度")
-        default: return intensity.capitalized
-        }
-    }
-
-    private func getIntensityColor(_ intensity: String) -> Color {
-        switch intensity.lowercased() {
-        case "low": return VelaTheme.recoveryColor
-        case "moderate": return VelaTheme.energyColor
-        case "high": return VelaTheme.stressColor
-        default: return VelaTheme.fg2
         }
     }
 }

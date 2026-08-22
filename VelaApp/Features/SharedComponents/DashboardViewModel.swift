@@ -103,6 +103,9 @@ final class DashboardViewModel: ObservableObject {
     @Published private(set) var fitnessActivityHistory: [FitnessActivityDay] = []
 
     // Secondary data properties for the dashboard view
+    /// Canonical daily decision emitted by `DailyIntelligenceAssemblyModule`.
+    /// Primary surfaces consume this value instead of invoking decision kernels.
+    @Published private(set) var dailyTrainingDecision: DailyTrainingDecision?
     @Published private(set) var todayExperience: TodayExperienceModel?
     @Published private(set) var todayCommandState: TodayCommandState?
     /// 未经反馈校准的 readiness 置信度（校准乘数基于它，避免重复缩放）。
@@ -134,7 +137,13 @@ final class DashboardViewModel: ObservableObject {
 
     func selectDate(_ date: Date) {
         let calendar = Calendar.current
-        selectedDate = min(calendar.startOfDay(for: date), calendar.startOfDay(for: Date()))
+        let nextDate = min(calendar.startOfDay(for: date), calendar.startOfDay(for: Date()))
+        guard !calendar.isDate(nextDate, inSameDayAs: selectedDate) else { return }
+        selectedDate = nextDate
+        // Never flash a previous day's intelligence while the selected day is loading.
+        dailyTrainingDecision = nil
+        todayCommandState = nil
+        todayExperience = nil
     }
 
     private let useCase: DailySummaryUseCase
@@ -502,10 +511,14 @@ final class DashboardViewModel: ObservableObject {
         let refDate = selectedDate
         let startOfDayRef = calendar.startOfDay(for: refDate)
 
-        let healthLookbackDays = 42
+        // Only DailyHealthSnapshot history feeds the multi-scale Brief. Keep
+        // behavior/training evidence windows at their established 42/30 days.
+        let healthHistoryLookbackDays = 180
+        let evidenceLookbackDays = 42
         let trainingLookbackDays = 30
 
-        let startLimit = calendar.startOfDay(for: calendar.date(byAdding: .day, value: -healthLookbackDays, to: startOfDayRef) ?? startOfDayRef)
+        let healthHistoryStartLimit = calendar.startOfDay(for: calendar.date(byAdding: .day, value: -healthHistoryLookbackDays, to: startOfDayRef) ?? startOfDayRef)
+        let evidenceStartLimit = calendar.startOfDay(for: calendar.date(byAdding: .day, value: -evidenceLookbackDays, to: startOfDayRef) ?? startOfDayRef)
         let trainingStartLimit = calendar.startOfDay(for: calendar.date(byAdding: .day, value: -trainingLookbackDays, to: startOfDayRef) ?? startOfDayRef)
         let endLimit = calendar.date(byAdding: .day, value: 1, to: startOfDayRef) ?? startOfDayRef
 
@@ -543,25 +556,25 @@ final class DashboardViewModel: ObservableObject {
         let workoutEvents = (try? modelContext.fetch(eventsDesc)) ?? []
 
         let responsesDesc = FetchDescriptor<TrainingResponseRecord>(
-            predicate: #Predicate<TrainingResponseRecord> { $0.date >= startLimit && $0.date <= endLimit },
+            predicate: #Predicate<TrainingResponseRecord> { $0.date >= evidenceStartLimit && $0.date <= endLimit },
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
         let trainingResponses = (try? modelContext.fetch(responsesDesc)) ?? []
 
         let foodDesc = FetchDescriptor<FoodLogRecord>(
-            predicate: #Predicate<FoodLogRecord> { $0.createdAt >= startLimit && $0.createdAt <= endLimit },
+            predicate: #Predicate<FoodLogRecord> { $0.createdAt >= evidenceStartLimit && $0.createdAt <= endLimit },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
         let foodLogs = (try? modelContext.fetch(foodDesc)) ?? []
 
         let journalDesc = FetchDescriptor<JournalEntryRecord>(
-            predicate: #Predicate<JournalEntryRecord> { $0.createdAt >= startLimit && $0.createdAt <= endLimit },
+            predicate: #Predicate<JournalEntryRecord> { $0.createdAt >= evidenceStartLimit && $0.createdAt <= endLimit },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
         let journalEntries = (try? modelContext.fetch(journalDesc)) ?? []
 
         let summaryDesc = FetchDescriptor<DailyHealthSummaryRecord>(
-            predicate: #Predicate<DailyHealthSummaryRecord> { $0.date >= startLimit && $0.date <= endLimit },
+            predicate: #Predicate<DailyHealthSummaryRecord> { $0.date >= healthHistoryStartLimit && $0.date <= endLimit },
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
         let dailySummaries = (try? modelContext.fetch(summaryDesc)) ?? []
@@ -591,14 +604,25 @@ final class DashboardViewModel: ObservableObject {
         let artifactValues = coachArtifacts.map(\.artifact)
         let activePlanDTO = activePlan?.dto
         let persistedDecision = persistedPlan?.trainingDecision
+        let persistedBodyStateHash = persistedPlan?.bodyStateHash
+        let persistedOperatingPlanPayload = persistedPlan?.operatingPlanPayload
+        let persistedTargetSessionTitle = persistedOperatingPlanPayload?.targetSessionTitle
         let dashboardSnapshot = dashboard
         let observationSummaries = confirmedObservationSummaries(modelContext: modelContext)
+        let evaluationNow = Date()
+        let activeStatus = ActiveStatusSettings.resolveStatus(
+            at: refDate,
+            now: evaluationNow,
+            calendar: calendar
+        )
+        let snapshotValues = dailySummaries.map { $0.toSnapshot() }
 
         let assembly = await Task.detached {
             SecondaryDataAssembler.assemble(
                 dashboard: dashboardSnapshot,
                 refDate: refDate,
                 calendar: calendar,
+                snapshots: snapshotValues,
                 dailySummaries: dailySummaryDTOs,
                 workoutEvents: eventDTOs,
                 strengthWorkouts: strengthDTOs,
@@ -608,6 +632,10 @@ final class DashboardViewModel: ObservableObject {
                 coachArtifacts: artifactValues,
                 activePlan: activePlanDTO,
                 persistedDecision: persistedDecision,
+                persistedBodyStateHash: persistedBodyStateHash,
+                persistedTargetSessionTitle: persistedTargetSessionTitle,
+                persistedOperatingPlan: persistedOperatingPlanPayload,
+                activeStatus: activeStatus,
                 trainingPreference: trainingPreference,
                 confirmedObservations: observationSummaries
             )
@@ -622,6 +650,7 @@ final class DashboardViewModel: ObservableObject {
         self.todayProtein = assembly.todayProtein
         self.todayCarbs = assembly.todayCarbs
         self.todayFat = assembly.todayFat
+        self.dailyTrainingDecision = assembly.dailyTrainingDecision
         self.todayExperience = assembly.todayExperience
         self.latestTodayArtifact = assembly.latestTodayArtifact
         self.todayCommandState = assembly.todayCommandState
@@ -683,6 +712,7 @@ enum SecondaryDataAssembler {
         dashboard: DashboardSummary,
         refDate: Date,
         calendar: Calendar,
+        snapshots: [DailyHealthSnapshot] = [],
         dailySummaries: [DailyHealthSummaryDTO],
         workoutEvents: [WorkoutEventDTO],
         strengthWorkouts: [StrengthWorkoutDTO],
@@ -692,29 +722,42 @@ enum SecondaryDataAssembler {
         coachArtifacts: [CoachArtifact],
         activePlan: TrainingPlanDTO?,
         persistedDecision: DailyTrainingDecision?,
+        persistedBodyStateHash: String? = nil,
+        persistedTargetSessionTitle: String? = nil,
+        persistedOperatingPlan: DailyOperatingPlanPayload? = nil,
+        activeStatus: String = "active",
         trainingPreference: TrainingPreferenceProfile? = nil,
         confirmedObservations: [String] = []
     ) -> SecondaryDataAssembly {
         let startOfDayRef = calendar.startOfDay(for: refDate)
 
-        // 2. Build BodyState
         let currentDailySummary = dailySummaries.first(where: {
             calendar.isDate($0.date, inSameDayAs: refDate)
         })
-        let bodyState = BodyStateKernel().build(input: BodyStateInput(
-            dashboard: dashboard,
-            dailySummary: currentDailySummary,
-            workoutEvents: workoutEvents,
-            strengthWorkouts: strengthWorkouts,
-            trainingResponses: trainingResponses,
-            foodLogs: foodLogs,
-            journalEntries: journalEntries,
-            activePlan: activePlan,
-            activeStatus: ActiveStatusSettings.resolveCurrentStatus(),
-            generatedAt: refDate
-        ))
+        let intelligence = DailyIntelligenceAssemblyModule.assemble(
+            DailyIntelligenceAssemblyInput(
+                dashboard: dashboard,
+                selectedDay: refDate,
+                calendar: calendar,
+                dailySummary: currentDailySummary,
+                bodyStateWorkoutEvents: workoutEvents,
+                decisionWorkoutEvents: workoutEvents,
+                strengthWorkouts: strengthWorkouts,
+                trainingResponses: trainingResponses,
+                foodLogs: foodLogs,
+                journalEntries: journalEntries,
+                activePlan: activePlan,
+                activeStatus: activeStatus,
+                snapshots: snapshots,
+                trainingPreference: trainingPreference,
+                persistedDecision: persistedDecision,
+                persistedBodyStateHash: persistedBodyStateHash,
+                persistedTargetSessionTitle: persistedTargetSessionTitle
+            )
+        )
+        let bodyState = intelligence.bodyState
+        let dailyTrainingDecision = intelligence.trainingDecision
 
-        // 3. Build Training Decision
         // F4 修复：窗口与 loadDashboard 持久化路径保持一致（28 天），
         // 避免「持久化计划决策」与「展示决策」因 7d/28d 摘要分歧而产生不同结论。
         let recentStrengthSummary = TrainingAnalyticsService().buildRecentSummary(
@@ -722,35 +765,9 @@ enum SecondaryDataAssembler {
             days: 28,
             endingAt: refDate
         )
-        let dailyTrainingDecision: DailyTrainingDecision
-        let rotationFocus = activePlan == nil
-            ? TrainingRotationResolver.nextFocus(
-                profile: trainingPreference,
-                recentResponses: trainingResponses
-            )
-            : nil
-        let expectedRotationTitle = rotationFocus.map(TrainingRotationResolver.title)
-        if let persistedDecision,
-           expectedRotationTitle == nil || persistedDecision.targetSessionTitle == expectedRotationTitle {
-            dailyTrainingDecision = persistedDecision
-        } else {
-            dailyTrainingDecision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(
-                bodyState: bodyState,
-                activePlan: activePlan,
-                trainingResponses: trainingResponses,
-                workoutEvents: workoutEvents,
-                longTermTrainingVolume: dashboard.longTermBaselines?.trainingVolume,
-                rotationFocus: rotationFocus
-            ))
-        }
 
         // 4. Update Dashboard metrics
-        var updatedDashboard = dashboard
-        updatedDashboard.bodyState = bodyState
-        updatedDashboard.trainingDecision = TrainingDecision.compatibilityView(
-            of: dailyTrainingDecision,
-            bodyState: bodyState
-        )
+        let updatedDashboard = intelligence.dashboard
 
         // 5. Latest today artifact（提前计算：CommandState 构建需要）
         let latestTodayArtifact = coachArtifacts
@@ -790,7 +807,8 @@ enum SecondaryDataAssembler {
                 carbs: carbs,
                 fat: fat
             ),
-            history: dailySummaries
+            history: dailySummaries,
+            operatingPlan: persistedOperatingPlan
         )
 
         // 7. scheduled day（CommandState 已在第 6 步提前构建，供行动列表统一结论）

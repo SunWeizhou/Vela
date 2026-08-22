@@ -5,52 +5,92 @@ struct CoreMetricTrendSeries: Equatable {
     var valueText: String
     var icon: String
     var statusLabel: String
+    var valueDirection: TrendValueDirection
+    var assessment: TrendAssessment
     var history: [Double]
 }
 
+extension VelaMetricDetailView.MetricType {
+    var coreMetric: CoreHealthMetric? {
+        switch self {
+        case .hrv: return .hrv
+        case .rhr: return .restingHeartRate
+        case .sleep: return .sleepDuration
+        case .recovery: return .recovery
+        case .strain: return .strain
+        case .stress: return .stress
+        case .energy: return .energy
+        case .respiratoryRate: return .respiratoryRate
+        case .bloodOxygen: return .oxygenSaturation
+        case .weight: return .bodyWeight
+        case .bodyFat: return .bodyFat
+        case .steps: return .steps
+        case .activeCalories: return .activeCalories
+        case .activeMinutes: return nil
+        }
+    }
+}
+
 enum CoreMetricTrendMapper {
-    static func series(
+    static func seriesList(
         for metric: VelaMetricDetailView.MetricType,
+        findings: [HealthTrendFinding] = [],
         snapshots: [DailyHealthSnapshot],
         endingAt endDate: Date,
         calendar: Calendar = .current
-    ) -> CoreMetricTrendSeries? {
-        let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: endDate)) ?? endDate
-        let start = calendar.date(byAdding: .day, value: -30, to: end) ?? end
-        let valuesWithDate = snapshots
-            .filter { $0.date >= start && $0.date < end }
-            .sorted { $0.date < $1.date }
-            .compactMap { snap -> (Date, Double)? in
-                guard let v = value(for: metric, snapshot: snap) else { return nil }
-                return (snap.date, v)
-            }
+    ) -> [TrendItem] {
+        guard let core = metric.coreMetric else { return [] }
 
-        let values = valuesWithDate.map(\.1)
-        guard !values.isEmpty, let latest = values.last else { return nil }
+        let horizons: [HealthTrendHorizon] = [.sevenDays, .thirtyDays, .sixMonths]
+        var items: [TrendItem] = []
 
-        let sorted = values.sorted()
-        let medianVal = sorted.count % 2 == 1
-            ? sorted[sorted.count / 2]
-            : (sorted[sorted.count / 2 - 1] + sorted[sorted.count / 2]) / 2.0
+        for horizon in horizons {
+            let days = horizon.windowDays
+            let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: endDate)) ?? endDate
+            let start = calendar.date(byAdding: .day, value: -days, to: end) ?? end
 
-        let delta = latest - medianVal
-        let deltaPercent = medianVal > 0 ? (delta / medianVal) * 100 : 0
-        let statusLabel: String
-        if abs(deltaPercent) < 3.5 {
-            statusLabel = "近30天基本稳定"
-        } else if deltaPercent > 0 {
-            statusLabel = String(format: "较基线偏高 +%.1f%%", deltaPercent)
-        } else {
-            statusLabel = String(format: "较基线偏低 -%.1f%%", abs(deltaPercent))
+            let valuesWithDate = snapshots
+                .filter { $0.date >= start && $0.date < end }
+                .sorted { $0.date < $1.date }
+                .compactMap { snap -> (Date, Double)? in
+                    guard let v = value(for: metric, snapshot: snap) else { return nil }
+                    return (snap.date, v)
+                }
+
+            let values = valuesWithDate.map { $0.1 }
+            let finding = findings.first { $0.metric == core && $0.horizon == horizon }
+
+            let horizonTitle = "\(horizon.detailedTitle)\(title(for: metric))"
+            let valText = finding?.isAvailable == true ? (finding?.currentValueFormatted ?? "--") : (values.last.map { valueText(for: metric, value: $0) } ?? "--")
+            let status = finding?.summary ?? "\(horizon.detailedTitle)数据积累中"
+            let valueDir = finding?.valueDirection ?? .stable
+            let assess = finding?.assessment ?? .insufficientData
+
+            items.append(
+                TrendItem(
+                    title: horizonTitle,
+                    value: valText,
+                    icon: icon(for: metric),
+                    statusLabel: status,
+                    valueDirection: valueDir,
+                    assessment: assess,
+                    statusColor: assessmentColor(for: assess),
+                    graphColor: assessmentColor(for: assess),
+                    history: normalize(values)
+                )
+            )
         }
 
-        return CoreMetricTrendSeries(
-            title: "近30天\(title(for: metric))",
-            valueText: valueText(for: metric, value: latest),
-            icon: icon(for: metric),
-            statusLabel: statusLabel,
-            history: normalize(values)
-        )
+        return items
+    }
+
+    private static func assessmentColor(for assessment: TrendAssessment) -> Color {
+        switch assessment {
+        case .favorable: return VelaTheme.stateGood
+        case .unfavorable: return VelaTheme.statePoor
+        case .neutral: return VelaTheme.rhythmInkSecondary
+        case .insufficientData: return VelaTheme.meta
+        }
     }
 
     private static func value(
@@ -82,13 +122,13 @@ enum CoreMetricTrendMapper {
         case .sleep: "睡眠"
         case .stress: "压力"
         case .energy: "能量"
-        case .hrv: "心率变异性"
+        case .hrv: "HRV"
         case .rhr: "静息心率"
         case .weight: "体重"
         case .bodyFat: "体脂"
         case .respiratoryRate: "呼吸率"
         case .bloodOxygen: "血氧"
-        case .steps: "今日步数"
+        case .steps: "步数"
         case .activeCalories: "活动消耗"
         case .activeMinutes: "活跃时长"
         }
@@ -110,15 +150,6 @@ enum CoreMetricTrendMapper {
         case .steps: "shoeprints.fill"
         case .activeCalories: "flame.fill"
         case .activeMinutes: "clock.badge.checkmark"
-        }
-    }
-
-    private static func unitSuffix(for metric: VelaMetricDetailView.MetricType) -> String {
-        switch metric {
-        case .weight: return " kg"
-        case .hrv: return " ms"
-        case .rhr: return " bpm"
-        default: return ""
         }
     }
 
@@ -166,6 +197,8 @@ struct TrendItem: Identifiable {
     let value: String
     let icon: String
     let statusLabel: String
+    var valueDirection: TrendValueDirection = .stable
+    var assessment: TrendAssessment = .neutral
     let statusColor: Color
     let graphColor: Color
     let history: [Double]
@@ -177,59 +210,77 @@ struct MetricTrendsSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("趋势")
-                .font(VelaTheme.footnote().weight(.bold))
-                .foregroundStyle(VelaTheme.rhythmInk)
+            HStack(spacing: 6) {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmDeep)
+                Text("多尺度趋势与动量")
+                    .font(VelaTheme.footnote().weight(.bold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                Spacer()
+            }
             
             VStack(spacing: 0) {
                 if items.isEmpty {
-                    Label("积累更多数据后显示长期变化", systemImage: "chart.line.uptrend.xyaxis")
+                    Label("积累更多数据后显示多尺度生理变化", systemImage: "chart.line.uptrend.xyaxis")
                         .font(VelaTheme.footnote())
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(16)
                 } else {
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: item.icon)
-                                        .font(.system(size: 12))
-                                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                                    Text(item.title)
-                                        .font(VelaTheme.caption1().weight(.semibold))
-                                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                                    Spacer()
-                                }
-                                
-                                HStack(alignment: .bottom) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(item.value)
-                                            .font(.system(size: 20, weight: .bold, design: .rounded))
-                                            .monospacedDigit()
-                                            .foregroundStyle(VelaTheme.rhythmInk)
-                                        Text(item.statusLabel)
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(alignment: .center, spacing: 8) {
+                                Image(systemName: item.icon)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(VelaTheme.rhythmDeep)
+                                Text(item.title)
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(VelaTheme.rhythmInk)
+                                Spacer()
+                                if item.assessment != .insufficientData {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: item.valueDirection.icon)
                                             .font(.system(size: 10, weight: .bold))
-                                            .foregroundStyle(item.statusColor)
+                                        Text(item.assessment.label)
+                                            .font(.system(size: 10, weight: .semibold))
                                     }
-                                    Spacer()
-                                    
-                                    // Live sparkline path graph
-                                    if !item.history.isEmpty {
-                                        SparklineLineGraph(data: item.history, color: item.graphColor, height: 32, width: 85)
-                                    } else {
-                                        Text("无可用趋势")
-                                            .font(VelaTheme.caption2())
-                                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                                            .frame(width: 85, height: 32)
-                                    }
+                                    .foregroundStyle(item.statusColor)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Capsule().fill(item.statusColor.opacity(0.12)))
+                                }
+                            }
+
+                            HStack(alignment: .bottom, spacing: 12) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.value)
+                                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                                        .monospacedDigit()
+                                        .foregroundStyle(VelaTheme.rhythmInk)
+                                    Text(item.statusLabel)
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                                        .lineLimit(2)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                Spacer()
+                                
+                                // Live sparkline path graph
+                                if !item.history.isEmpty && item.history.count >= 2 {
+                                    SparklineLineGraph(data: item.history, color: item.statusColor, height: 32, width: 85)
+                                } else {
+                                    Text("--")
+                                        .font(VelaTheme.caption2())
+                                        .foregroundStyle(VelaTheme.muted)
+                                        .frame(width: 85, height: 32, alignment: .trailing)
                                 }
                             }
                         }
                         .padding(14)
 
                         if index < items.count - 1 {
-                            Divider().padding(.leading, 14)
+                            Divider().padding(.horizontal, 14)
                         }
                     }
                 }

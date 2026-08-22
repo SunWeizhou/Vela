@@ -41,7 +41,7 @@ struct HealthTrendEngine: Sendable {
             allFindings.append(contentsOf: findingsForMetric)
         }
 
-        let notableChanges = allFindings.filter { $0.isNotable && $0.isAvailable }
+        let notableChanges = rankedNotableChanges(from: allFindings)
         let stableSignals = allFindings.filter { !$0.isNotable && $0.isAvailable && $0.horizon == .thirtyDays && $0.currentValue != nil }
 
         let overallState = determineOverallState(
@@ -181,10 +181,35 @@ struct HealthTrendEngine: Sendable {
             let summary = "\(devSummary)，\(trendSummary)"
             let isNotable = abs(deviation) >= 12.0
 
+            let valueDirection: TrendValueDirection
+            if abs(deviation) < 3.5 {
+                valueDirection = .stable
+            } else if deviation > 0 {
+                valueDirection = .rising
+            } else {
+                valueDirection = .falling
+            }
+
+            let assessment: TrendAssessment
+            switch metric.polarity {
+            case .higherIsBetter:
+                assessment = valueDirection == .stable
+                    ? .neutral
+                    : (valueDirection == .rising ? .favorable : .unfavorable)
+            case .lowerIsBetter:
+                assessment = valueDirection == .stable
+                    ? .neutral
+                    : (valueDirection == .rising ? .unfavorable : .favorable)
+            case .contextual:
+                assessment = .neutral
+            }
+
             results.append(HealthTrendFinding(
                 metric: metric,
                 horizon: .threeYears,
                 direction: direction,
+                valueDirection: valueDirection,
+                assessment: assessment,
                 currentValue: cur,
                 currentValueFormatted: formattedCurrent,
                 baselineValue: pMedian,
@@ -215,6 +240,38 @@ struct HealthTrendEngine: Sendable {
         return results
     }
 
+    /// Briefs expose one finding per metric. The ranking is deliberately
+    /// deterministic: shorter horizons are more actionable, then larger
+    /// percentage movement wins, then the canonical metric order breaks ties.
+    /// This prevents the same metric from occupying the brief once per horizon
+    /// while keeping the headline stable across fetch/order changes.
+    private func rankedNotableChanges(from findings: [HealthTrendFinding]) -> [HealthTrendFinding] {
+        let horizonRank: [HealthTrendHorizon: Int] = [
+            .sevenDays: 0,
+            .thirtyDays: 1,
+            .sixMonths: 2,
+            .threeYears: 3
+        ]
+        let metricRank = Dictionary(uniqueKeysWithValues: CoreHealthMetric.allCases.enumerated().map { ($1, $0) })
+
+        let ranked = findings
+            .filter { $0.isNotable && $0.isAvailable }
+            .sorted { lhs, rhs in
+                let lhsHorizon = horizonRank[lhs.horizon, default: Int.max]
+                let rhsHorizon = horizonRank[rhs.horizon, default: Int.max]
+                if lhsHorizon != rhsHorizon { return lhsHorizon < rhsHorizon }
+
+                let lhsMagnitude = max(abs(lhs.currentDeviationPercent ?? 0), abs(lhs.temporalTrendDeltaPercent ?? 0))
+                let rhsMagnitude = max(abs(rhs.currentDeviationPercent ?? 0), abs(rhs.temporalTrendDeltaPercent ?? 0))
+                if lhsMagnitude != rhsMagnitude { return lhsMagnitude > rhsMagnitude }
+
+                return metricRank[lhs.metric, default: Int.max] < metricRank[rhs.metric, default: Int.max]
+            }
+
+        var seenMetrics = Set<CoreHealthMetric>()
+        return ranked.filter { seenMetrics.insert($0.metric).inserted }
+    }
+
     private func computeHorizonFinding(
         metric: CoreHealthMetric,
         horizon: HealthTrendHorizon,
@@ -230,11 +287,34 @@ struct HealthTrendEngine: Sendable {
         let windowValuesWithDate: [(date: Date, value: Double)] = windowSnapshots.compactMap { snap in
             guard let val = value(for: metric, snapshot: snap) else { return nil }
             return (date: snap.date, value: val)
-        }
+        }.sorted { $0.date < $1.date }
 
         let sampleCount = windowValuesWithDate.count
         guard sampleCount >= horizon.requiredSampleCount else {
             return HealthTrendFinding.unavailable(metric: metric, horizon: horizon, sampleCount: sampleCount)
+        }
+
+        // Span & recency verification for multi-month / multi-year horizons
+        if horizon == .sixMonths {
+            guard let earliest = windowValuesWithDate.first?.date,
+                  let latest = windowValuesWithDate.last?.date else {
+                return HealthTrendFinding.unavailable(metric: metric, horizon: horizon, sampleCount: sampleCount)
+            }
+            let spanDays = abs(calendar.dateComponents([.day], from: calendar.startOfDay(for: earliest), to: calendar.startOfDay(for: latest)).day ?? 0)
+            let daysFromToday = abs(calendar.dateComponents([.day], from: calendar.startOfDay(for: latest), to: calendar.startOfDay(for: today)).day ?? 0)
+            guard spanDays >= 90, daysFromToday <= 14 else {
+                return HealthTrendFinding.unavailable(metric: metric, horizon: horizon, sampleCount: sampleCount)
+            }
+        } else if horizon == .threeYears {
+            guard let earliest = windowValuesWithDate.first?.date,
+                  let latest = windowValuesWithDate.last?.date else {
+                return HealthTrendFinding.unavailable(metric: metric, horizon: horizon, sampleCount: sampleCount)
+            }
+            let spanDays = abs(calendar.dateComponents([.day], from: calendar.startOfDay(for: earliest), to: calendar.startOfDay(for: latest)).day ?? 0)
+            let daysFromToday = abs(calendar.dateComponents([.day], from: calendar.startOfDay(for: latest), to: calendar.startOfDay(for: today)).day ?? 0)
+            guard spanDays >= 365, daysFromToday <= 30 else {
+                return HealthTrendFinding.unavailable(metric: metric, horizon: horizon, sampleCount: sampleCount)
+            }
         }
 
         let rawValues = windowValuesWithDate.map(\.value)
@@ -247,6 +327,10 @@ struct HealthTrendEngine: Sendable {
         let firstHalfValues = Array(rawValues.prefix(halfCount))
         let secondHalfValues = Array(rawValues.suffix(sampleCount - halfCount))
 
+        if horizon == .sixMonths && (firstHalfValues.count < 15 || secondHalfValues.count < 15) {
+            return HealthTrendFinding.unavailable(metric: metric, horizon: horizon, sampleCount: sampleCount)
+        }
+
         let m1 = median(of: firstHalfValues) ?? baselineMedian
         let m2 = median(of: secondHalfValues) ?? baselineMedian
         let trendDelta = m2 - m1
@@ -256,22 +340,45 @@ struct HealthTrendEngine: Sendable {
         let curDev: Double? = currentValue.map { $0 - baselineMedian }
         let curDevPercent: Double? = currentValue.flatMap { baselineMedian > 0 ? (($0 - baselineMedian) / baselineMedian) * 100 : 0 }
 
-        // Direction mapping based on metric polarity
-        let direction: HealthTrendDirection
+        // Decouple value direction (numerical) from assessment (health meaning)
         let trendThresholdPercent: Double = 3.5
+        let valueDirection: TrendValueDirection
         if abs(trendDeltaPercent) < trendThresholdPercent {
+            valueDirection = .stable
+        } else if trendDeltaPercent > 0 {
+            valueDirection = .rising
+        } else {
+            valueDirection = .falling
+        }
+
+        let assessment: TrendAssessment
+        let direction: HealthTrendDirection
+        if abs(trendDeltaPercent) < trendThresholdPercent {
+            assessment = .neutral
             direction = .stable
         } else if trendDeltaPercent > 0 {
             switch metric.polarity {
-            case .higherIsBetter: direction = .improving
-            case .lowerIsBetter: direction = .declining
-            case .contextual: direction = .elevated
+            case .higherIsBetter:
+                assessment = .favorable
+                direction = .improving
+            case .lowerIsBetter:
+                assessment = .unfavorable
+                direction = .declining
+            case .contextual:
+                assessment = .neutral
+                direction = .elevated
             }
         } else {
             switch metric.polarity {
-            case .higherIsBetter: direction = .declining
-            case .lowerIsBetter: direction = .improving
-            case .contextual: direction = .suppressed
+            case .higherIsBetter:
+                assessment = .unfavorable
+                direction = .declining
+            case .lowerIsBetter:
+                assessment = .favorable
+                direction = .improving
+            case .contextual:
+                assessment = .neutral
+                direction = .suppressed
             }
         }
 
@@ -290,44 +397,32 @@ struct HealthTrendEngine: Sendable {
         }
 
         // Temporal Trend Summary
-        let trendSummary: String
-        if abs(trendDeltaPercent) < 3.5 {
-            trendSummary = "\(horizon.title)基本平稳"
+        let temporalSummary: String
+        if abs(trendDeltaPercent) < trendThresholdPercent {
+            temporalSummary = "\(horizon.detailedTitle)整体平稳"
         } else if trendDeltaPercent > 0 {
-            trendSummary = metric.polarity == .higherIsBetter ? "\(horizon.title)呈上升改善" : "\(horizon.title)呈上升走势"
+            temporalSummary = String(format: "\(horizon.detailedTitle)中位数上升 +%.1f%%", trendDeltaPercent)
         } else {
-            trendSummary = metric.polarity == .higherIsBetter ? "\(horizon.title)呈回落趋势" : "\(horizon.title)呈下降改善"
+            temporalSummary = String(format: "\(horizon.detailedTitle)中位数下降 -%.1f%%", abs(trendDeltaPercent))
         }
 
-        // Notable check
-        let isNotable: Bool
-        let devMagnitude = curDevPercent.map(abs) ?? 0
-        let trendMagnitude = abs(trendDeltaPercent)
-        switch metric {
-        case .hrv:
-            isNotable = devMagnitude >= 12.0 || trendMagnitude >= 10.0
-        case .restingHeartRate:
-            let absDelta = curDev.map(abs) ?? 0
-            isNotable = absDelta >= 3.0 || trendMagnitude >= 6.0
-        case .sleepDuration:
-            let absSleepDelta = curDev.map(abs) ?? 0
-            isNotable = absSleepDelta >= 0.75 || trendMagnitude >= 10.0
-        case .recovery:
-            isNotable = devMagnitude >= 15.0 || trendMagnitude >= 12.0
-        case .strain:
-            isNotable = devMagnitude >= 20.0 || trendMagnitude >= 15.0
-        default:
-            isNotable = devMagnitude >= 15.0 || trendMagnitude >= 12.0
-        }
+        let isNotable = (curDevPercent.map { abs($0) >= 12.0 } ?? false) || abs(trendDeltaPercent) >= 10.0
 
-        let summary = "\(devSummary)，\(trendSummary)"
+        let summaryText: String
+        if let devPct = curDevPercent, abs(devPct) >= 5.0 {
+            summaryText = "\(devSummary)，\(temporalSummary)"
+        } else {
+            summaryText = temporalSummary
+        }
 
         return HealthTrendFinding(
             metric: metric,
             horizon: horizon,
             direction: direction,
+            valueDirection: valueDirection,
+            assessment: assessment,
             currentValue: currentValue,
-            currentValueFormatted: currentFormatted,
+            currentValueFormatted: formatValue(currentValue, metric: metric),
             baselineValue: baselineMedian,
             baselineValueFormatted: formatValue(baselineMedian, metric: metric),
             currentDeviationValue: curDev,
@@ -338,10 +433,10 @@ struct HealthTrendEngine: Sendable {
             sampleCount: sampleCount,
             requiredSampleCount: horizon.requiredSampleCount,
             isAvailable: true,
-            confidence: sampleCount >= (days * 2 / 3) ? .high : .medium,
+            confidence: sampleCount >= horizon.requiredSampleCount * 2 ? .high : .medium,
             deviationSummary: devSummary,
-            temporalTrendSummary: trendSummary,
-            summary: summary,
+            temporalTrendSummary: temporalSummary,
+            summary: summaryText,
             isNotable: isNotable
         )
     }
@@ -366,17 +461,19 @@ struct HealthTrendEngine: Sendable {
         let rhrFinding = notableChanges.first { $0.metric == .restingHeartRate }
         let sleepFinding = notableChanges.first { $0.metric == .sleepDuration }
 
-        if recoveryScore >= 67 && hrvFinding?.direction != .declining && rhrFinding?.direction != .declining {
-            return .optimal
-        }
-
         if recoveryScore < 35 || (hrvFinding?.direction == .declining && rhrFinding?.direction == .declining) {
             return .recovering
         }
 
         // Strain is 0-100 scale: high strain is >= 70
-        let strainScore = dashboard.strain.value ?? 0
-        if strainScore >= 70 || (sleepFinding?.direction == .declining && recoveryScore < 50) {
+        if let strainScore = dashboard.strain.value, strainScore >= 70 {
+            return .strained
+        }
+
+        if recoveryScore >= 67 && hrvFinding?.direction != .declining && rhrFinding?.direction != .declining {
+            return .optimal
+        }
+        if sleepFinding?.direction == .declining && recoveryScore < 50 {
             return .strained
         }
 
@@ -457,7 +554,7 @@ struct HealthTrendEngine: Sendable {
         let hrvLow = notableChanges.contains { $0.metric == .hrv && $0.direction == .declining }
         let rhrHigh = notableChanges.contains { $0.metric == .restingHeartRate && $0.direction == .declining }
         let sleepLow = notableChanges.contains { $0.metric == .sleepDuration && $0.direction == .declining }
-        let strainHigh = (dashboard.strain.value ?? 0) >= 70
+        let strainHigh = dashboard.strain.value.map { $0 >= 70 } ?? false
 
         if hrvLow && rhrHigh {
             drivers.append("观察到 HRV 偏低与静息心率升高在近期协同出现，提示生理恢复负荷有所累积")
@@ -549,7 +646,7 @@ struct HealthTrendEngine: Sendable {
         case .steps:
             return dashboard.strain.metrics["steps_raw"]
         case .activeCalories:
-            return dashboard.strain.metrics["active_calories_raw"]
+            return dashboard.strain.metrics["active_energy_raw"] ?? dashboard.strain.metrics["active_calories_raw"]
         }
     }
 

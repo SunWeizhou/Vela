@@ -10,6 +10,9 @@ struct TrainingHeroSection: View {
 
     let todaySession: TrainingDay?
     let todayPlan: DailyOperatingPlanRecord?
+    /// Canonical projection from `DailyIntelligenceAssemblyModule`; the persisted
+    /// plan remains the preferred payload when its matching record is available.
+    let dailyDecision: DailyTrainingDecision?
     let activePlan: TrainingPlanRecord?
     let rotationFocus: String?
     let preferredSessionMinutes: Int
@@ -33,7 +36,7 @@ struct TrainingHeroSection: View {
     }
 
     private var decision: DailyTrainingDecisionType {
-        payload?.decision ?? .reduce
+        payload?.decision ?? dailyDecision?.decision ?? .reduce
     }
 
     private var focus: TrainingRotationFocus? {
@@ -65,54 +68,64 @@ struct TrainingHeroSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             decisionSummaryRow
-                .padding(.top, 24)
+                .padding(.top, 20)
 
-            evidenceSection
-                .padding(.top, 16)
-
-            futureRecommendationStrip
-                .padding(.top, 22)
+            if let personalInsight, !personalInsight.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                    Text(personalInsight)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(VelaTheme.rhythmCanvasRaised.opacity(0.85), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+                )
+                .padding(.top, 14)
+            }
 
             Button(action: onDiscussWithCoach) {
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     Image(systemName: "sparkles")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color.white)
-                        .frame(width: 36, height: 36)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeepOn)
+                        .frame(width: 28, height: 28)
                         .background(VelaTheme.rhythmDeep, in: Circle())
 
-                    Text("和 Vela 调整下一站")
-                        .font(.system(size: 15, weight: .semibold))
+                    Text("和 Vela 调整训练计划")
+                        .font(.callout.weight(.semibold))
                         .foregroundStyle(VelaTheme.rhythmInk)
 
                     Spacer(minLength: 8)
 
                     Image(systemName: "arrow.up.right")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(VelaTheme.rhythmDeep)
                 }
-                .padding(.horizontal, 13)
-                .padding(.vertical, 11)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, minHeight: VelaTheme.minimumHitTarget, alignment: .leading)
+                .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(Color.white.opacity(0.42), lineWidth: 0.75)
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
                 }
-                .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             }
             .buttonStyle(.cardPress)
-            .padding(.top, 18)
-
-            rhythmDisclosure
-                .padding(.top, 20)
+            .padding(.top, 14)
         }
         .padding(.horizontal, VelaTheme.pagePadding)
         .padding(.top, 8)
-        .padding(.bottom, 24)
+        .padding(.bottom, 16)
         .background(alignment: .top) {
             TrainingAmbientField(decision: decision)
-                .frame(height: 500)
+                .frame(height: 360)
                 .allowsHitTesting(false)
         }
         .onAppear {
@@ -120,7 +133,7 @@ struct TrainingHeroSection: View {
             if reduceMotion {
                 isRevealed = true
             } else {
-                withAnimation(.spring(response: 0.52, dampingFraction: 1.0)) {
+                withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                     isRevealed = true
                 }
             }
@@ -128,7 +141,7 @@ struct TrainingHeroSection: View {
     }
 
     private var planStateLabel: String {
-        guard todayPlan != nil else { return "采用保守边界" }
+        guard todayPlan != nil || dailyDecision != nil else { return "采用保守边界" }
         switch decision {
         case .keep: return "保持计划"
         case .reduce: return "建议减量"
@@ -138,12 +151,12 @@ struct TrainingHeroSection: View {
     }
 
     private var volumeText: String {
-        let multiplier = payload?.volumeMultiplier ?? 0.60
+        let multiplier = payload?.volumeMultiplier ?? dailyDecision?.volumeMultiplier ?? 0.60
         return "容量 \(Int((multiplier * 100).rounded()))%"
     }
 
     private var rpeText: String {
-        let cap = payload?.intensityCap ?? 7
+        let cap = payload?.intensityCap ?? dailyDecision?.intensityCap ?? 7
         return "≤ \(cap)"
     }
 
@@ -152,68 +165,105 @@ struct TrainingHeroSection: View {
         return todaySession.map { "\($0.durationMinutes) 分" } ?? "\(preferredSessionMinutes) 分"
     }
 
+    private var boundaryItems: [String] {
+        [volumeText, "RPE \(rpeText)", durationText]
+            .filter { $0 != "--" && $0 != "RPE --" }
+    }
+
     /// Decision first: one focus and a few execution boundaries. Supporting
     /// history and evidence stay behind progressive disclosure.
     private var decisionSummaryRow: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Text(decision == .rest ? "今天" : "下一站")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
-
-                Text(planStateLabel)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(VelaTheme.rhythmDeep)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(VelaTheme.rhythmDeep.opacity(0.10), in: Capsule())
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(decision == .rest ? "今天" : "下一站")
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        Text(planStateLabel)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(VelaTheme.rhythmDeep)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(VelaTheme.rhythmDeep.opacity(0.10), in: Capsule())
+                    }
+                } else {
+                    HStack(spacing: 8) {
+                        Text(decision == .rest ? "今天" : "下一站")
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        Text(planStateLabel)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(VelaTheme.rhythmDeep)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(VelaTheme.rhythmDeep.opacity(0.10), in: Capsule())
+                    }
+                }
             }
+            .frame(maxWidth: .infinity, minHeight: dynamicTypeSize.isAccessibilitySize ? VelaTheme.minimumHitTarget : 0, alignment: .leading)
 
             Text(decision == .rest ? "恢复" : (focus?.title ?? "设置训练轮转"))
-                .font(.system(size: 40, weight: .semibold))
+                .font(.largeTitle.weight(.semibold))
                 .tracking(-1.1)
                 .foregroundStyle(VelaTheme.rhythmInk)
                 .minimumScaleFactor(0.8)
 
-            HStack(spacing: 8) {
-                ForEach([volumeText, "RPE \(rpeText)", durationText].filter { $0 != "--" && $0 != "RPE --" }, id: \.self) { item in
-                    Text(item)
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(VelaTheme.rhythmInk)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(VelaTheme.rhythmCanvasRaised.opacity(0.88), in: Capsule())
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 8) {
+                        boundaryPills
+                    }
+                } else {
+                    HStack(spacing: 8) {
+                        boundaryPills
+                    }
                 }
             }
         }
     }
 
-    private var rhythmDisclosure: some View {
+    @ViewBuilder
+    private var boundaryPills: some View {
+        ForEach(boundaryItems, id: \.self) { item in
+            Text(item)
+                .font(.callout.weight(.semibold).monospacedDigit())
+                .foregroundStyle(VelaTheme.rhythmInk)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .frame(minHeight: dynamicTypeSize.isAccessibilitySize ? VelaTheme.minimumHitTarget : 0, alignment: .leading)
+                .background(VelaTheme.rhythmCanvasRaised.opacity(0.88), in: Capsule())
+        }
+    }
+
+    var rhythmDisclosure: some View {
         VStack(alignment: .leading, spacing: 12) {
             Button {
-                withAnimation(.spring(response: 0.42, dampingFraction: 0.92)) {
+                withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                     showRhythm.toggle()
                 }
             } label: {
                 HStack {
                     Text("最近 5 周训练节律")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.callout.weight(.semibold))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     Spacer()
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .rotationEffect(.degrees(showRhythm ? 180 : 0))
                 }
+                .frame(minHeight: VelaTheme.minimumHitTarget, alignment: .leading)
             }
             .buttonStyle(.plain)
+            .accessibilityValue(showRhythm ? "已展开" : "已折叠")
 
             if showRhythm {
                 TrainingRhythmHeatmap(
                     weeks: heatmapWeeks,
                     revealProgress: isRevealed ? 1 : 0
                 )
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
         }
     }
@@ -221,19 +271,19 @@ struct TrainingHeroSection: View {
     /// 训练规划卡：「今天（今日决定）+ 明 + 后」，本地推荐器即时给出，
     /// 可点「Vela 规划」让 Coach 结合数据复核。
     @ViewBuilder
-    private var futureRecommendationStrip: some View {
+    var futureRecommendationStrip: some View {
         let cards = aiFutureDays ?? Array(futureRecommendations.prefix(2))
         if !cards.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     Text("训练规划")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.footnote.weight(.semibold))
                         .tracking(0.4)
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
 
                     if let aiDays = aiFutureDays, !aiDays.isEmpty {
                         Text("Vela 建议")
-                            .font(.system(size: 9, weight: .semibold))
+                            .font(.caption.weight(.semibold))
                             .foregroundStyle(VelaTheme.rhythmDeepOn)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -249,10 +299,10 @@ struct TrainingHeroSection: View {
                                     .controlSize(.mini)
                             } else {
                                 Image(systemName: aiFutureDays == nil ? "sparkles" : "arrow.clockwise")
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .font(.caption.weight(.semibold))
                             }
                             Text(aiFutureDays == nil ? "Vela 规划" : "重新生成")
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(.caption.weight(.semibold))
                         }
                         .foregroundStyle(VelaTheme.rhythmDeep)
                         .padding(.horizontal, 9)
@@ -261,15 +311,25 @@ struct TrainingHeroSection: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(isPlanningWithAI)
+                    .frame(minHeight: VelaTheme.minimumHitTarget)
                     .accessibilityLabel("让 Vela 结合数据规划训练")
                 }
 
-                HStack(spacing: 8) {
-                    todayPlanCard()
-                    ForEach(Array(cards.prefix(2).enumerated()), id: \.offset) { _, recommendation in
-                        futurePlanCard(recommendation)
+                    if dynamicTypeSize.isAccessibilitySize {
+                        VStack(spacing: 8) {
+                            todayPlanCard()
+                            ForEach(Array(cards.prefix(2).enumerated()), id: \.offset) { _, recommendation in
+                                futurePlanCard(recommendation)
+                            }
+                        }
+                    } else {
+                        HStack(spacing: 8) {
+                            todayPlanCard()
+                            ForEach(Array(cards.prefix(2).enumerated()), id: \.offset) { _, recommendation in
+                                futurePlanCard(recommendation)
+                            }
+                        }
                     }
-                }
             }
         }
     }
@@ -307,22 +367,22 @@ struct TrainingHeroSection: View {
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 4) {
                 Text("今天")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.footnote.weight(.bold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Text(planStateLabel)
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.caption2.weight(.bold))
                     .foregroundStyle(VelaTheme.rhythmDeep)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)
                     .background(VelaTheme.rhythmDeep.opacity(0.12), in: Capsule())
             }
             Text(groupsText)
-                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .font(.headline.weight(.bold))
                 .foregroundStyle(isRest ? VelaTheme.sleepColor : VelaTheme.rhythmDeep)
             Text(primaryNote)
-                .font(.system(size: 11))
+                .font(.footnote)
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                .lineLimit(2)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(12)
@@ -349,11 +409,11 @@ struct TrainingHeroSection: View {
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 4) {
                 Text(label)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 if recommendation.source == "ai" {
                     Text("AI")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.caption2.weight(.bold))
                         .foregroundStyle(VelaTheme.rhythmDeep)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1.5)
@@ -361,12 +421,12 @@ struct TrainingHeroSection: View {
                 }
             }
             Text(groupsText)
-                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .font(.headline.weight(.bold))
                 .foregroundStyle(isRest ? VelaTheme.sleepColor : VelaTheme.rhythmDeep)
             Text(isRest ? recommendation.note : shortNote(recommendation.note))
-                .font(.system(size: 11))
+                .font(.footnote)
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                .lineLimit(2)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(12)
@@ -394,7 +454,7 @@ struct TrainingHeroSection: View {
                 .background(VelaTheme.rhythmMist, in: Circle())
 
             Text("Apple Watch 记录，结束后自动同步")
-                .font(.system(size: 12, weight: .medium))
+                .font(.footnote.weight(.medium))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
         }
         .accessibilityElement(children: .combine)
@@ -404,7 +464,7 @@ struct TrainingHeroSection: View {
     private var evidenceSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Button {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.9)) {
+                withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                     showEvidence.toggle()
                 }
             } label: {
@@ -413,15 +473,16 @@ struct TrainingHeroSection: View {
                         .fill(VelaTheme.rhythmDeep)
                         .frame(width: 2, height: 13)
                     Text(evidenceLine)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.callout.weight(.medium))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .lineLimit(1)
                     Spacer(minLength: 6)
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.caption2.weight(.semibold))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .rotationEffect(.degrees(showEvidence ? 90 : 0))
                 }
+                .frame(minHeight: VelaTheme.minimumHitTarget, alignment: .leading)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("今日训练依据，\(evidenceLine)")
@@ -433,16 +494,16 @@ struct TrainingHeroSection: View {
                         NavigationLink(destination: BodyModelDetailView()) {
                             HStack(alignment: .top, spacing: 8) {
                                 Image(systemName: "waveform.path.ecg")
-                                    .font(.system(size: 11, weight: .semibold))
+                                    .font(.caption.weight(.semibold))
                                     .foregroundStyle(VelaTheme.rhythmDeep)
                                     .padding(.top, 2)
                                 Text(personalInsight)
-                                    .font(.system(size: 12, weight: .medium))
+                                    .font(.callout.weight(.medium))
                                     .foregroundStyle(VelaTheme.rhythmInk)
                                     .fixedSize(horizontal: false, vertical: true)
                                 Spacer(minLength: 4)
                                 Image(systemName: "chevron.right")
-                                    .font(.system(size: 9, weight: .bold))
+                                    .font(.caption2.weight(.bold))
                                     .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.6))
                             }
                             .padding(10)
@@ -460,7 +521,7 @@ struct TrainingHeroSection: View {
                                     .frame(width: 5, height: 5)
                                     .padding(.top, 5)
                                 Text(reason)
-                                    .font(.system(size: 12))
+                                    .font(.callout)
                                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
@@ -470,7 +531,7 @@ struct TrainingHeroSection: View {
                         HStack(spacing: 10) {
                             ForEach(evidenceMetrics, id: \.self) { metric in
                                 Text(metric)
-                                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                                    .font(.caption.weight(.semibold).monospacedDigit())
                                     .foregroundStyle(VelaTheme.rhythmInk)
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 4)
@@ -481,7 +542,7 @@ struct TrainingHeroSection: View {
                 }
                 .padding(12)
                 .background(VelaTheme.rhythmCanvasRaised.opacity(0.7), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
         }
     }
@@ -499,7 +560,8 @@ struct TrainingHeroSection: View {
     }
 
     private var decisionReasons: [String] {
-        todayPlan?.operatingPlanReasons ?? []
+        let persisted = todayPlan?.operatingPlanReasons ?? []
+        return persisted.isEmpty ? (dailyDecision?.reasons ?? []) : persisted
     }
 }
 
@@ -794,6 +856,7 @@ enum TrainingHeatmapData {
 
 /// 训练节律日历热力图：最近几周训练强度色块，今天描边，点格子看当天练了什么。
 private struct TrainingRhythmHeatmap: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let weeks: [TrainingHeatmapWeek]
     let revealProgress: CGFloat
 
@@ -806,7 +869,7 @@ private struct TrainingRhythmHeatmap: View {
             HStack(spacing: 6) {
                 ForEach(Self.weekdayLabels, id: \.self) { label in
                     Text(label)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.caption2.weight(.medium))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.7))
                         .frame(maxWidth: .infinity)
                 }
@@ -833,14 +896,14 @@ private struct TrainingRhythmHeatmap: View {
                         .transition(.opacity)
                 }
             }
-            .frame(height: 28)
+            .frame(minHeight: VelaTheme.minimumHitTarget)
         }
     }
 
     private var legend: some View {
         HStack(spacing: 7) {
             Text("最近 5 周训练")
-                .font(.system(size: 10, weight: .medium))
+                .font(.caption2.weight(.medium))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.7))
             legendCell(color: VelaTheme.rhythmMist.opacity(0.6), label: "无")
             legendCell(color: VelaTheme.rhythmGlow.opacity(0.55), label: "轻")
@@ -848,7 +911,7 @@ private struct TrainingRhythmHeatmap: View {
             legendCell(color: VelaTheme.rhythmDeep, label: "高")
             Spacer()
             Text("点格子看当天")
-                .font(.system(size: 10))
+                .font(.caption2)
                 .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.7))
         }
     }
@@ -859,12 +922,12 @@ private struct TrainingRhythmHeatmap: View {
                 .fill(VelaTheme.rhythmDeep)
                 .frame(width: 6, height: 6)
             Text(detailText(day))
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .font(.footnote.weight(.semibold).monospacedDigit())
                 .foregroundStyle(VelaTheme.rhythmInk)
                 .lineLimit(1)
             Spacer(minLength: 6)
             Text("再点取消")
-                .font(.system(size: 9))
+                .font(.caption2)
                 .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.6))
         }
         .padding(.horizontal, 10)
@@ -879,39 +942,43 @@ private struct TrainingRhythmHeatmap: View {
                 .fill(color)
                 .frame(width: 10, height: 10)
             Text(label)
-                .font(.system(size: 10))
+                .font(.caption2)
                 .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.8))
         }
     }
 
     private func cell(_ day: TrainingHeatmapDay) -> some View {
         let isToday = Calendar.current.isDateInToday(day.date)
-        return RoundedRectangle(cornerRadius: 6, style: .continuous)
-            .fill(cellColor(day))
-            .frame(height: 26)
-            .frame(maxWidth: .infinity)
-            .overlay {
-                if isToday {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .stroke(VelaTheme.rhythmDeep, lineWidth: 1.5)
-                }
-                if selectedDay == day {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .stroke(VelaTheme.rhythmInk.opacity(0.55), lineWidth: 1.2)
-                }
-            }
-            .opacity(day.isFuture ? 0.14 : 1)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+        return Button {
+                withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                     if day.isFuture {
                         selectedDay = nil
                     } else {
                         selectedDay = selectedDay == day ? nil : day
                     }
                 }
+            } label: {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(cellColor(day))
+                    .frame(height: 26)
+                    .frame(maxWidth: .infinity)
+                    .overlay {
+                        if isToday {
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .stroke(VelaTheme.rhythmDeep, lineWidth: 1.5)
+                        }
+                        if selectedDay == day {
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .stroke(VelaTheme.rhythmInk.opacity(0.55), lineWidth: 1.2)
+                        }
+                    }
+                    .opacity(day.isFuture ? 0.14 : 1)
+                    .frame(maxWidth: .infinity, minHeight: VelaTheme.minimumHitTarget)
             }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
             .accessibilityLabel(detailText(day))
+            .accessibilityValue(day.isFuture ? "未来日期" : (selectedDay == day ? "已选中" : "未选中"))
     }
 
     private func cellColor(_ day: TrainingHeatmapDay) -> Color {
@@ -952,6 +1019,8 @@ private struct TrainingRhythmHeatmap: View {
 // MARK: - Local fatigue landscape
 
 struct TrainingMuscleLandscape: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let summary: RecentTrainingSummary
     /// 肌群键 → 最近 7 天逐日有效组数（index 0 = 最旧），数据加载时预计算。
     var muscleDailySets: [String: [Int]] = [:]
@@ -983,10 +1052,10 @@ struct TrainingMuscleLandscape: View {
             if groups.isEmpty {
                 HStack(spacing: 12) {
                     Image(systemName: "waveform.path.ecg")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.callout.weight(.semibold))
                         .foregroundStyle(VelaTheme.rhythmDeep)
                     Text("完成并同步训练后，这里会判断各部位是否适合再次训练。")
-                        .font(.system(size: 13))
+                        .font(.footnote)
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 .padding(16)
@@ -1039,7 +1108,7 @@ struct TrainingMuscleLandscape: View {
                 .fill(color)
                 .frame(width: 6, height: 6)
             Text("\(label) \(count)")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.footnote.weight(.semibold))
                 .foregroundStyle(VelaTheme.rhythmInk)
         }
         .padding(.horizontal, 9)
@@ -1051,46 +1120,32 @@ struct TrainingMuscleLandscape: View {
         let isExpanded = expandedGroup == group.key
         return VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+                withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                     expandedGroup = isExpanded ? nil : group.key
                 }
             } label: {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(group.name)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(VelaTheme.rhythmInk)
-                        Text("48 小时 \(group.fatigue.setsLast48h) 组 · 7 天 \(group.fatigue.setsLast7d) 组")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                    }
-                    .frame(width: 116, alignment: .leading)
-
-                    GeometryReader { proxy in
-                        let ratio = min(1, CGFloat(group.fatigue.setsLast7d) / 24)
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(VelaTheme.rhythmMist).frame(height: 5)
-                            Capsule().fill(fatigueColor(group.fatigue.fatigueLevel))
-                                .frame(width: max(5, proxy.size.width * ratio), height: 5)
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        VStack(alignment: .leading, spacing: 8) {
+                            muscleSummary(group)
+                            HStack(spacing: 10) {
+                                fatigueBar(group)
+                                fatigueStatus(group, isExpanded: isExpanded)
+                            }
+                        }
+                    } else {
+                        HStack(spacing: 12) {
+                            muscleSummary(group)
+                                .layoutPriority(1)
+                            fatigueBar(group)
+                            fatigueStatus(group, isExpanded: isExpanded)
                         }
                     }
-                    .frame(height: 5)
-
-                    Text(fatigueLabel(group.fatigue.fatigueLevel))
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(fatigueColor(group.fatigue.fatigueLevel))
-                        .frame(width: 38, alignment: .trailing)
-
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.7))
-                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
-                        .frame(width: 16, height: 16)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .padding(.vertical, 12)
+            .frame(minHeight: VelaTheme.minimumHitTarget, alignment: .leading)
             .accessibilityLabel("\(group.name)，\(fatigueLabel(group.fatigue.fatigueLevel))，过去四十八小时 \(group.fatigue.setsLast48h) 组，七天 \(group.fatigue.setsLast7d) 组")
 
             if isExpanded {
@@ -1100,9 +1155,50 @@ struct TrainingMuscleLandscape: View {
                     endingAt: endingAt
                 )
                 .padding(.bottom, 12)
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
         }
+    }
+
+    private func muscleSummary(_ group: (name: String, key: String, fatigue: LocalMuscleFatigue)) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(group.name)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(VelaTheme.rhythmInk)
+            Text("48 小时 \(group.fatigue.setsLast48h) 组 · 7 天 \(group.fatigue.setsLast7d) 组")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func fatigueBar(_ group: (name: String, key: String, fatigue: LocalMuscleFatigue)) -> some View {
+        GeometryReader { proxy in
+            let ratio = min(1, CGFloat(group.fatigue.setsLast7d) / 24)
+            ZStack(alignment: .leading) {
+                Capsule().fill(VelaTheme.rhythmMist).frame(height: 5)
+                Capsule().fill(fatigueColor(group.fatigue.fatigueLevel))
+                    .frame(width: max(5, proxy.size.width * ratio), height: 5)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 5, maxHeight: 5)
+    }
+
+    private func fatigueStatus(
+        _ group: (name: String, key: String, fatigue: LocalMuscleFatigue),
+        isExpanded: Bool
+    ) -> some View {
+        HStack(spacing: 6) {
+            Text(fatigueLabel(group.fatigue.fatigueLevel))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(fatigueColor(group.fatigue.fatigueLevel))
+            Image(systemName: "chevron.down")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.7))
+                .rotationEffect(.degrees(isExpanded ? 180 : 0))
+        }
+        .fixedSize()
     }
 
     private func fatigueRank(_ value: String) -> Int {
@@ -1143,7 +1239,7 @@ private struct MuscleExpandedPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(fatigue.recommendation)
-                .font(.system(size: 11.5, weight: .medium))
+                .font(.footnote.weight(.medium))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -1151,11 +1247,11 @@ private struct MuscleExpandedPanel: View {
 
             HStack(spacing: 8) {
                 Label("下次可练：\(nextTrainingText)", systemImage: "clock")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer(minLength: 4)
                 Text("7 天容量 \(Int(fatigue.volumeLast7d.rounded())) kg")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
             .padding(.top, 2)
@@ -1171,14 +1267,14 @@ private struct MuscleExpandedPanel: View {
             ForEach(Array(dailySets.enumerated()), id: \.offset) { index, sets in
                 VStack(spacing: 3) {
                     Text(sets > 0 ? "\(sets)" : "")
-                        .font(.system(size: 8, weight: .semibold, design: .rounded))
+                        .font(.caption2.weight(.semibold).monospacedDigit())
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                        .frame(height: 10)
+                        .frame(minHeight: 14)
                     RoundedRectangle(cornerRadius: 3, style: .continuous)
                         .fill(sets > 0 ? VelaTheme.rhythmDeep : VelaTheme.rhythmMist.opacity(0.7))
                         .frame(height: max(4, CGFloat(sets) / CGFloat(maxDaily) * 34))
                     Text(dayLabel(index))
-                        .font(.system(size: 8, weight: .medium))
+                        .font(.caption2.weight(.medium))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.8))
                 }
                 .frame(maxWidth: .infinity)
@@ -1223,16 +1319,16 @@ struct TrainingAnalysisPortal: View {
     var body: some View {
         HStack(spacing: 15) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("深入分析")
-                    .font(.system(size: 17, weight: .semibold))
+                    Text("深入分析")
+                    .font(.headline.weight(.semibold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Text("\(sessions) 次力量 · \(totalDuration) · 有氧\(cardioStatus)")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.footnote.weight(.medium))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .lineLimit(1)
                 if prCount > 0 {
                     Text("个人纪录 \(prCount) 项")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(VelaTheme.rhythmDeep)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
@@ -1247,7 +1343,7 @@ struct TrainingAnalysisPortal: View {
                 PortalSparkline(points: sparkline)
                     .frame(width: 62, height: 30)
                 Text("30 天耗力")
-                    .font(.system(size: 9, weight: .medium))
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
 
@@ -1322,10 +1418,10 @@ struct TrainingPostWorkoutPrompt: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("这次训练感觉如何？")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.callout.weight(.semibold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Text("\(workout.activityName) · \(workout.start.formatted(date: .omitted, time: .shortened)) · 可跳过")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.footnote.weight(.medium))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .lineLimit(1)
             }
@@ -1333,7 +1429,7 @@ struct TrainingPostWorkoutPrompt: View {
             Spacer(minLength: 8)
 
             Button("补充体感", action: onAnnotate)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.callout.weight(.semibold))
                 .foregroundStyle(VelaTheme.rhythmDeep)
                 .buttonStyle(.plain)
                 .frame(minHeight: 44)
@@ -1362,10 +1458,10 @@ struct TrainingProposalPortal: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(proposals.isEmpty ? "当前没有待确认调整" : "\(proposals.count) 条待确认调整")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.callout.weight(.semibold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Text(previewLine)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.footnote.weight(.medium))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .lineLimit(2)
             }
@@ -1373,7 +1469,7 @@ struct TrainingProposalPortal: View {
             Spacer(minLength: 8)
 
             Text("去确认")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.callout.weight(.semibold))
                 .foregroundStyle(VelaTheme.rhythmDeep)
 
             Image(systemName: "chevron.right")
@@ -1436,21 +1532,21 @@ struct TrainingPlanPortal: View {
                         .rotationEffect(.degrees(-90))
 
                     Text(totalDays > 0 ? "\(completedDays)" : "—")
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .font(.callout.weight(.semibold).monospacedDigit())
                         .foregroundStyle(VelaTheme.rhythmInk)
                 }
                 .frame(width: 50, height: 50)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(planTitle ?? "建立你的训练轮转")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.callout.weight(.semibold))
                         .foregroundStyle(VelaTheme.rhythmInk)
-                        .lineLimit(1)
+                        .lineLimit(2)
 
                     Text(detail)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.footnote.weight(.medium))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                        .lineLimit(1)
+                        .lineLimit(2)
                 }
 
                 Spacer(minLength: 8)
@@ -1471,7 +1567,7 @@ struct TrainingPlanPortal: View {
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmDeep)
                     Text("\(pendingProposalCount) 条调整提案待你确认")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(VelaTheme.rhythmInk)
                     Spacer()
                 }
@@ -1498,7 +1594,7 @@ struct TrainingPlanPortal: View {
             }
             if days.count > 7 {
                 Text("+\(days.count - 7)")
-                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .font(.caption.weight(.semibold).monospacedDigit())
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
             Spacer(minLength: 0)
@@ -1517,7 +1613,7 @@ struct TrainingPlanPortal: View {
                         .foregroundStyle(VelaTheme.rhythmDeepOn)
                 } else {
                     Text(rotationShortLabel(day))
-                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .font(.caption2.weight(.semibold))
                         .foregroundStyle(isToday ? VelaTheme.rhythmDeep : VelaTheme.rhythmInkSecondary)
                 }
             }
@@ -1529,7 +1625,7 @@ struct TrainingPlanPortal: View {
                 }
             }
             Text("\(day.dayNumber)")
-                .font(.system(size: 8, weight: .medium, design: .rounded))
+                .font(.caption2.weight(.medium).monospacedDigit())
                 .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.75))
         }
         .frame(maxWidth: .infinity)
@@ -1569,6 +1665,7 @@ struct TrainingPlanPortal: View {
 /// 不在视图层另算口径。
 struct TrainingStatusSection: View {
     @EnvironmentObject private var dashboardVM: DashboardViewModel
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let decision: DailyTrainingDecision?
     let onDiscussWithCoach: () -> Void
@@ -1587,39 +1684,22 @@ struct TrainingStatusSection: View {
             )
 
             Text("\(readinessTitle(bodyState.readiness)) · \(statusDecisionTitle)")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.footnote.weight(.semibold))
                 .foregroundStyle(VelaTheme.rhythmDeep)
                 .padding(.horizontal, 9)
                 .padding(.vertical, 4)
                 .background(VelaTheme.rhythmDeep.opacity(0.10), in: Capsule())
 
-            HStack(spacing: 10) {
-                metricCard(
-                    metric: .recovery,
-                    title: "恢复",
-                    value: dashboard.recovery.formattedScore,
-                    detail: recoveryDetail,
-                    context: "越高越好",
-                    color: VelaTheme.recoveryColor
-                )
-                metricCard(
-                    metric: .strain,
-                    title: "负荷",
-                    value: dashboard.strain.formattedScore,
-                    detail: strainDetail,
-                    context: dashboard.strain.hasData
-                        ? "目标 \(dashboard.strain.recommendedRange.lowerBound)-\(dashboard.strain.recommendedRange.upperBound)"
-                        : "越高负荷越大",
-                    color: VelaTheme.strainColor
-                )
-                metricCard(
-                    metric: .stress,
-                    title: "压力",
-                    value: dashboard.stress.formattedScore,
-                    detail: stressDetail,
-                    context: "越高越需关注",
-                    color: VelaTheme.stressColor
-                )
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(spacing: 10) {
+                        statusMetricCards
+                    }
+                } else {
+                    HStack(spacing: 10) {
+                        statusMetricCards
+                    }
+                }
             }
 
             VStack(spacing: 0) {
@@ -1711,6 +1791,36 @@ struct TrainingStatusSection: View {
         return "处于可控区间"
     }
 
+    @ViewBuilder
+    private var statusMetricCards: some View {
+        metricCard(
+            metric: .recovery,
+            title: "恢复",
+            value: dashboard.recovery.formattedScore,
+            detail: recoveryDetail,
+            context: "越高越好",
+            color: VelaTheme.recoveryColor
+        )
+        metricCard(
+            metric: .strain,
+            title: "负荷",
+            value: dashboard.strain.formattedScore,
+            detail: strainDetail,
+            context: dashboard.strain.hasData
+                ? "目标 \(dashboard.strain.recommendedRange.lowerBound)-\(dashboard.strain.recommendedRange.upperBound)"
+                : "越高负荷越大",
+            color: VelaTheme.strainColor
+        )
+        metricCard(
+            metric: .stress,
+            title: "压力",
+            value: dashboard.stress.formattedScore,
+            detail: stressDetail,
+            context: "越高越需关注",
+            color: VelaTheme.stressColor
+        )
+    }
+
     private func metricCard(
         metric: VelaMetricDetailView.MetricType,
         title: String,
@@ -1723,29 +1833,28 @@ struct TrainingStatusSection: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 5) {
                     Text(title)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     Circle()
                         .fill(color)
                         .frame(width: 6, height: 6)
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.caption2.weight(.semibold))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.75))
                 }
                 Text(value)
-                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                    .font(.title2.weight(.bold).monospacedDigit())
                     .foregroundStyle(VelaTheme.rhythmInk)
                     .monospacedDigit()
                 Text(detail)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(color)
-                    .lineLimit(2)
-                    .frame(height: 26, alignment: .top)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 Text(context)
-                    .font(.system(size: 9, weight: .medium))
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.75))
-                    .lineLimit(1)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
             }
             .padding(11)
             .frame(maxWidth: .infinity, minHeight: 108, alignment: .topLeading)
@@ -1771,17 +1880,17 @@ struct TrainingStatusSection: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 7) {
                     Text(title)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(VelaTheme.rhythmInk)
                     Text(value)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(VelaTheme.rhythmDeep)
-                        .lineLimit(1)
+                        .lineLimit(2)
                 }
                 Text(detail)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                    .lineLimit(2)
+                    .lineLimit(3)
             }
 
             Spacer(minLength: 8)
@@ -1791,6 +1900,7 @@ struct TrainingStatusSection: View {
                 .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.7))
         }
         .padding(.vertical, 11)
+        .frame(minHeight: VelaTheme.minimumHitTarget, alignment: .leading)
         .contentShape(Rectangle())
     }
 
@@ -1848,18 +1958,18 @@ struct TrainingHistoryPortal: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(workouts.isEmpty ? "等待训练记录同步" : "最近 \(min(workouts.count, 3)) 次训练")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.callout.weight(.semibold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Text(previewLine)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.footnote.weight(.medium))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                    .lineLimit(1)
+                    .lineLimit(2)
             }
 
             Spacer(minLength: 8)
 
             Text("查看全部")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.callout.weight(.semibold))
                 .foregroundStyle(VelaTheme.rhythmDeep)
 
             Image(systemName: "chevron.right")
@@ -1899,10 +2009,10 @@ struct TrainingHistoryView: View {
                             .font(.system(size: 22, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmDeep)
                         Text("暂无可读取的训练记录")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(.title3.weight(.semibold))
                             .foregroundStyle(VelaTheme.rhythmInk)
                         Text("Apple 健康、训记与力量补录合并后，会出现在这里。")
-                            .font(.system(size: 13))
+                            .font(.footnote)
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                     .padding(16)
@@ -1920,10 +2030,10 @@ struct TrainingHistoryView: View {
                     VelaAppState.shared.routeToCoach(question: historyCoachQuestion)
                 } label: {
                     Label("让 Vela 分析训练历史", systemImage: "sparkles")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.callout.weight(.semibold))
                         .foregroundStyle(VelaTheme.rhythmDeepOn)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 50)
+                        .frame(minHeight: VelaTheme.minimumHitTarget)
                         .background(VelaTheme.rhythmDeep, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
                 .buttonStyle(.cardPress)
