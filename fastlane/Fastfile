@@ -1,0 +1,63 @@
+# fastlane 发布骨架（审计 H5 发布链路；未验证——需 Apple 开发者账号后执行）
+#
+# 用法：
+#   1) bundle install                 # 安装 fastlane（仓库首次）
+#   2) bundle exec fastlane beta      # 构建 → 上传 TestFlight
+#
+# 账号信息通过环境变量提供（不要写入仓库）：
+#   APP_STORE_CONNECT_API_KEY_PATH  （App Store Connect API Key 的 .p8 路径）
+#   APP_STORE_CONNECT_ISSUER_ID
+#   APP_STORE_CONNECT_KEY_ID
+#   FASTLANE_TEAM_ID
+#
+# 说明：当前仓库无 release 流水线；本文件为最小可用骨架，
+# beta lane 会发布 Debug-iphoneos 构建并上传 TestFlight（首次需在 App Store
+# Connect 完成协议/税务并创建 App 记录）。
+
+default_platform(:ios)
+
+platform :ios do
+  desc "构建并上传 TestFlight"
+  lane :beta do
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("APP_STORE_CONNECT_KEY_ID"),
+      issuer_id: ENV.fetch("APP_STORE_CONNECT_ISSUER_ID"),
+      key_filepath: ENV.fetch("APP_STORE_CONNECT_API_KEY_PATH"),
+      duration: 1200
+    )
+
+    build_app(
+      scheme: "Vela",
+      configuration: "Debug",
+      derived_data_path: "~/Developer/Vela-DerivedData",
+      export_method: "app-store",
+      skip_package_dependencies: false,
+      xcargs: {
+        "CODE_SIGN_STYLE" => "Automatic"
+      }
+    )
+
+    pilot(
+      app_identifier: "com.sunweizhou.Vela4",
+      api_key: api_key,
+      skip_submission: false,
+      distribute_external: false,
+      groups: [] # 首次需要先在 TestFlight 添加外部测试组
+    )
+
+    slack(
+      message: "Vela TestFlight 构建已上传 🚀",
+      default_payloads: [:git_branch, :git_commit]
+    ) if ENV.key?("SLACK_WEBHOOK_URL")
+  end
+
+  desc "为真机打 Debug 包"
+  lane :device do
+    build_app(
+      scheme: "Vela",
+      configuration: "Debug",
+      derived_data_path: "~/Developer/Vela-DerivedData",
+      export_method: "development"
+    )
+  end
+end
