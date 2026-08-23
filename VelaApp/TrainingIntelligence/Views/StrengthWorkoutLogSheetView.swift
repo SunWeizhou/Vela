@@ -101,7 +101,7 @@ struct StrengthWorkoutLogSheetView: View {
                         showExercisePicker = true
                     } label: {
                         Label("添加动作", systemImage: "plus.circle.fill")
-                            .font(.system(size: 14, weight: .bold))
+                            .font(.system(.footnote, design: .rounded, weight: .bold))
                             .foregroundStyle(VelaTheme.accent)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
@@ -204,11 +204,11 @@ struct StrengthWorkoutLogSheetView: View {
                 Label(setProgressText, systemImage: "checkmark.circle")
                 Spacer()
             }
-            .font(.system(size: 12, weight: .semibold))
+            .font(.system(.caption, design: .default, weight: .semibold))
             .foregroundStyle(VelaTheme.muted)
 
             TextField("训练名称", text: $title)
-                .font(.system(size: 18, weight: .bold))
+                .font(.system(.body, design: .default, weight: .bold))
             HStack {
                 Spacer()
                 Button {
@@ -216,14 +216,14 @@ struct StrengthWorkoutLogSheetView: View {
                 } label: {
                     Label("杠铃配片", systemImage: "scalemass")
                 }
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(.footnote, design: .default, weight: .bold))
 
                 Button {
                     showExerciseGrouping = true
                 } label: {
                     Label("组合动作", systemImage: "link")
                 }
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(.footnote, design: .default, weight: .bold))
                 .disabled(exercises.count < 2)
 
                 Menu("从模板开始") {
@@ -235,29 +235,29 @@ struct StrengthWorkoutLogSheetView: View {
                         }
                     }
                 }
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(.footnote, design: .default, weight: .bold))
             }
             
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text("自觉竭力程度 (RPE):")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(.footnote, design: .default, weight: .semibold))
                         .foregroundStyle(VelaTheme.fg)
                     Spacer()
                     Text("\(Int(exertionScore)) / 10")
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .font(.system(.footnote, design: .rounded, weight: .bold))
                         .foregroundStyle(VelaTheme.accent)
                 }
                 Slider(value: $exertionScore, in: 1...10, step: 1)
                     .tint(VelaTheme.accent)
                 Text("1 = 极轻松，10 = 力竭且无任何保留组。用于重算今日负荷。")
-                    .font(.system(size: 11))
+                    .font(.system(.caption2, design: .default))
                     .foregroundStyle(VelaTheme.muted)
             }
             .padding(.top, 4)
 
             TextField("训练备注（可选）", text: $notes, axis: .vertical)
-                .font(.system(size: 13))
+                .font(.system(.footnote, design: .default))
                 .lineLimit(2...4)
         }
         .padding(16)
@@ -278,7 +278,7 @@ struct StrengthWorkoutLogSheetView: View {
 
             HStack {
                 TextField("动作名称，例如卧推", text: exercise.name)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(.callout, design: .default, weight: .bold))
                 if exercises.count > 1 {
                     Button {
                         let exerciseID = exercise.wrappedValue.id
@@ -303,7 +303,7 @@ struct StrengthWorkoutLogSheetView: View {
             let previousSets = previousCompletedSets(for: exercise.wrappedValue.name)
             if !previousSets.isEmpty {
                 Text("上次表现：\(previousPerformance(for: exercise.wrappedValue.name) ?? "")")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(.caption2, design: .default, weight: .medium))
                     .foregroundStyle(VelaTheme.muted)
             }
 
@@ -326,7 +326,7 @@ struct StrengthWorkoutLogSheetView: View {
                     exercise.wrappedValue.sets.append(StrengthSetLog(repetitions: lastReps, weightKilograms: lastWeight, isWarmup: false, rpe: nil, rir: nil, isCompleted: false, completedAt: nil))
                 } label: {
                     Label("添加一组", systemImage: "plus")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(.caption, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.accent)
                 }
                 .buttonStyle(.cardPress)
@@ -340,7 +340,7 @@ struct StrengthWorkoutLogSheetView: View {
                         exercise.wrappedValue.sets.append(copy)
                     } label: {
                         Label("复制上一组", systemImage: "plus.square.on.square")
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.system(.caption, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.muted)
                     }
                     .buttonStyle(.cardPress)
@@ -806,7 +806,7 @@ struct StrengthWorkoutLogSheetView: View {
             Button("跳过") { restTimer = nil }
                 .buttonStyle(.cardPress)
         }
-        .font(.system(size: 13, weight: .bold))
+        .font(.system(.footnote, design: .default, weight: .bold))
         .foregroundStyle(VelaTheme.accent)
         .padding(14)
         .velaNativeCard(radius: 16)

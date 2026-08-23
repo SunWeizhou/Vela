@@ -120,7 +120,7 @@ struct StrengthWorkoutDetailView: View {
                             .font(.system(size: 30, weight: .bold, design: .rounded))
                             .foregroundStyle(bodyTextColor)
                         Text(workout.startedAt.formatted(date: .abbreviated, time: .shortened))
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.system(.footnote, design: .rounded, weight: .medium))
                             .foregroundStyle(mutedColor)
                     }
                     Spacer()
@@ -149,16 +149,16 @@ struct StrengthWorkoutDetailView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Label("训练智能摘要", systemImage: "sparkles")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(.subheadline, design: .rounded, weight: .bold))
                         .foregroundStyle(bodyTextColor)
                     Spacer()
                     Text("\(completedSets)/\(workout.totalSetCount) 完成")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(.caption2, design: .rounded, weight: .bold))
                         .foregroundStyle(accentColor)
                 }
 
                 Text(analysis.summaryText)
-                    .font(.system(size: 13))
+                    .font(.system(.footnote, design: .rounded))
                     .foregroundStyle(mutedColor)
 
                 if !analysis.personalRecords.isEmpty {
@@ -168,7 +168,7 @@ struct StrengthWorkoutDetailView: View {
                                 Image(systemName: "trophy.fill")
                                     .foregroundStyle(Color(hex: "#D89B28"))
                                 Text(record.summary)
-                                    .font(.system(size: 12, weight: .bold))
+                                    .font(.system(.caption, design: .rounded, weight: .bold))
                                     .foregroundStyle(bodyTextColor)
                                 Spacer()
                             }
@@ -185,17 +185,17 @@ struct StrengthWorkoutDetailView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Text("肌群分布")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(.subheadline, design: .rounded, weight: .bold))
                         .foregroundStyle(bodyTextColor)
                     Spacer()
                     Text("有效组")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(.caption2, design: .rounded, weight: .semibold))
                         .foregroundStyle(mutedColor)
                 }
 
                 if analysis.muscleGroupSets.isEmpty {
                     Text("这次训练暂未形成有效组。")
-                        .font(.system(size: 13))
+                        .font(.system(.footnote, design: .default))
                         .foregroundStyle(mutedColor)
                 } else {
                     ForEach(analysis.muscleGroupSets.sorted { $0.value > $1.value }, id: \.key) { muscle, sets in
@@ -203,11 +203,11 @@ struct StrengthWorkoutDetailView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
                                 Text(localizedMuscle(muscle))
-                                    .font(.system(size: 12, weight: .bold))
+                                    .font(.system(.caption, design: .default, weight: .bold))
                                     .foregroundStyle(bodyTextColor)
                                 Spacer()
                                 Text("\(sets) 组")
-                                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                                    .font(.system(.caption, design: .rounded, weight: .bold))
                                     .foregroundStyle(mutedColor)
                             }
                             GeometryReader { geo in
@@ -235,11 +235,11 @@ struct StrengthWorkoutDetailView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Label("渐进超负荷", systemImage: "arrow.up.forward.circle.fill")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(.subheadline, design: .default, weight: .bold))
                         .foregroundStyle(bodyTextColor)
                     Spacer()
                     Text("基于最近 3 次")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(.caption2, design: .default, weight: .semibold))
                         .foregroundStyle(mutedColor)
                 }
 
@@ -247,21 +247,21 @@ struct StrengthWorkoutDetailView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             Text(item.exerciseName)
-                                .font(.system(size: 13, weight: .bold))
+                                .font(.system(.footnote, design: .default, weight: .bold))
                                 .foregroundStyle(bodyTextColor)
                             Spacer()
                             Text(progressionStatusLabel(item.status))
-                                .font(.system(size: 10, weight: .bold))
+                                .font(.system(.caption2, design: .default, weight: .bold))
                                 .foregroundStyle(progressionStatusColor(item.status))
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 4)
                                 .background(progressionStatusColor(item.status).opacity(0.12), in: Capsule())
                         }
                         Text(item.evidence)
-                            .font(.system(size: 12))
+                            .font(.system(.caption, design: .default))
                             .foregroundStyle(mutedColor)
                         Text(item.action)
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(.caption, design: .default, weight: .semibold))
                             .foregroundStyle(bodyTextColor)
                     }
                     .padding(12)
@@ -269,7 +269,7 @@ struct StrengthWorkoutDetailView: View {
                 }
 
                 Text("训练建议仅用于一般健身规划；疼痛、不适或异常疲劳时停止训练并寻求专业意见。")
-                    .font(.system(size: 10))
+                    .font(.system(.caption2, design: .default))
                     .foregroundStyle(mutedColor)
             }
         }
@@ -294,7 +294,7 @@ struct StrengthWorkoutDetailView: View {
     private var exerciseList: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("动作与组次")
-                .font(.system(size: 15, weight: .bold))
+                .font(.system(.subheadline, design: .default, weight: .bold))
                 .foregroundStyle(bodyTextColor)
 
             ForEach(workout.exercises) { exercise in
@@ -303,20 +303,20 @@ struct StrengthWorkoutDetailView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(exercise.name)
-                                    .font(.system(size: 16, weight: .bold))
+                                    .font(.system(.callout, design: .default, weight: .bold))
                                     .foregroundStyle(bodyTextColor)
                                 Text("\(exercise.equipment) · \(Int(exercise.volumeKilograms.rounded())) kg")
-                                    .font(.system(size: 11, weight: .medium))
+                                    .font(.system(.caption2, design: .default, weight: .medium))
                                     .foregroundStyle(mutedColor)
                             }
                             Spacer()
                             if let e1RM = analysis.estimatedOneRepMaxByExercise[exercise.name] {
                                 VStack(alignment: .trailing, spacing: 3) {
                                     Text("\(Int(e1RM.rounded())) kg")
-                                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                                        .font(.system(.subheadline, design: .rounded, weight: .bold))
                                         .foregroundStyle(accentColor)
                                     Text("e1RM")
-                                        .font(.system(size: 10, weight: .bold))
+                                        .font(.system(.caption2, design: .default, weight: .bold))
                                         .foregroundStyle(mutedColor)
                                 }
                             }
@@ -336,7 +336,7 @@ struct StrengthWorkoutDetailView: View {
                                 Text("状态")
                                     .frame(width: 32, alignment: .trailing)
                             }
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.system(.caption2, design: .default, weight: .bold))
                             .foregroundStyle(mutedColor)
                             .padding(.horizontal, 4)
                             .padding(.bottom, 2)
@@ -366,10 +366,10 @@ struct StrengthWorkoutDetailView: View {
             VelaGlassCard(padding: 16, cornerRadius: 20) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("训练备注")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(.subheadline, design: .default, weight: .bold))
                         .foregroundStyle(bodyTextColor)
                     Text(workout.notes)
-                        .font(.system(size: 13))
+                        .font(.system(.footnote, design: .default))
                         .foregroundStyle(mutedColor)
                 }
             }
@@ -380,16 +380,16 @@ struct StrengthWorkoutDetailView: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(value)
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .font(.system(.title2, design: .rounded, weight: .bold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                 Text(unit)
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(.caption2, design: .default, weight: .bold))
                     .foregroundStyle(mutedColor)
                     .lineLimit(1)
             }
             Text(title)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(.caption2, design: .default, weight: .semibold))
                 .foregroundStyle(mutedColor)
                 .lineLimit(1)
         }
@@ -402,7 +402,7 @@ struct StrengthWorkoutDetailView: View {
         HStack(spacing: 12) {
             // 组号 / 热身标记
             Text(set.kind == .working ? "\(index + 1)" : set.kind.shortLabel)
-                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .font(.system(.caption2, design: .rounded, weight: .bold))
                 .foregroundStyle(Color.white)
                 .frame(width: 24, height: 24)
                 .background(Circle().fill(detailSetKindColor(set.kind)))
@@ -410,7 +410,7 @@ struct StrengthWorkoutDetailView: View {
 
             // 重量
             Text("\(set.weightKilograms.formatted(.number.precision(.fractionLength(0...1)))) kg")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(.system(.footnote, design: .rounded, weight: .semibold))
                 .foregroundStyle(bodyTextColor)
                 .frame(width: 70, alignment: .center)
 
@@ -418,13 +418,13 @@ struct StrengthWorkoutDetailView: View {
 
             // 次数
             Text("\(set.repetitions) 次")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(.system(.footnote, design: .rounded, weight: .semibold))
                 .foregroundStyle(bodyTextColor)
                 .frame(width: 50, alignment: .center)
 
             // RPE
             Text(set.rpe.map { "\(Int($0))" } ?? "—")
-                .font(.system(size: 11, weight: .bold))
+                .font(.system(.caption2, design: .default, weight: .bold))
                 .foregroundStyle(set.rpe != nil ? VelaTheme.accent : mutedColor)
                 .frame(width: 44, height: 26)
                 .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(VelaTheme.elevatedBg))
@@ -432,7 +432,7 @@ struct StrengthWorkoutDetailView: View {
             // 状态
             Image(systemName: (set.isCompleted ?? true) ? "checkmark.circle.fill" : "circle")
                 .foregroundStyle((set.isCompleted ?? true) ? VelaTheme.success : mutedColor)
-                .font(.system(size: 20))
+                .font(.system(.title3, design: .default))
                 .frame(width: 32, alignment: .trailing)
         }
         .padding(.vertical, 6)
@@ -515,12 +515,12 @@ private struct TrainingVolumeSparkline: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("训练容量趋势")
-                .font(.system(size: 12, weight: .bold))
+                .font(.system(.caption, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.fg)
             
             if chartData.count < 2 {
                 Text("暂无足够的容量趋势数据")
-                    .font(.system(size: 11))
+                    .font(.system(.caption2, design: .default))
                     .foregroundStyle(VelaTheme.muted)
                     .frame(height: 50)
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -553,7 +553,7 @@ private struct TrainingVolumeSparkline: View {
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
                             .foregroundStyle(VelaTheme.separatorSoft)
                         AxisValueLabel()
-                            .font(.system(size: 9, weight: .semibold))
+                            .font(.system(.caption2, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.muted)
                     }
                 }

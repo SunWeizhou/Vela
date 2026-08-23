@@ -209,9 +209,9 @@ struct CorrelationArtifactView: View {
                     .background(Circle().fill(VelaTheme.accent.opacity(0.12)))
                 VStack(alignment: .leading, spacing: 3) {
                     Text("自定义关联图")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(.subheadline, design: .rounded, weight: .bold))
                     Text(result.analysis.map { "n=\($0.points.count) · \($0.lagDays == 0 ? "当天" : "次日")" } ?? "样本门槛未满足")
-                        .font(.system(size: 12))
+                        .font(.system(.caption, design: .default))
                         .foregroundStyle(VelaTheme.muted)
                 }
                 Spacer()
@@ -239,7 +239,7 @@ struct CorrelationArtifactView: View {
                 }
                 if let predicted = analysis.predictedY {
                     Label("按当前 X 的探索性线性估计：Y ≈ \(String(format: "%.1f", predicted))。这不是临床预测。", systemImage: "waveform.path.ecg.rectangle")
-                        .font(.system(size: 12))
+                        .font(.system(.caption, design: .default))
                         .foregroundStyle(VelaTheme.fg2)
                 }
             } else {
@@ -247,7 +247,7 @@ struct CorrelationArtifactView: View {
             }
 
             Label("相关不等于因果；应结合样本量、时间滞后、同期生活变化和身体感受解读。", systemImage: "info.circle")
-                .font(.system(size: 12))
+                .font(.system(.caption, design: .default))
                 .foregroundStyle(VelaTheme.muted)
         }
         .padding(16)
@@ -258,8 +258,8 @@ struct CorrelationArtifactView: View {
 
     private func metricValue(_ title: String, _ value: String) -> some View {
         VStack(spacing: 2) {
-            Text(value).font(.system(size: 15, weight: .bold, design: .rounded))
-            Text(title).font(.system(size: 10)).foregroundStyle(VelaTheme.muted)
+            Text(value).font(.system(.subheadline, design: .rounded, weight: .bold))
+            Text(title).font(.system(.caption2, design: .default)).foregroundStyle(VelaTheme.muted)
         }
         .frame(maxWidth: .infinity)
     }
@@ -267,7 +267,7 @@ struct CorrelationArtifactView: View {
     private func metricPill(_ title: String, color: Color) -> some View {
         HStack(spacing: 5) {
             Circle().fill(color).frame(width: 7, height: 7)
-            Text(title).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+            Text(title).font(.system(.caption, design: .default, weight: .semibold)).lineLimit(1)
         }
         .padding(.horizontal, 10).padding(.vertical, 7)
         .background(Capsule().fill(color.opacity(0.10)))

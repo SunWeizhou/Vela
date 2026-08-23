@@ -526,12 +526,12 @@ struct StrengthWorkoutSummarySheet: View {
                 VStack(alignment: .leading, spacing: 14) {
                     VStack(alignment: .leading, spacing: 5) {
                         Label("训练已保存", systemImage: "checkmark.circle.fill")
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.system(.footnote, design: .rounded, weight: .bold))
                             .foregroundStyle(VelaTheme.recoveryColor)
                         Text(workout?.title ?? "力量训练")
                             .font(.system(size: 24, weight: .bold))
                         Text("基于本次已完成的训练组生成")
-                            .font(.system(size: 12))
+                            .font(.system(.caption, design: .rounded))
                             .foregroundStyle(VelaTheme.muted)
                     }
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
@@ -555,7 +555,7 @@ struct StrengthWorkoutSummarySheet: View {
                         isTemplateSaved = onSaveTemplate()
                     } label: {
                         Label(isTemplateSaved ? "已保存到模板库" : "保存为训练模板", systemImage: isTemplateSaved ? "checkmark" : "bookmark")
-                            .font(.system(size: 14, weight: .bold))
+                            .font(.system(.footnote, design: .rounded, weight: .bold))
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
@@ -579,7 +579,7 @@ struct StrengthWorkoutSummarySheet: View {
 
     private func metric(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(value).font(.system(size: 15, weight: .bold))
+            Text(value).font(.system(.subheadline, design: .rounded, weight: .bold))
             Text(title).font(.caption).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -589,8 +589,8 @@ struct StrengthWorkoutSummarySheet: View {
 
     private func summaryCard(_ title: String, _ body: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.system(size: 14, weight: .bold))
-            Text(body.isEmpty ? "暂无数据" : body).font(.system(size: 13)).foregroundStyle(.secondary)
+            Text(title).font(.system(.footnote, design: .rounded, weight: .bold))
+            Text(body.isEmpty ? "暂无数据" : body).font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)

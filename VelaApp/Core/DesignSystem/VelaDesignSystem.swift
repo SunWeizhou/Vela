@@ -11,7 +11,7 @@ struct CoachArtifactCard: View {
         VStack(alignment: .leading, spacing: compact ? 10 : 12) {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: iconName)
-                    .font(.system(.callout, design: .default, weight: .bold))
+                    .font(.system(.callout, design: .rounded, weight: .bold))
                     .foregroundStyle(accent)
                     .frame(width: 32, height: 32)
                     .background(
@@ -182,7 +182,7 @@ struct DataSourceBadge: View {
 
     var body: some View {
         Text(label)
-            .font(.system(size: 9, weight: .bold))
+            .font(.system(.caption2, design: .rounded, weight: .bold))
             .foregroundStyle(VelaTheme.muted)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
@@ -207,7 +207,7 @@ struct ConfidenceBadge: View {
 
     var body: some View {
         Text(label)
-            .font(.system(size: 9, weight: .bold))
+            .font(.system(.caption2, design: .rounded, weight: .bold))
             .foregroundStyle(color)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
@@ -252,7 +252,7 @@ struct WorkoutSessionCard: View {
         Button(action: action) {
             HStack(spacing: 12) {
                 Image(systemName: "figure.strengthtraining.traditional")
-                    .font(.system(.body, design: .default, weight: .bold))
+                    .font(.system(.body, design: .rounded, weight: .bold))
                     .foregroundStyle(VelaTheme.strainColor)
                     .frame(width: 36, height: 36)
                     .background(RoundedRectangle(cornerRadius: 10).fill(VelaTheme.strainColor.opacity(0.12)))
@@ -668,7 +668,7 @@ struct VelaMakeHeader<Trailing: View>: View {
         HStack(alignment: .bottom, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(subtitle)
-                    .font(.system(.footnote, design: .default, weight: .regular))
+                    .font(.system(.footnote, design: .rounded, weight: .regular))
                     .foregroundStyle(VelaTheme.fg2)
                 Text(title)
                     .font(.system(size: 28, weight: .bold))
@@ -708,7 +708,7 @@ struct VelaMakeSectionHeader: View {
 
     var body: some View {
         Text(title)
-            .font(.system(.footnote, design: .default, weight: .regular))
+            .font(.system(.footnote, design: .rounded, weight: .regular))
             .foregroundStyle(VelaTheme.fg2)
             .padding(.horizontal, 4)
     }

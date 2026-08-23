@@ -30,7 +30,7 @@ struct CoachHistoryDrawer: View {
             // Drawer Header
             HStack {
                 Text("历史对话")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.system(.body, design: .rounded, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Button {
@@ -59,7 +59,7 @@ struct CoachHistoryDrawer: View {
                     Image(systemName: "plus")
                         .font(.system(size: 14, weight: .bold))
                     Text("新建对话")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(.footnote, design: .rounded, weight: .bold))
                 }
                 .foregroundStyle(VelaTheme.rhythmDeepOn)
                 .frame(maxWidth: .infinity)
@@ -101,12 +101,12 @@ struct CoachHistoryDrawer: View {
                             
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(session.title.isEmpty ? "新对话" : session.title)
-                                    .font(.system(size: 14, weight: .bold))
+                                    .font(.system(.footnote, design: .rounded, weight: .bold))
                                     .foregroundStyle(VelaTheme.rhythmInk)
                                     .lineLimit(1)
                                 
                                 Text(session.updatedAt.formatted(.dateTime.month().day().hour().minute()))
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .font(.system(.caption2, design: .rounded, weight: .semibold))
                                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             }
                             
@@ -178,10 +178,10 @@ struct CoachHistoryDrawer: View {
                 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("本机健康资料")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.system(.footnote, design: .rounded, weight: .bold))
                         .foregroundStyle(VelaTheme.rhythmInk)
                     Text("本机优先存储")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(.caption2, design: .rounded, weight: .bold))
                         .foregroundStyle(VelaTheme.rhythmDeep)
                 }
                 Spacer()
