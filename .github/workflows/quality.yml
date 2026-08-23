@@ -39,6 +39,11 @@ jobs:
         run: |
           python3 scripts/schema_fingerprint.py --check
 
+      - name: Contrast guard (textColor >= 4.5:1)
+        shell: bash
+        run: |
+          python3 scripts/check_contrast.py
+
       - name: SwiftLint (report-only until baseline is clean)
         shell: bash
         run: |
@@ -88,7 +93,20 @@ jobs:
             -scheme Vela \
             -destination "platform=iOS Simulator,name=$device_id" \
             -derivedDataPath build/DerivedData \
+            -enableCodeCoverage YES \
             CODE_SIGNING_ALLOWED=NO
+
+      - name: Coverage summary (report-only)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          result_bundle=$(ls -td build/DerivedData/Logs/Test/*.xcresult 2>/dev/null | head -n 1 || true)
+          if [ -n "$result_bundle" ]; then
+            xcrun xccov view --report "$result_bundle" 2>/dev/null | tail -n 15 || true
+          else
+            echo "No xcresult bundle found; coverage report skipped."
+          fi
 
       - name: Upload xcresult on failure
         if: always()

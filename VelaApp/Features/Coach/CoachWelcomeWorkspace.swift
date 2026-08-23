@@ -69,6 +69,8 @@ struct CoachWelcomeWorkspace: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.top, 4)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("coach-welcome-greeting")
 
             // 2. Compact Top Shortcuts (档案 & 报告)
             topShortcuts

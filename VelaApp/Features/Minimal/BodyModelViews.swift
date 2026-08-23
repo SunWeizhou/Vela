@@ -314,8 +314,12 @@ struct BodyModelDetailView: View {
         if let sex = ["male": "男性", "female": "女性", "other": "其他"][sex ?? ""] { values.append(sex) }
         return values.isEmpty ? "等待 Apple 健康或手动填写" : values.joined(separator: " · ")
     }
+    /// 记忆化（审计 H2）：bodyModelState 是 O(n) 组装（含 28 天训练摘要），
+    /// 每帧 body 求值重跑会浪费主线程；数据变化时 loadModelData 里置空缓存。
+    @State private var memoizedBodyModelState: BodyModelState?
     private var bodyModelState: BodyModelState {
-        BodyModelBuilder().build(
+        if let cached = memoizedBodyModelState { return cached }
+        let state = BodyModelBuilder().build(
             onboarding: onboarding,
             dailySummaries: dailySummaries,
             journalEntries: journalEntries,
@@ -324,6 +328,8 @@ struct BodyModelDetailView: View {
             longTermBaselines: longTermReport,
             asOf: dashboard.date
         )
+        memoizedBodyModelState = state
+        return state
     }
 
     /// 详情页自给自足：用自己拉取的三年记录计算长线基准（不依赖 dashboard 缓存状态）。
@@ -508,6 +514,7 @@ struct BodyModelDetailView: View {
     }
     
     private func loadModelData() {
+        memoizedBodyModelState = nil
         // 三年窗口：身体模型与行为-结果配对用回填历史立即拟合，
         // 不再被 35/100/50/30 天的窗口截断在学习期。
         self.dailySummaries = (try? modelContext.fetch(

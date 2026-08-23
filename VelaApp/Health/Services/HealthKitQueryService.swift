@@ -999,7 +999,7 @@ extension HealthKitQueryService {
         try await dailyStatistics(
             identifier: identifier,
             unit: unit,
-            options: .discreteMostRecent,
+            options: .mostRecent,
             start: start,
             end: end,
             calendar: calendar
@@ -1100,7 +1100,7 @@ extension HealthKitQueryService {
                     let value: Double?
                     if options.contains(.cumulativeSum) {
                         value = statistics.sumQuantity()?.doubleValue(for: unit)
-                    } else if options.contains(.discreteMostRecent) {
+                    } else if options.contains(.mostRecent) {
                         value = statistics.mostRecentQuantity()?.doubleValue(for: unit)
                     } else {
                         value = statistics.averageQuantity()?.doubleValue(for: unit)

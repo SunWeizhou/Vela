@@ -262,14 +262,24 @@ final class NotificationService {
         return true
     }
 
-    // MARK: - Send Notification
+    
+/// UNUserNotificationCenter 非 Sendable 而 Apple 回调闭包为 @Sendable。
+/// 该包装仅供「捕获值」场景使用，不引入共享可变状态。
+private struct SendableNotificationCenter: @unchecked Sendable {
+    let value: UNUserNotificationCenter
+}
+
+// MARK: - Send Notification
 
     /// Send a local notification immediately.
     func sendNotification(title: String, body: String, category: VelaNotificationCategory?) {
         // 授权检查：被拒时静默丢弃会让用户以为通知正常（开了功能却收不到）。
-        let notificationCenter = center
+        // 最新 SDK 将 UNUserNotificationCenter 标记为非 Sendable 而其回调为
+        // @Sendable：用无检查包装盒捕获，断开对中心对象的闭包捕获（只捕获值，
+        // 不共享可变状态），满足 Swift 6 严格并发（CI 警告即错误）。
+        let notificationCenter = SendableNotificationCenter(value: center)
         let callbackLogger = logger
-        notificationCenter.getNotificationSettings { settings in
+        notificationCenter.value.getNotificationSettings { settings in
             guard settings.authorizationStatus == .authorized
                     || settings.authorizationStatus == .provisional else {
                 callbackLogger.warning(
@@ -291,7 +301,7 @@ final class NotificationService {
                 trigger: nil // immediate delivery
             )
 
-            notificationCenter.add(request) { error in
+            notificationCenter.value.add(request) { error in
                 if let error {
                     callbackLogger.error("Failed to send notification '\(title)': \(error.localizedDescription)")
                 } else {
