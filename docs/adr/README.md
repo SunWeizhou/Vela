@@ -19,5 +19,7 @@
 | [0007](0007-cross-domain-daily-operating-plan.md) | Cross-Domain Daily Operating Plan | Accepted | 每日行动计划跨域但有界：1 个主行动 + 最多 2 个辅助行动，不做泛日程管理器。 |
 | [0008](0008-ai-proposes-user-confirms-plan-changes.md) | AI Proposes, User Confirms Plan Changes | Accepted | 本地确定性规则生成正式计划；AI 只能生成候选 Proposal，重要修改必须经用户显式确认。 |
 | [0009](0009-single-user-daily-driver-before-generalization.md) | Single-User Daily Driver Before Generalization | Accepted | 当前阶段优先为产品作者本人的真实数据（~1100 天 Apple 健康数据）与真实习惯打造高可信 Daily Driver 闭环。 |
-| [0010](0010-personal-health-brief-as-canonical-product-projection.md) | PersonalHealthBrief as Canonical Product Projection | Accepted | `PersonalHealthBrief` 作为全局权威认知投影对象；训练决策作为下游衍生；确立 `Today / Trends / Vela / Training` 四大工作区。 |
+| [0010](0010-personal-health-brief-as-canonical-product-projection.md) | PersonalHealthBrief as Canonical Product Projection | Accepted | `PersonalHealthBrief` 作为全局权威认知投影对象，训练决策作为下游衍生；一级工作区部分已由 ADR 0012 取代。 |
 | [0011](0011-daily-intelligence-assembly-module.md) | Shared Daily Intelligence Assembly Module | Accepted | 两个日常 Adapter 跨同一 Seam；确定性 Module 统一 Body State → Personal Health Brief → Training Decision，并显式注入时间语义。 |
+| [0012](0012-score-led-today-and-primary-surfaces.md) | Score-led Today and Primary Surfaces | Accepted | Today 采用固定 3+2 五分层级：恢复/睡眠/负荷为圆环，压力为趋势，能量为余量；一级导航收敛为 Today / Trends / Plan / Coach。 |
+| [0013](0013-target-ios-26-and-watchos-26-for-the-rebuild.md) | Target iOS 26 and watchOS 26 | Accepted | Daily Driver 全量更新只维护 iOS 26 / watchOS 26 当前平台体验，不保留旧系统第二套 UI。 |

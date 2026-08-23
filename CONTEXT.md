@@ -1,11 +1,11 @@
 # Vela Health Intelligence — Domain Glossary
 
 > Status: Canonical
-> Last verified: 2026-08-21
+> Last verified: 2026-08-23
 > Scope: Vela 全局唯一领域术语定义与受控词汇表（Domain Ubiquitous Language）
 > Does not define: 页面结构与 UI 组件（见 [docs/PRD.md](docs/PRD.md)）、代码实现细节（见 [docs/TECH_ARCHITECTURE.md](docs/TECH_ARCHITECTURE.md)）
 
-Vela 是建立在 Apple 健康之上的个人身体面板与 AI 健康分析助手：帮助用户看见当前身体状态和长期趋势，理解变化原因，并将这种理解转化为训练与生活调整建议。
+Vela 是建立在 Apple 健康之上的个人身体状态仪表与 AI 分析助手：用个人长期数据量化当下状态，让用户为真实感受找到客观线索，而不是把疲惫或不适简单归咎于意志力；Agent 负责解释、追问与把理解转化为可调整的日常计划。
 
 > 核心原则：不做只陈列指标、不能解释个人状态和变化的健康数据面板。
 > 价值层级：1. 看见身体数据 → 2. 理解当前状态与长期趋势 → 3. 由 Agent 解释原因并联系不同信号 → 4. 在需要时给出训练与生活建议。
@@ -33,8 +33,12 @@ The normalized set of Health Signals assigned to one calendar day before scores 
 _Avoid_: Daily record, summary row, cache entry
 
 **Personal Baseline**:
-The valid historical window used to interpret a Health Signal relative to the same person; it is never a population diagnosis.
+The slowly adapting historical reference used to interpret a Health Signal or Scored Health Evidence relative to the same person. It is protected from abrupt single-day shifts and never represents a population diagnosis.
 _Avoid_: Normal range, standard value, average user
+
+**Personal Baseline Deviation**:
+An unusual departure from the Primary User's Personal Baseline, detected for a Health Signal or Scored Health Evidence time series. It means "unusual for you", not automatically "bad", "dangerous", or medically abnormal; validated absolute safety rules remain a separate concern.
+_Avoid_: Abnormality, danger alert, diagnosis, bad score
 
 **Data Coverage**:
 The explicit account of which required Health Signals are available, fresh, and authorized for a calculation.
@@ -51,19 +55,19 @@ The five independently interpretable 0–100 results produced by Daily Health Co
 _Avoid_: Overall health score, readiness total, wellness grade
 
 **Body State**:
-A conservative interpretation of current recovery, load, sleep, stress, and reported constraints derived from scored health evidence.
-_Avoid_: Readiness score, diagnosis, physical condition
+A conservative, uncertainty-aware interpretation of the body's current latent condition from the five Scored Health Evidence results, their Personal Baseline Deviations, Data Coverage, and optional Lived State. Body State is not directly measurable, is not assumed to follow one permanent formula, and never becomes a sixth or aggregate score.
+_Avoid_: Readiness score, diagnosis, physical condition, fixed latent variable, total score
 
 **Health Trend Finding**:
 A multi-scale (7d, 30d, 6m, 3y) statistical finding for a specific health metric, capturing direction, magnitude, baseline deviation, historical percentile position, and uncertainty.
 _Avoid_: Raw difference, isolated daily variance
 
 **Personal Health Brief**:
-The canonical, structured daily intelligence object answering "How am I overall? What is changing? Is it noteworthy? What might be driving it? Does it need action?". Consumed synchronously by Today, Trends, Agent, and Training.
+The canonical, structured daily intelligence object answering "How am I overall? What is changing? Is it noteworthy? What might be driving it? Does it need action?". Consumed synchronously by Today, Trends, Plan, and Coach.
 _Avoid_: Workout prescription, isolated score summary
 
 **Lived State**:
-The Primary User's self-reported felt experience at a point in time, including mental stress, training motivation, soreness, perceived energy, appetite disruption, and felt recovery. It is subjective evidence that may agree or disagree with Body State; neither silently replaces the other.
+The Primary User's optional self-reported felt experience after seeing the computed evidence: consistent with the scores, feeling worse, feeling better, or uncertain, with optional detail such as mental stress, soreness, perceived energy, appetite disruption, and felt recovery. It calibrates interpretation; absence is unknown rather than zero, and disagreement with Body State never invalidates the user's experience.
 _Avoid_: Mood score, emotion diagnosis, subjective readiness
 
 **Personal Response Model**:
@@ -79,11 +83,11 @@ The canonical daily choice to keep, reduce, swap, or recover, with reasons and c
 _Avoid_: AI recommendation, workout verdict, readiness label
 
 **Daily Operating Plan**:
-A persisted, cross-domain plan that protects Health Rhythm through one primary action and at most two supporting actions across training, movement, eating, stress recovery, and sleep. It may contain a Training Decision, but it does not become a general work or calendar manager.
+A locally available plan created for every day that protects Health Rhythm through one primary action and at most two supporting actions across training, movement, eating, stress recovery, and sleep. Deterministic evidence establishes safety constraints, the Agent expresses and organizes them naturally, and the Primary User may edit, delete, reschedule, or replace any action. It does not become a general work or calendar manager.
 _Avoid_: Today card, generated brief, coach plan
 
 **Plan Proposal**:
-A reviewable candidate change to a Daily Operating Plan produced from new context or Coach reasoning. It may explain alternatives and expected trade-offs, but it becomes canonical only after explicit user confirmation.
+A reviewable, material candidate change to an existing Daily Operating Plan produced from new context or Coach reasoning. It shows the proposed diff and expected trade-offs, but becomes canonical only after explicit user confirmation; direct user edits do not require Agent approval.
 _Avoid_: AI override, automatic plan, chat suggestion
 
 **Health Rhythm**:
@@ -95,7 +99,7 @@ An exercise or eating restriction performed primarily to cancel out a perceived 
 _Avoid_: Calorie correction, punishment cardio, earning food
 
 **Daily Check-in**:
-An optional self-report of current mental stress, training motivation, soreness, pain, or exceptional life context. It may strengthen or change a Daily Operating Plan, but its absence never blocks guidance and never means that the reported condition is normal or absent.
+A low-friction entry for recording Lived State or exceptional life context. It appears after the objective scores, may strengthen or change a Daily Operating Plan, and may be skipped without blocking guidance or implying that an unreported condition is absent.
 _Avoid_: Required questionnaire, daily compliance task, assumed zero
 
 **Proactive Touchpoint**:
@@ -149,7 +153,7 @@ _Avoid_: Workout logger, set log, mandatory feedback
 ### Coach memory
 
 **Agent Fact Snapshot**:
-The locale-neutral, deterministic projection of Health Signals, Data Coverage, Body State, Training Decision, and recent training or nutrition facts used by every AI workflow. Its semantic content hash excludes snapshot creation time; chat, reports, and proactive tasks render it through purpose-specific adapters.
+The locale-neutral, deterministic projection used by every AI workflow. It includes the five Scored Health Evidence results and contributors, Personal Baselines and deviations, multi-scale findings, recent daily aggregates, Data Coverage and freshness, Lived State, Training Observations, Daily Operating Plan edits, and confirmed memory or Personal Response Insights. Its semantic content hash excludes snapshot creation time; workflows may query bounded time-series detail through tools instead of uploading raw HealthKit samples.
 _Avoid_: Prompt context, context JSON, AI summary
 
 **Coach Artifact**:
@@ -167,6 +171,8 @@ _Avoid_: Automatic memory, wiki update, inferred profile
 - “Score” without a domain is ambiguous. Name the specific **Scored Health Evidence** result: Recovery, Sleep, Strain, Physiological Stress, or Energy.
 - “生活健康” is too broad for a product decision. Use **Health Rhythm** when referring to the cross-domain pattern Vela protects across sleep, eating, work stress, movement, training, and recovery.
 - “感觉” is ambiguous. Use **Lived State** for the user's reported experience and **Body State** for Vela's evidence-grounded interpretation; disagreement between them is information to learn from, not an error to hide.
+- “异常” is ambiguous. Use **Personal Baseline Deviation** for "unusual for this person" and reserve a safety notice for a separately validated absolute safety rule.
+- “AI 计划” hides ownership. Use **Daily Operating Plan** for the user-owned canonical plan and **Plan Proposal** only for a material Agent-suggested diff awaiting confirmation.
 
 ## Example dialogue
 

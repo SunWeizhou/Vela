@@ -1,7 +1,7 @@
 # Vela Technical Architecture Specification
 
 > Status: Canonical
-> Last verified: 2026-08-21
+> Last verified: 2026-08-23
 > Scope: Vela 当前工程的技术架构、模块分层、数据流管道、持久化模型与状态管理规范
 > Does not define: 业务需求与产品优先级（见 [docs/PRD.md](PRD.md)）、领域术语定义（见 [../CONTEXT.md](../CONTEXT.md)）
 
@@ -9,7 +9,7 @@
 
 ## 1. 架构总览与技术栈
 
-- **平台**: iOS 17+ (SwiftUI + SwiftData + HealthKit)
+- **平台**: iOS 26+ / watchOS 26+ (SwiftUI + SwiftData + HealthKit)
 - **UI 风格**: Apple Native Design System + Rhythm 视觉 Tokens（`VelaTheme`）
 - **数据流**: 单向数据流（Unidirectional Data Flow），本地确定性计算优先，AI 作为解释与提案增强
 - **运行时 AI 连接**: iOS 端直连 DeepSeek API (`api.deepseek.com`，Keychain 存储 Key)，可选 Kimi Vision 识别食物照片；`VelaBackend` (Vapor 4) 仅作为保留的实验服务，当前未启用。
@@ -36,9 +36,9 @@ Personal Health Brief (全局权威认知与简报投影)
 DailyIntelligenceAssemblyModule (共享确定性 Seam：Body State → Brief → Training Decision)
       ├───────────────────────┬───────────────────────┬───────────────────────┐
       ↓                       ↓                       ↓                       ↓
-Tab 0: Today            Tab 1: Trends           Tab 2: Vela             Tab 3: Training
-(今日状态与地平线)      (多尺度趋势与指标)       (Agent Fact Snapshot    (TrainingDecisionKernel
-                                                & 流式对话主场)          & 局部肌群负荷)
+Tab 0: Today            Tab 1: Trends           Tab 2: Plan             Tab 3: Coach
+(五分身体状态)          (时间序列与偏离)         (用户拥有的每日安排)      (Agent Fact Snapshot
+                                                                        & 解释/追问/记忆)
 ```
 
 ---
@@ -62,16 +62,21 @@ Tab 0: Today            Tab 1: Trends           Tab 2: Vela             Tab 3: T
 | **`StrainScore`** | Lucia/Banister TRIMP + Session RPE → ATL/CTL/ACWR | `StrainScoreEngine` | `DashboardSummary`, `PersonalHealthBrief` | **Implemented** |
 | **`StressIndex`** | 6 因子加权: RHR↑, HRV↓, RR↑, Temp, SleepDebt, Load | `StressIndexEngine` | `DashboardSummary`, `PersonalHealthBrief` | **Implemented** |
 | **`EnergyBank`** | Firstbeat-inspired 充放电模型 + TSB | `EnergyBankEngine` | `DashboardSummary`, `PersonalHealthBrief` | **Implemented** |
-| **`HealthTrendFinding`** | 7d/30d/6m/3y 多尺度统计基线对比与百分位定位 | `HealthTrendEngine` | `VelaTrendsView`, `AIContextBuilder` | **Implemented** |
+| **`HealthTrendFinding`** | 7d/30d/6m/3y 多尺度统计基线对比与百分位定位；五项评分各自拥有独立序列，`SleepScore` 不复用 `sleepDuration`；派生评分的 3 年基线从持久化每日评分序列计算 | `HealthTrendEngine` | `VelaTrendsView`, `AIContextBuilder` | **Implemented** |
+
+`PersonalBaselineEngine.formationProgress` 从截至所选日期的真实
+`DailyHealthSnapshot` 统计不重复的有效观察日，并把 `0 天 / 1–6 天 / ≥7 天`
+投影为 `waitingForEvidence / learning / ready`。该投影只负责首周界面定向；
+每个指标原有的七样本门槛继续独立生效，不能用整体进度绕过缺失规则或宣称长期基线已稳定。
 
 ### 3.3 认知投影与决策层（Cognitive & Decision Layer）
 
 | 规范类型 | 职责描述 | 生产者 | 消费者 | 状态 |
 | :--- | :--- | :--- | :--- | :--- |
-| **`PersonalHealthBrief`** | 汇总身体状态、显著变化、驱动因素与行动建议的权威对象 | `HealthTrendEngine`（PersonalHealthBrief 由其构造，见 PersonalHealthBrief.swift:381） | Today, Trends, Vela, Training | **Accepted Target** (持续收敛各视图消费路径) |
+| **`PersonalHealthBrief`** | 汇总身体状态、显著变化、驱动因素与行动建议的权威对象 | `HealthTrendEngine`（PersonalHealthBrief 由其构造，见 PersonalHealthBrief.swift:381） | Today, Trends, Plan, Coach | **Accepted Target** (持续收敛各视图消费路径) |
 | **`BodyState`** | 当前身体恢复、负荷与压力承受力的保守解释 | `BodyStateKernel` | `TrainingDecisionKernel`, `AIContextBuilder` | **Implemented** |
-| **`TrainingDecision`** | 今日训练定调（keep / reduce / swap / rest）+ 3 大执行边界 | `TrainingDecisionKernel` | Training Tab, Today Hero | **Implemented** |
-| **`DailyOperatingPlan`** | 跨域日常行动计划（1 个主行动 + 最多 2 个辅助行动） | `DailyOperatingPlanCoordinator` | Today View, Coach View | **Implemented** |
+| **`TrainingDecision`** | 今日训练定调（keep / reduce / swap / rest）+ 3 大执行边界 | `TrainingDecisionKernel` | Plan, Today detail | **Implemented** |
+| **`DailyOperatingPlan`** | 跨域日常行动计划（1 个主行动 + 最多 2 个辅助行动），用户拥有完成、编辑、删除、替换与改期状态 | `DailyOperatingPlanCoordinator` / `DailyOperatingPlanEditor` | Today, Plan, Coach | **Implemented** |
 | **`AgentFactSnapshot`** | 供给 LLM 的无时区偏差、确定性结构化事实快照 | `AIContextBuilder` | `CoachChatVM`, `ReportGenerator`, `ToolExecutionContext` | **Implemented** |
 
 Coach 的 non-casual 请求由 `CoachContextAssembler.buildRequestContext` 一次
@@ -84,6 +89,14 @@ Coach 的 non-casual 请求由 `CoachContextAssembler.buildRequestContext` 一�
 消息 hash 冒充 canonical hash。当前 snapshot 只有 `generatedAt` 一个请求
 时间字段，因此 `as_of` 明确映射同一值。Agent trace 以 `contextHashSource` 区分
 `agent_fact_snapshot` 与兼容路径的 `message_content`。
+
+Coach 路由同时保存 `CoachScreenSurface`。`VelaCoachView` 消费预填问题时，
+通过 `CoachContextFocus.routed` 将 Today、Trends、Plan、指标详情、手记、营养
+与训练入口投影成不同的 `systemContext` / `screenContext`，再交给同一请求装配链。
+这使 Agent 能延续上游语义；Plan 入口尤其明确要求实质修改只生成候选并等待
+用户确认。空会话首屏只消费同一 `DashboardSummary`、正式
+`DailyOperatingPlanRecord`、Coach artifacts 与 Memory Proposals，不构建第二套
+身体状态或计划事实。
 
 ### 3.4 Daily Intelligence Assembly Module
 
@@ -105,12 +118,12 @@ hash 校验必须重新散回两个调用方；因此 Module 具有实际 Levera
 Locality，而非 shallow pass-through。
 
 `DailyOperatingPlanBuilder` 是这条链路下游的确定性 Implementation。
-`DailyOperatingPlanPayload` schema v2 在保留训练决定、容量与 RPE Interface
-的同时，持久化一个主行动和最多两个不同领域的辅助行动。Today、Training、
-Vela 本机解释与 Agent facts 均通过这一个计划 Seam 消费结果；旧 schema
-仍可由兼容 Adapter 读取，并在下一次刷新时迁移。计划提案保持独立状态，
-只有用户在 Today 或 Training 明确采纳后才会跨入正式计划，拒绝或保存失败
-不会静默改变其 Implementation。
+`DailyOperatingPlanPayload` schema v3 在保留训练决定、容量与 RPE Interface
+的同时，持久化一个主行动、最多两个不同领域的辅助行动，以及安排时间、完成时间
+和用户编辑时间。`DailyOperatingPlanEditor` 是用户修改的唯一写入 Seam；一旦计划
+带有用户编辑状态，`DailyOperatingPlanRefreshPolicy` 禁止日常重算静默覆盖它，
+身体状态变化只能在 Plan 呈现候选差异。旧 schema 仍由兼容 Adapter 读取。
+Today、Plan、Coach 与 Agent facts 均消费同一正式记录；训练是 Plan 内的下游入口。
 
 ---
 
@@ -118,15 +131,18 @@ Vela 本机解释与 Agent facts 均通过这一个计划 Seam 消费结果；�
 
 ```text
 VelaApp
+├── Features/Onboarding/
+│   └── VelaOnboardingView.swift     # Body State → Agent Control → Apple Health 首次使用契约
 ├── Features/Minimal/
-│   ├── VelaMinimalShell.swift        # 根 TabView 容器（Today / Trends / Vela / Training）
-│   ├── VelaMinimalTodayView.swift    # Tab 0: 今日状态、地平线与核心决策
-│   ├── VelaMinimalFitnessView.swift  # Tab 3: 训练决策、手表自动同步流与局部肌群图谱
-│   └── TrainingHeroSection.swift     # 训练 Tab Hero、三日轮转与分析入口
+│   ├── VelaMinimalShell.swift        # 根 TabView：Today / Trends / Plan / Coach
+│   ├── VelaMinimalTodayView.swift    # Tab 0：五分 3+2 Today
+│   ├── VelaTrainingPlanView.swift    # Tab 2 Plan + 二级训练轮转页面
+│   ├── VelaMinimalFitnessView.swift  # Plan 内的训练专项工作区
+│   └── TrainingHeroSection.swift     # 训练专项 Hero、三日轮转与分析入口
 ├── Features/Trends/
 │   └── VelaTrendsView.swift           # Tab 1: 多尺度趋势对比与指标图表
 ├── Features/Coach/
-│   ├── CoachView.swift               # Tab 2: AI 分析工作台与流式对话主场
+│   ├── CoachView.swift               # Tab 3: AI 分析工作台与流式对话主场
 │   ├── CoachWelcomeWorkspace.swift   # 情境生理问候与动态分析提问气泡
 │   └── WikiProfileView.swift         # 健康记忆档案（Wiki / Memory Ledger）
 └── Features/Settings/

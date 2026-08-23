@@ -28,11 +28,7 @@ Vela accumulated rich longitudinal health data (~1100 days of Apple Health histo
    - `PersonalHealthBrief` evaluates physiological state and general readiness; it does not issue dogmatic training prescriptions.
    - `TrainingDecisionKernel` derives training volume and intensity caps downstream by taking `PersonalHealthBrief` + active training plan + workout rotation context.
 
-5. **Four Primary Surfaces**:
-   - `Today` (`sun.max`): How is my body right now? What is noteworthy today?
-   - `Trends` (`waveform.path.ecg`): How is my body changing across 7d, 30d, 6m, and 3y?
-   - `Vela` (`sparkles`): AI health analyst explaining physiological correlations and answering "why".
-   - `Training` (`figure.run`): Actionable workouts and rotation adjustments derived from health state.
+5. **Primary surfaces**: superseded by [ADR 0012](0012-score-led-today-and-primary-surfaces.md). The canonical projection remains shared across all replacement surfaces.
 
 6. **Evidence Boundaries & Language**:
    Eliminate unsubstantiated claims ("交感神经张力偏高", "自主神经活性良好", "深睡减少", "生理因果归因"). Use disciplined, observable, and probabilistic language.

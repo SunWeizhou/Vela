@@ -1,7 +1,7 @@
 # Vela AI Health Coach Specification
 
 > Status: Canonical
-> Last verified: 2026-08-21
+> Last verified: 2026-08-23
 > Scope: AI Agent 上下文协议、能力分层、Agent Fact Snapshot、Wiki 记忆机制与安全边界
 > Does not define: 本地评分算法实现（见 [SCORING_SYSTEM_V1_0.md](SCORING_SYSTEM_V1_0.md)）、产品需求总纲（见 [PRD.md](PRD.md)）
 
@@ -58,12 +58,11 @@ Agent 应逐步利用：
    - Friend：轻松、鼓励、少术语；
    - Commander：直接、行动导向。
 
-2. **Proactive Check-ins**
-   - 晨间简报；
-   - 午间状态检查；
-   - 晚间 Wiki 同步；
-   - 周总结；
-   - 异常指标提醒。
+2. **Proactive Touchpoints**
+   - 一次晨间状态与计划更新；
+   - 可选的运动后观察邀请；
+   - 仅在新证据会实质改变计划时出现的晚间调整；
+   - 不用午间打扰、Wiki 同步或常规波动制造参与度。
 
 3. **Files / Wiki Memory**
    - Vela 使用 `agent/user_wiki` 作为用户可读 memory；
@@ -81,14 +80,14 @@ Agent 应逐步利用：
 
 ## 3. Agent 输入
 
-Agent 不直接读取原始 HealthKit 数据，而读取 App 构造的结构化上下文包。
+Agent 不直接读取或上传全量原始 HealthKit 样本，而读取 App 构造的结构化 Agent Fact Snapshot；需要核对具体历史时，通过有界工具按指标与时间窗查询。
 
 ### 3.1 Context Schema
 ```json
 {
   "metadata": {
     "generated_at": "2026-05-16T08:30:00+08:00",
-    "context_window": "today | 7d | 30d | custom"
+    "context_window": "today | 7d | 30d | 6m | 3y | custom"
   },
   "today_summary": {},
   "body_state": {},
@@ -97,14 +96,16 @@ Agent 不直接读取原始 HealthKit 数据，而读取 App 构造的结构化�
   "strain": {},
   "stress": {},
   "energy_bank": {},
-  "health_age_trend": {},
-  "biological_age": {},
-  "training_plan": {},
-  "biomarkers": {},
-  "food_logs": {},
+  "personal_baselines": {},
+  "baseline_deviations": {},
+  "data_coverage": {},
+  "lived_state": {},
+  "training_observations": {},
+  "daily_operating_plan": {},
+  "plan_edits": {},
   "agent_artifacts": {},
   "recent_trends": {},
-  "journal": {},
+  "personal_response_insights": {},
   "historical_ai_reports": {},
   "user_wiki": {},
   "agent_instruction": {}
@@ -135,7 +136,7 @@ it exists. The Agent run audit also persists whether its hash came from
 
 ### 3.3 Recommendation Contract
 
-Every generated recommendation must state its source, confidence, and non-diagnostic safety language.
+Every generated recommendation must remain traceable to source and uncertainty, but compact surfaces do not have to print confidence boilerplate. Today renders one short sentence selected from deterministic facts and expressed by the Agent; unchanged semantic snapshot content must keep that sentence stable, and a local fallback must exist offline.
 
 Artifacts use the canonical types `daily_plan`, `training_adjustment`, `weekly_report`, `correlation_chart`, `wiki_diff`, and `nutrition_feedback`.
 
@@ -312,11 +313,11 @@ Artifacts use the canonical types `daily_plan`, `training_adjustment`, `weekly_r
 - 用人话解释，不堆砌术语；
 - 如有不确定，明确说“不足以判断”；
 - 不进行医疗诊断；
-- 不夸大 Stress / Biological Age 的科学确定性；
+- 不夸大 Physiological Stress 的科学确定性；
 - 始终优先使用用户个人基线，而不是绝对阈值。
 - 明确区分事实、推断、建议；
 - 明确数据缺口和 confidence；
-- 不把 Food Photo、Biological Age、Stress 当作精确医学结论；
+- 不把 Food Photo 或 Physiological Stress 当作精确医学结论；
 - 可操作建议优先，长解释次之。
 
 ### 6.3 输出结构建议
@@ -524,7 +525,7 @@ protocol LLMProvider {
 - “你有某疾病”
 - “你必须服用某药”
 - “你的身体存在严重问题”
-- 以 Biological Age 作为真实医学年龄断言
+- 在公开产品体验中生成或断言 Biological Age
 
 ### 合适表达
 - “近期趋势显示……”

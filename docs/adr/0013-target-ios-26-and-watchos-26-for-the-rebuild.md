@@ -1,0 +1,3 @@
+# Target iOS 26 and watchOS 26 for the Daily Driver rebuild
+
+The full Daily Driver rebuild will target iOS 26 and watchOS 26 rather than maintain parallel compatibility presentation paths for older OS versions. The project will keep validated domain, scoring, persistence, and HealthKit code where it remains correct, but new primary surfaces may rely on the current platform's SwiftUI, accessibility, material, and interaction capabilities. This narrows the active device set, removes long-lived UI parity branches, and lets the team spend its quality budget on one coherent experience; it also deliberately postpones support for users who cannot run the current OS until after the core product proves itself.
