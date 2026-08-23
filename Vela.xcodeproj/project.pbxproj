@@ -23,6 +23,7 @@
 		0B0000010000000000000001 /* VelaThemeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000020000000000000002 /* VelaThemeTests.swift */; };
 		0B0000290000000000000029 /* HealthFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000300000000000000030 /* HealthFoundationTests.swift */; };
 		0B0000310000000000000031 /* PersistenceFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000320000000000000032 /* PersistenceFoundationTests.swift */; };
+		83C9FE3788EF342185EFBC60 /* CrashLogStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F86EF538F9A14056E258C8E9 /* CrashLogStoreTests.swift */; };
 		1349E4216DE17618B3CBBDEC /* PrivacyDeletionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65FC7EBF9C35D54DDE1CF67A /* PrivacyDeletionTests.swift */; };
 		F2947F55733DA7C0951889F7 /* HealthSyncErrorHandlingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8381F93B80FA02BC248E253B /* HealthSyncErrorHandlingTests.swift */; };
 		F8AD5CF5041611F055C3B3F9 /* SchemaMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47FCDF48D12A9E1EEE2FECA0 /* SchemaMigrationTests.swift */; };
@@ -131,6 +132,7 @@
 		0B1000A300000000000000A3 /* WorkoutDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001A300000000000000A3 /* WorkoutDetailView.swift */; };
 		0B1001800000000000000080 /* PersonalBaselineEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001810000000000000081 /* PersonalBaselineEngine.swift */; };
 		0B1001820000000000000082 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001830000000000000083 /* NotificationService.swift */; };
+		7EBA3C1140E973334B0448BE /* CrashLogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9B500DB5B6DB64C589FACC3 /* CrashLogStore.swift */; };
 		0B1001840000000000000084 /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001850000000000000085 /* LocationManager.swift */; };
 		0B1001890000000000000089 /* WeatherService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B10018D000000000000008D /* WeatherService.swift */; };
 		0B1001A400000000000000A4 /* DomainContextBuilders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001A500000000000000A5 /* DomainContextBuilders.swift */; };
@@ -256,6 +258,7 @@
 		0B0000070000000000000007 /* VelaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VelaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0B0000300000000000000030 /* HealthFoundationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthFoundationTests.swift; sourceTree = "<group>"; };
 		0B0000320000000000000032 /* PersistenceFoundationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceFoundationTests.swift; sourceTree = "<group>"; };
+		F86EF538F9A14056E258C8E9 /* CrashLogStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashLogStoreTests.swift; sourceTree = "<group>"; };
 		65FC7EBF9C35D54DDE1CF67A /* PrivacyDeletionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyDeletionTests.swift; sourceTree = "<group>"; };
 		8381F93B80FA02BC248E253B /* HealthSyncErrorHandlingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthSyncErrorHandlingTests.swift; sourceTree = "<group>"; };
 		47FCDF48D12A9E1EEE2FECA0 /* SchemaMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaMigrationTests.swift; sourceTree = "<group>"; };
@@ -360,6 +363,7 @@
 		0B1001750000000000000075 /* JournalCorrelationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/Correlation/JournalCorrelationEngine.swift; sourceTree = "<group>"; };
 		0B1001810000000000000081 /* PersonalBaselineEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/PersonalBaselineEngine.swift; sourceTree = "<group>"; };
 		0B1001830000000000000083 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Services/NotificationService.swift; sourceTree = "<group>"; };
+		A9B500DB5B6DB64C589FACC3 /* CrashLogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Services/CrashLogStore.swift; sourceTree = "<group>"; };
 		0B1001850000000000000085 /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Services/LocationManager.swift; sourceTree = "<group>"; };
 		0B10018D000000000000008D /* WeatherService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Services/WeatherService.swift; sourceTree = "<group>"; };
 
@@ -677,6 +681,7 @@
 				0B1001730000000000000073 /* BackgroundTaskManager.swift */,
 				087BEB3E31344B8EA6E94717 /* AgentSkillsConfig.swift */,
 				0B1001830000000000000083 /* NotificationService.swift */,
+				A9B500DB5B6DB64C589FACC3 /* CrashLogStore.swift */,
 				0B1001850000000000000085 /* LocationManager.swift */,
 				0B10018D000000000000008D /* WeatherService.swift */,
 
@@ -714,6 +719,7 @@
 				0B0000020000000000000002 /* VelaThemeTests.swift */,
 				0B0000300000000000000030 /* HealthFoundationTests.swift */,
 				0B0000320000000000000032 /* PersistenceFoundationTests.swift */,
+				F86EF538F9A14056E258C8E9 /* CrashLogStoreTests.swift */,
 				65FC7EBF9C35D54DDE1CF67A /* PrivacyDeletionTests.swift */,
 				8381F93B80FA02BC248E253B /* HealthSyncErrorHandlingTests.swift */,
 				47FCDF48D12A9E1EEE2FECA0 /* SchemaMigrationTests.swift */,
@@ -1081,6 +1087,7 @@
 				43BEF779AE284532AACC77E8 /* AgentSkillsConfig.swift in Sources */,
 				0B1000730000000000000073 /* BackgroundTaskManager.swift in Sources */,
 				0B1001820000000000000082 /* NotificationService.swift in Sources */,
+				7EBA3C1140E973334B0448BE /* CrashLogStore.swift in Sources */,
 				0B1001840000000000000084 /* LocationManager.swift in Sources */,
 				0B1001890000000000000089 /* WeatherService.swift in Sources */,
 
@@ -1120,6 +1127,7 @@
 				0B0000010000000000000001 /* VelaThemeTests.swift in Sources */,
 				0B0000290000000000000029 /* HealthFoundationTests.swift in Sources */,
 				0B0000310000000000000031 /* PersistenceFoundationTests.swift in Sources */,
+				83C9FE3788EF342185EFBC60 /* CrashLogStoreTests.swift in Sources */,
 				1349E4216DE17618B3CBBDEC /* PrivacyDeletionTests.swift in Sources */,
 				F2947F55733DA7C0951889F7 /* HealthSyncErrorHandlingTests.swift in Sources */,
 				F8AD5CF5041611F055C3B3F9 /* SchemaMigrationTests.swift in Sources */,

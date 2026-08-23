@@ -276,11 +276,8 @@ struct VelaApp: App {
             let symbols = Thread.callStackSymbols.joined(separator: "\n")
             let message = "VELA_UNCAUGHT_EXCEPTION reason=\(exception.reason ?? "nil")\n\(symbols)"
             NSLog("%@", message)
-            if let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
-                let url = dir.appendingPathComponent("Vela/crash_diagnostic.log")
-                try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try? message.write(to: url, atomically: true, encoding: .utf8)
-            }
+            // 落盘为时间戳日志并轮转保留最近 3 份（审计 H4：覆盖式单文件会被冲掉）。
+            CrashLogStore.record(message)
         }
 
         // 前台收到本地通知时也要展示（此前无 delegate，前台通知被系统静默抑制）。
