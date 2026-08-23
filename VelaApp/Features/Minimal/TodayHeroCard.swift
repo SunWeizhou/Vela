@@ -1264,7 +1264,7 @@ struct VelaRhythmSectionHeader: View {
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 Text(title)
-                    .font(.system(size: 21, weight: .semibold))
+                    .font(.system(.title2, design: .default, weight: .semibold))
                     .tracking(-0.35)
                     .foregroundStyle(VelaTheme.rhythmInk)
             }

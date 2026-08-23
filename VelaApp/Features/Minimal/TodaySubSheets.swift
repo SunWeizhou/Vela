@@ -23,7 +23,7 @@ struct ProactiveInsightDetailSheet: View {
                     VStack(alignment: .leading, spacing: 14) {
                         HStack(alignment: .top, spacing: 14) {
                             Image(systemName: insight.focus.icon)
-                                .font(.system(size: 23, weight: .semibold))
+                                .font(.system(.title2, design: .default, weight: .semibold))
                                 .foregroundStyle(insight.focus.color)
                                 .frame(width: 52, height: 52)
                                 .background(
@@ -41,7 +41,7 @@ struct ProactiveInsightDetailSheet: View {
                                 .foregroundStyle(insight.severity.color)
 
                                 Text(insight.displayTitle)
-                                    .font(.system(size: 23, weight: .semibold))
+                                    .font(.system(.title2, design: .default, weight: .semibold))
                                     .foregroundStyle(VelaTheme.fg)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
