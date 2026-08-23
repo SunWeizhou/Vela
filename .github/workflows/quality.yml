@@ -24,6 +24,31 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Verify toolchain matches .xcode-version
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          test -d "/Applications/Xcode_26.5.0.app/Contents/Developer" || {
+            echo "::error::Runner expects Xcode 26.5.0 (see .xcode-version). Update DEVELOPER_DIR when bumping."
+            exit 1
+          }
+
+      - name: Schema version guard
+        shell: bash
+        run: |
+          python3 scripts/schema_fingerprint.py --check
+
+      - name: SwiftLint (report-only until baseline is clean)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if which swiftlint >/dev/null 2>&1; then
+            swiftlint --config .swiftlint.yml || true
+          else
+            echo "SwiftLint not preinstalled on runner; skipping (brew install swiftlint to enable)."
+          fi
+
       - name: Reject tracked dependencies
         shell: bash
         run: |
@@ -43,6 +68,7 @@ jobs:
             -scheme Vela \
             -configuration Debug \
             -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO \
             SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
             GCC_TREAT_WARNINGS_AS_ERRORS=YES \
@@ -52,15 +78,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # 确定性选择：可用 iPhone 模拟器中名称排序第一个（取代 head -n 1 的非确定行为）
           device_id="$({ xcrun simctl list devices available -j | \
-            jq -r '.devices[][] | select(.name | startswith("iPhone")) | .udid'; } | head -n 1)"
+            jq -r '[.devices[][] | select(.isAvailable and (.name | startswith("iPhone"))) | .name] | sort | .[0]'; } )"
           test -n "$device_id"
           set -o pipefail
           xcodebuild test \
             -project Vela.xcodeproj \
             -scheme Vela \
-            -destination "platform=iOS Simulator,id=$device_id" \
+            -destination "platform=iOS Simulator,name=$device_id" \
+            -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO
+
+      - name: Upload xcresult on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcresult
+          path: build/DerivedData/Logs/Test/
+          if-no-files-found: ignore
 
   backend:
     name: Backend tests

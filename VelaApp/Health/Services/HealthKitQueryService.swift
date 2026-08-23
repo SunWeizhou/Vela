@@ -43,7 +43,7 @@ final class HealthKitQueryService: HealthQueryService {
     /// only — never by `localizedDescription`, whose wording changes with the
     /// system language and across iOS releases. Matching on localized text turned
     /// a normal empty day into a thrown sync error on non-English devices.
-    nonisolated private static func isBenignHealthKitDataError(_ error: Error) -> Bool {
+    nonisolated static func isBenignHealthKitDataError(_ error: Error) -> Bool {
         let nsError = error as NSError
         guard nsError.domain == HKErrorDomain,
               let code = HKError.Code(rawValue: nsError.code) else { return false }
@@ -454,8 +454,7 @@ final class HealthKitQueryService: HealthQueryService {
             )
             query.initialResultsHandler = { _, results, error in
                 if let error {
-                    let nsError = error as NSError
-                    if nsError.domain == HKErrorDomain && (nsError.code == 4 || nsError.code == 3) {
+                    if Self.isBenignHealthKitDataError(error) {
                         continuation.resume(returning: [])
                     } else {
                         continuation.resume(throwing: error)
@@ -502,8 +501,7 @@ final class HealthKitQueryService: HealthQueryService {
             )
             query.initialResultsHandler = { _, results, error in
                 if let error {
-                    let nsError = error as NSError
-                    if nsError.domain == HKErrorDomain && (nsError.code == 4 || nsError.code == 3) {
+                    if Self.isBenignHealthKitDataError(error) {
                         continuation.resume(returning: [])
                     } else {
                         continuation.resume(throwing: error)

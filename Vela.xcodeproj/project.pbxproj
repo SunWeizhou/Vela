@@ -23,6 +23,9 @@
 		0B0000010000000000000001 /* VelaThemeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000020000000000000002 /* VelaThemeTests.swift */; };
 		0B0000290000000000000029 /* HealthFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000300000000000000030 /* HealthFoundationTests.swift */; };
 		0B0000310000000000000031 /* PersistenceFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000320000000000000032 /* PersistenceFoundationTests.swift */; };
+		1349E4216DE17618B3CBBDEC /* PrivacyDeletionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65FC7EBF9C35D54DDE1CF67A /* PrivacyDeletionTests.swift */; };
+		F2947F55733DA7C0951889F7 /* HealthSyncErrorHandlingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8381F93B80FA02BC248E253B /* HealthSyncErrorHandlingTests.swift */; };
+		F8AD5CF5041611F055C3B3F9 /* SchemaMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47FCDF48D12A9E1EEE2FECA0 /* SchemaMigrationTests.swift */; };
 		0B0000330000000000000033 /* ScoringEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000340000000000000034 /* ScoringEngineTests.swift */; };
 		0B0000350000000000000035 /* TrainingPlanAdaptationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000360000000000000036 /* TrainingPlanAdaptationTests.swift */; };
 		0B26A0010000000000000001 /* DataCoverageAndEvidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B26A0020000000000000002 /* DataCoverageAndEvidenceTests.swift */; };
@@ -55,6 +58,7 @@
 		0B1000320000000000000032 /* JournalRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001330000000000000033 /* JournalRepository.swift */; };
 		0B1000330000000000000033 /* AIReportRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001340000000000000034 /* AIReportRepository.swift */; };
 		0B1000340000000000000034 /* VelaModelContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001350000000000000035 /* VelaModelContainer.swift */; };
+		3848C89DE6723E0A72CB5D58 /* VelaSchemaV3Frozen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C47F96BE1FC2D34782EF610 /* VelaSchemaV3Frozen.swift */; };
 		0B1000350000000000000035 /* ScoringCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001360000000000000036 /* ScoringCore.swift */; };
 		0B1000350000000000000101 /* ScoreEngineFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001360000000000000101 /* ScoreEngineFactory.swift */; };
 		0B1000360000000000000036 /* SleepScoreEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001370000000000000037 /* SleepScoreEngine.swift */; };
@@ -252,6 +256,9 @@
 		0B0000070000000000000007 /* VelaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VelaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0B0000300000000000000030 /* HealthFoundationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthFoundationTests.swift; sourceTree = "<group>"; };
 		0B0000320000000000000032 /* PersistenceFoundationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceFoundationTests.swift; sourceTree = "<group>"; };
+		65FC7EBF9C35D54DDE1CF67A /* PrivacyDeletionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyDeletionTests.swift; sourceTree = "<group>"; };
+		8381F93B80FA02BC248E253B /* HealthSyncErrorHandlingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthSyncErrorHandlingTests.swift; sourceTree = "<group>"; };
+		47FCDF48D12A9E1EEE2FECA0 /* SchemaMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaMigrationTests.swift; sourceTree = "<group>"; };
 		0B0000340000000000000034 /* ScoringEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoringEngineTests.swift; sourceTree = "<group>"; };
 		0B0000360000000000000036 /* TrainingPlanAdaptationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingPlanAdaptationTests.swift; sourceTree = "<group>"; };
 		0B26A0020000000000000002 /* DataCoverageAndEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataCoverageAndEvidenceTests.swift; sourceTree = "<group>"; };
@@ -285,6 +292,7 @@
 		0B1001330000000000000033 /* JournalRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence/Repositories/JournalRepository.swift; sourceTree = "<group>"; };
 		0B1001340000000000000034 /* AIReportRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence/Repositories/AIReportRepository.swift; sourceTree = "<group>"; };
 		0B1001350000000000000035 /* VelaModelContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence/SwiftDataModels/VelaModelContainer.swift; sourceTree = "<group>"; };
+		3C47F96BE1FC2D34782EF610 /* VelaSchemaV3Frozen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence/SwiftDataModels/VelaSchemaV3Frozen.swift; sourceTree = "<group>"; };
 		0B1001360000000000000036 /* ScoringCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/ScoringCore.swift; sourceTree = "<group>"; };
 		0B1001360000000000000101 /* ScoreEngineFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/ScoreEngineFactory.swift; sourceTree = "<group>"; };
 		0B1001370000000000000037 /* SleepScoreEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/Sleep/SleepScoreEngine.swift; sourceTree = "<group>"; };
@@ -643,6 +651,7 @@
 				0B1001510000000000000051 /* JournalView.swift */,
 				0B1001220000000000000022 /* PersistenceModels.swift */,
 				0B1001350000000000000035 /* VelaModelContainer.swift */,
+				3C47F96BE1FC2D34782EF610 /* VelaSchemaV3Frozen.swift */,
 				0B1001310000000000000031 /* HealthCachePolicy.swift */,
 				0B1001320000000000000032 /* DailyHealthSummaryRepository.swift */,
 				0B1001330000000000000033 /* JournalRepository.swift */,
@@ -705,6 +714,9 @@
 				0B0000020000000000000002 /* VelaThemeTests.swift */,
 				0B0000300000000000000030 /* HealthFoundationTests.swift */,
 				0B0000320000000000000032 /* PersistenceFoundationTests.swift */,
+				65FC7EBF9C35D54DDE1CF67A /* PrivacyDeletionTests.swift */,
+				8381F93B80FA02BC248E253B /* HealthSyncErrorHandlingTests.swift */,
+				47FCDF48D12A9E1EEE2FECA0 /* SchemaMigrationTests.swift */,
 				0B0000340000000000000034 /* ScoringEngineTests.swift */,
 				0B0000360000000000000036 /* TrainingPlanAdaptationTests.swift */,
 				0B26A0020000000000000002 /* DataCoverageAndEvidenceTests.swift */,
@@ -1044,6 +1056,7 @@
 				0B1000500000000000000050 /* JournalView.swift in Sources */,
 				0B1000220000000000000022 /* PersistenceModels.swift in Sources */,
 				0B1000340000000000000034 /* VelaModelContainer.swift in Sources */,
+				3848C89DE6723E0A72CB5D58 /* VelaSchemaV3Frozen.swift in Sources */,
 				0B1000300000000000000030 /* HealthCachePolicy.swift in Sources */,
 				0B1000310000000000000031 /* DailyHealthSummaryRepository.swift in Sources */,
 				0B1000320000000000000032 /* JournalRepository.swift in Sources */,
@@ -1107,6 +1120,9 @@
 				0B0000010000000000000001 /* VelaThemeTests.swift in Sources */,
 				0B0000290000000000000029 /* HealthFoundationTests.swift in Sources */,
 				0B0000310000000000000031 /* PersistenceFoundationTests.swift in Sources */,
+				1349E4216DE17618B3CBBDEC /* PrivacyDeletionTests.swift in Sources */,
+				F2947F55733DA7C0951889F7 /* HealthSyncErrorHandlingTests.swift in Sources */,
+				F8AD5CF5041611F055C3B3F9 /* SchemaMigrationTests.swift in Sources */,
 				0B0000330000000000000033 /* ScoringEngineTests.swift in Sources */,
 				0B0000350000000000000035 /* TrainingPlanAdaptationTests.swift in Sources */,
 				0B26A0010000000000000001 /* DataCoverageAndEvidenceTests.swift in Sources */,

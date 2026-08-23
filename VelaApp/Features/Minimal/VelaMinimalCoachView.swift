@@ -200,7 +200,7 @@ struct PrivacyDataInventoryModel: Hashable {
                 PrivacyDeleteGroup(
                     id: "all_local",
                     title: "清空 Vela 本地数据",
-                    detail: "删除 Vela 本机数据库中的摘要、日志、计划、对话、AI 产物和记忆。",
+                    detail: "删除 Vela 本机数据库中的摘要、日志、计划、对话、AI 产物、明文归档（daily_logs）和记忆。Keychain 中的 API Key、Apple Health 原始数据与 iCloud 备份不会被清除。",
                     systemImage: "trash.fill",
                     scope: .allLocalVelaData,
                     isDestructive: true
@@ -245,7 +245,8 @@ enum PrivacyDataInventoryBuilder {
     }
 
     private static func count<T: PersistentModel>(_ type: T.Type, in modelContext: ModelContext) -> Int {
-        (try? modelContext.fetch(FetchDescriptor<T>()).count) ?? 0
+        // 只取行数：不要物化全部行（agent_runs/product_events 等可积累数千行，审计 H2）
+        (try? modelContext.fetchCount(FetchDescriptor<T>())) ?? 0
     }
 }
 
@@ -306,6 +307,11 @@ enum PrivacyDataDeletionService {
             deleted += try deleteAll(ProactiveInsightRecord.self, in: modelContext)
             deleted += try WikiFileService.deleteLocalDocuments(at: wikiDirectoryURL)
             WristSnapshotBridge.shared.clearCachedSnapshot()
+            // 明文归档与恢复备份也是 Vela 本地数据（审计 H7）：daily_logs 按天写入
+            // 的 md 含当日完整身体数据，VelaRecovery 是 store 的恢复副本——
+            // 「清空本地数据」必须一并删除，否则删除承诺未兑现且随 iCloud 备份离机。
+            deleted += try DailyLogService.deleteLocalLogs()
+            deleted += try VelaModelContainer.deleteRecoveryBackups()
         }
 
         try modelContext.save()

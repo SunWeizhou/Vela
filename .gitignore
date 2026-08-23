@@ -18,6 +18,7 @@ skills-lock.json
 # Misc junk
 bevel-homepage.png
 *.bak
+*.log
 scratch/
 
 # Design reference / tool exports
@@ -33,3 +34,4 @@ docs/reference/bevel-3.1.4/*.mov
 # SQLite databases
 *.sqlite
 .superpowers/
+__pycache__/

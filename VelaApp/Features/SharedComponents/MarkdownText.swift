@@ -7,12 +7,12 @@ struct MarkdownText: View {
     var isStreaming: Bool = false
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 0.5, paused: !isStreaming)) { context in
-            let blink = Int(context.date.timeIntervalSinceReferenceDate * 2).isMultiple(of: 2)
-            let paragraphs = parsedParagraphs(showStreamingCursor: isStreaming && blink)
-
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, attrStr in
+        let paragraphs = parsedParagraphs
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array(paragraphs.enumerated()), id: \.offset) { index, attrStr in
+                if isStreaming && index == paragraphs.count - 1 {
+                    StreamingLastParagraph(text: attrStr, font: font, color: color)
+                } else {
                     Text(attrStr)
                         .font(font)
                         .foregroundStyle(color)
@@ -24,12 +24,61 @@ struct MarkdownText: View {
         }
     }
 
+    /// 只按「内容变化」解析一次（缓存）。此前每 0.5s 心跳 + 每个 chunk 都对
+    /// 全文重跑 markdown 解析，流式期间主线程烧在解析上（审计 H2）。
+    private var parsedParagraphs: [AttributedString] {
+        MarkdownTextParser.parse(markdown)
+    }
+}
+
+/// 流式光标：独立的轻量闪烁层，复用已解析的 AttributedString，
+/// 每次心跳只重建一个 Text（不触发 markdown 重解析）。
+private struct StreamingLastParagraph: View {
+    let text: AttributedString
+    let font: Font
+    let color: Color
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 0.5)) { context in
+            let blink = Int(context.date.timeIntervalSinceReferenceDate * 2).isMultiple(of: 2)
+            Text(Self.cursorContent(for: text, visible: blink))
+                .font(font)
+                .foregroundStyle(color)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private static func cursorContent(for text: AttributedString, visible: Bool) -> AttributedString {
+        guard visible else { return text }
+        var cursor = AttributedString(" ▊")
+        cursor.foregroundColor = VelaTheme.accent
+        var content = text
+        content.append(cursor)
+        return content
+    }
+}
+
+/// markdown 段落解析器（带内容缓存）。
+@MainActor
+enum MarkdownTextParser {
+    private static var cacheKey: String = ""
+    private static var cacheValue: [AttributedString] = []
+
+    static func parse(_ markdown: String) -> [AttributedString] {
+        if markdown == cacheKey { return cacheValue }
+        let result = rawParse(markdown)
+        cacheKey = markdown
+        cacheValue = result
+        return result
+    }
+
     // MARK: - Paragraph Splitting
 
     /// Splits raw markdown into paragraphs (separated by blank lines),
-    /// parses each paragraph individually via AttributedString(markdown:),
-    /// and appends the streaming cursor to the final paragraph.
-    private func parsedParagraphs(showStreamingCursor: Bool) -> [AttributedString] {
+    /// parses each paragraph individually via AttributedString(markdown:).
+    private static func rawParse(_ markdown: String) -> [AttributedString] {
         let normalized = markdown
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
@@ -93,7 +142,7 @@ struct MarkdownText: View {
         // so AttributedString markdown parser applies soft wrapping within
         // the paragraph while keeping inline markdown (bold, italic) working.
         var result: [AttributedString] = []
-        for (index, group) in paragraphGroups.enumerated() {
+        for group in paragraphGroups {
             // AttributedString(markdown:) 不渲染 "- " 列表符号与围栏代码块；
             // 预处理：列表行改为 •，围栏改为缩进引用样式，保证视觉保真。
             let rendered = group.map { line -> String in
@@ -111,29 +160,14 @@ struct MarkdownText: View {
                 return line
             }
             let paraText = rendered.joined(separator: "\n")
-            let isLast = index == paragraphGroups.count - 1
 
             if let parsed = try? AttributedString(markdown: paraText) {
-                var attrStr = parsed
-                if isLast { appendStreamingCursor(to: &attrStr, isVisible: showStreamingCursor) }
-                result.append(attrStr)
+                result.append(parsed)
             } else {
-                var plain = AttributedString(paraText)
-                if isLast { appendStreamingCursor(to: &plain, isVisible: showStreamingCursor) }
-                result.append(plain)
+                result.append(AttributedString(paraText))
             }
         }
 
         return result
-    }
-
-    // MARK: - Streaming Cursor
-
-    private func appendStreamingCursor(to result: inout AttributedString, isVisible: Bool) {
-        if isVisible {
-            var cursor = AttributedString(" ▊")
-            cursor.foregroundColor = VelaTheme.accent
-            result.append(cursor)
-        }
     }
 }

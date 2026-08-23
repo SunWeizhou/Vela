@@ -167,6 +167,23 @@ enum DailyLogService {
         try content.write(to: url(for: date), atomically: true, encoding: .utf8)
     }
 
+    /// 删除 daily_logs 明文归档目录（含按天写入的身体数据 JSON 与对话文本）。
+    /// 「清空 Vela 本地数据」必须覆盖此目录，否则删除承诺未兑现（审计 H7）。
+    /// - Returns: 删除的文件数量；目录不存在时返回 0。
+    static func deleteLocalLogs(
+        at logBaseURL: URL? = nil,
+        fileManager: FileManager = .default
+    ) throws -> Int {
+        let url = logBaseURL ?? baseURL
+        guard fileManager.fileExists(atPath: url.path) else { return 0 }
+        let contents = try fileManager.contentsOfDirectory(
+            at: url,
+            includingPropertiesForKeys: nil
+        )
+        try fileManager.removeItem(at: url)
+        return contents.count
+    }
+
     static func loadWeek(endingAt date: Date = Date(), calendar: Calendar = .current) -> [DailyLogEntry] {
         let today = calendar.startOfDay(for: date)
         guard let weekStart = calendar.date(byAdding: .day, value: -6, to: today) else { return [] }

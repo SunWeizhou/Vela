@@ -141,13 +141,31 @@ final class HealthKitSyncEngine {
 
         for dayStart in plan.rawRefreshDays {
             // Build raw daily snapshot from HealthKit and local workouts
-            let snapshot = await DailySnapshotBuilder.buildSnapshot(
+            let buildResult = await DailySnapshotBuilder.buildSnapshot(
                 for: dayStart,
                 queryService: queryService,
                 calendar: calendar,
                 modelContext: modelContext
             )
-            
+            let snapshot = buildResult.snapshot
+            let dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: dayStart, calendar: calendar)
+
+            // 查询失败（区别于「无数据」）的组件必须让当天保持 dirty 以便重试，
+            // 同时把失败写入诊断链（Trust Center 可见）。核心健康组件全部失败时
+            // 没有可信数据：跳过持久化，避免用全空快照覆盖已有记录（审计 C2）。
+            if !buildResult.queryFailures.isEmpty {
+                failedDayIdentifiers.insert(dayIdentifier)
+                PipelineDiagnosticsLogger.log(
+                    modelContext: modelContext,
+                    stage: "HealthKitSyncEngine.syncPastDays.queryFailures",
+                    isSuccess: false,
+                    summary: "Day \(dayStart) query failures: \(buildResult.queryFailures.map(\.rawValue).joined(separator: ",")). Marked dirty for retry."
+                )
+                if !buildResult.hasCoreData {
+                    continue
+                }
+            }
+
             // Save the raw snapshot
             do {
                 try snapshotRepo.saveDailySnapshot(snapshot)
@@ -271,11 +289,15 @@ final class HealthKitSyncEngine {
         PipelineDiagnosticsLogger.log(
             modelContext: modelContext,
             stage: "HealthKitSyncEngine.syncPastDays.completed",
-            isSuccess: true,
-            summary: "Successfully synced and computed metrics for past \(days) days."
+            isSuccess: failedDayIdentifiers.isEmpty,
+            summary: "Synced and computed metrics for past \(days) days. Failed days: \(failedDayIdentifiers.count)."
         )
         var completedState = cursorState
-        completedState.lastSuccessfulSyncAt = endDate
+        // 有失败日时不得推进 lastSuccessfulSyncAt：否则下次同步会误认为数据已新鲜，
+        // 失败日永远停留在脏状态（审计 C2）。
+        if failedDayIdentifiers.isEmpty {
+            completedState.lastSuccessfulSyncAt = endDate
+        }
         let processedIdentifiers = Set(plan.rawRefreshDays.map {
             DailyHealthSummaryRecord.dayIdentifier(for: $0, calendar: calendar)
         })
@@ -332,24 +354,79 @@ final class HealthKitSyncEngine {
 }
 
 final class DailySnapshotBuilder {
+    /// HealthKit 快照的查询组件。用于区分「该组件无数据」与「该组件查询失败」。
+    enum HealthSnapshotComponent: String, Equatable, CaseIterable, Sendable {
+        case sleep
+        case recovery
+        case strain
+        case body
+        case extended
+    }
+
+    /// buildSnapshot 的返回：快照 + 失败的查询组件清单。
+    /// 失败组件未被当成「无数据」吞掉——否则授权被拒/数据库异常会被静默
+    /// 持久化为全空快照，并错误推进 lastSuccessfulSyncAt（审计 C2）。
+    struct Result: Sendable {
+        var snapshot: DailyHealthSnapshot
+        var queryFailures: [HealthSnapshotComponent]
+
+        /// 核心健康组件（sleep/recovery/strain/body）是否至少有一个成功。
+        /// 全部失败时没有可信数据，调用方不应持久化「无数据」快照覆盖已有记录。
+        var hasCoreData: Bool {
+            let core: Set<HealthSnapshotComponent> = [.sleep, .recovery, .strain, .body]
+            return !core.isSubset(of: Set(queryFailures))
+        }
+    }
+
     @MainActor
     static func buildSnapshot(
         for date: Date,
         queryService: HealthQueryService,
         calendar: Calendar,
         modelContext: ModelContext? = nil
-    ) async -> DailyHealthSnapshot {
+    ) async -> Result {
         let dayStart = calendar.startOfDay(for: date)
         let range = DateRangeQuery.singleDay(dayStart, calendar: calendar)
 
-        // Query components independently with fail-safes
-        let sleep = try? await queryService.sleepSummary(in: range)
-        let recovery = try? await queryService.recoveryMetrics(in: range)
-        let strain = try? await queryService.strainSummary(in: range)
-        let body = try? await queryService.bodyMetrics(in: range)
-        
+        // Query components independently。查询失败（区别于「无数据」）必须显式记录：
+        // 授权被拒/参数错误不再被吞成空数据（仅 errorNoData 走空数据分支）。
+        var queryFailures: [HealthSnapshotComponent] = []
+
+        let (sleepValue, sleepFailed) = await queryComponent(
+            .sleep, in: range
+        ) { try await queryService.sleepSummary(in: range) }
+        let sleep: SleepSummary? = sleepValue ?? nil
+        if sleepFailed { queryFailures.append(.sleep) }
+
+        let (recoveryValue, recoveryFailed) = await queryComponent(
+            .recovery, in: range
+        ) { try await queryService.recoveryMetrics(in: range) }
+        let recovery: RecoveryMetricSummary? = recoveryValue
+        if recoveryFailed { queryFailures.append(.recovery) }
+
+        let (strainValue, strainFailed) = await queryComponent(
+            .strain, in: range
+        ) { try await queryService.strainSummary(in: range) }
+        let strain: StrainActivitySummary? = strainValue
+        if strainFailed { queryFailures.append(.strain) }
+
+        let (bodyValue, bodyFailed) = await queryComponent(
+            .body, in: range
+        ) { try await queryService.bodyMetrics(in: range) }
+        let body: BodyMetricsSummary? = bodyValue
+        if bodyFailed { queryFailures.append(.body) }
+
         let hkQueryService = queryService as? HealthKitQueryService
-        let extended = (try? await hkQueryService?.extendedMetrics(in: range)) ?? ExtendedHealthMetrics()
+        let (extendedValue, extendedFailed) = await queryComponent(
+            .extended, in: range
+        ) {
+            if let hkQueryService {
+                return try await hkQueryService.extendedMetrics(in: range)
+            }
+            return ExtendedHealthMetrics()
+        }
+        let extended: ExtendedHealthMetrics = extendedValue ?? ExtendedHealthMetrics()
+        if extendedFailed { queryFailures.append(.extended) }
 
         var snapshot = DailyHealthSnapshot(date: dayStart)
         if let modelContext {
@@ -443,7 +520,25 @@ final class DailySnapshotBuilder {
         if let spo2 = extended.oxygenSaturation { snapshot.oxygenSaturation = HealthUnitNormalizer.normalizeOxygenSaturation(spo2) }
         if let temp = extended.bodyTemperature { snapshot.wristTemperature = temp }
 
-        return snapshot
+        return Result(snapshot: snapshot, queryFailures: queryFailures)
+    }
+
+    /// 执行单个 HealthKit 查询组件：无数据（benign）→ 返回 nil 且不记为失败；
+    /// 真实查询错误（授权被拒、参数错误、数据库异常等）→ 返回 nil 且标记 failed。
+    @MainActor
+    private static func queryComponent<T>(
+        _ component: HealthSnapshotComponent,
+        in range: DateRangeQuery,
+        _ operation: () async throws -> T
+    ) async -> (value: T?, failed: Bool) {
+        do {
+            return (try await operation(), false)
+        } catch {
+            if HealthKitQueryService.isBenignHealthKitDataError(error) {
+                return (nil, false)
+            }
+            return (nil, true)
+        }
     }
 }
 

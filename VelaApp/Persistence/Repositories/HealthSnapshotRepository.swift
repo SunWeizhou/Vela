@@ -100,15 +100,20 @@ final class HealthSnapshotRepository {
         // Fetch without a date #Predicate and filter in memory. SwiftData's
         // #Predicate date comparison has been observed to trap (SIGTRAP) when a
         // stored row carries an anomalous `date`, hard-crashing the app on the
-        // workout-save refresh path. The table is bounded (~90 days via
-        // pruneOldSnapshots), so fetching all and filtering is cheap and makes
-        // one bad row unable to crash the fetch.
-        let descriptor = FetchDescriptor<DailyHealthSummaryRecord>(
-            sortBy: [SortDescriptor(\.date, order: .forward)]
+        // workout-save refresh path. Keeping the in-memory filter makes one bad
+        // row unable to crash the fetch.
+        // 性能（审计 H2）：dayIdentifier 唯一 ⇒ 每日历日至多一行。以降序排序 +
+        // fetchLimit 让 SQL 层提前截断到「最近的 N 天」（LIMIT），
+        // 避免 1100 天全表物化后再按窗口过滤；额外 +2 行余量覆盖
+        // 健康日边界（04:00）可能多出的跨日记录。
+        var descriptor = FetchDescriptor<DailyHealthSummaryRecord>(
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
-        return try modelContext.fetch(descriptor)
+        descriptor.fetchLimit = safeDays + 2
+        let records = try modelContext.fetch(descriptor)
             .filter { $0.date >= rangeStart && $0.date < rangeEnd }
-            .map { $0.toSnapshot() }
+        // 恢复与历史一致的升序返回契约（调用方依赖按时间正序的基线计算）。
+        return records.reversed().map { $0.toSnapshot() }
     }
 
     /// Fetch this week vs last week comparison data.

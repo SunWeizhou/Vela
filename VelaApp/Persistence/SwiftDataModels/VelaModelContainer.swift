@@ -91,6 +91,24 @@ enum VelaModelContainer {
         return backupDirectory
     }
 
+    /// 删除 VelaRecovery 恢复备份目录（含被备份的 store 文件副本）。
+    /// 「清空 Vela 本地数据」必须覆盖此目录，否则数据副本随 iCloud 备份离机（审计 H7）。
+    /// - Returns: 删除的备份条目数量；目录不存在时返回 0。
+    static func deleteRecoveryBackups(
+        at root: URL? = nil,
+        fileManager: FileManager = .default
+    ) throws -> Int {
+        let resolvedRoot = root ?? URL.applicationSupportDirectory
+            .appending(path: "VelaRecovery", directoryHint: .isDirectory)
+        guard fileManager.fileExists(atPath: resolvedRoot.path) else { return 0 }
+        let contents = try fileManager.contentsOfDirectory(
+            at: resolvedRoot,
+            includingPropertiesForKeys: nil
+        )
+        try fileManager.removeItem(at: resolvedRoot)
+        return contents.count
+    }
+
     static func make(inMemory: Bool = false) throws -> ModelContainer {
         if inMemory {
             let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -335,6 +353,17 @@ enum VelaSchemaV2: VersionedSchema {
     }
 }
 
+/// 当前（live）模型图所属的版本化 schema。
+///
+/// SwiftData 版本演进规则（必须遵守，`scripts/schema_fingerprint.py --check` 会强制）：
+///   1. VersionedSchema 必须引用 live 模型类型（本枚举）；历史版本引用冻结副本。
+///      注意：SwiftData 拒绝在同一迁移计划中出现两个 checksum 相同的 schema
+///      （Duplicate version checksums）——所以不要为「图形未变」的版本号单独建版本。
+///   2. 任何 @Model 字段/注解变更 → 先把变更前的图形冻结为 VelaSchemaV3Frozen
+///      （`python3 scripts/schema_fingerprint.py --emit-frozen`），再把冻结类升级为
+///      VersionedSchema、新建 live 的 VelaSchemaV4、补 `.lightweight` stage、
+///      最后 `--update` 更新黄金快照——全部在同一个提交内完成。
+///   3. 冻结副本禁止手工修改。
 enum VelaSchemaV3: VersionedSchema {
     static let versionIdentifier = Schema.Version(3, 0, 0)
     static var models: [any PersistentModel.Type] {
