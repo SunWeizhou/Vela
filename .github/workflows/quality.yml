@@ -44,6 +44,11 @@ jobs:
         run: |
           python3 scripts/check_contrast.py
 
+      - name: Fixed-font scan (report-only, track H1 cleanup)
+        shell: bash
+        run: |
+          python3 scripts/check_fixed_fonts.py
+
       - name: SwiftLint (report-only until baseline is clean)
         shell: bash
         run: |
