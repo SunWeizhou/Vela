@@ -20,11 +20,21 @@ struct HealthTrendEngine: Sendable {
         }
 
         let sortedSnapshots = snapshots.sorted { $0.date < $1.date }
+
+        // Perf: build the four horizon windows in one linear pass so metric
+        // computation never re-scans the full snapshot array. Windows preserve
+        // the sorted order of `sortedSnapshots`.
+        let horizonWindows: [HealthTrendHorizon: [DailyHealthSnapshot]] = Self.makeHorizonWindows(
+            snapshots: sortedSnapshots,
+            today: today,
+            calendar: calendar
+        )
+
         var allFindings: [HealthTrendFinding] = []
 
         // Compute findings for each core metric across all 4 horizons
         let metrics: [CoreHealthMetric] = [
-            .hrv, .restingHeartRate, .sleepDuration, .recovery,
+            .hrv, .restingHeartRate, .sleepDuration, .sleepScore, .recovery,
             .strain, .stress, .energy, .respiratoryRate,
             .oxygenSaturation, .bodyWeight, .bodyFat, .steps, .activeCalories
         ]
@@ -33,7 +43,7 @@ struct HealthTrendEngine: Sendable {
             let findingsForMetric = computeFindings(
                 for: metric,
                 dashboard: dashboard,
-                snapshots: sortedSnapshots,
+                horizonWindows: horizonWindows,
                 longTermBaselines: longTermBaselines,
                 today: today,
                 calendar: calendar
@@ -98,10 +108,35 @@ struct HealthTrendEngine: Sendable {
 
     // MARK: - Metric Findings Computation
 
+    /// Builds the four horizon windows (7d / 30d / 180d / 1095d) from the
+    /// already-sorted snapshot array in a single linear pass.
+    private static func makeHorizonWindows(
+        snapshots: [DailyHealthSnapshot],
+        today: Date,
+        calendar: Calendar
+    ) -> [HealthTrendHorizon: [DailyHealthSnapshot]] {
+        let horizons: [(HealthTrendHorizon, Int)] = [
+            (.sevenDays, 7),
+            (.thirtyDays, 30),
+            (.sixMonths, 180),
+            (.threeYears, HealthTrendHorizon.threeYears.windowDays)
+        ]
+        let starts = horizons.map { (horizon, days) in
+            (horizon, calendar.date(byAdding: .day, value: -days, to: today) ?? today)
+        }
+        var result: [HealthTrendHorizon: [DailyHealthSnapshot]] = [:]
+        for snap in snapshots where snap.date <= today {
+            for (horizon, start) in starts where snap.date >= start {
+                result[horizon, default: []].append(snap)
+            }
+        }
+        return result
+    }
+
     private func computeFindings(
         for metric: CoreHealthMetric,
         dashboard: DashboardSummary,
-        snapshots: [DailyHealthSnapshot],
+        horizonWindows: [HealthTrendHorizon: [DailyHealthSnapshot]],
         longTermBaselines: LongTermBaselineReport?,
         today: Date,
         calendar: Calendar
@@ -118,7 +153,7 @@ struct HealthTrendEngine: Sendable {
             days: 7,
             currentValue: currentValue,
             currentFormatted: formattedCurrent,
-            snapshots: snapshots,
+            windowSnapshots: horizonWindows[.sevenDays] ?? [],
             today: today,
             calendar: calendar
         )
@@ -131,7 +166,7 @@ struct HealthTrendEngine: Sendable {
             days: 30,
             currentValue: currentValue,
             currentFormatted: formattedCurrent,
-            snapshots: snapshots,
+            windowSnapshots: horizonWindows[.thirtyDays] ?? [],
             today: today,
             calendar: calendar
         )
@@ -144,7 +179,7 @@ struct HealthTrendEngine: Sendable {
             days: 180,
             currentValue: currentValue,
             currentFormatted: formattedCurrent,
-            snapshots: snapshots,
+            windowSnapshots: horizonWindows[.sixMonths] ?? [],
             today: today,
             calendar: calendar
         )
@@ -229,11 +264,19 @@ struct HealthTrendEngine: Sendable {
                 isNotable: isNotable
             ))
         } else {
-            let existingCount = (longTermMetric(for: metric).flatMap { longTermBaselines?.baselines[$0]?.sampleCount }) ?? 0
-            results.append(HealthTrendFinding.unavailable(
+            // Derived scores do not have a LongTermBaselineMetric entry. Their
+            // persisted daily series is still valid evidence for a three-year
+            // personal baseline, so compute from snapshots instead of silently
+            // making Recovery / Sleep Score / Strain / Stress / Energy absent.
+            results.append(computeHorizonFinding(
                 metric: metric,
                 horizon: .threeYears,
-                sampleCount: existingCount
+                days: HealthTrendHorizon.threeYears.windowDays,
+                currentValue: currentValue,
+                currentFormatted: formattedCurrent,
+                windowSnapshots: horizonWindows[.threeYears] ?? [],
+                today: today,
+                calendar: calendar
             ))
         }
 
@@ -278,16 +321,17 @@ struct HealthTrendEngine: Sendable {
         days: Int,
         currentValue: Double?,
         currentFormatted: String,
-        snapshots: [DailyHealthSnapshot],
+        windowSnapshots: [DailyHealthSnapshot],
         today: Date,
         calendar: Calendar
     ) -> HealthTrendFinding {
-        let start = calendar.date(byAdding: .day, value: -days, to: today) ?? today
-        let windowSnapshots = snapshots.filter { $0.date >= start && $0.date <= today }
+        // `windowSnapshots` arrives pre-filtered for this horizon and keeps the
+        // sorted order of the source snapshot array, so no re-filter or sort is
+        // needed here.
         let windowValuesWithDate: [(date: Date, value: Double)] = windowSnapshots.compactMap { snap in
             guard let val = value(for: metric, snapshot: snap) else { return nil }
             return (date: snap.date, value: val)
-        }.sorted { $0.date < $1.date }
+        }
 
         let sampleCount = windowValuesWithDate.count
         guard sampleCount >= horizon.requiredSampleCount else {
@@ -459,7 +503,8 @@ struct HealthTrendEngine: Sendable {
 
         let hrvFinding = notableChanges.first { $0.metric == .hrv }
         let rhrFinding = notableChanges.first { $0.metric == .restingHeartRate }
-        let sleepFinding = notableChanges.first { $0.metric == .sleepDuration }
+        let sleepFinding = notableChanges.first { $0.metric == .sleepScore }
+            ?? notableChanges.first { $0.metric == .sleepDuration }
 
         if recoveryScore < 35 || (hrvFinding?.direction == .declining && rhrFinding?.direction == .declining) {
             return .recovering
@@ -523,9 +568,12 @@ struct HealthTrendEngine: Sendable {
             }
         }
 
-        if let sleep = notableChanges.first(where: { $0.metric == .sleepDuration }) {
+        if let sleep = notableChanges.first(where: { $0.metric == .sleepScore })
+            ?? notableChanges.first(where: { $0.metric == .sleepDuration }) {
             if sleep.direction == .declining {
-                parts.append("近两周睡眠时长较平时基线略有减少")
+                parts.append(sleep.metric == .sleepScore
+                    ? "近两周睡眠得分较个人基线有所下降"
+                    : "近两周睡眠时长较平时基线略有减少")
             }
         } else if let hrv = notableChanges.first(where: { $0.metric == .hrv }) {
             if hrv.direction == .improving {
@@ -553,14 +601,16 @@ struct HealthTrendEngine: Sendable {
 
         let hrvLow = notableChanges.contains { $0.metric == .hrv && $0.direction == .declining }
         let rhrHigh = notableChanges.contains { $0.metric == .restingHeartRate && $0.direction == .declining }
-        let sleepLow = notableChanges.contains { $0.metric == .sleepDuration && $0.direction == .declining }
+        let sleepLow = notableChanges.contains {
+            ($0.metric == .sleepScore || $0.metric == .sleepDuration) && $0.direction == .declining
+        }
         let strainHigh = dashboard.strain.value.map { $0 >= 70 } ?? false
 
         if hrvLow && rhrHigh {
             drivers.append("观察到 HRV 偏低与静息心率升高在近期协同出现，提示生理恢复负荷有所累积")
         }
         if sleepLow {
-            drivers.append("近两周睡眠时长偏离个人中位数，可能与恢复感受变化相关")
+            drivers.append("近期睡眠状态偏离个人基线，可能与恢复感受变化相关")
         }
         if strainHigh {
             drivers.append("近期日常活动与训练负荷相对较高，构成当前体征波动的潜在背景")
@@ -635,6 +685,7 @@ struct HealthTrendEngine: Sendable {
         case .sleepDuration:
             if dashboard.sleepSummary.totalSleepMinutes > 0 { return Double(dashboard.sleepSummary.totalSleepMinutes) / 60.0 }
             return nil
+        case .sleepScore: return dashboard.sleepScore.value
         case .recovery: return dashboard.recovery.value
         case .strain: return dashboard.strain.value
         case .stress: return dashboard.stress.value
@@ -655,6 +706,7 @@ struct HealthTrendEngine: Sendable {
         case .hrv: return snapshot.hrvAverage
         case .restingHeartRate: return snapshot.restingHeartRate
         case .sleepDuration: return snapshot.sleepHours
+        case .sleepScore: return snapshot.sleepScore
         case .recovery: return snapshot.recoveryScore
         case .strain: return snapshot.strainScore
         case .stress: return snapshot.stressIndex
@@ -677,7 +729,7 @@ struct HealthTrendEngine: Sendable {
             return "\(Int(val.rounded())) bpm"
         case .sleepDuration:
             return String(format: "%.1f h", val)
-        case .recovery, .energy, .oxygenSaturation, .bodyFat:
+        case .sleepScore, .recovery, .energy, .oxygenSaturation, .bodyFat:
             return "\(Int(val.rounded()))%"
         case .strain, .stress:
             return "\(Int(val.rounded()))"
@@ -708,6 +760,7 @@ struct HealthTrendEngine: Sendable {
         case .hrv: return .hrv
         case .restingHeartRate: return .restingHeartRate
         case .sleepDuration: return .sleepHours
+        case .sleepScore: return nil
         case .bodyWeight: return .bodyWeight
         case .bodyFat: return .bodyFatPercent
         case .steps: return .steps

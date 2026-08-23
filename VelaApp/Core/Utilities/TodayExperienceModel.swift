@@ -88,6 +88,7 @@ struct TodayExperienceModel: Codable, Hashable {
     var generatedAt: Date
     var hero: TodayExperienceHero
     var signalCards: [TodayExperienceSignalCard]
+    var baselineFormation: PersonalBaselineFormation
     var evidenceChips: [String]
     var actions: [TodayExperienceAction]
     var nutrition: TodayExperienceNutrition
@@ -101,6 +102,7 @@ struct TodayExperienceModel: Codable, Hashable {
         generatedAt: Date = Date(),
         nutrition: TodayExperienceNutrition = .empty,
         history: [DailyHealthSummaryDTO] = [],
+        baselineFormation: PersonalBaselineFormation = .ready,
         operatingPlan: DailyOperatingPlanPayload? = nil
     ) -> TodayExperienceModel {
         let hasReadinessData = dashboard.recovery.hasData
@@ -208,6 +210,7 @@ struct TodayExperienceModel: Codable, Hashable {
             generatedAt: generatedAt,
             hero: hero,
             signalCards: signals,
+            baselineFormation: baselineFormation,
             evidenceChips: evidenceChips(
                 dashboard: dashboard,
                 bodyState: bodyState,
@@ -233,7 +236,7 @@ struct TodayExperienceModel: Codable, Hashable {
 
     /// Today is an Adapter over the persisted Daily Operating Plan. Legacy payloads
     /// intentionally fall back to the deterministic local projection until the next
-    /// coordinator refresh migrates them to schema v2.
+    /// coordinator refresh migrates them to the current Daily Operating Plan schema.
     private static func canonicalActions(
         from operatingPlan: DailyOperatingPlanPayload?
     ) -> [TodayExperienceAction]? {

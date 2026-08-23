@@ -206,6 +206,18 @@ public struct MetricResult: Codable, Hashable, Sendable {
     }
 
     // For StrainScoreResult
+    /// The personalized reference band only exists when the scoring engine
+    /// actually published both bounds. UI must use this optional projection so
+    /// the compatibility fallback below is never presented as personal data.
+    public var explicitRecommendedRange: ClosedRange<Double>? {
+        guard let lower = components["recommended_lower"],
+              let upper = components["recommended_upper"],
+              lower <= upper else {
+            return nil
+        }
+        return lower...upper
+    }
+
     public var recommendedRange: ClosedRange<Int> {
         let lower = components["recommended_lower"] ?? 40.0
         let upper = components["recommended_upper"] ?? 70.0

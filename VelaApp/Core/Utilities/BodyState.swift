@@ -8,6 +8,45 @@ enum BodyReadiness: String, Codable, Hashable, Sendable {
     case unknown
 }
 
+/// A quick calibration of whether objective scored evidence matches the user's
+/// felt experience. It is deliberately separate from the detailed check-in:
+/// disagreement changes interpretation confidence, never the five scores.
+enum LivedStateAlignment: String, Codable, Hashable, CaseIterable, Sendable {
+    case aligned
+    case worse
+    case better
+    case uncertain
+
+    var journalTags: [String] {
+        ["lived_state_alignment", "lived_state_alignment_\(rawValue)"]
+    }
+
+    var journalNote: String {
+        switch self {
+        case .aligned: return "身体感受与今日分数一致"
+        case .worse: return "身体感受比今日分数更差"
+        case .better: return "身体感受比今日分数更好"
+        case .uncertain: return "暂时无法判断身体感受是否与今日分数一致"
+        }
+    }
+
+    /// A mismatch is evidence of uncertainty, not proof that the objective
+    /// evidence is wrong and not a diagnosis. Positive alignment never raises
+    /// readiness or overwrites deterministic scores.
+    var conservativeSeverity: Double {
+        self == .worse ? 0.5 : 0
+    }
+
+    init?(tags: [String]) {
+        let values = Set(tags.map { $0.lowercased() })
+        guard values.contains("lived_state_alignment") else { return nil }
+        guard let value = Self.allCases.first(where: {
+            values.contains("lived_state_alignment_\($0.rawValue)")
+        }) else { return nil }
+        self = value
+    }
+}
+
 /// A low-friction subjective snapshot stored through the existing journal Adapter.
 /// Values use 0...2 so the model stays stable while the UI can localize labels.
 struct LivedStateCheckIn: Codable, Hashable, Sendable {
@@ -615,8 +654,19 @@ struct BodyStateKernel: Sendable {
     /// 当日自评（Lived State）信号：note + 标签的中英关键词 → 保守严重度 0...1。
     /// 不区分真伪，只按「负面自评」的保守方向使用；中性/积极自评不改判定。
     private static func livedStateSignal(entries: [JournalEntryDTO]) -> (hasEntry: Bool, severity: Double, evidence: String) {
-        guard let latest = entries.max(by: { $0.createdAt < $1.createdAt }) else {
+        // Prefer the latest explicit calibration. A later food or habit note
+        // must not silently hide the user's answer to the Today prompt.
+        let explicitEntries = entries.filter { entry in
+            LivedStateAlignment(tags: entry.tags) != nil
+                || entry.tags.contains(where: { $0.lowercased() == "lived_state" })
+        }
+        guard let latest = (explicitEntries.isEmpty ? entries : explicitEntries)
+            .max(by: { $0.createdAt < $1.createdAt }) else {
             return (false, 0, "")
+        }
+        if let alignment = LivedStateAlignment(tags: latest.tags) {
+            let evidence = latest.note.isEmpty ? alignment.journalNote : latest.note
+            return (true, alignment.conservativeSeverity, evidence)
         }
         if let structured = LivedStateCheckIn(tags: latest.tags, note: latest.note) {
             let evidence = latest.note.isEmpty ? structured.journalNote : latest.note

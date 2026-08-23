@@ -128,6 +128,12 @@ final class DailySummaryUseCase {
         arguments.contains("-velaSeedDemoData")
     }
 
+    /// Stable, read-only dashboard projection for simulator screenshots. Unlike
+    /// demo seeding, this does not mutate SwiftData or depend on an empty store.
+    static func isPreviewDashboardEnabled(arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
+        arguments.contains("-velaPreviewDashboard")
+    }
+
     func loadDashboard(
         for date: Date = Date(),
         modelContext: ModelContext? = nil,
@@ -135,6 +141,11 @@ final class DailySummaryUseCase {
         shouldSyncHealthData: Bool = true
     ) async throws -> DashboardSummary {
         let now = date
+        #if DEBUG
+        if Self.isPreviewDashboardEnabled() {
+            return PreviewDataFactory.makeDashboard(date: now)
+        }
+        #endif
         // `now` is the selected dashboard day (and may be historical). Keep a
         // separate wall-clock instant for resolving the currently stored status.
         let statusEvaluationNow = Date()
@@ -634,8 +645,10 @@ final class DailySummaryUseCase {
                 
                 // Reuse the canonical decision when hashes match, but still migrate a
                 // legacy training-only payload to ADR-0007's bounded action sequence.
-                if !intelligence.usedPersistedDecision
-                    || persistedOperatingPlanPayload?.hasCanonicalActionSequence != true {
+                if DailyOperatingPlanRefreshPolicy.shouldRegenerate(
+                    usedPersistedDecision: intelligence.usedPersistedDecision,
+                    persistedPayload: persistedOperatingPlanPayload
+                ) {
                     try DailyOperatingPlanCoordinator.upsert(
                         bodyState: bodyState,
                         decision: dailyTrainingDecision,

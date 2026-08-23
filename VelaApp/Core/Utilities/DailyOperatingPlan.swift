@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-enum DailyOperatingPlanActionDomain: String, Codable, Hashable, Sendable {
+enum DailyOperatingPlanActionDomain: String, Codable, Hashable, CaseIterable, Sendable {
     case training
     case movement
     case eatingRhythm = "eating_rhythm"
@@ -21,10 +21,13 @@ struct DailyOperatingPlanAction: Codable, Hashable, Identifiable, Sendable {
     var detail: String
     var destination: String
     var evidence: String?
+    var scheduledAt: Date? = nil
+    var completedAt: Date? = nil
+    var userEditedAt: Date? = nil
 }
 
 struct DailyOperatingPlanPayload: Codable, Hashable, Sendable {
-    static let currentSchemaVersion = 2
+    static let currentSchemaVersion = 3
 
     var schemaVersion: Int
     var decision: DailyTrainingDecisionType
@@ -34,6 +37,9 @@ struct DailyOperatingPlanPayload: Codable, Hashable, Sendable {
     var targetSessionTitle: String?
     var primaryAction: DailyOperatingPlanAction?
     var supportingActions: [DailyOperatingPlanAction]
+    /// Once present, automatic recomputation must propose changes instead of
+    /// overwriting the user's plan. Completion and scheduling are user-owned.
+    var userEditedAt: Date?
 
     init(
         schemaVersion: Int = Self.currentSchemaVersion,
@@ -43,7 +49,8 @@ struct DailyOperatingPlanPayload: Codable, Hashable, Sendable {
         summary: String,
         targetSessionTitle: String?,
         primaryAction: DailyOperatingPlanAction? = nil,
-        supportingActions: [DailyOperatingPlanAction] = []
+        supportingActions: [DailyOperatingPlanAction] = [],
+        userEditedAt: Date? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.decision = decision
@@ -56,16 +63,20 @@ struct DailyOperatingPlanPayload: Codable, Hashable, Sendable {
             supportingActions,
             excluding: primaryAction?.domain
         )
+        self.userEditedAt = userEditedAt
     }
 
     /// True only for the versioned, bounded cross-domain contract. Legacy payloads still
     /// decode and continue to provide their training boundary while the next refresh
     /// upgrades them through `DailyOperatingPlanCoordinator`.
     var hasCanonicalActionSequence: Bool {
-        guard schemaVersion >= Self.currentSchemaVersion,
-              let primaryAction else {
+        guard schemaVersion >= 2 else {
             return false
         }
+        if primaryAction == nil {
+            return userEditedAt != nil && supportingActions.count <= 2
+        }
+        guard let primaryAction else { return false }
         let domains = supportingActions.map(\.domain)
         return supportingActions.count <= 2
             && !domains.contains(primaryAction.domain)
@@ -81,6 +92,7 @@ struct DailyOperatingPlanPayload: Codable, Hashable, Sendable {
         case targetSessionTitle
         case primaryAction
         case supportingActions
+        case userEditedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -100,6 +112,7 @@ struct DailyOperatingPlanPayload: Codable, Hashable, Sendable {
             decodedSupporting,
             excluding: primaryAction?.domain
         )
+        userEditedAt = try values.decodeIfPresent(Date.self, forKey: .userEditedAt)
     }
 
     private static func boundedSupportingActions(
@@ -114,6 +127,180 @@ struct DailyOperatingPlanPayload: Codable, Hashable, Sendable {
             }
             return true
         }.prefix(2))
+    }
+}
+
+enum DailyOperatingPlanMutation {
+    case toggleCompletion(actionID: String, at: Date)
+    case update(action: DailyOperatingPlanAction, at: Date)
+    case add(action: DailyOperatingPlanAction, at: Date)
+    case delete(actionID: String, at: Date)
+}
+
+enum DailyOperatingPlanEditor {
+    static func applying(
+        _ mutation: DailyOperatingPlanMutation,
+        to payload: DailyOperatingPlanPayload
+    ) -> DailyOperatingPlanPayload {
+        var result = payload
+
+        switch mutation {
+        case let .toggleCompletion(actionID, date):
+            result = mapAction(in: result, id: actionID) { action in
+                var action = action
+                action.completedAt = action.completedAt == nil ? date : nil
+                action.userEditedAt = date
+                return action
+            }
+
+        case let .update(action, date):
+            var edited = action
+            edited.userEditedAt = date
+            result = mapAction(in: result, id: action.id) { _ in edited }
+
+        case let .add(action, date):
+            guard result.primaryAction == nil || result.supportingActions.count < 2 else {
+                return result
+            }
+            let usedDomains = Set(result.allActions.map(\.domain))
+            guard !usedDomains.contains(action.domain) else { return result }
+            var edited = action
+            edited.userEditedAt = date
+            if result.primaryAction == nil {
+                result.primaryAction = edited
+            } else {
+                result.supportingActions.append(edited)
+            }
+
+        case let .delete(actionID, _):
+            if result.primaryAction?.id == actionID {
+                result.primaryAction = result.supportingActions.first
+                result.supportingActions = Array(result.supportingActions.dropFirst())
+            } else {
+                result.supportingActions.removeAll { $0.id == actionID }
+            }
+        }
+
+        let editedAt: Date
+        switch mutation {
+        case let .toggleCompletion(_, date), let .update(_, date), let .add(_, date), let .delete(_, date):
+            editedAt = date
+        }
+        result.schemaVersion = DailyOperatingPlanPayload.currentSchemaVersion
+        result.userEditedAt = editedAt
+        return result
+    }
+
+    @MainActor
+    static func persist(
+        _ payload: DailyOperatingPlanPayload,
+        to record: DailyOperatingPlanRecord,
+        modelContext: ModelContext
+    ) throws {
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(payload)
+        guard let json = String(data: data, encoding: .utf8) else {
+            throw CocoaError(.fileWriteInapplicableStringEncoding)
+        }
+        record.payloadJSON = json
+        record.title = payload.primaryAction?.title ?? "今日计划"
+        record.primaryActionType = payload.decision.rawValue
+        record.status = "active"
+
+        let artifactType = AgentArtifactType.dailyPlan.rawValue
+        let contextHash = record.bodyStateHash
+        let descriptor = FetchDescriptor<AgentArtifactRecord>(
+            predicate: #Predicate<AgentArtifactRecord> {
+                $0.type == artifactType && $0.sourceContextHash == contextHash
+            }
+        )
+        if let artifact = try modelContext.fetch(descriptor).first {
+            artifact.title = record.title
+            artifact.payloadJSON = json
+            artifact.status = "active"
+        } else {
+            modelContext.insert(AgentArtifactRecord(
+                type: artifactType,
+                title: record.title,
+                payloadJSON: json,
+                sourceContextHash: contextHash,
+                confidence: record.confidence,
+                source: record.source ?? "DailyOperatingPlanEditor",
+                safetyNotice: record.safetyNotice
+            ))
+        }
+        try modelContext.save()
+    }
+
+    /// Records the user's decision to keep their edited plan after the upstream
+    /// Body State changes, and moves the matching Agent artifact to the same context.
+    @MainActor
+    static func acknowledgeCurrentPlan(
+        _ payload: DailyOperatingPlanPayload,
+        record: DailyOperatingPlanRecord,
+        bodyStateHash: String,
+        modelContext: ModelContext
+    ) throws {
+        let artifactType = AgentArtifactType.dailyPlan.rawValue
+        let previousHash = record.bodyStateHash
+        let descriptor = FetchDescriptor<AgentArtifactRecord>(
+            predicate: #Predicate<AgentArtifactRecord> {
+                $0.type == artifactType && $0.sourceContextHash == previousHash
+            }
+        )
+        let previousArtifact = try modelContext.fetch(descriptor).first
+        record.bodyStateHash = bodyStateHash
+        record.generatedAt = Date()
+        previousArtifact?.sourceContextHash = bodyStateHash
+        try persist(payload, to: record, modelContext: modelContext)
+    }
+
+    private static func mapAction(
+        in payload: DailyOperatingPlanPayload,
+        id: String,
+        transform: (DailyOperatingPlanAction) -> DailyOperatingPlanAction
+    ) -> DailyOperatingPlanPayload {
+        var result = payload
+        if let primary = result.primaryAction, primary.id == id {
+            let candidate = transform(primary)
+            guard !result.supportingActions.contains(where: { $0.domain == candidate.domain }) else {
+                return payload
+            }
+            result.primaryAction = candidate
+            return result
+        }
+        guard let index = result.supportingActions.firstIndex(where: { $0.id == id }) else {
+            return payload
+        }
+        let candidate = transform(result.supportingActions[index])
+        if result.primaryAction?.domain == candidate.domain
+            || result.supportingActions.enumerated().contains(where: { offset, action in
+                offset != index && action.domain == candidate.domain
+            }) {
+            return payload
+        }
+        result.supportingActions[index] = candidate
+        return result
+    }
+}
+
+extension DailyOperatingPlanPayload {
+    var allActions: [DailyOperatingPlanAction] {
+        [primaryAction].compactMap { $0 } + supportingActions
+    }
+
+    var hasUserEdits: Bool { userEditedAt != nil }
+}
+
+/// Automatic refresh may create or migrate a plan, but it never silently replaces
+/// a plan the user has completed, scheduled, edited, or deliberately emptied.
+enum DailyOperatingPlanRefreshPolicy {
+    static func shouldRegenerate(
+        usedPersistedDecision: Bool,
+        persistedPayload: DailyOperatingPlanPayload?
+    ) -> Bool {
+        guard persistedPayload?.hasUserEdits != true else { return false }
+        return !usedPersistedDecision || persistedPayload?.hasCanonicalActionSequence != true
     }
 }
 

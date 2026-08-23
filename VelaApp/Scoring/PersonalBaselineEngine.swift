@@ -1,5 +1,52 @@
 import Foundation
 
+struct PersonalBaselineFormation: Codable, Hashable, Sendable {
+    enum Phase: String, Codable, Hashable, Sendable {
+        case waitingForEvidence
+        case learning
+        case ready
+    }
+
+    static let requiredObservedDays = 7
+    static let waiting = PersonalBaselineFormation(phase: .waitingForEvidence, observedDays: 0)
+    static let ready = PersonalBaselineFormation(
+        phase: .ready,
+        observedDays: requiredObservedDays
+    )
+
+    var phase: Phase
+    var observedDays: Int
+    var requiredDays: Int = requiredObservedDays
+
+    var progress: Double {
+        guard requiredDays > 0 else { return 1 }
+        return min(1, max(0, Double(observedDays) / Double(requiredDays)))
+    }
+
+    /// Debug-only visual-regression seam. It avoids mutating HealthKit fixtures
+    /// just to inspect the first-week Today state in Simulator.
+    static func visualRegressionValue(
+        fallback: PersonalBaselineFormation,
+        arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> PersonalBaselineFormation {
+        #if DEBUG
+        guard let flag = arguments.firstIndex(of: "-velaBaselineObservedDays"),
+              arguments.indices.contains(arguments.index(after: flag)),
+              let requestedDays = Int(arguments[arguments.index(after: flag)]) else {
+            return fallback
+        }
+        let observedDays = max(0, requestedDays)
+        if observedDays == 0 { return .waiting }
+        if observedDays < requiredObservedDays {
+            return PersonalBaselineFormation(phase: .learning, observedDays: observedDays)
+        }
+        return PersonalBaselineFormation(phase: .ready, observedDays: observedDays)
+        #else
+        return fallback
+        #endif
+    }
+}
+
 // MARK: - Personal Baselines Data Structure
 
 struct PersonalBaselines {
@@ -28,6 +75,43 @@ struct PersonalBaselines {
 
 enum PersonalBaselineEngine {
     private static let minimumSamples = 7
+
+    /// Product-facing orientation for the first week. A day counts when at least
+    /// one real signal used by a Personal Baseline is present. This progress does
+    /// not bypass the per-metric seven-sample gates below: each metric still
+    /// remains unavailable until its own evidence is sufficient.
+    static func formationProgress(
+        from snapshots: [DailyHealthSnapshot],
+        selectedDate: Date,
+        calendar: Calendar = .current
+    ) -> PersonalBaselineFormation {
+        let selectedDay = calendar.startOfDay(for: selectedDate)
+        let evidenceDays = Set(
+            snapshots.compactMap { snapshot -> Date? in
+                let day = calendar.startOfDay(for: snapshot.date)
+                guard day <= selectedDay, hasBaselineEvidence(snapshot) else { return nil }
+                return day
+            }
+        )
+        let observedDays = evidenceDays.count
+
+        if observedDays == 0 {
+            return .waiting
+        }
+        if observedDays < minimumSamples {
+            return PersonalBaselineFormation(phase: .learning, observedDays: observedDays)
+        }
+        return PersonalBaselineFormation(phase: .ready, observedDays: observedDays)
+    }
+
+    private static func hasBaselineEvidence(_ snapshot: DailyHealthSnapshot) -> Bool {
+        snapshot.hrvAverage != nil
+            || snapshot.restingHeartRate != nil
+            || snapshot.sleepHours != nil
+            || snapshot.strainScore != nil
+            || snapshot.steps != nil
+            || snapshot.activeCalories != nil
+    }
 
     // MARK: - Compute
 

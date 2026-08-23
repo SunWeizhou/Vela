@@ -88,6 +88,7 @@ public enum CoreHealthMetric: String, Codable, Hashable, CaseIterable, Sendable,
     case hrv = "hrv"
     case restingHeartRate = "rhr"
     case sleepDuration = "sleep"
+    case sleepScore = "sleepScore"
     case recovery = "recovery"
     case strain = "strain"
     case stress = "stress"
@@ -106,6 +107,7 @@ public enum CoreHealthMetric: String, Codable, Hashable, CaseIterable, Sendable,
         case .hrv: return "心率变异性"
         case .restingHeartRate: return "静息心率"
         case .sleepDuration: return "睡眠时长"
+        case .sleepScore: return "睡眠得分"
         case .recovery: return "恢复得分"
         case .strain: return "耗力负荷"
         case .stress: return "压力指数"
@@ -123,7 +125,7 @@ public enum CoreHealthMetric: String, Codable, Hashable, CaseIterable, Sendable,
         switch self {
         case .hrv: return "HRV"
         case .restingHeartRate: return "静息心率"
-        case .sleepDuration: return "睡眠"
+        case .sleepDuration, .sleepScore: return "睡眠"
         case .recovery: return "恢复"
         case .strain: return "耗力"
         case .stress: return "压力"
@@ -142,6 +144,7 @@ public enum CoreHealthMetric: String, Codable, Hashable, CaseIterable, Sendable,
         case .hrv: return "ms"
         case .restingHeartRate: return "bpm"
         case .sleepDuration: return "h"
+        case .sleepScore: return "%"
         case .recovery: return "%"
         case .strain: return ""
         case .stress: return ""
@@ -159,7 +162,7 @@ public enum CoreHealthMetric: String, Codable, Hashable, CaseIterable, Sendable,
         switch self {
         case .hrv: return "waveform.path.ecg"
         case .restingHeartRate: return "heart.fill"
-        case .sleepDuration: return "moon.stars.fill"
+        case .sleepDuration, .sleepScore: return "moon.stars.fill"
         case .recovery: return "heart.circle.fill"
         case .strain: return "figure.run"
         case .stress: return "bolt.shield.fill"
@@ -175,7 +178,7 @@ public enum CoreHealthMetric: String, Codable, Hashable, CaseIterable, Sendable,
 
     public var polarity: MetricPolarity {
         switch self {
-        case .hrv, .recovery, .sleepDuration, .energy, .oxygenSaturation:
+        case .hrv, .recovery, .sleepDuration, .sleepScore, .energy, .oxygenSaturation:
             return .higherIsBetter
         case .restingHeartRate, .stress:
             return .lowerIsBetter
