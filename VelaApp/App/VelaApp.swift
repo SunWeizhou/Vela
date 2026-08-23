@@ -297,6 +297,9 @@ struct VelaApp: App {
         }
         VelaModelContainer.activeContainer = modelContainer
 
+        // 崩溃上报：DSN 未配置时完全 no-op，不上传任何数据。
+        SentryService.configureOnLaunch()
+
         // Register background task handler
         BackgroundTaskManager.register()
 

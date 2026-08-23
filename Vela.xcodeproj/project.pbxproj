@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D0CEA8F6CBE8CC6555972F9C /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 286FFA53BD9D8961FD2A971E /* Sentry */; };
 		0B4A00010000000000000001 /* VelaWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B4A10010000000000000001 /* VelaWatchApp.swift */; };
 		0B4A00020000000000000002 /* WristSnapshotBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B4A10020000000000000002 /* WristSnapshotBridge.swift */; };
 		0B4A00150000000000000015 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0B1001580000000000000058 /* Assets.xcassets */; };
@@ -82,6 +83,7 @@
 		0B1000460000000000000046 /* DeepSeekProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001470000000000000047 /* DeepSeekProvider.swift */; };
 		0B1000470000000000000047 /* ReportGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001480000000000000048 /* ReportGenerator.swift */; };
 		0B1000480000000000000048 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001490000000000000049 /* KeychainService.swift */; };
+		A373D726D063176FA16A33A5 /* SentryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C151684BA1B29ECA7C2FD77B /* SentryService.swift */; };
 		0B1000490000000000000049 /* DashboardViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001500000000000000050 /* DashboardViewModel.swift */; };
 		0B10004A000000000000004A /* WebSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B10014A000000000000004A /* WebSearchService.swift */; };
 		0B10004B000000000000004B /* AgentTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B10014B000000000000004B /* AgentTool.swift */; };
@@ -326,6 +328,7 @@
 		0B1001470000000000000047 /* DeepSeekProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Provider/DeepSeekProvider.swift; sourceTree = "<group>"; };
 		0B1001480000000000000048 /* ReportGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Reports/ReportGenerator.swift; sourceTree = "<group>"; };
 		0B1001490000000000000049 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Provider/KeychainService.swift; sourceTree = "<group>"; };
+		C151684BA1B29ECA7C2FD77B /* SentryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Provider/SentryService.swift; sourceTree = "<group>"; };
 		0B10014A000000000000004A /* WebSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Provider/WebSearchService.swift; sourceTree = "<group>"; };
 		0B10014B000000000000004B /* AgentTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Agent/AgentTool.swift; sourceTree = "<group>"; };
 		0B10014C000000000000004C /* FoodPhotoAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Agent/FoodPhotoAnalyzer.swift; sourceTree = "<group>"; };
@@ -484,6 +487,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D0CEA8F6CBE8CC6555972F9C /* Sentry in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -646,6 +650,7 @@
 				0B1001470000000000000047 /* DeepSeekProvider.swift */,
 				0B1001480000000000000048 /* ReportGenerator.swift */,
 				0B1001490000000000000049 /* KeychainService.swift */,
+				C151684BA1B29ECA7C2FD77B /* SentryService.swift */,
 				0B10014A000000000000004A /* WebSearchService.swift */,
 				0B10014B000000000000004B /* AgentTool.swift */,
 				0B10014C000000000000004C /* FoodPhotoAnalyzer.swift */,
@@ -800,6 +805,9 @@
 			dependencies = (
 			);
 			name = Vela;
+			packageProductDependencies = (
+				286FFA53BD9D8961FD2A971E /* Sentry */,
+			);
 			productName = Vela;
 			productReference = 0B0000060000000000000006 /* Vela.app */;
 			productType = "com.apple.product-type.application";
@@ -841,7 +849,15 @@
 		};
 /* End PBXNativeTarget section */
 
-/* Begin PBXProject section */
+/* Begin PBXProject section *//* Begin XCRemoteSwiftPackageReference section */
+		3366974B39BF06D2D2F4F6B8 /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {isa = XCRemoteSwiftPackageReference; repositoryURL = "https://github.com/getsentry/sentry-cocoa"; requirement = {kind = upToNextMajorVersion; minimumVersion = 8.0.0;}; };
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		286FFA53BD9D8961FD2A971E /* Sentry */ = {isa = XCSwiftPackageProductDependency; package = 3366974B39BF06D2D2F4F6B8 /* XCRemoteSwiftPackageReference "sentry-cocoa" */; productName = Sentry; };
+/* End XCSwiftPackageProductDependency section */
+
+
 		0B0000040000000000000004 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
@@ -873,6 +889,9 @@
 			productRefGroup = 0B0000130000000000000013 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
+			packageReferences = (
+				3366974B39BF06D2D2F4F6B8 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
+			);
 			targets = (
 				0B0000050000000000000005 /* Vela */,
 				0B4A00050000000000000005 /* VelaWatch */,
@@ -1053,6 +1072,7 @@
 				0B1000460000000000000046 /* DeepSeekProvider.swift in Sources */,
 				0B1000470000000000000047 /* ReportGenerator.swift in Sources */,
 				0B1000480000000000000048 /* KeychainService.swift in Sources */,
+				A373D726D063176FA16A33A5 /* SentryService.swift in Sources */,
 				0B10004A000000000000004A /* WebSearchService.swift in Sources */,
 				0B10004B000000000000004B /* AgentTool.swift in Sources */,
 				0B10004C000000000000004C /* FoodPhotoAnalyzer.swift in Sources */,
@@ -1358,6 +1378,8 @@
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
