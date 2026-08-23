@@ -536,7 +536,7 @@ struct BiologyView: View {
             Text(String(format: "%.1f 岁", biological))
                 .font(VelaTheme.subheadline().weight(.bold).monospacedDigit())
             Text("实际年龄 \(String(format: "%.1f", chronological))")
-                .font(.system(size: 9))
+                .font(.system(.caption2, design: .default))
                 .foregroundStyle(VelaTheme.muted)
         }
         .padding(11)

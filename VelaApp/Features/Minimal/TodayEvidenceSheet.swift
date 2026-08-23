@@ -54,11 +54,11 @@ struct TodayEvidenceSheet: View {
                     .fill(VelaTheme.rhythmDeep)
                     .frame(width: 7, height: 7)
                 Text("状态判断")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(.caption2, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmDeep)
                 Spacer()
                 Text(confidenceLabel)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(.caption2, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmDeep)
             }
 
@@ -77,7 +77,7 @@ struct TodayEvidenceSheet: View {
                 Image(systemName: "checkmark.seal")
                     .foregroundStyle(VelaTheme.rhythmDeep)
                 Text("由本机健康证据与规则生成，AI 只负责解释。")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(.caption, design: .default, weight: .medium))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
         }
@@ -102,22 +102,22 @@ struct TodayEvidenceSheet: View {
                 ForEach(Array(state.keySignals.enumerated()), id: \.element.id) { index, signal in
                     HStack(alignment: .top, spacing: 13) {
                         Text(String(format: "%02d", index + 1))
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .font(.system(.caption2, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmDeep)
                             .padding(.top, 3)
 
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(alignment: .firstTextBaseline) {
                                 Text(localizedSignalTitle(signal.title))
-                                    .font(.system(size: 15, weight: .semibold))
+                                    .font(.system(.subheadline, design: .default, weight: .semibold))
                                     .foregroundStyle(VelaTheme.rhythmInk)
                                 Spacer(minLength: 8)
                                 Text(signal.value)
-                                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                                    .font(.system(.footnote, design: .default, weight: .semibold))
                                     .foregroundStyle(VelaTheme.rhythmInk)
                             }
                             Text(localizedReason(signal.interpretation))
-                                .font(.system(size: 12, weight: .regular))
+                                .font(.system(.caption, design: .default, weight: .regular))
                                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                 .lineSpacing(2)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -150,7 +150,7 @@ struct TodayEvidenceSheet: View {
                     Image(systemName: "heart.text.square")
                         .foregroundStyle(VelaTheme.rhythmDeep)
                     Text("在系统设置中管理健康权限")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(.footnote, design: .default, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmInk)
                     Spacer()
                     Image(systemName: "arrow.up.right")
@@ -181,7 +181,7 @@ struct TodayEvidenceSheet: View {
                             .frame(width: 2, height: 16)
                             .padding(.top, 2)
                         Text(localizedReason(reason))
-                            .font(.system(size: 13, weight: .regular))
+                            .font(.system(.footnote, design: .default, weight: .regular))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .lineSpacing(3)
                     }
@@ -214,10 +214,10 @@ struct TodayEvidenceSheet: View {
                             .background(VelaTheme.rhythmMist, in: Circle())
                         VStack(alignment: .leading, spacing: 3) {
                             Text(insight.displayTitle)
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.system(.footnote, design: .default, weight: .semibold))
                                 .foregroundStyle(VelaTheme.rhythmInk)
                             Text(insight.body)
-                                .font(.system(size: 11, weight: .regular))
+                                .font(.system(.caption2, design: .default, weight: .regular))
                                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                 .lineLimit(2)
                         }

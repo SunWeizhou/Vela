@@ -7,7 +7,7 @@
 | :--- | :--- | :--- | :--- | :--- |
 | C1 | SwiftData schema 版本管理 | ✅ 完成 | 26906c18 | 冻结快照 + `schema_fingerprint.py` CI 守卫（模型图变更必须与版本提升同提交）；经验证 SwiftData 拒绝同 checksum 双 schema，故 V3=live + 冻结预案；迁移测试恢复通过 |
 | C2 | HealthKit 错误吞没 | ✅ 完成 | 26906c18 | 仅 errorNoData 放行；组件级失败分类；核心组件全失败不落全空快照；`lastSuccessfulSyncAt` 条件推进 |
-| C3 | 本地化基础设施 | ⚠️ 部分 + 决策待定 | edbd1afc + 50f96090 前 | 已修：未选择时跟随系统语言、a11y 字符串走 L10n；**完整 English 化方案 A/B 需产品决策**（见 `docs/validation/i18n-coverage-2026-08-23.md`，建议方案 C：维持中文优先 + Beta 如实说明） |
+| C3 | 本地化基础设施 | ✅ 完成（决策 C） | edbd1afc | 用户拍板方案 C（中文优先 + English Beta 如实说明）；已修：未选择时跟随系统语言、a11y 字符串走 L10n；方案 A/B 留作升级路径（见 `docs/validation/i18n-coverage-2026-08-23.md`） |
 | H1 | Dynamic Type | ✅ 大部分（设计项除外） | a300c63c, 35e97839, dc461878, 23ab73e8 | 主题字号 + 设计系统 + 视图层共约 355 处文字字号转系统 TextStyle；剩余 481 处为图标/显示级设计决策项（`scripts/check_fixed_fonts.py` 追踪） |
 | H2 | 全表扫描/主线程重计算 | ✅ 完成 | 26906c18, 4863e883 | fetchLimit 有界化、fetchCount、流式 markdown 缓存、BodyModelBuilder 值类型化 + loadDashboard/缓存路径离线计算、bodyModel 记忆化（等价性测试守护） |
 | H3 | 后台任务预算 | ✅ 完成 | a300c63c | BGAppRefreshTask 复用 App 容器（省去重复打开 store/迁移检查） |

@@ -7,10 +7,10 @@ struct iCloudSyncSettingsView: View {
         Form {
             Section(header: Text("iCloud 云同步")) {
                 Text("尚未接入")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(.subheadline, design: .default, weight: .bold))
 
                 Text("当前版本只使用本机数据库保存资料，尚未开启 iCloud 跨设备同步。完成合并策略验证前，不会展示自动备份开关。")
-                    .font(.system(size: 11))
+                    .font(.system(.caption2, design: .default))
                     .foregroundStyle(VelaTheme.muted)
             }
         }
@@ -23,10 +23,10 @@ struct WhatsNewSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Text("Vela \(VelaAppMetadata.marketingVersion) 当前能力")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.system(.title2, design: .default, weight: .bold))
                 
                 Text("当前版本已实现以下本机优先能力：")
-                    .font(.system(size: 14))
+                    .font(.system(.footnote, design: .default))
                     .foregroundStyle(VelaTheme.muted)
                 
                 VStack(alignment: .leading, spacing: 16) {
@@ -52,11 +52,11 @@ struct WhatsNewSettingsView: View {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(VelaTheme.systemGreen)
                 Text(title)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(.subheadline, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
             }
             Text(desc)
-                .font(.system(size: 12))
+                .font(.system(.caption, design: .default))
                 .foregroundStyle(VelaTheme.muted)
                 .lineSpacing(4)
                 .padding(.leading, 26)
@@ -467,7 +467,7 @@ struct ExportDataSettingsView: View {
                     }
                 } label: {
                     Label("导出本地健康数据", systemImage: "doc.text.fill")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(.subheadline, design: .default, weight: .bold))
                         .foregroundStyle(Color.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)

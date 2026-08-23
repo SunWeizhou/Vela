@@ -10,15 +10,15 @@ struct TodayNutritionStrip: View {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("营养")
-                        .font(.system(size: 17, weight: .bold))
+                        .font(.system(.body, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.rhythmInk)
                     Text(nutrition.macroText)
-                        .font(.system(size: 12))
+                        .font(.system(.caption, design: .default))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 Spacer()
                 Text(nutrition.calorieText)
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .font(.system(.footnote, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmInk)
             }
 
@@ -60,12 +60,12 @@ struct TodayNutritionStrip: View {
     private func macroBadge(_ label: String, value: Int, color: Color) -> some View {
         HStack(spacing: 4) {
             Text(label)
-                .font(.system(size: 10, weight: .bold))
+                .font(.system(.caption2, design: .default, weight: .bold))
                 .foregroundStyle(color)
                 .frame(width: 14, height: 14)
                 .background(Circle().fill(color.opacity(0.12)))
             Text("\(value)g")
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .font(.system(.caption2, design: .default, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmInk)
         }
         .padding(.horizontal, 6)
@@ -649,7 +649,7 @@ struct VelaNutritionView: View {
                                 .font(VelaTheme.subheadline().weight(.bold).monospacedDigit())
                                 .foregroundStyle(VelaTheme.rhythmInk)
                             Text(nutrient.source)
-                                .font(.system(size: 9))
+                                .font(.system(.caption2, design: .default))
                                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         }
                         .padding(11)
@@ -731,7 +731,7 @@ struct VelaNutritionView: View {
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
             if let target {
                 Text("/ \(target)")
-                    .font(.system(size: 9, weight: .medium))
+                    .font(.system(.caption2, design: .default, weight: .medium))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
         }
@@ -817,11 +817,11 @@ struct VelaNutritionView: View {
                                         .font(VelaTheme.caption2().monospacedDigit())
                                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                     Label("再次记录", systemImage: "plus")
-                                        .font(.system(size: 9, weight: .semibold))
+                                        .font(.system(.caption2, design: .default, weight: .semibold))
                                         .foregroundStyle(VelaTheme.energyColor)
                                     if favoriteIDs.contains(record.id) {
                                         Label("已收藏", systemImage: "star.fill")
-                                            .font(.system(size: 9, weight: .semibold))
+                                            .font(.system(.caption2, design: .default, weight: .semibold))
                                             .foregroundStyle(VelaTheme.rhythmWarm)
                                     }
                                 }

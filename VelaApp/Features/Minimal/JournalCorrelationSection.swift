@@ -47,7 +47,7 @@ struct JournalCorrelationSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("行为信号与待验证区域")
-                .font(.system(size: 14, weight: .bold))
+                .font(.system(.footnote, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.muted)
 
             impactMatrix
@@ -58,10 +58,10 @@ struct JournalCorrelationSection: View {
                         .font(.system(size: 24))
                         .foregroundStyle(VelaTheme.muted)
                     Text("行为-结果配对仍在积累")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(.footnote, design: .default, weight: .semibold))
                         .foregroundStyle(VelaTheme.muted)
                     Text("继续用「随手记」记录酒精、咖啡因、晚餐时间、吃撑、补水等低摩擦信号。Vela 会先积累样本，再把它们和次日睡眠、HRV、RHR、恢复进行配对。")
-                        .font(.system(size: 11))
+                        .font(.system(.caption2, design: .default))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 16)
@@ -77,14 +77,14 @@ struct JournalCorrelationSection: View {
                     ForEach(bodyModelState.claims) { claim in
                         VStack(alignment: .leading, spacing: 6) {
                             Text(claim.title)
-                                .font(.system(size: 13, weight: .bold))
+                                .font(.system(.footnote, design: .default, weight: .bold))
                                 .foregroundStyle(VelaTheme.rhythmInk)
                             Text(claim.summary)
-                                .font(.system(size: 12))
+                                .font(.system(.caption, design: .default))
                                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                 .lineSpacing(3)
                             Text("置信度 \(displayConfidence(claim.confidence.rawValue)) · n=\(claim.evidenceCount)")
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(.system(.caption2, design: .default, weight: .semibold))
                                 .foregroundStyle(confidenceColor(claim.confidence))
                             // 联通专项批次 2：用户校准入口（正确/部分正确/不正确）。
                             ClaimRatingControl(claimID: claim.id)
@@ -105,9 +105,9 @@ struct JournalCorrelationSection: View {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Impact Matrix")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(.subheadline, design: .default, weight: .bold))
                     Text("关联强度 × 真实配对样本")
-                        .font(.system(size: 11))
+                        .font(.system(.caption2, design: .default))
                         .foregroundStyle(VelaTheme.muted)
                 }
                 Spacer()
@@ -131,7 +131,7 @@ struct JournalCorrelationSection: View {
                     .foregroundStyle(point.signedCorrelation >= 0 ? VelaTheme.success : VelaTheme.warn)
                     .annotation(position: .top, spacing: 4) {
                         Text(point.habit)
-                            .font(.system(size: 9, weight: .semibold))
+                            .font(.system(.caption2, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.fg2)
                             .lineLimit(1)
                     }
@@ -150,7 +150,7 @@ struct JournalCorrelationSection: View {
                     Text("仅探索性证据")
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(.caption2, design: .default, weight: .semibold))
             }
         }
         .padding(16)
@@ -171,10 +171,10 @@ struct JournalCorrelationSection: View {
     private func detailStat(_ title: String, _ value: String) -> some View {
         VStack(spacing: 2) {
             Text(value)
-                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .font(.system(.subheadline, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.rhythmInk)
             Text(title)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(.caption2, design: .default, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
         }
         .frame(maxWidth: .infinity)
@@ -467,7 +467,7 @@ struct ClaimRatingControl: View {
     var body: some View {
         HStack(spacing: 6) {
             Text("你的判断：")
-                .font(.system(size: 10))
+                .font(.system(.caption2, design: .default))
                 .foregroundStyle(VelaTheme.muted)
             ForEach(options, id: \.value) { option in
                 Button {
@@ -475,7 +475,7 @@ struct ClaimRatingControl: View {
                     ClaimRatingStore.set(rating, for: claimID)
                 } label: {
                     Text(option.label)
-                        .font(.system(size: 10, weight: rating == option.value ? .bold : .regular))
+                        .font(.system(.caption2, design: .default, weight: rating == option.value ? .bold : .regular))
                         .foregroundStyle(rating == option.value ? VelaTheme.accent : VelaTheme.muted)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)

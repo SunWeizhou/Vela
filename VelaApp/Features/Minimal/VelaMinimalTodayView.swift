@@ -105,20 +105,20 @@ struct VelaTodayView: View {
                             : VelaTheme.rhythmDeep
                     )
                 Text("AI 增强 · 今日解读")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(.caption, design: .default, weight: .bold))
                     .foregroundStyle(conflicted ? VelaTheme.rhythmInkSecondary : VelaTheme.rhythmDeep)
                 Spacer()
             }
 
             Text(insight.interpretation)
-                .font(.system(size: 13, weight: .regular))
+                .font(.system(.footnote, design: .default, weight: .regular))
                 .foregroundStyle(conflicted ? VelaTheme.rhythmInkSecondary.opacity(0.8) : VelaTheme.rhythmInk)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
 
             if conflicted {
                 Label("AI 与本机判断不一致，以本机今日决定为准", systemImage: "exclamationmark.triangle")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(.caption2, design: .default, weight: .medium))
                     .foregroundStyle(VelaTheme.stressColor)
             } else if !insight.evidence.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
@@ -129,7 +129,7 @@ struct VelaTodayView: View {
                                 .frame(width: 4, height: 4)
                                 .padding(.top, 6)
                             Text(line)
-                                .font(.system(size: 12))
+                                .font(.system(.caption, design: .default))
                                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                 .lineSpacing(2)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -278,7 +278,7 @@ struct VelaTodayView: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmDeep)
                     Text("最值得关注的变化")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(.caption, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.rhythmDeep)
                     Spacer()
                     Button {
@@ -288,13 +288,13 @@ struct VelaTodayView: View {
                             Text("查看趋势")
                             Image(systemName: "chevron.right")
                         }
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(.caption2, design: .default, weight: .medium))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                 }
 
                 Text(notable.summary)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(.footnote, design: .default, weight: .medium))
                     .foregroundStyle(VelaTheme.rhythmInk)
                     .lineSpacing(2)
             }
@@ -321,13 +321,13 @@ struct VelaTodayView: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmDeep)
                     Text("Vela 解读")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(.caption, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.rhythmDeep)
                     Spacer()
                 }
 
                 Text(brief.subheadline)
-                    .font(.system(size: 13, weight: .regular))
+                    .font(.system(.footnote, design: .default, weight: .regular))
                     .foregroundStyle(VelaTheme.rhythmInk)
                     .lineSpacing(3)
 
@@ -337,7 +337,7 @@ struct VelaTodayView: View {
                             .fill(VelaTheme.rhythmDeep.opacity(0.7))
                             .frame(width: 4, height: 4)
                         Text(insightLine)
-                            .font(.system(size: 12))
+                            .font(.system(.caption, design: .default))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                     .padding(.top, 2)
@@ -364,7 +364,7 @@ struct VelaTodayView: View {
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmDeep)
                     Text(insightLine)
-                        .font(.system(size: 12))
+                        .font(.system(.caption, design: .default))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .lineSpacing(2)
                         .lineLimit(2)
@@ -451,12 +451,12 @@ struct VelaTodayView: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(VelaTheme.stressColor)
                     Text(errorMessage)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(.footnote, design: .default, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmInk)
                 }
                 if let suggestion = dashboardVM.currentError?.recoverySuggestion {
                     Text(suggestion)
-                        .font(.system(size: 12))
+                        .font(.system(.caption, design: .default))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
             }
@@ -877,7 +877,7 @@ struct TodayDateAndStatusHeader: View {
                 } label: {
                     HStack(spacing: 5) {
                         Text(dateHeaderString(for: selectedDate))
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(.system(.body, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmInk)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
@@ -937,7 +937,7 @@ struct TodayDateAndStatusHeader: View {
             if showSimulationLabel {
                 HStack {
                     Text(L10n.t("Simulated", "模拟数据"))
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.system(.caption2, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.rhythmDeep)
                     Spacer()
                 }

@@ -18,17 +18,17 @@ struct JournalEntryCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(entry.uiDisplayTitle)
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.system(.footnote, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.rhythmInk)
                     
                     Text(entry.createdAt.formatted(.dateTime.hour().minute()))
-                        .font(.system(size: 11))
+                        .font(.system(.caption2, design: .default))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 
                 if !entry.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(entry.note)
-                        .font(.system(size: 12))
+                        .font(.system(.caption, design: .default))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .lineLimit(2)
                 }

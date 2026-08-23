@@ -75,11 +75,11 @@ struct WorkoutDetailView: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(workout.activityName)
-                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .font(.system(.title3, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.rhythmInk)
                             .lineLimit(1)
                         Text(workout.start.formatted(date: .abbreviated, time: .shortened))
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(.caption, design: .default, weight: .medium))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                     Spacer()
@@ -177,17 +177,17 @@ struct WorkoutDetailView: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(value)
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .font(.system(.title2, design: .default, weight: .bold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Text(unit)
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(.caption2, design: .default, weight: .bold))
                     .foregroundStyle(mutedColor)
                     .lineLimit(1)
             }
             Text(title)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(.caption2, design: .default, weight: .semibold))
                 .foregroundStyle(mutedColor)
                 .lineLimit(1)
         }
@@ -222,10 +222,10 @@ struct WorkoutDetailView: View {
                 .background(Circle().fill(VelaTheme.rhythmMist.opacity(0.8)))
             VStack(alignment: .leading, spacing: 4) {
                 Text("训练智能摘要")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.system(.footnote, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Text("本次为 \(workout.activityName) 运动，持续时间约 \(Int((workout.end.timeIntervalSince(workout.start) / 60).rounded())) 分钟。")
-                    .font(.system(size: 13))
+                    .font(.system(.footnote, design: .default))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .lineLimit(2)
             }
@@ -242,7 +242,7 @@ struct WorkoutDetailView: View {
                     .foregroundStyle(Color(hex: "#FF5252"))
                 
                 Text(L10n.t("Heart Rate Fluctuation", "心率波动趋势"))
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(.callout, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmInk)
             }
             
@@ -271,7 +271,7 @@ struct WorkoutDetailView: View {
                 .frame(maxWidth: .infinity)
             } else if heartRates.isEmpty {
                 Text(L10n.t("No heart rate details recorded for this period.", "此时间段未记录心率明细。"))
-                    .font(.system(size: 13))
+                    .font(.system(.footnote, design: .default))
                     .foregroundStyle(VelaTheme.muted)
                     .frame(height: 160)
             } else {
@@ -291,7 +291,7 @@ struct WorkoutDetailView: View {
                             .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [3, 3]))
                             .annotation(position: .trailing, alignment: .center) {
                                 Text(AppLanguage.stored.isChinese ? "均值" : "AVG")
-                                    .font(.system(size: 9, weight: .bold))
+                                    .font(.system(.caption2, design: .default, weight: .bold))
                                     .foregroundStyle(Color(hex: "#FF5252"))
                             }
                     }
@@ -318,7 +318,7 @@ struct WorkoutDetailView: View {
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                             .foregroundStyle(VelaTheme.separatorSoft)
                         AxisValueLabel(format: .dateTime.hour().minute())
-                            .font(.system(size: 9, weight: .bold))
+                            .font(.system(.caption2, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.muted)
                     }
                 }
@@ -327,7 +327,7 @@ struct WorkoutDetailView: View {
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6, dash: [2, 4]))
                             .foregroundStyle(VelaTheme.hairline)
                         AxisValueLabel()
-                            .font(.system(size: 10, weight: .medium))
+                            .font(.system(.caption2, design: .default, weight: .medium))
                             .foregroundStyle(VelaTheme.muted)
                     }
                 }
@@ -340,11 +340,11 @@ struct WorkoutDetailView: View {
                 } label: {
                     HStack {
                         Text(heartRateIntensityText)
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.system(.caption, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.rhythmInk)
                         Spacer()
                         Text(L10n.t("View zones", "查看区间"))
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.system(.caption, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.rhythmDeep)
                         Image(systemName: "chevron.right")
                             .font(.system(size: 10, weight: .bold))
@@ -362,10 +362,10 @@ struct WorkoutDetailView: View {
     private func heartRateFact(title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(value)
-                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .font(.system(.footnote, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.rhythmInk)
             Text(title)
-                .font(.system(size: 10))
+                .font(.system(.caption2, design: .default))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -382,7 +382,7 @@ struct WorkoutDetailView: View {
                     .foregroundStyle(VelaTheme.rhythmDeep)
                 
                 Text(L10n.t("GPS Workout Route", "GPS 运动轨迹"))
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(.callout, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmInk)
             }
             
@@ -394,7 +394,7 @@ struct WorkoutDetailView: View {
                     .frame(maxWidth: .infinity)
             } else if routeCoordinates.isEmpty {
                 Text(L10n.t("No GPS route mapping recorded for this workout.", "此项运动未记录 GPS 运动轨迹。"))
-                    .font(.system(size: 13))
+                    .font(.system(.footnote, design: .default))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .frame(height: 100)
             } else {
@@ -733,17 +733,17 @@ struct WorkoutDetailView: View {
           VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("肌群分布")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(.subheadline, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
                 Spacer()
                 Text("有效组")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(.caption2, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.fg2)
             }
 
             if analysis.muscleGroupSets.isEmpty {
                 Text("这次训练暂未形成有效组。")
-                    .font(.system(size: 13))
+                    .font(.system(.footnote, design: .default))
                     .foregroundStyle(mutedColor)
             } else {
                 ForEach(analysis.muscleGroupSets.sorted { $0.value > $1.value }, id: \.key) { muscle, sets in
@@ -751,11 +751,11 @@ struct WorkoutDetailView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             Text(localizedMuscle(muscle))
-                                .font(.system(size: 12, weight: .bold))
+                                .font(.system(.caption, design: .default, weight: .bold))
                                 .foregroundStyle(bodyTextColor)
                             Spacer()
                             Text("\(sets) 组")
-                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .font(.system(.caption, design: .default, weight: .bold))
                                 .foregroundStyle(mutedColor)
                         }
                         GeometryReader { geo in

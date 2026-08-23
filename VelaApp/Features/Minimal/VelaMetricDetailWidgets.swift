@@ -134,7 +134,7 @@ struct MetricCustomWidgetsSection: View {
                                     .font(VelaTheme.caption2())
                                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                 Text(bedtimeText)
-                                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                                    .font(.system(.body, design: .default, weight: .bold))
                                     .foregroundStyle(VelaTheme.rhythmInk)
                             }
                             Spacer()
@@ -143,7 +143,7 @@ struct MetricCustomWidgetsSection: View {
                                     .font(VelaTheme.caption2())
                                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                 Text(targetBedtimeText)
-                                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                                    .font(.system(.body, design: .default, weight: .bold))
                                     .foregroundStyle(VelaTheme.sleepColor)
                             }
                         }

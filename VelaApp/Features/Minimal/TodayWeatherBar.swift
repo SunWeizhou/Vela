@@ -15,11 +15,11 @@ struct TodayWeatherBar: View {
                     .symbolRenderingMode(.multicolor)
 
                 Text(weatherTemp)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(.caption, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.fg)
 
                 Text(weatherStatusText)
-                    .font(.system(size: 10))
+                    .font(.system(.caption2, design: .default))
                     .foregroundStyle(VelaTheme.muted)
                     .lineLimit(1)
             }

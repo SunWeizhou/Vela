@@ -114,7 +114,7 @@ struct PlusActionSheet: View {
                 }
                 
                 Text(label)
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(.caption2, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.muted)
                     .lineLimit(1)
             }
@@ -147,7 +147,7 @@ struct PlusActionSheet: View {
                 }
                 
                 Text(label)
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(.caption2, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.muted)
                     .lineLimit(1)
             }

@@ -224,7 +224,7 @@ struct CardioStatusCard: View {
                 .font(.system(.footnote, design: .default, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmInk)
             Text(detail)
-                .font(.system(size: 9))
+                .font(.system(.caption2, design: .default))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 .lineLimit(2)
         }
@@ -709,7 +709,7 @@ struct PersonalRecordsCard: View {
                 .frame(minWidth: 58, alignment: .trailing)
             if let previous = record.previousValue {
                 Text("+\(Int((record.value - previous).rounded())) \(unit(record.kind))")
-                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .font(.system(.caption2, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmDeep)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)
@@ -1050,7 +1050,7 @@ struct SafeZoneWorkloadChartView: View {
                         .frame(width: 8, height: 8)
                         .position(x: x, y: y)
                     Text("\(dateText(scrubIndex)) · \(Int(values[scrubIndex].rounded()))")
-                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .font(.system(.caption2, design: .default, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmInk)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
@@ -1211,7 +1211,7 @@ struct YearlyTrainingCard: View {
                     .font(.system(.caption2, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Text("\(year.workoutCount) 次 · \(Int(year.totalCalories.rounded())) kcal")
-                    .font(.system(size: 9.5))
+                    .font(.system(.caption2, design: .default))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
             .frame(width: 108, alignment: .trailing)

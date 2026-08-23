@@ -1028,7 +1028,7 @@ struct PostWorkoutImpactSheet: View {
                 }
                 Spacer()
                 Text(impact.postPeakHeartRateText)
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .font(.system(.body, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.strainColor)
             }
 

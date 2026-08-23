@@ -324,7 +324,7 @@ struct VelaMetricDetailView: View {
                                     .foregroundStyle(metricColor)
 
                                 Text(dynamicValueText)
-                                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                                    .font(.system(.body, design: .default, weight: .bold))
                                     .foregroundStyle(isSleep ? VelaTheme.sleepText : VelaTheme.fg)
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.58)
@@ -690,7 +690,7 @@ struct DigitalTwinSimulatorCard: View {
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(VelaTheme.accent)
                         Text("明日恢复预测器")
-                            .font(.system(size: 15, weight: .bold))
+                            .font(.system(.subheadline, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.fg)
                     }
                     Spacer()
@@ -855,7 +855,7 @@ struct LongTermHealthTrendView: View {
                         .tracking(-0.65)
                         .foregroundStyle(VelaTheme.rhythmInk)
                     Text("来自 Apple 健康的历史原始数据，按月均值呈现")
-                        .font(.system(size: 12))
+                        .font(.system(.caption, design: .default))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 .padding(.bottom, 4)
@@ -868,10 +868,10 @@ struct LongTermHealthTrendView: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     Label("数据来自本机回填", systemImage: "lock")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(.caption, design: .default, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmDeep)
                     Text("只写入每日原始汇总（心率/睡眠/步数/体重等），不伪造旧日评分。历史不足时，可在「设置 → 三年 Apple 健康回填」运行回填。")
-                        .font(.system(size: 11))
+                        .font(.system(.caption2, design: .default))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .lineSpacing(3)
                 }
@@ -900,7 +900,7 @@ struct LongTermHealthTrendView: View {
                         }
                     } label: {
                         Text(item.title)
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(.caption, design: .default, weight: .semibold))
                             .foregroundStyle(metric == item ? VelaTheme.rhythmDeepOn : VelaTheme.rhythmInkSecondary)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
@@ -920,15 +920,15 @@ struct LongTermHealthTrendView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(metric.title)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(.subheadline, design: .default, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmInk)
                     Text("近三年 · 月均值")
-                        .font(.system(size: 11))
+                        .font(.system(.caption2, design: .default))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 Spacer()
                 Text(metric.unit)
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .font(.system(.caption2, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
 
@@ -944,7 +944,7 @@ struct LongTermHealthTrendView: View {
                     Spacer()
                     Text("现在")
                 }
-                .font(.system(size: 10, weight: .bold))
+                .font(.system(.caption2, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 .padding(.top, 6)
             } else {
@@ -962,7 +962,7 @@ struct LongTermHealthTrendView: View {
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmDeep)
             Text("历史数据不足。可在「设置 → 三年 Apple 健康回填」运行回填，再回来看轨迹。")
-                .font(.system(size: 13))
+                .font(.system(.footnote, design: .default))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -973,11 +973,11 @@ struct LongTermHealthTrendView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("今年 vs 去年同期")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(.subheadline, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Text("1 月 1 日至今 · 对齐时段")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(.caption2, design: .default, weight: .medium))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
 
@@ -994,7 +994,7 @@ struct LongTermHealthTrendView: View {
                 }
             } else {
                 Text("回填后出现；对比需要两段各至少 7 天样本。")
-                    .font(.system(size: 12))
+                    .font(.system(.caption, design: .default))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .padding(.vertical, 8)
             }
@@ -1007,10 +1007,10 @@ struct LongTermHealthTrendView: View {
     private func comparisonMetric(title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(.caption2, design: .default, weight: .medium))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
             Text(value)
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .font(.system(.callout, design: .default, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmInk)
         }
     }
@@ -1019,7 +1019,7 @@ struct LongTermHealthTrendView: View {
         let improved = metric.improvementIsPositive ? delta > 0 : delta < 0
         let text = String(format: "%+.0f", delta)
         return Text("\(text) \(metric.unit)")
-            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .font(.system(.caption, design: .default, weight: .semibold))
             .foregroundStyle(improved ? VelaTheme.rhythmDeep : VelaTheme.rhythmWarm)
             .padding(.horizontal, 9)
             .padding(.vertical, 5)

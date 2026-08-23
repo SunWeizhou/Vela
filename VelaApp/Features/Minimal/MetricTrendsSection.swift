@@ -235,7 +235,7 @@ struct MetricTrendsSection: View {
                                     .font(.system(size: 12, weight: .semibold))
                                     .foregroundStyle(VelaTheme.rhythmDeep)
                                 Text(item.title)
-                                    .font(.system(size: 12, weight: .bold))
+                                    .font(.system(.caption, design: .default, weight: .bold))
                                     .foregroundStyle(VelaTheme.rhythmInk)
                                 Spacer()
                                 if item.assessment != .insufficientData {
@@ -243,7 +243,7 @@ struct MetricTrendsSection: View {
                                         Image(systemName: item.valueDirection.icon)
                                             .font(.system(size: 10, weight: .bold))
                                         Text(item.assessment.label)
-                                            .font(.system(size: 10, weight: .semibold))
+                                            .font(.system(.caption2, design: .default, weight: .semibold))
                                     }
                                     .foregroundStyle(item.statusColor)
                                     .padding(.horizontal, 6)
@@ -255,11 +255,11 @@ struct MetricTrendsSection: View {
                             HStack(alignment: .bottom, spacing: 12) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(item.value)
-                                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                                        .font(.system(.title3, design: .default, weight: .bold))
                                         .monospacedDigit()
                                         .foregroundStyle(VelaTheme.rhythmInk)
                                     Text(item.statusLabel)
-                                        .font(.system(size: 11))
+                                        .font(.system(.caption2, design: .default))
                                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                         .lineLimit(2)
                                         .fixedSize(horizontal: false, vertical: true)

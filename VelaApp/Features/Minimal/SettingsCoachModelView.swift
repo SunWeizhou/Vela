@@ -662,7 +662,7 @@ struct CGMSettingsView: View {
                 .font(.system(size: 32))
                 .foregroundStyle(VelaTheme.infoBlue)
             Text("等待血糖数据")
-                .font(.system(size: 18, weight: .bold))
+                .font(.system(.body, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.fg)
             Text(message)
                 .font(.system(.footnote, design: .default))

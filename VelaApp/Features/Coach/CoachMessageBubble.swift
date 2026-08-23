@@ -145,7 +145,7 @@ struct CoachRecoveryActionButton: View {
     var body: some View {
         Button(action: perform) {
             Label(action.title, systemImage: action.systemImage)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(.caption, design: .default, weight: .semibold))
                 .foregroundStyle(VelaTheme.accent)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)

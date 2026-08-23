@@ -22,7 +22,7 @@ struct HistoricalBackfillView: View {
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text("回填三年健康历史")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(.body, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmInk)
                         Text(coordinator.stateText)
                             .font(.system(.caption, design: .default))
@@ -132,7 +132,7 @@ struct XunjiHistoryBackfillView: View {
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text("回填训记训练历史")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(.body, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmInk)
                         Text("逐日补全动作、组数与重量")
                             .font(.system(.caption, design: .default))

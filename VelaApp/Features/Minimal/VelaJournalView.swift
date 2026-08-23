@@ -61,12 +61,12 @@ struct VelaJournalView: View {
                 // 3. Category daytime title
                 VStack(alignment: .leading, spacing: 12) {
                     Text(dateSectionTitle(for: dashboardVM.selectedDate))
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.system(.callout, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.fg)
                         .padding(.top, 4)
                     
                     Text("习惯与记录")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(.caption, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.muted)
                         .textCase(.uppercase)
                         .padding(.leading, 2)
@@ -404,7 +404,7 @@ struct VelaJournalView: View {
                     .font(.system(size: 24, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
                 Text(headerDateString(for: dashboardVM.selectedDate))
-                    .font(.system(size: 12))
+                    .font(.system(.caption, design: .default))
                     .foregroundStyle(VelaTheme.muted)
             }
             
@@ -418,7 +418,7 @@ struct VelaJournalView: View {
                         Image(systemName: "sparkles")
                             .font(.system(size: 12, weight: .bold))
                         Text("分析")
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.system(.footnote, design: .default, weight: .bold))
                     }
                     .foregroundStyle(VelaTheme.fg)
                     .padding(.horizontal, 12)
@@ -480,10 +480,10 @@ struct VelaJournalView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("随手记一餐或一个行为")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(.footnote, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.fg)
                     Text("一句话即可：火锅、啤酒、睡前咖啡、吃撑、喝水少。无需估克重。")
-                        .font(.system(size: 11))
+                        .font(.system(.caption2, design: .default))
                         .foregroundStyle(VelaTheme.muted)
                         .lineLimit(2)
                 }
@@ -531,11 +531,11 @@ struct VelaJournalView: View {
                 } label: {
                     VStack(spacing: 8) {
                         Text(weekdays[idx])
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.system(.caption2, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.muted)
                         
                         Text("\(dayNumber)")
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .font(.system(.footnote, design: .default, weight: .bold))
                             .foregroundStyle(isSelected ? Color.white : VelaTheme.fg)
                             .frame(width: 26, height: 26)
                             .background(
@@ -582,7 +582,7 @@ struct VelaJournalView: View {
                     .background(Circle().fill(VelaTheme.accent.opacity(0.12)))
                 
                 Text(title)
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.system(.footnote, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
             }
             
@@ -666,7 +666,7 @@ struct VelaJournalView: View {
                         .background(Circle().fill(VelaTheme.accent.opacity(0.12)))
                     
                     Text(title)
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(.footnote, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.fg)
                 }
                 
@@ -674,7 +674,7 @@ struct VelaJournalView: View {
                 
                 HStack(spacing: 8) {
                     Text(valuePlaceholder)
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.system(.footnote, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.meta)
                     
                     Image(systemName: "arrow.right")

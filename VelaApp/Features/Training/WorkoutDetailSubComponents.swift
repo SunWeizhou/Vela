@@ -64,10 +64,10 @@ struct WorkoutHeartRateInsightSheet: View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 5) {
                 Text("心率区间")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.system(.title2, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Text(intensityText)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(.footnote, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
 
@@ -87,11 +87,11 @@ struct WorkoutHeartRateInsightSheet: View {
                             .fill(segment.color)
                             .frame(width: 9, height: 9)
                         Text(segment.label)
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.system(.footnote, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.rhythmInk)
                         Spacer()
                         Text("\(Int((Double(segment.count) / Double(totalCount) * 100).rounded()))%")
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .font(.system(.footnote, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                 }
@@ -105,12 +105,12 @@ struct WorkoutHeartRateInsightSheet: View {
     private func insightTile(title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(value)
-                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .font(.system(.subheadline, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.rhythmInk)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
             Text(title)
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(.caption2, design: .default, weight: .medium))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -141,7 +141,7 @@ struct StrengthSetDetailSheet: View {
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Text("第 \(detail.setIndex) 组")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(.footnote, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
 
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
@@ -164,10 +164,10 @@ struct StrengthSetDetailSheet: View {
     private func metric(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(value)
-                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .font(.system(.body, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.rhythmInk)
             Text(title)
-                .font(.system(size: 11, weight: .bold))
+                .font(.system(.caption2, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -196,7 +196,7 @@ struct WorkoutExerciseListView: View {
         )
         return VStack(alignment: .leading, spacing: 12) {
             Text("动作与组次")
-                .font(.system(size: 15, weight: .bold))
+                .font(.system(.subheadline, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.rhythmInk)
 
             ForEach(strength.exercises) { exercise in
@@ -204,20 +204,20 @@ struct WorkoutExerciseListView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(exercise.name)
-                                .font(.system(size: 16, weight: .bold))
+                                .font(.system(.callout, design: .default, weight: .bold))
                                 .foregroundStyle(bodyTextColor)
                             Text("\(exercise.equipment) · \(Int(exercise.volumeKilograms.rounded())) kg")
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.system(.caption2, design: .default, weight: .medium))
                                 .foregroundStyle(mutedColor)
                         }
                         Spacer()
                         if let e1RM = analysis.estimatedOneRepMaxByExercise[exercise.name] {
                             VStack(alignment: .trailing, spacing: 3) {
                                 Text("\(Int(e1RM.rounded())) kg")
-                                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                                    .font(.system(.subheadline, design: .default, weight: .bold))
                                     .foregroundStyle(accentColor)
                                 Text("e1RM")
-                                    .font(.system(size: 10, weight: .bold))
+                                    .font(.system(.caption2, design: .default, weight: .bold))
                                     .foregroundStyle(mutedColor)
                             }
                         }
@@ -237,7 +237,7 @@ struct WorkoutExerciseListView: View {
                             Text("状态")
                                 .frame(width: 32, alignment: .trailing)
                         }
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(.caption2, design: .default, weight: .bold))
                         .foregroundStyle(mutedColor)
                         .padding(.horizontal, 4)
                         .padding(.bottom, 2)
@@ -265,26 +265,26 @@ struct WorkoutExerciseListView: View {
     private func setRow(index: Int, set: StrengthSetLog) -> some View {
         HStack(spacing: 12) {
             Text(set.isWarmup ? "热" : "\(index + 1)")
-                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .font(.system(.caption2, design: .default, weight: .bold))
                 .foregroundStyle(set.isWarmup ? Color.white : VelaTheme.rhythmDeepOn)
                 .frame(width: 24, height: 24)
                 .background(Circle().fill(set.isWarmup ? VelaTheme.systemOrange : VelaTheme.rhythmDeep))
                 .frame(width: 32, alignment: .leading)
 
             Text("\(set.weightKilograms.formatted(.number.precision(.fractionLength(0...1)))) kg")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(.system(.footnote, design: .default, weight: .semibold))
                 .foregroundStyle(bodyTextColor)
                 .frame(width: 70, alignment: .center)
 
             Spacer()
 
             Text("\(set.repetitions) 次")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(.system(.footnote, design: .default, weight: .semibold))
                 .foregroundStyle(bodyTextColor)
                 .frame(width: 50, alignment: .center)
 
             Text(set.rpe.map { "\(Int($0))" } ?? "—")
-                .font(.system(size: 11, weight: .bold))
+                .font(.system(.caption2, design: .default, weight: .bold))
                 .foregroundStyle(set.rpe != nil ? VelaTheme.rhythmDeep : mutedColor)
                 .frame(width: 44, height: 26)
                 .background(
@@ -298,7 +298,7 @@ struct WorkoutExerciseListView: View {
 
             Image(systemName: (set.isCompleted ?? true) ? "checkmark.circle.fill" : "circle")
                 .foregroundStyle((set.isCompleted ?? true) ? VelaTheme.rhythmDeep : mutedColor)
-                .font(.system(size: 20))
+                .font(.system(.title3, design: .default))
                 .frame(width: 32, alignment: .trailing)
         }
         .padding(.vertical, 6)
@@ -314,10 +314,10 @@ struct WorkoutNotesCardView: View {
         if !strength.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 Label("训练备注", systemImage: "note.text")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.system(.footnote, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Text(strength.notes)
-                    .font(.system(size: 13))
+                    .font(.system(.footnote, design: .default))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
             .padding(16)

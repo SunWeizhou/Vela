@@ -479,11 +479,11 @@ private struct PlanDayRow: View {
 
                             if day.isCompleted {
                                 Text("已完成")
-                                    .font(.system(size: 9, weight: .semibold))
+                                    .font(.system(.caption2, design: .default, weight: .semibold))
                                     .foregroundStyle(VelaTheme.rhythmDeep)
                             } else if let adherence = day.adherenceScore {
                                 Text("依从 \(Int((adherence * 100).rounded()))%")
-                                    .font(.system(size: 9, weight: .semibold))
+                                    .font(.system(.caption2, design: .default, weight: .semibold))
                                     .foregroundStyle(VelaTheme.rhythmDeep)
                             }
                         }

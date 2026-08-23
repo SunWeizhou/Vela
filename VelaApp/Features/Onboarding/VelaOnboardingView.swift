@@ -87,7 +87,7 @@ struct VelaOnboardingView: View {
                 .fill(VelaTheme.rhythmDeep)
                 .frame(width: 6, height: 6)
             Text("VELA · RHYTHM")
-                .font(.system(size: 11, weight: .bold))
+                .font(.system(.caption2, design: .default, weight: .bold))
                 .tracking(1.4)
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
 
@@ -105,7 +105,7 @@ struct VelaOnboardingView: View {
         VStack(alignment: .leading, spacing: 32) {
             VStack(alignment: .leading, spacing: 14) {
                 Text("RHYTHM INTELLIGENCE")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(.caption2, design: .default, weight: .bold))
                     .tracking(1.6)
                     .foregroundStyle(VelaTheme.rhythmDeep)
 
@@ -217,7 +217,7 @@ struct VelaOnboardingView: View {
     private var bodyModelSetupCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(L10n.t("First-Day Body Model", "首日身体模型"))
-                .font(.system(size: 17, weight: .bold))
+                .font(.system(.body, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.fg)
 
             Picker(L10n.t("Goal", "目标"), selection: $primaryGoal) {
@@ -239,10 +239,10 @@ struct VelaOnboardingView: View {
                 Stepper(value: $weeklyTrainingDays, in: 1...7) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(L10n.t("\(weeklyTrainingDays)x / week", "每周 \(weeklyTrainingDays) 次"))
-                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .font(.system(.subheadline, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.fg)
                         Text(L10n.t("training frequency", "训练频次"))
-                            .font(.system(size: 11))
+                            .font(.system(.caption2, design: .default))
                             .foregroundStyle(VelaTheme.muted)
                     }
                 }
@@ -250,10 +250,10 @@ struct VelaOnboardingView: View {
                 Stepper(value: $sessionDurationMinutes, in: 20...120, step: 5) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("\(sessionDurationMinutes) 分钟")
-                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .font(.system(.subheadline, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.fg)
                         Text(L10n.t("session", "单次时长"))
-                            .font(.system(size: 11))
+                            .font(.system(.caption2, design: .default))
                             .foregroundStyle(VelaTheme.muted)
                     }
                 }
@@ -354,7 +354,7 @@ struct VelaOnboardingView: View {
             isOn.wrappedValue.toggle()
         } label: {
             Text(title)
-                .font(.system(size: 12, weight: .bold))
+                .font(.system(.caption, design: .default, weight: .bold))
                 .foregroundStyle(isOn.wrappedValue ? VelaTheme.rhythmDeepOn : VelaTheme.rhythmInk)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 9)

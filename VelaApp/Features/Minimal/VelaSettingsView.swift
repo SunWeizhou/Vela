@@ -160,7 +160,7 @@ struct VelaSettingsView: View {
                 Button("完成") {
                     dismiss()
                 }
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(.subheadline, design: .default, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmDeep)
             }
         }
@@ -238,7 +238,7 @@ struct VelaSettingsView: View {
 
     private func settingsPill(_ title: String, icon: String) -> some View {
         Label(title, systemImage: icon)
-            .font(.system(size: 10, weight: .semibold))
+            .font(.system(.caption2, design: .default, weight: .semibold))
             .foregroundStyle(VelaTheme.rhythmInkSecondary)
             .lineLimit(1)
             .minimumScaleFactor(0.82)
@@ -475,10 +475,10 @@ struct ShortcutsSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Text("Siri 快捷指令与语音集成")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.system(.title3, design: .default, weight: .bold))
                 
                 Text("以下快捷指令已通过 App Intents 接入，可在快捷指令 App 或 Siri 中使用：")
-                    .font(.system(size: 14))
+                    .font(.system(.footnote, design: .default))
                     .foregroundStyle(VelaTheme.muted)
                 
                 VStack(alignment: .leading, spacing: 14) {
@@ -499,10 +499,10 @@ struct ShortcutsSettingsView: View {
     private func shortcutGuideRow(command: String, desc: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(command)
-                .font(.system(size: 15, weight: .bold))
+                .font(.system(.subheadline, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.accent)
             Text(desc)
-                .font(.system(size: 12))
+                .font(.system(.caption, design: .default))
                 .foregroundStyle(VelaTheme.muted)
         }
         .padding(14)

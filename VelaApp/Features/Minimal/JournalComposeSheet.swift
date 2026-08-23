@@ -17,7 +17,7 @@ struct BehaviorQuickNoteSheet: View {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 8) {
                         Label("随手记", systemImage: "text.bubble.fill")
-                            .font(.system(size: 18, weight: .bold))
+                            .font(.system(.body, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.rhythmInk)
                         Text("记录你觉得可能影响恢复、睡眠或训练的行为。这里不估算热量、克重或宏量营养，只给 Body Model 留低摩擦信号。")
                             .font(.system(.footnote, design: .default))
@@ -160,7 +160,7 @@ struct CaffeineLoggerView: View {
                                 .font(.system(size: 48, weight: .black, design: .rounded))
                                 .foregroundStyle(VelaTheme.accent)
                             Text("mg")
-                                .font(.system(size: 18, weight: .bold))
+                                .font(.system(.body, design: .default, weight: .bold))
                                 .foregroundStyle(VelaTheme.meta)
                         }
                         
@@ -285,7 +285,7 @@ struct WaterLoggerView: View {
                                 .font(.system(.largeTitle, design: .rounded, weight: .bold))
                                 .foregroundStyle(VelaTheme.accent)
                             Text("ml")
-                                .font(.system(size: 18, weight: .bold))
+                                .font(.system(.body, design: .default, weight: .bold))
                                 .foregroundStyle(VelaTheme.meta)
                         }
                         
@@ -515,7 +515,7 @@ struct AlcoholLoggerView: View {
                                 .font(.system(.largeTitle, design: .rounded, weight: .bold))
                                 .foregroundStyle(VelaTheme.stressColor)
                             Text("标准杯")
-                                .font(.system(size: 18, weight: .bold))
+                                .font(.system(.body, design: .default, weight: .bold))
                                 .foregroundStyle(VelaTheme.meta)
                         }
                         

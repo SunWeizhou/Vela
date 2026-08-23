@@ -217,11 +217,11 @@ struct BaselineRangeIndicator: View {
             HStack {
                 if let baseVal = baseline {
                     Text("基线: \(Int(baseVal))\(unit)")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(.caption2, design: .default, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 } else {
                     Text("基线积累中")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(.caption2, design: .default, weight: .medium))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 
@@ -229,11 +229,11 @@ struct BaselineRangeIndicator: View {
                 
                 if let todayVal = today {
                     Text("今日: \(Int(todayVal))\(unit)")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(.caption2, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.rhythmDeep)
                 } else {
                     Text("今日: --")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(.caption2, design: .default, weight: .medium))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
             }
@@ -379,10 +379,10 @@ struct BodyModelDetailView: View {
                 .background(RoundedRectangle(cornerRadius: 12).fill(VelaTheme.rhythmMist.opacity(0.72)))
             VStack(alignment: .leading, spacing: 5) {
                 Text("身体模型校准状态")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(.callout, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Text(maturityTitle)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(.caption, design: .default, weight: .medium))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
             Spacer()
@@ -397,7 +397,7 @@ struct BodyModelDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("静态约束与倾向")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.system(.footnote, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 Spacer()
                 NavigationLink(destination: BodyModelEditView()) {
@@ -405,7 +405,7 @@ struct BodyModelDetailView: View {
                         Image(systemName: "slider.horizontal.3")
                         Text("修改设定")
                     }
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(.caption, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmDeep)
                 }
                 .buttonStyle(.plain)
@@ -430,11 +430,11 @@ struct BodyModelDetailView: View {
     private func detailRow(title: String, value: String) -> some View {
         HStack {
             Text(title)
-                .font(.system(size: 14))
+                .font(.system(.footnote, design: .default))
                 .foregroundStyle(VelaTheme.rhythmInk)
             Spacer()
             Text(value)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(.footnote, design: .default, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
         }
         .padding(.horizontal, 16)
@@ -444,13 +444,13 @@ struct BodyModelDetailView: View {
     private var physiologicalSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("生理稳态系统标定 (28天生理基线)")
-                .font(.system(size: 14, weight: .bold))
+                .font(.system(.footnote, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
             
             VStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("自主神经张力基线 (HRV / 心率变异性)")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.system(.footnote, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.rhythmInk)
                     BaselineRangeIndicator(
                         today: dashboard.recoveryMetrics.hrvMilliseconds,
@@ -463,7 +463,7 @@ struct BodyModelDetailView: View {
                 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("心脏负荷恢复基线 (RHR / 静息心率)")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.system(.footnote, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.rhythmInk)
                     BaselineRangeIndicator(
                         today: dashboard.recoveryMetrics.restingHeartRate,
@@ -476,7 +476,7 @@ struct BodyModelDetailView: View {
                 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("自主神经呼吸恢复 (Respiratory Rate / 呼吸频率)")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.system(.footnote, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.rhythmInk)
                     BaselineRangeIndicator(
                         today: dashboard.recoveryMetrics.respiratoryRate,
@@ -489,16 +489,16 @@ struct BodyModelDetailView: View {
                 
                 HStack {
                     Text("最大摄氧量标定 (VO2 Max)")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.system(.footnote, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.rhythmInk)
                     Spacer()
                     if let vo2Max = dashboard.bodyMetrics.vo2Max {
                         Text("\(String(format: "%.1f", vo2Max)) mL/kg/min")
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .font(.system(.footnote, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmDeep)
                     } else {
                         Text("暂无数据 (Apple Watch 户外跑/步行校准)")
-                            .font(.system(size: 12))
+                            .font(.system(.caption, design: .default))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                 }

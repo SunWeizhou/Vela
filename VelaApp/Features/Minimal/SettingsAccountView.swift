@@ -238,7 +238,7 @@ struct UserWikiArchiveView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text("你的健康画像与个人背景会作为 Coach 的本地长期记忆，用于改善训练、恢复和营养建议。")
-                    .font(.system(size: 14))
+                    .font(.system(.footnote, design: .default))
                     .foregroundStyle(VelaTheme.muted)
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
@@ -247,7 +247,7 @@ struct UserWikiArchiveView: View {
                     VStack(spacing: 20) {
                         ProgressView()
                         Text("正在初始化本地健康档案...")
-                            .font(.system(size: 13))
+                            .font(.system(.footnote, design: .default))
                             .foregroundStyle(VelaTheme.muted)
                     }
                     .frame(maxWidth: .infinity)
@@ -268,11 +268,11 @@ struct UserWikiArchiveView: View {
                             VStack(alignment: .leading, spacing: 8) {
                                   HStack {
                                       Text(doc.title)
-                                          .font(.system(size: 16, weight: .bold))
+                                          .font(.system(.callout, design: .default, weight: .bold))
                                           .foregroundStyle(VelaTheme.fg)
                                       Spacer()
                                       Text(doc.filename)
-                                          .font(.system(size: 11, weight: .bold, design: .rounded))
+                                          .font(.system(.caption2, design: .default, weight: .bold))
                                           .foregroundStyle(VelaTheme.accent)
                                           .padding(.horizontal, 8)
                                           .padding(.vertical, 4)
@@ -280,7 +280,7 @@ struct UserWikiArchiveView: View {
                                   }
                                 
                                 Text(doc.markdownContent.prefix(120) + (doc.markdownContent.count > 120 ? "..." : ""))
-                                    .font(.system(size: 13))
+                                    .font(.system(.footnote, design: .default))
                                     .foregroundStyle(VelaTheme.muted)
                                     .lineLimit(3)
                                     .multilineTextAlignment(.leading)
@@ -288,7 +288,7 @@ struct UserWikiArchiveView: View {
                                 HStack {
                                     Spacer()
                                     Text("更新于: \(formatDate(doc.updatedAt))")
-                                        .font(.system(size: 10))
+                                        .font(.system(.caption2, design: .default))
                                         .foregroundStyle(Color(hex: "#C7C7CC"))
                                 }
                             }
@@ -313,7 +313,7 @@ struct UserWikiArchiveView: View {
                     Label("返回", systemImage: "chevron.left")
                         .labelStyle(.titleAndIcon)
                 }
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(.subheadline, design: .default, weight: .semibold))
             }
         }
         .task {
@@ -332,7 +332,7 @@ struct UserWikiArchiveView: View {
                     .padding(.bottom, 8)
                     
                     TextField("标题", text: $editTitle)
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.system(.callout, design: .default, weight: .bold))
                         .padding(12)
                         .background(RoundedRectangle(cornerRadius: 10).fill(VelaTheme.secondaryGroupedBackground))
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))
@@ -345,10 +345,10 @@ struct UserWikiArchiveView: View {
                                 if parsedItems.isEmpty {
                                     VStack(spacing: 12) {
                                         Text("无结构化项目。")
-                                            .font(.system(size: 14, weight: .semibold))
+                                            .font(.system(.footnote, design: .default, weight: .semibold))
                                             .foregroundStyle(VelaTheme.muted)
                                         Text("你可以使用下方按钮添加属性或普通列表项。")
-                                            .font(.system(size: 12))
+                                            .font(.system(.caption, design: .default))
                                             .foregroundStyle(VelaTheme.muted)
                                             .multilineTextAlignment(.center)
                                     }
@@ -380,12 +380,12 @@ struct UserWikiArchiveView: View {
                                                                 .font(.system(size: 11))
                                                                 .foregroundStyle(VelaTheme.accent)
                                                             TextField("属性名", text: $item.key)
-                                                                .font(.system(size: 13, weight: .bold))
+                                                                .font(.system(.footnote, design: .default, weight: .bold))
                                                                 .foregroundStyle(VelaTheme.accent)
                                                         }
                                                         
                                                         TextField("属性值", text: $item.value)
-                                                            .font(.system(size: 14))
+                                                            .font(.system(.footnote, design: .default))
                                                             .foregroundStyle(VelaTheme.fg)
                                                             .padding(.leading, 19)
                                                     } else {
@@ -394,7 +394,7 @@ struct UserWikiArchiveView: View {
                                                                 .font(.system(size: 12))
                                                                 .foregroundStyle(VelaTheme.muted)
                                                             TextField("列表内容", text: $item.value)
-                                                                .font(.system(size: 14))
+                                                                .font(.system(.footnote, design: .default))
                                                                 .foregroundStyle(VelaTheme.fg)
                                                         }
                                                     }
@@ -418,7 +418,7 @@ struct UserWikiArchiveView: View {
                                             Image(systemName: "plus.circle.fill")
                                             Text("新增属性")
                                         }
-                                        .font(.system(size: 13, weight: .semibold))
+                                        .font(.system(.footnote, design: .default, weight: .semibold))
                                         .foregroundStyle(VelaTheme.accent)
                                         .padding(.vertical, 8)
                                         .padding(.horizontal, 16)
@@ -435,7 +435,7 @@ struct UserWikiArchiveView: View {
                                             Image(systemName: "plus.circle.fill")
                                             Text("新增列表项")
                                         }
-                                        .font(.system(size: 13, weight: .semibold))
+                                        .font(.system(.footnote, design: .default, weight: .semibold))
                                         .foregroundStyle(VelaTheme.muted)
                                         .padding(.vertical, 8)
                                         .padding(.horizontal, 16)
@@ -447,11 +447,11 @@ struct UserWikiArchiveView: View {
                                 
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text("其它备注信息 (Markdown)")
-                                        .font(.system(size: 13, weight: .bold))
+                                        .font(.system(.footnote, design: .default, weight: .bold))
                                         .foregroundStyle(VelaTheme.muted)
                                     
                                     TextEditor(text: $notesText)
-                                        .font(.system(size: 14))
+                                        .font(.system(.footnote, design: .default))
                                         .frame(height: 120)
                                         .padding(8)
                                         .background(RoundedRectangle(cornerRadius: 10).fill(VelaTheme.cardBg))
@@ -464,7 +464,7 @@ struct UserWikiArchiveView: View {
                         }
                     } else {
                         TextEditor(text: $editText)
-                            .font(.system(size: 14, design: .monospaced))
+                            .font(.system(.footnote, design: .default))
                             .padding(8)
                             .background(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).fill(VelaTheme.cardBg))
                             .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusMd).stroke(VelaTheme.separatorSoft, lineWidth: 0.5))

@@ -14,10 +14,10 @@ struct JournalTagInsights: View {
                     .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(bodyModelMaturityColor(state.maturity.overall)))
                 VStack(alignment: .leading, spacing: 2) {
                     Text("模型成熟度：\(bodyModelMaturityTitle(state.maturity.overall))")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(.caption, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.rhythmInk)
                     Text("\(state.maturity.baselineDays) 天基线 · \(state.maturity.behaviorPairs) 条行为信号 · \(state.maturity.trainingSessions) 次训练事实")
-                        .font(.system(size: 11))
+                        .font(.system(.caption2, design: .default))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 Spacer()
@@ -30,13 +30,13 @@ struct JournalTagInsights: View {
                         .foregroundStyle(confidenceColor(claim.confidence))
                         .padding(.top, 2)
                     Text("\(claim.title)：\(claim.summary)")
-                        .font(.system(size: 11))
+                        .font(.system(.caption2, design: .default))
                         .foregroundStyle(VelaTheme.rhythmInk)
                         .lineLimit(2)
                 }
             } else if !state.uncertainAreas.isEmpty {
                 Text("仍有 \(state.uncertainAreas.count) 类证据不足，积累更多记录后再形成结论。")
-                    .font(.system(size: 11))
+                    .font(.system(.caption2, design: .default))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
         }

@@ -186,10 +186,10 @@ struct VelaVitalsView: View {
                             .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(VelaTheme.rhythmMist.opacity(0.6)))
                         VStack(alignment: .leading, spacing: 3) {
                             Text(isPhenoAge ? "生物年龄估算" : "健康信号参考")
-                                .font(.system(size: 16, weight: .bold))
+                                .font(.system(.callout, design: .default, weight: .bold))
                                 .foregroundStyle(VelaTheme.rhythmInk)
                             Text(selectedDateText)
-                                .font(.system(size: 11))
+                                .font(.system(.caption2, design: .default))
                                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         }
                         Spacer()
@@ -215,12 +215,12 @@ struct VelaVitalsView: View {
                                 .font(.system(size: 34, weight: .bold, design: .rounded))
                                 .foregroundStyle(VelaTheme.rhythmInk)
                             Text(isPhenoAge ? "岁（估算）" : "信号评分")
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(.system(.caption2, design: .default, weight: .semibold))
                                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         }
                         VStack(alignment: .leading, spacing: 4) {
                             Text(deltaText)
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.system(.footnote, design: .default, weight: .semibold))
                                 .foregroundStyle(deltaColor)
                         }
                     }
@@ -233,7 +233,7 @@ struct VelaVitalsView: View {
                                 .foregroundStyle(VelaTheme.strainColor)
                         }
                     }
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(.caption2, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                     .padding(14)
@@ -260,10 +260,10 @@ struct VelaVitalsView: View {
 
             VStack(alignment: .leading, spacing: 5) {
                 Text("健康信号尚未生成")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(.callout, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Text("填写年龄，并积累静息心率、睡眠或活动等核心信号后再生成参考趋势。")
-                    .font(.system(size: 12))
+                    .font(.system(.caption, design: .default))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .lineSpacing(2)
             }
@@ -292,7 +292,7 @@ struct VelaVitalsView: View {
                 Button("编辑记录") {
                     VelaAppState.shared.triggerBloodLog = true
                 }
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(.footnote, design: .default, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmDeep)
             }
             .padding(.horizontal, 2)
@@ -428,7 +428,7 @@ struct VelaVitalsView: View {
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmDeep)
                 Text(title)
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(.caption2, design: .default, weight: .bold))
                     .tracking(0.5)
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 Spacer()
@@ -462,7 +462,7 @@ struct VelaVitalsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(title)
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(.footnote, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.rhythmInk)
                     
                     DataFreshnessIndicator(freshness: freshness, showText: false)
@@ -480,7 +480,7 @@ struct VelaVitalsView: View {
                         .foregroundStyle(valueColor)
 
                     Text(trendText)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(.caption, design: .default, weight: .medium))
                         .foregroundStyle(valueColor)
                 }
             }
@@ -489,7 +489,7 @@ struct VelaVitalsView: View {
 
             HStack(alignment: .center, spacing: 10) {
                 Text(valueText)
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .font(.system(.body, design: .default, weight: .bold))
                     .monospacedDigit()
                     .foregroundStyle(VelaTheme.rhythmInk)
 

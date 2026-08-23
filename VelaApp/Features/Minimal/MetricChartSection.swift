@@ -72,7 +72,7 @@ struct MetricChartSection: View {
                             .fill(metricColor)
                             .frame(width: 6, height: 6)
                         Text(displayDateText)
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(.caption, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmInk)
                     }
                     .padding(.horizontal, 8)
@@ -92,7 +92,7 @@ struct MetricChartSection: View {
 
                     if rawSelectedDate == nil {
                         Text(metricSubtitle)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(.footnote, design: .default, weight: .semibold))
                             .foregroundStyle(metricColor)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
@@ -101,7 +101,7 @@ struct MetricChartSection: View {
                             )
                     } else {
                         Text("按住滑动查看历史")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(.caption2, design: .default, weight: .medium))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                 }
@@ -213,7 +213,7 @@ struct MetricChartSection: View {
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                             .foregroundStyle(VelaTheme.rhythmMist.opacity(0.6))
                         AxisValueLabel()
-                            .font(.system(size: 9, weight: .semibold))
+                            .font(.system(.caption2, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                 }
@@ -222,7 +222,7 @@ struct MetricChartSection: View {
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                             .foregroundStyle(VelaTheme.rhythmMist.opacity(0.6))
                         AxisValueLabel()
-                            .font(.system(size: 9, weight: .semibold))
+                            .font(.system(.caption2, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                 }
@@ -257,7 +257,7 @@ struct MetricChartSection: View {
                     VelaHaptic.selection()
                 } label: {
                     Text(range.title)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(.caption2, design: .default, weight: .semibold))
                         .foregroundStyle(selectedRange == range ? VelaTheme.rhythmInk : VelaTheme.rhythmInkSecondary)
                         .padding(.horizontal, 10)
                         .frame(minHeight: 28)

@@ -303,16 +303,16 @@ struct VelaTrainingView: View {
                             .frame(width: 44, height: 44)
                         Image(systemName: "applewatch")
                             .accessibilityHidden(true)
-                            .font(.system(size: 20, weight: .semibold))
+                            .font(.system(.title3, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmDeep)
                     }
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Apple Watch 自动同步")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.system(.footnote, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmInk)
                         Text("手表记录运动完成后，将在此自动生成生理负荷与心率区间复盘。")
-                            .font(.system(size: 12))
+                            .font(.system(.caption, design: .default))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .lineLimit(2)
                     }
@@ -352,17 +352,17 @@ struct VelaTrainingView: View {
                     .frame(width: 40, height: 40)
                 Image(systemName: workoutIcon(for: workout.activityName))
                 .accessibilityHidden(true)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(.body, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmDeep)
             }
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(workout.activityName)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(.footnote, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmInk)
 
                 Text(workoutTimeSubtitle(workout))
-                    .font(.system(size: 12))
+                    .font(.system(.caption, design: .default))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
 
@@ -370,18 +370,18 @@ struct VelaTrainingView: View {
 
             VStack(alignment: .trailing, spacing: 3) {
                 Text("\(durationMinutes) 分钟")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(.footnote, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 if let energy = workout.energyKilocalories, energy > 0 {
                     Text("\(Int(energy)) kcal")
-                        .font(.system(size: 11))
+                        .font(.system(.caption2, design: .default))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
             }
 
             Image(systemName: "chevron.right")
                 .accessibilityHidden(true)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(.caption2, design: .default, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.5))
         }
         .padding(14)
@@ -433,7 +433,7 @@ struct VelaTrainingView: View {
                     Image(systemName: "sparkles")
                         .font(.system(size: 13, weight: .semibold))
                     Text("问 Vela")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(.footnote, design: .default, weight: .semibold))
                 }
                 .foregroundStyle(VelaTheme.rhythmDeep)
                 .padding(.horizontal, 12)
