@@ -302,6 +302,7 @@ struct VelaTrainingView: View {
                             .fill(VelaTheme.rhythmDeep.opacity(0.12))
                             .frame(width: 44, height: 44)
                         Image(systemName: "applewatch")
+                            .accessibilityHidden(true)
                             .font(.system(size: 20, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmDeep)
                     }
@@ -350,6 +351,7 @@ struct VelaTrainingView: View {
                     .fill(VelaTheme.rhythmDeep.opacity(0.12))
                     .frame(width: 40, height: 40)
                 Image(systemName: workoutIcon(for: workout.activityName))
+                .accessibilityHidden(true)
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmDeep)
             }
@@ -378,6 +380,7 @@ struct VelaTrainingView: View {
             }
 
             Image(systemName: "chevron.right")
+                .accessibilityHidden(true)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.5))
         }

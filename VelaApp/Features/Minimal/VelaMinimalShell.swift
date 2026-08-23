@@ -446,7 +446,7 @@ struct VelaShell: View {
         }
         .buttonStyle(.tabItem)
         .accessibilityLabel(label(for: tab))
-        .accessibilityValue(isActive ? "已选中" : "")
+        .accessibilityValue(isActive ? L10n.t("Selected", "已选中") : "")
         .accessibilityAddTraits(isActive ? .isSelected : [])
         .accessibilityIdentifier("tab-\(tab.rawValue)")
     }

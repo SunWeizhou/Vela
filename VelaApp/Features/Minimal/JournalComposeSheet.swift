@@ -20,7 +20,7 @@ struct BehaviorQuickNoteSheet: View {
                             .font(.system(size: 18, weight: .bold))
                             .foregroundStyle(VelaTheme.rhythmInk)
                         Text("记录你觉得可能影响恢复、睡眠或训练的行为。这里不估算热量、克重或宏量营养，只给 Body Model 留低摩擦信号。")
-                            .font(.system(size: 13))
+                            .font(.system(.footnote, design: .default))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .lineSpacing(3)
                     }
@@ -48,7 +48,7 @@ struct BehaviorQuickNoteSheet: View {
                                         note = note.isEmpty ? template : "\(note)，\(template)"
                                     } label: {
                                         Text(template)
-                                            .font(.system(size: 12, weight: .semibold))
+                                            .font(.system(.caption, design: .default, weight: .semibold))
                                             .foregroundStyle(VelaTheme.rhythmInk)
                                             .padding(.horizontal, 10)
                                             .padding(.vertical, 7)
@@ -64,7 +64,7 @@ struct BehaviorQuickNoteSheet: View {
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 8)], alignment: .leading, spacing: 8) {
                                 ForEach(signals) { signal in
                                     Text("\(signal.tag.displayTitle) · \(signal.intensity.rawValue)")
-                                        .font(.system(size: 11, weight: .bold))
+                                        .font(.system(.caption2, design: .default, weight: .bold))
                                         .foregroundStyle(VelaTheme.rhythmDeep)
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 5)
@@ -73,7 +73,7 @@ struct BehaviorQuickNoteSheet: View {
                             }
                         } else {
                             Text("保存后仍会作为普通手记进入上下文；识别不到标签时不会强行编造。")
-                                .font(.system(size: 11))
+                                .font(.system(.caption2, design: .default))
                                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         }
                     }
@@ -90,7 +90,7 @@ struct BehaviorQuickNoteSheet: View {
                         dismiss()
                     } label: {
                         Text("保存随手记")
-                            .font(.system(size: 15, weight: .bold))
+                            .font(.system(.subheadline, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.rhythmDeepOn)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
@@ -130,7 +130,7 @@ struct CaffeineLoggerView: View {
         VStack(spacing: 20) {
             HStack {
                 Text("记录咖啡因")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.system(.title3, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Button {
@@ -148,7 +148,7 @@ struct CaffeineLoggerView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     Text("输入或选择摄入的咖啡因量。这会有助于 AI 预测它对你深度睡眠和能量水平的长期影响。")
-                        .font(.system(size: 14))
+                        .font(.system(.footnote, design: .default))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .lineSpacing(4)
                         .padding(.horizontal, 20)
@@ -174,7 +174,7 @@ struct CaffeineLoggerView: View {
                     
                     VStack(alignment: .leading, spacing: 12) {
                         Text("快捷选项")
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.system(.footnote, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.muted)
                             .padding(.leading, 20)
                         
@@ -193,11 +193,11 @@ struct CaffeineLoggerView: View {
                                                 .background(Circle().fill(VelaTheme.accent.opacity(0.12)))
                                             
                                             Text(name)
-                                                .font(.system(size: 12, weight: .bold))
+                                                .font(.system(.caption, design: .default, weight: .bold))
                                                 .foregroundStyle(VelaTheme.fg)
                                             
                                             Text("\(Int(val)) mg")
-                                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                                .font(.system(.caption2, design: .default, weight: .bold))
                                                 .foregroundStyle(VelaTheme.meta)
                                         }
                                         .frame(width: 90, height: 110)
@@ -221,7 +221,7 @@ struct CaffeineLoggerView: View {
                         dismiss()
                     } label: {
                         Text("保存")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.system(.callout, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.rhythmDeepOn)
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
@@ -254,7 +254,7 @@ struct WaterLoggerView: View {
         VStack(spacing: 20) {
             HStack {
                 Text("记录补水")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.system(.title3, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Button {
@@ -272,7 +272,7 @@ struct WaterLoggerView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     Text("记录今天摄入的水分，帮助你回顾补水习惯与后续状态。")
-                        .font(.system(size: 14))
+                        .font(.system(.footnote, design: .default))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .lineSpacing(4)
                         .padding(.horizontal, 20)
@@ -298,7 +298,7 @@ struct WaterLoggerView: View {
                     
                     VStack(alignment: .leading, spacing: 12) {
                         Text("快捷选项")
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.system(.footnote, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.muted)
                             .padding(.leading, 20)
                         
@@ -317,11 +317,11 @@ struct WaterLoggerView: View {
                                                 .background(Circle().fill(VelaTheme.accent.opacity(0.12)))
                                             
                                             Text(name)
-                                                .font(.system(size: 12, weight: .bold))
+                                                .font(.system(.caption, design: .default, weight: .bold))
                                                 .foregroundStyle(VelaTheme.fg)
                                             
                                             Text("\(Int(val)) ml")
-                                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                                .font(.system(.caption2, design: .default, weight: .bold))
                                                 .foregroundStyle(VelaTheme.meta)
                                         }
                                         .frame(width: 90, height: 110)
@@ -345,7 +345,7 @@ struct WaterLoggerView: View {
                         dismiss()
                     } label: {
                         Text("保存")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.system(.callout, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.rhythmDeepOn)
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
@@ -380,7 +380,7 @@ struct MoodLoggerView: View {
         VStack(spacing: 20) {
             HStack {
                 Text("记录心情")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.system(.title3, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Button {
@@ -398,7 +398,7 @@ struct MoodLoggerView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     Text("记录今天你的整体情绪感受。AI 会基于心率变异性(HRV)等生理指标与心境波动建立深度习惯网络模型。")
-                        .font(.system(size: 14))
+                        .font(.system(.footnote, design: .default))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .lineSpacing(4)
                         .padding(.horizontal, 20)
@@ -413,7 +413,7 @@ struct MoodLoggerView: View {
                                     Text(emoji)
                                         .font(.system(size: 32))
                                     Text(label)
-                                        .font(.system(size: 11, weight: .bold))
+                                        .font(.system(.caption2, design: .default, weight: .bold))
                                         .foregroundStyle(selectedScore == score ? VelaTheme.rhythmInk : VelaTheme.rhythmInkSecondary)
                                 }
                                 .frame(maxWidth: .infinity)
@@ -434,12 +434,12 @@ struct MoodLoggerView: View {
                     
                     VStack(alignment: .leading, spacing: 10) {
                         Text("今日备注 (可选)")
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.system(.footnote, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .padding(.leading, 4)
                         
                         TextField("记录一些让你开心或焦虑的小事...", text: $noteText)
-                            .font(.system(size: 14))
+                            .font(.system(.footnote, design: .default))
                             .padding(14)
                             .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
                             .overlay(
@@ -456,7 +456,7 @@ struct MoodLoggerView: View {
                         dismiss()
                     } label: {
                         Text("保存")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.system(.callout, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.rhythmDeepOn)
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
@@ -482,7 +482,7 @@ struct AlcoholLoggerView: View {
         VStack(spacing: 20) {
             HStack {
                 Text("记录饮酒")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.system(.title3, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Button {
@@ -500,7 +500,7 @@ struct AlcoholLoggerView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     Text("饮酒可能影响睡眠连续性、夜间心率和次日恢复。影响程度会随摄入量、饮酒时间、睡眠和个体差异而变化；记录后可结合自己的趋势回看。")
-                        .font(.system(size: 14))
+                        .font(.system(.footnote, design: .default))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .lineSpacing(4)
                         .padding(.horizontal, 20)
@@ -546,11 +546,11 @@ struct AlcoholLoggerView: View {
                     
                     VStack(alignment: .leading, spacing: 10) {
                         Text("标准杯换算")
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.system(.footnote, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.rhythmInk)
                         
                         Text("本页按约 10 克纯酒精记为 1 标准杯，便于统一记录。不同地区的标准不同，实际酒精量应以饮品容量和酒精度为准：\n· 普通啤酒约 330 ml、4.5%\n· 红葡萄酒约 150 ml、12%\n· 烈性酒约 45 ml、40%")
-                            .font(.system(size: 12))
+                            .font(.system(.caption, design: .default))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .lineSpacing(5)
                     }
@@ -568,7 +568,7 @@ struct AlcoholLoggerView: View {
                         dismiss()
                     } label: {
                         Text("保存")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.system(.callout, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.rhythmDeepOn)
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)

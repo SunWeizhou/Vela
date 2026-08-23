@@ -29,19 +29,19 @@ struct AIModelSettingsView: View {
             Section(header: Text("模型连接配置")) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("DeepSeek 密钥")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(.caption, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.muted)
                     SecureField("输入 DeepSeek 密钥...", text: $deepseekKey)
-                        .font(.system(size: 14, design: .monospaced))
+                        .font(.system(.footnote, design: .default))
                 }
                 .padding(.vertical, 4)
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Kimi 密钥（图片识别）")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(.caption, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.muted)
                     SecureField("输入 Kimi 密钥...", text: $kimiKey)
-                        .font(.system(size: 14, design: .monospaced))
+                        .font(.system(.footnote, design: .default))
                 }
                 .padding(.vertical, 4)
             }
@@ -130,7 +130,7 @@ struct AIModelSettingsView: View {
                 
                 if !testResultText.isEmpty {
                     Text(testResultText)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(.footnote, design: .default, weight: .semibold))
                         .foregroundStyle(testResultText.contains("成功") ? VelaTheme.systemGreen : VelaTheme.systemRed)
                 }
                 
@@ -233,13 +233,13 @@ struct DataSourceSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Text("连接 Apple 健康")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(.callout, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
                     .padding(.leading, 16)
                     .padding(.top, 16)
  
                 Text("按用途逐步授权。Vela 只读取你允许的数据，并用于生成恢复、训练负荷和长期趋势参考。")
-                    .font(.system(size: 13))
+                    .font(.system(.footnote, design: .default))
                     .foregroundStyle(VelaTheme.muted)
                     .lineSpacing(3)
                     .padding(.horizontal, 16)
@@ -276,20 +276,20 @@ struct DataSourceSettingsView: View {
  
                 if let authErrorMessage {
                     Text(authErrorMessage)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(.footnote, design: .default, weight: .semibold))
                         .foregroundStyle(.red)
                         .padding(.horizontal, 16)
                 }
  
                 if let successTier {
                     Text("已向系统请求\(authorizationTierTitle(successTier))。")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.system(.footnote, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.systemGreen)
                         .padding(.horizontal, 16)
                 }
  
                 Text("已同步健康传感器")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(.callout, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
                     .padding(.leading, 16)
                 
@@ -320,7 +320,7 @@ struct DataSourceSettingsView: View {
                         }
                         Text(isSyncing ? "正在同步..." : "立即同步 Apple 健康")
                     }
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.system(.footnote, design: .default, weight: .bold))
                     .foregroundStyle(Color.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 13)
@@ -354,19 +354,19 @@ struct DataSourceSettingsView: View {
                     .background(Circle().fill(color.opacity(0.12)))
  
                 Text(title)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(.subheadline, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
  
                 Spacer()
             }
  
             Text(desc)
-                .font(.system(size: 12))
+                .font(.system(.caption, design: .default))
                 .foregroundStyle(VelaTheme.muted)
                 .lineSpacing(2)
  
             Text(impact)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(.caption, design: .default, weight: .medium))
                 .foregroundStyle(VelaTheme.fg2)
                 .lineSpacing(2)
  
@@ -383,7 +383,7 @@ struct DataSourceSettingsView: View {
                 }
             } label: {
                 Text(action)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(.footnote, design: .default, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
@@ -435,15 +435,15 @@ struct DataSourceSettingsView: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(name)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(.subheadline, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
                 Text(count)
-                    .font(.system(size: 12))
+                    .font(.system(.caption, design: .default))
                     .foregroundStyle(VelaTheme.muted)
             }
             Spacer()
             Text(status)
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(.footnote, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.systemGreen)
         }
         .padding(.horizontal, 20)
@@ -552,7 +552,7 @@ struct CGMSettingsView: View {
                     Task { await requestAccessAndReload() }
                 } label: {
                     Label("请求权限并刷新", systemImage: "arrow.clockwise")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(.footnote, design: .default, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 46)
@@ -587,10 +587,10 @@ struct CGMSettingsView: View {
  
             VStack(alignment: .leading, spacing: 4) {
                 Text("Apple 健康 CGM 数据")
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.system(.body, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
                 Text("读取已同步到 Apple 健康的血糖样本")
-                    .font(.system(size: 12))
+                    .font(.system(.caption, design: .default))
                     .foregroundStyle(VelaTheme.muted)
             }
         }
@@ -602,7 +602,7 @@ struct CGMSettingsView: View {
     private var latestReadingCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("最新血糖")
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(.footnote, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.muted)
  
             if let latest = summary.latestReading {
@@ -611,12 +611,12 @@ struct CGMSettingsView: View {
                         .font(.system(size: 42, weight: .bold, design: .rounded))
                         .foregroundStyle(VelaTheme.fg)
                     Text("mg/dL")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(.footnote, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.muted)
                 }
  
                 Text("最近更新 \(latest.date.formatted(date: .abbreviated, time: .shortened)) · 近 14 天共 \(summary.readingCount) 条")
-                    .font(.system(size: 12))
+                    .font(.system(.caption, design: .default))
                     .foregroundStyle(VelaTheme.muted)
             }
         }
@@ -628,7 +628,7 @@ struct CGMSettingsView: View {
     private var trendCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("近 14 天趋势")
-                .font(.system(size: 15, weight: .bold))
+                .font(.system(.subheadline, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.fg)
  
             Chart(summary.readings) { reading in
@@ -665,7 +665,7 @@ struct CGMSettingsView: View {
                 .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(VelaTheme.fg)
             Text(message)
-                .font(.system(size: 13))
+                .font(.system(.footnote, design: .default))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(VelaTheme.muted)
         }
@@ -736,10 +736,10 @@ struct CoachPersonalitySettingsView: View {
  
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(personality.displayName)
-                                    .font(.system(size: 15, weight: .bold))
+                                    .font(.system(.subheadline, design: .default, weight: .bold))
                                     .foregroundStyle(VelaTheme.fg)
                                 Text(personality.description)
-                                    .font(.system(size: 12))
+                                    .font(.system(.caption, design: .default))
                                     .foregroundStyle(VelaTheme.muted)
                                     .multilineTextAlignment(.leading)
                             }

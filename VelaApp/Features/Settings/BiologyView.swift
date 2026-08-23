@@ -124,7 +124,7 @@ struct BiologyView: View {
                 .font(.system(size: 26, weight: .bold, design: .rounded))
                 .foregroundStyle(VelaTheme.fg)
                 Text(L10n.t("BIOLOGY DASHBOARD", "生物特征仪表盘"))
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(.caption2, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.accent)
                     .tracking(0.8)
             }
@@ -362,7 +362,7 @@ struct BiologyView: View {
                             .monospacedDigit()
 
                         Text(L10n.t("Years Old", "岁 (生物年龄)"))
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.system(.caption2, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.muted)
                             .tracking(1)
 
@@ -371,7 +371,7 @@ struct BiologyView: View {
                             Text(String(format: "%.1f", chronologicalAge))
                                 .bold()
                         }
-                        .font(.system(size: 12))
+                        .font(.system(.caption, design: .default))
                         .foregroundStyle(VelaTheme.fg2)
                         .padding(.top, 4)
                     } else {
@@ -380,7 +380,7 @@ struct BiologyView: View {
                             .foregroundStyle(VelaTheme.fg)
 
                         Text(L10n.t("Health Signal Reference", "健康信号参考"))
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.system(.caption2, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.muted)
                             .tracking(1)
                     }
@@ -399,7 +399,7 @@ struct BiologyView: View {
                         : L10n.t(String(format: "Estimated biological age is %.1f years above chronological age.", -diff), String(format: "生物年龄估算比实际年龄高 %.1f 岁。", -diff)))
                     : L10n.t("Current health signals: \(result.healthAgeTrendLabel)", "当前健康信号：\(result.healthAgeTrendLabel)")
                 )
-                .font(.system(size: 14, weight: .bold))
+                .font(.system(.footnote, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.fg)
             }
             .padding(.horizontal, 16)
@@ -577,7 +577,7 @@ struct BiologyView: View {
                         .foregroundStyle(VelaTheme.muted)
 
                     Text(L10n.t("No blood records entered.", "还没有录入过血检指标。"))
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(.footnote, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.fg)
 
                     Text(L10n.t("Record lab values here for reference. A biological-age estimate appears only when the complete PhenoAge laboratory set is available.", "可在这里记录化验指标供参考；只有完整的 PhenoAge 化验组合齐全后才会生成生物年龄估算。"))
@@ -748,7 +748,7 @@ struct SectionLabel: View {
                 .font(.subheadline.bold())
                 .foregroundStyle(VelaTheme.accent)
             Text(title)
-                .font(.system(size: 16, weight: .bold))
+                .font(.system(.callout, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.fg)
         }
     }
@@ -809,11 +809,11 @@ struct FactorRowView: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(factor.name)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(.footnote, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.fg)
 
                 Text(factor.description)
-                    .font(.system(size: 11))
+                    .font(.system(.caption2, design: .default))
                     .foregroundStyle(VelaTheme.muted)
             }
 
@@ -821,7 +821,7 @@ struct FactorRowView: View {
 
             VStack(alignment: .trailing, spacing: 2) {
                 Text(String(format: "%.0f", factor.score))
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .font(.system(.callout, design: .default, weight: .bold))
                     .foregroundStyle(factor.isOptimal ? VelaTheme.recoveryColor : VelaTheme.stressColor)
 
                 Text(L10n.t("Score", "得分"))
@@ -854,7 +854,7 @@ struct BiomarkerBadgeView: View {
 
                 VStack(spacing: 1) {
                     Text(String(format: "%.1f", biomarker.value))
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .font(.system(.footnote, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.fg)
                         .minimumScaleFactor(0.7)
                         .lineLimit(1)
@@ -869,7 +869,7 @@ struct BiomarkerBadgeView: View {
             .frame(width: 70, height: 70)
 
             Text(biomarker.name)
-                .font(.system(size: 11, weight: .bold))
+                .font(.system(.caption2, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.fg)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -1479,7 +1479,7 @@ struct StyledTextField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
-                .font(.system(size: 10, weight: .bold))
+                .font(.system(.caption2, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 .tracking(1)
 

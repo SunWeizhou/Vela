@@ -171,11 +171,11 @@ struct CardioStatusCard: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Label("有氧状态", systemImage: "heart.circle")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(.subheadline, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Text("最近 7 天")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(.caption2, design: .default, weight: .medium))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
 
@@ -218,10 +218,10 @@ struct CardioStatusCard: View {
     private func cardioMetric(_ title: String, _ value: String, detail: String) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(title)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(.caption2, design: .default, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
             Text(value)
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .font(.system(.footnote, design: .default, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmInk)
             Text(detail)
                 .font(.system(size: 9))
@@ -288,7 +288,7 @@ struct TrainingStatsSection: View {
                         .font(.system(size: 14))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     Text("表现与分析")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(.subheadline, design: .default, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmInk)
                 }
                 Spacer()
@@ -320,7 +320,7 @@ struct TrainingStatsSection: View {
                                 .font(.system(size: 26, weight: .bold, design: .rounded))
                                 .foregroundStyle(VelaTheme.rhythmInk)
                             Text(dynamicExertionWorkload.isEmpty ? "暂无耗力记录" : targetComparison.contextText)
-                                .font(.system(size: 12, weight: .bold))
+                                .font(.system(.caption, design: .default, weight: .bold))
                                 .foregroundStyle(targetComparison.tint)
                         }
                         Spacer()
@@ -329,7 +329,7 @@ struct TrainingStatsSection: View {
                                   Text("详情")
                                   Image(systemName: "chevron.right")
                             }
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.system(.caption, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.rhythmDeep)
                         }
                         .buttonStyle(.cardPress)
@@ -360,7 +360,7 @@ struct TrainingStatsSection: View {
                                 .font(.system(size: 26, weight: .bold, design: .rounded))
                                 .foregroundStyle(VelaTheme.rhythmInk)
                             Text("过去 30 天耗力趋势")
-                                .font(.system(size: 12, weight: .medium))
+                                .font(.system(.caption, design: .default, weight: .medium))
                                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         }
                         Spacer()
@@ -369,7 +369,7 @@ struct TrainingStatsSection: View {
                                 Text("分析")
                                 Image(systemName: "chevron.right")
                             }
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.system(.caption, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.rhythmDeep)
                         }
                         .buttonStyle(.cardPress)
@@ -385,7 +385,7 @@ struct TrainingStatsSection: View {
                             .padding(.top, 10)
                         
                         Text(summaryPeakStrainText)
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .font(.system(.caption2, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .offset(y: -4)
                         
@@ -396,7 +396,7 @@ struct TrainingStatsSection: View {
                             Spacer()
                             Text("今天")
                         }
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.system(.caption2, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .padding(.top, 114)
                     }
@@ -471,14 +471,14 @@ struct TrainingStatsSection: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(monthTitle)
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(.footnote, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
             
             // Grid Header Days
             HStack(spacing: 5) {
                 ForEach(["日", "一", "二", "三", "四", "五", "六"], id: \.self) { d in
                     Text(d)
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(.caption2, design: .default, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.8))
                         .frame(width: 16)
                 }
@@ -523,7 +523,7 @@ struct TrainingStatsSection: View {
                 .frame(width: 6, height: 6)
             
             Text(label)
-                .font(.system(size: 10, weight: .bold))
+                .font(.system(.caption2, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
         }
     }
@@ -537,17 +537,17 @@ struct MuscleVolumeCard: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text("过去 7 天肌群有效组")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(.subheadline, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Text("\(summary.sessions) 次力量训练")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(.caption2, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
             
             if summary.muscleGroupSets.isEmpty {
                 Text("完成力量训练后，这里会显示肌群训练量与局部疲劳。")
-                    .font(.system(size: 12))
+                    .font(.system(.caption, design: .default))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 12)
@@ -557,11 +557,11 @@ struct MuscleVolumeCard: View {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
                                 Text(localizedMuscleGroup(muscle))
-                                    .font(.system(size: 12, weight: .semibold))
+                                    .font(.system(.caption, design: .default, weight: .semibold))
                                     .foregroundStyle(VelaTheme.rhythmInk)
                                 Spacer()
                                 Text("\(sets) 组")
-                                    .font(.system(size: 11, weight: .bold))
+                                    .font(.system(.caption2, design: .default, weight: .bold))
                                     .foregroundStyle(sets >= 18 ? VelaTheme.textColor(for: .poor) : (sets < 6 ? VelaTheme.rhythmDeep : VelaTheme.rhythmGlow))
                             }
                             
@@ -587,10 +587,10 @@ struct MuscleVolumeCard: View {
                 Divider()
                 VStack(alignment: .leading, spacing: 4) {
                     Text("近期 PR")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(.caption2, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     Text(summary.recentPRs.prefix(3).map(\.summary).joined(separator: " · "))
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(.caption, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.rhythmDeep)
                 }
             }
@@ -602,7 +602,7 @@ struct MuscleVolumeCard: View {
                         .font(.caption2)
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     Text("最近一次：\(latest)")
-                        .font(.system(size: 12))
+                        .font(.system(.caption, design: .default))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
             }
@@ -611,11 +611,11 @@ struct MuscleVolumeCard: View {
                 Divider()
                 VStack(alignment: .leading, spacing: 6) {
                     Text("常练动作进步")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(.caption, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.rhythmInk)
                     ForEach(exerciseProgressLines.prefix(3), id: \.self) { line in
                         Text("• \(line)")
-                            .font(.system(size: 12))
+                            .font(.system(.caption, design: .default))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                 }
@@ -641,11 +641,11 @@ struct PersonalRecordsCard: View {
         VStack(alignment: .leading, spacing: 13) {
             HStack {
                 Label("个人纪录", systemImage: "trophy")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(.subheadline, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Text(records.isEmpty ? "" : "\(records.count) 项")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(.caption2, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
 
@@ -655,7 +655,7 @@ struct PersonalRecordsCard: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmDeep)
                     Text("打破此前重量或次数后，个人纪录会出现在这里。")
-                        .font(.system(size: 12))
+                        .font(.system(.caption, design: .default))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 .padding(.vertical, 6)
@@ -672,7 +672,7 @@ struct PersonalRecordsCard: View {
                     }
                     if records.count > 5 {
                         Text("另有 \(records.count - 5) 项纪录")
-                            .font(.system(size: 10, weight: .medium))
+                            .font(.system(.caption2, design: .default, weight: .medium))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .padding(.top, 9)
                     }
@@ -696,15 +696,15 @@ struct PersonalRecordsCard: View {
                 .fill(VelaTheme.rhythmDeep)
                 .frame(width: 6, height: 6)
             Text(record.exerciseName)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(.footnote, design: .default, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmInk)
                 .lineLimit(1)
             Spacer(minLength: 6)
             Text(kindLabel(record.kind))
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(.caption2, design: .default, weight: .medium))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
             Text(valueText(record))
-                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .font(.system(.footnote, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.rhythmDeep)
                 .frame(minWidth: 58, alignment: .trailing)
             if let previous = record.previousValue {
@@ -748,14 +748,14 @@ struct RecentWorkoutsSection: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("训练记录")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(.callout, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
             }
 
             if recentWorkouts.isEmpty {
                 Text("暂无可读取的训练记录")
-                    .font(.system(size: 13))
+                    .font(.system(.footnote, design: .default))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -789,10 +789,10 @@ struct RecentWorkoutsSection: View {
                 .background(VelaTheme.rhythmMist.opacity(0.6), in: Circle())
             VStack(alignment: .leading, spacing: 4) {
                 Text(workout.activityName)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(.footnote, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Text(workout.start.formatted(date: .abbreviated, time: .shortened))
-                    .font(.system(size: 11))
+                    .font(.system(.caption2, design: .default))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 HStack(spacing: 6) {
                     Text(sourceLabel(for: workout.source))
@@ -813,7 +813,7 @@ struct RecentWorkoutsSection: View {
                              : "\(Int(distance.rounded())) m")
                     }
                 }
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(.caption2, design: .default, weight: .medium))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 .lineLimit(1)
             }
@@ -871,14 +871,14 @@ struct StrengthWorkoutsSection: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("力量训练记录")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(.callout, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Button {
                     startStrengthWorkout()
                 } label: {
                     Label("记录力量", systemImage: "plus")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(.caption, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.rhythmDeep)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
@@ -889,7 +889,7 @@ struct StrengthWorkoutsSection: View {
 
             if strengthWorkouts.isEmpty {
                 Text("尚未记录力量训练。完成一次动作与组次记录后，Coach 就能读取容量历史。")
-                    .font(.system(size: 13))
+                    .font(.system(.footnote, design: .default))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -912,13 +912,13 @@ struct StrengthWorkoutsSection: View {
 
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(workout.title)
-                                    .font(.system(size: 14, weight: .bold))
+                                    .font(.system(.footnote, design: .default, weight: .bold))
                                     .foregroundStyle(VelaTheme.rhythmInk)
                                 Text("\(workout.exerciseCount) 个动作 · \(workout.totalSetCount) 组 · \(Int(workout.totalVolumeKilograms.rounded())) kg 容量")
-                                    .font(.system(size: 11))
+                                    .font(.system(.caption2, design: .default))
                                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                 Text(workout.startedAt.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.system(size: 10))
+                                    .font(.system(.caption2, design: .default))
                                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             }
 
@@ -1144,11 +1144,11 @@ struct YearlyTrainingCard: View {
         VStack(alignment: .leading, spacing: 13) {
             HStack {
                 Label("历年训练量", systemImage: "calendar")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(.subheadline, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Text("Apple 健康历史")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(.caption2, design: .default, weight: .medium))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
 
@@ -1158,7 +1158,7 @@ struct YearlyTrainingCard: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmDeep)
                     Text("回填 Apple 健康历史后，这里会出现每年的训练天数、总时长与消耗。")
-                        .font(.system(size: 12))
+                        .font(.system(.caption, design: .default))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -1192,7 +1192,7 @@ struct YearlyTrainingCard: View {
     private func yearRow(_ year: YearlyTrainingAggregator.YearStats, maxMinutes: Double) -> some View {
         HStack(spacing: 12) {
             Text("\(year.year)")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(.system(.footnote, design: .default, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmInk)
                 .frame(width: 44, alignment: .leading)
 
@@ -1208,7 +1208,7 @@ struct YearlyTrainingCard: View {
 
             VStack(alignment: .trailing, spacing: 2) {
                 Text("\(year.trainingDays) 天 · \(Int(year.totalMinutes / 60)) 小时")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .font(.system(.caption2, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Text("\(year.workoutCount) 次 · \(Int(year.totalCalories.rounded())) kcal")
                     .font(.system(size: 9.5))
@@ -1243,11 +1243,11 @@ struct RecoveryLoadStressTrendsCard: View {
         VStack(alignment: .leading, spacing: 13) {
             HStack {
                 Label("恢复 · 负荷 · 压力趋势", systemImage: "chart.xyaxis.line")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(.subheadline, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Text("最近 30 天")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(.caption2, design: .default, weight: .medium))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
 
@@ -1306,15 +1306,15 @@ struct RecoveryLoadStressTrendsCard: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(item.title)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(.footnote, design: .default, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmInk)
                     Text(latestText(item.values))
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .font(.system(.footnote, design: .default, weight: .bold))
                         .foregroundStyle(item.color)
                         .monospacedDigit()
                 }
                 Text(item.values.isEmpty ? "暂无评分记录" : "\(item.values.count) 天有记录")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(.caption2, design: .default, weight: .medium))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
 

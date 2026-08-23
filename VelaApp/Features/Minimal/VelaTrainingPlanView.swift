@@ -93,7 +93,7 @@ struct VelaTrainingPlanView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             Text(planSummary)
-                .font(.system(size: 13))
+                .font(.system(.footnote, design: .default))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 .lineSpacing(3)
 
@@ -143,7 +143,7 @@ struct VelaTrainingPlanView: View {
                 Image(systemName: "point.3.connected.trianglepath.dotted")
                     .foregroundStyle(VelaTheme.rhythmDeep)
                 Text("目前没有活动计划。Vela 可以根据恢复、目标与最近训练建立第一版。")
-                    .font(.system(size: 13))
+                    .font(.system(.footnote, design: .default))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
             .padding(16)
@@ -156,30 +156,30 @@ struct VelaTrainingPlanView: View {
     private var todayDecisionSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("今天如何调整")
-                .font(.system(size: 20, weight: .semibold))
+                .font(.system(.title3, design: .default, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmInk)
 
             Text(metricContextLine)
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .font(.system(.caption2, design: .default, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             if let todayOperatingPlan, let payload = todayOperatingPlan.operatingPlanPayload {
                 HStack(spacing: 8) {
                     Text(decisionLabel(payload.decision))
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(.caption, design: .default, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmDeepOn)
                         .padding(.horizontal, 9)
                         .padding(.vertical, 4)
                         .background(VelaTheme.rhythmDeep, in: Capsule())
                     Text(boundaryText(payload))
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(.caption, design: .default, weight: .medium))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
 
                 if !payload.summary.isEmpty {
                     Text(payload.summary)
-                        .font(.system(size: 13))
+                        .font(.system(.footnote, design: .default))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
@@ -195,7 +195,7 @@ struct VelaTrainingPlanView: View {
                                     .frame(width: 5, height: 5)
                                     .padding(.top, 5)
                                 Text(reason)
-                                    .font(.system(size: 12))
+                                    .font(.system(.caption, design: .default))
                                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
@@ -204,7 +204,7 @@ struct VelaTrainingPlanView: View {
                 }
             } else {
                 Text(adaptationText)
-                    .font(.system(size: 13))
+                    .font(.system(.footnote, design: .default))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
@@ -236,31 +236,31 @@ struct VelaTrainingPlanView: View {
                 Image(systemName: "sparkles")
                     .foregroundStyle(VelaTheme.rhythmDeep)
                 Text("Vela 的调整提案")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(.title3, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmInk)
             }
             ForEach(planAdaptations) { adaptation in
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
                         Text(adaptationLabel(adaptation.adjustment))
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(.caption, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmDeepOn)
                             .padding(.horizontal, 9)
                             .padding(.vertical, 4)
                             .background(VelaTheme.rhythmDeep, in: Capsule())
                         Text(adaptation.originalDayTitle)
-                            .font(.system(size: 12))
+                            .font(.system(.caption, design: .default))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .lineLimit(1)
                     }
                     Text(adaptation.reason)
-                        .font(.system(size: 13))
+                        .font(.system(.footnote, design: .default))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
                     if let alternative = adaptation.suggestedAlternative, !alternative.isEmpty {
                         Text(alternative)
-                            .font(.system(size: 12))
+                            .font(.system(.caption, design: .default))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .lineSpacing(3)
                             .fixedSize(horizontal: false, vertical: true)
@@ -270,7 +270,7 @@ struct VelaTrainingPlanView: View {
                             acceptAdaptation(adaptation)
                         } label: {
                             Label("采纳", systemImage: "checkmark")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.system(.footnote, design: .default, weight: .semibold))
                                 .foregroundStyle(VelaTheme.rhythmDeepOn)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 8)
@@ -281,7 +281,7 @@ struct VelaTrainingPlanView: View {
                             rejectAdaptation(adaptation)
                         } label: {
                             Label("拒绝", systemImage: "xmark")
-                                .font(.system(size: 13, weight: .medium))
+                                .font(.system(.footnote, design: .default, weight: .medium))
                                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 8)
@@ -300,7 +300,7 @@ struct VelaTrainingPlanView: View {
                 }
             }
             Text("采纳后计划即时更新，今日决策面板将在下次刷新时重算。")
-                .font(.system(size: 10))
+                .font(.system(.caption2, design: .default))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
         }
     }
@@ -339,7 +339,7 @@ struct VelaTrainingPlanView: View {
                 VelaAppState.shared.routeToCoach(question: coachPlanQuestion)
             } label: {
                 Label("和 Vela 调整计划", systemImage: "sparkles")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(.subheadline, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmDeepOn)
                     .frame(maxWidth: .infinity)
                     .frame(height: 50)
@@ -348,7 +348,7 @@ struct VelaTrainingPlanView: View {
             .buttonStyle(.cardPress)
 
             Text("Vela 只提出方案；任何影响后续安排的修改都由你确认。")
-                .font(.system(size: 10))
+                .font(.system(.caption2, design: .default))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
@@ -409,10 +409,10 @@ struct VelaTrainingPlanView: View {
     private func planMetric(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(.caption2, design: .default, weight: .medium))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
             Text(value)
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .font(.system(.subheadline, design: .default, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmInk)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -464,7 +464,7 @@ private struct PlanDayRow: View {
                                 .foregroundStyle(.white)
                         } else {
                             Text("\(day.dayNumber)")
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .font(.system(.caption, design: .default, weight: .semibold))
                                 .foregroundStyle(VelaTheme.rhythmInk)
                         }
                     }
@@ -473,7 +473,7 @@ private struct PlanDayRow: View {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 7) {
                             Text(day.title)
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.system(.footnote, design: .default, weight: .semibold))
                                 .foregroundStyle(VelaTheme.rhythmInk)
                                 .lineLimit(1)
 
@@ -489,7 +489,7 @@ private struct PlanDayRow: View {
                         }
 
                         Text(day.description.isEmpty ? "边界会在训练当天根据状态调整" : day.description)
-                            .font(.system(size: 11))
+                            .font(.system(.caption2, design: .default))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .lineLimit(2)
                     }
@@ -497,7 +497,7 @@ private struct PlanDayRow: View {
                     Spacer(minLength: 8)
 
                     Text(day.focus == "rest" ? "恢复" : "\(day.durationMinutes)′")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .font(.system(.caption2, design: .default, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
 
                     Image(systemName: "chevron.down")
@@ -526,16 +526,16 @@ private struct PlanDayRow: View {
             if !plannedExercises.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("计划动作")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(.caption2, design: .default, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     ForEach(Array(plannedExercises.prefix(6).enumerated()), id: \.element.id) { index, exercise in
                         Text("• \(exercise.name) — \(exercise.targetSets) 组 × \(exercise.targetReps)")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(.caption, design: .default, weight: .medium))
                             .foregroundStyle(VelaTheme.rhythmInk)
                     }
                     if plannedExercises.count > 6 {
                         Text("另有 \(plannedExercises.count - 6) 个动作")
-                            .font(.system(size: 10))
+                            .font(.system(.caption2, design: .default))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                 }
@@ -544,7 +544,7 @@ private struct PlanDayRow: View {
             if !linkedEvents.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("实际执行")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(.caption2, design: .default, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     ForEach(Array(linkedEvents.prefix(3).enumerated()), id: \.element.id) { _, event in
                         HStack(spacing: 7) {
@@ -552,20 +552,20 @@ private struct PlanDayRow: View {
                                 .fill(VelaTheme.rhythmDeep)
                                 .frame(width: 5, height: 5)
                             Text(eventText(event))
-                                .font(.system(size: 12))
+                                .font(.system(.caption, design: .default))
                                 .foregroundStyle(VelaTheme.rhythmInk)
                         }
                     }
                 }
             } else if !day.isCompleted {
                 Text("还没有关联的实际训练记录。")
-                    .font(.system(size: 11))
+                    .font(.system(.caption2, design: .default))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
 
             if day.isCompleted, let completedAt = day.completedAt {
                 Text("完成于 \(completedAt.formatted(date: .abbreviated, time: .shortened))")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(.caption2, design: .default, weight: .medium))
                     .foregroundStyle(VelaTheme.rhythmDeep)
             }
         }

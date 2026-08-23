@@ -136,7 +136,7 @@ struct VelaMeView: View {
                                 .font(VelaTheme.body())
                                 .foregroundStyle(VelaTheme.rhythmInk)
                             Text("静息心率 · HRV · 睡眠 · 体重 · 步数")
-                                .font(.system(size: 11))
+                                .font(.system(.caption2, design: .default))
                                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         }
 
@@ -166,7 +166,7 @@ struct VelaMeView: View {
                                 .font(VelaTheme.body())
                                 .foregroundStyle(VelaTheme.rhythmInk)
                             Text(backfill.stateText)
-                                .font(.system(size: 11))
+                                .font(.system(.caption2, design: .default))
                                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         }
 
@@ -203,7 +203,7 @@ struct VelaMeView: View {
                                 .font(VelaTheme.body())
                                 .foregroundStyle(VelaTheme.rhythmInk)
                             Text("补全动作、组数与重量历史")
-                                .font(.system(size: 11))
+                                .font(.system(.caption2, design: .default))
                                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         }
 
@@ -298,7 +298,7 @@ struct VelaMeView: View {
 
     private func contextPill(_ title: String, icon: String) -> some View {
         Label(title, systemImage: icon)
-            .font(.system(size: 10, weight: .semibold))
+            .font(.system(.caption2, design: .default, weight: .semibold))
             .foregroundStyle(VelaTheme.rhythmInkSecondary)
             .lineLimit(1)
             .minimumScaleFactor(0.82)
@@ -626,7 +626,7 @@ struct VelaMeView: View {
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(VelaTheme.muted)
                 Text(value)
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(.caption2, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
                     .lineLimit(1)
             }
@@ -802,7 +802,7 @@ struct HistoricalBackfillView: View {
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmInk)
                         Text(coordinator.stateText)
-                            .font(.system(size: 12))
+                            .font(.system(.caption, design: .default))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                     Spacer()
@@ -810,7 +810,7 @@ struct HistoricalBackfillView: View {
                 .padding(.bottom, 2)
 
                 Text("把 Apple 健康里近三年的静息心率、HRV、睡眠、步数、活动能量、体重与训练记录读入 Vela。回填后，长期趋势、今年 vs 去年对比与历年训练量立即可用。原始数据只留在本机。")
-                    .font(.system(size: 13))
+                    .font(.system(.footnote, design: .default))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
@@ -821,11 +821,11 @@ struct HistoricalBackfillView: View {
 
                     HStack {
                         Text("\(coordinator.progress.completedDays) / \(coordinator.progress.totalDays) 天")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(.caption2, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         Spacer()
                         Text("可随时停止，进度已保存")
-                            .font(.system(size: 10))
+                            .font(.system(.caption2, design: .default))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.8))
                     }
                 }
@@ -838,7 +838,7 @@ struct HistoricalBackfillView: View {
 
                 if let error = coordinator.lastError {
                     Text("回填中断：\(error)")
-                        .font(.system(size: 12))
+                        .font(.system(.caption, design: .default))
                         .foregroundStyle(VelaTheme.textColor(for: .poor))
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -854,7 +854,7 @@ struct HistoricalBackfillView: View {
                     }
                 } label: {
                     Text(coordinator.isRunning ? "停止回填" : "开始回填")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(.subheadline, design: .default, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmDeepOn)
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
@@ -865,7 +865,7 @@ struct HistoricalBackfillView: View {
 
                 if coordinator.progress.isComplete {
                     Text("回填已完成。三年健康轨迹与历年训练量现在都已就绪。")
-                        .font(.system(size: 11))
+                        .font(.system(.caption2, design: .default))
                         .foregroundStyle(VelaTheme.rhythmDeep)
                         .frame(maxWidth: .infinity)
                 }
@@ -912,7 +912,7 @@ struct XunjiHistoryBackfillView: View {
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmInk)
                         Text("逐日补全动作、组数与重量")
-                            .font(.system(size: 12))
+                            .font(.system(.caption, design: .default))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                     Spacer()
@@ -920,14 +920,14 @@ struct XunjiHistoryBackfillView: View {
                 .padding(.bottom, 2)
 
                 Text("把训记里的历史训练（动作、组数、重量、时长）逐日读入 Vela，用于个人纪录、容量轨迹与肌群疲劳的长期分析。原始数据只留在本机；进度会保存，可随时停止续传。")
-                    .font(.system(size: 13))
+                    .font(.system(.footnote, design: .default))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if loadKeyFailed {
                     Text("未找到训记密钥。请先在训练页填写训记 API Key。")
-                        .font(.system(size: 12))
+                        .font(.system(.caption, design: .default))
                         .foregroundStyle(VelaTheme.textColor(for: .poor))
                 }
 
@@ -937,11 +937,11 @@ struct XunjiHistoryBackfillView: View {
 
                     HStack {
                         Text("\(service.completedDays) / \(service.totalDays) 天 · 已导入 \(service.importedCount) 条")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(.caption2, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         Spacer()
                         Text("可随时停止，进度已保存")
-                            .font(.system(size: 10))
+                            .font(.system(.caption2, design: .default))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.8))
                     }
                 }
@@ -954,7 +954,7 @@ struct XunjiHistoryBackfillView: View {
 
                 if let error = service.errorMessage {
                     Text("回填暂停：\(error)")
-                        .font(.system(size: 12))
+                        .font(.system(.caption, design: .default))
                         .foregroundStyle(VelaTheme.textColor(for: .poor))
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -963,7 +963,7 @@ struct XunjiHistoryBackfillView: View {
                     Task { await startOrStop() }
                 } label: {
                     Text(service.isRunning ? "停止回填" : "开始回填")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(.subheadline, design: .default, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmDeepOn)
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
@@ -973,7 +973,7 @@ struct XunjiHistoryBackfillView: View {
 
                 if service.completedDays >= service.totalDays, service.totalDays > 0 {
                     Text("回填已完成。历史动作、组数与重量已可用于长期分析。")
-                        .font(.system(size: 11))
+                        .font(.system(.caption2, design: .default))
                         .foregroundStyle(VelaTheme.rhythmDeep)
                         .frame(maxWidth: .infinity)
                 }

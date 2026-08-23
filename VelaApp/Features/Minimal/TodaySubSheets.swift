@@ -38,7 +38,7 @@ struct ProactiveInsightDetailSheet: View {
                                     Text("·")
                                     Text(insight.severity.contextLabel)
                                 }
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(.system(.caption, design: .default, weight: .semibold))
                                 .foregroundStyle(insight.severity.color)
 
                                 Text(insight.displayTitle)
@@ -51,7 +51,7 @@ struct ProactiveInsightDetailSheet: View {
                         }
 
                         Text(insight.body)
-                            .font(.system(size: 15, weight: .regular))
+                            .font(.system(.subheadline, design: .default, weight: .regular))
                             .foregroundStyle(VelaTheme.meta)
                             .lineSpacing(5)
                             .fixedSize(horizontal: false, vertical: true)
@@ -61,7 +61,7 @@ struct ProactiveInsightDetailSheet: View {
 
                     VStack(alignment: .leading, spacing: 12) {
                         Text("身体信号")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(.footnote, design: .default, weight: .semibold))
                             .tracking(0.5)
                             .textCase(.uppercase)
                             .foregroundStyle(VelaTheme.muted)
@@ -77,11 +77,11 @@ struct ProactiveInsightDetailSheet: View {
 
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(item.title)
-                                            .font(.system(size: 14, weight: .semibold))
+                                            .font(.system(.footnote, design: .default, weight: .semibold))
                                             .foregroundStyle(VelaTheme.fg)
 
                                         Text(item.subtitle)
-                                            .font(.system(size: 12, weight: .regular))
+                                            .font(.system(.caption, design: .default, weight: .regular))
                                             .foregroundStyle(VelaTheme.meta)
                                     }
 
@@ -101,7 +101,7 @@ struct ProactiveInsightDetailSheet: View {
 
                     VStack(alignment: .leading, spacing: 10) {
                         Text("行动安排")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(.footnote, design: .default, weight: .semibold))
                             .tracking(0.5)
                             .textCase(.uppercase)
                             .foregroundStyle(VelaTheme.muted)
@@ -114,7 +114,7 @@ struct ProactiveInsightDetailSheet: View {
                                     .padding(.top, 1)
 
                                 Text(actionText)
-                                    .font(.system(size: 15, weight: .semibold))
+                                    .font(.system(.subheadline, design: .default, weight: .semibold))
                                     .foregroundStyle(VelaTheme.rhythmInk)
                                     .lineSpacing(4)
 
@@ -137,7 +137,7 @@ struct ProactiveInsightDetailSheet: View {
                         onAskCoach(insight.coachPresetQuestion)
                     } label: {
                         Label("和 Coach 讨论", systemImage: "sparkles")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.system(.callout, design: .default, weight: .semibold))
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
                     }
@@ -148,7 +148,7 @@ struct ProactiveInsightDetailSheet: View {
                         dismiss()
                     } label: {
                         Text("知道了")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.system(.subheadline, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.meta)
                             .frame(maxWidth: .infinity)
                             .frame(height: 42)
@@ -320,7 +320,7 @@ struct ActiveStatusSelectionSheetView: View {
                                     .font(.system(size: 15))
                                     .foregroundStyle(VelaTheme.muted)
                                 Text("保持状态")
-                                    .font(.system(size: 14, weight: .bold))
+                                    .font(.system(.footnote, design: .default, weight: .bold))
                                     .foregroundStyle(VelaTheme.fg)
                             }
 
@@ -335,7 +335,7 @@ struct ActiveStatusSelectionSheetView: View {
                             } label: {
                                 HStack(spacing: 4) {
                                     Text(tempDuration)
-                                        .font(.system(size: 14, weight: .bold))
+                                        .font(.system(.footnote, design: .default, weight: .bold))
                                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                     Image(systemName: "chevron.right")
                                         .font(.system(size: 12, weight: .bold))
@@ -358,7 +358,7 @@ struct ActiveStatusSelectionSheetView: View {
                         dismiss()
                     } label: {
                         Text("更新")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.system(.callout, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.rhythmDeepOn)
                             .frame(maxWidth: .infinity)
                             .frame(height: 52)
@@ -391,10 +391,10 @@ struct ActiveStatusSelectionSheetView: View {
                 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(.subheadline, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.rhythmInk)
                     Text(desc)
-                        .font(.system(size: 12))
+                        .font(.system(.caption, design: .default))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 
@@ -463,7 +463,7 @@ struct CalendarOverviewSheetView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Text(verbatim: VelaMinimalFormatting.calendarTitle(year: calendarYear, month: calendarMonth))
-                            .font(.system(size: 22, weight: .bold))
+                            .font(.system(.title2, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.rhythmInk)
                         Image(systemName: "chevron.down")
                             .font(.system(size: 14, weight: .bold))
@@ -510,7 +510,7 @@ struct CalendarOverviewSheetView: View {
                             selectedMetric = metric
                         } label: {
                             Text(metric)
-                                .font(.system(size: 13, weight: .bold))
+                                .font(.system(.footnote, design: .default, weight: .bold))
                                 .foregroundStyle(selectedMetric == metric ? VelaTheme.accentOn : VelaTheme.muted)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 8)
@@ -533,7 +533,7 @@ struct CalendarOverviewSheetView: View {
             HStack(spacing: 0) {
                 ForEach(weekdays, id: \.self) { day in
                     Text(day)
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(.caption2, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.muted)
                         .frame(maxWidth: .infinity)
                 }
@@ -574,7 +574,7 @@ struct CalendarOverviewSheetView: View {
                                     }
 
                                     Text("\(day)")
-                                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                                        .font(.system(.caption, design: .default, weight: .bold))
                                         .foregroundStyle(isFuture ? VelaTheme.meta : (isSelected ? VelaTheme.accent : VelaTheme.fg))
                                 }
 
@@ -605,7 +605,7 @@ struct CalendarOverviewSheetView: View {
                     dismiss()
                 } label: {
                     Text("今天")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(.footnote, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.rhythmDeepOn)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 10)
@@ -829,7 +829,7 @@ struct PostWorkoutCheckInSheet: View {
     private var tagGrid: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("主观感受")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(.subheadline, design: .default, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmInk)
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 8)], spacing: 8) {
@@ -842,7 +842,7 @@ struct PostWorkoutCheckInSheet: View {
                         }
                     } label: {
                         Text(option.label)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(.footnote, design: .default, weight: .semibold))
                             .foregroundStyle(selectedTags.contains(option.key) ? VelaTheme.rhythmDeepOn : VelaTheme.rhythmInk)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
@@ -865,11 +865,11 @@ struct PostWorkoutCheckInSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("这次练了哪里")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(.subheadline, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Text("选填")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(.caption2, design: .default, weight: .medium))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
 
@@ -883,7 +883,7 @@ struct PostWorkoutCheckInSheet: View {
                         }
                     } label: {
                         Text(option.label)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(.footnote, design: .default, weight: .semibold))
                             .foregroundStyle(selectedMuscleGroups.contains(option.key) ? VelaTheme.rhythmDeepOn : VelaTheme.rhythmInk)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
@@ -906,20 +906,20 @@ struct PostWorkoutCheckInSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("整体用力程度")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(.subheadline, design: .default, weight: .semibold))
                 Spacer()
                 if let rpe {
                     Button {
                         self.rpe = nil
                     } label: {
                         Text("\(Int(rpe.rounded())) / 10 · 清除")
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .font(.system(.footnote, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmDeep)
                     }
                     .buttonStyle(.plain)
                 } else {
                     Text("选填")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(.caption2, design: .default, weight: .medium))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
             }
@@ -944,7 +944,7 @@ struct PostWorkoutCheckInSheet: View {
     private var noteSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("补充说明")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(.subheadline, design: .default, weight: .semibold))
             TextField("例如：深蹲最后两组腰背紧张，整体还可以。", text: $note, axis: .vertical)
                 .lineLimit(3...5)
                 .textFieldStyle(.plain)
@@ -962,7 +962,7 @@ struct PostWorkoutCheckInSheet: View {
             save()
         } label: {
             Text("保存训练反馈")
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(.callout, design: .default, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmDeepOn)
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
@@ -1206,7 +1206,7 @@ struct PostWorkoutImpactSheet: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("心率变化")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(.footnote, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.fg)
                     Text("\(impact.postWorkoutHeartRateTrend.count) 个实际采样点")
                         .font(VelaTheme.caption2())
@@ -1245,7 +1245,7 @@ struct PostWorkoutImpactSheet: View {
                 .font(VelaTheme.caption1())
                 .foregroundStyle(VelaTheme.muted)
             Text(value)
-                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .font(.system(.title3, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.fg)
                 .minimumScaleFactor(0.75)
                 .lineLimit(1)
@@ -1309,7 +1309,7 @@ struct PostWorkoutImpactSheet: View {
                 .foregroundStyle(VelaTheme.muted)
             Spacer()
             Text(value)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(.subheadline, design: .default, weight: .semibold))
                 .foregroundStyle(VelaTheme.fg)
                 .multilineTextAlignment(.trailing)
         }
@@ -1606,7 +1606,7 @@ struct WorkoutLogSheetView: View {
             
             HStack {
                 Text("记录运动活动")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.system(.title3, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
                 Spacer()
                 Button {
@@ -1625,7 +1625,7 @@ struct WorkoutLogSheetView: View {
                     // Sport Type Picker
                     VStack(alignment: .leading, spacing: 10) {
                         Text("运动类型")
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.system(.footnote, design: .default, weight: .bold))
                             .foregroundStyle(VelaTheme.muted)
                         
                         Picker("运动类型", selection: $selectedSport) {
@@ -1641,11 +1641,11 @@ struct WorkoutLogSheetView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
                             Text("时长")
-                                .font(.system(size: 13, weight: .bold))
+                                .font(.system(.footnote, design: .default, weight: .bold))
                                 .foregroundStyle(VelaTheme.muted)
                             Spacer()
                             Text("\(Int(durationMinutes)) 分钟")
-                                .font(.system(size: 14, weight: .bold))
+                                .font(.system(.footnote, design: .default, weight: .bold))
                                 .foregroundStyle(VelaTheme.accent)
                         }
                         
@@ -1658,11 +1658,11 @@ struct WorkoutLogSheetView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
                             Text("活跃热量消耗")
-                                .font(.system(size: 13, weight: .bold))
+                                .font(.system(.footnote, design: .default, weight: .bold))
                                 .foregroundStyle(VelaTheme.muted)
                             Spacer()
                             Text("\(Int(caloriesBurned)) kcal")
-                                .font(.system(size: 14, weight: .bold))
+                                .font(.system(.footnote, design: .default, weight: .bold))
                                 .foregroundStyle(VelaTheme.accent)
                         }
                         
@@ -1675,11 +1675,11 @@ struct WorkoutLogSheetView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
                             Text("耗力感官评分 (RPE)")
-                                .font(.system(size: 13, weight: .bold))
+                                .font(.system(.footnote, design: .default, weight: .bold))
                                 .foregroundStyle(VelaTheme.muted)
                             Spacer()
                             Text("\(Int(exertionScore)) / 10")
-                                .font(.system(size: 14, weight: .bold))
+                                .font(.system(.footnote, design: .default, weight: .bold))
                                 .foregroundStyle(VelaTheme.accent)
                         }
                         
@@ -1695,7 +1695,7 @@ struct WorkoutLogSheetView: View {
                         }
                     } label: {
                         Text("保存活动")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.system(.callout, design: .default, weight: .bold))
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
@@ -1793,7 +1793,7 @@ struct FoodSearchSheetView: View {
             
             HStack {
                 Text("搜索常见食物（估算）")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.system(.title3, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
                 Spacer()
                 Button {
@@ -1812,7 +1812,7 @@ struct FoodSearchSheetView: View {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(VelaTheme.muted)
                 TextField("搜索膳食...", text: $searchText)
-                    .font(.system(size: 15))
+                    .font(.system(.subheadline, design: .default))
                     .foregroundStyle(VelaTheme.rhythmInk)
             }
             .padding(12)
@@ -1830,17 +1830,17 @@ struct FoodSearchSheetView: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(name)
-                                        .font(.system(size: 15, weight: .bold))
+                                        .font(.system(.subheadline, design: .default, weight: .bold))
                                         .foregroundStyle(VelaTheme.rhythmInk)
                                     Text("P: \(prot)g · C: \(carb)g · F: \(fat)g")
-                                        .font(.system(size: 11))
+                                        .font(.system(.caption2, design: .default))
                                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                 }
                                 
                                 Spacer()
                                 
                                 Text("\(cal) kcal")
-                                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                                    .font(.system(.footnote, design: .default, weight: .bold))
                                     .foregroundStyle(VelaTheme.rhythmInk)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 6)
@@ -1914,7 +1914,7 @@ struct FoodScannerView: View {
             
             HStack {
                 Text(type == "camera" ? "智能拍照识别" : (type == "library" ? "相册导入解析" : "条形码扫描"))
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.system(.title3, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
                 Spacer()
                 Button {
@@ -1933,7 +1933,7 @@ struct FoodScannerView: View {
                     ProgressView()
                         .tint(VelaTheme.accent)
                     Text(type == "barcode" ? "正在查询食品条码..." : "正在用 Kimi 视觉模型分析餐食...")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(.footnote, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.muted)
                 }
                 .padding(.vertical, 40)
@@ -1952,7 +1952,7 @@ struct FoodScannerView: View {
                         .foregroundStyle(VelaTheme.fg)
 
                     Text("图片会在你确认后发送给 Kimi 视觉模型。需要先在设置中添加 Kimi API Key。")
-                        .font(.system(size: 13))
+                        .font(.system(.footnote, design: .default))
                         .multilineTextAlignment(.center)
                         .foregroundStyle(VelaTheme.muted)
                         .padding(.horizontal, 20)
@@ -1962,7 +1962,7 @@ struct FoodScannerView: View {
 
             if let errorMessage {
                 Text(errorMessage)
-                    .font(.system(size: 13))
+                    .font(.system(.footnote, design: .default))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(VelaTheme.systemRed)
                     .padding(.horizontal, 20)
@@ -1972,7 +1972,7 @@ struct FoodScannerView: View {
                 Button(type == "camera" ? "打开相机" : "从相册选择") {
                     openImagePicker()
                 }
-                .font(.system(size: 16, weight: .bold))
+                .font(.system(.callout, design: .default, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
@@ -2010,7 +2010,7 @@ struct FoodScannerView: View {
             .padding(.horizontal, 20)
 
             Text(scannedBarcode.map { "已识别条码：\($0)" } ?? "将包装条码放入取景框内")
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(.footnote, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
 
             if scannedBarcode != nil {
@@ -2019,7 +2019,7 @@ struct FoodScannerView: View {
                     errorMessage = nil
                     barcodeScannerID = UUID()
                 }
-                .font(.system(size: 14, weight: .bold))
+                .font(.system(.footnote, design: .default, weight: .bold))
                 .foregroundStyle(VelaTheme.accent)
             }
         }
@@ -2038,12 +2038,12 @@ struct FoodScannerView: View {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(Array(result.foods.enumerated()), id: \.offset) { _, food in
                     Text("\(food.name) · \(food.portion) · \(food.calories) kcal")
-                        .font(.system(size: 13))
+                        .font(.system(.footnote, design: .default))
                         .foregroundStyle(VelaTheme.fg)
                 }
                 Divider()
                 Text("总计 \(result.totalCalories) kcal · 蛋白质 \(result.macros.protein)g · 碳水 \(result.macros.carbs)g · 脂肪 \(result.macros.fat)g")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(.footnote, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.muted)
             }
             .padding(14)
@@ -2055,7 +2055,7 @@ struct FoodScannerView: View {
             Button("确认并记录") {
                 save(result: result)
             }
-            .font(.system(size: 16, weight: .bold))
+            .font(.system(.callout, design: .default, weight: .bold))
             .foregroundStyle(VelaTheme.rhythmDeepOn)
             .frame(maxWidth: .infinity)
             .frame(height: 50)
@@ -2068,7 +2068,7 @@ struct FoodScannerView: View {
                 selectedImage = nil
                 openImagePicker()
             }
-            .font(.system(size: 14, weight: .bold))
+            .font(.system(.footnote, design: .default, weight: .bold))
             .foregroundStyle(VelaTheme.accent)
         }
     }

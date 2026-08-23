@@ -103,7 +103,7 @@ struct TodayHeroCard: View {
 
             if let safetyNotice, !safetyNotice.isEmpty {
                 Text(safetyNotice)
-                    .font(.system(size: 10, weight: .regular))
+                    .font(.system(.caption2, design: .default, weight: .regular))
                     .foregroundStyle(VelaTheme.meta)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
@@ -560,7 +560,7 @@ struct VelaRhythmHorizonHero: View {
                     .shadow(color: VelaTheme.rhythmGlow.opacity(0.55), radius: 6)
 
                 Text(eyebrow)
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(.caption2, design: .default, weight: .bold))
                     .tracking(0.5)
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
 
@@ -571,7 +571,7 @@ struct VelaRhythmHorizonHero: View {
                         Image(systemName: "sparkles")
                             .font(.system(size: 12, weight: .semibold))
                         Text("问 Vela")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(.caption2, design: .default, weight: .semibold))
                     }
                     .foregroundStyle(VelaTheme.rhythmInk)
                     .padding(.horizontal, 10)
@@ -607,7 +607,7 @@ struct VelaRhythmHorizonHero: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text("查看今日安排")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.system(.footnote, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmInk)
                     }
 
@@ -637,7 +637,7 @@ struct VelaRhythmHorizonHero: View {
             } label: {
                 HStack {
                     Text("健康节律 (24小时 / 7天)")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(.caption, design: .default, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     Spacer()
                     Image(systemName: "chevron.down")
@@ -762,11 +762,11 @@ struct VelaRhythmHorizonHero: View {
 
             VStack(spacing: 2) {
                 Text(card.title)
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(.caption, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmInk)
 
                 Text(card.value == "--" ? "待同步" : (card.directionLabel.isEmpty ? "\(card.value)分" : card.directionLabel))
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(.caption2, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .lineLimit(1)
             }
@@ -806,7 +806,7 @@ struct VelaRhythmHorizonHero: View {
                             }
                         } label: {
                             Text(card.title)
-                                .font(.system(size: 10, weight: isSelected ? .semibold : .medium))
+                                .font(.system(.caption2, design: .default, weight: isSelected ? .semibold : .medium))
                                 .foregroundStyle(
                                     isSelected
                                         ? VelaTheme.rhythmDeep
@@ -833,7 +833,7 @@ struct VelaRhythmHorizonHero: View {
                         }
                     } label: {
                         Text(metric.title)
-                            .font(.system(size: 10, weight: isSelected ? .semibold : .medium))
+                            .font(.system(.caption2, design: .default, weight: isSelected ? .semibold : .medium))
                             .foregroundStyle(
                                 isSelected
                                     ? VelaTheme.rhythmDeep
@@ -871,7 +871,7 @@ struct VelaRhythmHorizonHero: View {
             }
         } label: {
             Text(label)
-                .font(.system(size: 10, weight: isSelected ? .semibold : .regular))
+                .font(.system(.caption2, design: .default, weight: isSelected ? .semibold : .regular))
                 .foregroundStyle(isSelected ? VelaTheme.rhythmInk : VelaTheme.rhythmInkSecondary.opacity(0.8))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
@@ -940,7 +940,7 @@ private struct RhythmEvidenceAnchors: View {
                     .fill(index == 0 ? VelaTheme.rhythmDeep : VelaTheme.rhythmInkSecondary.opacity(0.45))
                     .frame(width: 1, height: 13)
                 Text(item)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(.caption2, design: .default, weight: .medium))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     .lineLimit(1)
             }
@@ -1167,7 +1167,7 @@ private struct RhythmHorizonVisualization: View {
                     // 交互提示：拖动时显示真实数值（与图表同源）
                     if scrubFraction != nil {
                         Text(tooltipText)
-                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .font(.system(.caption2, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmInk)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
@@ -1179,7 +1179,7 @@ private struct RhythmHorizonVisualization: View {
                             )
                     } else {
                         Text(defaultAnchorText)
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .font(.system(.caption2, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .position(
                                 x: min(size.width - 24, max(24, point.x)),
@@ -1199,7 +1199,7 @@ private struct RhythmHorizonVisualization: View {
                     Spacer()
                     Text(axisRightLabel)
                 }
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(.caption2, design: .default, weight: .medium))
                 .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.7))
                 .frame(width: size.width)
                 .offset(y: size.height - 19)
@@ -1577,12 +1577,12 @@ struct VelaRhythmActionSequence: View {
                 Button { onAction(action) } label: {
                     HStack(alignment: .center, spacing: 14) {
                         Text(String(format: "%02d", index + 1))
-                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .font(.system(.caption2, design: .default, weight: .semibold))
                             .foregroundStyle(index == 0 ? VelaTheme.rhythmDeep : VelaTheme.rhythmInkSecondary)
                             .padding(.top, 4)
 
                         Text(action.title)
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.system(.callout, design: .default, weight: .semibold))
                             .foregroundStyle(VelaTheme.rhythmInk)
 
                         Spacer(minLength: 8)
@@ -1632,10 +1632,10 @@ struct VelaRhythmSignalLandscape: View {
                         HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(signal.title)
-                                    .font(.system(size: 13, weight: .semibold))
+                                    .font(.system(.footnote, design: .default, weight: .semibold))
                                     .foregroundStyle(VelaTheme.rhythmInk)
                                 Text(signal.subtitle)
-                                    .font(.system(size: 10, weight: .medium))
+                                    .font(.system(.caption2, design: .default, weight: .medium))
                                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                                     .lineLimit(1)
                             }
@@ -1646,7 +1646,7 @@ struct VelaRhythmSignalLandscape: View {
                                 .frame(height: 30)
 
                             Text(signal.value)
-                                .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                .font(.system(.footnote, design: .default, weight: .semibold))
                                 .foregroundStyle(VelaTheme.rhythmInk)
                                 .frame(width: 28, alignment: .trailing)
                         }
@@ -1729,7 +1729,7 @@ struct VelaRhythmSectionHeader: View {
             VStack(alignment: .leading, spacing: 4) {
                 if !eyebrow.isEmpty {
                     Text(eyebrow)
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(.caption2, design: .default, weight: .semibold))
                         .tracking(1.3)
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
@@ -1743,7 +1743,7 @@ struct VelaRhythmSectionHeader: View {
 
             if let actionTitle {
                 Button(actionTitle, action: action)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(.caption, design: .default, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmDeep)
                     .buttonStyle(.plain)
                     .frame(minHeight: 44)
