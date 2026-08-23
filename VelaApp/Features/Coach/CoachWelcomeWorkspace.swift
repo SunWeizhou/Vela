@@ -12,6 +12,7 @@ struct CoachWelcomeWorkspace: View {
     let onSendMessage: (String) -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @EnvironmentObject private var dashboardVM: DashboardViewModel
     @ObservedObject private var appState = VelaAppState.shared
 
     private var greetingTimeText: String {
@@ -71,6 +72,11 @@ struct CoachWelcomeWorkspace: View {
             .padding(.top, 4)
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("coach-welcome-greeting")
+
+            // 1.5 待处理与最近生成（P0-E：提案/记忆/产物此前完全未展示）
+            if !pendingMemoryProposals.isEmpty || !agentArtifacts.isEmpty {
+                pendingAndRecentSection
+            }
 
             // 2. Compact Top Shortcuts (档案 & 报告)
             topShortcuts
@@ -186,12 +192,90 @@ struct CoachWelcomeWorkspace: View {
     }
 
     private var contextualPromptCards: [(title: String, subtitle: String, icon: String, query: String)] {
-        [
+        // 动态优先（P0-E）：contextualQuickQuestions 已按决策/恢复/睡眠/压力生成，
+        // 此前页面只用固定四问（能力存在但没接线）；空结果时回退到精选问题。
+        let dynamic = vm.contextualQuickQuestions(
+            todayPlan: todayOperatingPlan,
+            dashboard: dashboardVM.dashboard
+        )
+        if !dynamic.isEmpty {
+            return dynamic.map {
+                (title: $0, subtitle: "结合今日决策与个人基线", icon: "sparkles", query: $0)
+            }
+        }
+        return [
             ("分析今日身体状态与恢复", "结合静息心率、HRV 与睡眠深度综合评估", "sparkles", "请全面分析我今天的身体状态，结合各项体征和个人基线，指出当前身体最重要的生理特征。"),
             ("评估训练容量与强度建议", "根据当前生理就绪度计算最佳 RPE 与组数", "figure.run", "基于我目前的身体状态与恢复节奏，今天以及未来几天我应该怎样安排训练？"),
             ("睡眠质量与日间压力关联", "探讨深睡时长、压力波动与心率的关联与候选影响因素", "moon.stars.fill", "我的睡眠质量、日常压力和心率之间表现出什么关联？"),
             ("梳理近 30 天体征变化趋势", "识别近期偏离个人稳态的异常指标并给出建议", "chart.xyaxis.line", "请帮我梳理最近 30 天的身体数据变化趋势，有哪些指标明显上升或下降？")
         ]
+    }
+
+    /// 待处理（记忆提案/训练调整）与最近生成（AI 产物）的可见性入口。
+    /// 此前这两个输入只传入未渲染；点击走现有 sendMessage 路由（Agent 按权限处理）。
+    private var pendingAndRecentSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("待处理与最近生成")
+                .font(VelaTheme.caption1().weight(.bold))
+                .tracking(0.3)
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            VStack(spacing: 6) {
+                if !pendingMemoryProposals.isEmpty {
+                    pendingRow(
+                        icon: "brain.head.profile",
+                        title: "记忆更新提案 ×\(pendingMemoryProposals.count)",
+                        subtitle: "待你确认的长期事实或偏好",
+                        action: "请展示待确认的记忆更新提案"
+                    )
+                }
+                if !agentArtifacts.isEmpty {
+                    let recent = agentArtifacts.sorted { $0.createdAt > $1.createdAt }
+                    pendingRow(
+                        icon: "doc.text.magnifyingglass",
+                        title: "最近生成 ×\(agentArtifacts.count)",
+                        subtitle: recent.prefix(2).map(\.title).filter { !$0.isEmpty }.joined(separator: " · "),
+                        action: "打开最近生成的分析报告"
+                    )
+                }
+            }
+            .padding(12)
+            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+            )
+        }
+    }
+
+    private func pendingRow(icon: String, title: String, subtitle: String, action: String) -> some View {
+        Button {
+            onSendMessage(action)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmDeep)
+                    .frame(width: 24, height: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(VelaTheme.caption1().weight(.semibold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                    if !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(VelaTheme.caption2())
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.5))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .frame(minHeight: VelaTheme.minimumHitTarget)
     }
 
     private func displayModel(for plan: DailyOperatingPlanRecord) -> DailyOperatingPlanDisplayModel {
