@@ -49,7 +49,7 @@ Tab 0: Today            Tab 1: Trends           Tab 2: Vela             Tab 3: T
 
 | 规范类型 | 生产者 (Producer) | 消费者 (Consumer) | 缺失规则 | 持久化位置 | 状态 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`DailyHealthSnapshot`** | `HealthKitSyncEngine` / `QueryService` | `DailyHealthComputation` | 标记缺失字段，不伪造默认值 | SwiftData `DailyHealthSummaryRecord` | **Implemented** |
+| **`DailyHealthSnapshot`** | `HealthKitSyncEngine` / `HealthQueryService` | `DailyHealthComputation` | 标记缺失字段，不伪造默认值 | SwiftData `DailyHealthSummaryRecord` | **Implemented** |
 | **`WorkoutEvent`** | HealthKit / Apple Watch | `WorkoutAggregationService` / 训练页 | 无运动记录时为空数组 | SwiftData `WorkoutEventRecord` | **Implemented** |
 | **`LivedState` / Check-in** | 用户每日主观自评 | `BodyStateKernel` / `CoachContext` | 可选跳过；未填不代表无压力/无酸痛 | 当前由 `JournalEntryRecord` / 行为标签推断；`DailyCheckInRecord` 尚未实现 | **Partial / Planned** |
 
@@ -57,18 +57,18 @@ Tab 0: Today            Tab 1: Trends           Tab 2: Vela             Tab 3: T
 
 | 规范类型 | 算法引擎 / 逻辑 | 生产者 | 消费者 | 状态 |
 | :--- | :--- | :--- | :--- | :--- |
-| **`RecoveryScore`** | HRV log-SDNN MAD Z-score (35%) + RHR Z (25%) + Sleep (25%) + Load (15%) | `RecoveryScoreEngine` | `DashboardSummary`, `PersonalHealthBrief` | **Implemented** |
+| **`RecoveryScore`** | HRV log-SDNN MAD Z-score (35%) + RHR Z (25%) + Sleep (25%) + prior_strain (15%，昨日负荷) | `RecoveryScoreEngine` | `DashboardSummary`, `PersonalHealthBrief` | **Implemented** |
 | **`SleepScore`** | Duration (0-50) + Consistency (0-30) + Interruption (0-20) | `SleepScoreEngine` | `DashboardSummary`, `PersonalHealthBrief` | **Implemented** |
 | **`StrainScore`** | Lucia/Banister TRIMP + Session RPE → ATL/CTL/ACWR | `StrainScoreEngine` | `DashboardSummary`, `PersonalHealthBrief` | **Implemented** |
 | **`StressIndex`** | 6 因子加权: RHR↑, HRV↓, RR↑, Temp, SleepDebt, Load | `StressIndexEngine` | `DashboardSummary`, `PersonalHealthBrief` | **Implemented** |
 | **`EnergyBank`** | Firstbeat-inspired 充放电模型 + TSB | `EnergyBankEngine` | `DashboardSummary`, `PersonalHealthBrief` | **Implemented** |
-| **`HealthTrendFinding`** | 7d/30d/6m/3y 多尺度统计基线对比与百分位定位 | `HealthTrendEngine` | `VelaTrendsView`, `AgentContextBuilder` | **Implemented** |
+| **`HealthTrendFinding`** | 7d/30d/6m/3y 多尺度统计基线对比与百分位定位 | `HealthTrendEngine` | `VelaTrendsView`, `AIContextBuilder` | **Implemented** |
 
 ### 3.3 认知投影与决策层（Cognitive & Decision Layer）
 
 | 规范类型 | 职责描述 | 生产者 | 消费者 | 状态 |
 | :--- | :--- | :--- | :--- | :--- |
-| **`PersonalHealthBrief`** | 汇总身体状态、显著变化、驱动因素与行动建议的权威对象 | `HealthTrendEngine` / `BriefBuilder` | Today, Trends, Vela, Training | **Accepted Target** (持续收敛各视图消费路径) |
+| **`PersonalHealthBrief`** | 汇总身体状态、显著变化、驱动因素与行动建议的权威对象 | `HealthTrendEngine`（PersonalHealthBrief 由其构造，见 PersonalHealthBrief.swift:381） | Today, Trends, Vela, Training | **Accepted Target** (持续收敛各视图消费路径) |
 | **`BodyState`** | 当前身体恢复、负荷与压力承受力的保守解释 | `BodyStateKernel` | `TrainingDecisionKernel`, `AIContextBuilder` | **Implemented** |
 | **`TrainingDecision`** | 今日训练定调（keep / reduce / swap / rest）+ 3 大执行边界 | `TrainingDecisionKernel` | Training Tab, Today Hero | **Implemented** |
 | **`DailyOperatingPlan`** | 跨域日常行动计划（1 个主行动 + 最多 2 个辅助行动） | `DailyOperatingPlanCoordinator` | Today View, Coach View | **Implemented** |

@@ -30,7 +30,12 @@ enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
 
     static var stored: AppLanguage {
         get {
-            AppLanguage(rawValue: UserDefaults.standard.string(forKey: storageKey) ?? "") ?? .simplifiedChinese
+            if let saved = AppLanguage(rawValue: UserDefaults.standard.string(forKey: storageKey) ?? "") {
+                return saved
+            }
+            // 未手动选择时跟随系统语言（审计 C3）：系统为中文 → 中文，否则英文。
+            let preferred = Locale.preferredLanguages.first ?? "en"
+            return preferred.lowercased().hasPrefix("zh") ? .simplifiedChinese : .english
         }
         set {
             UserDefaults.standard.set(newValue.rawValue, forKey: storageKey)

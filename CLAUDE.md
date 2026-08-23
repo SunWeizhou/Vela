@@ -13,7 +13,7 @@
 
 1. [`docs/PRD.md`](docs/PRD.md) — 唯一当前产品规格、四大 Tab 与北极星指标
 2. [`CONTEXT.md`](CONTEXT.md) — 唯一领域术语表（Health Signal, Baseline, Brief, Body State, Training Decision 等）
-3. [`docs/adr/README.md`](docs/adr/README.md) — 架构决策记录（ADR 0001–0010）
+3. [`docs/adr/README.md`](docs/adr/README.md) — 架构决策记录（ADR 0001–0011）
 4. [`docs/TECH_ARCHITECTURE.md`](docs/TECH_ARCHITECTURE.md) — 当前实现的技术架构与数据流
 5. 专项文档：
    - 设计语言：[`docs/VELA_DESIGN_LANGUAGE.md`](docs/VELA_DESIGN_LANGUAGE.md)
