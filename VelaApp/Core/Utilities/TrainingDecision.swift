@@ -288,13 +288,17 @@ struct TrainingDecisionKernel: Sendable {
                     ?? activePlan?.title
                     ?? input.rotationFocus.map(TrainingRotationResolver.title)
                     ?? "自由训练"
+                // 契约修复（P0-A）：未同步数据不得包装成「正常训练」（keep@100%）。
+                // 数据不可用 → 训练边界必须落在保守窗口（与 TrainingDecisionFallback、
+                // TodayCommandState 及「保守健康窗口」文案一致）；confidence 为 0 表示
+                // 这不是对身体的判断，只是可执行的保守默认。
                 return DailyTrainingDecision(
-                    decision: .keep,
+                    decision: .reduce,
                     targetSessionTitle: sessionTitle,
-                    volumeMultiplier: 1.0,
-                    intensityCap: 9,
-                    reasons: ["体征数据尚在同步"],
-                    userFacingSummary: "暂不评估今日身体状态，等待数据同步",
+                    volumeMultiplier: 0.60,
+                    intensityCap: 7,
+                    reasons: ["体征数据尚在同步；今日按保守健康窗口执行，不评估身体就绪度。"],
+                    userFacingSummary: "今日数据尚未完成同步；如需训练，按约 60% 容量、RPE 不超过 7 执行。",
                     confidence: 0.0,
                     source: "TrainingDecisionKernel",
                     safetyNotice: "一般健康与训练建议，不构成医疗诊断。"

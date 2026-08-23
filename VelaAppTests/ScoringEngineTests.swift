@@ -2237,3 +2237,65 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertNotEqual(decision.targetSessionTitle, "今天已完成")
     }
 }
+
+    /// 契约测试（P0-A）：未同步/空数据时，canonical TrainingDecision 必须落在
+    /// 保守窗口（reduce/0.60/RPE≤7），不得出现 keep@100%——文案与命令行
+    /// 「保守健康窗口」承诺的是同一个边界。
+    func testUnsyncedDataProducesConservativeBoundariesInsteadOfKeep100() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: .empty(date: now),
+            trainingResponses: [],
+            activeStatus: "active",
+            generatedAt: now
+        ))
+        let decision = TrainingDecisionKernel().decide(
+            input: TrainingDecisionInput(bodyState: bodyState)
+        )
+
+        XCTAssertEqual(decision.decision, .reduce, "未同步数据不得给出 keep@100%")
+        XCTAssertLessThanOrEqual(decision.volumeMultiplier, 0.7)
+        XCTAssertLessThanOrEqual(decision.intensityCap, 7)
+        XCTAssertEqual(decision.confidence, 0.0, "数据不可用时不得给出伪置信度")
+        XCTAssertFalse(
+            decision.userFacingSummary.contains("等待数据同步"),
+            "摘要应如实表达保守窗口"
+        )
+        // 与既有 fallback、今日命令状态（readinessDecision → .reduce）同一边界语义
+        let fallback = TrainingDecisionFallback.conservative(targetSessionTitle: decision.targetSessionTitle)
+        XCTAssertEqual(decision.volumeMultiplier, fallback.volumeMultiplier)
+        XCTAssertEqual(decision.intensityCap, fallback.intensityCap)
+    }
+
+    /// 回归测试（XII）：训练记录完成计数必须同时统计 workout_completed 与
+    /// workout_log —— 否则「产品质量诊断」长期少计训练打卡。
+    @MainActor
+    func testQualitySnapshotCountsBothWorkoutCompletionEventTypes() throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = ModelContext(container)
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        context.insert(VelaEventRecord(
+            eventType: VelaProductEventType.workoutCompleted,
+            timestamp: now.addingTimeInterval(-3600),
+            title: "打卡"
+        ))
+        context.insert(VelaEventRecord(
+            eventType: "workout_log",
+            timestamp: now.addingTimeInterval(-7200),
+            title: "日志"
+        ))
+        context.insert(VelaEventRecord(
+            eventType: VelaProductEventType.healthSyncSucceeded,
+            timestamp: now.addingTimeInterval(-3600),
+            title: "同步"
+        ))
+        try context.save()
+
+        let snapshot = DailyDecisionFeedbackService().qualitySnapshot(
+            modelContext: context,
+            periodDays: 28,
+            now: now
+        )
+
+        XCTAssertEqual(snapshot.workoutLogs, 2, "workout_completed 与 workout_log 都应计入")
+    }

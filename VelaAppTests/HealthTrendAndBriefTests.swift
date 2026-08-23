@@ -433,8 +433,12 @@ final class HealthTrendAndBriefTests: XCTestCase {
             personalHealthBrief: dashboard.personalHealthBrief
         ))
 
-        XCTAssertEqual(decision.userFacingSummary, "暂不评估今日身体状态，等待数据同步")
+        // 契约（P0-A）：空数据必须落在保守窗口，而不是 keep@100% 或"等待同步"的含糊措辞。
+        XCTAssertEqual(decision.decision, .reduce)
+        XCTAssertEqual(decision.volumeMultiplier, 0.60)
+        XCTAssertEqual(decision.intensityCap, 7)
         XCTAssertEqual(decision.confidence, 0.0)
+        XCTAssertTrue(decision.userFacingSummary.contains("60%"), decision.userFacingSummary)
     }
 
     func testRobustHalfWindowMedianRejectsSingleDaySpike() {

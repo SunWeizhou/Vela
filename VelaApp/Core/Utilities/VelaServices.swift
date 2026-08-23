@@ -413,7 +413,11 @@ struct DailyDecisionFeedbackService {
             completedFeedback: completed.count,
             adoptedDecisions: completed.filter { $0.adoptionStatus == "followed" || $0.adoptionStatus == "modified" }.count,
             accurateDecisions: completed.filter { $0.accuracyRating == "accurate" || $0.accuracyRating == "partly" }.count,
-            workoutLogs: events.filter { $0.eventType == "workout_log" }.count,
+            // 训练完成打卡路径记录 workout_completed；历史/其他路径可能记录
+            // workout_log（XII）：两者都算训练记录完成，否则诊断页长期少计。
+            workoutLogs: events.filter {
+                $0.eventType == "workout_log" || $0.eventType == VelaProductEventType.workoutCompleted
+            }.count,
             syncSuccesses: events.filter { $0.eventType == VelaProductEventType.healthSyncSucceeded }.count,
             syncFailures: events.filter { $0.eventType == VelaProductEventType.healthSyncFailed }.count
         )
