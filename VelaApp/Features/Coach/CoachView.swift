@@ -642,6 +642,9 @@ struct VelaCoachView: View {
                         .onTapGesture {
                             isFocused = false
                         }
+                        .accessibilityAction {
+                            isFocused = false
+                        }
                     }
                     .scrollIndicators(.hidden)
                     .scrollDismissesKeyboard(.immediately)
@@ -698,6 +701,12 @@ struct VelaCoachView: View {
                 Color.black.opacity(0.4)
                     .ignoresSafeArea()
                     .onTapGesture {
+                        withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
+                            showHistoryDrawer = false
+                        }
+                    }
+                    .accessibilityLabel("关闭历史抽屉")
+                    .accessibilityAction {
                         withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
                             showHistoryDrawer = false
                         }

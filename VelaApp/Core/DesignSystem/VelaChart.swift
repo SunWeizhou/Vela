@@ -187,7 +187,7 @@ private struct VelaTimelineItemRow: View {
         HStack(alignment: .top, spacing: 12) {
             VStack(spacing: 0) {
                 Image(systemName: item.systemImage)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(.footnote, design: .default, weight: .semibold))
                     .foregroundStyle(item.domain.color)
                     .frame(width: 32, height: 32)
                     .background(item.domain.color.opacity(0.10), in: Circle())
@@ -336,10 +336,10 @@ struct DottedCircleGauge: View {
             
             VStack(spacing: 1) {
                 Text("\(Int(animatedScore))")
-                    .font(.system(size: 20, weight: .bold, design: .rounded).monospacedDigit())
+                    .font(.system(.title3, design: .rounded, weight: .bold).monospacedDigit())
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Text(labelText)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(.caption2, design: .default, weight: .semibold))
                     .foregroundStyle(color)
             }
         }
@@ -558,7 +558,7 @@ struct MiniMetricRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
-                .font(.system(size: 10, weight: .bold))
+                .font(.system(.caption2, design: .default, weight: .bold))
                 .foregroundStyle(color)
                 .frame(width: 20, height: 20)
                 .background(Circle().fill(color.opacity(0.12)))
@@ -566,11 +566,11 @@ struct MiniMetricRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
                     Text(label)
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(.caption, design: .default, weight: .bold))
                         .foregroundStyle(VelaTheme.fg)
                     Spacer()
                     Text(value)
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .font(.system(.caption, design: .rounded, weight: .bold))
                         .foregroundStyle(color)
                 }
                 

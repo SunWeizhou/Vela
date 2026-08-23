@@ -13,7 +13,7 @@ struct SettingsRow: View {
         Button(action: onTap) {
             HStack(spacing: 14) {
                 Image(systemName: icon)
-                    .font(.system(size: 16))
+                    .font(.system(.callout, design: .default))
                     .foregroundStyle(.white)
                     .frame(width: 30, height: 30)
                     .background(iconBg)
@@ -32,7 +32,7 @@ struct SettingsRow: View {
                 }
 
                 Image(systemName: "chevron.forward")
-                    .font(.system(size: 14))
+                    .font(.system(.footnote, design: .default))
                     .foregroundStyle(VelaTheme.meta.opacity(0.5))
             }
             .padding(.horizontal, 16)
@@ -55,7 +55,7 @@ struct ToggleRow: View {
     var body: some View {
         HStack(spacing: 14) {
             Image(systemName: icon)
-                .font(.system(size: 16))
+                .font(.system(.callout, design: .default))
                 .foregroundStyle(.white)
                 .frame(width: 30, height: 30)
                 .background(iconBg)
@@ -218,7 +218,7 @@ struct PlusAction: View {
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: icon)
-                .font(.system(size: 22))
+                .font(.system(.title2, design: .default))
                 .foregroundStyle(iconFg)
                 .frame(width: 44, height: 44)
                 .background(iconBg)

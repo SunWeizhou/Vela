@@ -98,7 +98,7 @@ struct VelaEvidenceRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             Image(systemName: systemImage)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(.footnote, design: .default, weight: .semibold))
                 .foregroundStyle(tint)
                 .frame(width: 32, height: 32)
                 .background(tint.opacity(0.09), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -163,7 +163,7 @@ struct InsightCard: View {
                         .font(VelaTheme.subheadline())
                         .fontWeight(.medium)
                     Image(systemName: "chevron.forward")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(.caption2, design: .default, weight: .semibold))
                 }
                 .foregroundStyle(VelaTheme.accent)
             }
@@ -268,7 +268,7 @@ struct WorkoutCard: View {
                         )
 
                     Text(title)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(.callout, design: .default, weight: .semibold))
                         .foregroundStyle(VelaTheme.fg)
 
                     Spacer()
@@ -281,7 +281,7 @@ struct WorkoutCard: View {
                 if let original = originalPlan {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "arrow.triangle.swap")
-                            .font(.system(size: 12))
+                            .font(.system(.caption, design: .default))
                             .foregroundStyle(VelaTheme.warn)
                             .padding(.top, 2)
 
@@ -444,7 +444,7 @@ struct VelaStatusBadgeCompat: View {
         HStack(spacing: 4) {
             if let img = systemImage {
                 Image(systemName: img)
-                    .font(.system(size: 10))
+                    .font(.system(.caption2, design: .default))
             }
             Text(label)
                 .font(VelaTheme.caption2())
@@ -473,7 +473,7 @@ struct VelaMetricPill: View {
         HStack(spacing: 4) {
             if let img = systemImage {
                 Image(systemName: img)
-                    .font(.system(size: 10))
+                    .font(.system(.caption2, design: .default))
             }
             Text("\(title) ")
                 .font(VelaTheme.caption2())
@@ -523,7 +523,7 @@ struct VelaEmptyStateCompat: View {
     var body: some View {
         VStack(spacing: 12) {
             Image(systemName: systemImage)
-                .font(.system(size: 22, weight: .semibold))
+                .font(.system(.title2, design: .default, weight: .semibold))
                 .foregroundStyle(tint)
                 .frame(width: 44, height: 44)
                 .background(Circle().fill(tint.opacity(0.12)))

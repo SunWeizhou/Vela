@@ -153,6 +153,12 @@ struct CoachHistoryDrawer: View {
                                 showHistoryDrawer = false
                             }
                         }
+                        .accessibilityAction {
+                            vm.selectSession(session, modelContext: modelContext)
+                            withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
+                                showHistoryDrawer = false
+                            }
+                        }
                     }
                 }
                 .padding(.vertical, 8)

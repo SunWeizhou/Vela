@@ -100,7 +100,7 @@ struct VelaStateCard: View {
                     .tint(state.tint)
             } else {
                 Image(systemName: state.systemImage)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(.body, design: .default, weight: .semibold))
                     .foregroundStyle(state.tint)
             }
         }
@@ -131,7 +131,7 @@ struct StatusCapsule: View {
                     .foregroundStyle(VelaTheme.fg2)
 
                 Text(value)
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
                     .foregroundStyle(VelaTheme.fg)
             }
             .padding(.horizontal, 14)
