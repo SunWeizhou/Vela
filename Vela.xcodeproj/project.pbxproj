@@ -39,7 +39,7 @@
 		0B1000060000000000000006 /* VelaTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001060000000000000006 /* VelaTheme.swift */; };
 		0B1000070000000000000007 /* VelaBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001070000000000000007 /* VelaBackground.swift */; };
 		0B1000100000000000000010 /* SectionHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001100000000000000010 /* SectionHeader.swift */; };
-		0B1000140000000000000014 /* VitalsMetricDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001140000000000000014 /* VitalsMetricDetailView.swift */; };
+
 		0B1000160000000000000016 /* CoachView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001160000000000000016 /* CoachView.swift */; };
 		0B1000180000000000000018 /* HealthAuthorizationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001180000000000000018 /* HealthAuthorizationService.swift */; };
 		0B1000190000000000000019 /* HealthDomainModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001190000000000000019 /* HealthDomainModels.swift */; };
@@ -87,7 +87,7 @@
 		0B10004C000000000000004C /* FoodPhotoAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B10014C000000000000004C /* FoodPhotoAnalyzer.swift */; };
 		0B10004D000000000000004D /* WebSearchHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B10014D000000000000004D /* WebSearchHelper.swift */; };
 		0B10004E000000000000004E /* ToolFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B10014E000000000000004E /* ToolFactory.swift */; };
-		0B1000500000000000000050 /* JournalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001510000000000000051 /* JournalView.swift */; };
+
 		0B1000510000000000000051 /* WikiFileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001520000000000000052 /* WikiFileService.swift */; };
 		0B1000520000000000000052 /* AppLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001530000000000000053 /* AppLanguage.swift */; };
 		0B1000530000000000000053 /* MarkdownText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001540000000000000054 /* MarkdownText.swift */; };
@@ -98,13 +98,13 @@
 		0B25D0630000000000000060 /* CoachPersistenceWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1630000000000000060 /* CoachPersistenceWriter.swift */; };
 		0B25D0640000000000000060 /* CoachRequestRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1640000000000000060 /* CoachRequestRunner.swift */; };
 		0B25D0650000000000000060 /* FoodPhotoWorkflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1650000000000000060 /* FoodPhotoWorkflow.swift */; };
-		0B25D0800000000000000080 /* FlexStack.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1800000000000000080 /* FlexStack.swift */; };
+
 		0B25D0810000000000000081 /* CoachHistoryDrawer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1810000000000000081 /* CoachHistoryDrawer.swift */; };
 		0B25D0820000000000000082 /* CoachWelcomeWorkspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1820000000000000082 /* CoachWelcomeWorkspace.swift */; };
 		0B25D0830000000000000083 /* WorkoutDetailSubComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1830000000000000083 /* WorkoutDetailSubComponents.swift */; };
 		0B25D0840000000000000084 /* StrengthWorkoutLogSubComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1840000000000000084 /* StrengthWorkoutLogSubComponents.swift */; };
-		0B25D0850000000000000085 /* TrainingCalendarSubComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1850000000000000085 /* TrainingCalendarSubComponents.swift */; };
-		0B25D0860000000000000086 /* VitalsMetricDetailSubComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1860000000000000086 /* VitalsMetricDetailSubComponents.swift */; };
+
+
 		0B1000550000000000000055 /* MetricCoachCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001560000000000000056 /* MetricCoachCard.swift */; };
 		0B1000560000000000000056 /* VelaLogoMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001570000000000000057 /* VelaLogoMark.swift */; };
 		0B1000570000000000000057 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0B1001580000000000000058 /* Assets.xcassets */; };
@@ -115,10 +115,10 @@
 		0B1000730000000000000073 /* BackgroundTaskManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001730000000000000073 /* BackgroundTaskManager.swift */; };
 		0B1000740000000000000074 /* HealthSnapshotRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001740000000000000074 /* HealthSnapshotRepository.swift */; };
 		0B1000750000000000000075 /* JournalCorrelationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001750000000000000075 /* JournalCorrelationEngine.swift */; };
-		0B1000860000000000000086 /* TrainingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001860000000000000086 /* TrainingView.swift */; };
-		0B1000870000000000000087 /* TrainingCalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001870000000000000087 /* TrainingCalendarView.swift */; };
-		0B1000E100000000000000E1 /* TrainingPlanEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001E100000000000000E1 /* TrainingPlanEditorSheet.swift */; };
-		0B1000E200000000000000E2 /* TrainingQuickLogSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001E200000000000000E2 /* TrainingQuickLogSheet.swift */; };
+
+
+
+
 		0B1000880000000000000088 /* BiologyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001880000000000000088 /* BiologyView.swift */; };
 		0B10008A000000000000008A /* CorrelationArtifactView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B10018A000000000000008A /* CorrelationArtifactView.swift */; };
 		0B10008B000000000000008B /* CoachPersonality.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B10018B000000000000008B /* CoachPersonality.swift */; };
@@ -171,9 +171,9 @@
 		0B25D0050000000000000005 /* JournalCorrelationSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1050000000000000005 /* JournalCorrelationSection.swift */; };
 		0B25D0060000000000000006 /* TodayHeroCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1060000000000000006 /* TodayHeroCard.swift */; };
 		0B25D0070000000000000007 /* TodaySignalGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1070000000000000007 /* TodaySignalGrid.swift */; };
-		0B25D0080000000000000008 /* TodayActionTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1080000000000000008 /* TodayActionTimeline.swift */; };
+
 		0B25D0090000000000000009 /* TodayNutritionStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1090000000000000009 /* TodayNutritionStrip.swift */; };
-		0B25D0100000000000000010 /* TodayCoachPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1100000000000000010 /* TodayCoachPreview.swift */; };
+
 		0B25D0110000000000000011 /* TodayEvidenceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1110000000000000011 /* TodayEvidenceSheet.swift */; };
 		0B25D0120000000000000012 /* TodayWeatherBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1120000000000000012 /* TodayWeatherBar.swift */; };
 		0B25D0130000000000000013 /* VelaSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1130000000000000013 /* VelaSettingsView.swift */; };
@@ -182,11 +182,11 @@
 		0B25D0170000000000000017 /* TodayExperienceModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1170000000000000017 /* TodayExperienceModel.swift */; };
 		0B25D0180000000000000018 /* BehaviorTagModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1180000000000000018 /* BehaviorTagModels.swift */; };
 		0B25D0190000000000000019 /* CoachMessageBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1190000000000000019 /* CoachMessageBubble.swift */; };
-		0B25D0200000000000000020 /* CoachInputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1200000000000000020 /* CoachInputBar.swift */; };
+
 		0B25D0210000000000000021 /* TrainingHeroSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1210000000000000021 /* TrainingHeroSection.swift */; };
-		0B25D0220000000000000022 /* WorkoutTemplateGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1220000000000000022 /* WorkoutTemplateGrid.swift */; };
+
 		0B25D0230000000000000023 /* TrainingStatsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1230000000000000023 /* TrainingStatsSection.swift */; };
-		0B25D0240000000000000024 /* XunjiImportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1240000000000000024 /* XunjiImportSheet.swift */; };
+
 		0B25D0250000000000000025 /* VelaTrainingPlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25D1250000000000000025 /* VelaTrainingPlanView.swift */; };
 		0B2000070000000000000007 /* VelaMinimalCoachView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B2001070000000000000007 /* VelaMinimalCoachView.swift */; };
 		0B21D0010000000000000001 /* VelaDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B21D1010000000000000001 /* VelaDesignSystem.swift */; };
@@ -272,7 +272,7 @@
 		0B1001060000000000000006 /* VelaTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Theme/VelaTheme.swift; sourceTree = "<group>"; };
 		0B1001070000000000000007 /* VelaBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Theme/VelaBackground.swift; sourceTree = "<group>"; };
 		0B1001100000000000000010 /* SectionHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/SharedComponents/SectionHeader.swift; sourceTree = "<group>"; };
-		0B1001140000000000000014 /* VitalsMetricDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Recovery/VitalsMetricDetailView.swift; sourceTree = "<group>"; };
+
 		0B1001160000000000000016 /* CoachView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/CoachView.swift; sourceTree = "<group>"; };
 		0B1001180000000000000018 /* HealthAuthorizationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/Authorization/HealthAuthorizationService.swift; sourceTree = "<group>"; };
 		0B1001190000000000000019 /* HealthDomainModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/Models/HealthDomainModels.swift; sourceTree = "<group>"; };
@@ -329,7 +329,7 @@
 		0B10014D000000000000004D /* WebSearchHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Agent/WebSearchHelper.swift; sourceTree = "<group>"; };
 		0B10014E000000000000004E /* ToolFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Agent/ToolFactory.swift; sourceTree = "<group>"; };
 		0B1001500000000000000050 /* DashboardViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/SharedComponents/DashboardViewModel.swift; sourceTree = "<group>"; };
-		0B1001510000000000000051 /* JournalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Journal/Views/JournalView.swift; sourceTree = "<group>"; };
+
 		0B1001520000000000000052 /* WikiFileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AI/Context/WikiFileService.swift; sourceTree = "<group>"; };
 		0B1001530000000000000053 /* AppLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Settings/AppLanguage.swift; sourceTree = "<group>"; };
 		0B1001540000000000000054 /* MarkdownText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/SharedComponents/MarkdownText.swift; sourceTree = "<group>"; };
@@ -340,13 +340,13 @@
 		0B25D1630000000000000060 /* CoachPersistenceWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/CoachPersistenceWriter.swift; sourceTree = "<group>"; };
 		0B25D1640000000000000060 /* CoachRequestRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/CoachRequestRunner.swift; sourceTree = "<group>"; };
 		0B25D1650000000000000060 /* FoodPhotoWorkflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/FoodPhotoWorkflow.swift; sourceTree = "<group>"; };
-		0B25D1800000000000000080 /* FlexStack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/FlexStack.swift; sourceTree = "<group>"; };
+
 		0B25D1810000000000000081 /* CoachHistoryDrawer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/CoachHistoryDrawer.swift; sourceTree = "<group>"; };
 		0B25D1820000000000000082 /* CoachWelcomeWorkspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/CoachWelcomeWorkspace.swift; sourceTree = "<group>"; };
 		0B25D1830000000000000083 /* WorkoutDetailSubComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Training/WorkoutDetailSubComponents.swift; sourceTree = "<group>"; };
 		0B25D1840000000000000084 /* StrengthWorkoutLogSubComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingIntelligence/Views/StrengthWorkoutLogSubComponents.swift; sourceTree = "<group>"; };
-		0B25D1850000000000000085 /* TrainingCalendarSubComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Training/TrainingCalendarSubComponents.swift; sourceTree = "<group>"; };
-		0B25D1860000000000000086 /* VitalsMetricDetailSubComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Recovery/VitalsMetricDetailSubComponents.swift; sourceTree = "<group>"; };
+
+
 		0B1001560000000000000056 /* MetricCoachCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/SharedComponents/MetricCoachCard.swift; sourceTree = "<group>"; };
 		0B1001570000000000000057 /* VelaLogoMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/SharedComponents/VelaLogoMark.swift; sourceTree = "<group>"; };
 		0B1001580000000000000058 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Resources/Assets.xcassets; sourceTree = "<group>"; };
@@ -362,10 +362,10 @@
 		0B1001830000000000000083 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Services/NotificationService.swift; sourceTree = "<group>"; };
 		0B1001850000000000000085 /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Services/LocationManager.swift; sourceTree = "<group>"; };
 		0B10018D000000000000008D /* WeatherService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Services/WeatherService.swift; sourceTree = "<group>"; };
-		0B1001860000000000000086 /* TrainingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Training/TrainingView.swift; sourceTree = "<group>"; };
-		0B1001870000000000000087 /* TrainingCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Training/TrainingCalendarView.swift; sourceTree = "<group>"; };
-		0B1001E100000000000000E1 /* TrainingPlanEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Training/TrainingPlanEditorSheet.swift; sourceTree = "<group>"; };
-		0B1001E200000000000000E2 /* TrainingQuickLogSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Training/TrainingQuickLogSheet.swift; sourceTree = "<group>"; };
+
+
+
+
 		0B1001880000000000000088 /* BiologyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Settings/BiologyView.swift; sourceTree = "<group>"; };
 		0B10018A000000000000008A /* CorrelationArtifactView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/SharedComponents/CorrelationArtifactView.swift; sourceTree = "<group>"; };
 		0B10018B000000000000008B /* CoachPersonality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/CoachPersonality.swift; sourceTree = "<group>"; };
@@ -415,9 +415,9 @@
 		0B25D1050000000000000005 /* JournalCorrelationSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/JournalCorrelationSection.swift; sourceTree = "<group>"; };
 		0B25D1060000000000000006 /* TodayHeroCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/TodayHeroCard.swift; sourceTree = "<group>"; };
 		0B25D1070000000000000007 /* TodaySignalGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/TodaySignalGrid.swift; sourceTree = "<group>"; };
-		0B25D1080000000000000008 /* TodayActionTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/TodayActionTimeline.swift; sourceTree = "<group>"; };
+
 		0B25D1090000000000000009 /* TodayNutritionStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/TodayNutritionStrip.swift; sourceTree = "<group>"; };
-		0B25D1100000000000000010 /* TodayCoachPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/TodayCoachPreview.swift; sourceTree = "<group>"; };
+
 		0B25D1110000000000000011 /* TodayEvidenceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/TodayEvidenceSheet.swift; sourceTree = "<group>"; };
 		0B25D1120000000000000012 /* TodayWeatherBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/TodayWeatherBar.swift; sourceTree = "<group>"; };
 		0B25D1130000000000000013 /* VelaSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/VelaSettingsView.swift; sourceTree = "<group>"; };
@@ -426,11 +426,11 @@
 		0B25D1170000000000000017 /* TodayExperienceModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/TodayExperienceModel.swift; sourceTree = "<group>"; };
 		0B25D1180000000000000018 /* BehaviorTagModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/BehaviorTagModels.swift; sourceTree = "<group>"; };
 		0B25D1190000000000000019 /* CoachMessageBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/CoachMessageBubble.swift; sourceTree = "<group>"; };
-		0B25D1200000000000000020 /* CoachInputBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Coach/CoachInputBar.swift; sourceTree = "<group>"; };
+
 		0B25D1210000000000000021 /* TrainingHeroSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/TrainingHeroSection.swift; sourceTree = "<group>"; };
-		0B25D1220000000000000022 /* WorkoutTemplateGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/WorkoutTemplateGrid.swift; sourceTree = "<group>"; };
+
 		0B25D1230000000000000023 /* TrainingStatsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/TrainingStatsSection.swift; sourceTree = "<group>"; };
-		0B25D1240000000000000024 /* XunjiImportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/XunjiImportSheet.swift; sourceTree = "<group>"; };
+
 		0B2001070000000000000007 /* VelaMinimalCoachView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Minimal/VelaMinimalCoachView.swift; sourceTree = "<group>"; };
 		0B21D1010000000000000001 /* VelaDesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/DesignSystem/VelaDesignSystem.swift; sourceTree = "<group>"; };
 		0B21D1020000000000000002 /* VelaCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/DesignSystem/VelaCard.swift; sourceTree = "<group>"; };
@@ -584,9 +584,9 @@
 				0B25D1050000000000000005 /* JournalCorrelationSection.swift */,
 				0B25D1060000000000000006 /* TodayHeroCard.swift */,
 				0B25D1070000000000000007 /* TodaySignalGrid.swift */,
-				0B25D1080000000000000008 /* TodayActionTimeline.swift */,
+
 				0B25D1090000000000000009 /* TodayNutritionStrip.swift */,
-				0B25D1100000000000000010 /* TodayCoachPreview.swift */,
+
 				0B25D1110000000000000011 /* TodayEvidenceSheet.swift */,
 				0B25D1120000000000000012 /* TodayWeatherBar.swift */,
 				0B25D1130000000000000013 /* VelaSettingsView.swift */,
@@ -595,26 +595,26 @@
 				0B25D1170000000000000017 /* TodayExperienceModel.swift */,
 				0B25D1180000000000000018 /* BehaviorTagModels.swift */,
 				0B25D1190000000000000019 /* CoachMessageBubble.swift */,
-				0B25D1200000000000000020 /* CoachInputBar.swift */,
+
 				0B25D1210000000000000021 /* TrainingHeroSection.swift */,
-				0B25D1220000000000000022 /* WorkoutTemplateGrid.swift */,
+
 				0B25D1230000000000000023 /* TrainingStatsSection.swift */,
-				0B25D1240000000000000024 /* XunjiImportSheet.swift */,
+
 				0B2001070000000000000007 /* VelaMinimalCoachView.swift */,
 				0B1001100000000000000010 /* SectionHeader.swift */,
 				0B1001500000000000000050 /* DashboardViewModel.swift */,
 				0B1001540000000000000054 /* MarkdownText.swift */,
 				0B1001560000000000000056 /* MetricCoachCard.swift */,
 				0B1001570000000000000057 /* VelaLogoMark.swift */,
-				0B1001140000000000000014 /* VitalsMetricDetailView.swift */,
+
 				0B1001160000000000000016 /* CoachView.swift */,
-				0B25D1800000000000000080 /* FlexStack.swift */,
+
 				0B25D1810000000000000081 /* CoachHistoryDrawer.swift */,
 				0B25D1820000000000000082 /* CoachWelcomeWorkspace.swift */,
 				0B25D1830000000000000083 /* WorkoutDetailSubComponents.swift */,
 				0B25D1840000000000000084 /* StrengthWorkoutLogSubComponents.swift */,
-				0B25D1850000000000000085 /* TrainingCalendarSubComponents.swift */,
-				0B25D1860000000000000086 /* VitalsMetricDetailSubComponents.swift */,
+
+
 				0B1001550000000000000055 /* CoachChatPanel.swift */,
 				0B25D1600000000000000060 /* CoachChatVM.swift */,
 				0B25D1610000000000000060 /* CoachSessionStore.swift */,
@@ -648,7 +648,7 @@
 				0B1001210000000000000021 /* JournalDraft.swift */,
 				0B10014D000000000000004D /* WebSearchHelper.swift */,
 				0B10014E000000000000004E /* ToolFactory.swift */,
-				0B1001510000000000000051 /* JournalView.swift */,
+
 				0B1001220000000000000022 /* PersistenceModels.swift */,
 				0B1001350000000000000035 /* VelaModelContainer.swift */,
 				3C47F96BE1FC2D34782EF610 /* VelaSchemaV3Frozen.swift */,
@@ -679,10 +679,10 @@
 				0B1001830000000000000083 /* NotificationService.swift */,
 				0B1001850000000000000085 /* LocationManager.swift */,
 				0B10018D000000000000008D /* WeatherService.swift */,
-				0B1001860000000000000086 /* TrainingView.swift */,
-				0B1001870000000000000087 /* TrainingCalendarView.swift */,
-				0B1001E100000000000000E1 /* TrainingPlanEditorSheet.swift */,
-				0B1001E200000000000000E2 /* TrainingQuickLogSheet.swift */,
+
+
+
+
 				0B1001880000000000000088 /* BiologyView.swift */,
 				0B10018A000000000000008A /* CorrelationArtifactView.swift */,
 				0B10018B000000000000008B /* CoachPersonality.swift */,
@@ -989,9 +989,9 @@
 				0B25D0050000000000000005 /* JournalCorrelationSection.swift in Sources */,
 				0B25D0060000000000000006 /* TodayHeroCard.swift in Sources */,
 				0B25D0070000000000000007 /* TodaySignalGrid.swift in Sources */,
-				0B25D0080000000000000008 /* TodayActionTimeline.swift in Sources */,
+
 				0B25D0090000000000000009 /* TodayNutritionStrip.swift in Sources */,
-				0B25D0100000000000000010 /* TodayCoachPreview.swift in Sources */,
+
 				0B25D0110000000000000011 /* TodayEvidenceSheet.swift in Sources */,
 				0B25D0120000000000000012 /* TodayWeatherBar.swift in Sources */,
 				0B25D0130000000000000013 /* VelaSettingsView.swift in Sources */,
@@ -1000,11 +1000,11 @@
 				0B25D0170000000000000017 /* TodayExperienceModel.swift in Sources */,
 				0B25D0180000000000000018 /* BehaviorTagModels.swift in Sources */,
 				0B25D0190000000000000019 /* CoachMessageBubble.swift in Sources */,
-				0B25D0200000000000000020 /* CoachInputBar.swift in Sources */,
+
 				0B25D0210000000000000021 /* TrainingHeroSection.swift in Sources */,
-				0B25D0220000000000000022 /* WorkoutTemplateGrid.swift in Sources */,
+
 				0B25D0230000000000000023 /* TrainingStatsSection.swift in Sources */,
-				0B25D0240000000000000024 /* XunjiImportSheet.swift in Sources */,
+
 				0B2000070000000000000007 /* VelaMinimalCoachView.swift in Sources */,
 				0B1000100000000000000010 /* SectionHeader.swift in Sources */,
 				0B1000490000000000000049 /* DashboardViewModel.swift in Sources */,
@@ -1013,15 +1013,15 @@
 				0B1000560000000000000056 /* VelaLogoMark.swift in Sources */,
 				2ABEFD7CAFAF4B688AAD9547 /* AgentActionParser.swift in Sources */,
 				A24B8C77AB634C2792754C42 /* DailyLogService.swift in Sources */,
-				0B1000140000000000000014 /* VitalsMetricDetailView.swift in Sources */,
+
 				0B1000160000000000000016 /* CoachView.swift in Sources */,
-				0B25D0800000000000000080 /* FlexStack.swift in Sources */,
+
 				0B25D0810000000000000081 /* CoachHistoryDrawer.swift in Sources */,
 				0B25D0820000000000000082 /* CoachWelcomeWorkspace.swift in Sources */,
 				0B25D0830000000000000083 /* WorkoutDetailSubComponents.swift in Sources */,
 				0B25D0840000000000000084 /* StrengthWorkoutLogSubComponents.swift in Sources */,
-				0B25D0850000000000000085 /* TrainingCalendarSubComponents.swift in Sources */,
-				0B25D0860000000000000086 /* VitalsMetricDetailSubComponents.swift in Sources */,
+
+
 				0B1000540000000000000054 /* CoachChatPanel.swift in Sources */,
 				0B25D0600000000000000060 /* CoachChatVM.swift in Sources */,
 				0B25D0610000000000000060 /* CoachSessionStore.swift in Sources */,
@@ -1053,7 +1053,7 @@
 				0B1000210000000000000021 /* JournalDraft.swift in Sources */,
 				0B10004D000000000000004D /* WebSearchHelper.swift in Sources */,
 				0B10004E000000000000004E /* ToolFactory.swift in Sources */,
-				0B1000500000000000000050 /* JournalView.swift in Sources */,
+
 				0B1000220000000000000022 /* PersistenceModels.swift in Sources */,
 				0B1000340000000000000034 /* VelaModelContainer.swift in Sources */,
 				3848C89DE6723E0A72CB5D58 /* VelaSchemaV3Frozen.swift in Sources */,
@@ -1083,10 +1083,10 @@
 				0B1001820000000000000082 /* NotificationService.swift in Sources */,
 				0B1001840000000000000084 /* LocationManager.swift in Sources */,
 				0B1001890000000000000089 /* WeatherService.swift in Sources */,
-				0B1000860000000000000086 /* TrainingView.swift in Sources */,
-				0B1000870000000000000087 /* TrainingCalendarView.swift in Sources */,
-				0B1000E100000000000000E1 /* TrainingPlanEditorSheet.swift in Sources */,
-				0B1000E200000000000000E2 /* TrainingQuickLogSheet.swift in Sources */,
+
+
+
+
 				0B1000880000000000000088 /* BiologyView.swift in Sources */,
 				0B10008A000000000000008A /* CorrelationArtifactView.swift in Sources */,
 				0B10008B000000000000008B /* CoachPersonality.swift in Sources */,
