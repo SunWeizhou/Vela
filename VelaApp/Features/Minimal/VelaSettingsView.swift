@@ -3,7 +3,6 @@ import SwiftData
 
 struct VelaSettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var cs
     
     // Settings toggles
     @AppStorage("vela_dark_mode") private var darkModeRaw = "system"
@@ -16,11 +15,12 @@ struct VelaSettingsView: View {
     @AppStorage(SleepTargetSettings.hoursKey) private var sleepTargetHours = SleepTargetSettings.defaultHours
     @AppStorage("vela_coach_personality") private var coachPersonalityRaw = CoachPersonality.guardian.rawValue
     
-    // AI Model settings
-    @AppStorage("vela_coach_text_model") private var textModel = "DeepSeek V4 Pro"
-
     private var currentCoachPersonalityName: String {
         CoachPersonality(rawValue: coachPersonalityRaw)?.displayName ?? CoachPersonality.guardian.displayName
+    }
+
+    private var outboundAgentStatus: String {
+        CoachOutboundDataPolicy.hasExplicitConsent ? "已授权" : "未授权"
     }
 
     var body: some View {
@@ -28,7 +28,7 @@ struct VelaSettingsView: View {
             LazyVStack(alignment: .leading, spacing: 32) {
                 profileCardRow
 
-                settingsGroup(eyebrow: "", title: "个人模型") {
+                settingsGroup(eyebrow: "", title: "你的模型") {
                     VStack(spacing: 0) {
                         NavigationLink(destination: AccountSettingsView()) {
                             settingsRow(icon: "person.crop.circle", title: "基本资料", value: "本机保存")
@@ -48,7 +48,7 @@ struct VelaSettingsView: View {
                     }
                 }
 
-                settingsGroup(eyebrow: "", title: "证据与控制") {
+                settingsGroup(eyebrow: "", title: "身体数据与控制") {
                     VStack(spacing: 0) {
                         NavigationLink(destination: DataSourceSettingsView()) {
                             settingsRow(icon: "applewatch", title: "数据来源", value: "Apple 健康")
@@ -59,7 +59,11 @@ struct VelaSettingsView: View {
                         }
                         settingsDivider
                         NavigationLink(destination: TrustCenterView()) {
-                            settingsRow(icon: "checkmark.shield", title: "信任中心", value: "运行与权限")
+                            settingsRow(icon: "checkmark.shield", title: "信任中心", value: "数据与 Agent")
+                        }
+                        settingsDivider
+                        NavigationLink(destination: AIModelSettingsView()) {
+                            settingsRow(icon: "network", title: "联网 Agent", value: outboundAgentStatus)
                         }
                         settingsDivider
                         NavigationLink(destination: PrivacyDataControlsView()) {
@@ -114,10 +118,6 @@ struct VelaSettingsView: View {
 
                 settingsGroup(eyebrow: "", title: "高级设置") {
                     VStack(spacing: 0) {
-                        NavigationLink(destination: AIModelSettingsView()) {
-                            settingsRow(icon: "cpu", title: "AI 模型与网络", value: textModel)
-                        }
-                        settingsDivider
                         NavigationLink(destination: CGMSettingsView()) {
                             settingsRow(icon: "drop.degreesign", title: "连续血糖数据", value: "Apple 健康")
                         }

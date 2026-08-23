@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct AppCoordinator: View {
     @Environment(\.modelContext) private var modelContext
@@ -11,24 +12,34 @@ struct AppCoordinator: View {
     @StateObject private var appState = VelaAppState.shared
     @StateObject private var dashboardVM: DashboardViewModel
     private let forceOnboarding: Bool
-
+    private let forcedOnboardingStep: VelaOnboardingStep?
+    private let forceTrustCenter: Bool
     init(arguments: [String] = ProcessInfo.processInfo.arguments) {
         let localServices = VelaServices()
         _services = StateObject(wrappedValue: localServices)
         _dashboardVM = StateObject(wrappedValue: DashboardViewModel(useCase: localServices.dailySummaryUseCase, services: localServices))
         forceOnboarding = Self.shouldForceOnboarding(arguments: arguments)
+        forcedOnboardingStep = Self.forcedOnboardingStep(arguments: arguments)
+        forceTrustCenter = Self.shouldForceTrustCenter(arguments: arguments)
     }
 
     var body: some View {
         ZStack {
-            if onboardingCompleted && !forceOnboarding {
+            if forceTrustCenter {
+                NavigationStack {
+                    TrustCenterView()
+                }
+                .environmentObject(dashboardVM)
+                .environmentObject(services)
+                .environment(\.locale, Locale(identifier: language.localeIdentifier))
+            } else if onboardingCompleted && !forceOnboarding {
                 VelaRootView()
                     .environmentObject(dashboardVM)
                     .environmentObject(services)
                     .environment(\.locale, Locale(identifier: language.localeIdentifier))
                     .id(language.rawValue)
             } else {
-                VelaOnboardingView()
+                VelaOnboardingView(initialStep: forcedOnboardingStep ?? .bodyState)
                     .environmentObject(dashboardVM)
                     .environment(\.locale, Locale(identifier: language.localeIdentifier))
             }
@@ -119,4 +130,22 @@ struct AppCoordinator: View {
         false
         #endif
     }
+
+    nonisolated static func forcedOnboardingStep(arguments: [String]) -> VelaOnboardingStep? {
+        #if DEBUG
+        if arguments.contains("-velaOnboardingAgentControl") { return .agentControl }
+        if arguments.contains("-velaOnboardingAppleHealth") { return .appleHealth }
+        #endif
+        return nil
+    }
+
+    nonisolated static func shouldForceTrustCenter(arguments: [String]) -> Bool {
+        #if DEBUG
+        arguments.contains("-velaForceTrustCenter")
+        #else
+        false
+        #endif
+    }
 }
+
+

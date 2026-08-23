@@ -480,6 +480,18 @@ enum CoachChatLayout {
     }
 }
 
+enum CoachHistoryLaunchState {
+    /// Stable debug seam for simulator visual regression. Production builds
+    /// always start with history dismissed.
+    static func isPresented(arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
+        #if DEBUG
+        arguments.contains("-velaOpenCoachHistory")
+        #else
+        false
+        #endif
+    }
+}
+
 struct VelaCoachView: View {
     @Environment(\.velaSurfaceIsActive) private var isActiveSurface
     @Environment(\.scenePhase) private var scenePhase
@@ -513,7 +525,7 @@ struct VelaCoachView: View {
     @State private var isNearBottom = true
 
     // Drawer state management
-    @State private var showHistoryDrawer = false
+    @State private var showHistoryDrawer: Bool
     @State private var isRenamingSession = false
     @State private var renamingSession: CoachSessionRecord? = nil
     @State private var sessionPendingDeletion: CoachSessionRecord? = nil
@@ -551,6 +563,14 @@ struct VelaCoachView: View {
     private var agentArtifacts: [AgentArtifactRecord]
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
+    private var headerTitle: String {
+        guard !vm.isGhostMode else { return "私密对话" }
+        let title = vm.currentSession?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if title.isEmpty || ["新对话", "New Chat", "New Session"].contains(title) {
+            return "身体分析"
+        }
+        return title
+    }
     private var todayOperatingPlan: DailyOperatingPlanRecord? {
         let identifier = DailyHealthSummaryRecord.dayIdentifier(for: dashboardVM.selectedDate)
         return operatingPlans.first(where: { $0.dayIdentifier == identifier })
@@ -564,6 +584,7 @@ struct VelaCoachView: View {
         self.presentation = presentation
         self.usesOverlayNavigation = usesOverlayNavigation
         self.vm = vm
+        _showHistoryDrawer = State(initialValue: CoachHistoryLaunchState.isPresented())
     }
 
     var body: some View {
@@ -693,45 +714,6 @@ struct VelaCoachView: View {
                     .background(VelaTheme.rhythmCanvas)
             }
             .background(VelaTheme.rhythmCanvas)
-            .blur(radius: showHistoryDrawer && !reduceMotion ? 3 : 0)
-            .disabled(showHistoryDrawer)
-
-            // Transparent backdrop for drawer
-            if showHistoryDrawer {
-                Color.black.opacity(0.4)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
-                            showHistoryDrawer = false
-                        }
-                    }
-                    .accessibilityLabel("关闭历史抽屉")
-                    .accessibilityAction {
-                        withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
-                            showHistoryDrawer = false
-                        }
-                    }
-            }
-
-            // Sliding drawer view
-            GeometryReader { geo in
-                HStack(spacing: 0) {
-                    CoachHistoryDrawer(
-                        width: geo.size.width * 0.78,
-                        vm: vm,
-                        modelContext: modelContext,
-                        showHistoryDrawer: $showHistoryDrawer,
-                        renamingSession: $renamingSession,
-                        renameText: $renameText,
-                        isRenamingSession: $isRenamingSession,
-                        sessionPendingDeletion: $sessionPendingDeletion
-                    )
-                    .offset(x: reduceMotion || showHistoryDrawer ? 0 : -geo.size.width * 0.78)
-                    .opacity(showHistoryDrawer ? 1 : 0)
-                    Spacer()
-                }
-            }
-            .ignoresSafeArea()
         }
         .task(id: isActiveSurface) {
             guard isActiveSurface else { return }
@@ -755,6 +737,19 @@ struct VelaCoachView: View {
         }
         .onChange(of: appState.coachRouteRevision) { _, _ in
             consumePendingRouteIfVisible()
+        }
+        .sheet(isPresented: $showHistoryDrawer) {
+            CoachHistoryDrawer(
+                vm: vm,
+                modelContext: modelContext,
+                showHistoryDrawer: $showHistoryDrawer,
+                renamingSession: $renamingSession,
+                renameText: $renameText,
+                isRenamingSession: $isRenamingSession,
+                sessionPendingDeletion: $sessionPendingDeletion
+            )
+            .presentationDetents([.large])
+            .velaSheetSurface()
         }
         .alert("重命名对话", isPresented: $isRenamingSession) {
             TextField("输入新标题...", text: $renameText)
@@ -883,9 +878,7 @@ struct VelaCoachView: View {
     private var headerView: some View {
         HStack(spacing: 8) {
             Button {
-                withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
-                    showHistoryDrawer = true
-                }
+                showHistoryDrawer = true
             } label: {
                 Image(systemName: "sidebar.left")
                     .font(.system(size: 16, weight: .semibold))
@@ -898,7 +891,7 @@ struct VelaCoachView: View {
             .accessibilityHint("打开历史对话列表")
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(vm.isGhostMode ? "私密对话" : ((vm.currentSession?.title.isEmpty ?? true) ? "Vela" : (vm.currentSession?.title ?? "Vela")))
+                Text(headerTitle)
                     .font(.headline)
                     .tracking(-0.25)
                     .foregroundStyle(VelaTheme.rhythmInk)
@@ -907,7 +900,7 @@ struct VelaCoachView: View {
                 if !dynamicTypeSize.isAccessibilitySize {
                     HStack(spacing: 5) {
                         Circle().fill(VelaTheme.rhythmDeep).frame(width: 5, height: 5)
-                        Text(vm.isGhostMode ? "不保存 · 只读" : (vm.isReady ? "解释与调整工作台" : "本机解释可用"))
+                        Text(vm.isGhostMode ? "不保存" : "分数 · 基线 · 趋势")
                             .font(.caption)
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
@@ -986,21 +979,21 @@ struct VelaCoachView: View {
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmDeep)
             VStack(alignment: .leading, spacing: 4) {
-                Text("AI 请求执行「\(toolConfirmationLabel(tool))」")
+                Text("Vela 提议「\(toolConfirmationLabel(tool))」")
                     .font(VelaTheme.subheadline().weight(.semibold))
                     .foregroundStyle(VelaTheme.rhythmInk)
-                Text(tool.arguments.count > 120 ? String(tool.arguments.prefix(120)) + "…" : tool.arguments)
+                Text(toolConfirmationSummary(tool))
                     .font(VelaTheme.caption2())
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 10) {
-                    Button("允许") { vm.confirmToolCall(true) }
+                    Button("确认") { vm.confirmToolCall(true) }
                         .font(VelaTheme.caption1().weight(.semibold))
                         .foregroundStyle(VelaTheme.rhythmDeepOn)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(VelaTheme.rhythmDeep, in: Capsule())
-                    Button("拒绝") { vm.confirmToolCall(false) }
+                    Button("暂不") { vm.confirmToolCall(false) }
                         .font(VelaTheme.caption1().weight(.semibold))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         .padding(.horizontal, 12)
@@ -1029,6 +1022,56 @@ struct VelaCoachView: View {
         case "update_wiki": return "更新档案文件"
         case "update_user_profile": return "更新个人档案"
         default: return tool.name
+        }
+    }
+
+    private func toolConfirmationSummary(_ tool: ToolCallDescription) -> String {
+        guard let data = tool.arguments.data(using: .utf8),
+              let values = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return "确认后才会写入本机；暂不不会改变现有数据。"
+        }
+
+        switch tool.name {
+        case "create_training_plan":
+            let title = values["title"] as? String ?? "新的训练计划"
+            let weeks = values["weeks_count"] as? Int
+            let goal = values["goal_description"] as? String
+            return [
+                title,
+                weeks.map { "\($0) 周" },
+                goal
+            ]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+        case "log_food":
+            let meal = values["meal_name"] as? String ?? values["name"] as? String
+            let calories = values["total_calories"] as? Int ?? values["calories"] as? Int
+            return [meal, calories.map { "\($0) kcal" }]
+                .compactMap { $0 }
+                .filter { !$0.isEmpty }
+                .joined(separator: " · ")
+        case "update_user_profile":
+            let labels: [(String, String)] = [
+                ("age", "年龄"),
+                ("weight_kg", "体重"),
+                ("height_cm", "身高"),
+                ("max_hr", "最大心率"),
+                ("biological_sex", "生理性别")
+            ]
+            let fields = labels.compactMap { key, label in
+                values[key] == nil ? nil : label
+            }
+            return fields.isEmpty
+                ? "确认后更新个人档案。"
+                : "更新：" + fields.joined(separator: "、")
+        case "update_wiki":
+            let target = values["target_file"] as? String
+            return target.map { "更新健康记忆：\($0)" } ?? "确认后更新健康记忆。"
+        case "delete_plan":
+            return "确认后删除所选计划；现有计划在确认前保持不变。"
+        default:
+            return "确认后才会写入本机；暂不不会改变现有数据。"
         }
     }
 
@@ -1087,7 +1130,7 @@ struct VelaCoachView: View {
                 .buttonStyle(.plusButton)
                 .accessibilityLabel("添加 Coach 上下文")
 
-                TextField(vm.isReady ? "解释、质疑或调整今天的决定…" : "请 Vela 解释本机建议…", text: $inputText, axis: .vertical)
+                TextField("追问你的身体状态…", text: $inputText, axis: .vertical)
                     .font(VelaTheme.body())
                     .lineLimit(1...(dynamicTypeSize.isAccessibilitySize ? 6 : 5))
                     .fixedSize(horizontal: false, vertical: true)
@@ -1223,7 +1266,13 @@ struct VelaCoachView: View {
         }
 
         if let question = appState.prefilledCoachQuestion {
-            sendMessage(question)
+            sendMessage(
+                question,
+                focus: CoachContextFocus.routed(
+                    from: appState.coachRouteSurface,
+                    selectedDate: dashboardVM.selectedDate
+                )
+            )
             appState.prefilledCoachQuestion = nil
         }
     }
@@ -1277,7 +1326,10 @@ struct VelaCoachView: View {
         return nil
     }
 
-    private func sendMessage(_ text: String) {
+    private func sendMessage(
+        _ text: String,
+        focus: CoachContextFocus = .general
+    ) {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty, !vm.isStreaming else { return }
         inputText = ""
@@ -1306,7 +1358,7 @@ struct VelaCoachView: View {
             modelContext: modelContext,
             journalEntries: journalEntries,
             savedReports: savedReports,
-            focus: .general,
+            focus: focus,
             services: services,
             coverageSummary: dataCoverageSummary
         )
@@ -1495,56 +1547,50 @@ enum LocalCoachGuidanceBuilder {
         operatingPlan: DailyOperatingPlanRecord?,
         isChinese: Bool = AppLanguage.stored.isChinese
     ) -> String {
-        if let operatingPlan {
-            let display = DailyOperatingPlanDisplayModel.build(
-                payload: operatingPlan.operatingPlanPayload,
-                primaryActionType: operatingPlan.primaryActionType,
-                source: operatingPlan.source,
-                safetyNotice: operatingPlan.safetyNotice,
-                confidence: operatingPlan.confidence,
-                isChinese: isChinese
-            )
-            if isChinese {
-                let supportText = display.supportingActionLines.isEmpty
-                    ? ""
-                    : "\n\n辅助行动：\n" + display.supportingActionLines.map { "- \($0)" }.joined(separator: "\n")
-                return """
-                **\(display.statusTitle)**
+        let availableMetrics = [
+            dashboard.recovery.hasData,
+            dashboard.sleepScore.hasData,
+            dashboard.strain.hasData,
+            dashboard.stress.hasData,
+            dashboard.energy.hasData
+        ].filter { $0 }.count
 
-                \(display.summary)\(supportText)
-
-                - \(display.confidenceLabel)
-                - \(display.evidenceLine)
-                - 下一步：前往训练页执行或调整计划，完成后记录体感，Vela 会用于后续校准。
-
-                当前回答由本机规则与已同步数据生成；连接 AI 后可继续追问更细的解释。
-                """
+        if isChinese {
+            guard availableMetrics > 0 else {
+                return "目前还没有可解释的身体分数。先同步 Apple 健康；Vela 不会用缺失数据猜测你的状态。"
             }
-            let supportText = display.supportingActionLines.isEmpty
-                ? ""
-                : "\n\nSupporting actions:\n" + display.supportingActionLines.map { "- \($0)" }.joined(separator: "\n")
+            let headline = dashboard.personalHealthBrief?.headline
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let summary = (headline?.isEmpty == false) ? headline! : "先从各项分数本身开始，不把它们合成一个伪精确的总分。"
+            let planLine = operatingPlan?.operatingPlanPayload?.primaryAction.map {
+                "\n今日计划：\($0.title)"
+            } ?? ""
             return """
-            **\(display.statusTitle)**
+            **今天的身体数据**
 
-            \(display.summary)\(supportText)
+            恢复 \(dashboard.recovery.formattedScore) · 睡眠 \(dashboard.sleepScore.formattedScore) · 负荷 \(dashboard.strain.formattedScore)
+            压力 \(dashboard.stress.formattedScore) · 能量 \(dashboard.energy.formattedScore)
 
-            - \(display.confidenceLabel)
-            - \(display.evidenceLine)
-            - Next: open Training to follow or adjust the plan, then log how it felt so Vela can calibrate future guidance.
+            \(summary)\(planLine)
 
-            This answer was generated locally from synced data and deterministic rules. Connect AI for deeper follow-up questions.
+            当前未连接 AI；以上是本机数据摘要。连接后可继续追问影响因素、时间趋势与计划调整。
             """
         }
-
-        let hasRecovery = dashboard.recovery.hasData
-        if isChinese {
-            return hasRecovery
-                ? "本机已经读取到部分身体信号，但今日计划仍在生成。请先刷新今日页；在计划完成前，不建议仅凭单项分数提高训练量。一般健康建议，不构成医疗诊断。"
-                : "当前还没有足够的恢复与睡眠信号。请先在今日页同步 Apple 健康并建立身体基线；在此之前，保持原有节奏或适度减量，不要根据缺失数据临时加练。一般健康建议，不构成医疗诊断。"
+        guard availableMetrics > 0 else {
+            return "There are no body scores to explain yet. Sync Apple Health first; Vela will not guess from missing data."
         }
-        return hasRecovery
-            ? "Some body signals are available, but today's plan is still being generated. Refresh Today first, and do not increase training from a single metric alone. General guidance only; not a medical diagnosis."
-            : "Recovery and sleep coverage is still limited. Sync Apple Health from Today and build your baseline first; until then, keep your normal routine or reduce load conservatively. General guidance only; not a medical diagnosis."
+        let planLine = operatingPlan?.operatingPlanPayload?.primaryAction.map {
+            "\nToday's plan: \($0.title)"
+        } ?? ""
+        return """
+        **Today's body data**
+
+        Recovery \(dashboard.recovery.formattedScore) · Sleep \(dashboard.sleepScore.formattedScore) · Strain \(dashboard.strain.formattedScore)
+        Stress \(dashboard.stress.formattedScore) · Energy \(dashboard.energy.formattedScore)
+        \(planLine)
+
+        AI is not connected. This is the local data summary; connect a model to ask about contributors, trends, and plan changes.
+        """
     }
 }
 

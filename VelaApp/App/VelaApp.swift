@@ -11,8 +11,10 @@ private let logger = Logger(subsystem: "com.sunweizhou.Vela", category: "App")
 final class VelaAppState: ObservableObject {
     static let todayTabIndex = 0
     static let trendsTabIndex = 1
-    static let coachTabIndex = 2
-    static let trainingTabIndex = 3
+    static let planTabIndex = 2
+    static let coachTabIndex = 3
+    /// Compatibility alias for older deep links. Training now lives inside Plan.
+    static let trainingTabIndex = planTabIndex
     static let meTabIndex = 3
     nonisolated private static let validTabIndices = 0...3
 
@@ -54,6 +56,7 @@ final class VelaAppState: ObservableObject {
     @Published var postWorkoutImpactWorkoutID: UUID?
     @Published var forceNewCoachSession = false
     @Published private(set) var coachRouteDestination: CoachRouteDestination?
+    @Published private(set) var coachRouteSurface: CoachScreenSurface = .coach
     @Published private(set) var coachRouteRevision = 0
     @Published private(set) var localDataRevision = 0
     @Published private(set) var adaptiveTrainingStartRequest = 0
@@ -64,6 +67,7 @@ final class VelaAppState: ObservableObject {
     init(arguments: [String] = ProcessInfo.processInfo.arguments) {
         #if DEBUG
         selectedTab = Self.initialTab(from: arguments)
+        triggerRecoveryDetail = arguments.contains("-velaOpenRecoveryDetail")
         #endif
     }
 
@@ -77,22 +81,32 @@ final class VelaAppState: ObservableObject {
         return tab
     }
 
-    func routeToCoach(question: String?) {
-        prepareCoachRoute(question: question)
+    func routeToCoach(
+        question: String?,
+        surface: CoachScreenSurface = .coach
+    ) {
+        prepareCoachRoute(question: question, surface: surface)
         coachRouteDestination = .embedded
         showCoachHub = false
         selectedTab = Self.coachTabIndex
         coachRouteRevision += 1
     }
 
-    func routeToQuickCoach(question: String?) {
-        prepareCoachRoute(question: question)
+    func routeToQuickCoach(
+        question: String?,
+        surface: CoachScreenSurface = .coach
+    ) {
+        prepareCoachRoute(question: question, surface: surface)
         coachRouteDestination = .quickCover
         coachRouteRevision += 1
         showCoachHub = true
     }
 
-    private func prepareCoachRoute(question: String?) {
+    private func prepareCoachRoute(
+        question: String?,
+        surface: CoachScreenSurface
+    ) {
+        coachRouteSurface = surface
         if let question = question {
             prefilledCoachQuestion = question
             forceNewCoachSession = false
@@ -122,8 +136,12 @@ final class VelaAppState: ObservableObject {
         routeToTab(Self.trendsTabIndex)
     }
 
+    func routeToPlan() {
+        routeToTab(Self.planTabIndex)
+    }
+
     func routeToTraining() {
-        routeToTab(Self.trainingTabIndex)
+        routeToPlan()
     }
 
     func routeToMe() {
@@ -132,7 +150,7 @@ final class VelaAppState: ObservableObject {
 
     func routeToAdaptiveTrainingStart() {
         resetQuickActionSheetTriggers()
-        selectedTab = Self.trainingTabIndex
+        selectedTab = Self.planTabIndex
         adaptiveTrainingStartRequest += 1
     }
 
@@ -218,7 +236,10 @@ struct OpenVelaReadinessIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        VelaAppState.shared.routeToCoach(question: "请根据我今天的恢复、睡眠和训练负荷，判断当前就绪状态，并给出一个最重要的行动建议。")
+        VelaAppState.shared.routeToCoach(
+            question: "请根据我今天的恢复、睡眠和训练负荷，解释当前身体状态，并给出一个最重要的行动建议。",
+            surface: .home
+        )
         return .result()
     }
 }

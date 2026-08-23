@@ -4,8 +4,6 @@ import SwiftData
 // MARK: - CoachHistoryDrawer
 
 struct CoachHistoryDrawer: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let width: CGFloat
     @ObservedObject var vm: CoachChatVM
     let modelContext: ModelContext
     @Binding var showHistoryDrawer: Bool
@@ -34,15 +32,16 @@ struct CoachHistoryDrawer: View {
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Spacer()
                 Button {
-                    withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
-                        showHistoryDrawer = false
-                    }
+                    showHistoryDrawer = false
                 } label: {
-                    Image(systemName: "sidebar.left")
-                        .font(.system(size: 16))
+                    Image(systemName: "xmark")
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmDeep)
+                        .frame(width: VelaTheme.minimumHitTarget, height: VelaTheme.minimumHitTarget)
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.cardPress)
+                .accessibilityLabel("关闭对话历史")
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
@@ -51,9 +50,7 @@ struct CoachHistoryDrawer: View {
             // New Chat Button
             Button {
                 vm.createNewSession(modelContext: modelContext)
-                withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
-                    showHistoryDrawer = false
-                }
+                showHistoryDrawer = false
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "plus")
@@ -121,9 +118,11 @@ struct CoachHistoryDrawer: View {
                                     Image(systemName: "pencil")
                                         .font(.system(size: 12))
                                         .foregroundStyle(VelaTheme.rhythmDeep)
-                                        .frame(width: 24, height: 24)
+                                        .frame(width: VelaTheme.minimumHitTarget, height: VelaTheme.minimumHitTarget)
+                                        .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.cardPress)
+                                .accessibilityLabel("重命名\(session.title.isEmpty ? "新对话" : session.title)")
                                 
                                 Button {
                                     sessionPendingDeletion = session
@@ -131,9 +130,11 @@ struct CoachHistoryDrawer: View {
                                     Image(systemName: "trash")
                                         .font(.system(size: 12))
                                         .foregroundStyle(VelaTheme.stressColor)
-                                        .frame(width: 24, height: 24)
+                                        .frame(width: VelaTheme.minimumHitTarget, height: VelaTheme.minimumHitTarget)
+                                        .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.cardPress)
+                                .accessibilityLabel("删除\(session.title.isEmpty ? "新对话" : session.title)")
                             }
                         }
                         .padding(.horizontal, 14)
@@ -149,15 +150,11 @@ struct CoachHistoryDrawer: View {
                         .padding(.horizontal, 14)
                         .onTapGesture {
                             vm.selectSession(session, modelContext: modelContext)
-                            withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
-                                showHistoryDrawer = false
-                            }
+                            showHistoryDrawer = false
                         }
                         .accessibilityAction {
                             vm.selectSession(session, modelContext: modelContext)
-                            withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
-                                showHistoryDrawer = false
-                            }
+                            showHistoryDrawer = false
                         }
                     }
                 }
@@ -188,17 +185,10 @@ struct CoachHistoryDrawer: View {
             }
             .padding(.horizontal, 20)
             .padding(.top, 12)
-            .padding(.bottom, 48)
+            .padding(.bottom, 16)
             .background(VelaTheme.rhythmCanvasRaised)
         }
-        .safeAreaPadding(.top)
-        .frame(width: width)
-        .frame(maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(VelaTheme.rhythmCanvas)
-        .overlay(alignment: .trailing) {
-            Rectangle()
-                .fill(VelaTheme.rhythmMist)
-                .frame(width: 0.75)
-        }
     }
 }

@@ -7,6 +7,8 @@ import UIKit
 enum CoachScreenSurface: String, Codable, Hashable, Sendable {
     case coach
     case home
+    case trends
+    case plan
     case metricDetail = "metric_detail"
     case workoutDetail = "workout_detail"
     case journal
@@ -53,6 +55,93 @@ struct CoachContextFocus: Hashable, Sendable {
             ),
             screenContext: CoachScreenContext(surface: .coach)
         )
+    }
+
+    static func routed(
+        from surface: CoachScreenSurface,
+        selectedDate: Date? = nil
+    ) -> CoachContextFocus {
+        let screenContext = CoachScreenContext(
+            surface: surface,
+            selectedDate: selectedDate
+        )
+
+        switch surface {
+        case .home:
+            return CoachContextFocus(
+                title: L10n.t("Today", "今日"),
+                systemContext: L10n.t(
+                    "Explain the independent health scores, their baseline deviations, and likely relationships before discussing downstream actions.",
+                    "先解释五个独立身体分数、个人基线偏离和可能联系，再讨论下游行动。"
+                ),
+                screenContext: screenContext
+            )
+        case .trends:
+            return CoachContextFocus(
+                title: L10n.t("Trends", "趋势"),
+                systemContext: L10n.t(
+                    "Explain the selected time-series horizon, distinguish current deviation from temporal trend, and avoid claiming causality without evidence.",
+                    "解释选定时间尺度，区分当前基线偏离与时间趋势；没有证据时不得声称因果。"
+                ),
+                screenContext: screenContext
+            )
+        case .plan:
+            return CoachContextFocus(
+                title: L10n.t("Plan", "计划"),
+                systemContext: L10n.t(
+                    "Explain how current body evidence relates to the user-owned Daily Operating Plan. Propose material changes for explicit confirmation instead of silently applying them.",
+                    "解释当前身体证据与用户拥有的每日行动计划如何关联；实质变更只能形成候选并等待用户确认。"
+                ),
+                screenContext: screenContext
+            )
+        case .metricDetail:
+            return CoachContextFocus(
+                title: L10n.t("Metric detail", "指标详情"),
+                systemContext: L10n.t(
+                    "Explain the selected metric using its current value, baseline, contributors, coverage, and time series.",
+                    "结合当前值、个人基线、贡献因子、数据覆盖和时间序列解释所选指标。"
+                ),
+                screenContext: screenContext
+            )
+        case .journal:
+            return CoachContextFocus(
+                title: L10n.t("Lived state", "主观状态"),
+                systemContext: L10n.t(
+                    "Relate the user's lived state to objective signals without treating an unreported symptom as absent.",
+                    "把用户的主观感受与客观身体信号联系起来，未报告的感受不得视为不存在。"
+                ),
+                screenContext: screenContext
+            )
+        case .nutrition:
+            return CoachContextFocus(
+                title: L10n.t("Nutrition", "营养"),
+                systemContext: L10n.t(
+                    "Discuss nutrition in proportion to the current body evidence and avoid compensatory actions.",
+                    "结合当前身体证据讨论营养，不提出补偿性饮食或运动行为。"
+                ),
+                screenContext: screenContext
+            )
+        case .training, .workoutDetail:
+            return CoachContextFocus(
+                title: L10n.t("Training", "训练"),
+                systemContext: L10n.t(
+                    "Treat training as a downstream capability of the Daily Operating Plan and explain boundaries from current body evidence.",
+                    "把训练视为每日行动计划的下游能力，并从当前身体证据解释执行边界。"
+                ),
+                screenContext: screenContext
+            )
+        case .biology:
+            return CoachContextFocus(
+                title: L10n.t("Biology", "生理"),
+                systemContext: L10n.t(
+                    "Explain long-term physiology from bounded evidence and personal baselines.",
+                    "依据有边界的证据与个人基线解释长期生理变化。"
+                ),
+                screenContext: screenContext
+            )
+        case .coach:
+            return .general
+        }
     }
 }
 
@@ -175,55 +264,40 @@ final class CoachChatVM: ObservableObject {
     ) -> [String] {
         var questions: [String] = []
 
-        let rawDecision = todayPlan?.trainingDecision?.decision
-        let planKind = dashboard?.trainingDecision.kind
-
-        let isRest = rawDecision == .rest || planKind == .rest || planKind == .recovery
-        let isSwap = rawDecision == .swap
-        let isReduce = rawDecision == .reduce || planKind == .downshift
-        let isKeep = rawDecision == .keep || planKind == .train || planKind == .maintain
-
-        let sleepScore = dashboard?.sleepScore.score ?? 0
-        let stressIndex = dashboard?.stress.stressIndex ?? 0
-        let recoveryScore = dashboard?.recovery.score ?? 0
-        let hasRecovery = dashboard?.recovery.hasData ?? false
-
-        // 1. 结合今日核心决策
-        if isRest {
-            if sleepScore > 0 && sleepScore < 60 {
-                questions.append("昨晚睡眠欠佳，今天如何科学补觉与安排恢复？")
-            } else if stressIndex > 65 {
-                questions.append("当前生理压力偏高，推荐哪些轻度放松和减压方式？")
-            } else {
-                questions.append("为什么今天建议优先恢复？帮我分析生理原因")
+        if let dashboard {
+            if dashboard.recovery.hasData {
+                questions.append("为什么我今天的恢复是 \(Int(dashboard.recovery.score.rounded()))？主要受哪些身体信号影响？")
             }
-        } else if isSwap {
-            questions.append("为什么今天建议替换训练肌群？该如何调整动作？")
-        } else if isReduce {
-            questions.append("今天建议减量执行，具体应该降低多少重量或组数？")
-        } else if isKeep {
-            questions.append("今天身体状态良好，针对目标训练部位有什么动作建议？")
+
+            if dashboard.sleepScore.hasData || dashboard.stress.hasData {
+                let sleep = dashboard.sleepScore.hasData
+                    ? "睡眠 \(Int(dashboard.sleepScore.score.rounded()))"
+                    : "睡眠数据"
+                let stress = dashboard.stress.hasData
+                    ? "压力 \(Int(dashboard.stress.score.rounded()))"
+                    : "压力数据"
+                questions.append("\(sleep) 与\(stress)之间可能有什么联系？")
+            }
+
+            if let notable = dashboard.personalHealthBrief?.notableChanges.first,
+               notable.isAvailable {
+                questions.append("\(notable.metric.shortTitle)相对我的个人基线发生了什么变化？")
+            } else {
+                questions.append("这五个身体分数和我的个人基线相比，有哪些变化值得注意？")
+            }
         }
 
-        // 2. 结合生理体征痛点
-        if hasRecovery && recoveryScore < 50 && !questions.contains(where: { $0.contains("恢复") }) {
-            questions.append("今天恢复分数偏低，背后的主要限制因子是什么？")
-        } else if sleepScore >= 80 && !questions.contains(where: { $0.contains("睡眠") }) {
-            questions.append("昨晚睡眠质量优良，帮我分析睡眠各阶段表现")
-        } else if (dashboard?.strain.score ?? 0) > 14 {
-            questions.append("今日累积运动负荷较高，今晚需要注意哪些恢复要点？")
+        if todayPlan != nil {
+            questions.append("这些身体变化是否需要调整今天的计划？先解释依据，再给候选方案。")
+        } else {
+            questions.append("根据当前身体状态，今天的健康行动应该怎样安排？")
         }
 
-        // 3. 趋势与长线记忆
-        questions.append("分析我近期的健康节律与训练反应趋势")
-        questions.append("查看并更新我的个人健康档案与长期目标")
-
-        // 4. 兜底补齐到 4 个
         let fallbacks = [
-            "今天的训练建议与执行细节",
-            "本周整体运动负荷与恢复平衡分析",
-            "根据我的近期数据给出饮食与作息建议",
-            "更新我的训练偏好与力量基准"
+            "我目前有哪些身体数据可用，哪些还在建立个人基线？",
+            "恢复、睡眠、负荷、压力和能量之间有哪些可能联系？",
+            "最近 30 天有哪些指标偏离了我的正常范围？",
+            "把当前身体状态转述成一句容易理解的话"
         ]
 
         for fallback in fallbacks {

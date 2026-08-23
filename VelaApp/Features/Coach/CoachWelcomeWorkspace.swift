@@ -1,8 +1,10 @@
 import SwiftUI
 import SwiftData
 
-// MARK: - CoachWelcomeWorkspace
+// MARK: - Coach welcome workspace
 
+/// Coach opens on evidence, not a generic chat greeting. The score hierarchy
+/// mirrors Today while keeping this surface focused on explanation and follow-up.
 struct CoachWelcomeWorkspace: View {
     @ObservedObject var vm: CoachChatVM
     let todayOperatingPlan: DailyOperatingPlanRecord?
@@ -12,310 +14,347 @@ struct CoachWelcomeWorkspace: View {
     let onSendMessage: (String) -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     @ObservedObject private var appState = VelaAppState.shared
 
-    private var greetingTimeText: String {
-        let hour = Calendar.current.component(.hour, from: Date())
-        if hour < 6 { return "夜深了" }
-        if hour < 11 { return "早安" }
-        if hour < 14 { return "中午好" }
-        if hour < 18 { return "下午好" }
-        return "晚上好"
+    private var dashboard: DashboardSummary { dashboardVM.dashboard }
+
+    private var primaryMetrics: [CoachWelcomeMetric] {
+        [
+            .init(id: "recovery", title: "恢复", metric: dashboard.recovery, domain: .recovery),
+            .init(id: "sleep", title: "睡眠", metric: dashboard.sleepScore, domain: .sleep),
+            .init(id: "strain", title: "负荷", metric: dashboard.strain, domain: .strain)
+        ]
     }
 
-    private var dynamicBriefingText: String {
-        if let plan = todayOperatingPlan?.operatingPlanPayload {
-            switch plan.decision {
-            case .keep:
-                return "今日生理就绪度良好，恢复节奏平稳，适合按计划推进。"
-            case .reduce:
-                return "今日身体处于轻度恢复窗口，建议适当降低训练负荷与强度。"
-            case .swap:
-                return "根据局部肌群疲劳与体征反馈，建议调整今日训练焦点。"
-            case .rest:
-                return "生理负荷处于较高位，今日建议优先安排轻量恢复与拉伸。"
-            }
+    private var questions: [String] {
+        Array(vm.contextualQuickQuestions(
+            todayPlan: todayOperatingPlan,
+            dashboard: dashboard
+        ).prefix(3))
+    }
+
+    private var agentSentence: String {
+        if let brief = dashboard.personalHealthBrief,
+           !brief.headline.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return brief.headline
         }
-        return "已连接健康数据与个人生理基线，随时与我探讨身体状态、睡眠与训练。"
+        if primaryMetrics.contains(where: { $0.value != nil }) {
+            return "这些分数描述不同侧面，点一下让我解释它们之间的联系。"
+        }
+        return "同步 Apple 健康后，我会从这些分数开始解释。"
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            // 1. Context-First Welcome Greeting
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(VelaTheme.rhythmDeep)
-                        .frame(width: 7, height: 7)
-                        .shadow(color: VelaTheme.rhythmGlow.opacity(0.6), radius: 5)
-                    Text("Vela 智能顾问")
-                        .font(VelaTheme.caption1().weight(.bold))
-                        .tracking(0.5)
-                        .foregroundStyle(VelaTheme.rhythmDeep)
-                }
-                .padding(.horizontal, 9)
-                .padding(.vertical, 4)
-                .background(VelaTheme.rhythmDeep.opacity(0.08), in: Capsule())
+            Text("今天想理解什么？")
+                .font(VelaTheme.title1())
+                .tracking(-0.65)
+                .foregroundStyle(VelaTheme.rhythmInk)
+                .padding(.top, 4)
+                .accessibilityIdentifier("coach-welcome-greeting")
 
-                Text("\(greetingTimeText)，想聊聊什么？")
-                    .font(VelaTheme.title1())
-                    .tracking(-0.6)
+            currentContextSection
+            questionSection
+            workspaceSection
+        }
+    }
+
+    private var currentContextSection: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("当前身体上下文")
+                    .font(VelaTheme.headline())
                     .foregroundStyle(VelaTheme.rhythmInk)
-
-                Text(dynamicBriefingText)
-                    .font(VelaTheme.body())
-                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.top, 4)
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("coach-welcome-greeting")
-
-            // 1.5 待处理与最近生成（P0-E：提案/记忆/产物此前完全未展示）
-            if !pendingMemoryProposals.isEmpty || !agentArtifacts.isEmpty {
-                pendingAndRecentSection
-            }
-
-            // 2. Compact Top Shortcuts (档案 & 报告)
-            topShortcuts
-
-            // 3. Dynamic Contextual Smart Prompt Chips
-            VStack(alignment: .leading, spacing: 10) {
-                Text("灵感与深度分析")
-                    .font(VelaTheme.caption1().weight(.bold))
-                    .tracking(0.3)
-                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                    .padding(.leading, 2)
-
-                VStack(spacing: 9) {
-                    ForEach(contextualPromptCards, id: \.title) { item in
-                        Button {
-                            onSendMessage(item.query)
-                        } label: {
-                            HStack(spacing: 12) {
-                                ZStack {
-                                    Circle()
-                                        .fill(VelaTheme.rhythmDeep.opacity(0.10))
-                                        .frame(width: 32, height: 32)
-                                    Image(systemName: item.icon)
-                                        .font(VelaTheme.footnote().weight(.semibold))
-                                        .foregroundStyle(VelaTheme.rhythmDeep)
-                                }
-
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(item.title)
-                                        .font(VelaTheme.body().weight(.semibold))
-                                        .foregroundStyle(VelaTheme.rhythmInk)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                    Text(item.subtitle)
-                                        .font(VelaTheme.footnote())
-                                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-
-                                Spacer(minLength: 8)
-
-                                Image(systemName: "arrow.up.right")
-                                    .font(VelaTheme.footnote().weight(.semibold))
-                                    .foregroundStyle(VelaTheme.rhythmDeep)
-                            }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 11)
-                            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
-                            )
-                        }
-                        .buttonStyle(.cardPress)
-                    }
+                Spacer()
+                Button("查看 Today") {
+                    VelaHaptic.selection()
+                    appState.routeToToday()
                 }
+                .font(VelaTheme.caption1().weight(.semibold))
+                .foregroundStyle(VelaTheme.rhythmDeep)
+            }
+
+            primaryScoreRow
+
+            HStack(spacing: 12) {
+                secondaryMetric(
+                    title: "压力",
+                    metric: dashboard.stress,
+                    domain: .stress
+                )
+                secondaryMetric(
+                    title: "能量",
+                    metric: dashboard.energy,
+                    domain: .energy
+                )
+            }
+
+            Button {
+                VelaHaptic.selection()
+                onSendMessage("请结合我的五个身体分数和个人基线，解释今天最值得关注的变化以及它们之间可能的联系。")
+            } label: {
+                HStack(spacing: 9) {
+                    Image(systemName: "sparkles")
+                        .font(VelaTheme.footnote().weight(.semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                    Text(agentSentence)
+                        .font(VelaTheme.footnote())
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        .multilineTextAlignment(.leading)
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.right")
+                        .font(VelaTheme.caption2().weight(.bold))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.55))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .frame(minHeight: VelaTheme.minimumHitTarget)
+            .accessibilityHint("让 Vela 解释当前身体状态")
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: VelaTheme.radiusFeature, style: .continuous)
+                .fill(VelaTheme.rhythmCanvasRaised)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: VelaTheme.radiusFeature, style: .continuous)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+        }
+        .shadow(color: VelaTheme.cardShadow(colorScheme), radius: 14, x: 0, y: 6)
+        .accessibilityIdentifier("coach-current-context")
+    }
+
+    @ViewBuilder
+    private var primaryScoreRow: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 12)], spacing: 14) {
+                primaryScoreRings
+            }
+        } else {
+            HStack(spacing: 12) {
+                primaryScoreRings
             }
         }
     }
 
     @ViewBuilder
-    private var topShortcuts: some View {
-        if dynamicTypeSize.isAccessibilitySize {
-            VStack(spacing: 10) {
-                wikiShortcut
-                reportsShortcut
+    private var primaryScoreRings: some View {
+        ForEach(primaryMetrics) { item in
+            Button {
+                VelaHaptic.selection()
+                onSendMessage(item.question)
+            } label: {
+                VelaMetricScoreRing(
+                    score: item.value,
+                    label: item.title,
+                    domain: item.domain,
+                    size: dynamicTypeSize.isAccessibilitySize ? 82 : 74
+                )
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
             }
-        } else {
-            HStack(spacing: 10) {
-                wikiShortcut
-                reportsShortcut
-            }
+            .buttonStyle(.plain)
+            .accessibilityHint("询问这个分数的影响因素")
         }
     }
 
-    private var wikiShortcut: some View {
+    private func secondaryMetric(
+        title: String,
+        metric: MetricResult,
+        domain: VelaMetricDomain
+    ) -> some View {
         Button {
-            showWikiProfile = true
+            VelaHaptic.selection()
+            let value = metric.value.map { String(Int($0.rounded())) } ?? "暂无"
+            onSendMessage("请解释我今天的\(title)分数（\(value)）以及它和其他身体信号、个人基线的关系。")
         } label: {
-            shortcutLabel(title: "健康记忆档案", systemImage: "brain.head.profile")
-        }
-        .buttonStyle(.cardPress)
-    }
-
-    private var reportsShortcut: some View {
-        NavigationLink(destination: VelaReportsView()) {
-            shortcutLabel(title: "历史分析报告", systemImage: "doc.text.fill")
-        }
-        .buttonStyle(.cardPress)
-    }
-
-    private func shortcutLabel(title: String, systemImage: String) -> some View {
-        HStack(spacing: 7) {
-            Image(systemName: systemImage)
-                .font(VelaTheme.footnote().weight(.semibold))
-                .foregroundStyle(VelaTheme.rhythmDeep)
-            Text(title)
-                .font(VelaTheme.footnote().weight(.semibold))
-                .foregroundStyle(VelaTheme.rhythmInk)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-                .font(VelaTheme.caption2().weight(.bold))
-                .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.6))
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
-        )
-    }
-
-    private var contextualPromptCards: [(title: String, subtitle: String, icon: String, query: String)] {
-        // 动态优先（P0-E）：contextualQuickQuestions 已按决策/恢复/睡眠/压力生成，
-        // 此前页面只用固定四问（能力存在但没接线）；空结果时回退到精选问题。
-        let dynamic = vm.contextualQuickQuestions(
-            todayPlan: todayOperatingPlan,
-            dashboard: dashboardVM.dashboard
-        )
-        if !dynamic.isEmpty {
-            return dynamic.map {
-                (title: $0, subtitle: "结合今日决策与个人基线", icon: "sparkles", query: $0)
-            }
-        }
-        return [
-            ("分析今日身体状态与恢复", "结合静息心率、HRV 与睡眠深度综合评估", "sparkles", "请全面分析我今天的身体状态，结合各项体征和个人基线，指出当前身体最重要的生理特征。"),
-            ("评估训练容量与强度建议", "根据当前生理就绪度计算最佳 RPE 与组数", "figure.run", "基于我目前的身体状态与恢复节奏，今天以及未来几天我应该怎样安排训练？"),
-            ("睡眠质量与日间压力关联", "探讨深睡时长、压力波动与心率的关联与候选影响因素", "moon.stars.fill", "我的睡眠质量、日常压力和心率之间表现出什么关联？"),
-            ("梳理近 30 天体征变化趋势", "识别近期偏离个人稳态的异常指标并给出建议", "chart.xyaxis.line", "请帮我梳理最近 30 天的身体数据变化趋势，有哪些指标明显上升或下降？")
-        ]
-    }
-
-    /// 待处理（记忆提案/训练调整）与最近生成（AI 产物）的可见性入口。
-    /// 此前这两个输入只传入未渲染；点击走现有 sendMessage 路由（Agent 按权限处理）。
-    private var pendingAndRecentSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("待处理与最近生成")
-                .font(VelaTheme.caption1().weight(.bold))
-                .tracking(0.3)
-                .foregroundStyle(VelaTheme.rhythmInkSecondary)
-            VStack(spacing: 6) {
-                if !pendingMemoryProposals.isEmpty {
-                    pendingRow(
-                        icon: "brain.head.profile",
-                        title: "记忆更新提案 ×\(pendingMemoryProposals.count)",
-                        subtitle: "待你确认的长期事实或偏好",
-                        action: "请展示待确认的记忆更新提案"
-                    )
-                }
-                if !agentArtifacts.isEmpty {
-                    let recent = agentArtifacts.sorted { $0.createdAt > $1.createdAt }
-                    pendingRow(
-                        icon: "doc.text.magnifyingglass",
-                        title: "最近生成 ×\(agentArtifacts.count)",
-                        subtitle: recent.prefix(2).map(\.title).filter { !$0.isEmpty }.joined(separator: " · "),
-                        action: "打开最近生成的分析报告"
-                    )
-                }
-            }
-            .padding(12)
-            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
-            )
-        }
-    }
-
-    private func pendingRow(icon: String, title: String, subtitle: String, action: String) -> some View {
-        Button {
-            onSendMessage(action)
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: icon)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(VelaTheme.rhythmDeep)
-                    .frame(width: 24, height: 24)
-                VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(title)
                         .font(VelaTheme.caption1().weight(.semibold))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    Spacer(minLength: 4)
+                    Text(metric.formattedScore)
+                        .font(VelaTheme.headline().monospacedDigit())
                         .foregroundStyle(VelaTheme.rhythmInk)
-                    if !subtitle.isEmpty {
-                        Text(subtitle)
-                            .font(VelaTheme.caption2())
-                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                            .lineLimit(1)
-                    }
                 }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.5))
+
+                ProgressView(value: metric.value ?? 0, total: 100)
+                    .tint(domain.color)
+                    .accessibilityHidden(true)
             }
-            .contentShape(Rectangle())
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
+            .background(VelaTheme.rhythmMist.opacity(0.38), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
-        .frame(minHeight: VelaTheme.minimumHitTarget)
+        .accessibilityLabel("\(title)，\(metric.hasData ? "\(metric.formattedScore) 分" : "暂无数据")")
+        .accessibilityHint("询问这个分数的影响因素")
     }
 
-    private func displayModel(for plan: DailyOperatingPlanRecord) -> DailyOperatingPlanDisplayModel {
-        return DailyOperatingPlanDisplayModel.build(
-            payload: plan.operatingPlanPayload,
-            primaryActionType: plan.primaryActionType,
-            source: plan.source,
-            safetyNotice: plan.safetyNotice,
-            confidence: plan.confidence
-        )
+    private var questionSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("继续追问")
+                .font(VelaTheme.headline())
+                .foregroundStyle(VelaTheme.rhythmInk)
+
+            VStack(spacing: 0) {
+                ForEach(Array(questions.enumerated()), id: \.offset) { index, question in
+                    Button {
+                        VelaHaptic.selection()
+                        onSendMessage(question)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: promptIcon(at: index))
+                                .font(VelaTheme.footnote().weight(.semibold))
+                                .foregroundStyle(VelaTheme.rhythmDeep)
+                                .frame(width: 28, height: 28)
+                                .background(VelaTheme.rhythmDeep.opacity(0.09), in: Circle())
+                            Text(question)
+                                .font(VelaTheme.subheadline().weight(.medium))
+                                .foregroundStyle(VelaTheme.rhythmInk)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 6)
+                            Image(systemName: "arrow.up.right")
+                                .font(VelaTheme.caption2().weight(.bold))
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.55))
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    if index < questions.count - 1 {
+                        Divider()
+                            .overlay(VelaTheme.rhythmMist)
+                            .padding(.leading, 54)
+                    }
+                }
+            }
+            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
+                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+            }
+        }
+        .accessibilityIdentifier("coach-contextual-questions")
     }
 
-    private func localizedArtifactType(_ type: String) -> String {
-        switch type {
-        case "daily_plan": return "每日训练计划"
-        case "training_adjustment": return "训练调整方案"
-        case "weekly_report": return "周度分析报告"
-        case "correlation_chart": return "体征行为关联图"
-        case "wiki_diff": return "教练记忆更新"
-        case "nutrition_feedback": return "营养饮食反馈"
-        default: return "决策分析报告"
+    private var workspaceSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("记录与记忆")
+                .font(VelaTheme.headline())
+                .foregroundStyle(VelaTheme.rhythmInk)
+
+            VStack(spacing: 0) {
+                if !pendingMemoryProposals.isEmpty {
+                    Button {
+                        onSendMessage("请展示待确认的记忆更新提案，并逐项说明来源。")
+                    } label: {
+                        workspaceRow(
+                            icon: "brain.head.profile",
+                            title: "待确认记忆",
+                            badge: "\(pendingMemoryProposals.count)"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    workspaceDivider
+                }
+
+                if !agentArtifacts.isEmpty {
+                    NavigationLink(destination: AgentArtifactLibraryView()) {
+                        workspaceRow(
+                            icon: "doc.text.magnifyingglass",
+                            title: "分析生成物",
+                            badge: "\(agentArtifacts.count)"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    workspaceDivider
+                }
+
+                Button {
+                    showWikiProfile = true
+                } label: {
+                    workspaceRow(icon: "person.text.rectangle", title: "健康记忆档案")
+                }
+                .buttonStyle(.plain)
+
+                workspaceDivider
+
+                NavigationLink(destination: VelaReportsView()) {
+                    workspaceRow(icon: "clock.arrow.circlepath", title: "历史分析报告")
+                }
+                .buttonStyle(.plain)
+            }
+            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
+                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+            }
         }
     }
 
-    private func evidenceLabel(_ confidence: Double) -> String {
-        if confidence >= 0.8 { return "判断依据充分" }
-        if confidence >= 0.55 { return "判断依据部分" }
-        return "判断依据有限"
+    private var workspaceDivider: some View {
+        Divider()
+            .overlay(VelaTheme.rhythmMist)
+            .padding(.leading, 52)
     }
 
-    private func artifactIcon(_ type: String) -> String {
-        switch type {
-        case "daily_plan": return "calendar.badge.checkmark"
-        case "training_adjustment": return "slider.horizontal.3"
-        case "weekly_report": return "chart.line.uptrend.xyaxis"
-        case "correlation_chart": return "point.3.connected.trianglepath.dotted"
-        case "wiki_diff": return "doc.badge.gearshape"
-        case "nutrition_feedback": return "fork.knife"
-        default: return "doc.text.fill"
+    private func workspaceRow(icon: String, title: String, badge: String? = nil) -> some View {
+        HStack(spacing: 11) {
+            Image(systemName: icon)
+                .font(VelaTheme.footnote().weight(.semibold))
+                .foregroundStyle(VelaTheme.rhythmDeep)
+                .frame(width: 28, height: 28)
+            Text(title)
+                .font(VelaTheme.subheadline().weight(.medium))
+                .foregroundStyle(VelaTheme.rhythmInk)
+            Spacer()
+            if let badge {
+                Text(badge)
+                    .font(VelaTheme.caption2().weight(.bold))
+                    .foregroundStyle(VelaTheme.rhythmDeep)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(VelaTheme.rhythmDeep.opacity(0.09), in: Capsule())
+            }
+            Image(systemName: "chevron.right")
+                .font(VelaTheme.caption2().weight(.bold))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.55))
         }
+        .padding(.horizontal, 14)
+        .frame(minHeight: 50)
+        .contentShape(Rectangle())
+    }
+
+    private func promptIcon(at index: Int) -> String {
+        switch index {
+        case 0: return "waveform.path.ecg"
+        case 1: return "point.3.connected.trianglepath.dotted"
+        default: return "chart.xyaxis.line"
+        }
+    }
+}
+
+private struct CoachWelcomeMetric: Identifiable {
+    let id: String
+    let title: String
+    let metric: MetricResult
+    let domain: VelaMetricDomain
+
+    var value: Double? { metric.value }
+
+    var question: String {
+        let valueText = value.map { String(Int($0.rounded())) } ?? "暂无数据"
+        return "请解释我今天的\(title)分数（\(valueText)）及其主要影响因素，并与我的个人基线比较。"
     }
 }
 

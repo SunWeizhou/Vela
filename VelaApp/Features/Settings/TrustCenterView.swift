@@ -4,7 +4,7 @@ import SwiftData
 /// A scrollable history of all agent runs (Morning Brief, Evening Sync, Coach).
 /// Shows status, duration, and what was produced.
 struct TrustCenterView: View {
-    @Environment(\.modelContext) private var modelContext
+    @AppStorage(CoachOutboundDataPolicy.consentVersionKey) private var outboundConsentVersion = 0
 
     @Query(
         sort: \AgentRunRecord.startedAt,
@@ -17,35 +17,186 @@ struct TrustCenterView: View {
         ZStack {
             VelaTheme.rhythmCanvas.ignoresSafeArea()
 
-            if runRecords.isEmpty {
-                VelaEmptyState(
-                    title: AppLanguage.stored.isChinese ? "尚无 Agent 运行记录" : "No Agent Runs Yet",
-                    message: AppLanguage.stored.isChinese
-                    ? "Morning Brief、Evening Sync 或 Coach 首次运行后，这里会显示可审计日志。"
-                    : "Auditable logs will appear here after Morning Brief, Evening Sync, or Coach runs.",
-                    systemImage: "checkmark.shield",
-                    tint: VelaTheme.accent
-                )
-                .padding(24)
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 12) {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    trustOverviewCard
+
+                    Text(AppLanguage.stored.isChinese ? "Agent 活动" : "Agent Activity")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+
+                    if runRecords.isEmpty {
+                        emptyAuditCard
+                    } else {
                         auditSummaryCard
 
                         ForEach(runRecords.prefix(100)) { run in
                             runCard(run)
                         }
                     }
-                    .padding(VelaTheme.pagePadding)
-                    .padding(.top, 4)
-                    .padding(.bottom, 40)
                 }
+                .padding(VelaTheme.pagePadding)
+                .padding(.top, 4)
+                .padding(.bottom, 40)
             }
         }
         .navigationTitle(AppLanguage.stored.isChinese ? "信任中心" : "Trust Center")
         .velaRhythmDetailChrome()
         .sheet(item: $selectedRun) { run in
             runDetailSheet(run)
+        }
+    }
+
+    // MARK: - Ownership overview
+
+    private var trustOverviewCard: some View {
+        VelaHeroSurface(tint: VelaTheme.recoveryColor) {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "hand.raised.fill")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(VelaTheme.recoveryColor)
+                        .frame(width: 44, height: 44)
+                        .background(Circle().fill(VelaTheme.recoveryColor.opacity(0.12)))
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(AppLanguage.stored.isChinese ? "你的数据，你的决定" : "Your data. Your decision.")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(VelaTheme.fg)
+                        Text(AppLanguage.stored.isChinese
+                             ? "查看身体数据、联网 Agent、计划与记忆如何被使用。"
+                             : "See how body data, network AI, plans, and memory are used.")
+                            .font(.footnote)
+                            .foregroundStyle(VelaTheme.fg2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                VStack(spacing: 0) {
+                    trustControlLink(
+                        icon: "heart.text.square.fill",
+                        title: AppLanguage.stored.isChinese ? "身体数据" : "Body Data",
+                        detail: AppLanguage.stored.isChinese ? "Apple 健康只读；分数在本机计算" : "Read-only Apple Health; scores compute on device",
+                        status: AppLanguage.stored.isChinese ? "本机" : "On Device",
+                        tint: VelaTheme.recoveryColor,
+                        destination: DataSourceSettingsView()
+                    )
+                    Divider().padding(.leading, 54)
+                    trustControlLink(
+                        icon: "network",
+                        title: AppLanguage.stored.isChinese ? "联网 Agent" : "Network Agent",
+                        detail: AppLanguage.stored.isChinese ? "逐类选择允许发送的上下文" : "Choose each context category that may be sent",
+                        status: outboundConsentStatus,
+                        tint: VelaTheme.sleepColor,
+                        destination: AIModelSettingsView()
+                    )
+                    Divider().padding(.leading, 54)
+                    trustControlLink(
+                        icon: "calendar.badge.checkmark",
+                        title: AppLanguage.stored.isChinese ? "计划与长期记忆" : "Plans and Long-term Memory",
+                        detail: AppLanguage.stored.isChinese ? "Agent 写入前先由你确认" : "You confirm before the Agent writes",
+                        status: AppLanguage.stored.isChinese ? "需确认" : "Confirm First",
+                        tint: VelaTheme.energyColor,
+                        destination: UserWikiArchiveView()
+                    )
+                    Divider().padding(.leading, 54)
+                    trustControlLink(
+                        icon: "square.and.arrow.up",
+                        title: AppLanguage.stored.isChinese ? "导出与删除" : "Export and Delete",
+                        detail: AppLanguage.stored.isChinese ? "管理保存在 Vela 的本地资料" : "Manage local data stored by Vela",
+                        status: AppLanguage.stored.isChinese ? "可管理" : "Available",
+                        tint: VelaTheme.strainColor,
+                        destination: PrivacyDataControlsView()
+                    )
+                }
+                .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(VelaTheme.rhythmMist.opacity(0.78), lineWidth: 0.75)
+                }
+            }
+        }
+    }
+
+    private var outboundConsentStatus: String {
+        let enabled = outboundConsentVersion >= CoachOutboundDataPolicy.currentConsentVersion
+        if AppLanguage.stored.isChinese {
+            return enabled ? "已授权" : "未授权"
+        }
+        return enabled ? "Allowed" : "Not Allowed"
+    }
+
+    private func trustControlLink<Destination: View>(
+        icon: String,
+        title: String,
+        detail: String,
+        status: String,
+        tint: Color,
+        destination: Destination
+    ) -> some View {
+        NavigationLink(destination: destination) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 32, height: 32)
+                    .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 6)
+
+                Text(status)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(tint)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(tint.opacity(0.1), in: Capsule())
+
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.55))
+            }
+            .padding(.horizontal, 12)
+            .frame(minHeight: 64)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var emptyAuditCard: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "clock.badge.checkmark")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(VelaTheme.accent)
+                .frame(width: 42, height: 42)
+                .background(Circle().fill(VelaTheme.accent.opacity(0.11)))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(AppLanguage.stored.isChinese ? "还没有运行记录" : "No runs yet")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                Text(AppLanguage.stored.isChinese
+                     ? "Agent 首次工作后，可在这里查看时间、结果与工具调用。"
+                     : "After the Agent first runs, review its timing, result, and tool calls here.")
+                    .font(.caption)
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(VelaTheme.rhythmMist.opacity(0.78), lineWidth: 0.75)
         }
     }
 
@@ -106,8 +257,8 @@ struct TrustCenterView: View {
                             .font(.caption)
                             .foregroundStyle(VelaTheme.fg2)
 
-                        if !run.outputSummary.isEmpty {
-                            Text(run.outputSummary)
+                        if let summary = localizedRunSummary(run.outputSummary) {
+                            Text(summary)
                                 .font(.caption)
                                 .foregroundStyle(VelaTheme.fg2)
                                 .lineLimit(2)
@@ -181,13 +332,13 @@ struct TrustCenterView: View {
                         }
                     }
 
-                    if !run.outputSummary.isEmpty {
+                    if let summary = localizedRunSummary(run.outputSummary) {
                         VelaGlassCard {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(AppLanguage.stored.isChinese ? "输出摘要" : "Output Summary")
                                     .font(.headline.weight(.semibold))
                                     .foregroundStyle(VelaTheme.fg)
-                                Text(run.outputSummary)
+                                Text(summary)
                                     .font(.subheadline)
                                     .foregroundStyle(VelaTheme.fg2)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -282,7 +433,7 @@ struct TrustCenterView: View {
     private func colorFor(_ status: String) -> Color {
         switch status {
         case "success": return VelaTheme.energyColor
-        case "failed": return VelaTheme.recoveryColor
+        case "failed": return VelaTheme.strainColor
         case "running": return VelaTheme.accent
         case "skipped": return VelaTheme.muted
         default: return VelaTheme.fg2
@@ -316,6 +467,29 @@ struct TrustCenterView: View {
         if trimmed.isEmpty || trimmed == "[]" {
             return AppLanguage.stored.isChinese ? "没有记录工具调用。" : "No tool calls recorded."
         }
+        return trimmed
+    }
+
+    private func localizedRunSummary(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        guard AppLanguage.stored.isChinese else { return trimmed }
+
+        if trimmed.hasPrefix("Synced and computed metrics for past") {
+            let numbers = trimmed
+                .split(whereSeparator: { !$0.isNumber })
+                .compactMap { Int($0) }
+            if numbers.count >= 2 {
+                let retry = numbers[1] > 0 ? "；\(numbers[1]) 天读取失败，等待重试" : ""
+                return "已同步并计算最近 \(numbers[0]) 天的身体指标\(retry)。"
+            }
+            return "健康数据同步与身体指标计算已完成。"
+        }
+
+        if trimmed.contains("query failures"), trimmed.contains("Marked dirty for retry") {
+            return "部分健康信号读取失败，已加入自动重试。"
+        }
+
         return trimmed
     }
 
