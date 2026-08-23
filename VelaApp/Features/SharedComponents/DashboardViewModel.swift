@@ -188,7 +188,7 @@ final class DashboardViewModel: ObservableObject {
             lastUpdated = cached.recovery.lastUpdated
             computeStreaK(modelContext: modelContext)
             computeWeeklyComparison(modelContext: modelContext)
-            await loadSecondaryData(modelContext: modelContext)
+            await loadSecondaryData(modelContext: modelContext, force: true)
             return true
         } catch {
             return false
@@ -329,7 +329,7 @@ final class DashboardViewModel: ObservableObject {
             if let modelContext {
                 computeStreaK(modelContext: modelContext)
                 computeWeeklyComparison(modelContext: modelContext)
-                await loadSecondaryData(modelContext: modelContext)
+                await loadSecondaryData(modelContext: modelContext, force: true)
             }
         } catch {
             let message = error.localizedDescription
@@ -519,14 +519,15 @@ final class DashboardViewModel: ObservableObject {
         self.heatmapPoints = points
     }
 
-    func loadSecondaryData(modelContext: ModelContext) async {
+    func loadSecondaryData(modelContext: ModelContext, force: Bool = false) async {
         let refDate = selectedDate
 
         // Perf: Today's lifecycle paths (.task / onChange / refresh) can call
         // this several times back-to-back for the same day. Coalesce into an
         // in-flight load — it already assembles the freshest data — and skip
         // entirely when a load for this day completed within the last 60 s.
-        if let completedAt = secondaryDataLastCompletedAt,
+        if !force,
+           let completedAt = secondaryDataLastCompletedAt,
            let completedDate = secondaryDataLastCompletedDate,
            Calendar.current.isDate(completedDate, inSameDayAs: refDate),
            Date().timeIntervalSince(completedAt) < 60 {

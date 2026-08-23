@@ -46,11 +46,7 @@ struct VelaTodayView: View {
     }
 
     var todayExperience: TodayExperienceModel {
-        if let cached = cachedTodayExperience,
-           cachedTodayExperienceDashboard == dashboard {
-            return cached
-        }
-        return dashboardVM.todayExperience ?? makeTodayExperience()
+        dashboardVM.todayExperience ?? makeTodayExperience()
     }
 
     /// Baseline deviation changes emphasis, never score order or display
@@ -477,10 +473,6 @@ struct VelaTodayView: View {
     @State private var lastScenePhaseSyncTime: Date?
     // F2 修复：档案修改发生在非 Today 页面时记一笔，回到 Today 立即强制重算。
     @State private var pendingLocalDataRefresh = false
-    // Perf: cache the fallback TodayExperienceModel build so scroll-driven
-    // per-frame body evaluations never re-run TodayExperienceModel.build.
-    @State private var cachedTodayExperience: TodayExperienceModel?
-    @State private var cachedTodayExperienceDashboard: DashboardSummary?
 
     var decisionDataCoverageSummary: DataCoverageSummaryModel {
         guard dataCoverageSummary.status != .unknown,
@@ -658,10 +650,6 @@ struct VelaTodayView: View {
         .background(VelaTheme.rhythmCanvas)
         .task(id: isActiveSurface) {
             guard isActiveSurface else { return }
-            if cachedTodayExperience == nil {
-                cachedTodayExperience = dashboardVM.todayExperience ?? makeTodayExperience()
-                cachedTodayExperienceDashboard = dashboard
-            }
             await dashboardVM.hydrateFromCache(modelContext: modelContext)
             locationManager.startUpdating()
             if pendingLocalDataRefresh {
@@ -697,10 +685,6 @@ struct VelaTodayView: View {
                     await loadDataCoverageSummary()
                 }
             }
-        }
-        .onChange(of: dashboardVM.dashboard) { _, newDashboard in
-            cachedTodayExperience = dashboardVM.todayExperience ?? makeTodayExperience()
-            cachedTodayExperienceDashboard = newDashboard
         }
         .onChange(of: dashboardVM.selectedDate) {
             guard isActiveSurface else { return }

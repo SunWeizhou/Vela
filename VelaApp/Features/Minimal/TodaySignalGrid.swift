@@ -867,7 +867,8 @@ struct TodayDailyPlanCard: View {
 // unchanged — the dominant per-frame cost of the fixed five-score dashboard.
 extension TodaySignalGrid: Equatable {
     nonisolated static func == (lhs: TodaySignalGrid, rhs: TodaySignalGrid) -> Bool {
-        lhs.model == rhs.model
+        lhs.model.signalCards == rhs.model.signalCards
+            && lhs.model.baselineFormation == rhs.model.baselineFormation
             && lhs.freshness == rhs.freshness
             && lhs.deviatedScoreIDs == rhs.deviatedScoreIDs
             && lhs.agentSentence == rhs.agentSentence
@@ -876,6 +877,6 @@ extension TodaySignalGrid: Equatable {
 
 extension TodayDailyPlanCard: Equatable {
     nonisolated static func == (lhs: TodayDailyPlanCard, rhs: TodayDailyPlanCard) -> Bool {
-        lhs.model == rhs.model && lhs.payload == rhs.payload
+        lhs.model.actions == rhs.model.actions && lhs.payload == rhs.payload
     }
 }
