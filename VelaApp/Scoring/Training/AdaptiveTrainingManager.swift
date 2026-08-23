@@ -253,7 +253,7 @@ struct WorkoutAdaptationService: Sendable {
         // 2. Re-evaluate from the latest local evidence. Completing a workout
         // must stay fast and deterministic; the normal dashboard refresh owns
         // HealthKit synchronization and can retry independently.
-        let dashboard = (try? DailySummaryUseCase().loadCachedDashboard(
+        let dashboard = (try? await DailySummaryUseCase().loadCachedDashboard(
             for: now,
             modelContext: modelContext
         )) ?? DashboardSummary.empty(date: today)

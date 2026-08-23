@@ -161,7 +161,7 @@ final class DashboardViewModel: ObservableObject {
     @discardableResult
     func hydrateFromCache(modelContext: ModelContext) async -> Bool {
         do {
-            guard let cached = try useCase.loadCachedDashboard(
+            guard let cached = try await useCase.loadCachedDashboard(
                 for: selectedDate,
                 modelContext: modelContext
             ) else {

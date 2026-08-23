@@ -49,7 +49,7 @@ enum BehaviorSignalConfidence: String, Codable, Hashable, CaseIterable {
     case photoAssisted
 }
 
-struct BehaviorSignal: Codable, Hashable, Identifiable {
+struct BehaviorSignal: Codable, Hashable, Identifiable, Sendable {
     var id: String
     var tag: BehaviorTag
     var intensity: BehaviorIntensity
@@ -154,27 +154,8 @@ enum BehaviorSignalExtractor {
     }
 
     static func extract(from entry: JournalEntryRecord) -> [BehaviorSignal] {
-        var signals = extract(from: entry.note, createdAt: entry.createdAt)
-        for tag in entry.tags {
-            guard tag.hasPrefix("behavior:"),
-                  let behavior = BehaviorTag(rawValue: String(tag.dropFirst("behavior:".count))) else {
-                continue
-            }
-            if !signals.contains(where: { $0.tag == behavior }) {
-                signals.append(BehaviorSignal(
-                    id: "\(Int(entry.createdAt.timeIntervalSince1970))-\(behavior.rawValue)",
-                    tag: behavior,
-                    intensity: intensity(from: entry.tags),
-                    timing: .unknown,
-                    confidence: .userConfirmed,
-                    sourceNote: entry.note,
-                    createdAt: entry.createdAt
-                ))
-            }
-        }
-        return signals.sorted { $0.tag.rawValue < $1.tag.rawValue }
+        extract(from: entry.dto)
     }
-
     private static func intensity(from tags: [String]) -> BehaviorIntensity {
         if tags.contains("intensity:high") { return .high }
         if tags.contains("intensity:low") { return .low }
@@ -182,20 +163,20 @@ enum BehaviorSignalExtractor {
     }
 }
 
-enum BodyModelMaturityLevel: String, Codable, Hashable, CaseIterable {
+enum BodyModelMaturityLevel: String, Codable, Hashable, CaseIterable, Sendable {
     case seed
     case learning
     case stable
 }
 
-struct BodyModelMaturity: Codable, Hashable {
+struct BodyModelMaturity: Codable, Hashable, Sendable {
     var overall: BodyModelMaturityLevel
     var baselineDays: Int
     var behaviorPairs: Int
     var trainingSessions: Int
 }
 
-struct BodyModelClaim: Codable, Hashable, Identifiable {
+struct BodyModelClaim: Codable, Hashable, Identifiable, Sendable {
     var id: String
     var title: String
     var summary: String
@@ -203,13 +184,13 @@ struct BodyModelClaim: Codable, Hashable, Identifiable {
     var evidenceCount: Int
 }
 
-struct BodyModelUncertainArea: Codable, Hashable, Identifiable {
+struct BodyModelUncertainArea: Codable, Hashable, Identifiable, Sendable {
     var id: String
     var title: String
     var detail: String
 }
 
-struct BodyModelState: Codable, Hashable {
+struct BodyModelState: Codable, Hashable, Sendable {
     var generatedAt: Date
     var maturity: BodyModelMaturity
     var claims: [BodyModelClaim]
@@ -237,6 +218,94 @@ extension BodyModelState {
     }
 }
 
+/// 值类型版手记信号抽取（审计 H2：供离线组装，不跨并发域传 Live Object）。
+extension BehaviorSignalExtractor {
+    /// 提取手记行为信号（值类型版，与 @Model 版同源逻辑）。
+    static func extract(from entry: JournalEntryDTO) -> [BehaviorSignal] {
+        var signals = extract(from: entry.note, createdAt: entry.createdAt)
+        for tag in entry.tags {
+            guard tag.hasPrefix("behavior:"),
+                  let behavior = BehaviorTag(rawValue: String(tag.dropFirst("behavior:".count))) else {
+                continue
+            }
+            if !signals.contains(where: { $0.tag == behavior }) {
+                signals.append(BehaviorSignal(
+                    id: "\(Int(entry.createdAt.timeIntervalSince1970))-\(behavior.rawValue)",
+                    tag: behavior,
+                    intensity: intensity(from: entry.tags),
+                    timing: .unknown,
+                    confidence: .userConfirmed,
+                    sourceNote: entry.note,
+                    createdAt: entry.createdAt
+                ))
+            }
+        }
+        return signals.sorted { $0.tag.rawValue < $1.tag.rawValue }
+    }
+}
+
+// MARK: - Body Model Value Inputs（审计 H2）
+
+/// Onboarding 的值类型种子：允许离线组装时携带档案事实，不携带 Live Object。
+struct OnboardingProfileSeed: Sendable, Equatable {
+    var primaryGoal: String
+    var experienceLevel: String
+    var trainingStyle: String
+    var weeklyTrainingDays: Int
+    var sessionDurationMinutes: Int
+    var coachingStyle: String
+    var isCompleted: Bool
+}
+
+extension OnboardingState {
+    var profileSeed: OnboardingProfileSeed {
+        OnboardingProfileSeed(
+            primaryGoal: goalProfile.primaryGoal,
+            experienceLevel: goalProfile.experienceLevel,
+            trainingStyle: trainingPreference.trainingStyle,
+            weeklyTrainingDays: trainingPreference.weeklyTrainingDays,
+            sessionDurationMinutes: trainingPreference.sessionDurationMinutes,
+            coachingStyle: coachingPreference.style,
+            isCompleted: isCompleted
+        )
+    }
+}
+
+/// 每日摘要的证据快照（BodyModelBuilder 实际消费的字段子集）。
+struct BodyModelDailyEvidence: Sendable, Equatable {
+    var date: Date
+    var workoutCount: Int?
+    var workoutDuration: Double?
+    var hrvAverage: Double?
+    var restingHeartRate: Double?
+}
+
+extension DailyHealthSummaryRecord {
+    var bodyModelEvidence: BodyModelDailyEvidence {
+        BodyModelDailyEvidence(
+            date: date,
+            workoutCount: workoutCount,
+            workoutDuration: workoutDuration,
+            hrvAverage: hrvAverage,
+            restingHeartRate: restingHeartRate
+        )
+    }
+}
+
+/// BodyModelBuilder 的完整值类型输入：在 MainActor 上完成 @Model→值转换后，
+/// 可在 Task.detached 中安全组装（所有成员 Sendable）。
+struct BodyModelEvidence: Sendable {
+    var onboardingSeed: OnboardingProfileSeed?
+    var dailySummaries: [BodyModelDailyEvidence]
+    var journalEntries: [JournalEntryDTO]
+    var strengthWorkouts: [StrengthWorkoutDTO]
+    var trainingResponses: [TrainingResponseDTO]
+    var longTermBaselines: LongTermBaselineReport?
+    var asOf: Date
+    var calendar: Calendar
+}
+
+
 struct BodyModelBuilder {
     static func profileSeedSummary(primaryGoal: String, trainingStyle: String, weeklyTrainingDays: Int) -> String {
         let goal = localizedOnboardingGoal(primaryGoal)
@@ -247,28 +316,20 @@ struct BodyModelBuilder {
         )
     }
 
-    func build(
-        onboarding: OnboardingState?,
-        dailySummaries: [DailyHealthSummaryRecord],
-        journalEntries: [JournalEntryRecord],
-        strengthWorkouts: [StrengthWorkoutRecord],
-        trainingResponses: [TrainingResponseRecord],
-        longTermBaselines: LongTermBaselineReport? = nil,
-        asOf: Date = Date(),
-        calendar: Calendar = .current
-    ) -> BodyModelState {
+    /// 值类型入口（审计 H2）：只依赖 Sendable 证据，可在 Task.detached 中运行。
+    func build(evidence: BodyModelEvidence) -> BodyModelState {
         // 历史日/缓存路径的 asOf 语义：模型只能使用 asOf 当天及之前的事实，
         // 不能让未来日期的训练/手记/摘要反向抬高成熟度或改变训练事实计数。
-        let asOfDay = calendar.startOfDay(for: asOf)
-        let dailySummaries = dailySummaries.filter {
-            calendar.startOfDay(for: $0.date) <= asOfDay
+        let asOfDay = evidence.calendar.startOfDay(for: evidence.asOf)
+        let dailySummaries = evidence.dailySummaries.filter {
+            evidence.calendar.startOfDay(for: $0.date) <= asOfDay
         }
-        let journalEntries = journalEntries.filter { $0.createdAt <= asOf }
-        let strengthWorkouts = strengthWorkouts.filter { $0.startedAt <= asOf }
-        let trainingResponses = trainingResponses.filter { $0.date <= asOf }
+        let journalEntries = evidence.journalEntries.filter { $0.createdAt <= evidence.asOf }
+        let strengthWorkouts = evidence.strengthWorkouts.filter { $0.startedAt <= evidence.asOf }
+        let trainingResponses = evidence.trainingResponses.filter { $0.date <= evidence.asOf }
 
-        let recentBaselineDays = Set(dailySummaries.map { calendar.startOfDay(for: $0.date) }).count
-        let longTermDays = longTermBaselines?.daysOfData ?? 0
+        let recentBaselineDays = Set(dailySummaries.map { evidence.calendar.startOfDay(for: $0.date) }).count
+        let longTermDays = evidence.longTermBaselines?.daysOfData ?? 0
         // 三年回填后基线天数以全历史为准：基线「仍在建立」从此不再由窗口截断造成。
         let baselineDays = max(recentBaselineDays, longTermDays)
         let behaviorSignals = journalEntries.flatMap { BehaviorSignalExtractor.extract(from: $0) }
@@ -287,21 +348,21 @@ struct BodyModelBuilder {
         )
 
         var claims: [BodyModelClaim] = []
-        if let onboarding {
+        if let onboarding = evidence.onboardingSeed {
             claims.append(BodyModelClaim(
                 id: "profile_seed",
                 title: "目标与训练偏好已建立",
                 summary: Self.profileSeedSummary(
-                    primaryGoal: onboarding.goalProfile.primaryGoal,
-                    trainingStyle: onboarding.trainingPreference.trainingStyle,
-                    weeklyTrainingDays: onboarding.trainingPreference.weeklyTrainingDays
+                    primaryGoal: onboarding.primaryGoal,
+                    trainingStyle: onboarding.trainingStyle,
+                    weeklyTrainingDays: onboarding.weeklyTrainingDays
                 ),
                 confidence: onboarding.isCompleted ? .medium : .low,
                 evidenceCount: 1
             ))
         }
         if trainingSessions > 0 {
-            let analysis = TrainingAnalyticsService().buildRecentSummary(workouts: strengthWorkouts.map { $0.dto }, days: 28, endingAt: asOf)
+            let analysis = TrainingAnalyticsService().buildRecentSummary(workouts: strengthWorkouts, days: 28, endingAt: evidence.asOf)
             claims.append(BodyModelClaim(
                 id: "training_facts",
                 title: "训练事实正在积累",
@@ -311,7 +372,7 @@ struct BodyModelBuilder {
             ))
         }
         // 三年生理基线拟合（Layer 2 身体模型版）：从回填数据拟合出「你这个人」。
-        if let report = longTermBaselines, report.daysOfData >= 60 {
+        if let report = evidence.longTermBaselines, report.daysOfData >= 60 {
             var parts: [String] = []
             if let rhr = report.baselines[.restingHeartRate], let median = rhr.threeYearMedian {
                 var text = "静息心率三年中位 \(Int(median.rounded())) bpm"
@@ -342,7 +403,7 @@ struct BodyModelBuilder {
             }
         }
         // 训练 → 次日 HRV/RHR 三年配对（行为-结果配对：训练作为行为）。
-        if let pairing = Self.trainingResponsePairing(dailySummaries: dailySummaries, calendar: calendar, asOf: asOf) {
+        if let pairing = Self.trainingResponsePairing(dailySummaries: dailySummaries, calendar: evidence.calendar, asOf: evidence.asOf) {
             claims.append(BodyModelClaim(
                 id: "training_outcome_pairing",
                 title: "训练后的次日反应已配对",
@@ -352,7 +413,7 @@ struct BodyModelBuilder {
             ))
         }
         // 深度专项批次 3：长线剂量-反应曲线（只作参考/收紧，不据良好反应加量）。
-        if let dose = Self.doseResponseCurve(dailySummaries: dailySummaries, calendar: calendar, asOf: asOf) {
+        if let dose = Self.doseResponseCurve(dailySummaries: dailySummaries, calendar: evidence.calendar, asOf: evidence.asOf) {
             claims.append(BodyModelClaim(
                 id: "dose_response_curve",
                 title: "训练剂量-反应曲线",
@@ -398,14 +459,38 @@ struct BodyModelBuilder {
         }
 
         return BodyModelState(
-            generatedAt: asOf,
+            generatedAt: evidence.asOf,
             maturity: maturity,
             claims: claims,
             uncertainAreas: uncertain,
             behaviorSignals: behaviorSignals,
-            trainingPatternSummary: trainingSummary(strengthWorkouts, recordedTrainingDays: recordedTrainingDays, asOf: asOf),
+            trainingPatternSummary: trainingSummary(strengthWorkouts, recordedTrainingDays: recordedTrainingDays, asOf: evidence.asOf),
             coachRules: coachRules(for: maturity, uncertainAreas: uncertain)
         )
+    }
+
+    /// @Model 入口：转换为值类型后委托证据版（行为不变；调用方如已持有 Live
+    /// 对象且处于 MainActor 可直接使用本入口）。
+    func build(
+        onboarding: OnboardingState?,
+        dailySummaries: [DailyHealthSummaryRecord],
+        journalEntries: [JournalEntryRecord],
+        strengthWorkouts: [StrengthWorkoutRecord],
+        trainingResponses: [TrainingResponseRecord],
+        longTermBaselines: LongTermBaselineReport? = nil,
+        asOf: Date = Date(),
+        calendar: Calendar = .current
+    ) -> BodyModelState {
+        build(evidence: BodyModelEvidence(
+            onboardingSeed: onboarding?.profileSeed,
+            dailySummaries: dailySummaries.map(\.bodyModelEvidence),
+            journalEntries: journalEntries.map(\.dto),
+            strengthWorkouts: strengthWorkouts.map(\.dto),
+            trainingResponses: trainingResponses.map(\.dto),
+            longTermBaselines: longTermBaselines,
+            asOf: asOf,
+            calendar: calendar
+        ))
     }
 
     private func maturityLevel(
@@ -426,14 +511,14 @@ struct BodyModelBuilder {
         return .seed
     }
 
-    private func trainingSummary(_ workouts: [StrengthWorkoutRecord], recordedTrainingDays: Int, asOf: Date) -> String {
+    private func trainingSummary(_ workouts: [StrengthWorkoutDTO], recordedTrainingDays: Int, asOf: Date) -> String {
         guard !workouts.isEmpty else {
             if recordedTrainingDays > 0 {
                 return "三年记录 \(recordedTrainingDays) 个训练日（Apple 健康 + 训记）；记录动作与组数后还可分析肌群容量。"
             }
             return "尚无训练事实。训记或 Vela 训练记录同步后会开始学习训练反应。"
         }
-        let summary = TrainingAnalyticsService().buildRecentSummary(workouts: workouts.map { $0.dto }, days: 28, endingAt: asOf)
+        let summary = TrainingAnalyticsService().buildRecentSummary(workouts: workouts, days: 28, endingAt: asOf)
         return "近 28 天 \(summary.sessions) 次训练，\(summary.effectiveSets) 个有效组，容量 \(Int(summary.volumeKg.rounded())) kg。"
     }
 
@@ -446,17 +531,17 @@ struct BodyModelBuilder {
     }
 
     static func trainingResponsePairing(
-        dailySummaries: [DailyHealthSummaryRecord],
+        dailySummaries: [BodyModelDailyEvidence],
         calendar: Calendar = .current,
         asOf: Date = Date()
     ) -> TrainingOutcomePairing? {
-        let byDay = dailySummaries.reduce(into: [Date: DailyHealthSummaryRecord]()) { result, record in
+        let byDay = dailySummaries.reduce(into: [Date: BodyModelDailyEvidence]()) { result, record in
             result[calendar.startOfDay(for: record.date)] = record
         }
         let sortedDays = byDay.keys.filter { $0 <= calendar.startOfDay(for: asOf) }.sorted()
         guard sortedDays.count >= 10 else { return nil }
 
-        func isTrainingDay(_ record: DailyHealthSummaryRecord) -> Bool {
+        func isTrainingDay(_ record: BodyModelDailyEvidence) -> Bool {
             (record.workoutCount ?? 0) > 0 || (record.workoutDuration ?? 0) >= 15
         }
 
@@ -509,6 +594,19 @@ struct BodyModelBuilder {
         )
     }
 
+    /// @Model 版配对（保持既有测试与调用契约）：转换后委托值类型版。
+    static func trainingResponsePairing(
+        dailySummaries: [DailyHealthSummaryRecord],
+        calendar: Calendar = .current,
+        asOf: Date = Date()
+    ) -> TrainingOutcomePairing? {
+        trainingResponsePairing(
+            dailySummaries: dailySummaries.map(\.bodyModelEvidence),
+            calendar: calendar,
+            asOf: asOf
+        )
+    }
+
     /// 深度专项批次 3：长线剂量-反应曲线（训练时长剂量 → 次日 HRV/RHR）。
     /// 三分位稳健对照（低/中/高剂量各 ≥8 对、总 ≥60 对），只作参考/收紧信号，
     /// 绝不据良好反应建议加量（ADR 0005 保守原则）。
@@ -518,11 +616,11 @@ struct BodyModelBuilder {
     }
 
     static func doseResponseCurve(
-        dailySummaries: [DailyHealthSummaryRecord],
+        dailySummaries: [BodyModelDailyEvidence],
         calendar: Calendar = .current,
         asOf: Date = Date()
     ) -> DoseResponseCurve? {
-        let byDay = dailySummaries.reduce(into: [Date: DailyHealthSummaryRecord]()) { result, record in
+        let byDay = dailySummaries.reduce(into: [Date: BodyModelDailyEvidence]()) { result, record in
             result[calendar.startOfDay(for: record.date)] = record
         }
         let sortedDays = byDay.keys.filter { $0 <= calendar.startOfDay(for: asOf) }.sorted()
@@ -584,6 +682,20 @@ struct BodyModelBuilder {
             summary: "剂量-反应（n=\(pairs.count) 个训练日）：\(parts.joined(separator: "；"))"
         )
     }
+
+    /// @Model 版曲线（保持既有测试与调用契约）：转换后委托值类型版。
+    static func doseResponseCurve(
+        dailySummaries: [DailyHealthSummaryRecord],
+        calendar: Calendar = .current,
+        asOf: Date = Date()
+    ) -> DoseResponseCurve? {
+        doseResponseCurve(
+            dailySummaries: dailySummaries.map(\.bodyModelEvidence),
+            calendar: calendar,
+            asOf: asOf
+        )
+    }
+
 
     private func coachRules(for maturity: BodyModelMaturity, uncertainAreas: [BodyModelUncertainArea]) -> [String] {
         var rules = [

@@ -258,11 +258,13 @@ final class DailySummaryUseCase {
         let longTermReport: LongTermBaselineReport
         if let modelContext {
             allDailySummaryRecords = (try? modelContext.fetch(FetchDescriptor<DailyHealthSummaryRecord>())) ?? []
-            longTermReport = LongTermBaselineEngine.compute(
-                points: allDailySummaryRecords.map(\.longTermBaselinePoint),
-                today: now,
-                calendar: calendar
-            )
+            // 长线基准是纯统计计算（审计 H2）：值类型 points 在 MainActor 上准备好后
+            // 移出主线程执行，视图与交互不被 1100 天聚合阻塞。
+            let baselinePoints = allDailySummaryRecords.map(\.longTermBaselinePoint)
+            let computationCalendar = calendar
+            longTermReport = await Task.detached {
+                LongTermBaselineEngine.compute(points: baselinePoints, today: now, calendar: computationCalendar)
+            }.value
         } else {
             longTermReport = LongTermBaselineEngine.compute(points: [], today: now, calendar: calendar)
         }
@@ -511,16 +513,21 @@ final class DailySummaryUseCase {
             let allJournalsForModel = (try? modelContext.fetch(FetchDescriptor<JournalEntryRecord>())) ?? []
             let onboardingForModel = (try? modelContext.fetch(FetchDescriptor<OnboardingState>()))?.first
             trainingPreference = onboardingForModel?.trainingPreference
-            bodyModelState = BodyModelBuilder().build(
-                onboarding: onboardingForModel,
-                dailySummaries: allDailySummaryRecords,
-                journalEntries: allJournalsForModel,
-                strengthWorkouts: allStrengthForModel,
-                trainingResponses: allResponsesForModel,
+            // 身体模型组装同样移出主线程（审计 H2）：先转值类型证据（Sendable），
+            // Task.detached 中计算，不与 Live Object 跨并发域。
+            let bodyModelEvidence = BodyModelEvidence(
+                onboardingSeed: onboardingForModel?.profileSeed,
+                dailySummaries: allDailySummaryRecords.map(\.bodyModelEvidence),
+                journalEntries: allJournalsForModel.map(\.dto),
+                strengthWorkouts: allStrengthForModel.map(\.dto),
+                trainingResponses: allResponsesForModel.map(\.dto),
                 longTermBaselines: longTermReport,
                 asOf: now,
                 calendar: calendar
             )
+            bodyModelState = await Task.detached {
+                BodyModelBuilder().build(evidence: bodyModelEvidence)
+            }.value
         }
 
         var dashboard = DashboardSummary(
@@ -952,7 +959,7 @@ final class DailySummaryUseCase {
     func loadCachedDashboard(
         for date: Date = Date(),
         modelContext: ModelContext
-    ) throws -> DashboardSummary? {
+    ) async throws -> DashboardSummary? {
         let dayStart = calendar.startOfDay(for: date)
         let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
         let records = try SwiftDataDailyHealthSummaryRepository(modelContext: modelContext)
@@ -973,16 +980,31 @@ final class DailySummaryUseCase {
         let allResponses = (try? modelContext.fetch(FetchDescriptor<TrainingResponseRecord>())) ?? []
         let allJournals = (try? modelContext.fetch(FetchDescriptor<JournalEntryRecord>())) ?? []
         let onboarding = (try? modelContext.fetch(FetchDescriptor<OnboardingState>()))?.first
-        dashboard.bodyModelState = BodyModelBuilder().build(
-            onboarding: onboarding,
-            dailySummaries: allRecords,
-            journalEntries: allJournals,
-            strengthWorkouts: allStrength,
-            trainingResponses: allResponses,
-            longTermBaselines: dashboard.longTermBaselines,
-            asOf: date,
-            calendar: calendar
-        )
+        // 缓存启动路径的长线基准与身体模型组装一并移出主线程（审计 H2）：
+        // MainActor 上只做 fetch + 值类型转换，Task.detached 内纯计算。
+        let onboardingSeed = onboarding?.profileSeed
+        let dailyEvidences = allRecords.map(\.bodyModelEvidence)
+        let journalDTOs = allJournals.map(\.dto)
+        let strengthDTOs = allStrength.map(\.dto)
+        let responseDTOs = allResponses.map(\.dto)
+        let baselinePoints = allRecords.map(\.longTermBaselinePoint)
+        let computationCalendar = calendar
+        let (baselines, bodyModel) = await Task.detached {
+            let report = LongTermBaselineEngine.compute(points: baselinePoints, today: date, calendar: computationCalendar)
+            let model = BodyModelBuilder().build(evidence: BodyModelEvidence(
+                onboardingSeed: onboardingSeed,
+                dailySummaries: dailyEvidences,
+                journalEntries: journalDTOs,
+                strengthWorkouts: strengthDTOs,
+                trainingResponses: responseDTOs,
+                longTermBaselines: report,
+                asOf: date,
+                calendar: computationCalendar
+            ))
+            return (report, model)
+        }.value
+        dashboard.longTermBaselines = baselines
+        dashboard.bodyModelState = bodyModel
         return dashboard
     }
 

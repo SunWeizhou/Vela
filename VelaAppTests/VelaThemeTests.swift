@@ -2884,3 +2884,50 @@ final class VelaThemeTests: XCTestCase {
         XCTAssertTrue(questions.first?.contains("睡眠") == true || questions.first?.contains("恢复") == true)
     }
 }
+
+// MARK: - Body Model 值类型等价性（审计 H2）
+
+/// 值类型入口（evidence）与 @Model 入口的产出必须逐字段一致——
+/// 两者共享同一实现契约，防止离线化改造改变身体模型语义。
+final class BodyModelValueParityTests: XCTestCase {
+    func testEvidenceBuildMatchesModelBuild() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let asOf = Date(timeIntervalSince1970: 1_800_000_000)
+
+        let records: [DailyHealthSummaryRecord] = (0..<40).map { i in
+            let record = DailyHealthSummaryRecord(
+                dayIdentifier: "parity-\(i)",
+                date: asOf.addingTimeInterval(-Double(i) * 86_400)
+            )
+            record.workoutCount = i % 3 == 0 ? 1 : 0
+            record.workoutDuration = (i % 4 == 0 ? 45.0 : nil)
+            record.hrvAverage = 30 + Double(i % 9)
+            record.restingHeartRate = 60 + Double(i % 7)
+            return record
+        }
+
+        let modelState = BodyModelBuilder().build(
+            onboarding: nil,
+            dailySummaries: records,
+            journalEntries: [],
+            strengthWorkouts: [],
+            trainingResponses: [],
+            longTermBaselines: nil,
+            asOf: asOf,
+            calendar: calendar
+        )
+        let valueState = BodyModelBuilder().build(evidence: BodyModelEvidence(
+            onboardingSeed: nil,
+            dailySummaries: records.map(\.bodyModelEvidence),
+            journalEntries: [],
+            strengthWorkouts: [],
+            trainingResponses: [],
+            longTermBaselines: nil,
+            asOf: asOf,
+            calendar: calendar
+        ))
+
+        XCTAssertEqual(modelState, valueState)
+    }
+}
