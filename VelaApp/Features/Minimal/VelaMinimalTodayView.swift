@@ -267,6 +267,13 @@ struct VelaTodayView: View {
         }
     }
 
+    private static let vitalTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+
     private func vitalStatusText(hasData: Bool, lastUpdated: Date?) -> String {
         guard hasData else { return "待同步" }
         guard let lastUpdated else { return "已同步" }
@@ -281,15 +288,10 @@ struct VelaTodayView: View {
         }
 
         let calendar = Calendar.current
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-
         if calendar.isDateInToday(lastUpdated) {
-            formatter.dateFormat = "HH:mm"
-            return "\(formatter.string(from: lastUpdated)) 同步"
+            return "\(Self.vitalTimeFormatter.string(from: lastUpdated)) 同步"
         } else if calendar.isDateInYesterday(lastUpdated) {
-            formatter.dateFormat = "HH:mm"
-            return "昨天 \(formatter.string(from: lastUpdated))"
+            return "昨天 \(Self.vitalTimeFormatter.string(from: lastUpdated))"
         } else {
             return "已同步"
         }
@@ -538,7 +540,7 @@ struct VelaTodayView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
                 if dashboardVM.errorMessage != nil {
                     errorMessageView
                         .padding(.horizontal, VelaTheme.pagePadding)
@@ -671,8 +673,6 @@ struct VelaTodayView: View {
             await loadDataCoverageSummary()
             loadTodayLivedStateAlignment()
             trackDailyDecisionViewed()
-            withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) {
-            }
         }
         .refreshable {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -709,12 +709,6 @@ struct VelaTodayView: View {
             loadDynamicData()
             Task {
                 await refreshDashboard()
-                withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) {
-                    }
-            }
-        }
-        .onChange(of: energyScore) {
-            withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) {
             }
         }
         .onChange(of: appState.localDataRevision) {
@@ -1085,6 +1079,18 @@ struct TodayDateAndStatusHeader: View {
         }
     }
 
+    private static let headerDateFormatterZh: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M月d日"
+        return formatter
+    }()
+
+    private static let headerDateFormatterEn: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        return formatter
+    }()
+
     private func dateHeaderString(for date: Date) -> String {
         let calendar = Calendar.current
         if calendar.isDateInToday(date) {
@@ -1092,8 +1098,7 @@ struct TodayDateAndStatusHeader: View {
         } else if calendar.isDateInYesterday(date) {
             return L10n.t("Yesterday", "昨天")
         } else {
-            let formatter = DateFormatter()
-            formatter.dateFormat = AppLanguage.stored.isChinese ? "M月d日" : "MMM d"
+            let formatter = AppLanguage.stored.isChinese ? Self.headerDateFormatterZh : Self.headerDateFormatterEn
             return formatter.string(from: date)
         }
     }

@@ -101,33 +101,36 @@ struct TodayVitalsGrid: View {
     let cards: [TodayVitalCardModel]
     let onTap: (TodayVitalKind) -> Void
 
-    private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
-    private let accessibilityColumns = [GridItem(.flexible())]
-
     var body: some View {
         Group {
             if dynamicTypeSize.isAccessibilitySize {
-                LazyVGrid(columns: accessibilityColumns, spacing: 10) {
-                    vitalCards
+                VStack(spacing: 10) {
+                    ForEach(cards) { card in
+                        vitalButton(card)
+                    }
                 }
             } else {
-                LazyVGrid(columns: columns, spacing: 10) {
-                    vitalCards
+                VStack(spacing: 10) {
+                    HStack(spacing: 10) {
+                        if cards.indices.contains(0) { vitalButton(cards[0]) }
+                        if cards.indices.contains(1) { vitalButton(cards[1]) }
+                    }
+                    HStack(spacing: 10) {
+                        if cards.indices.contains(2) { vitalButton(cards[2]) }
+                        if cards.indices.contains(3) { vitalButton(cards[3]) }
+                    }
                 }
             }
         }
     }
 
-    @ViewBuilder
-    private var vitalCards: some View {
-        ForEach(cards) { card in
-            Button { onTap(card.kind) } label: {
-                TodayVitalCard(card: card)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("\(card.label) \(card.value)\(card.unit),\(card.status)")
-            .accessibilityHint("查看\(card.label)详情")
+    private func vitalButton(_ card: TodayVitalCardModel) -> some View {
+        Button { onTap(card.kind) } label: {
+            TodayVitalCard(card: card)
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(card.label) \(card.value)\(card.unit),\(card.status)")
+        .accessibilityHint("查看\(card.label)详情")
     }
 }
 
