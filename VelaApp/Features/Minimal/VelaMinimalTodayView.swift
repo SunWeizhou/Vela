@@ -187,24 +187,42 @@ struct VelaTodayView: View {
             TodayVitalCardModel(
                 kind: .hrv, label: "心率变异性",
                 value: hrv.map { "\(Int($0.rounded()))" } ?? "--", unit: "ms",
-                status: vitalStatusText(hasData: hrv != nil, lastUpdated: updatedDate), isGood: true, trend: []
+                status: vitalStatusText(hasData: hrv != nil, lastUpdated: updatedDate),
+                isGood: vitalAssessment("hrv"), trend: dashboardVM.vitalTrendSeries["hrv"] ?? []
             ),
             TodayVitalCardModel(
                 kind: .rhr, label: "静息心率",
                 value: rhr.map { "\(Int($0.rounded()))" } ?? "--", unit: "bpm",
-                status: vitalStatusText(hasData: rhr != nil, lastUpdated: updatedDate), isGood: true, trend: []
+                status: vitalStatusText(hasData: rhr != nil, lastUpdated: updatedDate),
+                isGood: vitalAssessment("rhr"), trend: dashboardVM.vitalTrendSeries["rhr"] ?? []
             ),
             TodayVitalCardModel(
                 kind: .spo2, label: "血氧",
                 value: spo2.map { "\(Int($0.rounded()))" } ?? "--", unit: "%",
-                status: vitalStatusText(hasData: spo2 != nil, lastUpdated: updatedDate), isGood: true, trend: []
+                status: vitalStatusText(hasData: spo2 != nil, lastUpdated: updatedDate),
+                isGood: vitalAssessment("spo2"), trend: dashboardVM.vitalTrendSeries["spo2"] ?? []
             ),
             TodayVitalCardModel(
                 kind: .sleep, label: "睡眠",
                 value: sleepMin > 0 ? "\(sleepMin / 60):\(String(format: "%02d", sleepMin % 60))" : "--", unit: "时",
-                status: vitalStatusText(hasData: sleepMin > 0, lastUpdated: updatedDate), isGood: true, trend: []
+                status: vitalStatusText(hasData: sleepMin > 0, lastUpdated: updatedDate),
+                isGood: vitalAssessment("sleep"), trend: dashboardVM.vitalTrendSeries["sleep"] ?? []
             )
         ]
+    }
+
+    /// 体征卡评估：来自 canonical HealthTrendFinding（7d）的 assessment，
+    /// 替代此前固定 isGood: true（P0-D）。
+    private func vitalAssessment(_ metricRaw: String) -> Bool {
+        let finding = dashboard.healthTrends.first {
+            $0.metric.rawValue == metricRaw && $0.horizon == .sevenDays
+        }
+        guard let finding else { return true }
+        switch finding.assessment {
+        case .favorable: return true
+        case .unfavorable: return false
+        case .neutral, .insufficientData: return true
+        }
     }
 
     private func vitalStatusText(hasData: Bool, lastUpdated: Date?) -> String {

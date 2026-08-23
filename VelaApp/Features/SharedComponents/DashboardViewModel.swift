@@ -147,6 +147,10 @@ final class DashboardViewModel: ObservableObject {
     }
 
     private let useCase: DailySummaryUseCase
+    /// 7 日体征序列（按 CoreHealthMetric.rawValue 键），供 Today 体征卡 sparkline
+    /// 使用（此前 trend 恒为空数组——UI 有趋势能力但无数据）。
+    @Published private(set) var vitalTrendSeries: [String: [Double]] = [:]
+
     private let services: VelaServices?
     private var refreshTask: Task<Void, Never>?
     private var refreshTaskDate: Date?
@@ -616,6 +620,7 @@ final class DashboardViewModel: ObservableObject {
             calendar: calendar
         )
         let snapshotValues = dailySummaries.map { $0.toSnapshot() }
+        vitalTrendSeries = Self.vitalSeries(from: snapshotValues, calendar: calendar)
 
         let assembly = await Task.detached {
             SecondaryDataAssembler.assemble(
@@ -679,6 +684,35 @@ final class DashboardViewModel: ObservableObject {
                 scheduledDay: assembly.scheduledDay
             )
         }
+    }
+}
+
+
+// MARK: - Vital Series
+
+private extension DashboardViewModel {
+    /// 从最近 7 天快照提取 HRV/RHR/血氧/睡眠序列（缺失值跳过，不伪造）。
+    static func vitalSeries(
+        from snapshots: [DailyHealthSnapshot],
+        calendar: Calendar
+    ) -> [String: [Double]] {
+        let recent = snapshots.sorted { $0.date < $1.date }.suffix(7)
+        var hrv: [Double] = []
+        var rhr: [Double] = []
+        var spo2: [Double] = []
+        var sleepHours: [Double] = []
+        for snapshot in recent {
+            if let value = snapshot.hrvAverage { hrv.append(value) }
+            if let value = snapshot.restingHeartRate { rhr.append(value) }
+            if let value = snapshot.oxygenSaturation { spo2.append(value) }
+            if let value = snapshot.sleepHours { sleepHours.append(value) }
+        }
+        return [
+            "hrv": hrv,
+            "rhr": rhr,
+            "spo2": spo2,
+            "sleep": sleepHours
+        ]
     }
 }
 
