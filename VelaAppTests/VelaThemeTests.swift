@@ -812,6 +812,13 @@ final class VelaThemeTests: XCTestCase {
         XCTAssertEqual(segments.map(\.count), [2, 1])
     }
 
+    func testMetricDetailRangesOnlyMapToPublishedTrendHorizons() {
+        XCTAssertEqual(DetailTimeRange.week.trendHorizon, .sevenDays)
+        XCTAssertEqual(DetailTimeRange.month.trendHorizon, .thirtyDays)
+        XCTAssertEqual(DetailTimeRange.halfYear.trendHorizon, .sixMonths)
+        XCTAssertEqual(DetailTimeRange.threeYears.trendHorizon, .threeYears)
+    }
+
     func testStageTimelineClipsIntervalsToVisibleWindow() {
         let start = Date(timeIntervalSince1970: 1_700_000_000)
         let window = DateInterval(start: start, duration: 8 * 3_600)
@@ -880,17 +887,27 @@ final class VelaThemeTests: XCTestCase {
         XCTAssertEqual(VelaAppState.initialTab(from: ["Vela", "-velaInitialTab"]), 0)
     }
 
+    @MainActor
+    func testDebugRecoveryDetailLaunchArgumentPresentsDetailSheet() {
+        let appState = VelaAppState(arguments: ["Vela", "-velaOpenRecoveryDetail"])
+        XCTAssertTrue(appState.triggerRecoveryDetail)
+    }
+
     func testDebugForceOnboardingLaunchArgument() {
         XCTAssertFalse(AppCoordinator.shouldForceOnboarding(arguments: ["Vela"]))
         XCTAssertTrue(AppCoordinator.shouldForceOnboarding(arguments: ["Vela", "-velaForceOnboarding"]))
+        XCTAssertEqual(AppCoordinator.forcedOnboardingStep(arguments: ["Vela", "-velaOnboardingAgentControl"]), .agentControl)
+        XCTAssertEqual(AppCoordinator.forcedOnboardingStep(arguments: ["Vela", "-velaOnboardingAppleHealth"]), .appleHealth)
+        XCTAssertNil(AppCoordinator.forcedOnboardingStep(arguments: ["Vela"]))
+        XCTAssertTrue(AppCoordinator.shouldForceTrustCenter(arguments: ["Vela", "-velaForceTrustCenter"]))
     }
 
     func testTabSelectionOnlyActivatesTheCurrentSurface() {
         XCTAssertTrue(VelaTabSelection.isActive(.today, selectedTab: 0))
         XCTAssertTrue(VelaTabSelection.isActive(.trends, selectedTab: 1))
-        XCTAssertTrue(VelaTabSelection.isActive(.coach, selectedTab: 2))
-        XCTAssertTrue(VelaTabSelection.isActive(.training, selectedTab: 3))
-        XCTAssertFalse(VelaTabSelection.isActive(.training, selectedTab: 0))
+        XCTAssertTrue(VelaTabSelection.isActive(.plan, selectedTab: 2))
+        XCTAssertTrue(VelaTabSelection.isActive(.coach, selectedTab: 3))
+        XCTAssertFalse(VelaTabSelection.isActive(.plan, selectedTab: 0))
         XCTAssertFalse(VelaTabSelection.isActive(.trends, selectedTab: 2))
     }
 
@@ -899,7 +916,7 @@ final class VelaThemeTests: XCTestCase {
         mounted = VelaLegacySurfaceMountPolicy.including(selectedTab: 3, in: mounted)
         mounted = VelaLegacySurfaceMountPolicy.including(selectedTab: 2, in: mounted)
 
-        XCTAssertEqual(mounted, [.today, .training, .coach])
+        XCTAssertEqual(mounted, [.today, .plan, .coach])
         XCTAssertEqual(
             VelaLegacySurfaceMountPolicy.including(selectedTab: 99, in: mounted),
             mounted
@@ -1004,15 +1021,27 @@ final class VelaThemeTests: XCTestCase {
         XCTAssertFalse(profileClaim.contains("strength"))
     }
 
+    func testOnboardingLeadsWithBodyStateThenAgentControlBeforeHealthPermission() {
+        XCTAssertEqual(
+            VelaOnboardingStep.allCases,
+            [.bodyState, .agentControl, .appleHealth]
+        )
+        XCTAssertEqual(VelaOnboardingStep.bodyState.primaryActionTitle, "继续")
+        XCTAssertEqual(VelaOnboardingStep.agentControl.primaryActionTitle, "连接身体数据")
+        XCTAssertEqual(VelaOnboardingStep.appleHealth.primaryActionTitle, "连接 Apple 健康")
+    }
+
     @MainActor
-    func testCoachRouteUsesCenteredTab() {
+    func testCoachRouteUsesTrailingTabAfterPlan() {
         let appState = VelaAppState.shared
         appState.selectedTab = 0
 
-        appState.routeToCoach(question: nil)
+        appState.routeToCoach(question: nil, surface: .plan)
 
-        XCTAssertEqual(VelaAppState.coachTabIndex, 2)
-        XCTAssertEqual(appState.selectedTab, 2)
+        XCTAssertEqual(VelaAppState.planTabIndex, 2)
+        XCTAssertEqual(VelaAppState.coachTabIndex, 3)
+        XCTAssertEqual(appState.selectedTab, 3)
+        XCTAssertEqual(appState.coachRouteSurface, .plan)
     }
 
     @MainActor
@@ -1085,8 +1114,9 @@ final class VelaThemeTests: XCTestCase {
         )
 
         XCTAssertTrue(response.contains("同步 Apple 健康"))
-        XCTAssertTrue(response.contains("建立身体基线"))
-        XCTAssertTrue(response.contains("不构成医疗诊断"))
+        XCTAssertTrue(response.contains("不会用缺失数据猜测"))
+        XCTAssertFalse(response.contains("训练容量"))
+        XCTAssertFalse(response.contains("置信度"))
     }
 
     func testIntradayStressSeriesUsesPersistedHeartRateBucketsWithoutInventingMissingPeriods() {
@@ -2881,7 +2911,25 @@ final class VelaThemeTests: XCTestCase {
 
         let questions = vm.contextualQuickQuestions(todayPlan: planRecord, dashboard: dashboard)
         XCTAssertEqual(questions.count, 4)
-        XCTAssertTrue(questions.first?.contains("睡眠") == true || questions.first?.contains("恢复") == true)
+        XCTAssertTrue(questions.first?.contains("恢复是 20") == true)
+        XCTAssertTrue(questions.contains { $0.contains("个人基线") })
+        XCTAssertTrue(questions.contains { $0.contains("调整今天的计划") })
+        XCTAssertFalse(questions.first?.contains("训练") == true)
+    }
+
+    func testCoachRouteFocusPreservesSurfaceSemantics() {
+        let trends = CoachContextFocus.routed(
+            from: .trends,
+            selectedDate: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        XCTAssertEqual(trends.screenContext.surface, .trends)
+        XCTAssertTrue(trends.systemContext.contains("时间尺度"))
+        XCTAssertTrue(trends.systemContext.contains("不得声称因果"))
+
+        let plan = CoachContextFocus.routed(from: .plan)
+        XCTAssertEqual(plan.screenContext.surface, .plan)
+        XCTAssertTrue(plan.systemContext.contains("用户拥有"))
+        XCTAssertTrue(plan.systemContext.contains("等待用户确认"))
     }
 }
 

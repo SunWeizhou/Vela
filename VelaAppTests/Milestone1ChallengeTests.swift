@@ -301,6 +301,72 @@ final class Milestone1ChallengeTests: XCTestCase {
         XCTAssertEqual(decoded?.motivation, 0)
     }
 
+    func testLivedStateAlignmentRoundTripsWithoutRewritingScores() {
+        let alignment = LivedStateAlignment.worse
+
+        XCTAssertEqual(LivedStateAlignment(tags: alignment.journalTags), .worse)
+        XCTAssertEqual(alignment.conservativeSeverity, 0.5, accuracy: 0.001)
+        XCTAssertEqual(LivedStateAlignment.better.conservativeSeverity, 0, accuracy: 0.001)
+        XCTAssertFalse(alignment.journalTags.contains("lived_state"))
+    }
+
+    func testWorseLivedStateAlignmentLowersConfidenceButKeepsObjectiveScores() {
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        var dashboard = DashboardSummary.empty(date: date)
+        dashboard.source = .healthKit
+        dashboard.recovery = MetricResult(
+            domain: .recovery,
+            name: "Recovery",
+            value: 84,
+            band: .high,
+            confidence: .high,
+            components: [:],
+            componentWeights: [:],
+            reasons: [],
+            missingInputs: [],
+            dataWindow: DateInterval(start: date, duration: 86_400),
+            source: .derived,
+            algorithmVersion: "test",
+            lastUpdated: date
+        )
+        dashboard.sleepScore = MetricResult(
+            domain: .sleep,
+            name: "Sleep",
+            value: 86,
+            band: .high,
+            confidence: .high,
+            components: [:],
+            componentWeights: [:],
+            reasons: [],
+            missingInputs: [],
+            dataWindow: DateInterval(start: date, duration: 86_400),
+            source: .derived,
+            algorithmVersion: "test",
+            lastUpdated: date
+        )
+        let alignment = LivedStateAlignment.worse
+
+        let bodyState = BodyStateKernel().build(
+            input: BodyStateInput(
+                dashboard: dashboard,
+                journalEntries: [
+                    JournalEntryDTO(
+                        createdAt: date,
+                        note: alignment.journalNote,
+                        tags: alignment.journalTags,
+                        value: 1 - alignment.conservativeSeverity
+                    )
+                ],
+                generatedAt: date
+            )
+        )
+
+        XCTAssertEqual(bodyState.recovery.score, 84, accuracy: 0.001)
+        XCTAssertEqual(bodyState.sleep.score, 86, accuracy: 0.001)
+        XCTAssertEqual(bodyState.confidence, .low)
+        XCTAssertEqual(bodyState.drivers.first(where: { $0.id == "lived-state" })?.impact ?? 0, -0.5, accuracy: 0.001)
+    }
+
     func testStructuredLivedStateFeedsSharedBodyStateProjection() {
         let date = Date(timeIntervalSince1970: 1_800_000_000)
         let checkIn = LivedStateCheckIn(

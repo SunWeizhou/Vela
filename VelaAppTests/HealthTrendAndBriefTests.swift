@@ -292,6 +292,85 @@ final class HealthTrendAndBriefTests: XCTestCase {
         XCTAssertEqual(finding?.assessment, .unfavorable)
     }
 
+    func testSleepScoreTrendIsIndependentFromSleepDuration() {
+        let calendar = Calendar(identifier: .gregorian)
+        let today = calendar.startOfDay(for: Date())
+        var snapshots: [DailyHealthSnapshot] = []
+
+        for day in 0..<30 {
+            let date = calendar.date(byAdding: .day, value: day - 29, to: today)!
+            var snapshot = DailyHealthSnapshot(date: date)
+            snapshot.sleepHours = 8
+            snapshot.sleepScore = day < 15 ? 86 : 62
+            snapshot.recoveryScore = 70
+            snapshots.append(snapshot)
+        }
+
+        var dashboard = DashboardSummary.empty(date: today)
+        dashboard.recovery = MetricResult(
+            domain: .recovery, name: "Recovery", value: 70, band: .normal, confidence: .high,
+            components: [:], componentWeights: [:], reasons: [], missingInputs: [],
+            dataWindow: DateInterval(start: today, duration: 86_400), source: .healthKit,
+            algorithmVersion: "1.0", lastUpdated: today
+        )
+        dashboard.sleepScore = MetricResult(
+            domain: .sleep, name: "Sleep", value: 62, band: .low, confidence: .high,
+            components: [:], componentWeights: [:], reasons: [], missingInputs: [],
+            dataWindow: DateInterval(start: today, duration: 86_400), source: .healthKit,
+            algorithmVersion: "1.0", lastUpdated: today
+        )
+        dashboard.sleepSummary.totalSleepMinutes = 480
+
+        let findings = HealthTrendEngine().analyze(
+            dashboard: dashboard,
+            snapshots: snapshots,
+            longTermBaselines: nil,
+            today: today,
+            calendar: calendar
+        ).findings
+
+        let score = findings.first { $0.metric == .sleepScore && $0.horizon == .thirtyDays }
+        let duration = findings.first { $0.metric == .sleepDuration && $0.horizon == .thirtyDays }
+        XCTAssertEqual(score?.currentValue, 62)
+        XCTAssertEqual(score?.valueDirection, .falling)
+        XCTAssertEqual(score?.assessment, .unfavorable)
+        XCTAssertEqual(duration?.valueDirection, .stable)
+    }
+
+    func testThreeYearDerivedScoreUsesPersistedDailySeries() {
+        let calendar = Calendar(identifier: .gregorian)
+        let today = calendar.startOfDay(for: Date())
+        var snapshots: [DailyHealthSnapshot] = []
+
+        for day in 0..<400 {
+            let date = calendar.date(byAdding: .day, value: day - 399, to: today)!
+            var snapshot = DailyHealthSnapshot(date: date)
+            snapshot.recoveryScore = day < 200 ? 82 : 61
+            snapshots.append(snapshot)
+        }
+
+        var dashboard = DashboardSummary.empty(date: today)
+        dashboard.recovery = MetricResult(
+            domain: .recovery, name: "Recovery", value: 61, band: .normal, confidence: .high,
+            components: [:], componentWeights: [:], reasons: [], missingInputs: [],
+            dataWindow: DateInterval(start: today, duration: 86_400), source: .healthKit,
+            algorithmVersion: "1.0", lastUpdated: today
+        )
+
+        let finding = HealthTrendEngine().analyze(
+            dashboard: dashboard,
+            snapshots: snapshots,
+            longTermBaselines: nil,
+            today: today,
+            calendar: calendar
+        ).findings.first { $0.metric == .recovery && $0.horizon == .threeYears }
+
+        XCTAssertTrue(finding?.isAvailable == true)
+        XCTAssertEqual(finding?.valueDirection, .falling)
+        XCTAssertEqual(finding?.assessment, .unfavorable)
+        XCTAssertEqual(finding?.sampleCount, 400)
+    }
+
     func testMetricPolaritiesAreCorrectlyDefined() {
         XCTAssertEqual(CoreHealthMetric.bodyWeight.polarity, .contextual)
         XCTAssertEqual(CoreHealthMetric.bodyFat.polarity, .contextual)
@@ -302,6 +381,7 @@ final class HealthTrendAndBriefTests: XCTestCase {
         XCTAssertEqual(CoreHealthMetric.hrv.polarity, .higherIsBetter)
         XCTAssertEqual(CoreHealthMetric.recovery.polarity, .higherIsBetter)
         XCTAssertEqual(CoreHealthMetric.sleepDuration.polarity, .higherIsBetter)
+        XCTAssertEqual(CoreHealthMetric.sleepScore.polarity, .higherIsBetter)
         XCTAssertEqual(CoreHealthMetric.restingHeartRate.polarity, .lowerIsBetter)
         XCTAssertEqual(CoreHealthMetric.stress.polarity, .lowerIsBetter)
     }

@@ -103,6 +103,66 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertEqual(ready.rhrBaselineMean, 60)
     }
 
+    func testPersonalBaselineFormationCountsDistinctEvidenceDaysAndRequiresSeven() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let selectedDate = Date(timeIntervalSince1970: 1_780_000_000)
+
+        let sixEvidenceDays = (1...6).map { offset -> DailyHealthSnapshot in
+            var snapshot = DailyHealthSnapshot(
+                date: calendar.date(byAdding: .day, value: -offset, to: selectedDate)!
+            )
+            snapshot.hrvAverage = 50 + Double(offset)
+            return snapshot
+        }
+        var duplicateDay = DailyHealthSnapshot(date: sixEvidenceDays[0].date.addingTimeInterval(3_600))
+        duplicateDay.restingHeartRate = 60
+        var futureDay = DailyHealthSnapshot(
+            date: calendar.date(byAdding: .day, value: 1, to: selectedDate)!
+        )
+        futureDay.sleepHours = 8
+        let emptyPastDay = DailyHealthSnapshot(
+            date: calendar.date(byAdding: .day, value: -10, to: selectedDate)!
+        )
+
+        let learning = PersonalBaselineEngine.formationProgress(
+            from: sixEvidenceDays + [duplicateDay, futureDay, emptyPastDay],
+            selectedDate: selectedDate,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(learning.phase, .learning)
+        XCTAssertEqual(learning.observedDays, 6)
+        XCTAssertEqual(learning.progress, 6.0 / 7.0, accuracy: 0.001)
+
+        var seventhDay = DailyHealthSnapshot(date: selectedDate)
+        seventhDay.sleepHours = 7.5
+        let ready = PersonalBaselineEngine.formationProgress(
+            from: sixEvidenceDays + [seventhDay],
+            selectedDate: selectedDate,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(ready.phase, .ready)
+        XCTAssertEqual(ready.observedDays, 7)
+        XCTAssertEqual(ready.progress, 1)
+        XCTAssertEqual(
+            PersonalBaselineEngine.formationProgress(
+                from: [emptyPastDay],
+                selectedDate: selectedDate,
+                calendar: calendar
+            ).phase,
+            .waitingForEvidence
+        )
+        XCTAssertEqual(
+            PersonalBaselineFormation.visualRegressionValue(
+                fallback: .ready,
+                arguments: ["Vela", "-velaBaselineObservedDays", "4"]
+            ),
+            PersonalBaselineFormation(phase: .learning, observedDays: 4)
+        )
+    }
+
     func testPersonalBaselineUsesInjectedCalculationTime() {
         let calculatedAt = Date(timeIntervalSince1970: 1_700_000_000)
         let snapshots = (0..<7).map { offset -> DailyHealthSnapshot in
@@ -1848,6 +1908,18 @@ final class ScoringEngineTests: XCTestCase {
             algorithmVersion: "test",
             lastUpdated: Date(timeIntervalSince1970: 0)
         )
+    }
+
+    func testExplicitStrainReferenceRangeNeverUsesCompatibilityFallback() {
+        var metric = makeMetric(domain: .strain, band: .normal)
+        XCTAssertNil(metric.explicitRecommendedRange)
+
+        metric.components["recommended_lower"] = 35
+        metric.components["recommended_upper"] = 65
+        XCTAssertEqual(metric.explicitRecommendedRange, 35...65)
+
+        metric.components["recommended_lower"] = 80
+        XCTAssertNil(metric.explicitRecommendedRange)
     }
 
     func testMetricStateHigherIsBetter() {

@@ -15,6 +15,13 @@ final class PersistenceFoundationTests: XCTestCase {
         XCTAssertTrue(DailySummaryUseCase.isDemoDataSeedingEnabled(arguments: ["-velaSeedDemoData"]))
     }
 
+    @MainActor
+    func testPreviewDashboardRequiresExplicitLaunchArgument() {
+        XCTAssertFalse(DailySummaryUseCase.isPreviewDashboardEnabled(arguments: []))
+        XCTAssertFalse(DailySummaryUseCase.isPreviewDashboardEnabled(arguments: ["-velaSeedDemoData"]))
+        XCTAssertTrue(DailySummaryUseCase.isPreviewDashboardEnabled(arguments: ["-velaPreviewDashboard"]))
+    }
+
     func testActiveStatusDefaultsToActiveWhenNoValueExists() {
         let suiteName = "ActiveStatusDefaults-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -635,6 +642,150 @@ final class PersistenceFoundationTests: XCTestCase {
         let compact = try XCTUnwrap(AIContextBuilder.compactDailyOperatingPlan(plans.first))
         XCTAssertNotNil(compact["primary_action"])
         XCTAssertNotNil(compact["supporting_actions"])
+    }
+
+    func testDailyOperatingPlanEditsAreUserOwnedAndBlockSilentRefresh() throws {
+        let now = Date(timeIntervalSince1970: 1_781_004_800)
+        let primary = DailyOperatingPlanAction(
+            id: "primary",
+            domain: .training,
+            title: "轻量训练",
+            detail: "保留动作质量",
+            destination: "training",
+            evidence: "恢复一般"
+        )
+        let support = DailyOperatingPlanAction(
+            id: "sleep",
+            domain: .sleep,
+            title: "提前休息",
+            detail: "",
+            destination: "sleep",
+            evidence: nil
+        )
+        let original = DailyOperatingPlanPayload(
+            decision: .reduce,
+            volumeMultiplier: 0.7,
+            intensityCap: 7,
+            summary: "今天留些余地",
+            targetSessionTitle: nil,
+            primaryAction: primary,
+            supportingActions: [support]
+        )
+
+        let completed = DailyOperatingPlanEditor.applying(
+            .toggleCompletion(actionID: primary.id, at: now),
+            to: original
+        )
+        XCTAssertEqual(completed.primaryAction?.completedAt, now)
+        XCTAssertEqual(completed.userEditedAt, now)
+        XCTAssertTrue(completed.hasCanonicalActionSequence)
+        XCTAssertFalse(DailyOperatingPlanRefreshPolicy.shouldRegenerate(
+            usedPersistedDecision: false,
+            persistedPayload: completed
+        ))
+
+        let added = DailyOperatingPlanEditor.applying(
+            .add(
+                action: DailyOperatingPlanAction(
+                    id: "movement",
+                    domain: .movement,
+                    title: "散步",
+                    detail: "晚饭后走一会儿",
+                    destination: "movement",
+                    evidence: "用户安排",
+                    scheduledAt: now
+                ),
+                at: now
+            ),
+            to: completed
+        )
+        XCTAssertEqual(added.allActions.count, 3)
+        XCTAssertEqual(added.supportingActions.last?.scheduledAt, now)
+
+        let deleted = DailyOperatingPlanEditor.applying(
+            .delete(actionID: primary.id, at: now),
+            to: added
+        )
+        XCTAssertEqual(deleted.primaryAction?.id, support.id)
+        XCTAssertEqual(deleted.allActions.count, 2)
+    }
+
+    func testDailyOperatingPlanLegacyActionsDecodeWithoutEditMetadata() throws {
+        let json = """
+        {
+          "schemaVersion": 2,
+          "decision": "keep",
+          "volumeMultiplier": 1,
+          "intensityCap": 8,
+          "summary": "按计划进行",
+          "primaryAction": {
+            "id": "primary",
+            "domain": "training",
+            "title": "训练",
+            "detail": "保持动作质量",
+            "destination": "training"
+          },
+          "supportingActions": []
+        }
+        """
+
+        let payload = try JSONDecoder().decode(
+            DailyOperatingPlanPayload.self,
+            from: Data(json.utf8)
+        )
+
+        XCTAssertEqual(payload.schemaVersion, 2)
+        XCTAssertNil(payload.userEditedAt)
+        XCTAssertNil(payload.primaryAction?.scheduledAt)
+        XCTAssertTrue(payload.hasCanonicalActionSequence)
+        XCTAssertFalse(DailyOperatingPlanRefreshPolicy.shouldRegenerate(
+            usedPersistedDecision: true,
+            persistedPayload: payload
+        ))
+    }
+
+    @MainActor
+    func testDailyOperatingPlanEditorPersistsCompletionToPlanAndArtifact() throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let now = Date(timeIntervalSince1970: 1_781_004_800)
+        let bodyState = BodyStateKernel().build(input: BodyStateInput(
+            dashboard: .empty(date: now),
+            activeStatus: "active",
+            generatedAt: now
+        ))
+        let decision = TrainingDecisionKernel().decide(input: TrainingDecisionInput(bodyState: bodyState))
+        let record = try DailyOperatingPlanCoordinator.upsert(
+            bodyState: bodyState,
+            decision: decision,
+            modelContext: context
+        )
+        let payload = try XCTUnwrap(record.operatingPlanPayload)
+        let actionID = try XCTUnwrap(payload.primaryAction?.id)
+        let edited = DailyOperatingPlanEditor.applying(
+            .toggleCompletion(actionID: actionID, at: now),
+            to: payload
+        )
+
+        try DailyOperatingPlanEditor.persist(edited, to: record, modelContext: context)
+
+        XCTAssertEqual(record.operatingPlanPayload?.primaryAction?.completedAt, now)
+        let artifact = try XCTUnwrap(context.fetch(FetchDescriptor<AgentArtifactRecord>())
+            .first { $0.type == AgentArtifactType.dailyPlan.rawValue })
+        let artifactPayload = try JSONDecoder().decode(
+            DailyOperatingPlanPayload.self,
+            from: Data(artifact.payloadJSON.utf8)
+        )
+        XCTAssertEqual(artifactPayload.primaryAction?.completedAt, now)
+
+        try DailyOperatingPlanEditor.acknowledgeCurrentPlan(
+            edited,
+            record: record,
+            bodyStateHash: "new-body-state",
+            modelContext: context
+        )
+        XCTAssertEqual(record.bodyStateHash, "new-body-state")
+        XCTAssertEqual(artifact.sourceContextHash, "new-body-state")
     }
 
     @MainActor
