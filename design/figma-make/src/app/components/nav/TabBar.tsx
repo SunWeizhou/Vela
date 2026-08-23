@@ -1,6 +1,6 @@
-import { Home, BookOpen, Dumbbell, HeartPulse, Sparkles } from "lucide-react";
+import { ChartNoAxesCombined, Gauge, ListChecks, MessageCircle } from "lucide-react";
 
-export type TabKey = "home" | "journal" | "fitness" | "vitals" | "coach";
+export type TabKey = "today" | "trends" | "plan" | "coach";
 
 interface TabBarProps {
   active: TabKey;
@@ -8,11 +8,10 @@ interface TabBarProps {
 }
 
 const items: { key: TabKey; label: string; Icon: any }[] = [
-  { key: "home", label: "总览", Icon: Home },
-  { key: "journal", label: "日志", Icon: BookOpen },
-  { key: "coach", label: "Coach", Icon: Sparkles },
-  { key: "fitness", label: "训练", Icon: Dumbbell },
-  { key: "vitals", label: "体征", Icon: HeartPulse },
+  { key: "today", label: "Today", Icon: Gauge },
+  { key: "trends", label: "趋势", Icon: ChartNoAxesCombined },
+  { key: "plan", label: "计划", Icon: ListChecks },
+  { key: "coach", label: "Coach", Icon: MessageCircle },
 ];
 
 export function TabBar({ active, onChange }: TabBarProps) {
@@ -34,7 +33,7 @@ export function TabBar({ active, onChange }: TabBarProps) {
             <button
               key={key}
               onClick={() => onChange(key)}
-              className="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 active:opacity-60"
+              className="prototype-pressable flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5"
               style={{
                 color: isActive ? "var(--tint)" : "var(--ios-label-secondary)",
               }}

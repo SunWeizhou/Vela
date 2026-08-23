@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { TabBar, TabKey } from "./components/nav/TabBar";
 import { HomePage } from "./pages/Home";
-import { JournalPage } from "./pages/Journal";
 import { FitnessPage } from "./pages/Fitness";
 import { VitalsPage } from "./pages/Vitals";
 import { CoachHub } from "./pages/CoachHub";
@@ -17,11 +16,17 @@ import { WikiFilePage } from "./pages/WikiFile";
 import { AlgorithmsPage, AlgorithmDetail, AlgoId } from "./pages/Algorithms";
 
 export default function App() {
-  const [tab, setTab] = useState<TabKey>("home");
+  const [tab, setTab] = useState<TabKey>("today");
   const [stack, setStack] = useState<string[]>([]);
 
   useEffect(() => {
-    document.documentElement.classList.remove("dark");
+    const colorScheme = window.matchMedia("(prefers-color-scheme: dark)");
+    const applySystemAppearance = () => {
+      document.documentElement.classList.toggle("dark", colorScheme.matches);
+    };
+    applySystemAppearance();
+    colorScheme.addEventListener("change", applySystemAppearance);
+    return () => colorScheme.removeEventListener("change", applySystemAppearance);
   }, []);
 
   const push = (r: string) => {
@@ -37,10 +42,9 @@ export default function App() {
 
   function renderRoot() {
     switch (tab) {
-      case "home": return <HomePage go={push} />;
-      case "journal": return <JournalPage go={push} />;
-      case "fitness": return <FitnessPage go={push} />;
-      case "vitals": return <VitalsPage go={push} />;
+      case "today": return <HomePage go={push} />;
+      case "trends": return <VitalsPage go={push} />;
+      case "plan": return <FitnessPage go={push} />;
       case "coach": return <CoachHub go={push} />;
     }
   }
@@ -69,7 +73,7 @@ export default function App() {
 
   return (
     <div
-      className="size-full min-h-screen relative"
+      className="size-full min-h-screen relative antialiased"
       style={{ background: "var(--ios-bg)", color: "var(--ios-label)" }}
     >
       <div className="mx-auto max-w-[480px] min-h-screen relative">
