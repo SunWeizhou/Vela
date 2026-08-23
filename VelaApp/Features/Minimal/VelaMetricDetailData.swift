@@ -46,14 +46,18 @@ enum MetricRecommendationPolicy {
 
         case .strain:
             let score = dashboard.strain.score
-            let target = dashboard.strain.recommendedRange
-            if score > Double(target.upperBound) {
-                return recommendation("今天停止继续加量", "当前负荷已经超过建议区间；后续活动以轻松完成和恢复为主。", "负荷 \(valueText) · 目标 \(target.lowerBound)–\(target.upperBound)", "stop.circle")
+            guard let range = dashboard.strain.explicitRecommendedRange else {
+                return recommendation("个体化负荷边界仍在建立", "先按身体感受与既有计划安排活动。", "负荷 \(valueText)", "scope")
             }
-            if score < Double(target.lowerBound) {
-                return recommendation("负荷仍低于今日目标", "若恢复和睡眠允许，可按计划补足活动；恢复建议始终优先于负荷目标。", "负荷 \(valueText) · 目标 \(target.lowerBound)–\(target.upperBound)", "figure.walk")
+            let lower = range.lowerBound
+            let upper = range.upperBound
+            if score > upper {
+                return recommendation("今天停止继续加量", "当前负荷已经超过参考区间；后续活动以轻松完成和恢复为主。", "负荷 \(valueText) · 参考 \(Int(lower))–\(Int(upper))", "stop.circle")
             }
-            return recommendation("负荷位于建议区间", "无需为了数字继续加量；完成计划后把重点转向补水、进食和恢复。", "负荷 \(valueText) · 目标 \(target.lowerBound)–\(target.upperBound)", "target")
+            if score < lower {
+                return recommendation("负荷低于今日参考区间", "若恢复和睡眠允许，可按计划完成活动；不需为了数字追加负荷。", "负荷 \(valueText) · 参考 \(Int(lower))–\(Int(upper))", "figure.walk")
+            }
+            return recommendation("负荷位于参考区间", "无需为了数字继续加量；完成计划后把重点转向补水、进食和恢复。", "负荷 \(valueText) · 参考 \(Int(lower))–\(Int(upper))", "scope")
 
         case .stress:
             let score = dashboard.stress.stressIndex
@@ -214,13 +218,8 @@ extension VelaMetricDetailView {
         let dateToUse = selectedPoint?.date ?? dashboardVM.selectedDate
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_Hans_CN")
-        if selectedRange == .day {
-            let isToday = Calendar.current.isDateInToday(dateToUse)
-            if selectedPoint != nil {
-                formatter.dateFormat = isToday ? "今天 HH:00" : "M月d日 HH:00"
-            } else {
-                formatter.dateFormat = isToday ? "今天，M月d日" : "M月d日"
-            }
+        if selectedRange == .threeYears {
+            formatter.dateFormat = "yyyy年M月"
         } else {
             formatter.dateFormat = Calendar.current.isDateInToday(dateToUse) ? "今天，M月d日" : "M月d日"
         }
@@ -228,9 +227,6 @@ extension VelaMetricDetailView {
     }
 
     var chartPoints: [ChartPoint] {
-        if selectedRange == .day {
-            return []
-        }
         let snapshots = dailyRecords.map { $0.toSnapshot() }
         let calendar = Calendar.current
         let endDate = calendar.startOfDay(for: dashboardVM.selectedDate)
@@ -241,10 +237,29 @@ extension VelaMetricDetailView {
             .filter { $0.date >= start && $0.date < end }
             .sorted { $0.date < $1.date }
             
-        return filtered.compactMap { snap in
+        let points: [ChartPoint] = filtered.compactMap { snap -> ChartPoint? in
             guard let val = metricValue(for: snap) else { return nil }
             return ChartPoint(date: snap.date, value: val)
         }
+
+        guard selectedRange == .threeYears else { return points }
+        let monthly: [Date: [ChartPoint]] = Dictionary(grouping: points) { point in
+            calendar.date(
+                from: calendar.dateComponents([.year, .month], from: point.date)
+            ) ?? calendar.startOfDay(for: point.date)
+        }
+        var monthlyPoints: [ChartPoint] = []
+        monthlyPoints.reserveCapacity(monthly.count)
+        for (month, values) in monthly {
+            let sum = values.reduce(0.0) { partial, point in
+                partial + point.value
+            }
+            monthlyPoints.append(ChartPoint(
+                date: month,
+                value: sum / Double(values.count)
+            ))
+        }
+        return monthlyPoints.sorted { $0.date < $1.date }
     }
 
     func metricValue(for snapshot: DailyHealthSnapshot) -> Double? {
@@ -351,10 +366,14 @@ extension VelaMetricDetailView {
     }
 
     var metricColor: Color {
-        // G1 状态着色:颜色只表达「好不好」,与今日页五环一致。
+        // Core-domain colors provide stable identity across Today, Trends and
+        // details. State is expressed separately through labels and markers.
         switch metric {
-        case .strain, .recovery, .sleep, .stress, .energy:
-            return VelaTheme.color(for: dashboardResult(for: metric).state)
+        case .strain: return VelaTheme.strainColor
+        case .recovery: return VelaTheme.recoveryColor
+        case .sleep: return VelaTheme.sleepColor
+        case .stress: return VelaTheme.stressColor
+        case .energy: return VelaTheme.energyColor
         case .hrv, .rhr, .respiratoryRate, .bloodOxygen, .weight, .bodyFat,
              .steps, .activeCalories, .activeMinutes:
             return VelaTheme.brand
@@ -440,7 +459,12 @@ extension VelaMetricDetailView {
         guard hasMetricData else { return "暂无数据" }
         switch metric {
         case .strain:
-            return strainTargetLabel(dashboard.strain.targetStatus)
+            guard let range = dashboard.strain.explicitRecommendedRange else {
+                return "参考区间建立中"
+            }
+            if dynamicScore < range.lowerBound { return "低于参考区间" }
+            if dynamicScore > range.upperBound { return "高于参考区间" }
+            return "处于参考区间"
         case .recovery:
             return scoreBandLabel(dashboard.recovery.band) + "恢复"
         case .sleep:

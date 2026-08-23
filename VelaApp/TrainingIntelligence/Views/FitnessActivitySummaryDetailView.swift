@@ -258,7 +258,8 @@ struct FitnessActivitySummaryDetailView: View {
     private var guidanceCard: some View {
         Button {
             VelaAppState.shared.routeToCoach(
-                question: "请结合我过去 30 天的活动摘要、耗力趋势、恢复、负荷、压力和身体模型，给出下一次训练的明确建议。"
+                question: "请结合我过去 30 天的活动摘要、耗力趋势、恢复、负荷、压力和身体模型，给出下一次训练的明确建议。",
+                surface: .training
             )
         } label: {
             VelaGlassCard {

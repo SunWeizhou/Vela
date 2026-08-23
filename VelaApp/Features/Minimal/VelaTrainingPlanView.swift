@@ -1,7 +1,745 @@
 import SwiftUI
 import SwiftData
 
-struct VelaTrainingPlanView: View {
+/// The user's daily operating plan. Training is one downstream action domain,
+/// not the organizing principle of the primary workspace.
+struct VelaPlanView: View {
+    @EnvironmentObject private var dashboardVM: DashboardViewModel
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var appState = VelaAppState.shared
+
+    @State private var plan: DailyOperatingPlanRecord?
+    @State private var editorDraft: PlanActionDraft?
+    @State private var pendingDelete: DailyOperatingPlanAction?
+    @State private var showTraining = false
+    @State private var lastHandledTrainingRequest = 0
+    @State private var planRevision = 0
+
+    private var payload: DailyOperatingPlanPayload? {
+        plan?.operatingPlanPayload
+    }
+
+    private var actions: [DailyOperatingPlanAction] {
+        payload?.allActions ?? []
+    }
+
+    private var completedCount: Int {
+        actions.filter { $0.completedAt != nil }.count
+    }
+
+    private var candidatePayload: DailyOperatingPlanPayload? {
+        guard let plan, payload?.hasUserEdits == true,
+              plan.bodyStateHash != dashboardVM.dashboard.bodyState.hash else {
+            return nil
+        }
+        return DailyOperatingPlanBuilder.build(
+            bodyState: dashboardVM.dashboard.bodyState,
+            decision: currentDecision,
+            brief: dashboardVM.dashboard.personalHealthBrief,
+            language: AppLanguage.stored
+        )
+    }
+
+    private var currentDecision: DailyTrainingDecision {
+        dashboardVM.dailyTrainingDecision ?? TrainingDecisionKernel().decide(
+            input: TrainingDecisionInput(
+                bodyState: dashboardVM.dashboard.bodyState,
+                personalHealthBrief: dashboardVM.dashboard.personalHealthBrief
+            )
+        )
+    }
+
+    private var dayIdentifier: String {
+        DailyHealthSummaryRecord.dayIdentifier(for: dashboardVM.selectedDate)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VelaSurfaceHeader(
+                title: L10n.t("Plan", "计划"),
+                subtitle: dateSubtitle
+            ) {
+                Button {
+                    appState.routeToCoach(question: coachQuestion, surface: .plan)
+                } label: {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                        .frame(width: VelaTheme.circularControlSize, height: VelaTheme.circularControlSize)
+                        .background(VelaTheme.rhythmCanvasRaised, in: Circle())
+                }
+                .buttonStyle(.cardPress)
+                .accessibilityLabel("让 Vela 分析今天的计划")
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: VelaTheme.sectionGap) {
+                    rhythmSummary
+
+                    if let candidatePayload {
+                        candidateCard(candidatePayload)
+                    }
+
+                    actionSection
+                    trainingPortal
+                }
+                .padding(.horizontal, VelaTheme.pagePadding)
+                .padding(.top, 8)
+                .padding(.bottom, VelaTheme.bottomContentClearance)
+                .id(planRevision)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .background(VelaTheme.rhythmCanvas)
+        .task(id: dayIdentifier) {
+            await dashboardVM.refresh(modelContext: modelContext)
+            loadOrCreatePlan()
+            openRequestedTrainingIfNeeded()
+        }
+        .onChange(of: appState.localDataRevision) { _, _ in
+            loadOrCreatePlan()
+        }
+        .onChange(of: appState.adaptiveTrainingStartRequest) { _, _ in
+            openRequestedTrainingIfNeeded()
+        }
+        .sheet(item: $editorDraft) { draft in
+            PlanActionEditorSheet(draft: draft) { savedDraft in
+                save(savedDraft)
+            }
+            .velaSheetSurface()
+        }
+        .confirmationDialog(
+            "删除“\(pendingDelete?.title ?? "这项行动")”？",
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("删除行动", role: .destructive) {
+                deletePendingAction()
+            }
+            Button("取消", role: .cancel) {
+                pendingDelete = nil
+            }
+        } message: {
+            Text("只会从今天的计划中移除，其他健康数据不会改变。")
+        }
+        .navigationDestination(isPresented: $showTraining) {
+            VelaTrainingView()
+        }
+    }
+
+    private var rhythmSummary: some View {
+        let total = actions.count
+        let progress = total == 0 ? 0 : Double(completedCount) / Double(total)
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(total == 0 ? "今天由你决定" : primaryRhythmTitle)
+                        .font(.system(.title2, design: .default, weight: .semibold))
+                        .tracking(-0.35)
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(total == 0 ? "添加一项真正有帮助的行动" : "先完成最重要的一件事")
+                        .font(.footnote)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                }
+                Spacer(minLength: 16)
+                HStack(alignment: .firstTextBaseline, spacing: 2) {
+                    Text("\(completedCount)")
+                        .font(.system(size: 34, weight: .semibold, design: .rounded).monospacedDigit())
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                    Text("/\(total)")
+                        .font(.system(.footnote, design: .rounded, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("已完成 \(completedCount) 项，共 \(total) 项")
+            }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(VelaTheme.rhythmMist.opacity(0.72))
+                    Capsule()
+                        .fill(VelaTheme.rhythmDeep)
+                        .frame(width: proxy.size.width * progress)
+                }
+            }
+            .frame(height: 7)
+            .animation(VelaTheme.dataAnimation(reduceMotion: reduceMotion), value: progress)
+        }
+        .padding(VelaTheme.cardPadding)
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+        }
+        .shadow(color: VelaTheme.cardShadow(colorScheme), radius: 14, x: 0, y: 6)
+    }
+
+    private var actionSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VelaRhythmSectionHeader(
+                eyebrow: L10n.t("TODAY", "今天"),
+                title: "今日行动",
+                actionTitle: actions.count < 3 ? "添加" : nil,
+                action: presentAddEditor
+            )
+
+            if actions.isEmpty {
+                Button(action: presentAddEditor) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(VelaTheme.rhythmDeepOn)
+                            .frame(width: 34, height: 34)
+                            .background(VelaTheme.rhythmDeep, in: Circle())
+                        Text("添加今天的第一项行动")
+                            .font(.system(.subheadline, design: .default, weight: .semibold))
+                            .foregroundStyle(VelaTheme.rhythmInk)
+                        Spacer()
+                    }
+                    .padding(VelaTheme.cardPadding)
+                    .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                }
+                .buttonStyle(.cardPress)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(actions.enumerated()), id: \.element.id) { index, action in
+                        PlanActionRow(
+                            action: action,
+                            isPrimary: index == 0,
+                            onToggle: { toggle(action) },
+                            onEdit: { presentEditor(for: action, mode: .edit) },
+                            onReschedule: { presentEditor(for: action, mode: .reschedule) },
+                            onReplace: { presentEditor(for: action, mode: .replace) },
+                            onDelete: { pendingDelete = action }
+                        )
+                        if index < actions.count - 1 {
+                            Divider()
+                                .overlay(VelaTheme.rhythmMist)
+                                .padding(.leading, 66)
+                        }
+                    }
+                }
+                .padding(.horizontal, 14)
+                .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+                }
+            }
+        }
+    }
+
+    private func candidateCard(_ candidate: DailyOperatingPlanPayload) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(VelaTheme.rhythmDeep)
+                Text("Vela 建议更新")
+                    .font(.system(.subheadline, design: .default, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+            }
+
+            Text(candidateSentence(candidate))
+                .font(.system(.body, design: .default))
+                .foregroundStyle(VelaTheme.rhythmInk)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(candidate.allActions) { action in
+                    let style = PlanDomainStyle(action.domain)
+                    HStack(spacing: 8) {
+                        Image(systemName: style.icon)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(style.color)
+                            .frame(width: 20)
+                        Text(action.title)
+                            .font(.system(.caption, design: .default, weight: .medium))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                            .lineLimit(1)
+                    }
+                }
+            }
+            .accessibilityElement(children: .contain)
+
+            HStack(spacing: 10) {
+                Button("采用新计划") {
+                    accept(candidate)
+                }
+                .font(.system(.footnote, design: .default, weight: .semibold))
+                .foregroundStyle(VelaTheme.rhythmDeepOn)
+                .padding(.horizontal, 14)
+                .frame(minHeight: 40)
+                .background(VelaTheme.rhythmDeep, in: Capsule())
+                .buttonStyle(.cardPress)
+
+                Button("保留我的安排") {
+                    keepCurrentPlan()
+                }
+                .font(.system(.footnote, design: .default, weight: .semibold))
+                .foregroundStyle(VelaTheme.rhythmDeep)
+                .padding(.horizontal, 12)
+                .frame(minHeight: 40)
+                .buttonStyle(.cardPress)
+            }
+        }
+        .padding(VelaTheme.cardPadding)
+        .background(VelaTheme.rhythmDeep.opacity(0.08), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(VelaTheme.rhythmDeep.opacity(0.20), lineWidth: 0.8)
+        }
+    }
+
+    private var trainingPortal: some View {
+        Button {
+            showTraining = true
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "figure.run")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(VelaTheme.strainColor)
+                    .frame(width: 42, height: 42)
+                    .background(VelaTheme.strainColor.opacity(0.11), in: Circle())
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("训练")
+                        .font(.system(.headline, design: .default))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                    Text("训练窗口、轮转与记录")
+                        .font(.footnote)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(.caption, design: .default, weight: .bold))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            }
+            .padding(VelaTheme.cardPadding)
+            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+            }
+        }
+        .buttonStyle(.cardPress)
+        .accessibilityHint("打开训练专项")
+    }
+
+    private var primaryRhythmTitle: String {
+        payload?.primaryAction?.title ?? "今天的节奏"
+    }
+
+    private var dateSubtitle: String {
+        let formatter = DateFormatter()
+        formatter.locale = AppLanguage.stored.isChinese
+            ? Locale(identifier: "zh_Hans_CN")
+            : Locale(identifier: "en_US")
+        formatter.setLocalizedDateFormatFromTemplate("MMMMdEEEE")
+        let date = formatter.string(from: dashboardVM.selectedDate)
+        return Calendar.current.isDateInToday(dashboardVM.selectedDate) ? "今天 · \(date)" : date
+    }
+
+    private var coachQuestion: String {
+        "请结合我今天的身体状态和当前每日计划，分析这些安排是否合适；先说明最值得关注的一点，再回答我的追问。"
+    }
+
+    private func candidateSentence(_ candidate: DailyOperatingPlanPayload) -> String {
+        guard let title = candidate.primaryAction?.title else {
+            return "身体状态有了变化，我建议把今天留得更轻一些。"
+        }
+        return "身体状态有了变化，我建议把今天的重点调整为“\(title)”。"
+    }
+
+    private func loadOrCreatePlan() {
+        var descriptor = FetchDescriptor<DailyOperatingPlanRecord>(
+            predicate: #Predicate<DailyOperatingPlanRecord> { $0.dayIdentifier == dayIdentifier },
+            sortBy: [SortDescriptor(\.generatedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+        if let stored = try? modelContext.fetch(descriptor).first {
+            plan = stored
+            planRevision += 1
+            return
+        }
+
+        plan = try? DailyOperatingPlanCoordinator.upsert(
+            bodyState: dashboardVM.dashboard.bodyState,
+            decision: currentDecision,
+            brief: dashboardVM.dashboard.personalHealthBrief,
+            modelContext: modelContext
+        )
+        planRevision += 1
+    }
+
+    private func mutate(_ mutation: DailyOperatingPlanMutation) {
+        guard let plan, let payload else { return }
+        let updated = DailyOperatingPlanEditor.applying(mutation, to: payload)
+        do {
+            try DailyOperatingPlanEditor.persist(updated, to: plan, modelContext: modelContext)
+            planRevision += 1
+            appState.markLocalDataChanged()
+        } catch {
+            appState.logDebug("[VelaPlanView] failed to persist plan edit: \(error.localizedDescription)")
+        }
+    }
+
+    private func toggle(_ action: DailyOperatingPlanAction) {
+        let wasComplete = action.completedAt != nil
+        mutate(.toggleCompletion(actionID: action.id, at: Date()))
+        if wasComplete {
+            VelaHaptic.selection()
+        } else {
+            VelaHaptic.success()
+        }
+    }
+
+    private func presentAddEditor() {
+        guard actions.count < 3 else { return }
+        editorDraft = PlanActionDraft.new(
+            usedDomains: Set(actions.map(\.domain)),
+            selectedDate: dashboardVM.selectedDate
+        )
+    }
+
+    private func presentEditor(for action: DailyOperatingPlanAction, mode: PlanActionDraft.Mode) {
+        editorDraft = PlanActionDraft.existing(
+            action,
+            mode: mode,
+            usedDomains: Set(actions.filter { $0.id != action.id }.map(\.domain)),
+            selectedDate: dashboardVM.selectedDate
+        )
+    }
+
+    private func save(_ draft: PlanActionDraft) {
+        let action = draft.action
+        if draft.originalActionID == nil {
+            mutate(.add(action: action, at: Date()))
+        } else {
+            mutate(.update(action: action, at: Date()))
+        }
+        VelaHaptic.success()
+    }
+
+    private func deletePendingAction() {
+        guard let action = pendingDelete else { return }
+        pendingDelete = nil
+        mutate(.delete(actionID: action.id, at: Date()))
+        VelaHaptic.selection()
+    }
+
+    private func accept(_ candidate: DailyOperatingPlanPayload) {
+        do {
+            plan = try DailyOperatingPlanCoordinator.upsert(
+                bodyState: dashboardVM.dashboard.bodyState,
+                decision: currentDecision,
+                brief: dashboardVM.dashboard.personalHealthBrief,
+                modelContext: modelContext
+            )
+            planRevision += 1
+            appState.markLocalDataChanged()
+            VelaHaptic.success()
+        } catch {
+            appState.logDebug("[VelaPlanView] failed to accept candidate plan: \(error.localizedDescription)")
+        }
+    }
+
+    private func keepCurrentPlan() {
+        guard let plan, let payload else { return }
+        do {
+            try DailyOperatingPlanEditor.acknowledgeCurrentPlan(
+                payload,
+                record: plan,
+                bodyStateHash: dashboardVM.dashboard.bodyState.hash,
+                modelContext: modelContext
+            )
+            planRevision += 1
+            appState.markLocalDataChanged()
+            VelaHaptic.selection()
+        } catch {
+            appState.logDebug("[VelaPlanView] failed to retain current plan: \(error.localizedDescription)")
+        }
+    }
+
+    private func openRequestedTrainingIfNeeded() {
+        let request = appState.adaptiveTrainingStartRequest
+        guard request > lastHandledTrainingRequest else { return }
+        lastHandledTrainingRequest = request
+        showTraining = true
+    }
+}
+
+private struct PlanActionRow: View {
+    let action: DailyOperatingPlanAction
+    let isPrimary: Bool
+    let onToggle: () -> Void
+    let onEdit: () -> Void
+    let onReschedule: () -> Void
+    let onReplace: () -> Void
+    let onDelete: () -> Void
+
+    private var style: PlanDomainStyle { PlanDomainStyle(action.domain) }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Button(action: onToggle) {
+                ZStack {
+                    Circle()
+                        .stroke(action.completedAt == nil ? style.color.opacity(0.62) : style.color, lineWidth: 1.8)
+                    if action.completedAt != nil {
+                        Circle().fill(style.color)
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Color.white)
+                    } else {
+                        Image(systemName: style.icon)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(style.color)
+                    }
+                }
+                .frame(width: 40, height: 40)
+                .contentShape(Circle())
+            }
+            .buttonStyle(.cardPress)
+            .accessibilityLabel(action.completedAt == nil ? "完成 \(action.title)" : "取消完成 \(action.title)")
+
+            Button(action: onEdit) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 7) {
+                        Text(action.title)
+                            .font(.system(.subheadline, design: .default, weight: isPrimary ? .semibold : .medium))
+                            .foregroundStyle(VelaTheme.rhythmInk)
+                            .strikethrough(action.completedAt != nil, color: VelaTheme.rhythmInkSecondary)
+                            .lineLimit(2)
+                        if isPrimary {
+                            Text("重点")
+                                .font(.system(.caption2, design: .default, weight: .semibold))
+                                .foregroundStyle(VelaTheme.rhythmDeep)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(VelaTheme.rhythmDeep.opacity(0.10), in: Capsule())
+                        }
+                    }
+                    if let scheduledAt = action.scheduledAt {
+                        Label(scheduledAt.formatted(date: .omitted, time: .shortened), systemImage: "clock")
+                            .font(.caption2)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    } else if !action.detail.isEmpty {
+                        Text(action.detail)
+                            .font(.caption)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                            .lineLimit(2)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .opacity(action.completedAt == nil ? 1 : 0.62)
+
+            Menu {
+                Button("编辑", systemImage: "pencil", action: onEdit)
+                Button("改期", systemImage: "clock", action: onReschedule)
+                Button("替换", systemImage: "arrow.triangle.2.circlepath", action: onReplace)
+                Divider()
+                Button("删除", systemImage: "trash", role: .destructive, action: onDelete)
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .frame(width: 40, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("管理 \(action.title)")
+        }
+        .padding(.vertical, 12)
+    }
+}
+
+private struct PlanActionEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State var draft: PlanActionDraft
+    let onSave: (PlanActionDraft) -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("行动") {
+                    Picker("类别", selection: $draft.domain) {
+                        ForEach(draft.availableDomains, id: \.self) { domain in
+                            Label(PlanDomainStyle(domain).title, systemImage: PlanDomainStyle(domain).icon)
+                                .tag(domain)
+                        }
+                    }
+                    TextField("准备做什么？", text: $draft.title, axis: .vertical)
+                        .lineLimit(1...3)
+                    TextField("补充说明（可选）", text: $draft.detail, axis: .vertical)
+                        .lineLimit(2...5)
+                }
+
+                Section("安排") {
+                    Toggle("设置时间", isOn: $draft.hasSchedule)
+                    if draft.hasSchedule {
+                        DatePicker(
+                            "时间",
+                            selection: $draft.scheduledAt,
+                            displayedComponents: [.hourAndMinute]
+                        )
+                    }
+                }
+            }
+            .velaRhythmFormSurface()
+            .navigationTitle(draft.navigationTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        onSave(draft)
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+}
+
+private struct PlanActionDraft: Identifiable {
+    enum Mode { case add, edit, reschedule, replace }
+
+    let id = UUID()
+    var originalActionID: String?
+    var mode: Mode
+    var domain: DailyOperatingPlanActionDomain
+    var title: String
+    var detail: String
+    var hasSchedule: Bool
+    var scheduledAt: Date
+    var completedAt: Date?
+    var evidence: String?
+    var availableDomains: [DailyOperatingPlanActionDomain]
+
+    var navigationTitle: String {
+        switch mode {
+        case .add: "添加行动"
+        case .edit: "编辑行动"
+        case .reschedule: "安排时间"
+        case .replace: "替换行动"
+        }
+    }
+
+    var action: DailyOperatingPlanAction {
+        DailyOperatingPlanAction(
+            id: originalActionID ?? "user_\(UUID().uuidString)",
+            domain: domain,
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+            detail: detail.trimmingCharacters(in: .whitespacesAndNewlines),
+            destination: PlanDomainStyle(domain).destination,
+            evidence: evidence ?? "用户安排",
+            scheduledAt: hasSchedule ? scheduledAt : nil,
+            completedAt: completedAt
+        )
+    }
+
+    static func new(usedDomains: Set<DailyOperatingPlanActionDomain>, selectedDate: Date) -> Self {
+        let domains = DailyOperatingPlanActionDomain.allCases.filter { !usedDomains.contains($0) }
+        let defaultDomain = domains.first ?? .movement
+        return Self(
+            originalActionID: nil,
+            mode: .add,
+            domain: defaultDomain,
+            title: "",
+            detail: "",
+            hasSchedule: false,
+            scheduledAt: defaultSchedule(on: selectedDate),
+            completedAt: nil,
+            evidence: "用户安排",
+            availableDomains: domains
+        )
+    }
+
+    static func existing(
+        _ action: DailyOperatingPlanAction,
+        mode: Mode,
+        usedDomains: Set<DailyOperatingPlanActionDomain>,
+        selectedDate: Date
+    ) -> Self {
+        let domains = DailyOperatingPlanActionDomain.allCases.filter {
+            $0 == action.domain || !usedDomains.contains($0)
+        }
+        return Self(
+            originalActionID: action.id,
+            mode: mode,
+            domain: action.domain,
+            title: mode == .replace ? "" : action.title,
+            detail: mode == .replace ? "" : action.detail,
+            hasSchedule: mode == .reschedule || action.scheduledAt != nil,
+            scheduledAt: action.scheduledAt ?? defaultSchedule(on: selectedDate),
+            completedAt: mode == .replace ? nil : action.completedAt,
+            evidence: mode == .replace ? "用户替换" : action.evidence,
+            availableDomains: domains
+        )
+    }
+
+    private static func defaultSchedule(on date: Date) -> Date {
+        Calendar.current.date(bySettingHour: 18, minute: 0, second: 0, of: date) ?? date
+    }
+}
+
+private struct PlanDomainStyle {
+    let domain: DailyOperatingPlanActionDomain
+    init(_ domain: DailyOperatingPlanActionDomain) { self.domain = domain }
+
+    var title: String {
+        switch domain {
+        case .training: "训练"
+        case .movement: "活动"
+        case .eatingRhythm: "饮食节奏"
+        case .stressRecovery: "放松恢复"
+        case .sleep: "睡眠"
+        }
+    }
+
+    var icon: String {
+        switch domain {
+        case .training: "figure.run"
+        case .movement: "figure.walk"
+        case .eatingRhythm: "fork.knife"
+        case .stressRecovery: "wind"
+        case .sleep: "bed.double.fill"
+        }
+    }
+
+    var color: Color {
+        switch domain {
+        case .training: VelaTheme.strainColor
+        case .movement: VelaTheme.recoveryColor
+        case .eatingRhythm: VelaTheme.energyColor
+        case .stressRecovery: VelaTheme.stressColor
+        case .sleep: VelaTheme.sleepColor
+        }
+    }
+
+    var destination: String {
+        switch domain {
+        case .training: "training"
+        case .movement: "movement"
+        case .eatingRhythm: "nutrition"
+        case .stressRecovery: "recovery"
+        case .sleep: "sleep"
+        }
+    }
+}
+
+struct VelaTrainingRotationView: View {
     @Query(sort: \TrainingPlanRecord.updatedAt, order: .reverse)
     private var plans: [TrainingPlanRecord]
     @Query(sort: \WorkoutEventRecord.startedAt, order: .reverse)
@@ -336,7 +1074,7 @@ struct VelaTrainingPlanView: View {
     private var coachActions: some View {
         VStack(spacing: 10) {
             Button {
-                VelaAppState.shared.routeToCoach(question: coachPlanQuestion)
+                VelaAppState.shared.routeToCoach(question: coachPlanQuestion, surface: .plan)
             } label: {
                 Label("和 Vela 调整计划", systemImage: "sparkles")
                     .font(.system(.subheadline, design: .default, weight: .semibold))

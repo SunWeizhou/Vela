@@ -534,7 +534,10 @@ struct VelaNutritionView: View {
                 appState.routeToFoodScanner(type: "barcode")
             }
             nutritionAction("描述", icon: "text.bubble.fill") {
-                appState.routeToCoach(question: "请帮我根据描述记录今天吃的食物，并在保存前让我核对份量和营养。")
+                appState.routeToCoach(
+                    question: "请帮我根据描述记录今天吃的食物，并在保存前让我核对份量和营养。",
+                    surface: .nutrition
+                )
             }
         }
     }

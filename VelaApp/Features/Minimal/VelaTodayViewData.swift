@@ -43,7 +43,7 @@ extension VelaTodayView {
         case .checkIn:
             appState.triggerJournal = true
         case .coach:
-            appState.routeToCoach(question: action.detail)
+            appState.routeToCoach(question: action.detail, surface: .home)
         }
     }
 
@@ -63,7 +63,7 @@ extension VelaTodayView {
             } else if action.type.contains("recovery") {
                 appState.routeToRecoveryDetail()
             } else {
-                appState.routeToCoach(question: action.label)
+                appState.routeToCoach(question: action.label, surface: .home)
             }
         }
     }

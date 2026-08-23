@@ -2,7 +2,7 @@ import SwiftUI
 import Charts
 
 enum DetailTimeRange: String, CaseIterable, Identifiable {
-    case week, month, halfYear, day
+    case week, month, halfYear, threeYears
     
     var id: String { rawValue }
     var days: Int {
@@ -10,7 +10,7 @@ enum DetailTimeRange: String, CaseIterable, Identifiable {
         case .week: return 7
         case .month: return 30
         case .halfYear: return 180
-        case .day: return 1
+        case .threeYears: return 1095
         }
     }
     var title: String {
@@ -18,7 +18,16 @@ enum DetailTimeRange: String, CaseIterable, Identifiable {
         case .week: return "7天"
         case .month: return "30天"
         case .halfYear: return "6个月"
-        case .day: return "今天"
+        case .threeYears: return "3年"
+        }
+    }
+
+    var trendHorizon: HealthTrendHorizon? {
+        switch self {
+        case .week: return .sevenDays
+        case .month: return .thirtyDays
+        case .halfYear: return .sixMonths
+        case .threeYears: return .threeYears
         }
     }
 }
@@ -46,6 +55,10 @@ enum VelaChartSegmentation {
 }
 
 struct MetricChartSection: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let metric: VelaMetricDetailView.MetricType
     let isSleep: Bool
     let points: [ChartPoint]
@@ -111,14 +124,12 @@ struct MetricChartSection: View {
             // The Swift Chart!
             if points.isEmpty {
                 VelaStateCard(
-                    state: selectedRange == .day ? .empty : .calibrating,
-                    message: selectedRange == .day
-                        ? "今天尚无读数，可在上方切换至 7 天或 30 天查看趋势。"
-                        : "继续佩戴设备并同步数据以建立趋势。"
+                    state: .calibrating,
+                    message: "这个时间范围内还没有真实读数。"
                 )
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-            } else if points.count < 3 && selectedRange != .day {
+            } else if points.count < 3 {
                 VelaStateCard(
                     state: .calibrating,
                     message: "目前已有 \(points.count) 个读数，累计 3 个后展示个人基线与区间。"
@@ -127,7 +138,7 @@ struct MetricChartSection: View {
                 .padding(.vertical, 8)
             } else {
                 Chart {
-                    let unit: Calendar.Component = selectedRange == .day ? .hour : .day
+                    let unit: Calendar.Component = selectedRange == .threeYears ? .month : .day
 
                     if let targetRange,
                        let firstDate = points.first?.date,
@@ -170,7 +181,7 @@ struct MetricChartSection: View {
                                 )
                                 .foregroundStyle(metricColor)
                                 .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
-                                .interpolationMethod(.catmullRom)
+                                .interpolationMethod(.linear)
 
                                 AreaMark(
                                     x: .value("Date", pt.date, unit: unit),
@@ -184,7 +195,7 @@ struct MetricChartSection: View {
                                         endPoint: .bottom
                                     )
                                 )
-                                .interpolationMethod(.catmullRom)
+                                .interpolationMethod(.linear)
                             }
                         }
                     }
@@ -247,43 +258,69 @@ struct MetricChartSection: View {
         )
     }
 
+    @ViewBuilder
     private var rangePicker: some View {
-        HStack(spacing: 3) {
-            ForEach(DetailTimeRange.allCases) { range in
-                Button {
-                    guard selectedRange != range else { return }
-                    selectedRange = range
-                    rawSelectedDate = nil
-                    VelaHaptic.selection()
-                } label: {
-                    Text(range.title)
-                        .font(.system(.caption2, design: .default, weight: .semibold))
-                        .foregroundStyle(selectedRange == range ? VelaTheme.rhythmInk : VelaTheme.rhythmInkSecondary)
-                        .padding(.horizontal, 10)
-                        .frame(minHeight: 28)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(selectedRange == range ? VelaTheme.rhythmCanvasRaised : Color.clear)
-                        )
+        if dynamicTypeSize.isAccessibilitySize {
+            Menu {
+                ForEach(DetailTimeRange.allCases) { range in
+                    Button {
+                        select(range)
+                    } label: {
+                        Label(range.title, systemImage: selectedRange == range ? "checkmark" : "")
+                    }
                 }
-                .buttonStyle(.cardPress)
-                .accessibilityAddTraits(selectedRange == range ? .isSelected : [])
+            } label: {
+                Label(selectedRange.title, systemImage: "calendar")
+                    .font(VelaTheme.subheadline().weight(.semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: VelaTheme.minimumHitTarget)
+                    .background(VelaTheme.rhythmMist.opacity(0.42), in: Capsule(style: .continuous))
             }
+            .accessibilityLabel("趋势时间范围")
+            .accessibilityValue(selectedRange.title)
+        } else {
+            HStack(spacing: 3) {
+                ForEach(DetailTimeRange.allCases) { range in
+                    Button {
+                        select(range)
+                    } label: {
+                        Text(range.title)
+                            .font(.system(.caption2, design: .default, weight: .semibold))
+                            .foregroundStyle(selectedRange == range ? VelaTheme.rhythmInk : VelaTheme.rhythmInkSecondary)
+                            .padding(.horizontal, 9)
+                            .frame(minHeight: VelaTheme.minimumHitTarget)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(selectedRange == range ? VelaTheme.rhythmCanvasRaised : Color.clear)
+                            )
+                    }
+                    .buttonStyle(.cardPress)
+                    .accessibilityAddTraits(selectedRange == range ? .isSelected : [])
+                }
+            }
+            .padding(3)
+            .background(VelaTheme.rhythmMist.opacity(0.4), in: Capsule(style: .continuous))
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("时间区间")
         }
-        .padding(3)
-        .background(VelaTheme.rhythmMist.opacity(0.4), in: Capsule(style: .continuous))
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("时间区间")
+    }
+
+    private func select(_ range: DetailTimeRange) {
+        guard selectedRange != range else { return }
+        selectedRange = range
+        rawSelectedDate = nil
+        VelaHaptic.selection()
     }
 
     private var effectiveBaseline: Double? {
-        if let baselineValue { return baselineValue }
-        guard points.count >= 3 else { return nil }
-        return points.map(\.value).reduce(0, +) / Double(points.count)
+        baselineValue
     }
 
     private var chartSegments: [[ChartPoint]] {
-        let maximumGap: TimeInterval = selectedRange == .day ? 2 * 60 * 60 : 36 * 60 * 60
+        let maximumGap: TimeInterval = selectedRange == .threeYears
+            ? 46 * 24 * 60 * 60
+            : 36 * 60 * 60
         return VelaChartSegmentation.segments(points: points, maximumGap: maximumGap)
     }
 }

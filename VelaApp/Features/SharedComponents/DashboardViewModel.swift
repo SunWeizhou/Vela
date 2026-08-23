@@ -112,6 +112,11 @@ final class DashboardViewModel: ObservableObject {
     private var baseReadinessConfidence: Double = 0
     @Published private(set) var latestTodayArtifact: CoachArtifact?
     @Published private(set) var persistedOperatingPlan: DailyOperatingPlanRecord?
+    /// Decoded once per load instead of per body evaluation (Today render path).
+    @Published private(set) var persistedOperatingPlanPayload: DailyOperatingPlanPayload?
+    @Published private(set) var activeTrainingPlan: TrainingPlanRecord?
+    @Published private(set) var pendingPlanAdaptation: TrainingPlanAdaptationRecord?
+    @Published private(set) var todayAIInsight: DailyAIInsight?
     @Published private(set) var todayCalories: Int = 0
     @Published private(set) var todayProtein: Int = 0
     @Published private(set) var todayCarbs: Int = 0
@@ -154,6 +159,10 @@ final class DashboardViewModel: ObservableObject {
     private let services: VelaServices?
     private var refreshTask: Task<Void, Never>?
     private var refreshTaskDate: Date?
+    private var secondaryDataLoadTask: Task<Void, Never>?
+    private var secondaryDataLoadDate: Date?
+    private var secondaryDataLastCompletedAt: Date?
+    private var secondaryDataLastCompletedDate: Date?
     private var lastRefreshAttemptAt: Date?
     private var lastRefreshAttemptDate: Date?
 
@@ -511,6 +520,39 @@ final class DashboardViewModel: ObservableObject {
     }
 
     func loadSecondaryData(modelContext: ModelContext) async {
+        let refDate = selectedDate
+
+        // Perf: Today's lifecycle paths (.task / onChange / refresh) can call
+        // this several times back-to-back for the same day. Coalesce into an
+        // in-flight load — it already assembles the freshest data — and skip
+        // entirely when a load for this day completed within the last 60 s.
+        if let completedAt = secondaryDataLastCompletedAt,
+           let completedDate = secondaryDataLastCompletedDate,
+           Calendar.current.isDate(completedDate, inSameDayAs: refDate),
+           Date().timeIntervalSince(completedAt) < 60 {
+            return
+        }
+
+        if let runningTask = secondaryDataLoadTask,
+           let runningDate = secondaryDataLoadDate,
+           Calendar.current.isDate(runningDate, inSameDayAs: refDate) {
+            await runningTask.value
+            return
+        }
+
+        let loadTask = Task<Void, Never> { [weak self] in
+            _ = await self?.performLoadSecondaryData(modelContext: modelContext)
+        }
+        secondaryDataLoadTask = loadTask
+        secondaryDataLoadDate = refDate
+        await loadTask.value
+        secondaryDataLoadTask = nil
+        secondaryDataLoadDate = nil
+        secondaryDataLastCompletedAt = Date()
+        secondaryDataLastCompletedDate = refDate
+    }
+
+    private func performLoadSecondaryData(modelContext: ModelContext) async {
         let calendar = Calendar.current
         let refDate = selectedDate
         let startOfDayRef = calendar.startOfDay(for: refDate)
@@ -593,6 +635,37 @@ final class DashboardViewModel: ObservableObject {
 
         let persistedPlan = operatingPlans.first
         self.persistedOperatingPlan = persistedPlan
+        // Perf: decode once here instead of per body evaluation. The Today
+        // view reads this payload in its render path; JSONDecoder per frame is
+        // measurably expensive in DEBUG builds.
+        self.persistedOperatingPlanPayload = persistedPlan?.operatingPlanPayload
+
+        self.activeTrainingPlan = activePlan
+        let adaptationsDesc = FetchDescriptor<TrainingPlanAdaptationRecord>(
+            predicate: #Predicate<TrainingPlanAdaptationRecord> { $0.status == "proposed" },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        let proposedAdaptations = (try? modelContext.fetch(adaptationsDesc)) ?? []
+        if let activePlan {
+            let upcomingDayIDs = Set(activePlan.days.filter { !$0.isCompleted }.map(\.id))
+            self.pendingPlanAdaptation = proposedAdaptations.first {
+                $0.planId == activePlan.id && upcomingDayIDs.contains($0.dayId)
+            }
+        } else {
+            self.pendingPlanAdaptation = nil
+        }
+
+        let aiInsightDesc = FetchDescriptor<AIReportRecord>(
+            predicate: #Predicate<AIReportRecord> { $0.type == "daily_ai_insight" },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        let aiInsights = (try? modelContext.fetch(aiInsightDesc)) ?? []
+        if let record = aiInsights.first(where: { calendar.isDateInToday($0.createdAt) }),
+           let data = record.serializedContextSnapshot.data(using: .utf8) {
+            self.todayAIInsight = try? JSONDecoder().decode(DailyAIInsight.self, from: data)
+        } else {
+            self.todayAIInsight = nil
+        }
 
         // Domain assembly (pure computation, no DB writes / Watch I/O) is extracted
         // into SecondaryDataAssembler so it is unit-testable. The ViewModel converts
@@ -689,6 +762,7 @@ final class DashboardViewModel: ObservableObject {
 
 
 // MARK: - Vital Series
+
 
 private extension DashboardViewModel {
     /// 从最近 7 天快照提取 HRV/RHR/血氧/睡眠序列（缺失值跳过，不伪造）。
@@ -842,6 +916,13 @@ enum SecondaryDataAssembler {
                 fat: fat
             ),
             history: dailySummaries,
+            baselineFormation: PersonalBaselineFormation.visualRegressionValue(
+                fallback: PersonalBaselineEngine.formationProgress(
+                    from: snapshots,
+                    selectedDate: refDate,
+                    calendar: calendar
+                )
+            ),
             operatingPlan: persistedOperatingPlan
         )
 

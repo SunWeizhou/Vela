@@ -91,8 +91,8 @@ struct VelaShell: View {
     enum VelaTab: Int, CaseIterable, Hashable {
         case today = 0
         case trends = 1
-        case coach = 2
-        case training = 3
+        case plan = 2
+        case coach = 3
     }
 
     enum ParityTab: Int, CaseIterable, Hashable {
@@ -125,7 +125,7 @@ struct VelaShell: View {
             switch selectedTab {
             case VelaAppState.trendsTabIndex:
                 paritySelectedTab = ParityTab.biology.rawValue
-            case VelaAppState.trainingTabIndex:
+            case VelaAppState.planTabIndex:
                 paritySelectedTab = ParityTab.fitness.rawValue
             case VelaAppState.coachTabIndex:
                 showCoach = true
@@ -290,23 +290,28 @@ struct VelaShell: View {
             }
             .tag(1)
 
+            nativeTabSurface(.plan) {
+                VelaPlanView()
+            }
+            .tabItem {
+                Label(label(for: .plan), systemImage: iconName(for: .plan))
+            }
+            .tag(2)
+
             nativeTabSurface(.coach) {
                 VelaCoachView(presentation: .embedded, vm: services.coachChat)
             }
             .tabItem {
                 Label(label(for: .coach), systemImage: iconName(for: .coach))
             }
-            .tag(2)
-
-            nativeTabSurface(.training) {
-                VelaTrainingView()
-            }
-            .tabItem {
-                Label(label(for: .training), systemImage: iconName(for: .training))
-            }
             .tag(3)
         }
-        .tabBarMinimizeBehavior(.onScrollDown)
+        // Perf: `tabBarMinimizeBehavior(.onScrollDown)` makes the tab bar track
+        // the scroll offset on every frame. On iOS 26 that invalidates the whole
+        // tab hierarchy (all four mounted tab roots re-evaluate their bodies
+        // per frame), which is the dominant hitch source in DEBUG builds.
+        // Remove the minimize behavior; the tab bar stays visible instead.
+        // .tabBarMinimizeBehavior(.onScrollDown)
         .toolbar(keyboardVisible ? .hidden : .visible, for: .tabBar)
     }
 
@@ -328,6 +333,11 @@ struct VelaShell: View {
                         VelaTrendsView()
                     }
                 }
+                if mountedLegacyTabs.contains(.plan) {
+                    tabSurface(.plan) {
+                        VelaPlanView()
+                    }
+                }
                 if mountedLegacyTabs.contains(.coach) {
                     tabSurface(.coach) {
                         VelaCoachView(
@@ -335,11 +345,6 @@ struct VelaShell: View {
                             usesOverlayNavigation: true,
                             vm: services.coachChat
                         )
-                    }
-                }
-                if mountedLegacyTabs.contains(.training) {
-                    tabSurface(.training) {
-                        VelaTrainingView()
                     }
                 }
             }
@@ -455,8 +460,8 @@ struct VelaShell: View {
         switch tab {
         case .today:    "sun.max"
         case .trends:   "waveform.path.ecg"
+        case .plan:     "checklist"
         case .coach:    "sparkles"
-        case .training: "figure.run"
         }
     }
 
@@ -464,8 +469,8 @@ struct VelaShell: View {
         switch tab {
         case .today:    L10n.t("Today", "今日")
         case .trends:   L10n.t("Trends", "趋势")
+        case .plan:     L10n.t("Plan", "计划")
         case .coach:    "Vela"
-        case .training: L10n.t("Training", "训练")
         }
     }
 
@@ -491,7 +496,7 @@ enum VelaTabSelection {
         var shouldPresentQuickActions: Bool
     }
 
-    static let contentTabs: [VelaShell.VelaTab] = [.today, .trends, .coach, .training]
+    static let contentTabs: [VelaShell.VelaTab] = [.today, .trends, .plan, .coach]
 
     static func isActive(_ tab: VelaShell.VelaTab, selectedTab: Int) -> Bool {
         tab.rawValue == selectedTab

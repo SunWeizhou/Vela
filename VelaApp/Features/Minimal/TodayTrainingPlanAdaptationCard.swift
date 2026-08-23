@@ -4,41 +4,14 @@ import SwiftData
 /// The pending training-plan proposal belongs in the Today decision scene so
 /// the user can act on the evidence while it is still relevant.
 struct TodayTrainingPlanAdaptationCard: View {
-    @Query(
-        filter: #Predicate<TrainingPlanRecord> { $0.isActive },
-        sort: \TrainingPlanRecord.updatedAt,
-        order: .reverse
-    )
-    private var activePlans: [TrainingPlanRecord]
-
-    @Query(
-        filter: #Predicate<TrainingPlanAdaptationRecord> { $0.status == "proposed" },
-        sort: \TrainingPlanAdaptationRecord.createdAt,
-        order: .reverse
-    )
-    private var proposedAdaptations: [TrainingPlanAdaptationRecord]
+    let activePlan: TrainingPlanRecord
+    let pendingProposal: TrainingPlanAdaptationRecord
 
     @Environment(\.modelContext) private var modelContext
     @State private var actionError: String?
 
-    private var activePlan: TrainingPlanRecord? {
-        activePlans.first
-    }
-
-    /// Show the first unresolved proposal for the active plan. The proposal's
-    /// original day is retained as context; completed days are excluded so a
-    /// stale proposal cannot surface as a new Today action.
-    private var pendingProposal: TrainingPlanAdaptationRecord? {
-        guard let activePlan else { return nil }
-        let upcomingDayIDs = Set(activePlan.days.filter { !$0.isCompleted }.map(\.id))
-        return proposedAdaptations.first {
-            $0.planId == activePlan.id && upcomingDayIDs.contains($0.dayId)
-        }
-    }
-
     var body: some View {
-        if let activePlan, let pendingProposal {
-            VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 7) {
                     Image(systemName: "sparkles")
                         .font(.caption.weight(.semibold))
@@ -123,7 +96,6 @@ struct TodayTrainingPlanAdaptationCard: View {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .stroke(VelaTheme.rhythmDeep.opacity(0.28), lineWidth: 0.9)
             }
-        }
     }
 
     private func accept(
@@ -203,5 +175,18 @@ enum TodayTrainingPlanAdaptationDecision {
         guard proposal.status == AdaptationStatus.proposed.rawValue else { return }
         proposal.status = AdaptationStatus.rejected.rawValue
         proposal.rejectedAt = date
+    }
+}
+
+extension TodayTrainingPlanAdaptationCard: @preconcurrency Equatable {
+    @MainActor
+    static func == (lhs: TodayTrainingPlanAdaptationCard, rhs: TodayTrainingPlanAdaptationCard) -> Bool {
+        lhs.activePlan.id == rhs.activePlan.id &&
+        lhs.activePlan.updatedAt == rhs.activePlan.updatedAt &&
+        lhs.pendingProposal.id == rhs.pendingProposal.id &&
+        lhs.pendingProposal.status == rhs.pendingProposal.status &&
+        lhs.pendingProposal.adjustment == rhs.pendingProposal.adjustment &&
+        lhs.pendingProposal.reason == rhs.pendingProposal.reason &&
+        lhs.pendingProposal.suggestedAlternative == rhs.pendingProposal.suggestedAlternative
     }
 }

@@ -140,30 +140,11 @@ struct VelaMetricDetailView: View {
 
             ScrollView {
                 VStack(spacing: 16) {
-                    // 1. Interactive Chart Header Card (Default 7-Day Range, Apple Style)
-                    chartHeaderSection(isSleep: isSleep)
-                        .padding(.top, 8)
-
-                    // 2. Double Highlight key comparison metrics
-                    doubleHighlightsSection(isSleep: isSleep)
-
-                    // 3. Multi-scale Trend & Momentum Matrix (7d, 30d, 6m)
-                    trendsSection(isSleep: isSleep)
-
-                    // 4. Deterministic interpretation and next action
-                    guidanceSection(isSleep: isSleep)
-
-                    // 5. Custom Widgets & Physiological Breakdown based on Metric Type
-                    customWidgetsSection(isSleep: isSleep)
-
-                    // 6. Continue from deterministic interpretation into screen-aware Coach
-                    coreMetricCoachCard
-
-                    // 7. Direction, confidence, coverage, and freshness
-                    trustSection
-
-                    // 8. Score inputs and supporting raw data
-                    supportingEvidenceSection(isSleep: isSleep)
+                    if metric.isScoredHealthDomain {
+                        coreMetricContent(isSleep: isSleep)
+                    } else {
+                        rawMetricContent(isSleep: isSleep)
+                    }
                 }
                 .padding(.horizontal, VelaTheme.pagePadding)
                 .padding(.bottom, 56)
@@ -211,8 +192,11 @@ struct VelaMetricDetailView: View {
         let calendar = Calendar.current
         let endDate = calendar.startOfDay(for: dashboardVM.selectedDate)
         let end = calendar.date(byAdding: .day, value: 1, to: endDate) ?? endDate
-        // Max range we need for charts is 180 days (.halfYear)
-        let start = calendar.date(byAdding: .day, value: -190, to: end) ?? end
+        let start = calendar.date(
+            byAdding: .day,
+            value: -(HealthTrendHorizon.threeYears.windowDays + 7),
+            to: end
+        ) ?? end
         
         let descriptor = FetchDescriptor<DailyHealthSummaryRecord>(
             predicate: #Predicate<DailyHealthSummaryRecord> { $0.date >= start && $0.date <= end },
@@ -249,14 +233,153 @@ struct VelaMetricDetailView: View {
             displayDateText: displayDateText,
             dynamicValueText: dynamicValueText,
             metricSubtitle: metricSubtitle,
+            baselineValue: chartBaselineValue,
             targetRange: chartTargetRange
         )
     }
 
+    /// A baseline line is only truthful when the trend engine has published a
+    /// baseline for the same metric and horizon. The visible chart average is
+    /// not a substitute for a Personal Baseline.
+    private var chartBaselineValue: Double? {
+        guard chartTrendFinding?.isAvailable == true else { return nil }
+        return chartTrendFinding?.baselineValue
+    }
+
+    private var chartTrendFinding: HealthTrendFinding? {
+        guard let coreMetric = metric.coreMetric,
+              let horizon = selectedRange.trendHorizon else { return nil }
+        return dashboard.healthTrends.first {
+            $0.metric == coreMetric
+                && $0.horizon == horizon
+        }
+    }
+
+    private var personalBaselineText: String {
+        guard let finding = chartTrendFinding else { return "建立中" }
+        guard let baseline = finding.baselineValue else {
+            return "建立中 \(finding.sampleCount)/\(finding.requiredSampleCount)"
+        }
+        if finding.isNotable, let deviation = finding.currentDeviationValue {
+            return String(format: "偏离 %+.0f", deviation)
+        }
+        return String(format: "%.0f", baseline)
+    }
+
     private var chartTargetRange: ClosedRange<Double>? {
         guard metric == .strain else { return nil }
-        let range = dashboard.strain.recommendedRange
-        return Double(range.lowerBound)...Double(range.upperBound)
+        return dashboard.strain.explicitRecommendedRange
+    }
+
+    @ViewBuilder
+    private func coreMetricContent(isSleep: Bool) -> some View {
+        CoreMetricDetailHero(
+            metric: metric,
+            valueText: dynamicValueText,
+            score: hasMetricData ? dynamicScore : nil,
+            color: metricColor,
+            state: currentMetricResult?.state ?? .moderate,
+            guidance: metricRecommendation.title,
+            facts: coreMetricHeroFacts,
+            baselineValue: chartBaselineValue,
+            targetRange: chartTargetRange,
+            onAskCoach: openMetricCoach
+        )
+        .padding(.top, 8)
+
+        chartHeaderSection(isSleep: isSleep)
+        customWidgetsSection(isSleep: isSleep)
+        coreMetricEvidenceDisclosure(isSleep: isSleep)
+    }
+
+    @ViewBuilder
+    private func rawMetricContent(isSleep: Bool) -> some View {
+        chartHeaderSection(isSleep: isSleep)
+            .padding(.top, 8)
+        doubleHighlightsSection(isSleep: isSleep)
+        trendsSection(isSleep: isSleep)
+        guidanceSection(isSleep: isSleep)
+        customWidgetsSection(isSleep: isSleep)
+        coreMetricCoachCard
+        trustSection
+        supportingEvidenceSection(isSleep: isSleep)
+    }
+
+    private var coreMetricHeroFacts: [CoreMetricHeroFact] {
+        switch metric {
+        case .recovery:
+            return [
+                CoreMetricHeroFact(title: "HRV", value: rightValue, systemImage: "waveform.path.ecg"),
+                CoreMetricHeroFact(title: "静息心率", value: leftValue, systemImage: "heart.fill"),
+                CoreMetricHeroFact(title: "个人基线", value: personalBaselineText, systemImage: "line.diagonal")
+            ]
+        case .sleep:
+            return [
+                CoreMetricHeroFact(title: "实际睡眠", value: rightValue, systemImage: "bed.double.fill"),
+                CoreMetricHeroFact(
+                    title: "睡眠节律",
+                    value: hasCompleteSleepTimes ? "\(bedtimeText) → \(wakeTimeText)" : "--",
+                    systemImage: "moon.stars.fill"
+                ),
+                CoreMetricHeroFact(title: "个人基线", value: personalBaselineText, systemImage: "line.diagonal")
+            ]
+        case .strain:
+            return [
+                CoreMetricHeroFact(
+                    title: "参考区间",
+                    value: chartTargetRange.map { "\(Int($0.lowerBound))–\(Int($0.upperBound))" } ?? "待建立",
+                    systemImage: "scope"
+                ),
+                CoreMetricHeroFact(title: "活跃时长", value: leftValue, systemImage: "timer"),
+                CoreMetricHeroFact(title: "个人基线", value: personalBaselineText, systemImage: "line.diagonal")
+            ]
+        case .stress:
+            return [
+                CoreMetricHeroFact(title: "当前状态", value: metricSubtitle, systemImage: "waveform.path.ecg"),
+                CoreMetricHeroFact(title: "个人基线", value: personalBaselineText, systemImage: "line.diagonal"),
+                CoreMetricHeroFact(title: "静息心率", value: rightValue, systemImage: "heart.fill")
+            ]
+        case .energy:
+            return [
+                CoreMetricHeroFact(title: "早间储备", value: leftValue, systemImage: "sun.max.fill"),
+                CoreMetricHeroFact(title: "当前剩余", value: rightValue, systemImage: "bolt.fill"),
+                CoreMetricHeroFact(title: "个人基线", value: personalBaselineText, systemImage: "line.diagonal")
+            ]
+        default:
+            return []
+        }
+    }
+
+    private func openMetricCoach() {
+        let context = CoreMetricCoachContext.make(for: metric)
+        appState.routeToCoach(question: context.suggestedQuestion, surface: .metricDetail)
+    }
+
+    @ViewBuilder
+    private func coreMetricEvidenceDisclosure(isSleep: Bool) -> some View {
+        DisclosureGroup {
+            VStack(spacing: 16) {
+                trustSection
+                supportingEvidenceSection(isSleep: isSleep)
+            }
+            .padding(.top, 12)
+        } label: {
+            Label("更多数据与依据", systemImage: "list.bullet.rectangle")
+                .font(VelaTheme.subheadline().weight(.semibold))
+                .foregroundStyle(VelaTheme.rhythmInk)
+                .frame(minHeight: VelaTheme.minimumHitTarget)
+        }
+        .tint(VelaTheme.rhythmDeep)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(
+            VelaTheme.rhythmCanvasRaised,
+            in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+        }
     }
 
 
@@ -272,24 +395,54 @@ struct VelaMetricDetailView: View {
         ZStack {
             MetricLandscapeHeader(metric: metric, isSleep: isSleep)
             
-            // Score Rings & Metric Text Overlays
+            // Metric-specific hero grammar: primary score rings, stress trace,
+            // energy reserve, and absolute-value raw signals.
             VStack(spacing: 8) {
                 Spacer()
                 
-                // Ring/Gauge Container
+                // Metric hero container
                 ZStack {
                     switch metric.heroPresentation {
-                    case .stressGauge:
-                        DottedCircleGauge(
-                            score: dynamicScore,
-                            labelText: stressBandLabel(dashboard.stress.band),
-                            size: 110,
-                            color: metricColor
-                        )
+                    case .stressTrace:
+                        VStack(spacing: 6) {
+                            Image(systemName: "waveform.path.ecg")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(metricColor)
+                            Text(dynamicValueText)
+                                .font(.system(size: 30, weight: .bold, design: .rounded))
+                                .monospacedDigit()
+                                .foregroundStyle(VelaTheme.rhythmInk)
+                            Text(stressBandLabel(dashboard.stress.band))
+                                .font(VelaTheme.caption2().weight(.semibold))
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        }
+                        .frame(width: 140, height: 104)
                         .background(
-                            Circle()
+                            RoundedRectangle(cornerRadius: 24, style: .continuous)
                                 .fill(isSleep ? VelaTheme.inkDark.opacity(0.85) : VelaTheme.rhythmCanvasRaised)
-                                .frame(width: 140, height: 140)
+                                .shadow(color: isSleep ? .clear : Color.black.opacity(0.012), radius: 10, x: 0, y: 3)
+                        )
+                    case .energyReserve:
+                        VStack(spacing: 10) {
+                            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                Image(systemName: "bolt.fill")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(metricColor)
+                                Text(dynamicValueText)
+                                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                                    .monospacedDigit()
+                                    .foregroundStyle(VelaTheme.rhythmInk)
+                            }
+                            SegmentedBatteryBar(
+                                percentage: min(max(dynamicScore / 100, 0), 1),
+                                barCount: 16,
+                                color: metricColor
+                            )
+                        }
+                        .frame(width: 156, height: 96)
+                        .background(
+                            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                .fill(isSleep ? VelaTheme.inkDark.opacity(0.85) : VelaTheme.rhythmCanvasRaised)
                                 .shadow(color: isSleep ? .clear : Color.black.opacity(0.012), radius: 10, x: 0, y: 3)
                         )
                     case .scoreGauge:
@@ -626,7 +779,8 @@ struct VelaMetricDetailView: View {
 
 enum MetricHeroPresentation: Equatable {
     case scoreGauge
-    case stressGauge
+    case stressTrace
+    case energyReserve
     case absoluteValue
 }
 
@@ -642,10 +796,12 @@ extension VelaMetricDetailView.MetricType {
 
     var heroPresentation: MetricHeroPresentation {
         switch self {
-        case .strain, .recovery, .sleep, .energy:
+        case .strain, .recovery, .sleep:
             return .scoreGauge
         case .stress:
-            return .stressGauge
+            return .stressTrace
+        case .energy:
+            return .energyReserve
         case .hrv, .rhr, .weight, .bodyFat, .respiratoryRate, .bloodOxygen, .steps, .activeCalories, .activeMinutes:
             return .absoluteValue
         }

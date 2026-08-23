@@ -113,7 +113,7 @@ struct MetricCoachCard: View {
                         if !hasFinished {
                             startStreaming()
                         } else {
-                            VelaAppState.shared.routeToCoach(question: resolvedQuestion)
+                            VelaAppState.shared.routeToCoach(question: resolvedQuestion, surface: .metricDetail)
                         }
                     } label: {
                         HStack {

@@ -15,7 +15,7 @@ extension VelaMetricDetailView.MetricType {
         switch self {
         case .hrv: return .hrv
         case .rhr: return .restingHeartRate
-        case .sleep: return .sleepDuration
+        case .sleep: return .sleepScore
         case .recovery: return .recovery
         case .strain: return .strain
         case .stress: return .stress

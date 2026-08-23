@@ -84,7 +84,7 @@ enum TodayVitalKind: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-struct TodayVitalCardModel: Identifiable {
+struct TodayVitalCardModel: Identifiable, Equatable {
     let kind: TodayVitalKind
     let label: String
     let value: String          // "68" / "--"
@@ -233,3 +233,13 @@ struct TodayVitalCard: View {
 }
 
 // MARK: TodayWeeklyLoadCard(本周负荷柱状)
+
+// Perf: breaks the per-frame cascade from the Today scroll container (iOS 26
+// preference propagation re-evaluates the parent body every scroll frame).
+// The grid body re-runs SwiftData-driven derivations and per-card layouts, so
+// skipping unchanged rebuilds removes ~90ms/frame on device.
+extension TodayVitalsGrid: Equatable {
+    nonisolated static func == (lhs: TodayVitalsGrid, rhs: TodayVitalsGrid) -> Bool {
+        lhs.cards == rhs.cards
+    }
+}

@@ -2027,7 +2027,7 @@ struct TrainingHistoryView: View {
                 }
 
                 Button {
-                    VelaAppState.shared.routeToCoach(question: historyCoachQuestion)
+                    VelaAppState.shared.routeToCoach(question: historyCoachQuestion, surface: .training)
                 } label: {
                     Label("让 Vela 分析训练历史", systemImage: "sparkles")
                         .font(.callout.weight(.semibold))

@@ -9,47 +9,47 @@ struct CoreMetricCoachContext {
         case .strain:
             return CoreMetricCoachContext(
                 focus: CoachContextFocus(
-                    title: "耗力",
-                    systemContext: "你的心肺负荷与肌肉压力",
+                    title: "负荷",
+                    systemContext: "当前负荷、近期训练节律，以及由恢复状态约束的参考区间",
                     screenContext: metricScreenContext(metric)
                 ),
-                suggestedQuestion: "今天耗力是否达标？"
+                suggestedQuestion: "今天的负荷相对参考区间如何？我该怎么安排剩余活动？"
             )
         case .recovery:
             return CoreMetricCoachContext(
                 focus: CoachContextFocus(
                     title: "恢复",
-                    systemContext: "自主神经系统平衡与夜间体征",
+                    systemContext: "恢复分、HRV、静息心率、睡眠和近期负荷相对个人基线的变化",
                     screenContext: metricScreenContext(metric)
                 ),
-                suggestedQuestion: "如何提高明天的恢复值？"
+                suggestedQuestion: "哪些信号主要影响了我今天的恢复？我该如何安排？"
             )
         case .sleep:
             return CoreMetricCoachContext(
                 focus: CoachContextFocus(
                     title: "睡眠",
-                    systemContext: "睡眠效率与各个睡眠周期配比",
+                    systemContext: "睡眠分、实际睡眠时长、入睡与起床节律，以及可用的睡眠阶段证据",
                     screenContext: metricScreenContext(metric)
                 ),
-                suggestedQuestion: "怎么优化深度睡眠比例？"
+                suggestedQuestion: "昨晚的睡眠分、时长和节律分别说明了什么？"
             )
         case .stress:
             return CoreMetricCoachContext(
                 focus: CoachContextFocus(
                     title: "压力",
-                    systemContext: "全天慢性与急性压力负荷比率",
+                    systemContext: "生理压力信号、计算输入和个人基线偏离；不将其当作心理状态或医疗诊断",
                     screenContext: metricScreenContext(metric)
                 ),
-                suggestedQuestion: "我今天的压力源自何处？"
+                suggestedQuestion: "哪些已记录的生理信号与今天的压力分数同时偏离？"
             )
         case .energy:
             return CoreMetricCoachContext(
                 focus: CoachContextFocus(
                     title: "能量",
-                    systemContext: "体能储备量 ATL 与 CTL 比例",
+                    systemContext: "早间储备、当前剩余，以及睡眠、恢复、压力和近期负荷的关系",
                     screenContext: metricScreenContext(metric)
                 ),
-                suggestedQuestion: "目前体能水平适合做大重量训练吗？"
+                suggestedQuestion: "今天的能量主要消耗在哪里？我该如何安排剩余时间？"
             )
         case .hrv:
             return CoreMetricCoachContext(

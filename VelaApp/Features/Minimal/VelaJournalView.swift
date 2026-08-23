@@ -412,7 +412,7 @@ struct VelaJournalView: View {
             
             HStack(spacing: 12) {
                 Button {
-                    VelaAppState.shared.routeToCoach(question: journalAnalysisQuestion)
+                    VelaAppState.shared.routeToCoach(question: journalAnalysisQuestion, surface: .journal)
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "sparkles")

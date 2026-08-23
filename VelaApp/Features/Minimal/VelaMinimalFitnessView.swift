@@ -95,6 +95,7 @@ struct VelaTrainingView: View {
     @State private var memoStrengthSummary: RecentTrainingSummary?
     @State private var memoPersonalRecords: [PersonalRecord] = []
     @State private var memoMuscleDailySets: [String: [Int]] = [:]
+    @State private var memoCardioSnapshot: CardioTrainingSnapshot?
     /// 三年历史基线（回填后可用；给 AI 规划上下文的长线参照）。
     @State private var memoLongTermRHRMedian: Double?
     @State private var memoLongTermHRVMedian: Double?
@@ -105,7 +106,7 @@ struct VelaTrainingView: View {
 
     var body: some View {
         let strengthSummary = recentStrengthSummary
-        let cardioSnapshot = CardioTrainingAnalyzer.analyze(
+        let cardioSnapshot = memoCardioSnapshot ?? CardioTrainingAnalyzer.analyze(
             workouts: recentWorkouts,
             endingAt: dashboardVM.selectedDate
         )
@@ -125,7 +126,7 @@ struct VelaTrainingView: View {
             personalInsight: dashboardVM.dashboard.bodyModelState?.insightLine(),
             onRequestAIPlan: { Task { await requestAIPlan() } },
             onDiscussWithCoach: {
-                VelaAppState.shared.routeToCoach(question: trainingAnalysisQuestion)
+                VelaAppState.shared.routeToCoach(question: trainingAnalysisQuestion, surface: .training)
             }
         )
 
@@ -164,7 +165,7 @@ struct VelaTrainingView: View {
                             )
 
                             NavigationLink {
-                                VelaTrainingPlanView()
+                                VelaTrainingRotationView()
                             } label: {
                                 TrainingProposalPortal(proposals: pendingPlanAdaptations)
                             }
@@ -181,7 +182,7 @@ struct VelaTrainingView: View {
                         )
 
                         NavigationLink {
-                            VelaTrainingPlanView()
+                            VelaTrainingRotationView()
                         } label: {
                             TrainingPlanPortal(
                                 planTitle: activePlan?.title,
@@ -255,7 +256,6 @@ struct VelaTrainingView: View {
             guard isActiveSurface else { return }
             loadRealFitnessData()
             consumeAdaptiveTrainingStartIfNeeded()
-            try? ExerciseLibraryService.seedDefaultsIfNeeded(modelContext: modelContext)
             await syncRealFitnessData()
         }
         .refreshable {
@@ -427,7 +427,7 @@ struct VelaTrainingView: View {
             Spacer()
 
             Button {
-                VelaAppState.shared.routeToCoach(question: trainingAnalysisQuestion)
+                VelaAppState.shared.routeToCoach(question: trainingAnalysisQuestion, surface: .training)
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "sparkles")
@@ -689,7 +689,7 @@ struct VelaTrainingView: View {
         handledAdaptiveTrainingStartRequest = request
         loadDynamicData()
         // 训练数据来自 Apple 健康:从训练页/今日页发起的「开始训练」改为与 Coach 讨论。
-        VelaAppState.shared.routeToCoach(question: trainingAnalysisQuestion)
+        VelaAppState.shared.routeToCoach(question: trainingAnalysisQuestion, surface: .training)
     }
 
     // MARK: - SwiftData and HealthKit loader
@@ -751,6 +751,10 @@ struct VelaTrainingView: View {
                 .compactMap(\.linkedHealthKitWorkoutId))
             recentWorkouts = (filteredHealthKit.filter { !localIDs.contains($0.id) && !representedEventHKIDs.contains($0.id) } + local)
                 .sorted { $0.start > $1.start }
+            memoCardioSnapshot = CardioTrainingAnalyzer.analyze(
+                workouts: recentWorkouts,
+                endingAt: dashboardVM.selectedDate
+            )
         }
     }
 

@@ -1,17 +1,30 @@
 import SwiftUI
 import SwiftData
 
-// MARK: - VelaTrendsView — 3-Tier Multi-Scale Health Trends & Vitals
+private struct ScoreTrendDescriptor: Identifiable {
+    let metric: CoreHealthMetric
+    let detail: VelaMetricDetailView.MetricType
+    let title: String
+    let icon: String
+
+    var id: String { metric.rawValue }
+}
+
+// MARK: - VelaTrendsView — five scored time series first, raw vitals second
 
 struct VelaTrendsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     @ObservedObject private var appState = VelaAppState.shared
 
     @State private var selectedHorizon: HealthTrendHorizon = .thirtyDays
     @State private var selectedMetricForDetail: VelaMetricDetailView.MetricType?
     @State private var showAllMetricCatalog = false
+    @State private var dailyRecords: [DailyHealthSummaryRecord] = []
+    @State private var memoizedScoreHistories: [CoreHealthMetric: [Double]] = [:]
+    @State private var memoizedNormalizedHistories: [CoreHealthMetric: [Double]] = [:]
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
     private var healthBrief: PersonalHealthBrief? { dashboard.personalHealthBrief }
@@ -29,30 +42,54 @@ struct VelaTrendsView: View {
         availableFindings.filter { $0.isNotable }
     }
 
+    private var scoreDescriptors: [ScoreTrendDescriptor] {
+        [
+            .init(metric: .recovery, detail: .recovery, title: "恢复", icon: "heart.circle.fill"),
+            .init(metric: .sleepScore, detail: .sleep, title: "睡眠", icon: "moon.stars.fill"),
+            .init(metric: .strain, detail: .strain, title: "负荷", icon: "figure.run"),
+            .init(metric: .stress, detail: .stress, title: "压力", icon: "waveform.path.ecg"),
+            .init(metric: .energy, detail: .energy, title: "能量", icon: "bolt.fill")
+        ]
+    }
+
+    private var scoreMetrics: Set<CoreHealthMetric> {
+        Set(scoreDescriptors.map(\.metric))
+    }
+
+    private var notableScoreShifts: [HealthTrendFinding] {
+        horizonNotableShifts.filter { scoreMetrics.contains($0.metric) }
+    }
+
+    private var hasAnyScoreHistory: Bool {
+        scoreDescriptors.contains { descriptor in
+            scoreHistory(for: descriptor.metric).count >= 2
+        }
+    }
+
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: VelaTheme.sectionGap) {
-                // Horizon Picker (7d / 30d / 6m / 3y)
                 horizonPicker
+                fiveScoreTrendSection
 
-                if availableFindings.isEmpty {
-                    // Empty State: Clean single empty view with backfill / sync guidance
-                    emptyHorizonStateView
+                if !hasAnyScoreHistory && scoreDescriptors.allSatisfy({ finding(for: $0.metric)?.isAvailable != true }) {
+                    compactCalibrationCard
                 } else {
-                    // Tier 1: 本周期最值得关注的变化 (1–3 Top Notable Shifts or Stable Reassurance)
-                    notableShiftsSection
+                    if !notableScoreShifts.isEmpty {
+                        notableShiftsSection
+                    }
+                    compactAgentObservation
+                }
 
-                    // Tier 2: 系统关联解释 (Inter-metric Connections & Grounded Narrative)
-                    systemNarrativeSection
-
-                    // Tier 3: 按生理系统分组的完整指标浏览器 (Grouped Metric Browser)
+                metricCatalogDisclosure
+                if showAllMetricCatalog {
                     groupedMetricBrowserSection
                 }
 
-                // Three-Year Long Term Trajectory Entry
-                threeYearTrajectoryCard
+                if selectedHorizon != .threeYears {
+                    threeYearTrajectoryCard
+                }
 
-                // Ask Vela Contextual Analysis
                 askVelaTrendCard
             }
             .padding(.horizontal, VelaTheme.pagePadding)
@@ -69,6 +106,10 @@ struct VelaTrendsView: View {
             .background(VelaTheme.rhythmCanvas.opacity(0.96))
         }
         .toolbar(.hidden, for: .navigationBar)
+        .onAppear(perform: loadDailyRecords)
+        .onChange(of: dashboardVM.selectedDate) { _, _ in loadDailyRecords() }
+        .onChange(of: appState.localDataRevision) { _, _ in loadDailyRecords() }
+        .onChange(of: selectedHorizon) { _, _ in recomputeMemoizedHistories() }
         .sheet(item: $selectedMetricForDetail) { metric in
             NavigationStack {
                 VelaMetricDetailView(metric: metric)
@@ -77,6 +118,335 @@ struct VelaTrendsView: View {
             .presentationDetents([.large])
             .velaSheetSurface()
         }
+    }
+
+    // MARK: - Five scored time series
+
+    private var fiveScoreTrendSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("身体状态")
+                    .font(VelaTheme.headline())
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                Spacer()
+                Text(selectedHorizon.detailedTitle)
+                    .font(VelaTheme.caption1().weight(.semibold))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            }
+
+            VStack(spacing: 0) {
+                ForEach(Array(scoreDescriptors.enumerated()), id: \.element.id) { index, descriptor in
+                    scoreTrendRow(descriptor)
+                    if index < scoreDescriptors.count - 1 {
+                        Divider()
+                            .overlay(VelaTheme.rhythmMist)
+                            .padding(.leading, 52)
+                    }
+                }
+            }
+            .background(
+                RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
+                    .fill(VelaTheme.rhythmCanvasRaised)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
+                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+            }
+            .shadow(color: VelaTheme.cardShadow(colorScheme), radius: 14, x: 0, y: 6)
+        }
+    }
+
+    private func scoreTrendRow(_ descriptor: ScoreTrendDescriptor) -> some View {
+        let finding = finding(for: descriptor.metric)
+        let values = memoizedScoreHistories[descriptor.metric] ?? scoreHistory(for: descriptor.metric)
+        let normalized = memoizedNormalizedHistories[descriptor.metric] ?? normalizedHistory(values)
+        let color = scoreColor(for: descriptor.metric)
+        let valueText = scoreValueText(descriptor: descriptor, finding: finding, values: values)
+
+        return Button {
+            selectedMetricForDetail = descriptor.detail
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: descriptor.icon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(color)
+                    .frame(width: 34, height: 34)
+                    .background(color.opacity(0.10), in: Circle())
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(descriptor.title)
+                            .font(VelaTheme.subheadline().weight(.semibold))
+                            .foregroundStyle(VelaTheme.rhythmInk)
+                        if finding?.isNotable == true {
+                            Circle()
+                                .fill(VelaTheme.stressColor)
+                                .frame(width: 7, height: 7)
+                                .accessibilityHidden(true)
+                        }
+                    }
+
+                    Text(scoreTrendCaption(finding: finding, sampleCount: values.count))
+                        .font(VelaTheme.caption2())
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 4)
+
+                if normalized.count >= 2 {
+                    SparklineLineGraph(
+                        data: normalized,
+                        color: color,
+                        height: 34,
+                        width: 88
+                    )
+                    .accessibilityHidden(true)
+                } else {
+                    Capsule()
+                        .fill(VelaTheme.rhythmMist)
+                        .frame(width: 88, height: 2)
+                        .accessibilityHidden(true)
+                }
+
+                Text(valueText)
+                    .font(.system(.headline, design: .rounded, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(valueText == "--" ? VelaTheme.muted : VelaTheme.rhythmInk)
+                    .frame(minWidth: 38, alignment: .trailing)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.55))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.cardPress)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(scoreAccessibilityLabel(descriptor: descriptor, finding: finding, values: values))
+        .accessibilityHint("打开\(descriptor.title)详情")
+    }
+
+    private var compactCalibrationCard: some View {
+        NavigationLink(destination: HistoricalBackfillView()) {
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(VelaTheme.rhythmDeep)
+                Text("同步或回填健康数据，建立个人趋势")
+                    .font(VelaTheme.footnote().weight(.semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            }
+            .padding(14)
+            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.cardPress)
+    }
+
+    @ViewBuilder
+    private var compactAgentObservation: some View {
+        if let brief = healthBrief, !brief.subheadline.isEmpty {
+            Button {
+                appState.routeToCoach(question: selectedHorizonCoachQuestion, surface: .trends)
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "sparkles")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                    Text(brief.subheadline)
+                        .font(VelaTheme.footnote())
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                        .lineLimit(2)
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                }
+                .padding(14)
+                .background(VelaTheme.rhythmMist.opacity(0.42), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(.cardPress)
+        }
+    }
+
+    private var metricCatalogDisclosure: some View {
+        Button {
+            withAnimation(.snappy(duration: 0.24)) {
+                showAllMetricCatalog.toggle()
+            }
+            VelaHaptic.selection()
+        } label: {
+            HStack {
+                Text("更多健康指标")
+                    .font(VelaTheme.callout().weight(.semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                Spacer()
+                Image(systemName: showAllMetricCatalog ? "chevron.up" : "chevron.down")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            }
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(showAllMetricCatalog ? "已展开" : "已收起")
+    }
+
+    private func finding(for metric: CoreHealthMetric) -> HealthTrendFinding? {
+        allTrends.first { $0.metric == metric && $0.horizon == selectedHorizon }
+    }
+
+    private func scoreHistory(for metric: CoreHealthMetric) -> [Double] {
+        let calendar = Calendar.current
+        let endDay = calendar.startOfDay(for: dashboardVM.selectedDate)
+        let end = calendar.date(byAdding: .day, value: 1, to: endDay) ?? endDay
+        let start = calendar.date(byAdding: .day, value: -selectedHorizon.windowDays, to: end) ?? end
+
+        return dailyRecords
+            .filter { $0.date >= start && $0.date < end }
+            .sorted { $0.date < $1.date }
+            .compactMap { record in
+                switch metric {
+                case .recovery: record.recoveryScore
+                case .sleepScore: record.sleepScore
+                case .strain: record.strainScore
+                case .stress: record.stressIndex
+                case .energy: record.currentEnergy ?? record.energyBank ?? record.morningEnergy
+                default: nil
+                }
+            }
+    }
+
+    private func normalizedHistory(_ values: [Double]) -> [Double] {
+        guard !values.isEmpty else { return [] }
+        let sampled = downsample(values, maximumCount: 72)
+        guard let minimum = sampled.min(), let maximum = sampled.max() else { return [] }
+        let distance = maximum - minimum
+        guard distance > 0 else { return sampled.map { _ in 0.5 } }
+        return sampled.map { ($0 - minimum) / distance }
+    }
+
+    private func downsample(_ values: [Double], maximumCount: Int) -> [Double] {
+        guard values.count > maximumCount else { return values }
+        let bucketSize = Double(values.count) / Double(maximumCount)
+        return (0..<maximumCount).compactMap { bucket in
+            let lower = Int((Double(bucket) * bucketSize).rounded(.down))
+            let upper = min(values.count, Int((Double(bucket + 1) * bucketSize).rounded(.down)))
+            guard lower < upper else { return nil }
+            let slice = values[lower..<upper]
+            return slice.reduce(0, +) / Double(slice.count)
+        }
+    }
+
+    private func scoreValueText(
+        descriptor: ScoreTrendDescriptor,
+        finding: HealthTrendFinding?,
+        values: [Double]
+    ) -> String {
+        let value = finding?.isAvailable == true
+            ? finding?.currentValue
+            : currentScoreValue(for: descriptor.metric)
+        guard let value else { return "--" }
+        let rounded = Int(value.rounded())
+        return descriptor.metric == .energy ? "\(rounded)%" : "\(rounded)"
+    }
+
+    private func scoreTrendCaption(finding: HealthTrendFinding?, sampleCount: Int) -> String {
+        guard let finding, finding.isAvailable else {
+            if sampleCount >= selectedHorizon.requiredSampleCount {
+                return "\(sampleCount) 天记录"
+            }
+            return "\(sampleCount)/\(selectedHorizon.requiredSampleCount) 天"
+        }
+        if finding.isNotable { return "偏离个人基线" }
+        if let baseline = finding.baselineValue {
+            return "基线 \(Int(baseline.rounded())) · \(finding.valueDirection.label)"
+        }
+        return "\(finding.sampleCount) 天 · \(finding.valueDirection.label)"
+    }
+
+    private func scoreAccessibilityLabel(
+        descriptor: ScoreTrendDescriptor,
+        finding: HealthTrendFinding?,
+        values: [Double]
+    ) -> String {
+        let value = scoreValueText(descriptor: descriptor, finding: finding, values: values)
+        let state = scoreTrendCaption(finding: finding, sampleCount: values.count)
+        return "\(descriptor.title)，\(value)，\(state)"
+    }
+
+    private func currentScoreValue(for metric: CoreHealthMetric) -> Double? {
+        switch metric {
+        case .recovery: return dashboard.recovery.hasData ? dashboard.recovery.value : nil
+        case .sleepScore: return dashboard.sleepScore.hasData ? dashboard.sleepScore.value : nil
+        case .strain: return dashboard.strain.hasData ? dashboard.strain.value : nil
+        case .stress: return dashboard.stress.hasData ? dashboard.stress.value : nil
+        case .energy: return dashboard.energy.hasData ? dashboard.energy.value : nil
+        default: return nil
+        }
+    }
+
+    private func scoreColor(for metric: CoreHealthMetric) -> Color {
+        switch metric {
+        case .recovery: return VelaTheme.recoveryColor
+        case .sleepScore: return VelaTheme.sleepColor
+        case .strain: return VelaTheme.strainColor
+        case .stress: return VelaTheme.stressColor
+        case .energy: return VelaTheme.energyColor
+        default: return VelaTheme.rhythmDeep
+        }
+    }
+
+    private func loadDailyRecords() {
+        let calendar = Calendar.current
+        let endDay = calendar.startOfDay(for: dashboardVM.selectedDate)
+        let end = calendar.date(byAdding: .day, value: 1, to: endDay) ?? endDay
+        let start = calendar.date(byAdding: .day, value: -HealthTrendHorizon.threeYears.windowDays, to: end) ?? end
+        let descriptor = FetchDescriptor<DailyHealthSummaryRecord>(
+            predicate: #Predicate { $0.date >= start && $0.date < end },
+            sortBy: [SortDescriptor(\.date, order: .forward)]
+        )
+        dailyRecords = (try? modelContext.fetch(descriptor)) ?? []
+        recomputeMemoizedHistories()
+    }
+
+    private func recomputeMemoizedHistories() {
+        let calendar = Calendar.current
+        let endDay = calendar.startOfDay(for: dashboardVM.selectedDate)
+        let end = calendar.date(byAdding: .day, value: 1, to: endDay) ?? endDay
+        let start = calendar.date(byAdding: .day, value: -selectedHorizon.windowDays, to: end) ?? end
+
+        let filtered = dailyRecords
+            .filter { $0.date >= start && $0.date < end }
+            .sorted { $0.date < $1.date }
+
+        var histories: [CoreHealthMetric: [Double]] = [:]
+        var normalized: [CoreHealthMetric: [Double]] = [:]
+
+        for metric in scoreMetrics {
+            let values: [Double] = filtered.compactMap { record in
+                switch metric {
+                case .recovery: record.recoveryScore
+                case .sleepScore: record.sleepScore
+                case .strain: record.strainScore
+                case .stress: record.stressIndex
+                case .energy: record.currentEnergy ?? record.energyBank ?? record.morningEnergy
+                default: nil
+                }
+            }
+            histories[metric] = values
+            normalized[metric] = normalizedHistory(values)
+        }
+
+        memoizedScoreHistories = histories
+        memoizedNormalizedHistories = normalized
     }
 
     // MARK: - Horizon Picker
@@ -222,7 +592,7 @@ struct VelaTrendsView: View {
                         .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
                 )
             } else {
-                let shifts = Array(horizonNotableShifts.prefix(3))
+                let shifts = Array(notableScoreShifts.prefix(3))
                 VStack(spacing: 0) {
                     ForEach(Array(shifts.enumerated()), id: \.offset) { index, finding in
                         notableShiftRow(finding: finding)
@@ -531,7 +901,7 @@ struct VelaTrendsView: View {
 
     private var askVelaTrendCard: some View {
         Button {
-            appState.routeToCoach(question: selectedHorizonCoachQuestion)
+            appState.routeToCoach(question: selectedHorizonCoachQuestion, surface: .trends)
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "sparkles")
@@ -580,7 +950,7 @@ struct VelaTrendsView: View {
         switch metric {
         case .hrv: return .hrv
         case .restingHeartRate: return .rhr
-        case .sleepDuration: return .sleep
+        case .sleepDuration, .sleepScore: return .sleep
         case .recovery: return .recovery
         case .strain: return .strain
         case .stress: return .stress
@@ -600,7 +970,7 @@ struct VelaTrendsView: View {
         switch metric {
         case .hrv, .recovery: return VelaTheme.recoveryColor
         case .restingHeartRate, .strain: return VelaTheme.strainColor
-        case .sleepDuration: return VelaTheme.sleepColor
+        case .sleepDuration, .sleepScore: return VelaTheme.sleepColor
         case .stress: return VelaTheme.stressColor
         case .energy: return VelaTheme.energyColor
         case .respiratoryRate, .oxygenSaturation, .bodyWeight, .bodyFat, .steps, .activeCalories:
