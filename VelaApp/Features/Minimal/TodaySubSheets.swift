@@ -1,8 +1,11 @@
 import SwiftUI
 import SwiftData
 import CoreLocation
+import os.log
 @preconcurrency import AVFoundation
 
+
+private let logger = Logger(subsystem: "com.sunweizhou.Vela", category: "Sync")
 // MARK: - ProactiveInsightDetailSheet
 struct ProactiveInsightDetailSheet: View {
     let insight: ProactiveInsight
@@ -1883,7 +1886,7 @@ struct FoodSearchSheetView: View {
         do {
             try modelContext.save()
         } catch {
-            print("Failed to save logged food item: \(error)")
+            logger.error("Failed to save logged food item: \(error.localizedDescription, privacy: .public)")
         }
     }
 }

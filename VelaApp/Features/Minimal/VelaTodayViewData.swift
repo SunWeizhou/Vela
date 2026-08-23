@@ -1,7 +1,10 @@
 import SwiftUI
 import SwiftData
 import CoreLocation
+import os.log
 
+
+private let logger = Logger(subsystem: "com.sunweizhou.Vela", category: "Weather")
 // MARK: - VelaTodayView Extension for Data Operations
 extension VelaTodayView {
 
@@ -142,7 +145,7 @@ extension VelaTodayView {
                 weatherTemp = "\(Int(weather.temperature.rounded()))°C"
                 weatherLocation = location.displayName
             } catch {
-                print("Failed to sync weather locally: \(error.localizedDescription)")
+                logger.error("Failed to sync weather locally: \(error.localizedDescription, privacy: .public)")
             }
         }
     }

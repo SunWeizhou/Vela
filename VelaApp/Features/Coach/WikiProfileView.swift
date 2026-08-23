@@ -1,6 +1,9 @@
 import SwiftUI
 import SwiftData
+import os.log
 
+
+private let logger = Logger(subsystem: "com.sunweizhou.Vela", category: "Wiki")
 struct WikiProfileView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var documents: [WikiDocument] = []
@@ -759,7 +762,7 @@ struct WikiProfileView: View {
             documents = allDocs.filter { $0.filename != "baselines.md" }
             baselineDoc = allDocs.first { $0.filename == "baselines.md" && $0.content.count > 100 }
         } catch {
-            print("Failed to confirm proposal: \(error)")
+            logger.error("Failed to confirm proposal: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -768,7 +771,7 @@ struct WikiProfileView: View {
             let ledger = MemoryLedger(modelContext: modelContext)
             try ledger.rejectProposal(proposal.id)
         } catch {
-            print("Failed to reject proposal: \(error)")
+            logger.error("Failed to reject proposal: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -781,7 +784,7 @@ struct WikiProfileView: View {
             )
             editingProposal = nil
         } catch {
-            print("Failed to edit proposal: \(error)")
+            logger.error("Failed to edit proposal: \(error.localizedDescription, privacy: .public)")
         }
     }
 }

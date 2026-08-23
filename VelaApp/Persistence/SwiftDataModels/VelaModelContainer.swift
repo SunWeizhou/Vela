@@ -41,6 +41,12 @@ enum VelaModelContainer {
     ]
     static let schema = Schema(VelaSchemaV3.models)
 
+    /// App 生命周期内已创建的容器（VelaApp.init 注入）。
+    /// 后台任务（BGAppRefreshTask）优先复用，避免每次后台刷新都重建容器——
+    /// 打开 store + 迁移检查既有主线程成本，又挤占 BG ~30s 预算（审计 H3）。
+    @MainActor
+    static var activeContainer: ModelContainer?
+
     private static let storeURL: URL = {
         let base = URL.applicationSupportDirectory
         return base.appending(path: "Vela.store")

@@ -5,7 +5,10 @@ import PDFKit
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+import os.log
 
+
+private let logger = Logger(subsystem: "com.sunweizhou.Vela", category: "Coach")
 // MARK: - VelaCoachView — ChatGPT-Style Coach with DeepSeek AI
 // 中文默认 · 深色模式 · 欢迎区 · 对话气泡 · 打字指示器 · 底部编辑框 · 侧滑历史对话管理
 
@@ -1107,7 +1110,7 @@ struct VelaCoachView: View {
                 } label: {
                     Image(systemName: dictation.isRecording ? "waveform.circle.fill" : "mic.circle.fill")
                         .font(.system(size: 28, weight: .semibold))
-                        .foregroundStyle(dictation.isRecording ? VelaTheme.statePoor : VelaTheme.rhythmInkSecondary)
+                        .foregroundStyle(dictation.isRecording ? VelaTheme.textColor(for: .poor) : VelaTheme.rhythmInkSecondary)
                         .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
@@ -1217,39 +1220,39 @@ struct VelaCoachView: View {
     }
 
     private func handleArtifactAction(_ action: CoachArtifactAction, artifact: CoachArtifact) {
-        print("[CoachView] handleArtifactAction: type=\(action.type), label=\(action.label)")
+        logger.info("[CoachView] handleArtifactAction: type=\(action.type, privacy: .public), label=\(action.label, privacy: .public)")
         if action.type == "start_check_in" {
-            print("[CoachView] Opening post-workout check-in")
+            logger.info("[CoachView] Opening post-workout check-in")
             appState.routeToPostWorkoutCheckIn(workoutID: workoutID(for: action, artifact: artifact))
             if presentation == .quickCover {
                 dismiss()
             }
         } else if action.type == "open_recovery_detail" {
-            print("[CoachView] Opening post-workout impact")
+            logger.info("[CoachView] Opening post-workout impact")
             appState.routeToPostWorkoutImpact(workoutID: workoutID(for: action, artifact: artifact))
             if presentation == .quickCover {
                 dismiss()
             }
         } else if action.type.contains("training") || action.type.contains("workout") || action.type.contains("summary") {
-            print("[CoachView] Routing to training (tab 1)")
+            logger.info("[CoachView] Routing to training (tab 1)")
             appState.routeToTraining()
             if presentation == .quickCover {
                 dismiss()
             }
         } else if action.type.contains("check") || action.type.contains("journal") {
-            print("[CoachView] Triggering journal")
+            logger.info("[CoachView] Triggering journal")
             appState.triggerJournal = true
             if presentation == .quickCover {
                 dismiss()
             }
         } else if action.type.contains("recovery") || action.type.contains("vitals") || action.type.contains("insight") {
-            print("[CoachView] Routing to recovery (tab 2)")
+            logger.info("[CoachView] Routing to recovery (tab 2)")
             appState.routeToRecoveryDetail()
             if presentation == .quickCover {
                 dismiss()
             }
         } else {
-            print("[CoachView] Routing to coach with question: \(artifact.followUpQuestion ?? action.label)")
+            logger.info("[CoachView] Routing to coach with question: \(artifact.followUpQuestion ?? action.label, privacy: .public)")
             sendMessage(artifact.followUpQuestion ?? action.label)
         }
     }

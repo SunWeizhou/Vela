@@ -562,7 +562,7 @@ struct MuscleVolumeCard: View {
                                 Spacer()
                                 Text("\(sets) 组")
                                     .font(.system(size: 11, weight: .bold))
-                                    .foregroundStyle(sets >= 18 ? VelaTheme.statePoor : (sets < 6 ? VelaTheme.rhythmDeep : VelaTheme.rhythmGlow))
+                                    .foregroundStyle(sets >= 18 ? VelaTheme.textColor(for: .poor) : (sets < 6 ? VelaTheme.rhythmDeep : VelaTheme.rhythmGlow))
                             }
                             
                             GeometryReader { geo in

@@ -11,7 +11,8 @@ struct JournalEntryCard: View {
             Image(systemName: entry.uiIcon)
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(.white)
-                .frame(width: 28, height: 28)
+                .frame(minWidth: VelaTheme.minimumHitTarget, minHeight: VelaTheme.minimumHitTarget)
+                    .contentShape(Rectangle())
                 .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(entry.uiColor))
             
             VStack(alignment: .leading, spacing: 2) {
@@ -41,7 +42,8 @@ struct JournalEntryCard: View {
                 Image(systemName: "trash")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                    .frame(width: 28, height: 28)
+                    .frame(minWidth: VelaTheme.minimumHitTarget, minHeight: VelaTheme.minimumHitTarget)
+                    .contentShape(Rectangle())
                     .background(Circle().fill(VelaTheme.rhythmMist.opacity(0.4)))
             }
             .buttonStyle(.plain)

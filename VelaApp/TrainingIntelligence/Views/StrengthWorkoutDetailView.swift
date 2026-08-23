@@ -1,7 +1,10 @@
 import SwiftUI
 import SwiftData
 import Charts
+import os.log
 
+
+private let logger = Logger(subsystem: "com.sunweizhou.Vela", category: "Workout")
 struct StrengthWorkoutDetailView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.modelContext) private var modelContext
@@ -104,7 +107,7 @@ struct StrengthWorkoutDetailView: View {
             }
             dismiss()
         } catch {
-            print("Failed to delete workout: \(error)")
+            logger.error("Failed to delete workout: \(error.localizedDescription, privacy: .public)")
         }
     }
 

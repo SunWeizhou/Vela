@@ -839,7 +839,7 @@ struct HistoricalBackfillView: View {
                 if let error = coordinator.lastError {
                     Text("回填中断：\(error)")
                         .font(.system(size: 12))
-                        .foregroundStyle(VelaTheme.statePoor)
+                        .foregroundStyle(VelaTheme.textColor(for: .poor))
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -928,7 +928,7 @@ struct XunjiHistoryBackfillView: View {
                 if loadKeyFailed {
                     Text("未找到训记密钥。请先在训练页填写训记 API Key。")
                         .font(.system(size: 12))
-                        .foregroundStyle(VelaTheme.statePoor)
+                        .foregroundStyle(VelaTheme.textColor(for: .poor))
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
@@ -955,7 +955,7 @@ struct XunjiHistoryBackfillView: View {
                 if let error = service.errorMessage {
                     Text("回填暂停：\(error)")
                         .font(.system(size: 12))
-                        .foregroundStyle(VelaTheme.statePoor)
+                        .foregroundStyle(VelaTheme.textColor(for: .poor))
                         .fixedSize(horizontal: false, vertical: true)
                 }
 

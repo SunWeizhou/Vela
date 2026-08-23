@@ -1,6 +1,9 @@
 import CoreLocation
 import Combine
+import os.log
 
+
+private let logger = Logger(subsystem: "com.sunweizhou.Vela", category: "Location")
 @MainActor
 final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     static let shared = LocationManager()
@@ -60,6 +63,6 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
     
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         // Handle failure gracefully
-        print("LocationManager failed: \(error.localizedDescription)")
+        logger.error("LocationManager failed: \(error.localizedDescription, privacy: .public)")
     }
 }

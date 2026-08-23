@@ -119,6 +119,17 @@ enum VelaTheme {
         }
     }
 
+    /// 文字用状态色：浅色模式下比图形色更深，保证 WCAG AA 正文对比度 ≥4.5:1
+    /// （实测 #0C7A44≈4.9:1 / #8A5F14≈5.1:1 / #B0405C≈5.1:1 on #F2F5F1）。
+    /// 图形、徽章、条形继续用 color(for:)（其浅色值按 3:1 图形目标设计）。
+    static func textColor(for state: MetricState) -> Color {
+        switch state {
+        case .good: return adaptive("#0C7A44", "#3FC97F")
+        case .moderate: return adaptive("#8A5F14", "#F2B45C")
+        case .poor: return adaptive("#B0405C", "#FF8299")
+        }
+    }
+
     // MARK: - Semantic Palette (硬编码收敛映射)
 
     /// 系统绿(成功/达标态)
@@ -189,8 +200,9 @@ enum VelaTheme {
     static func footnote() -> Font     { .footnote }
     static func caption1() -> Font     { .caption }
     static func caption2() -> Font     { .caption2 }
-    static func monoCaption() -> Font  { .system(size: 12, weight: .regular, design: .monospaced) }
-    static func monoValue() -> Font    { .system(size: 15, weight: .medium, design: .monospaced) }
+    /// 小号等宽字体：基于系统 TextStyle（默认字号与原文一致，随 Dynamic Type 缩放，审计 H1）。
+    static func monoCaption() -> Font  { .system(.caption, design: .monospaced) }
+    static func monoValue() -> Font    { .system(.subheadline, design: .monospaced, weight: .medium) }
 
     // MARK: - Layout & Spacing
     //
@@ -230,7 +242,8 @@ enum VelaTheme {
 
     static let fillSoft = adaptive("#5664E81A", "#FFFFFF16")
 
-    static func captionLarge() -> Font { .system(size: 14, weight: .regular, design: .default) }
+    /// 大号 caption：基于系统 TextStyle（默认 13pt，随 Dynamic Type 缩放；原 14pt 固定，审计 H1）。
+    static func captionLarge() -> Font { .system(.footnote, design: .default) }
     static func pageTitle() -> Font { .system(.title2, design: .default, weight: .bold) }
     static func metricHeroValue() -> Font {
         .system(size: 48, weight: .semibold, design: .rounded).monospacedDigit()

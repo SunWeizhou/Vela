@@ -3,7 +3,10 @@ import Charts
 import MapKit
 import HealthKit
 import SwiftData
+import os.log
 
+
+private let logger = Logger(subsystem: "com.sunweizhou.Vela", category: "Workout")
 struct WorkoutDetailView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.modelContext) private var modelContext
@@ -638,7 +641,7 @@ struct WorkoutDetailView: View {
                 routeCoordinates = []
             }
         } catch {
-            print("Workout detail loading failed: \(error.localizedDescription)")
+            logger.error("Workout detail loading failed: \(error.localizedDescription, privacy: .public)")
             heartRates = []
             routeCoordinates = []
         }

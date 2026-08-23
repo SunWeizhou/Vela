@@ -99,7 +99,14 @@ enum BackgroundTaskManager {
                 let config = AutoAgentConfig.shared
                 let hour = Calendar.current.component(.hour, from: Date())
 
-                let modelContainer = try VelaModelContainer.make()
+                // 优先复用 App 容器（审计 H3）：BG 预算内省去 store 打开/迁移检查；
+                // App 未在内存（被系统杀掉）时才重建。
+                let modelContainer: ModelContainer
+                if let active = VelaModelContainer.activeContainer {
+                    modelContainer = active
+                } else {
+                    modelContainer = try VelaModelContainer.make()
+                }
                 let modelContext = ModelContext(modelContainer)
                 let bgRun = AgentRunRecord(
                     agentName: "background_refresh",

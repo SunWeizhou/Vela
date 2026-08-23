@@ -448,6 +448,7 @@ struct VelaShell: View {
         .accessibilityLabel(label(for: tab))
         .accessibilityValue(isActive ? "已选中" : "")
         .accessibilityAddTraits(isActive ? .isSelected : [])
+        .accessibilityIdentifier("tab-\(tab.rawValue)")
     }
 
     private func iconName(for tab: VelaTab) -> String {

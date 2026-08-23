@@ -50,7 +50,8 @@ struct VelaVitalsView: View {
                 Image(systemName: "plus")
                     .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                    .frame(width: 36, height: 36)
+                    .frame(minWidth: VelaTheme.minimumHitTarget, minHeight: VelaTheme.minimumHitTarget)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("记录健康指标")
@@ -198,7 +199,8 @@ struct VelaVitalsView: View {
                             Image(systemName: "plus")
                                 .font(.system(size: 14, weight: .bold))
                                 .foregroundStyle(VelaTheme.rhythmDeep)
-                                .frame(width: 32, height: 32)
+                                .frame(minWidth: VelaTheme.minimumHitTarget, minHeight: VelaTheme.minimumHitTarget)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("记录健康指标")

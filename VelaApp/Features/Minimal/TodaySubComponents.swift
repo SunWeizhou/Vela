@@ -477,7 +477,7 @@ struct TodayVitalCard: View {
     private var statusText: some View {
         Text(card.status)
             .font(VelaTheme.caption2().weight(.bold))
-            .foregroundStyle(card.isGood ? VelaTheme.stateGood : VelaTheme.stateModerate)
+            .foregroundStyle(VelaTheme.textColor(for: card.isGood ? .good : .moderate))
             .fixedSize(horizontal: false, vertical: true)
     }
 

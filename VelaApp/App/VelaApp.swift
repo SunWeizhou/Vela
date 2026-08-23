@@ -3,7 +3,10 @@ import SwiftData
 import BackgroundTasks
 import AppIntents
 import UserNotifications
+import os.log
 
+
+private let logger = Logger(subsystem: "com.sunweizhou.Vela", category: "App")
 @MainActor
 final class VelaAppState: ObservableObject {
     static let todayTabIndex = 0
@@ -100,7 +103,7 @@ final class VelaAppState: ObservableObject {
     }
 
     func logDebug(_ message: String) {
-        print(message)
+        logger.error("\(message, privacy: .public)")
     }
 
     func routeToTab(_ tab: Int) {
@@ -295,6 +298,7 @@ struct VelaApp: App {
                 preconditionFailure("Vela: Could not create ModelContainer in any configuration.")
             }
         }
+        VelaModelContainer.activeContainer = modelContainer
 
         // Register background task handler
         BackgroundTaskManager.register()
