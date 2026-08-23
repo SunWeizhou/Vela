@@ -56,7 +56,9 @@ jobs:
           if which swiftlint >/dev/null 2>&1; then
             swiftlint --config .swiftlint.yml || true
           else
-            echo "SwiftLint not preinstalled on runner; skipping (brew install swiftlint to enable)."
+            # macos runners 不预装 SwiftLint；安装后运行自定义规则审计
+            brew install swiftlint >/dev/null 2>&1
+            swiftlint --config .swiftlint.yml || true
           fi
 
       - name: Reject tracked dependencies

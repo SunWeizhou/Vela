@@ -293,7 +293,10 @@ struct CalendarOverviewSheetView: View {
                             .background(Circle().fill(VelaTheme.rhythmCanvasRaised))
                             .overlay(Circle().stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
                     }
-                    .buttonStyle(.plain)
+                                        .buttonStyle(.plain)
+                    .frame(minWidth: VelaTheme.minimumHitTarget, minHeight: VelaTheme.minimumHitTarget)
+                    .contentShape(Rectangle())
+                    .accessibilityLabel(L10n.t("Previous month", "上个月"))
 
                     Button {
                         nextMonth()
@@ -305,7 +308,10 @@ struct CalendarOverviewSheetView: View {
                             .background(Circle().fill(VelaTheme.rhythmCanvasRaised))
                             .overlay(Circle().stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
                     }
-                    .buttonStyle(.plain)
+                                        .buttonStyle(.plain)
+                    .frame(minWidth: VelaTheme.minimumHitTarget, minHeight: VelaTheme.minimumHitTarget)
+                    .contentShape(Rectangle())
+                    .accessibilityLabel(L10n.t("Next month", "下个月"))
                     .disabled(!canMoveToNextMonth)
                 }
             }

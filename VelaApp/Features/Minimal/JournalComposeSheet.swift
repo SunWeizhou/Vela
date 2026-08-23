@@ -141,6 +141,7 @@ struct CaffeineLoggerView: View {
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(L10n.t("Close", "关闭"))
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
@@ -265,6 +266,7 @@ struct WaterLoggerView: View {
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(L10n.t("Close", "关闭"))
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
@@ -391,6 +393,7 @@ struct MoodLoggerView: View {
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(L10n.t("Close", "关闭"))
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
@@ -493,6 +496,7 @@ struct AlcoholLoggerView: View {
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(L10n.t("Close", "关闭"))
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
@@ -527,6 +531,8 @@ struct AlcoholLoggerView: View {
                                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             }
                             .buttonStyle(.plain)
+                                .accessibilityLabel(L10n.t("Decrease drink", "减少饮水量"))
+                                .frame(minWidth: VelaTheme.minimumHitTarget, minHeight: VelaTheme.minimumHitTarget)
                             
                             Button {
                                 VelaHaptic.selection()
@@ -537,6 +543,8 @@ struct AlcoholLoggerView: View {
                                     .foregroundStyle(VelaTheme.rhythmDeep)
                             }
                             .buttonStyle(.plain)
+                                .accessibilityLabel(L10n.t("Increase drink", "增加饮水量"))
+                                .frame(minWidth: VelaTheme.minimumHitTarget, minHeight: VelaTheme.minimumHitTarget)
                         }
                     }
                     .padding(.vertical, 24)
