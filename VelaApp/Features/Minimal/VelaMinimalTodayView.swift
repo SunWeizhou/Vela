@@ -314,7 +314,7 @@ struct VelaTodayView: View {
                         .foregroundStyle(VelaTheme.rhythmDeep)
                     Spacer()
                     Button {
-                        todayLegacyRuntime.routeToTrends()
+                        dispatchToday(.openTrends)
                     } label: {
                         HStack(spacing: 2) {
                             Text("查看趋势")
@@ -517,7 +517,7 @@ struct VelaTodayView: View {
                     deviatedScoreIDs: deviatedScoreIDs,
                     agentSentence: todayAgentSentence,
                     accentColor: signalAccentColor,
-                    onAskCoach: { showCoach = true }
+                    onAskCoach: { dispatchToday(.openQuickCoach) }
                 )
                 .equatable()
                 .padding(.horizontal, VelaTheme.pagePadding)
@@ -684,8 +684,9 @@ struct VelaTodayView: View {
             } else {
                 pendingLocalDataRefresh = true
             }
-            loadRealNutritionData()
-            loadDynamicData()
+            Task { @MainActor in
+                await todayLegacyRuntime.refreshCompatibilitySurface()
+            }
         }
         .onReceive(todayLegacyRuntime.locationUpdates) { _ in
             dispatchToday(.requestWeather)
@@ -760,7 +761,9 @@ struct VelaTodayView: View {
             }
             todayLegacyRuntime.mirrorSelectedDayToLegacySurface(canonicalDay)
             loadTodayLivedStateAlignment()
-            loadDynamicData()
+            Task { @MainActor in
+                await todayLegacyRuntime.refreshCompatibilitySurface()
+            }
         }
     }
 

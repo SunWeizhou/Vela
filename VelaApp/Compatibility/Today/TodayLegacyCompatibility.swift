@@ -140,6 +140,10 @@ final class TodayLegacyRuntime {
         appState?.routeToCoach(question: question, surface: surface)
     }
 
+    func routeToQuickCoach() {
+        appState?.routeToQuickCoach(question: nil, surface: .home)
+    }
+
     func present(_ sheet: VelaAppState.AppSheet) {
         appState?.present(sheet)
     }
@@ -275,6 +279,15 @@ final class TodayLegacyRuntime {
     func loadSecondaryData(for dashboardVM: DashboardViewModel) async {
         guard let modelContext else { return }
         await dashboardVM.loadSecondaryData(modelContext: modelContext)
+    }
+
+    /// Named compatibility adapter for legacy secondary-data consumers. Today
+    /// lifecycle code must not call `DashboardViewModel.loadSecondaryData`
+    /// directly; this keeps the transitional SwiftData/VM bridge at the
+    /// composition boundary while Store remains the dashboard source.
+    func refreshCompatibilitySurface(force: Bool = false) async {
+        guard let modelContext, let dashboardVM else { return }
+        await dashboardVM.loadSecondaryData(modelContext: modelContext, force: force)
     }
 
     func refreshDashboard(_ dashboardVM: DashboardViewModel, force: Bool) async {
@@ -802,6 +815,14 @@ final class TodayLegacyEffectRouter: TodayEffectRouter {
         runtime?.routeToTraining()
     }
 
+    func openTrends() async {
+        runtime?.routeToTrends()
+    }
+
+    func openQuickCoach() async {
+        runtime?.routeToQuickCoach()
+    }
+
     func requestWeather() async -> TodayWeatherProjection? {
         guard let runtime else { return nil }
         runtime.requestWeather()
@@ -1063,19 +1084,6 @@ extension VelaTodayView {
     // MARK: - Weather Sync
     func requestWeatherUpdate() {
         dispatchToday(.requestWeather)
-    }
-
-    // MARK: - SwiftData nutrition sync
-    func loadRealNutritionData() {
-        Task { @MainActor in
-            await todayLegacyRuntime.loadSecondaryData(for: dashboardVM)
-        }
-    }
-
-    func loadDynamicData() {
-        Task { @MainActor in
-            await todayLegacyRuntime.loadSecondaryData(for: dashboardVM)
-        }
     }
 
     /// Persistence-backed feedback lookup stays in this compatibility

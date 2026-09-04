@@ -76,6 +76,10 @@ final class TodayStore: ObservableObject {
             await effects.askCoach(question)
         case .startTraining:
             await effects.startTraining()
+        case .openTrends:
+            await effects.openTrends()
+        case .openQuickCoach:
+            await effects.openQuickCoach()
         case .requestWeather:
             state.weather = await effects.requestWeather() ?? .unavailable
         case .refreshCoverage:

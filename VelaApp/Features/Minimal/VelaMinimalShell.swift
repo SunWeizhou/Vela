@@ -38,7 +38,6 @@ struct VelaShell: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var services: VelaServices
-    @EnvironmentObject private var dashboardVM: DashboardViewModel
 
     @State private var showPlusSheet = false
     @State private var showCoach     = false
@@ -214,7 +213,7 @@ struct VelaShell: View {
             .presentationDetents([.large])
             .velaSheetSurface()
         case .livedState:
-            LivedStateCheckInSheet(selectedDate: dashboardVM.selectedDate) {}
+            LivedStateCheckInSheet(selectedDate: todayStore.state.selectedDay) {}
                 .presentationDetents([.large])
                 .velaSheetSurface()
         case .recoveryDetail:

@@ -195,6 +195,8 @@ final class TodayStoreTests: XCTestCase {
         var openedSettings = 0
         var coachQuestions: [String] = []
         var startedTraining = 0
+        var openedTrends = 0
+        var openedQuickCoach = 0
         var requestedWeather = 0
         var requestedCoverage = 0
         var viewedHashes: [String] = []
@@ -210,6 +212,8 @@ final class TodayStoreTests: XCTestCase {
         func openSettings() async { openedSettings += 1 }
         func askCoach(_ question: String) async { coachQuestions.append(question) }
         func startTraining() async { startedTraining += 1 }
+        func openTrends() async { openedTrends += 1 }
+        func openQuickCoach() async { openedQuickCoach += 1 }
         func requestWeather() async -> TodayWeatherProjection? {
             requestedWeather += 1
             return nil
@@ -436,6 +440,8 @@ final class TodayStoreTests: XCTestCase {
         await store.send(.openMetric(.sleep))
         await store.send(.askCoach("为什么今天要恢复？"))
         await store.send(.startTraining)
+        await store.send(.openTrends)
+        await store.send(.openQuickCoach)
         await store.send(.requestWeather)
         await store.send(.setLivedStateAlignment(.worse))
         await store.send(.saveLivedState(checkIn))
@@ -444,6 +450,8 @@ final class TodayStoreTests: XCTestCase {
         XCTAssertEqual(effects.openedMetrics, [.sleep])
         XCTAssertEqual(effects.coachQuestions, ["为什么今天要恢复？"])
         XCTAssertEqual(effects.startedTraining, 1)
+        XCTAssertEqual(effects.openedTrends, 1)
+        XCTAssertEqual(effects.openedQuickCoach, 1)
         XCTAssertEqual(effects.requestedWeather, 1)
         XCTAssertEqual(effects.alignments, [.worse])
         XCTAssertEqual(effects.checkIns, [checkIn])

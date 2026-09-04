@@ -15,6 +15,8 @@ enum TodayStoreAction: Sendable {
     case openSettings
     case askCoach(String)
     case startTraining
+    case openTrends
+    case openQuickCoach
     case requestWeather
     case refreshCoverage
     case trackDailyDecisionViewed(bodyStateHash: String)
@@ -33,6 +35,8 @@ protocol TodayEffectRouter: AnyObject {
     func openSettings() async
     func askCoach(_ question: String) async
     func startTraining() async
+    func openTrends() async
+    func openQuickCoach() async
     func requestWeather() async -> TodayWeatherProjection?
     func requestCoverage() async -> DataCoverageSummaryModel?
     func trackDailyDecisionViewed(bodyStateHash: String) async
@@ -55,6 +59,8 @@ final class NoOpTodayEffectRouter: TodayEffectRouter {
     func openSettings() async {}
     func askCoach(_ question: String) async {}
     func startTraining() async {}
+    func openTrends() async {}
+    func openQuickCoach() async {}
     func requestWeather() async -> TodayWeatherProjection? { nil }
     func requestCoverage() async -> DataCoverageSummaryModel? { nil }
     func trackDailyDecisionViewed(bodyStateHash: String) async {}
