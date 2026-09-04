@@ -106,7 +106,12 @@ final class TrendsStore {
         var day = start
         while day < endExclusive {
             let snapshot = snapshotsByDay[day]
-            let value = snapshot.flatMap { value(for: state.metric, snapshot: $0) }
+            let value: Double?
+            if let snapshot {
+                value = self.value(for: state.metric, snapshot: snapshot)
+            } else {
+                value = nil
+            }
             points.append(
                 TrendsChartPoint(
                     date: day,

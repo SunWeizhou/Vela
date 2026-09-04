@@ -76,6 +76,11 @@
 		C00300020000000000000002 /* TodayStoreAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00310020000000000000002 /* TodayStoreAction.swift */; };
 		C00300030000000000000003 /* TodayStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00310030000000000000003 /* TodayStore.swift */; };
 		C00300050000000000000005 /* TodayLegacyCompatibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00310050000000000000005 /* TodayLegacyCompatibility.swift */; };
+		C5A500010000000000000001 /* TrendsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A510010000000000000001 /* TrendsStore.swift */; };
+		C5A500020000000000000002 /* TrendsStoreAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A510020000000000000002 /* TrendsStoreAction.swift */; };
+		C5A500030000000000000003 /* TrendsViewState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A510030000000000000003 /* TrendsViewState.swift */; };
+		C5A500040000000000000004 /* TrendsOneMetricChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A510040000000000000004 /* TrendsOneMetricChart.swift */; };
+		C5A500060000000000000006 /* TrendsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A530010000000000000001 /* TrendsStoreTests.swift */; };
 		0B9900020000000000000002 /* PersonalHealthBrief.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9900010000000000000001 /* PersonalHealthBrief.swift */; };
 		0B9900040000000000000004 /* HealthTrendEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9900030000000000000003 /* HealthTrendEngine.swift */; };
 		0B9900060000000000000006 /* VelaTrendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9900050000000000000005 /* VelaTrendsView.swift */; };
@@ -338,6 +343,11 @@
 		C00310020000000000000002 /* TodayStoreAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayStoreAction.swift; sourceTree = "<group>"; };
 		C00310030000000000000003 /* TodayStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayStore.swift; sourceTree = "<group>"; };
 		C00310050000000000000005 /* TodayLegacyCompatibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Compatibility/Today/TodayLegacyCompatibility.swift; sourceTree = "<group>"; };
+		C5A510010000000000000001 /* TrendsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrendsStore.swift; sourceTree = "<group>"; };
+		C5A510020000000000000002 /* TrendsStoreAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrendsStoreAction.swift; sourceTree = "<group>"; };
+		C5A510030000000000000003 /* TrendsViewState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrendsViewState.swift; sourceTree = "<group>"; };
+		C5A510040000000000000004 /* TrendsOneMetricChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrendsOneMetricChart.swift; sourceTree = "<group>"; };
+		C5A530010000000000000001 /* TrendsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrendsStoreTests.swift; sourceTree = "<group>"; };
 		0B9900010000000000000001 /* PersonalHealthBrief.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/PersonalHealthBrief.swift; sourceTree = "<group>"; };
 		0B9900030000000000000003 /* HealthTrendEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/HealthTrendEngine.swift; sourceTree = "<group>"; };
 		0B9900050000000000000005 /* VelaTrendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Trends/VelaTrendsView.swift; sourceTree = "<group>"; };
@@ -574,6 +584,7 @@
 				0B9900010000000000000001 /* PersonalHealthBrief.swift */,
 				0B9900030000000000000003 /* HealthTrendEngine.swift */,
 				0B9900050000000000000005 /* VelaTrendsView.swift */,
+				C5A520010000000000000001 /* Trends */,
 				0B25D1700000000000000070 /* BodyState.swift */,
 				0B25D1710000000000000071 /* TrainingDecision.swift */,
 				0B25D1720000000000000072 /* DailyOperatingPlan.swift */,
@@ -775,6 +786,7 @@
 				06E296850D824F5484621DB7 /* PromptComposerTests.swift */,
 				FC2F3B94AA064B1E83F71978 /* MemoryLedgerTests.swift */,
 				4746CA84311E3C6D12654200 /* WorkoutAggregationTests.swift */,
+				C5A530010000000000000001 /* TrendsStoreTests.swift */,
 			);
 			path = VelaAppTests;
 			sourceTree = "<group>";
@@ -843,6 +855,18 @@
 			);
 			name = Today;
 			path = Features/Today;
+			sourceTree = "<group>";
+		};
+		C5A520010000000000000001 /* Trends */ = {
+			isa = PBXGroup;
+			children = (
+				C5A510010000000000000001 /* TrendsStore.swift */,
+				C5A510020000000000000002 /* TrendsStoreAction.swift */,
+				C5A510030000000000000003 /* TrendsViewState.swift */,
+				C5A510040000000000000004 /* TrendsOneMetricChart.swift */,
+			);
+			name = Trends;
+			path = Features/Trends;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -1058,6 +1082,10 @@
 				C00300020000000000000002 /* TodayStoreAction.swift in Sources */,
 				C00300030000000000000003 /* TodayStore.swift in Sources */,
 				C00300050000000000000005 /* TodayLegacyCompatibility.swift in Sources */,
+				C5A500010000000000000001 /* TrendsStore.swift in Sources */,
+				C5A500020000000000000002 /* TrendsStoreAction.swift in Sources */,
+				C5A500030000000000000003 /* TrendsViewState.swift in Sources */,
+				C5A500040000000000000004 /* TrendsOneMetricChart.swift in Sources */,
 				0B1000430000000000000043 /* DailySummaryUseCase.swift in Sources */,
 				0B1001A600000000000000A6 /* PreviewDataFactory.swift in Sources */,
 				0B1001B100000000000000B1 /* VelaError.swift in Sources */,
@@ -1254,6 +1282,7 @@
 				DD4356A314314464890D8B2D /* MemoryLedgerTests.swift in Sources */,
 				B886D213B1A540FD7EE4A215 /* WorkoutAggregationTests.swift in Sources */,
 				C00300040000000000000004 /* TodayStoreTests.swift in Sources */,
+				C5A500060000000000000006 /* TrendsStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
