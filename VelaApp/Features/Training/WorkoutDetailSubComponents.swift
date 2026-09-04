@@ -138,7 +138,7 @@ struct StrengthSetDetailSheet: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 14) {
                 Text(detail.exerciseName)
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .font(.system(.title2, design: .rounded, weight: .bold))
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Text("第 \(detail.setIndex) 组")
                     .font(.system(.footnote, design: .default, weight: .semibold))

@@ -202,7 +202,7 @@ private struct CoreMetricScoreRing: View {
             }
 
             Text(valueText)
-                .font(.system(size: 34, weight: .semibold, design: .rounded))
+                .font(.system(.largeTitle, design: .rounded, weight: .semibold))
                 .monospacedDigit()
                 .foregroundStyle(VelaTheme.rhythmInk)
                 .minimumScaleFactor(0.7)
@@ -260,7 +260,7 @@ private struct CoreMetricStressDial: View {
 
             VStack(spacing: 2) {
                 Text(score.map { String(Int($0.rounded())) } ?? "--")
-                    .font(.system(size: 34, weight: .semibold, design: .rounded))
+                    .font(.system(.largeTitle, design: .rounded, weight: .semibold))
                     .monospacedDigit()
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Text(stateLabel)
@@ -289,7 +289,7 @@ private struct CoreMetricEnergyReserve: View {
                     .font(.title3.weight(.bold))
                     .foregroundStyle(color)
                 Text(valueText)
-                    .font(.system(size: 34, weight: .semibold, design: .rounded))
+                    .font(.system(.largeTitle, design: .rounded, weight: .semibold))
                     .monospacedDigit()
                     .foregroundStyle(VelaTheme.rhythmInk)
             }

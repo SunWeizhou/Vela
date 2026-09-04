@@ -115,7 +115,7 @@ struct MetricChartSection: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .lastTextBaseline, spacing: 8) {
                     Text(dynamicValueText)
-                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                        .font(.system(.largeTitle, design: .rounded, weight: .bold))
                         .monospacedDigit()
                         .foregroundStyle(VelaTheme.rhythmInk)
 

@@ -224,7 +224,7 @@ struct WorkoutDetailView: View {
             HStack(spacing: 8) {
                 Image(systemName: "waveform.path.ecg")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Color(hex: "#FF5252"))
+                    .foregroundStyle(VelaTheme.heartRateAverage)
                 
                 Text(L10n.t("Heart Rate Fluctuation", "心率波动趋势"))
                     .font(.system(.callout, design: .default, weight: .bold))
@@ -272,12 +272,12 @@ struct WorkoutDetailView: View {
                 Chart {
                     if let averageHeartRate {
                         RuleMark(y: .value("Average", averageHeartRate))
-                            .foregroundStyle(Color(hex: "#FF5252").opacity(0.6))
+                            .foregroundStyle(VelaTheme.heartRateAverage.opacity(0.6))
                             .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [3, 3]))
                             .annotation(position: .trailing, alignment: .center) {
                                 Text(AppLanguage.stored.isChinese ? "均值" : "AVG")
                                     .font(.system(.caption2, design: .default, weight: .bold))
-                                    .foregroundStyle(Color(hex: "#FF5252"))
+                                    .foregroundStyle(VelaTheme.heartRateAverage)
                             }
                     }
 
@@ -290,7 +290,7 @@ struct WorkoutDetailView: View {
                         )
                         .foregroundStyle(
                             LinearGradient(
-                                colors: [Color(hex: "#00C7BE").opacity(0.85), Color(hex: "#30B0C7")],
+                                colors: VelaTheme.heartRateBarGradient,
                                 startPoint: .bottom,
                                 endPoint: .top
                             )
@@ -527,45 +527,19 @@ struct WorkoutDetailView: View {
     private var heartRateZoneSegments: [HeartRateZoneSegment] {
         guard !heartRates.isEmpty else { return [] }
         return [
-            HeartRateZoneSegment(label: L10n.t("Easy", "轻松"), count: heartRates.filter { $0.bpm < 110 }.count, color: Color(hex: "#4DA3FF")),
-            HeartRateZoneSegment(label: L10n.t("Aerobic", "有氧"), count: heartRates.filter { $0.bpm >= 110 && $0.bpm < 140 }.count, color: VelaTheme.systemGreen),
-            HeartRateZoneSegment(label: L10n.t("Tempo", "节奏"), count: heartRates.filter { $0.bpm >= 140 && $0.bpm < 165 }.count, color: VelaTheme.systemOrange),
-            HeartRateZoneSegment(label: L10n.t("Peak", "峰值"), count: heartRates.filter { $0.bpm >= 165 }.count, color: VelaTheme.systemRed)
+            HeartRateZoneSegment(label: L10n.t("Easy", "轻松"), count: heartRates.filter { $0.bpm < 110 }.count, color: VelaTheme.heartRateZoneEasy),
+            HeartRateZoneSegment(label: L10n.t("Aerobic", "有氧"), count: heartRates.filter { $0.bpm >= 110 && $0.bpm < 140 }.count, color: VelaTheme.heartRateZoneAerobic),
+            HeartRateZoneSegment(label: L10n.t("Tempo", "节奏"), count: heartRates.filter { $0.bpm >= 140 && $0.bpm < 165 }.count, color: VelaTheme.heartRateZoneTempo),
+            HeartRateZoneSegment(label: L10n.t("Peak", "峰值"), count: heartRates.filter { $0.bpm >= 165 }.count, color: VelaTheme.heartRateZonePeak)
         ]
     }
 
     private var workoutAccentColor: Color {
-        let lowName = workout.activityName.lowercased()
-        if lowName.contains("run") || lowName.contains("walk") {
-            return Color(hex: "#FF6B35")
-        }
-        if lowName.contains("cycl") {
-            return VelaTheme.systemGreen
-        }
-        if lowName.contains("swim") {
-            return VelaTheme.sleepColor
-        }
-        if lowName.contains("strength") || lowName.contains("lift") || lowName.contains("weight") || lowName.contains("力量") {
-            return Color(hex: "#7B61FF")
-        }
-        return VelaTheme.accent
+        VelaTheme.workoutActivityColor(activityName: workout.activityName)
     }
 
     private var workoutSecondaryColor: Color {
-        let lowName = workout.activityName.lowercased()
-        if lowName.contains("run") || lowName.contains("walk") {
-            return Color(hex: "#FFD166")
-        }
-        if lowName.contains("cycl") {
-            return Color(hex: "#4DA3FF")
-        }
-        if lowName.contains("swim") {
-            return Color(hex: "#7FDBFF")
-        }
-        if lowName.contains("strength") || lowName.contains("lift") || lowName.contains("weight") || lowName.contains("力量") {
-            return Color(hex: "#FF9F7A")
-        }
-        return Color(hex: "#E0A926")
+        VelaTheme.workoutSecondaryColor(activityName: workout.activityName)
     }
     
     private var formattedHomeDate: String {
@@ -745,7 +719,7 @@ struct WorkoutDetailView: View {
                         }
                         GeometryReader { geo in
                             ZStack(alignment: .leading) {
-                                Capsule().fill(Color(hex: "#EFEAE2"))
+                                Capsule().fill(VelaTheme.neutralCapsule)
                                 Capsule()
                                     .fill(muscleColor(muscle))
                                     .frame(width: geo.size.width * CGFloat(Double(sets) / Double(maxSets)))
@@ -775,14 +749,6 @@ struct WorkoutDetailView: View {
     }
 
     private func muscleColor(_ muscle: String) -> Color {
-        switch muscle {
-        case "chest": return Color(hex: "#FF8A65")
-        case "back": return Color(hex: "#4DB6AC")
-        case "quads", "hamstrings", "glutes": return VelaTheme.accent
-        case "shoulders": return VelaTheme.indigo
-        case "biceps", "triceps": return Color(hex: "#AB47BC")
-        case "core": return Color(hex: "#FFCA28")
-        default: return Color(hex: "#90A4AE")
-        }
+        VelaTheme.muscleGroupColor(name: muscle)
     }
 }

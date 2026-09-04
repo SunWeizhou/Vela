@@ -38,8 +38,8 @@ struct DailyDecisionFeedbackCard: View {
                     .foregroundStyle(VelaTheme.muted)
             }
             .padding(14)
-            .background(RoundedRectangle(cornerRadius: 17, style: .continuous).fill(VelaTheme.cardBg))
-            .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.cardBg))
+            .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(record?.isCompleted == true ? "更新今日建议反馈" : "记录今日建议反馈")
@@ -296,7 +296,7 @@ struct VelaRhythmHorizonHero: View {
 
             // Headline
             Text(headline)
-                .font(.system(size: 24, weight: .bold, design: .rounded))
+                .font(.system(.title2, design: .rounded, weight: .bold))
                 .tracking(-0.5)
                 .foregroundStyle(VelaTheme.rhythmInk)
                 .fixedSize(horizontal: false, vertical: true)
@@ -331,12 +331,12 @@ struct VelaRhythmHorizonHero: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 9)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
                         .stroke(Color.white.opacity(0.42), lineWidth: 0.75)
                 }
-                .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous))
             }
             .buttonStyle(.cardPress)
 
@@ -385,11 +385,11 @@ struct VelaRhythmHorizonHero: View {
         }
         .padding(18)
         .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: VelaTheme.radiusHero, style: .continuous)
                 .fill(VelaTheme.rhythmCanvasRaised)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: VelaTheme.radiusHero, style: .continuous)
                 .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         )
         .accessibilityElement(children: .contain)
@@ -486,11 +486,11 @@ struct VelaRhythmHorizonHero: View {
         .padding(.horizontal, 4)
         .frame(maxWidth: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
                 .fill(VelaTheme.rhythmCanvas.opacity(0.65))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
                 .stroke(VelaTheme.rhythmMist.opacity(0.8), lineWidth: 0.75)
         )
     }

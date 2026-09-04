@@ -111,7 +111,7 @@ struct WikiProfileView: View {
                         Capsule()
                             .fill(
                                 LinearGradient(
-                                    colors: [VelaTheme.accent, Color(hex: "#AF52DE")],
+                                    colors: [VelaTheme.accent, VelaTheme.tagPurple],
                                     startPoint: .leading,
                                     endPoint: .trailing
                                 )

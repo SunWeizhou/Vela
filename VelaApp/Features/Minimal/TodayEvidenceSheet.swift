@@ -63,7 +63,7 @@ struct TodayEvidenceSheet: View {
             }
 
             Text(state.bodyStateTitle)
-                .font(.system(size: 34, weight: .semibold))
+                .font(.system(.largeTitle, design: .default, weight: .semibold))
                 .tracking(-0.8)
                 .foregroundStyle(VelaTheme.rhythmInk)
 

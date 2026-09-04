@@ -47,14 +47,14 @@ struct DesertLandscape: View {
         ZStack {
             // Sky gradient
             LinearGradient(
-                colors: [Color(hex: "#D2E7F9"), Color(hex: "#F5E6D8"), Color(hex: "#FFF6E5")],
+                colors: VelaTheme.Landscape.desertSky,
                 startPoint: .top,
                 endPoint: .bottom
             )
             
             // Distant soft orange sun
             Circle()
-                .fill(Color(hex: "#FFDDA1").opacity(0.8))
+                .fill(VelaTheme.Landscape.desertSun.opacity(0.8))
                 .frame(width: 60, height: 60)
                 .blur(radius: 6)
                 .offset(x: -40, y: -20)
@@ -68,7 +68,7 @@ struct DesertLandscape: View {
                 path.addLine(to: CGPoint(x: 0, y: 240))
                 path.closeSubpath()
             }
-            .fill(LinearGradient(colors: [Color(hex: "#EFECE7"), Color(hex: "#E5DFD5")], startPoint: .top, endPoint: .bottom))
+            .fill(LinearGradient(colors: VelaTheme.Landscape.desertDuneFront, startPoint: .top, endPoint: .bottom))
             
             Path { path in
                 path.move(to: CGPoint(x: 160, y: 190))
@@ -77,7 +77,7 @@ struct DesertLandscape: View {
                 path.addLine(to: CGPoint(x: 160, y: 240))
                 path.closeSubpath()
             }
-            .fill(LinearGradient(colors: [Color(hex: "#E9E3D9"), Color(hex: "#DFD7C9")], startPoint: .top, endPoint: .bottom))
+            .fill(LinearGradient(colors: VelaTheme.Landscape.desertDuneBack, startPoint: .top, endPoint: .bottom))
             
             // Joshua Trees Vector Outline on the right
             MinimalistJoshuaTree(xOffset: 120, scale: 0.85)
@@ -91,7 +91,7 @@ struct NightLandscape: View {
         ZStack {
             // Midnight sky gradient
             LinearGradient(
-                colors: [Color(hex: "#090814"), Color(hex: "#0F0D24"), Color(hex: "#1B173B")],
+                colors: VelaTheme.Landscape.nightSky,
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -106,7 +106,7 @@ struct NightLandscape: View {
             
             // Soft moon
             Circle()
-                .fill(Color(hex: "#F5F3ED").opacity(0.12))
+                .fill(VelaTheme.Landscape.nightMoon.opacity(0.12))
                 .frame(width: 80, height: 80)
                 .blur(radius: 4)
                 .offset(x: -120, y: -40)
@@ -122,7 +122,7 @@ struct NightLandscape: View {
                 path.addLine(to: CGPoint(x: 0, y: 240))
                 path.closeSubpath()
             }
-            .fill(LinearGradient(colors: [Color(hex: "#0D0A1E"), Color(hex: "#05030B")], startPoint: .top, endPoint: .bottom))
+            .fill(LinearGradient(colors: VelaTheme.Landscape.nightMountainFront, startPoint: .top, endPoint: .bottom))
             
             Path { path in
                 path.move(to: CGPoint(x: 80, y: 185))
@@ -132,7 +132,7 @@ struct NightLandscape: View {
                 path.addLine(to: CGPoint(x: 80, y: 240))
                 path.closeSubpath()
             }
-            .fill(LinearGradient(colors: [Color(hex: "#0A0818"), Color(hex: "#030206")], startPoint: .top, endPoint: .bottom))
+            .fill(LinearGradient(colors: VelaTheme.Landscape.nightMountainBack, startPoint: .top, endPoint: .bottom))
         }
     }
 }
@@ -142,7 +142,7 @@ struct CoastalLandscape: View {
         ZStack {
             // Calm Sky
             LinearGradient(
-                colors: [Color(hex: "#E4F0FB"), Color(hex: "#FFF4ED"), Color(hex: "#FFF1DB")],
+                colors: VelaTheme.Landscape.coastalSky,
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -164,7 +164,7 @@ struct CoastalLandscape: View {
                 path.addLine(to: CGPoint(x: 400, y: 240))
                 path.closeSubpath()
             }
-            .fill(LinearGradient(colors: [Color(hex: "#9AB2C5"), Color(hex: "#7A92A5")], startPoint: .top, endPoint: .bottom))
+            .fill(LinearGradient(colors: VelaTheme.Landscape.coastalCliff, startPoint: .top, endPoint: .bottom))
             
             // Coastal waves at bottom
             Path { path in
@@ -175,7 +175,7 @@ struct CoastalLandscape: View {
                 path.addLine(to: CGPoint(x: 0, y: 240))
                 path.closeSubpath()
             }
-            .fill(LinearGradient(colors: [Color(hex: "#90D1DB"), Color(hex: "#5DB8CA"), Color(hex: "#349BB0")], startPoint: .top, endPoint: .bottom))
+            .fill(LinearGradient(colors: VelaTheme.Landscape.coastalWaves, startPoint: .top, endPoint: .bottom))
         }
     }
 }
@@ -184,7 +184,7 @@ struct ForestLandscape: View {
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [Color(hex: "#E3F3EA"), Color(hex: "#FFFEE8")],
+                colors: VelaTheme.Landscape.forestSky,
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -197,7 +197,7 @@ struct ForestLandscape: View {
                 path.addLine(to: CGPoint(x: 0, y: 240))
                 path.closeSubpath()
             }
-            .fill(LinearGradient(colors: [Color(hex: "#84B094"), Color(hex: "#5C8C6F")], startPoint: .top, endPoint: .bottom))
+            .fill(LinearGradient(colors: VelaTheme.Landscape.forestSilhouette, startPoint: .top, endPoint: .bottom))
         }
     }
 }
@@ -206,7 +206,7 @@ struct MeadowLandscape: View {
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [Color(hex: "#D6F2FE"), Color(hex: "#FFF4CE")],
+                colors: VelaTheme.Landscape.meadowSky,
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -218,7 +218,7 @@ struct MeadowLandscape: View {
                 path.addLine(to: CGPoint(x: 0, y: 240))
                 path.closeSubpath()
             }
-            .fill(LinearGradient(colors: [Color(hex: "#D6BF74"), Color(hex: "#BFA456")], startPoint: .top, endPoint: .bottom))
+            .fill(LinearGradient(colors: VelaTheme.Landscape.meadowHills, startPoint: .top, endPoint: .bottom))
         }
     }
 }
@@ -227,7 +227,7 @@ struct MountainLakeLandscape: View {
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [Color(hex: "#DDF4FE"), Color(hex: "#ECE8FF")],
+                colors: VelaTheme.Landscape.mountainLakeSky,
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -240,7 +240,7 @@ struct MountainLakeLandscape: View {
                 path.addLine(to: CGPoint(x: 0, y: 240))
                 path.closeSubpath()
             }
-            .fill(LinearGradient(colors: [Color(hex: "#87BAC5"), Color(hex: "#6A9AA5")], startPoint: .top, endPoint: .bottom))
+            .fill(LinearGradient(colors: VelaTheme.Landscape.mountainLakePeaks, startPoint: .top, endPoint: .bottom))
         }
     }
 }
@@ -249,7 +249,7 @@ struct CalmSunsetLandscape: View {
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [Color(hex: "#FFE4D5"), Color(hex: "#FFC8B3")],
+                colors: VelaTheme.Landscape.sunsetSky,
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -261,7 +261,7 @@ struct CalmSunsetLandscape: View {
                 path.addLine(to: CGPoint(x: 0, y: 240))
                 path.closeSubpath()
             }
-            .fill(LinearGradient(colors: [Color(hex: "#E89B7D"), Color(hex: "#0A84FF")], startPoint: .top, endPoint: .bottom))
+            .fill(LinearGradient(colors: VelaTheme.Landscape.sunsetWaves, startPoint: .top, endPoint: .bottom))
         }
     }
 }
@@ -293,22 +293,22 @@ struct MinimalistJoshuaTree: View {
                 path.addLine(to: CGPoint(x: startX + (12 * scale), y: startY - (45 * scale)))
                 path.addLine(to: CGPoint(x: startX + (12 * scale), y: startY - (60 * scale)))
             }
-            .stroke(Color(hex: "#4A433A"), style: StrokeStyle(lineWidth: 3.5 * scale, lineCap: .round, lineJoin: .round))
+            .stroke(VelaTheme.Landscape.joshuaTrunk, style: StrokeStyle(lineWidth: 3.5 * scale, lineCap: .round, lineJoin: .round))
             
             // Foliage pom-poms (vector circles)
             Group {
                 Circle()
-                    .fill(Color(hex: "#5E6D59"))
+                    .fill(VelaTheme.Landscape.joshuaFoliage)
                     .frame(width: 14 * scale, height: 14 * scale)
                     .position(x: startX, y: startY - (45 * scale))
                 
                 Circle()
-                    .fill(Color(hex: "#5E6D59"))
+                    .fill(VelaTheme.Landscape.joshuaFoliage)
                     .frame(width: 12 * scale, height: 12 * scale)
                     .position(x: startX - (15 * scale), y: startY - (55 * scale))
                 
                 Circle()
-                    .fill(Color(hex: "#5E6D59"))
+                    .fill(VelaTheme.Landscape.joshuaFoliage)
                     .frame(width: 13 * scale, height: 13 * scale)
                     .position(x: startX + (12 * scale), y: startY - (60 * scale))
             }

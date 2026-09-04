@@ -450,7 +450,7 @@ struct VelaMetricDetailView: View {
                                 .font(.system(size: 17, weight: .semibold))
                                 .foregroundStyle(metricColor)
                             Text(dynamicValueText)
-                                .font(.system(size: 30, weight: .bold, design: .rounded))
+                                .font(.system(.title, design: .rounded, weight: .bold))
                                 .monospacedDigit()
                                 .foregroundStyle(VelaTheme.rhythmInk)
                             Text(stressBandLabel(dashboard.stress.band))
@@ -470,7 +470,7 @@ struct VelaMetricDetailView: View {
                                     .font(.system(size: 16, weight: .semibold))
                                     .foregroundStyle(metricColor)
                                 Text(dynamicValueText)
-                                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                                    .font(.system(.title2, design: .rounded, weight: .bold))
                                     .monospacedDigit()
                                     .foregroundStyle(VelaTheme.rhythmInk)
                             }
@@ -914,7 +914,7 @@ struct DigitalTwinSimulatorCard: View {
                         .font(.caption)
                         .foregroundStyle(VelaTheme.muted)
                     Text("\(Int(simulationResult.predictedNextDayRecovery.rounded()))%")
-                        .font(.system(size: 26, weight: .black, design: .rounded))
+                        .font(.system(.title2, design: .rounded, weight: .black))
                         .foregroundStyle(simulationResult.predictedNextDayRecovery >= 66 ? VelaTheme.systemGreen : (simulationResult.predictedNextDayRecovery >= 34 ? VelaTheme.systemYellow : VelaTheme.systemRed))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -926,7 +926,7 @@ struct DigitalTwinSimulatorCard: View {
                         .font(.caption)
                         .foregroundStyle(VelaTheme.muted)
                     Text("\(Int(simulationResult.predictedEnergyScore.rounded()))%")
-                        .font(.system(size: 26, weight: .black, design: .rounded))
+                        .font(.system(.title2, design: .rounded, weight: .black))
                         .foregroundStyle(VelaTheme.accent)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1050,7 +1050,7 @@ struct LongTermHealthTrendView: View {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("三年健康轨迹")
-                        .font(.system(size: 28, weight: .semibold))
+                        .font(.system(.title, design: .default, weight: .semibold))
                         .tracking(-0.65)
                         .foregroundStyle(VelaTheme.rhythmInk)
                     Text("来自 Apple 健康的历史原始数据，按月均值呈现")

@@ -260,7 +260,7 @@ struct DataSourceSettingsView: View {
                         desc: "最大摄氧量、体重、体脂率、去脂体重、血氧和腕温。",
                         impact: "用于长期趋势、体能变化和恢复异常解释。",
                         action: "授权体能数据",
-                        color: Color(hex: "#AF52DE")
+                        color: VelaTheme.tagPurple
                     )
  
                     tierRequestCard(
@@ -608,7 +608,7 @@ struct CGMSettingsView: View {
             if let latest = summary.latestReading {
                 HStack(alignment: .lastTextBaseline, spacing: 6) {
                     Text(latest.milligramsPerDeciliter.formatted(.number.precision(.fractionLength(0))))
-                        .font(.system(size: 42, weight: .bold, design: .rounded))
+                        .font(.system(.largeTitle, design: .rounded, weight: .bold))
                         .foregroundStyle(VelaTheme.fg)
                     Text("mg/dL")
                         .font(.system(.footnote, design: .default, weight: .bold))

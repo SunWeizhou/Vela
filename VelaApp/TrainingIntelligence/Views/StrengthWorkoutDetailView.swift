@@ -117,7 +117,7 @@ struct StrengthWorkoutDetailView: View {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 7) {
                         Text(workout.title)
-                            .font(.system(size: 30, weight: .bold, design: .rounded))
+                            .font(.system(.title, design: .rounded, weight: .bold))
                             .foregroundStyle(bodyTextColor)
                         Text(workout.startedAt.formatted(date: .abbreviated, time: .shortened))
                             .font(.system(.footnote, design: .rounded, weight: .medium))
@@ -128,7 +128,7 @@ struct StrengthWorkoutDetailView: View {
                         .font(.system(size: 22, weight: .semibold))
                         .foregroundStyle(accentColor)
                         .frame(width: 46, height: 46)
-                        .background(Circle().fill(Color(hex: "#EAF3FF")))
+                        .background(Circle().fill(VelaTheme.lightBlueSoft))
                 }
 
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
@@ -166,7 +166,7 @@ struct StrengthWorkoutDetailView: View {
                         ForEach(Array(analysis.personalRecords.prefix(3))) { record in
                             HStack {
                                 Image(systemName: "trophy.fill")
-                                    .foregroundStyle(Color(hex: "#D89B28"))
+                                    .foregroundStyle(VelaTheme.softGold)
                                 Text(record.summary)
                                     .font(.system(.caption, design: .rounded, weight: .bold))
                                     .foregroundStyle(bodyTextColor)
@@ -212,7 +212,7 @@ struct StrengthWorkoutDetailView: View {
                             }
                             GeometryReader { geo in
                                 ZStack(alignment: .leading) {
-                                    Capsule().fill(Color(hex: "#EFEAE2"))
+                                    Capsule().fill(VelaTheme.neutralCapsule)
                                     Capsule()
                                         .fill(muscleColor(muscle))
                                         .frame(width: geo.size.width * CGFloat(Double(sets) / Double(maxSets)))
@@ -488,15 +488,7 @@ struct StrengthWorkoutDetailView: View {
     }
 
     private func muscleColor(_ muscle: String) -> Color {
-        switch muscle {
-        case "chest": return Color(hex: "#FF8A65")
-        case "back": return Color(hex: "#4DB6AC")
-        case "quads", "hamstrings", "glutes": return Color(hex: "#66BB6A")
-        case "shoulders": return VelaTheme.indigo
-        case "biceps", "triceps": return Color(hex: "#AB47BC")
-        case "core": return Color(hex: "#FFCA28")
-        default: return Color(hex: "#90A4AE")
-        }
+        VelaTheme.muscleGroupColor(name: muscle)
     }
 }
 

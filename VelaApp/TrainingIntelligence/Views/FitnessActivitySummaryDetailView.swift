@@ -124,13 +124,13 @@ struct FitnessActivitySummaryDetailView: View {
                             .tracking(0.5)
                         HStack(alignment: .firstTextBaseline, spacing: 4) {
                             Text("\(workoutMinutes / 60)")
-                                .font(.system(size: 42, weight: .bold, design: .rounded))
+                                .font(.system(.largeTitle, design: .rounded, weight: .bold))
                                 .foregroundStyle(VelaTheme.fg)
                             Text("小时")
                                 .font(.system(.callout, design: .rounded, weight: .semibold))
                                 .foregroundStyle(VelaTheme.fg2)
                             Text("\(workoutMinutes % 60)")
-                                .font(.system(size: 42, weight: .bold, design: .rounded))
+                                .font(.system(.largeTitle, design: .rounded, weight: .bold))
                                 .foregroundStyle(VelaTheme.fg)
                             Text("分钟")
                                 .font(.system(.callout, design: .rounded, weight: .semibold))
@@ -198,7 +198,7 @@ struct FitnessActivitySummaryDetailView: View {
                     Spacer()
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(averageWorkoutHeartRate.map { "\(Int($0.rounded()))" } ?? "--")
-                            .font(.system(size: 26, weight: .bold, design: .rounded))
+                            .font(.system(.title2, design: .rounded, weight: .bold))
                             .foregroundStyle(VelaTheme.fg)
                         Text("bpm 平均")
                             .font(.system(.caption2, design: .default, weight: .bold))
@@ -528,7 +528,7 @@ struct WorkoutHeartRateRibbonView: View {
                 }
                 .stroke(
                     LinearGradient(
-                        colors: [Color(hex: "#FF7043"), Color(hex: "#EF5350"), Color(hex: "#AB47BC")],
+                        colors: [VelaTheme.tagOrange, VelaTheme.heartRateZonePeak, VelaTheme.tagPurple],
                         startPoint: .leading,
                         endPoint: .trailing
                     ),
@@ -543,7 +543,7 @@ struct WorkoutHeartRateRibbonView: View {
                         Circle()
                             .fill(VelaTheme.cardBg)
                             .frame(width: 7, height: 7)
-                            .overlay(Circle().stroke(Color(hex: "#EF5350"), lineWidth: 1.5))
+                            .overlay(Circle().stroke(VelaTheme.heartRateZonePeak, lineWidth: 1.5))
                             .position(x: x, y: y)
                     }
                 }

@@ -30,11 +30,11 @@ struct SleepClockWheelView: View {
         ZStack {
             // Dial background
             Circle()
-                .fill(Color(hex: "#100F0D").opacity(0.8))
+                .fill(VelaTheme.sleepClockFace.opacity(0.8))
                 .frame(width: 170, height: 170)
                 .overlay(
                     Circle()
-                        .stroke(Color(hex: "#2E2B25"), style: StrokeStyle(lineWidth: 1.5, dash: [4, 6]))
+                        .stroke(VelaTheme.sleepClockRing, style: StrokeStyle(lineWidth: 1.5, dash: [4, 6]))
                 )
             
             // Hour markings around the circle (12am, 6am, 12pm, 6pm)
@@ -48,7 +48,7 @@ struct SleepClockWheelView: View {
                 let deg = Double(idx) * 30.0 - 90.0
                 let r = 76.0
                 Circle()
-                    .fill(Color(hex: "#2E2B25"))
+                    .fill(VelaTheme.sleepClockRing)
                     .frame(width: 2.5, height: 2.5)
                     .offset(x: r * cos(deg * .pi / 180), y: r * sin(deg * .pi / 180))
             }
@@ -57,7 +57,7 @@ struct SleepClockWheelView: View {
             Circle()
                 .trim(from: 0.0, to: sleepDurationFraction)
                 .stroke(
-                    LinearGradient(colors: [VelaTheme.sleepColor, Color(hex: "#87BAC5")], startPoint: .top, endPoint: .bottom),
+                    LinearGradient(colors: [VelaTheme.sleepColor, VelaTheme.sleepClockWakePill], startPoint: .top, endPoint: .bottom),
                     style: StrokeStyle(lineWidth: 7.5, lineCap: .round)
                 )
                 .frame(width: 140, height: 140)
@@ -72,7 +72,7 @@ struct SleepClockWheelView: View {
                 
                 Image(systemName: "sun.max.fill")
                     .font(.system(size: 12))
-                    .foregroundStyle(Color(hex: "#D6BF74"))
+                    .foregroundStyle(VelaTheme.sleepClockBedPill)
             }
             .offset(y: -4)
 
@@ -81,7 +81,7 @@ struct SleepClockWheelView: View {
                 .offset(x: 70 * cos((bedtimeAngle - 90.0) * .pi / 180), y: 70 * sin((bedtimeAngle - 90.0) * .pi / 180))
             
             // Wake Indicator Icon overlay (clock)
-            dialIndicatorPill(icon: "alarm.fill", color: Color(hex: "#87BAC5"))
+            dialIndicatorPill(icon: "alarm.fill", color: VelaTheme.sleepClockWakePill)
                 .offset(x: 70 * cos((wakeAngle - 90.0) * .pi / 180), y: 70 * sin((wakeAngle - 90.0) * .pi / 180))
         }
         .overlay(alignment: .bottom) {

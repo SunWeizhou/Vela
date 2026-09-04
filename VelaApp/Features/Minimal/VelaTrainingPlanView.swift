@@ -150,7 +150,7 @@ struct VelaPlanView: View {
                 Spacer(minLength: 16)
                 HStack(alignment: .firstTextBaseline, spacing: 2) {
                     Text("\(completedCount)")
-                        .font(.system(size: 34, weight: .semibold, design: .rounded).monospacedDigit())
+                        .font(.system(.largeTitle, design: .rounded, weight: .semibold).monospacedDigit())
                         .foregroundStyle(VelaTheme.rhythmInk)
                     Text("/\(total)")
                         .font(.system(.footnote, design: .rounded, weight: .semibold))
@@ -864,7 +864,7 @@ struct VelaTrainingRotationView: View {
     private var planHero: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(activePlan?.title ?? "建立可调整的训练轮转")
-                .font(.system(size: 32, weight: .semibold))
+                .font(.system(.title, design: .default, weight: .semibold))
                 .tracking(-0.8)
                 .foregroundStyle(VelaTheme.rhythmInk)
                 .fixedSize(horizontal: false, vertical: true)

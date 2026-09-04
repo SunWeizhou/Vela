@@ -317,7 +317,7 @@ struct TrainingStatsSection: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(targetComparison.valueText)
-                                .font(.system(size: 26, weight: .bold, design: .rounded))
+                                .font(.system(.title2, design: .rounded, weight: .bold))
                                 .foregroundStyle(VelaTheme.rhythmInk)
                             Text(dynamicExertionWorkload.isEmpty ? "暂无耗力记录" : targetComparison.contextText)
                                 .font(.system(.caption, design: .default, weight: .bold))
@@ -357,7 +357,7 @@ struct TrainingStatsSection: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(totalWorkoutDurationText)
-                                .font(.system(size: 26, weight: .bold, design: .rounded))
+                                .font(.system(.title2, design: .rounded, weight: .bold))
                                 .foregroundStyle(VelaTheme.rhythmInk)
                             Text("过去 30 天耗力趋势")
                                 .font(.system(.caption, design: .default, weight: .medium))

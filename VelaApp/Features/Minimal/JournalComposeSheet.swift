@@ -157,7 +157,7 @@ struct CaffeineLoggerView: View {
                     VStack(spacing: 12) {
                         HStack(alignment: .firstTextBaseline) {
                             Text("\(Int(customAmount))")
-                                .font(.system(size: 48, weight: .black, design: .rounded))
+                                .font(.system(.largeTitle, design: .rounded, weight: .black))
                                 .foregroundStyle(VelaTheme.accent)
                             Text("mg")
                                 .font(.system(.body, design: .default, weight: .bold))

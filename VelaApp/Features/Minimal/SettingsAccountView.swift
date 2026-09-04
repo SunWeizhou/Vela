@@ -292,7 +292,7 @@ struct UserWikiArchiveView: View {
                                     Spacer()
                                     Text("更新于: \(formatDate(doc.updatedAt))")
                                         .font(.system(.caption2, design: .default))
-                                        .foregroundStyle(Color(hex: "#C7C7CC"))
+                                        .foregroundStyle(VelaTheme.meta)
                                 }
                             }
                             .padding(16)

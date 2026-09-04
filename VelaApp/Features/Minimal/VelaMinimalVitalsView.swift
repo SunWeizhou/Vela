@@ -212,7 +212,7 @@ struct VelaVitalsView: View {
                     HStack(alignment: .center, spacing: 18) {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(isPhenoAge ? String(format: "%.1f", result.biologicalAge) : "\(Int(result.overallScore.rounded()))")
-                                .font(.system(size: 34, weight: .bold, design: .rounded))
+                                .font(.system(.largeTitle, design: .rounded, weight: .bold))
                                 .foregroundStyle(VelaTheme.rhythmInk)
                             Text(isPhenoAge ? "岁（估算）" : "信号评分")
                                 .font(.system(.caption2, design: .default, weight: .semibold))
@@ -742,7 +742,7 @@ struct GaugeScaleArcView: View {
             ForEach(0..<41) { tick in
                 let angle = 144 + (Double(tick) * 6.3) // Map 41 ticks around the arc
                 Rectangle()
-                    .fill(Color(hex: "#D5D0C8"))
+                    .fill(VelaTheme.lightMistFill)
                     .frame(width: tick % 5 == 0 ? 8 : 4, height: 1)
                     .offset(x: (size / 2) - 8)
                     .rotationEffect(.degrees(angle))

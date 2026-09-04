@@ -1352,12 +1352,12 @@ struct TrainingAnalysisPortal: View {
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
         }
         .padding(15)
-        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 23, style: .continuous))
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 23, style: .continuous)
+            RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
                 .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         }
-        .contentShape(RoundedRectangle(cornerRadius: 23, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
     }
 }
 
@@ -1477,12 +1477,12 @@ struct TrainingProposalPortal: View {
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
         }
         .padding(14)
-        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 23, style: .continuous))
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 23, style: .continuous)
+            RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
                 .stroke(proposals.isEmpty ? VelaTheme.rhythmMist : VelaTheme.rhythmDeep.opacity(0.35), lineWidth: 0.75)
         }
-        .contentShape(RoundedRectangle(cornerRadius: 23, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
     }
 
     private var previewLine: String {
@@ -1578,12 +1578,12 @@ struct TrainingPlanPortal: View {
             }
         }
         .padding(15)
-        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 23, style: .continuous))
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 23, style: .continuous)
+            RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
                 .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         }
-        .contentShape(RoundedRectangle(cornerRadius: 23, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
     }
 
     /// 计划训练日序列条：完成=实心勾、今天=描边、未来=弱化，最多 7 个 + 溢出计数。
@@ -1744,9 +1744,9 @@ struct TrainingStatusSection: View {
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 15)
-            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 23, style: .continuous))
+            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 23, style: .continuous)
+                RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
                     .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
             }
         }
@@ -1977,12 +1977,12 @@ struct TrainingHistoryPortal: View {
                 .foregroundStyle(VelaTheme.rhythmInkSecondary)
         }
         .padding(14)
-        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 23, style: .continuous))
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 23, style: .continuous)
+            RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
                 .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         }
-        .contentShape(RoundedRectangle(cornerRadius: 23, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous))
     }
 
     private var previewLine: String {

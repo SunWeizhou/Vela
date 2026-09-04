@@ -54,7 +54,7 @@ struct ProactiveInsight: Identifiable, Hashable {
             case .readiness: return VelaTheme.accent
             case .recovery: return VelaTheme.recoveryColor
             case .sleep: return VelaTheme.indigo
-            case .training: return Color(hex: "#FF8A3D")
+            case .training: return VelaTheme.tagOrange
             case .energy: return VelaTheme.energyColor
             case .movement: return VelaTheme.systemGreen
             case .stress: return VelaTheme.stressColor

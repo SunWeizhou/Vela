@@ -633,7 +633,7 @@ struct PostWorkoutCheckInSheet: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("训练后复盘")
-                .font(.system(size: 26, weight: .bold, design: .rounded))
+                .font(.system(.title2, design: .rounded, weight: .bold))
                 .tracking(-0.6)
                 .foregroundStyle(VelaTheme.rhythmInk)
         }

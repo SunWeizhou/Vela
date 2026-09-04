@@ -199,11 +199,11 @@ struct VelaTodayView: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
                 .fill(VelaTheme.rhythmCanvasRaised)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
                 .stroke(VelaTheme.rhythmDeep.opacity(0.35), lineWidth: 1.0)
         }
     }
@@ -377,9 +377,9 @@ struct VelaTodayView: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusCard, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
             .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: VelaTheme.radiusCard, style: .continuous)
                     .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
             )
             .padding(.horizontal, VelaTheme.pagePadding)
@@ -422,9 +422,9 @@ struct VelaTodayView: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
             .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
                     .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
             )
         } else {
@@ -451,9 +451,9 @@ struct VelaTodayView: View {
                         .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.6))
                 }
                 .padding(12)
-                .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: VelaTheme.radiusCard, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: VelaTheme.radiusCard, style: .continuous)
                         .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
                 }
             }
@@ -535,9 +535,9 @@ struct VelaTodayView: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
+            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusCard, style: .continuous).fill(VelaTheme.rhythmCanvasRaised))
             .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: VelaTheme.radiusCard, style: .continuous)
                     .stroke(VelaTheme.stressColor.opacity(0.3), lineWidth: 1)
             )
         }

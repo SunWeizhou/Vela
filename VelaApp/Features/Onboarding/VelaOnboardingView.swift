@@ -126,7 +126,7 @@ struct VelaOnboardingView: View {
                     .foregroundStyle(VelaTheme.rhythmDeep)
 
                 Text(L10n.t("See your body before judging your willpower.", "先看见身体，再决定今天。"))
-                    .font(.system(size: 38, weight: .semibold, design: .default))
+                    .font(.system(.largeTitle, design: .default, weight: .semibold))
                     .tracking(-1.1)
                     .foregroundStyle(VelaTheme.rhythmInk)
                     .fixedSize(horizontal: false, vertical: true)
@@ -153,7 +153,7 @@ struct VelaOnboardingView: View {
                     .foregroundStyle(VelaTheme.rhythmDeep)
 
                 Text("Agent 解释，你做决定。")
-                    .font(.system(size: 30, weight: .semibold))
+                    .font(.system(.title, design: .default, weight: .semibold))
                     .tracking(-0.6)
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Text("分数先在本机计算；联网 Agent 只接收你允许的类别。")
@@ -203,7 +203,7 @@ struct VelaOnboardingView: View {
                     .foregroundStyle(VelaTheme.rhythmDeep)
 
                 Text("连接 Apple 健康")
-                    .font(.system(size: 30, weight: .semibold))
+                    .font(.system(.title, design: .default, weight: .semibold))
                     .tracking(-0.6)
                     .foregroundStyle(VelaTheme.rhythmInk)
                 Text("允许读取的信号会在本机形成五项分数和你的个人基线。")

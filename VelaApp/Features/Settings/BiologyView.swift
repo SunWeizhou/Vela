@@ -121,7 +121,7 @@ struct BiologyView: View {
                     ? L10n.t("Biological Age Estimate", "生物年龄估算")
                     : L10n.t("Health Signal Reference", "健康信号参考")
                 )
-                .font(.system(size: 26, weight: .bold, design: .rounded))
+                .font(.system(.title2, design: .rounded, weight: .bold))
                 .foregroundStyle(VelaTheme.fg)
                 Text(L10n.t("BIOLOGY DASHBOARD", "生物特征仪表盘"))
                     .font(.system(.caption2, design: .default, weight: .bold))
@@ -357,7 +357,7 @@ struct BiologyView: View {
                 VStack(spacing: 2) {
                     if result.isPhenoAge {
                         Text(String(format: "%.1f", result.biologicalAge))
-                            .font(.system(size: 40, weight: .black, design: .rounded))
+                            .font(.system(.largeTitle, design: .rounded, weight: .black))
                             .foregroundStyle(VelaTheme.fg)
                             .monospacedDigit()
 
@@ -376,7 +376,7 @@ struct BiologyView: View {
                         .padding(.top, 4)
                     } else {
                         Text(result.healthAgeTrendLabel)
-                            .font(.system(size: 28, weight: .black, design: .rounded))
+                            .font(.system(.title, design: .rounded, weight: .black))
                             .foregroundStyle(VelaTheme.fg)
 
                         Text(L10n.t("Health Signal Reference", "健康信号参考"))
@@ -774,7 +774,7 @@ struct StatGridCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .lastTextBaseline, spacing: 2) {
                     Text(value)
-                        .font(.system(size: 26, weight: .bold, design: .rounded))
+                        .font(.system(.title2, design: .rounded, weight: .bold))
                         .foregroundStyle(VelaTheme.fg)
 
                     Text(unit)
@@ -825,7 +825,7 @@ struct FactorRowView: View {
                     .foregroundStyle(factor.isOptimal ? VelaTheme.recoveryColor : VelaTheme.stressColor)
 
                 Text(L10n.t("Score", "得分"))
-                    .font(.system(size: 8))
+                    .font(.system(.caption2, design: .default))
                     .foregroundStyle(VelaTheme.muted)
             }
         }
@@ -860,7 +860,7 @@ struct BiomarkerBadgeView: View {
                         .lineLimit(1)
 
                     Text(biomarker.unit)
-                        .font(.system(size: 8, weight: .semibold))
+                        .font(.system(.caption2, design: .default, weight: .semibold))
                         .foregroundStyle(VelaTheme.muted)
                         .minimumScaleFactor(0.7)
                         .lineLimit(1)
@@ -876,7 +876,7 @@ struct BiomarkerBadgeView: View {
 
             if isFavorite {
                 Label(L10n.t("Favorite", "已收藏"), systemImage: "star.fill")
-                    .font(.system(size: 8, weight: .bold))
+                    .font(.system(.caption2, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.energyColor)
             }
         }

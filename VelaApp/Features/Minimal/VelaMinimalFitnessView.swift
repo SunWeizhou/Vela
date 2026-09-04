@@ -443,7 +443,7 @@ struct VelaTrainingView: View {
     private var fitnessHeader: some View {
         HStack {
             Text("训练")
-                .font(.system(size: 24, weight: .semibold))
+                .font(.system(.title2, design: .default, weight: .semibold))
                 .tracking(-0.4)
                 .foregroundStyle(VelaTheme.rhythmInk)
 
@@ -1152,7 +1152,7 @@ private struct TrainingDeepAnalysisView: View {
             LazyVStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("训练事实，而不是评分")
-                        .font(.system(size: 28, weight: .semibold))
+                        .font(.system(.title, design: .default, weight: .semibold))
                         .tracking(-0.65)
                         .foregroundStyle(VelaTheme.rhythmInk)
                 }

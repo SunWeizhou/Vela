@@ -221,7 +221,7 @@ struct PersonalExperimentCard: View {
                     .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(width: 38, height: 38)
-                    .background(RoundedRectangle(cornerRadius: 11).fill(Color(hex: "#6657C8")))
+                    .background(RoundedRectangle(cornerRadius: VelaTheme.radiusSm).fill(VelaTheme.tagIndigo))
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(experiment?.title ?? "开始一个个人实验")

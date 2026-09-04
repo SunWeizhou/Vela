@@ -183,6 +183,127 @@ enum VelaTheme {
     /// 能量 Energy — gold
     static let energyColor   = adaptive("#B47C18", "#F2BC4D")
 
+    // MARK: - Workout & Physiology Tokens
+
+    /// 心率均值线与强调色
+    static let heartRateAverage = adaptive("#FF5252", "#FF6B6B")
+    /// 心率区间：轻松（蓝）
+    static let heartRateZoneEasy = adaptive("#4DA3FF", "#68B4FF")
+    /// 心率区间：有氧（绿）
+    static let heartRateZoneAerobic = systemGreen
+    /// 心率区间：节奏（橙）
+    static let heartRateZoneTempo = systemOrange
+    /// 心率区间：峰值（红）
+    static let heartRateZonePeak = systemRed
+    /// 心率柱状图渐变
+    static let heartRateBarGradient = [
+        adaptive("#00C7BE", "#2ED6CD").opacity(0.85),
+        adaptive("#30B0C7", "#4CC3D9")
+    ]
+
+    /// 运动类型主要强调色
+    static func workoutActivityColor(activityName: String) -> Color {
+        let low = activityName.lowercased()
+        if low.contains("run") || low.contains("walk") {
+            return adaptive("#FF6B35", "#FF8555")
+        }
+        if low.contains("cycl") {
+            return systemGreen
+        }
+        if low.contains("swim") {
+            return sleepColor
+        }
+        if low.contains("strength") || low.contains("lift") || low.contains("weight") || low.contains("力量") {
+            return adaptive("#7B61FF", "#9985FF")
+        }
+        return accent
+    }
+
+    /// 运动类型次要强调色
+    static func workoutSecondaryColor(activityName: String) -> Color {
+        let low = activityName.lowercased()
+        if low.contains("run") || low.contains("walk") {
+            return adaptive("#FFD166", "#FFE08A")
+        }
+        if low.contains("cycl") {
+            return adaptive("#4DA3FF", "#68B4FF")
+        }
+        if low.contains("swim") {
+            return adaptive("#7FDBFF", "#9CE5FF")
+        }
+        if low.contains("strength") || low.contains("lift") || low.contains("weight") || low.contains("力量") {
+            return adaptive("#FF9F7A", "#FFB599")
+        }
+        return adaptive("#E0A926", "#F2C04B")
+    }
+
+    /// 肌群图谱语义色
+    static func muscleGroupColor(name: String) -> Color {
+        switch name.lowercased() {
+        case "chest": return adaptive("#FF8A65", "#FFA285")
+        case "back": return adaptive("#4DB6AC", "#6ECAC1")
+        case "quads", "hamstrings", "glutes", "legs": return adaptive("#66BB6A", "#81C784")
+        case "biceps", "triceps", "arms": return adaptive("#AB47BC", "#BA68C8")
+        case "core", "abs": return adaptive("#FFCA28", "#FFD54F")
+        default: return adaptive("#90A4AE", "#B0BEC5")
+        }
+    }
+
+    // MARK: - Clock & Feature Specific Tokens
+
+    static let sleepClockFace = adaptive("#100F0D", "#100F0D")
+    static let sleepClockRing = adaptive("#2E2B25", "#3D3930")
+    static let sleepClockWakePill = adaptive("#87BAC5", "#A0CBD4")
+    static let sleepClockBedPill = adaptive("#D6BF74", "#E0CE8E")
+
+    static let caffeineTagColor = adaptive("#8B5A2B", "#A46D38")
+    static let tagPurple = adaptive("#AF52DE", "#BF6EE5")
+    static let tagIndigo = adaptive("#6657C8", "#8275D9")
+    static let tagOrange = adaptive("#FF8A3D", "#FFA25C")
+    static let neutralCapsule = adaptive("#EFEAE2", "#242826")
+    static let softGold = adaptive("#D89B28", "#E6B043")
+    static let lightMistFill = adaptive("#D5D0C8", "#3A423E")
+    static let lightBlueSoft = adaptive("#EAF3FF", "#1C2938")
+
+    // MARK: - Landscape Illustration Palette
+
+    enum Landscape {
+        // Desert
+        static let desertSky = [adaptive("#D2E7F9", "#1B2836"), adaptive("#F5E6D8", "#2E241E"), adaptive("#FFF6E5", "#3D3025")]
+        static let desertSun = adaptive("#FFDDA1", "#FFDDA1")
+        static let desertDuneFront = [adaptive("#EFECE7", "#3B3832"), adaptive("#E5DFD5", "#2D2A24")]
+        static let desertDuneBack = [adaptive("#E9E3D9", "#35312A"), adaptive("#DFD7C9", "#28241E")]
+        static let joshuaTrunk = adaptive("#4A433A", "#8A8074")
+        static let joshuaFoliage = adaptive("#5E6D59", "#7D9176")
+
+        // Night
+        static let nightSky = [adaptive("#090814", "#090814"), adaptive("#0F0D24", "#0F0D24"), adaptive("#1B173B", "#1B173B")]
+        static let nightMoon = adaptive("#F5F3ED", "#F5F3ED")
+        static let nightMountainFront = [adaptive("#0D0A1E", "#0D0A1E"), adaptive("#05030B", "#05030B")]
+        static let nightMountainBack = [adaptive("#0A0818", "#0A0818"), adaptive("#030206", "#030206")]
+
+        // Coastal
+        static let coastalSky = [adaptive("#E4F0FB", "#162838"), adaptive("#FFF4ED", "#2E221B"), adaptive("#FFF1DB", "#3A2A1A")]
+        static let coastalCliff = [adaptive("#9AB2C5", "#566B7D"), adaptive("#7A92A5", "#415363")]
+        static let coastalWaves = [adaptive("#90D1DB", "#3A7D8A"), adaptive("#5DB8CA", "#296674"), adaptive("#349BB0", "#1C4E5A")]
+
+        // Forest
+        static let forestSky = [adaptive("#E3F3EA", "#13261C"), adaptive("#FFFEE8", "#2D2E18")]
+        static let forestSilhouette = [adaptive("#84B094", "#487056"), adaptive("#5C8C6F", "#325740")]
+
+        // Meadow
+        static let meadowSky = [adaptive("#D6F2FE", "#122A38"), adaptive("#FFF4CE", "#383115")]
+        static let meadowHills = [adaptive("#D6BF74", "#857237"), adaptive("#BFA456", "#6B5823")]
+
+        // MountainLake
+        static let mountainLakeSky = [adaptive("#DDF4FE", "#142636"), adaptive("#ECE8FF", "#25213D")]
+        static let mountainLakePeaks = [adaptive("#87BAC5", "#476F78"), adaptive("#6A9AA5", "#34555D")]
+
+        // CalmSunset
+        static let sunsetSky = [adaptive("#FFE4D5", "#362018"), adaptive("#FFC8B3", "#2E1810")]
+        static let sunsetWaves = [adaptive("#E89B7D", "#8A4C34"), adaptive("#0A84FF", "#2E75C2")]
+    }
+
     // MARK: - Typography
 
     static let fontDisplay: Font.Design = .default
@@ -233,8 +354,11 @@ enum VelaTheme {
 
     static let radiusSm: CGFloat   = 8
     static let radiusMd: CGFloat   = 12
+    static let radiusCard: CGFloat = 16
     static let radiusLg: CGFloat   = 18
+    static let radiusCardStandard: CGFloat = 20
     static let radiusCardLarge: CGFloat = 22
+    static let radiusHero: CGFloat = 24
     static let radiusFeature: CGFloat = 28
     static let radiusXl: CGFloat   = 28
     static let radiusSheet: CGFloat = 32

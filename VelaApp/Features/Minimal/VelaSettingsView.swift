@@ -250,7 +250,7 @@ struct VelaSettingsView: View {
     private var profileCardRow: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("设置与偏好")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(.system(.title, design: .rounded, weight: .bold))
                 .foregroundStyle(VelaTheme.rhythmInk)
         }
         .padding(.top, 4)

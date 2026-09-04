@@ -401,7 +401,7 @@ struct VelaJournalView: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text("手记")
-                    .font(.system(size: 24, weight: .bold))
+                    .font(.system(.title2, design: .default, weight: .bold))
                     .foregroundStyle(VelaTheme.fg)
                 Text(headerDateString(for: dashboardVM.selectedDate))
                     .font(.system(.caption, design: .default))

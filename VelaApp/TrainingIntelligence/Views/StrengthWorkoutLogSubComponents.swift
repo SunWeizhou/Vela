@@ -529,7 +529,7 @@ struct StrengthWorkoutSummarySheet: View {
                             .font(.system(.footnote, design: .rounded, weight: .bold))
                             .foregroundStyle(VelaTheme.recoveryColor)
                         Text(workout?.title ?? "力量训练")
-                            .font(.system(size: 24, weight: .bold))
+                            .font(.system(.title2, design: .default, weight: .bold))
                         Text("基于本次已完成的训练组生成")
                             .font(.system(.caption, design: .rounded))
                             .foregroundStyle(VelaTheme.muted)

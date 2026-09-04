@@ -28,7 +28,7 @@ struct MetricHighlightsSection: View {
                     }
                     
                     Text(leftValue)
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .font(.system(.title2, design: .rounded, weight: .bold))
                         .monospacedDigit()
                         .foregroundStyle(VelaTheme.rhythmInk)
                         .minimumScaleFactor(0.7)
@@ -61,7 +61,7 @@ struct MetricHighlightsSection: View {
                     }
                     
                     Text(rightValue)
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .font(.system(.title2, design: .rounded, weight: .bold))
                         .monospacedDigit()
                         .foregroundStyle(VelaTheme.rhythmInk)
                         .minimumScaleFactor(0.7)
