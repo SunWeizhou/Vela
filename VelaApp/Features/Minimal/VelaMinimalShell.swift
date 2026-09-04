@@ -19,48 +19,8 @@ enum VelaNavigationMotion {
     static let destinationFadeDuration = 0.16
 }
 
-// MARK: - VelaScrollTracking
-// Kept for child view compatibility. Without binding injection these are no-ops.
-
-enum VelaScrollDirection { case up, down, idle }
-
-private struct VelaScrollDirectionKey: EnvironmentKey {
-    static let defaultValue: Binding<VelaScrollDirection> = .constant(.idle)
-}
-
-private struct VelaSurfaceIsActiveKey: EnvironmentKey {
-    static let defaultValue = true
-}
-
 extension EnvironmentValues {
-    var velaScrollDirection: Binding<VelaScrollDirection> {
-        get { self[VelaScrollDirectionKey.self] }
-        set { self[VelaScrollDirectionKey.self] = newValue }
-    }
-
-
-    var velaSurfaceIsActive: Bool {
-        get { self[VelaSurfaceIsActiveKey.self] }
-        set { self[VelaSurfaceIsActiveKey.self] = newValue }
-    }
-}
-
-extension View {
-    @ViewBuilder
-    func velaTrackScroll(direction: Binding<VelaScrollDirection>) -> some View {
-        if #available(iOS 18, *) {
-            self.onScrollGeometryChange(for: CGFloat.self) { geo in
-                geo.contentOffset.y
-            } action: { oldY, newY in
-                let delta = newY - oldY
-                if abs(delta) > 3 {
-                    direction.wrappedValue = delta > 0 ? .down : .up
-                }
-            }
-        } else {
-            self
-        }
-    }
+    @Entry var velaSurfaceIsActive = true
 }
 
 // MARK: - VelaShell — Native iOS 26 Navigation with Legacy Fallback
@@ -69,19 +29,17 @@ extension View {
 // Earlier releases keep the custom floating glass navigation.
 
 struct VelaShell: View {
-    let parityInterfaceEnabled: Bool
-
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.modelContext) private var modelContext
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var services: VelaServices
+    @EnvironmentObject private var dashboardVM: DashboardViewModel
 
     @State private var showPlusSheet = false
     @State private var showCoach     = false
     @State private var keyboardVisible = false
-    @State private var paritySelectedTab = ParityTab.home.rawValue
-    @State private var previousParityTab = ParityTab.home.rawValue
     @State private var mountedLegacyTabs: Set<VelaTab> = [.today]
+    @State private var lastPresentedAppSheet: VelaAppState.AppSheet?
 
     @ObservedObject private var appState = VelaAppState.shared
     @Namespace private var tabAnimation
@@ -95,19 +53,8 @@ struct VelaShell: View {
         case coach = 3
     }
 
-    enum ParityTab: Int, CaseIterable, Hashable {
-        case home = 0
-        case journal = 1
-        case fitness = 2
-        case biology = 3
-        case intelligence = 4
-    }
-
-    /// Rhythm's four canonical surfaces are the safe default. The parity Adapter
-    /// is opt-in for regression capture only.
-    init(parityInterfaceEnabled: Bool = false) {
-        self.parityInterfaceEnabled = parityInterfaceEnabled
-    }
+    /// Rhythm's four canonical surfaces (Today, Trends, Plan, Coach) define the navigation.
+    init() {}
 
     // MARK: - Body
 
@@ -120,28 +67,15 @@ struct VelaShell: View {
                 appState.showCoachHub = false
             }
         }
-        .onReceive(appState.$selectedTab) { selectedTab in
-            guard parityInterfaceEnabled else { return }
-            switch selectedTab {
-            case VelaAppState.trendsTabIndex:
-                paritySelectedTab = ParityTab.biology.rawValue
-            case VelaAppState.planTabIndex:
-                paritySelectedTab = ParityTab.fitness.rawValue
-            case VelaAppState.coachTabIndex:
-                showCoach = true
-            default:
-                paritySelectedTab = ParityTab.home.rawValue
-            }
+        .onChange(of: appState.showSettings) { _, shouldShow in
+            guard shouldShow else { return }
+            appState.showSettings = false
+            appState.present(.settings)
         }
-        .onChange(of: paritySelectedTab) { oldValue, newValue in
-            guard newValue == ParityTab.intelligence.rawValue else {
-                previousParityTab = newValue
-                return
+        .onChange(of: appState.presentedSheet) { _, sheet in
+            if let sheet {
+                lastPresentedAppSheet = sheet
             }
-            paritySelectedTab = oldValue == ParityTab.intelligence.rawValue
-                ? previousParityTab
-                : oldValue
-            showPlusSheet = true
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             withAnimation(VelaTheme.interfaceAnimation(reduceMotion: reduceMotion)) {
@@ -170,105 +104,75 @@ struct VelaShell: View {
         .fullScreenCover(isPresented: $showCoach) {
             VelaCoachView(presentation: .quickCover, vm: services.coachChat)
         }
-        .sheet(isPresented: $appState.showSettings) {
+        .sheet(item: $appState.presentedSheet, onDismiss: handleAppSheetDismissal) { sheet in
+            appSheetContent(sheet)
+        }
+        .tint(VelaTheme.accent)
+    }
+
+    private func handleAppSheetDismissal() {
+        if lastPresentedAppSheet?.refreshesLocalDataOnDismiss == true {
+            appState.markLocalDataChanged()
+        }
+        lastPresentedAppSheet = nil
+    }
+
+    @ViewBuilder
+    private func appSheetContent(_ sheet: VelaAppState.AppSheet) -> some View {
+        switch sheet {
+        case .settings:
             NavigationStack { VelaSettingsView() }
                 .velaSheetSurface()
-        }
-        .sheet(isPresented: $appState.triggerWeightLog, onDismiss: appState.markLocalDataChanged) {
+        case .weightLog:
             WeightLogSheetView()
                 .velaSheetSurface()
-        }
-        .sheet(isPresented: $appState.triggerBloodLog, onDismiss: appState.markLocalDataChanged) {
+        case .bloodLog:
             BloodLogSheetView()
                 .presentationDetents([.medium, .large])
                 .velaSheetSurface()
-        }
-        .sheet(isPresented: $appState.triggerWorkoutLog, onDismiss: appState.markLocalDataChanged) {
+        case .workoutLog:
             WorkoutLogSheetView()
-                .presentationDetents([.medium])
+                .presentationDetents([.medium, .large])
                 .velaSheetSurface()
-        }
-        .sheet(isPresented: $appState.triggerJournal, onDismiss: appState.markLocalDataChanged) {
+        case .journal:
             NavigationStack {
                 VelaJournalView()
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("完成") { appState.dismissPresentedSheet() }
+                                .font(.system(.subheadline, design: .default, weight: .semibold))
+                                .foregroundStyle(VelaTheme.rhythmDeep)
+                        }
+                    }
             }
             .presentationDetents([.large])
             .velaSheetSurface()
+        case .livedState:
+            LivedStateCheckInSheet(selectedDate: dashboardVM.selectedDate) {}
+                .presentationDetents([.large])
+                .velaSheetSurface()
+        case .recoveryDetail:
+            NavigationStack { VelaMetricDetailView(metric: .recovery) }
+                .presentationDetents([.large])
+                .velaSheetSurface()
+        case let .postWorkoutCheckIn(workoutID):
+            NavigationStack { PostWorkoutCheckInSheet(workoutID: workoutID) }
+                .presentationDetents([.medium, .large])
+                .velaSheetSurface()
+        case let .postWorkoutImpact(workoutID):
+            NavigationStack { PostWorkoutImpactSheet(workoutID: workoutID) }
+                .presentationDetents([.medium, .large])
+                .velaSheetSurface()
         }
-        .sheet(isPresented: $appState.triggerRecoveryDetail) {
-            NavigationStack {
-                VelaMetricDetailView(metric: .recovery)
-            }
-            .presentationDetents([.large])
-            .velaSheetSurface()
-        }
-        .sheet(isPresented: $appState.triggerPostWorkoutCheckIn, onDismiss: appState.markLocalDataChanged) {
-            NavigationStack {
-                PostWorkoutCheckInSheet(workoutID: appState.postWorkoutCheckInWorkoutID)
-            }
-            .presentationDetents([.medium, .large])
-            .velaSheetSurface()
-        }
-        .sheet(isPresented: $appState.triggerPostWorkoutImpact) {
-            NavigationStack {
-                PostWorkoutImpactSheet(workoutID: appState.postWorkoutImpactWorkoutID)
-            }
-            .presentationDetents([.medium, .large])
-            .velaSheetSurface()
-        }
-        .tint(VelaTheme.accent)
     }
 
     @ViewBuilder
     private var navigationSurface: some View {
-        if parityInterfaceEnabled {
-            parityTabNavigation
-        } else if #available(iOS 26.0, *) {
+        if #available(iOS 26.0, *) {
             nativeTabNavigation
         } else {
             legacyFloatingNavigation
         }
-    }
-
-    private var parityTabNavigation: some View {
-        TabView(selection: $paritySelectedTab) {
-            // Each tab root needs its own NavigationStack so the NavigationLinks
-            // inside (signal grid, metric detail, journal detail, vitals metrics)
-            // get a back button. Without it, pushing a detail leaves no way to
-            // return — reported as "进入了之后就没办法返回了".
-            NavigationStack {
-                VelaTodayView(showCoach: $showCoach, showSettings: $appState.showSettings)
-            }
-            .environment(\.velaSurfaceIsActive, paritySelectedTab == ParityTab.home.rawValue)
-            .tabItem { Label(L10n.t("Home", "首页"), systemImage: "house.fill") }
-            .tag(ParityTab.home.rawValue)
-
-            NavigationStack {
-                VelaJournalView()
-            }
-            .environment(\.velaSurfaceIsActive, paritySelectedTab == ParityTab.journal.rawValue)
-            .tabItem { Label(L10n.t("Journal", "日志"), systemImage: "checklist") }
-            .tag(ParityTab.journal.rawValue)
-
-            NavigationStack {
-                VelaTrainingView()
-            }
-            .environment(\.velaSurfaceIsActive, paritySelectedTab == ParityTab.fitness.rawValue)
-            .tabItem { Label(L10n.t("Fitness", "健身"), systemImage: "figure.run") }
-            .tag(ParityTab.fitness.rawValue)
-
-            NavigationStack {
-                VelaVitalsView()
-            }
-            .environment(\.velaSurfaceIsActive, paritySelectedTab == ParityTab.biology.rawValue)
-            .tabItem { Label(L10n.t("Biology", "生理"), systemImage: "waveform.path.ecg") }
-            .tag(ParityTab.biology.rawValue)
-
-            Color.clear
-                .tabItem { Label(L10n.t("Add", "添加"), systemImage: "plus.circle.fill") }
-                .tag(ParityTab.intelligence.rawValue)
-        }
-        .tint(VelaTheme.accent)
     }
 
     @available(iOS 26.0, *)
@@ -406,6 +310,7 @@ struct VelaShell: View {
             content()
         }
         .environment(\.velaSurfaceIsActive, isActive)
+        .accessibilityIdentifier("surface-\(tab.rawValue)")
         .opacity(isActive ? 1 : 0)
         .allowsHitTesting(isActive)
         .accessibilityHidden(!isActive)
@@ -487,6 +392,7 @@ struct VelaShell: View {
             content()
         }
         .environment(\.velaSurfaceIsActive, appState.selectedTab == tab.rawValue)
+        .accessibilityIdentifier("surface-\(tab.rawValue)")
     }
 }
 

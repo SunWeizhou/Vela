@@ -32,8 +32,6 @@ enum VelaFeatureFlags {
 
 struct VelaRootView: View {
     var body: some View {
-        VelaShell(
-            parityInterfaceEnabled: VelaFeatureFlags.bevelParityInterfaceEnabled()
-        )
+        VelaShell()
     }
 }
