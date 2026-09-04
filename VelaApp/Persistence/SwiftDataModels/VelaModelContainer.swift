@@ -165,210 +165,30 @@ enum VelaModelContainer {
 enum VelaSchemaV1: VersionedSchema {
     static let versionIdentifier = Schema.Version(1, 0, 0)
 
-    // Historical note: this list is only a partial record of the deployed V1
-    // graph and still names several mutable production model types. Do not
-    // replace those references with VelaSchemaV3Frozen: V1 had a different
-    // entity set and field layout, so doing so would fabricate a checksum.
-    // Until complete V1 fixtures are recovered, schema_fingerprint.py's
-    // --check blocks any live/frozen divergence rather than accepting a
-    // partial migration.
+    // Source compatibility for existing migration fixtures. This is an alias
+    // to the immutable historical type, never to a production @Model class.
+    typealias DailyHealthSummaryRecord = VelaSchemaV1Frozen.DailyHealthSummaryRecord
 
-    @Model
-    final class DailyHealthSummaryRecord {
-        @Attribute(.unique) var dayIdentifier: String
-        var date: Date
-        var sleepScore: Double?
-        var recoveryScore: Double?
-        var strainScore: Double?
-        var stressIndex: Double?
-        var morningEnergy: Double?
-        var currentEnergy: Double?
-        var energyBank: Double?
-        var configVersion: String
-        var schemaVersion: Int
-        var updatedAt: Date
-        var createdAt: Date
-        var healthAge: Double?
-        var hrvAverage: Double?
-        var restingHeartRate: Double?
-        var sleepHours: Double?
-        var deepSleepPercent: Double?
-        var remSleepPercent: Double?
-        var sleepEfficiency: Double?
-        var steps: Double?
-        var activeCalories: Double?
-        var activeMinutes: Double?
-        var workoutCount: Int?
-        var workoutTypes: String?
-        var workoutDuration: Double?
-        var bodyWeight: Double?
-        var bodyFatPercent: Double?
-        var bmi: Double?
-        var oxygenSaturation: Double?
-        var respiratoryRate: Double?
-        var wristTemperature: Double?
-        var dailyLoad: Double?
-        var workoutLoad: Double?
-        var activityLoad: Double?
-        var trainingLoadRatio: Double?
-        var atl: Double?
-        var ctl: Double?
-        var tsb: Double?
-        var acwr: Double?
-        var bedtime: Date?
-        var wakeTime: Date?
-        var awakeMinutes: Double?
-        var awakeEpisodeCount: Int?
-        var deepSleepMinutes: Double?
-        var remSleepMinutes: Double?
-        @Attribute(.externalStorage) var workoutsData: Data?
-
-        init(
-            dayIdentifier: String,
-            date: Date,
-            sleepScore: Double? = nil,
-            recoveryScore: Double? = nil,
-            configVersion: String = VelaAppMetadata.configVersion,
-            schemaVersion: Int = 1,
-            updatedAt: Date = Date(),
-            createdAt: Date = Date()
-        ) {
-            self.dayIdentifier = dayIdentifier
-            self.date = date
-            self.sleepScore = sleepScore
-            self.recoveryScore = recoveryScore
-            self.configVersion = configVersion
-            self.schemaVersion = schemaVersion
-            self.updatedAt = updatedAt
-            self.createdAt = createdAt
-        }
-    }
-
+    /// The historical graph is defined in VelaSchemaV1Frozen.swift. Keeping
+    /// this wrapper free of production model references is what makes the
+    /// migration checksum independent from future @Model edits.
     static var models: [any PersistentModel.Type] {
-        [
-            DailyHealthSummaryRecord.self,
-            SleepSummaryRecord.self,
-            JournalEntryRecord.self,
-            CoachInteractionRecord.self,
-            AIReportRecord.self,
-            UserWikiDocumentRecord.self,
-            CoachSessionRecord.self,
-            OnboardingState.self,
-            CoachArtifactRecord.self,
-            FoodLogRecord.self,
-            StrengthWorkoutRecord.self,
-            ActiveWorkoutDraftRecord.self,
-            ExerciseDefinitionRecord.self,
-            WorkoutTemplateRecord.self,
-            TrainingResponseRecord.self,
-            TrainingPlanRecord.self,
-            BiomarkerRecord.self,
-            MemoryEventRecord.self,
-            AgentRunRecord.self,
-            DailyOperatingPlanRecord.self,
-            DailyDecisionFeedbackRecord.self,
-            PersonalExperimentRecord.self,
-            ExperimentCheckInRecord.self,
-            AgentArtifactRecord.self,
-            TrainingPlanAdaptationRecord.self,
-            WorkoutEventRecord.self,
-            XunjiDailyCacheRecord.self,
-            XunjiWorkoutMirrorRecord.self,
-            DeletedWorkoutRecord.self,
-            VelaEventRecord.self,
-            ProactiveInsightRecord.self
-        ]
+        VelaSchemaV1Frozen.models
     }
 }
 
 enum VelaSchemaV2: VersionedSchema {
     static let versionIdentifier = Schema.Version(2, 0, 0)
 
-    // Historical note: V2's modelTypes list still references mutable current
-    // types; it is not a checksum-preserving frozen historical graph. Keep it
-    // only as an explicit compatibility placeholder until a complete V2 graph
-    // is recovered from a real shipped store and can be frozen safely.
+    // Source compatibility for existing migration fixtures. This is an alias
+    // to the immutable historical type, never to a production @Model class.
+    typealias DailyHealthSummaryRecord = VelaSchemaV2Frozen.DailyHealthSummaryRecord
 
-    /// Frozen representation of the production V2 daily summary. Versioned
-    /// schemas must never point at the mutable current model type: doing so
-    /// changes the historical checksum whenever a field is added and makes an
-    /// existing on-device store appear to have an unknown model version.
-    @Model
-    final class DailyHealthSummaryRecord {
-        @Attribute(.unique) var dayIdentifier: String
-        var date: Date
-        var sleepScore: Double?
-        var recoveryScore: Double?
-        var strainScore: Double?
-        var stressIndex: Double?
-        var morningEnergy: Double?
-        var currentEnergy: Double?
-        var energyBank: Double?
-        var configVersion: String
-        var schemaVersion: Int
-        var updatedAt: Date
-        var createdAt: Date
-        var healthAge: Double?
-        var hrvAverage: Double?
-        var restingHeartRate: Double?
-        var sleepHours: Double?
-        var deepSleepPercent: Double?
-        var remSleepPercent: Double?
-        var sleepEfficiency: Double?
-        var steps: Double?
-        var activeCalories: Double?
-        var activeMinutes: Double?
-        var workoutCount: Int?
-        var workoutTypes: String?
-        var workoutDuration: Double?
-        var bodyWeight: Double?
-        var bodyFatPercent: Double?
-        var bmi: Double?
-        var oxygenSaturation: Double?
-        var respiratoryRate: Double?
-        var wristTemperature: Double?
-        var dailyLoad: Double?
-        var workoutLoad: Double?
-        var activityLoad: Double?
-        var trainingLoadRatio: Double?
-        var atl: Double?
-        var ctl: Double?
-        var tsb: Double?
-        var acwr: Double?
-        var bedtime: Date?
-        var wakeTime: Date?
-        var awakeMinutes: Double?
-        var awakeEpisodeCount: Int?
-        var deepSleepMinutes: Double?
-        var remSleepMinutes: Double?
-        @Attribute(.externalStorage) var workoutsData: Data?
-        @Attribute(.externalStorage) var scoreEvidenceData: Data?
-
-        init(
-            dayIdentifier: String,
-            date: Date,
-            sleepScore: Double? = nil,
-            recoveryScore: Double? = nil,
-            configVersion: String = VelaAppMetadata.configVersion,
-            schemaVersion: Int = 2,
-            updatedAt: Date = Date(),
-            createdAt: Date = Date()
-        ) {
-            self.dayIdentifier = dayIdentifier
-            self.date = date
-            self.sleepScore = sleepScore
-            self.recoveryScore = recoveryScore
-            self.configVersion = configVersion
-            self.schemaVersion = schemaVersion
-            self.updatedAt = updatedAt
-            self.createdAt = createdAt
-        }
-    }
-
+    /// The historical graph is defined in VelaSchemaV2Frozen.swift. The
+    /// daily summary differs from V1 only by scoreEvidenceData; all other
+    /// classes come from the fingerprint-guarded immutable V3 snapshot.
     static var models: [any PersistentModel.Type] {
-        var models = VelaModelContainer.modelTypes
-        models[0] = DailyHealthSummaryRecord.self
-        return models
+        VelaSchemaV2Frozen.models
     }
 }
 
@@ -376,8 +196,7 @@ enum VelaSchemaV2: VersionedSchema {
 ///
 /// SwiftData 版本演进规则（必须遵守，`scripts/schema_fingerprint.py --check` 会强制）：
 ///   1. 当前 VersionedSchema 必须引用 live 模型类型（本枚举）；历史版本应引用
-///      冻结副本。V1/V2 尚未完成冻结，`schema_fingerprint.py --check` 会在
-///      它们与 live 图分叉时 fail-closed。注意：SwiftData 拒绝在同一迁移计划中
+///      VelaSchemaV1Frozen/VelaSchemaV2Frozen 的冻结副本。注意：SwiftData 拒绝在同一迁移计划中
 ///      出现两个 checksum 相同的 schema（Duplicate version checksums）——所以
 ///      不要为「图形未变」的版本号单独建版本。
 ///   2. 任何 @Model 字段/注解变更 → 先把变更前的图形冻结为 VelaSchemaV3Frozen

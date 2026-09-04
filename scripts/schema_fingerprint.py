@@ -13,12 +13,12 @@
 规则（见脚本头的 goldens 结构）：
   goldens["live"] = 当前模型图指纹（当前运行时是 VelaSchemaV3 / 3.0.0）
   goldens["frozen_v3"] = V3 冻结模型图指纹（来自 VelaSchemaV3Frozen）
+  goldens["historical"] = V1/V2 冻结实体清单与逐模型指纹
 
-注意：V1/V2 的完整历史模型图尚未以独立冻结类落库。它们当前包含
-live 类型引用，不能用 V3Frozen 倒推替换，否则会伪造历史 checksum。
-在真实旧 store fixture 与完整历史图可用前，`--check` 会阻止 live 图与已冻结
-V3 发生分叉，避免将未完整的 V4 升级落入生产。`--update` 可以在迁移提交中
-先更新快照，但不会绕过这个 CI 门禁。
+V1/V2 的历史图源位于 VelaSchemaV1Frozen.swift/VelaSchemaV2Frozen.swift。
+它们允许复用 V3Frozen 中声明未变的实体，但 historical goldens 会重复固定
+这些指纹，防止未来修改 V3Frozen 时静默改变历史 checksum。当前仓库没有真实
+发布设备 old-store 二进制；磁盘 fixture 门禁在 SchemaMigrationTests 中单独标记。
 """
 
 import hashlib
@@ -49,6 +49,18 @@ LIVE_SCHEMA_NAME = "VelaSchemaV3"
 LIVE_VERSION = (3, 0, 0)
 FROZEN_SCHEMA_NAME = "VelaSchemaV3Frozen"
 HISTORICAL_SCHEMA_NAMES = ("VelaSchemaV1", "VelaSchemaV2")
+HISTORICAL_FROZEN_PATHS = {
+    "VelaSchemaV1": ROOT
+    / "VelaApp"
+    / "Persistence"
+    / "SwiftDataModels"
+    / "VelaSchemaV1Frozen.swift",
+    "VelaSchemaV2": ROOT
+    / "VelaApp"
+    / "Persistence"
+    / "SwiftDataModels"
+    / "VelaSchemaV2Frozen.swift",
+}
 
 PROP_RE = re.compile(
     r"^(?:@Attribute\([^)]*\)\s+)?(?:public\s+|internal\s+)?"
@@ -121,6 +133,66 @@ def load_frozen_v3_models():
     """解析冻结文件：提取 VelaSchemaV3 枚举内嵌套的 @Model 类。"""
     text = FROZEN_PATH.read_text(encoding="utf-8")
     return parse_models(text, "frozen")
+
+
+def load_historical_inventory(schema_name):
+    """Read the explicit historical entity list from a frozen graph source."""
+    path = HISTORICAL_FROZEN_PATHS[schema_name]
+    if not path.exists():
+        raise ValueError(f"missing historical graph source: {path}")
+    text = path.read_text(encoding="utf-8")
+    # Keep this parser intentionally narrow: only the static model inventory
+    # is authoritative, not arbitrary `.self` references in comments/init code.
+    match = re.search(
+        r"static\s+let\s+models\s*:\s*\[any\s+PersistentModel\.Type\]\s*=\s*\[(.*?)\n\s*\]",
+        text,
+        re.DOTALL,
+    )
+    if not match:
+        raise ValueError(f"{schema_name} frozen source has no explicit models list")
+    names = re.findall(
+        r"(?:(?:VelaSchemaV3Frozen)\.)?([A-Za-z_]\w*)\.self\b",
+        match.group(1),
+    )
+    if not names:
+        raise ValueError(f"{schema_name} frozen source has an empty models list")
+    return names
+
+
+def load_historical_models(schema_name):
+    """Return the locally declared historical model classes (currently Daily)."""
+    path = HISTORICAL_FROZEN_PATHS[schema_name]
+    text = path.read_text(encoding="utf-8")
+    return parse_models(text, str(path))
+
+
+def load_historical_fingerprints(frozen_v3):
+    """Compose each historical graph from its pinned inventory and local classes.
+
+    Unchanged entities intentionally point at VelaSchemaV3Frozen in Swift.  We
+    still duplicate their fingerprints in the goldens so a future edit to the
+    V3 snapshot cannot silently mutate a historical migration source.
+    """
+    result = {}
+    for schema_name in HISTORICAL_SCHEMA_NAMES:
+        names = load_historical_inventory(schema_name)
+        local = load_historical_models(schema_name)
+        local_fp = fingerprint_set(local)
+        models = {}
+        for name in names:
+            if name in local_fp:
+                models[name] = local_fp[name]
+            elif name in frozen_v3:
+                models[name] = frozen_v3[name]
+            else:
+                raise ValueError(
+                    f"{schema_name} references unknown frozen model {name}"
+                )
+        result[schema_name] = {
+            "entities": sorted(names),
+            "models": models,
+        }
+    return result
 
 
 def load_runtime_schema_metadata():
@@ -245,17 +317,46 @@ def check():
             ok = False
             print(f"[FAIL] frozen V3 model {name} 缺失")
 
+    # Historical graphs are checked independently from the live graph.  V1
+    # and V2 may reuse immutable V3 classes for entities whose declarations
+    # were unchanged, so their expected fingerprints are deliberately pinned
+    # in a separate golden section as well.
+    try:
+        historical = load_historical_fingerprints(frozen)
+    except (OSError, ValueError) as error:
+        historical = {}
+        ok = False
+        print(f"[FAIL] historical graph could not be loaded: {error}")
+    expected_historical = goldens.get("historical", {})
+    for schema_name in HISTORICAL_SCHEMA_NAMES:
+        expected = expected_historical.get(schema_name)
+        actual = historical.get(schema_name)
+        if expected is None:
+            ok = False
+            print(f"[FAIL] missing historical golden for {schema_name}")
+            continue
+        if actual is None:
+            continue
+        if actual.get("entities") != expected.get("entities"):
+            ok = False
+            print(f"[FAIL] {schema_name} historical entity inventory changed")
+        actual_models = actual.get("models", {})
+        expected_models = expected.get("models", {})
+        if actual_models != expected_models:
+            ok = False
+            print(f"[FAIL] {schema_name} historical model fingerprints changed")
+
     historical_live_refs = historical_schemas_reference_live_types(live.keys())
-    if historical_live_refs and live_fp != frozen_fp:
+    if historical_live_refs:
         ok = False
         print(
-            "[FAIL] V1/V2 仍引用可变 live 类型，且 live 图已与 V3 冻结图分叉："
+            "[FAIL] V1/V2 仍引用可变 live 类型；历史 schema 必须只引用 frozen graph："
         )
         for ref in historical_live_refs:
             print(f"       - {ref}")
         print(
-            "       禁止用 V3Frozen 倒推 V1/V2。请先从真实发布版本/old-store fixture "
-            "重建完整历史图，再在一个专属 migration 提交中升版。"
+            "       请将历史实体声明移入 VelaSchemaV1Frozen/VelaSchemaV2Frozen，"
+            "并在同一提交更新 historical goldens。"
         )
 
     if ok:
@@ -289,6 +390,11 @@ def update():
     frozen = load_frozen_v3_models()
     live_fp = fingerprint_set(live)
     frozen_fp = fingerprint_set(frozen)
+    try:
+        historical = load_historical_fingerprints(frozen)
+    except (OSError, ValueError) as error:
+        print(f"[REFUSE] historical graph could not be loaded: {error}", file=sys.stderr)
+        return 1
     # Updating the snapshot is an intermediate step in a V3→V4 change.  Do
     # not block it merely because the repository still has incomplete V1/V2
     # historical graphs: that would make the documented migration workflow
@@ -298,6 +404,7 @@ def update():
     goldens = {
         "live": live_fp,
         "frozen_v3": frozen_fp,
+        "historical": historical,
     }
     write_goldens(goldens)
     print(f"goldens updated: {len(live)} live, {len(frozen)} frozen_v3")

@@ -4,23 +4,15 @@ import SwiftData
 
 /// SwiftData 版本化 schema 演进回归测试。
 ///
-/// 审计 (docs/validation/engineering-audit-2026-08-23.md C1) 发现：VelaSchemaV3 直接
-/// 指向 live 模型类型且无任何守卫，一旦 @Model 字段变更而未升版本，存量 store 会
-/// 报告 unknown model version 并落入只读安全模式。
-///
-/// 修复后的机制（经验证）：
-///   - SwiftData 拒绝同一迁移计划中 checksum 相同的两个 schema
-///     （Duplicate version checksums），且当前模型图自 V3 起未变（三个新字段都在
-///     DTO/struct 上），因此不引入重复图形的新版本；
-///   - 冻结快照（VelaSchemaV3Frozen）作为「下次模型变更时的迁移源」预案，
-///     由 scripts/schema_fingerprint.py --check 强制：模型一变，守卫先失败，
-///     直到按 VelaModelContainer 中的注释完成版本提升流程——即变更与版本提升
-///     在同一提交内原子完成，不存在「改了字段断了存库」的窗口。
+/// 审计 (docs/validation/engineering-audit-2026-08-23.md C1) 发现：一旦 @Model
+/// 字段变更而未升版本，存量 store 会报告 unknown model version 并落入只读安全模式。
+/// 当前 migration plan 的 V1/V2 均指向独立 frozen graph，V3 指向 live graph；
+/// scripts/schema_fingerprint.py --check 会在任何图形漂移时 fail-closed。
 ///
 /// 本文件验证：
 ///   1. 当前构建写出的 store 重开无损（无回归）；
-///   2. 版本标识单调递增；
-///   3. 冻结快照实体名集合与 live 图形一致（它是合法的迁移源 schema 的前提）。
+///   2. V1/V2 pinned disk fixtures 可走完整迁移链且保留行值；
+///   3. 版本标识单调递增，历史 entity inventory 与 live/frozen 图满足 release contract。
 final class SchemaMigrationTests: XCTestCase {
 
     @MainActor
@@ -50,6 +42,94 @@ final class SchemaMigrationTests: XCTestCase {
         XCTAssertEqual(fetched.first?.sleepScore, 55.0)
     }
 
+    /// Creates a deterministic V1 store from the pinned historical graph, then
+    /// opens it with the production migration plan.  This is a real SwiftData
+    /// disk store (not an in-memory schema comparison); the source schema and
+    /// row values are recorded in Fixtures/SchemaMigration/v1-v2-fixture-manifest.json.
+    /// It proves the migration wiring, but does not claim compatibility with
+    /// an arbitrary pre-release store whose binary is not available here.
+    @MainActor
+    func testPinnedV1DiskFixtureMigratesToCurrentSchema() throws {
+        let dir = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let storeURL = dir.appendingPathComponent("pinned-v1.store")
+        let historicalSchema = Schema(VelaSchemaV1Frozen.models)
+        let historicalConfig = ModelConfiguration(schema: historicalSchema, url: storeURL)
+        let historical = try ModelContainer(
+            for: historicalSchema,
+            configurations: [historicalConfig]
+        )
+        let historicalContext = ModelContext(historical)
+        let dayID = "fixture-v1-20260904"
+        let oldRecord = VelaSchemaV1Frozen.DailyHealthSummaryRecord(
+            dayIdentifier: dayID,
+            date: Date(timeIntervalSince1970: 1_788_480_000),
+            sleepScore: 72.5,
+            recoveryScore: 61.25,
+            configVersion: "fixture-v1",
+            schemaVersion: 1,
+            updatedAt: Date(timeIntervalSince1970: 1_788_480_000),
+            createdAt: Date(timeIntervalSince1970: 1_788_480_000)
+        )
+        historicalContext.insert(oldRecord)
+        try historicalContext.save()
+
+        let migrated = try VelaModelContainer.make(at: storeURL)
+        let migratedContext = ModelContext(migrated)
+        let fetched = try migratedContext.fetch(
+            FetchDescriptor<DailyHealthSummaryRecord>(
+                predicate: #Predicate { $0.dayIdentifier == dayID }
+            )
+        )
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertEqual(fetched.first?.sleepScore, 72.5)
+        XCTAssertEqual(fetched.first?.recoveryScore, 61.25)
+        XCTAssertNil(fetched.first?.hrvRmssdMilliseconds)
+    }
+
+    /// Same disk-fixture check starting at V2.  Keeping this separate makes a
+    /// failure in either migration stage immediately attributable.
+    @MainActor
+    func testPinnedV2DiskFixtureMigratesToCurrentSchema() throws {
+        let dir = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let storeURL = dir.appendingPathComponent("pinned-v2.store")
+        let historicalSchema = Schema(VelaSchemaV2Frozen.models)
+        let historicalConfig = ModelConfiguration(schema: historicalSchema, url: storeURL)
+        let historical = try ModelContainer(
+            for: historicalSchema,
+            configurations: [historicalConfig]
+        )
+        let historicalContext = ModelContext(historical)
+        let dayID = "fixture-v2-20260904"
+        let oldRecord = VelaSchemaV2Frozen.DailyHealthSummaryRecord(
+            dayIdentifier: dayID,
+            date: Date(timeIntervalSince1970: 1_788_480_000),
+            sleepScore: 83.25,
+            recoveryScore: 77.75,
+            configVersion: "fixture-v2",
+            schemaVersion: 2,
+            updatedAt: Date(timeIntervalSince1970: 1_788_480_000),
+            createdAt: Date(timeIntervalSince1970: 1_788_480_000)
+        )
+        oldRecord.scoreEvidenceData = Data("fixture-v2-evidence".utf8)
+        historicalContext.insert(oldRecord)
+        try historicalContext.save()
+
+        let migrated = try VelaModelContainer.make(at: storeURL)
+        let migratedContext = ModelContext(migrated)
+        let fetched = try migratedContext.fetch(
+            FetchDescriptor<DailyHealthSummaryRecord>(
+                predicate: #Predicate { $0.dayIdentifier == dayID }
+            )
+        )
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertEqual(fetched.first?.sleepScore, 83.25)
+        XCTAssertEqual(fetched.first?.recoveryScore, 77.75)
+        XCTAssertEqual(fetched.first?.scoreEvidenceData, Data("fixture-v2-evidence".utf8))
+        XCTAssertNil(fetched.first?.hrvRmssdMilliseconds)
+    }
+
     func testVersionIdentifiersIncreaseMonotonically() {
         let versions: [Schema.Version] = [
             VelaSchemaV1.versionIdentifier,
@@ -76,6 +156,21 @@ final class SchemaMigrationTests: XCTestCase {
         XCTAssertEqual(
             liveNames, frozenNames,
             "冻结快照的实体集合必须与 live 图形一致；生成器或模型变更后请重新 --emit-frozen"
+        )
+    }
+
+    func testHistoricalFrozenInventoriesMatchReleaseContract() {
+        XCTAssertEqual(Schema(VelaSchemaV1Frozen.models).entities.count, 31)
+        XCTAssertEqual(Schema(VelaSchemaV2Frozen.models).entities.count, 32)
+        XCTAssertFalse(
+            Schema(VelaSchemaV1Frozen.models).entities.contains {
+                $0.name == "IntradaySignalBucketRecord"
+            }
+        )
+        XCTAssertTrue(
+            Schema(VelaSchemaV2Frozen.models).entities.contains {
+                $0.name == "IntradaySignalBucketRecord"
+            }
         )
     }
 
