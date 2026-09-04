@@ -73,14 +73,19 @@ DashboardViewModel.performRefresh
 目前 `VelaDailyOrchestrator.refresh` 在 `DailySummaryUseCase.swift:1365–1387`
 重新构造 `DailySummaryUseCase`，并强行使用 `AppSyncCoordinator.shared`（`:1382`）。
 这意味着 ViewModel 注入的 use case 与实际刷新用例不是同一个实例，也不是完整的
-依赖图。
+依赖图。`DashboardViewModel` 保存的 `services` 字段（`:162,172–174`）在该文件中也
+没有其他读取点；它目前不是一条有效依赖边。
 
 ### 1.3 `DailySummaryUseCase` 的真实下游
 
 `DailySummaryUseCase` 当前把 `queryService` 声明成**具体**的
 `HealthKitQueryService`（`Core/Utilities/DailySummaryUseCase.swift:159–170`），
 虽然工程同时存在 `HealthQueryService` 协议。这使测试不能传入简单 fake，协议在这
-一条主链上没有成为真正的接缝。
+一条主链上没有成为真正的接缝。直接把字段类型替换成现有协议仍不能编译：该 use case
+还调用 `extendedMetrics`（`:370`）和 `intradaySamples`（`:763`），二者没有出现在
+`Health/Queries/HealthQueryService.swift:3–16` 的 interface 中。因此 PR2 应优先定义
+能一次返回 typed daily evidence 的窄 adapter，或先补齐协议后再切换，不能只改一个
+类型标注。
 
 一次有 `ModelContext` 的 Today refresh 按以下顺序发生：
 
@@ -139,7 +144,7 @@ store；应由 PR3 的 `TodayStore` 统一调度并保留结果一致性。
 | `Features/Minimal/TodayNutritionStrip.swift:377–392` | `@Query FoodLogRecord`、多组 `@AppStorage` | Nutrition 是下游能力；不能作为 Today P0 store 的持久化接口 |
 
 `TodayHeroCard` 的小时图尤其重要：`HealthQueryService` 协议只有
-`heartRateSamples`，没有 `hourlySteps`/`hourlyActiveEnergy`/`extendedMetrics`；具体类
+`heartRateSamples`，没有 `hourlySteps`/`hourlyActiveEnergy`；具体类
 在 `HealthKitQueryService.swift:742–750` 才提供这些方法。若不先补一个窄的 hourly
 reading interface，任何 preview/test 都仍会启动真实 HealthKit。
 
@@ -292,7 +297,8 @@ protocol AppClock: Sendable {
 约束：
 
 1. `BodySeekDomain` 只接收显式 profile、calendar、now 和 value evidence；五项 score
-   仍独立，`nil` 不转为 0。
+   仍独立，`nil` 不转为 0。当前 PR1 package 只迁移 Sleep；其余四项在 host adapter
+   继续走经 golden 保护的 Vela 实现，直到各自完成 parity migration。
 2. repository interface 不暴露 `ModelContext`、`@Model` 或 `FetchDescriptor`；具体
    `SwiftDataDailyHealthSummaryRepository` 可继续在 App adapter 中使用 MainActor/ModelActor。
 3. `HealthReading` 的生产 adapter 才持有 `HKHealthStore`；测试/preview adapter 只返回
@@ -328,8 +334,10 @@ explicit Calendar/clock ──> TodayReadingModule / BodySeekDomain
 1. 新增（或在现有依赖文件中定义）`TodayReadingModule`、`AppClock`、
    `DailySnapshotRepository` 等 protocol；先不删除 `VelaResolver`。
 2. 把 `DailySummaryUseCase` 的内部字段/初始化器从具体
-   `HealthKitQueryService` 改为 `any HealthQueryService` 或等价窄 adapter。保留旧的
-   `init()` 作为 live 兼容入口，但其实现只能调用显式 factory，不应继续散落默认值。
+   `HealthKitQueryService` 改为扩充后的 `any HealthQueryService`，或更推荐的 typed
+   daily-evidence 窄 adapter（须覆盖当前 `extendedMetrics`/`intradaySamples` 调用）。
+   保留旧的 `init()` 作为 live 兼容入口，但其实现只能调用显式 factory，不应继续
+   散落默认值。
 3. `TodayReadingModule.live` 在内部持有当前 `DailySummaryUseCase`、repository、
    sync coordinator，外部只暴露 `cached/load`。这一步先不动 View 的 secondary、天气、
    lived-state 和 feedback。
