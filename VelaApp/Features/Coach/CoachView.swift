@@ -966,6 +966,10 @@ struct VelaCoachView: View {
         }
         .padding(.horizontal, VelaTheme.pagePadding)
         .padding(.vertical, 8)
+        .dynamicTypeSize(
+            dynamicTypeSize.isAccessibilitySize ? .accessibility1 : dynamicTypeSize
+        )
+        .accessibilityIdentifier("coach-surface-header")
     }
 
 
@@ -1299,7 +1303,7 @@ struct VelaCoachView: View {
             }
         } else if action.type.contains("check") || action.type.contains("journal") {
             logger.info("[CoachView] Triggering journal")
-            appState.triggerJournal = true
+            appState.present(.journal)
             if presentation == .quickCover {
                 dismiss()
             }
@@ -1370,7 +1374,7 @@ struct VelaCoachView: View {
             if presentation == .quickCover {
                 dismiss()
             }
-            appState.showSettings = true
+            appState.present(.settings)
         case .retry:
             vm.retryLastFailedRequest(
                 dashboard: dashboard,

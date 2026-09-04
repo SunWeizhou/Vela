@@ -92,22 +92,33 @@ struct CoachHistoryDrawer: View {
                 VStack(spacing: 10) {
                     ForEach(filteredSessions) { session in
                         HStack(spacing: 12) {
-                            Image(systemName: "bubble.left.and.bubble.right.fill")
-                                .font(.system(size: 13))
-                                .foregroundStyle(vm.currentSession?.id == session.id ? VelaTheme.rhythmDeep : VelaTheme.rhythmInkSecondary)
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(session.title.isEmpty ? "新对话" : session.title)
-                                    .font(.system(.footnote, design: .rounded, weight: .bold))
-                                    .foregroundStyle(VelaTheme.rhythmInk)
-                                    .lineLimit(1)
-                                
-                                Text(session.updatedAt.formatted(.dateTime.month().day().hour().minute()))
-                                    .font(.system(.caption2, design: .rounded, weight: .semibold))
-                                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                            Button {
+                                vm.selectSession(session, modelContext: modelContext)
+                                showHistoryDrawer = false
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "bubble.left.and.bubble.right.fill")
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(vm.currentSession?.id == session.id ? VelaTheme.rhythmDeep : VelaTheme.rhythmInkSecondary)
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(session.title.isEmpty ? "新对话" : session.title)
+                                            .font(.system(.footnote, design: .rounded, weight: .bold))
+                                            .foregroundStyle(VelaTheme.rhythmInk)
+                                            .lineLimit(1)
+
+                                        Text(session.updatedAt.formatted(.dateTime.month().day().hour().minute()))
+                                            .font(.system(.caption2, design: .rounded, weight: .semibold))
+                                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                                    }
+
+                                    Spacer(minLength: 0)
+                                }
+                                .contentShape(Rectangle())
                             }
-                            
-                            Spacer()
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(session.title.isEmpty ? "新对话" : session.title)
+                            .accessibilityValue(vm.currentSession?.id == session.id ? "当前对话" : "")
                             
                             if vm.currentSession?.id == session.id {
                                 Button {
@@ -148,14 +159,6 @@ struct CoachHistoryDrawer: View {
                                 )
                         )
                         .padding(.horizontal, 14)
-                        .onTapGesture {
-                            vm.selectSession(session, modelContext: modelContext)
-                            showHistoryDrawer = false
-                        }
-                        .accessibilityAction {
-                            vm.selectSession(session, modelContext: modelContext)
-                            showHistoryDrawer = false
-                        }
                     }
                 }
                 .padding(.vertical, 8)

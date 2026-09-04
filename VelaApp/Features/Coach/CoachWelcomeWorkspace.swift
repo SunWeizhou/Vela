@@ -63,32 +63,45 @@ struct CoachWelcomeWorkspace: View {
 
     private var currentContextSection: some View {
         VStack(alignment: .leading, spacing: 13) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("当前身体上下文")
-                    .font(VelaTheme.headline())
-                    .foregroundStyle(VelaTheme.rhythmInk)
-                Spacer()
-                Button("查看 Today") {
-                    VelaHaptic.selection()
-                    appState.routeToToday()
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("当前身体上下文")
+                            .font(VelaTheme.headline())
+                            .foregroundStyle(VelaTheme.rhythmInk)
+                        Button("查看今日") {
+                            VelaHaptic.selection()
+                            appState.routeToToday()
+                        }
+                        .font(VelaTheme.caption1().weight(.semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                    }
+                } else {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("当前身体上下文")
+                            .font(VelaTheme.headline())
+                            .foregroundStyle(VelaTheme.rhythmInk)
+                        Spacer()
+                        Button("查看今日") {
+                            VelaHaptic.selection()
+                            appState.routeToToday()
+                        }
+                        .font(VelaTheme.caption1().weight(.semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                    }
                 }
-                .font(VelaTheme.caption1().weight(.semibold))
-                .foregroundStyle(VelaTheme.rhythmDeep)
             }
 
             primaryScoreRow
 
-            HStack(spacing: 12) {
-                secondaryMetric(
-                    title: "压力",
-                    metric: dashboard.stress,
-                    domain: .stress
-                )
-                secondaryMetric(
-                    title: "能量",
-                    metric: dashboard.energy,
-                    domain: .energy
-                )
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 12) {
+                    secondaryMetrics
+                }
+            } else {
+                HStack(spacing: 12) {
+                    secondaryMetrics
+                }
             }
 
             Button {
@@ -125,6 +138,20 @@ struct CoachWelcomeWorkspace: View {
         }
         .shadow(color: VelaTheme.cardShadow(colorScheme), radius: 14, x: 0, y: 6)
         .accessibilityIdentifier("coach-current-context")
+    }
+
+    @ViewBuilder
+    private var secondaryMetrics: some View {
+        secondaryMetric(
+            title: "压力",
+            metric: dashboard.stress,
+            domain: .stress
+        )
+        secondaryMetric(
+            title: "能量",
+            metric: dashboard.energy,
+            domain: .energy
+        )
     }
 
     @ViewBuilder

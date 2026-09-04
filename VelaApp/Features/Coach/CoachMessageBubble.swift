@@ -356,7 +356,7 @@ struct ArtifactRendererView: View {
         } else if action.type.contains("training") || action.type.contains("workout") {
             VelaAppState.shared.routeToTraining()
         } else if action.type.contains("check") || action.type.contains("journal") {
-            VelaAppState.shared.triggerJournal = true
+            VelaAppState.shared.present(.journal)
         } else {
             VelaAppState.shared.routeToCoach(question: action.label)
         }

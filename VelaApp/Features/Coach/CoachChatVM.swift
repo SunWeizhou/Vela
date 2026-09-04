@@ -250,6 +250,40 @@ final class CoachChatVM: ObservableObject {
     @Published var pendingToolConfirmation: ToolCallDescription?
     private var toolConfirmationContinuation: CheckedContinuation<Bool, Never>?
     private var toolConfirmationTimeoutTask: Task<Void, Never>?
+    private var pendingStreamDeltas = ""
+    private var streamFlushTask: Task<Void, Never>?
+    private static let streamFlushIntervalNanoseconds: UInt64 = 40_000_000
+
+    /// Providers often emit one token at a time. Publishing every token invalidates
+    /// the entire conversation tree, so coalesce deltas to roughly one UI update per frame pair.
+    private func enqueueStreamDelta(_ delta: String) {
+        pendingStreamDeltas += delta
+        guard streamFlushTask == nil else { return }
+
+        streamFlushTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: Self.streamFlushIntervalNanoseconds)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            self?.flushPendingStreamDeltas()
+        }
+    }
+
+    private func flushPendingStreamDeltas() {
+        streamFlushTask = nil
+        guard !pendingStreamDeltas.isEmpty else { return }
+        streamingContent += pendingStreamDeltas
+        pendingStreamDeltas = ""
+    }
+
+    private func resetStreamingContent() {
+        streamFlushTask?.cancel()
+        streamFlushTask = nil
+        pendingStreamDeltas = ""
+        streamingContent = ""
+    }
 
     let quickQuestions: [String] = [
         L10n.t("Today's training advice", "今天的训练建议"),
@@ -694,7 +728,7 @@ final class CoachChatVM: ObservableObject {
         refreshKeyState()
 
         messages.removeAll { $0.isStreaming }
-        streamingContent = ""
+        resetStreamingContent()
         if appendingUserMessage {
             messages.append(ChatMsg(role: .user, content: userText))
             // 深度专项批次 2：用户消息立即落盘——此前整条线程要到流式完成/出错才
@@ -760,7 +794,7 @@ final class CoachChatVM: ObservableObject {
                 services: services,
                 isGhostMode: isGhostMode,
                 onStreamDelta: { [weak self] delta in
-                    self?.streamingContent += delta
+                    self?.enqueueStreamDelta(delta)
                 },
                 onConfirmToolCall: { [weak self] description in
                     guard let self else { return false }
@@ -885,6 +919,7 @@ final class CoachChatVM: ObservableObject {
             if isUserCancellation {
                 // 用户主动停止：把已流出的部分内容固化进气泡（与注释一致），
                 // 不追加伪造的「服务不可用」错误气泡；无内容则移除空泡。
+                flushPendingStreamDeltas()
                 let partial = streamingContent
                 if partial.isEmpty {
                     messages.removeAll { $0.id == assistantId }
@@ -896,9 +931,9 @@ final class CoachChatVM: ObservableObject {
                         wikiUpdates: messages[idx].wikiUpdates
                     )
                 }
-                streamingContent = ""
+                resetStreamingContent()
             } else {
-                streamingContent = ""
+                resetStreamingContent()
                 messages.removeAll { $0.id == assistantId }
                 let shouldRetry = pendingRequest != nil
                     && (isAwaitingForegroundRetry
@@ -918,7 +953,7 @@ final class CoachChatVM: ObservableObject {
             persistThread(modelContext: modelContext)
         }
 
-        streamingContent = ""
+        resetStreamingContent()
         isStreaming = false
         // 流式结束/取消时若确认弹窗仍挂起（用户未响应），自动按拒绝收尾，
         // 避免 continuation 泄漏导致任务悬挂。
