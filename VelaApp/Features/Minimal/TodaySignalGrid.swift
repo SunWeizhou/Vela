@@ -14,18 +14,38 @@ struct TodaySignalGrid: View {
     let accentColor: (DailyPlanAccent) -> Color
     let onAskCoach: () -> Void
 
-    private let primaryIDs = ["recovery", "sleep", "strain"]
+    /// The Today contract has five independent metrics. Keep the descriptor
+    /// list at the rendering boundary so a partial/legacy payload cannot make
+    /// a metric disappear from the dashboard. Missing cards are represented by
+    /// an explicit `--` value; no score or aggregate is fabricated.
+    private struct SignalDescriptor {
+        let id: String
+        let title: String
+        let accent: DailyPlanAccent
+    }
+
+    private static let requiredSignals = [
+        SignalDescriptor(id: "recovery", title: "恢复", accent: .recovery),
+        SignalDescriptor(id: "sleep", title: "睡眠", accent: .sleep),
+        SignalDescriptor(id: "strain", title: "负荷", accent: .strain),
+        SignalDescriptor(id: "stress", title: "压力", accent: .stress),
+        SignalDescriptor(id: "energy", title: "能量", accent: .energy)
+    ]
+
+    private var primaryDescriptors: ArraySlice<SignalDescriptor> {
+        Self.requiredSignals.prefix(3)
+    }
 
     private var primaryCards: [TodayExperienceSignalCard] {
-        cards(for: primaryIDs)
+        primaryDescriptors.map(card(for:))
     }
 
-    private var stressCard: TodayExperienceSignalCard? {
-        model.signalCards.first(where: { $0.id == "stress" })
+    private var stressCard: TodayExperienceSignalCard {
+        card(for: Self.requiredSignals[3])
     }
 
-    private var energyCard: TodayExperienceSignalCard? {
-        model.signalCards.first(where: { $0.id == "energy" })
+    private var energyCard: TodayExperienceSignalCard {
+        card(for: Self.requiredSignals[4])
     }
 
     var body: some View {
@@ -124,8 +144,8 @@ struct TodaySignalGrid: View {
                 .foregroundStyle(VelaTheme.rhythmInk)
 
             VStack(spacing: 12) {
-                if let stressCard { stressPanel(stressCard) }
-                if let energyCard { energyPanel(energyCard) }
+                stressPanel(stressCard)
+                energyPanel(energyCard)
             }
         }
     }
@@ -466,8 +486,20 @@ struct TodaySignalGrid: View {
         }
     }
 
-    private func cards(for ids: [String]) -> [TodayExperienceSignalCard] {
-        ids.compactMap { id in model.signalCards.first(where: { $0.id == id }) }
+    private func card(for descriptor: SignalDescriptor) -> TodayExperienceSignalCard {
+        model.signalCards.first(where: { $0.id == descriptor.id })
+            ?? TodayExperienceSignalCard(
+                id: descriptor.id,
+                title: descriptor.title,
+                value: "--",
+                directionLabel: "待同步",
+                confidenceLabel: "数据不足",
+                coverageLabel: "未同步",
+                subtitle: "等待健康数据",
+                trend: [],
+                accent: descriptor.accent,
+                state: .moderate
+            )
     }
 
     private func detailMetric(for cardID: String) -> VelaMetricDetailView.MetricType? {
