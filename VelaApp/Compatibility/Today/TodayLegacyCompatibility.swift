@@ -98,6 +98,16 @@ final class TodayLegacyRuntime {
         selectedDay = Calendar.current.startOfDay(for: day)
     }
 
+    /// Mirrors the Store-owned selected day into the legacy surfaces that
+    /// still require DashboardViewModel. Today must call this only after its
+    /// `selectDay` action has completed; keeping the mirror here makes the
+    /// compatibility boundary explicit and prevents the root renderer from
+    /// treating DashboardViewModel as the canonical date source.
+    func mirrorSelectedDayToLegacySurface(_ day: Date) {
+        setSelectedDay(day)
+        dashboardVM?.selectDate(day)
+    }
+
     func startLocationUpdates() {
         locationManager?.startUpdating()
     }

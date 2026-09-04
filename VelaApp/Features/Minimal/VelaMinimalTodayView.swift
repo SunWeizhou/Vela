@@ -747,16 +747,21 @@ struct VelaTodayView: View {
         }
     }
 
-    /// Calendar intent enters Today through the Store action boundary. The
-    /// DashboardViewModel mirror is updated only for legacy downstream
-    /// sheets that still require it; it is no longer observed as a Today
-    /// data-source trigger.
+    /// Calendar intent enters Today through the Store action boundary first.
+    /// The DashboardViewModel mirror is updated only after the Store accepts
+    /// the day, through a named compatibility adapter for legacy sheets.
     private func selectTodayDayFromCalendar(_ day: Date) {
-        dashboardVM.selectDate(day)
-        todayLegacyRuntime.setSelectedDay(day)
-        dispatchToday(.selectDay(day))
-        loadTodayLivedStateAlignment()
-        loadDynamicData()
+        let requestedDay = Calendar.current.startOfDay(for: day)
+        Task { @MainActor in
+            await todayStore.send(.selectDay(requestedDay))
+            let canonicalDay = todayStore.state.selectedDay
+            guard Calendar.current.isDate(canonicalDay, inSameDayAs: requestedDay) else {
+                return
+            }
+            todayLegacyRuntime.mirrorSelectedDayToLegacySurface(canonicalDay)
+            loadTodayLivedStateAlignment()
+            loadDynamicData()
+        }
     }
 
     func performExperienceAction(_ action: TodayExperienceAction) {
