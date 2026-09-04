@@ -46,6 +46,11 @@ struct VelaShell: View {
     @State private var mountedLegacyTabs: Set<VelaTab> = [.today]
     @State private var lastPresentedAppSheet: VelaAppState.AppSheet?
     @StateObject private var todayLegacyRuntimeHolder: TodayLegacyRuntimeHolder
+    /// TodayStore is a shell-owned dependency.  Keeping its identity at this
+    /// composition boundary prevents tab-surface reevaluation from creating a
+    /// second reader/load coordinator.
+    @StateObject private var todayStore: TodayStore
+    private let todayReader: LegacyTodayReadingModule
 
     @ObservedObject private var appState = VelaAppState.shared
     @Namespace private var tabAnimation
@@ -61,6 +66,15 @@ struct VelaShell: View {
 
     /// Rhythm's four canonical surfaces (Today, Trends, Plan, Coach) define the navigation.
     init() {
+        let reader = LegacyTodayReadingModule()
+        self.todayReader = reader
+        _todayStore = StateObject(
+            wrappedValue: TodayStore(
+                reader: reader,
+                clock: SystemAppClock(),
+                calendar: .current
+            )
+        )
         _todayLegacyRuntimeHolder = StateObject(
             wrappedValue: TodayLegacyRuntimeHolder()
         )
@@ -223,7 +237,12 @@ struct VelaShell: View {
     private var nativeTabNavigation: some View {
         TabView(selection: $appState.selectedTab) {
             nativeTabSurface(.today) {
-                VelaTodayView(showCoach: $showCoach, showSettings: $appState.showSettings)
+                VelaTodayView(
+                    showCoach: $showCoach,
+                    showSettings: $appState.showSettings,
+                    todayStore: todayStore,
+                    todayReader: todayReader
+                )
                     .environment(\.todayLegacyRuntime, todayLegacyRuntime)
             }
             .tabItem {
@@ -274,7 +293,12 @@ struct VelaShell: View {
             ZStack {
                 if mountedLegacyTabs.contains(.today) {
                     tabSurface(.today) {
-                        VelaTodayView(showCoach: $showCoach, showSettings: $appState.showSettings)
+                        VelaTodayView(
+                            showCoach: $showCoach,
+                            showSettings: $appState.showSettings,
+                            todayStore: todayStore,
+                            todayReader: todayReader
+                        )
                             .environment(\.todayLegacyRuntime, todayLegacyRuntime)
                     }
                 }

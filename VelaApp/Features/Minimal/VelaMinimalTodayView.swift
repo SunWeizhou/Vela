@@ -31,25 +31,22 @@ struct VelaTodayView: View {
     @EnvironmentObject var dashboardVM: DashboardViewModel
     @Environment(\.todayLegacyRuntime) var todayLegacyRuntime
 
-    /// The reader is bound to the composition-root objects when the surface
-    /// becomes active. Keeping the reader stable lets TodayStore coalesce
-    /// lifecycle-triggered loads while the legacy VM remains the renderer's
-    /// compatibility projection.
+    /// The reader and store are both supplied by the shell composition root.
+    /// The surface observes their state but never constructs its own load
+    /// coordinator, so SwiftUI reevaluation cannot fork TodayStore identity.
     private let legacyTodayReader: LegacyTodayReadingModule
-    @StateObject var todayStore: TodayStore
+    @ObservedObject var todayStore: TodayStore
 
-    init(showCoach: Binding<Bool>, showSettings: Binding<Bool>) {
+    init(
+        showCoach: Binding<Bool>,
+        showSettings: Binding<Bool>,
+        todayStore: TodayStore,
+        todayReader: LegacyTodayReadingModule
+    ) {
         self._showCoach = showCoach
         self._showSettings = showSettings
-        let reader = LegacyTodayReadingModule()
-        self.legacyTodayReader = reader
-        self._todayStore = StateObject(
-            wrappedValue: TodayStore(
-                reader: reader,
-                clock: SystemAppClock(),
-                calendar: .current
-            )
-        )
+        self.legacyTodayReader = todayReader
+        self._todayStore = ObservedObject(wrappedValue: todayStore)
     }
     
     /// Today renders the value snapshot published by the Store.  The shared
