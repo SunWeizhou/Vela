@@ -501,7 +501,11 @@ struct LivedStateCheckInSheet: View {
 }
 
 private struct TodayLegacyRuntimeKey: EnvironmentKey {
-    nonisolated(unsafe) static let defaultValue = TodayLegacyRuntime.preview
+    nonisolated static var defaultValue: TodayLegacyRuntime {
+        MainActor.assumeIsolated {
+            TodayLegacyRuntime.preview
+        }
+    }
 }
 
 extension EnvironmentValues {
@@ -572,7 +576,7 @@ extension VelaTodayView {
         )
     }
 
-    private var todayAIInsight: DailyAIInsight? {
+    var todayAIInsight: DailyAIInsight? {
         dashboardVM.todayAIInsight
     }
 
