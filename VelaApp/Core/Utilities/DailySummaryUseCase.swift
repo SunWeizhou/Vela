@@ -108,6 +108,50 @@ enum ActiveStatusSettings {
     }
 }
 
+/// SwiftData-backed adapter for the pure HealthTrendEngine seam.
+///
+/// DailySummaryUseCase deliberately keeps this adapter at the persistence
+/// boundary: the scoring module receives only value-typed snapshots and the
+/// long-term report. The regular Daily Health Computation path continues to
+/// use its bounded 180-day history; this provider is reserved for the Brief's
+/// multi-scale (including 3y) trend context.
+struct DailySummaryHealthTrendHistoryProvider: HealthTrendHistoryProvider {
+    let snapshots: [DailyHealthSnapshot]
+    let longTermBaselines: LongTermBaselineReport?
+
+    init(
+        snapshots: [DailyHealthSnapshot],
+        longTermBaselines: LongTermBaselineReport? = nil
+    ) {
+        self.snapshots = snapshots
+        self.longTermBaselines = longTermBaselines
+    }
+
+    func history(
+        endingAt selectedDay: Date,
+        calendar: Calendar
+    ) -> HealthTrendInput {
+        // Keep the adapter's payload bounded to the requested trend horizon.
+        // The engine still applies its own exact horizon windows and missing
+        // value gates; this only avoids carrying unrelated future/old rows
+        // across the boundary.
+        let selectedDayStart = calendar.startOfDay(for: selectedDay)
+        let end = calendar.date(byAdding: .day, value: 1, to: selectedDayStart) ?? selectedDay
+        let start = calendar.date(
+            byAdding: .day,
+            value: -HealthTrendHorizon.threeYears.windowDays,
+            to: selectedDayStart
+        ) ?? selectedDayStart
+        let boundedSnapshots = snapshots.filter { snapshot in
+            snapshot.date >= start && snapshot.date < end
+        }
+        return HealthTrendInput(
+            snapshots: boundedSnapshots,
+            longTermBaselines: longTermBaselines
+        )
+    }
+}
+
 @MainActor
 final class DailySummaryUseCase {
     nonisolated static let debugDemoConfigVersion = "\(VelaAppMetadata.configVersion).debug-demo"
@@ -239,6 +283,7 @@ final class DailySummaryUseCase {
         // 2b. 三年长线基准延后到确认今日快照存在后再计算：空启动/无今日数据时
         // 不必先全表抓 1100 天记录再返回空 dashboard。
         var allDailySummaryRecords: [DailyHealthSummaryRecord] = []
+        var allDailySummarySnapshots: [DailyHealthSnapshot] = []
         
         // 3. Locate today's snapshot
         let todaySnapshot = snapshots180.first(where: { calendar.isDate($0.date, inSameDayAs: now) })
@@ -275,6 +320,7 @@ final class DailySummaryUseCase {
         let longTermReport: LongTermBaselineReport
         if let modelContext {
             allDailySummaryRecords = (try? modelContext.fetch(FetchDescriptor<DailyHealthSummaryRecord>())) ?? []
+            allDailySummarySnapshots = allDailySummaryRecords.map { $0.toSnapshot() }
             // 长线基准是纯统计计算（审计 H2）：值类型 points 在 MainActor 上准备好后
             // 移出主线程执行，视图与交互不被 1100 天聚合阻塞。
             let baselinePoints = allDailySummaryRecords.map(\.longTermBaselinePoint)
@@ -610,6 +656,10 @@ final class DailySummaryUseCase {
                 journalEntries: recentJournalEntries.map { $0.dto },
                 activePlan: activePlan?.dto,
                 activeStatus: activeStatus,
+                trendHistoryProvider: DailySummaryHealthTrendHistoryProvider(
+                    snapshots: allDailySummarySnapshots,
+                    longTermBaselines: longTermReport
+                ),
                 snapshots: snapshots180,
                 feedbackCalibration: feedbackCalibration,
                 trainingPreference: trainingPreference,
@@ -1028,6 +1078,23 @@ final class DailySummaryUseCase {
         }.value
         dashboard.longTermBaselines = baselines
         dashboard.bodyModelState = bodyModel
+        // The cache path has no HealthKit work to refresh, but it still needs
+        // to publish the canonical Brief/AI projection with the same complete
+        // three-year trend history as a live DailySummary load. Secondary
+        // assembly preserves this projection when it only has its bounded
+        // recent snapshot window.
+        let trendProvider = DailySummaryHealthTrendHistoryProvider(
+            snapshots: allRecords.map { $0.toSnapshot() },
+            longTermBaselines: baselines
+        )
+        let trendAnalysis = HealthTrendEngine().analyze(
+            dashboard: dashboard,
+            historyProvider: trendProvider,
+            selectedDay: date,
+            calendar: calendar
+        )
+        dashboard.personalHealthBrief = trendAnalysis.brief
+        dashboard.healthTrends = trendAnalysis.findings
         return dashboard
     }
 

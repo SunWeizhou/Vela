@@ -5,10 +5,48 @@ import HealthKit
 import WidgetKit
 #endif
 
+/// Keep this envelope in lockstep with `WristSnapshotContract` in the iPhone
+/// target. The watch target intentionally has no dependency on the iPhone
+/// dashboard or SwiftData; it can therefore continue rendering and recording
+/// while the paired phone is unavailable.
+enum WatchSnapshotContract {
+    static let currentSchemaVersion = 2
+    static let legacySchemaVersion = 1
+    static let healthDayBoundaryMinutes = 4 * 60
+
+    static func isSupported(schemaVersion: Int) -> Bool {
+        schemaVersion == legacySchemaVersion || schemaVersion == currentSchemaVersion
+    }
+
+    static func healthDayIdentifier(
+        for date: Date,
+        calendar: Calendar = .current
+    ) -> String {
+        let midnight = calendar.startOfDay(for: date)
+        let boundary = calendar.date(
+            byAdding: .minute,
+            value: healthDayBoundaryMinutes,
+            to: midnight
+        ) ?? midnight
+        let labelDate = date >= boundary
+            ? midnight
+            : calendar.date(byAdding: .day, value: -1, to: midnight) ?? midnight
+        let components = calendar.dateComponents([.year, .month, .day], from: labelDate)
+        return String(
+            format: "%04d-%02d-%02d",
+            components.year ?? 0,
+            components.month ?? 0,
+            components.day ?? 0
+        )
+    }
+}
+
 // MARK: - Watch Snapshot & Models
 
 struct WatchSnapshot: Codable, Equatable {
     var generatedAt: Date
+    var schemaVersion: Int = WatchSnapshotContract.currentSchemaVersion
+    var healthDayIdentifier: String? = nil
     var bodyStateTitle: String
     var summary: String
     var decision: String
@@ -25,6 +63,181 @@ struct WatchSnapshot: Codable, Equatable {
     var sessionTitle: String?
     var sessionDetail: String?
     var planProgress: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case generatedAt
+        case schemaVersion
+        case healthDayIdentifier
+        case bodyStateTitle
+        case summary
+        case decision
+        case decisionConfidence
+        case recoveryScore
+        case sleepScore
+        case strainScore
+        case stressScore
+        case energyScore
+        case hrvMilliseconds
+        case restingHeartRate
+        case primaryAction
+        case planTitle
+        case sessionTitle
+        case sessionDetail
+        case planProgress
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        generatedAt = try container.decode(Date.self, forKey: .generatedAt)
+        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion)
+            ?? WatchSnapshotContract.legacySchemaVersion
+        healthDayIdentifier = try container.decodeIfPresent(String.self, forKey: .healthDayIdentifier)
+        bodyStateTitle = try container.decode(String.self, forKey: .bodyStateTitle)
+        summary = try container.decode(String.self, forKey: .summary)
+        decision = try container.decode(String.self, forKey: .decision)
+        decisionConfidence = try container.decode(Double.self, forKey: .decisionConfidence)
+        recoveryScore = try container.decodeIfPresent(Int.self, forKey: .recoveryScore)
+        sleepScore = try container.decodeIfPresent(Int.self, forKey: .sleepScore)
+        strainScore = try container.decodeIfPresent(Int.self, forKey: .strainScore)
+        stressScore = try container.decodeIfPresent(Int.self, forKey: .stressScore)
+        energyScore = try container.decodeIfPresent(Int.self, forKey: .energyScore)
+        hrvMilliseconds = try container.decodeIfPresent(Int.self, forKey: .hrvMilliseconds)
+        restingHeartRate = try container.decodeIfPresent(Int.self, forKey: .restingHeartRate)
+        primaryAction = try container.decode(String.self, forKey: .primaryAction)
+        planTitle = try container.decodeIfPresent(String.self, forKey: .planTitle)
+        sessionTitle = try container.decodeIfPresent(String.self, forKey: .sessionTitle)
+        sessionDetail = try container.decodeIfPresent(String.self, forKey: .sessionDetail)
+        planProgress = try container.decodeIfPresent(String.self, forKey: .planProgress)
+    }
+
+    /// Preserve the pre-versioning memberwise initializer order for previews
+    /// and any future watch tests; new envelope fields are appended.
+    init(
+        generatedAt: Date,
+        bodyStateTitle: String,
+        summary: String,
+        decision: String,
+        decisionConfidence: Double,
+        recoveryScore: Int?,
+        sleepScore: Int?,
+        strainScore: Int?,
+        stressScore: Int? = nil,
+        energyScore: Int? = nil,
+        hrvMilliseconds: Int? = nil,
+        restingHeartRate: Int? = nil,
+        primaryAction: String = "打开 Vela",
+        planTitle: String? = nil,
+        sessionTitle: String? = nil,
+        sessionDetail: String? = nil,
+        planProgress: String? = nil,
+        schemaVersion: Int = WatchSnapshotContract.currentSchemaVersion,
+        healthDayIdentifier: String? = nil
+    ) {
+        self.generatedAt = generatedAt
+        self.schemaVersion = schemaVersion
+        self.healthDayIdentifier = healthDayIdentifier
+        self.bodyStateTitle = bodyStateTitle
+        self.summary = summary
+        self.decision = decision
+        self.decisionConfidence = decisionConfidence
+        self.recoveryScore = recoveryScore
+        self.sleepScore = sleepScore
+        self.strainScore = strainScore
+        self.stressScore = stressScore
+        self.energyScore = energyScore
+        self.hrvMilliseconds = hrvMilliseconds
+        self.restingHeartRate = restingHeartRate
+        self.primaryAction = primaryAction
+        self.planTitle = planTitle
+        self.sessionTitle = sessionTitle
+        self.sessionDetail = sessionDetail
+        self.planProgress = planProgress
+    }
+}
+
+/// Watch-only training evidence. This payload deliberately does not require a
+/// `WatchSnapshot`; it is valid when the iPhone has never launched or cannot be
+/// reached and can be delivered later with `transferUserInfo`.
+private struct WatchTrainingObservation: Codable, Equatable {
+    static let currentSchemaVersion = 1
+
+    var id: UUID
+    var startedAt: Date
+    var endedAt: Date
+    var workoutKind: String
+    var activeCalories: Double
+    var averageHeartRate: Double?
+    var completedSets: Int
+    var healthDayIdentifier: String
+    var schemaVersion: Int = Self.currentSchemaVersion
+    var source: String = "appleWatch"
+
+    init(
+        id: UUID = UUID(),
+        startedAt: Date,
+        endedAt: Date,
+        workoutKind: String,
+        activeCalories: Double = 0,
+        averageHeartRate: Double? = nil,
+        completedSets: Int = 0,
+        healthDayIdentifier: String,
+        schemaVersion: Int = Self.currentSchemaVersion,
+        source: String = "appleWatch"
+    ) {
+        self.id = id
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.workoutKind = workoutKind
+        self.activeCalories = max(0, activeCalories)
+        self.averageHeartRate = averageHeartRate
+        self.completedSets = max(0, completedSets)
+        self.healthDayIdentifier = healthDayIdentifier
+        self.schemaVersion = schemaVersion
+        self.source = source
+    }
+}
+
+/// Device-local queue used when WatchConnectivity is still activating or the
+/// paired phone is absent. Transfer is best-effort and idempotent at the
+/// receiver, so an observation can be safely retried after activation.
+private enum WatchTrainingObservationQueue {
+    private static let cacheKey = "vela.watch.pending-training-observations"
+    private static let encoder = JSONEncoder()
+    private static let decoder = JSONDecoder()
+
+    static func enqueue(_ observation: WatchTrainingObservation) {
+        var pending = load()
+        guard !pending.contains(where: { $0.id == observation.id }) else { return }
+        pending.append(observation)
+        if let data = try? encoder.encode(Array(pending.suffix(100))) {
+            UserDefaults.standard.set(data, forKey: cacheKey)
+        }
+    }
+
+    static func flushIfPossible() {
+        let session = WCSession.default
+        guard session.activationState == .activated else { return }
+        let pending = load()
+        guard !pending.isEmpty else { return }
+        for observation in pending {
+            guard let data = try? encoder.encode(observation) else { continue }
+            session.transferUserInfo([
+                "trainingObservation": data,
+                "offlineWorkoutCompleted": true,
+                "kind": observation.workoutKind,
+                "duration": observation.endedAt.timeIntervalSince(observation.startedAt),
+                "calories": observation.activeCalories,
+                "completedAt": observation.endedAt.timeIntervalSince1970,
+                "completedSets": observation.completedSets
+            ])
+        }
+        UserDefaults.standard.removeObject(forKey: cacheKey)
+    }
+
+    private static func load() -> [WatchTrainingObservation] {
+        guard let data = UserDefaults.standard.data(forKey: cacheKey) else { return [] }
+        return (try? decoder.decode([WatchTrainingObservation].self, from: data)) ?? []
+    }
 }
 
 struct WatchStrengthSet: Codable, Equatable, Identifiable {
@@ -214,6 +427,7 @@ final class WatchWorkoutEngine: NSObject, ObservableObject, HKWorkoutSessionDele
     private var session: HKWorkoutSession?
     private var builder: HKLiveWorkoutBuilder?
     private var timer: Timer?
+    private var workoutStartedAt: Date?
     private let healthStore = HKHealthStore()
 
     func startWorkout(kind: WorkoutKind) {
@@ -228,6 +442,8 @@ final class WatchWorkoutEngine: NSObject, ObservableObject, HKWorkoutSessionDele
         configuration.activityType = kind.hkActivityType
         configuration.locationType = kind == .running ? .outdoor : .indoor
 
+        let startDate = Date()
+        workoutStartedAt = startDate
         do {
             session = try HKWorkoutSession(healthStore: healthStore, configuration: configuration)
             builder = session?.associatedWorkoutBuilder()
@@ -235,7 +451,6 @@ final class WatchWorkoutEngine: NSObject, ObservableObject, HKWorkoutSessionDele
             builder?.delegate = self
             builder?.dataSource = HKLiveWorkoutDataSource(healthStore: healthStore, workoutConfiguration: configuration)
 
-            let startDate = Date()
             session?.startActivity(with: startDate)
             builder?.beginCollection(withStart: startDate) { _, _ in }
         } catch {
@@ -252,6 +467,7 @@ final class WatchWorkoutEngine: NSObject, ObservableObject, HKWorkoutSessionDele
     func finishWorkout() {
         stopTimer()
         let finishDate = Date()
+        let startDate = workoutStartedAt ?? finishDate.addingTimeInterval(-Double(elapsedSeconds))
         session?.end()
         builder?.endCollection(withEnd: finishDate) { [weak self] _, _ in
             self?.builder?.finishWorkout { workout, _ in
@@ -266,18 +482,25 @@ final class WatchWorkoutEngine: NSObject, ObservableObject, HKWorkoutSessionDele
             isWorkingOut = false
         }
 
-        // Queue sync payload to iPhone via WCSession
+        // Queue a typed observation independently of the iPhone dashboard. The
+        // legacy scalar fields remain in the user-info envelope for one release
+        // so older phone builds can still recognize a completed workout.
+        let observation = WatchTrainingObservation(
+            startedAt: startDate,
+            endedAt: finishDate,
+            workoutKind: currentKind.rawValue,
+            activeCalories: activeCalories,
+            averageHeartRate: currentHeartRate > 0 ? currentHeartRate : nil,
+            completedSets: completedSetsCount,
+            healthDayIdentifier: WatchSnapshotContract.healthDayIdentifier(for: startDate)
+        )
+        WatchTrainingObservationQueue.enqueue(observation)
+        // Queue sync payload to iPhone via WCSession. If activation is
+        // delayed, the local queue is flushed by the bridge callback.
         if WCSession.default.activationState == .activated {
-            let summary: [String: Any] = [
-                "offlineWorkoutCompleted": true,
-                "kind": currentKind.rawValue,
-                "duration": elapsedSeconds,
-                "calories": activeCalories,
-                "completedAt": finishDate.timeIntervalSince1970,
-                "completedSets": completedSetsCount
-            ]
-            WCSession.default.transferUserInfo(summary)
+            WatchTrainingObservationQueue.flushIfPossible()
         }
+        workoutStartedAt = nil
     }
 
     func cancelWorkout() {
@@ -286,6 +509,7 @@ final class WatchWorkoutEngine: NSObject, ObservableObject, HKWorkoutSessionDele
         isWorkingOut = false
         session = nil
         builder = nil
+        workoutStartedAt = nil
     }
 
     private func startTimer() {
@@ -349,8 +573,9 @@ private final class WatchSnapshotStore: NSObject, ObservableObject, WCSessionDel
         let isMissingPreview = arguments.contains("-velaWatchPreviewMissing")
         let isPreview = arguments.contains("-velaWatchPreview") || isStalePreview || isMissingPreview
         if isPreview {
+            let previewGeneratedAt = isStalePreview ? Date().addingTimeInterval(-30 * 3_600) : Date()
             snapshot = WatchSnapshot(
-                generatedAt: isStalePreview ? Date().addingTimeInterval(-30 * 3_600) : Date(),
+                generatedAt: previewGeneratedAt,
                 bodyStateTitle: "恢复状态良好",
                 summary: "睡眠与 HRV 位于个人基线范围内，今天可以按计划训练。",
                 decision: "按计划训练",
@@ -366,15 +591,20 @@ private final class WatchSnapshotStore: NSObject, ObservableObject, WCSessionDel
                 planTitle: "四周力量进阶",
                 sessionTitle: "下肢力量 · Week 2",
                 sessionDetail: "50 分钟 · 中强度",
-                planProgress: "5/12 已完成"
+                planProgress: "5/12 已完成",
+                healthDayIdentifier: WatchSnapshotContract.healthDayIdentifier(for: previewGeneratedAt)
             )
         }
-        if !isPreview, let data = UserDefaults.standard.data(forKey: cacheKey) {
-            snapshot = try? JSONDecoder().decode(WatchSnapshot.self, from: data)
+        if !isPreview, let data = UserDefaults.standard.data(forKey: cacheKey),
+           let decoded = try? JSONDecoder().decode(WatchSnapshot.self, from: data),
+           WatchSnapshotContract.isSupported(schemaVersion: decoded.schemaVersion) {
+            snapshot = decoded
         }
         #else
-        if let data = UserDefaults.standard.data(forKey: cacheKey) {
-            snapshot = try? JSONDecoder().decode(WatchSnapshot.self, from: data)
+        if let data = UserDefaults.standard.data(forKey: cacheKey),
+           let decoded = try? JSONDecoder().decode(WatchSnapshot.self, from: data),
+           WatchSnapshotContract.isSupported(schemaVersion: decoded.schemaVersion) {
+            snapshot = decoded
         }
         #endif
         if let data = UserDefaults.standard.data(forKey: activeWorkoutCacheKey) {
@@ -383,6 +613,7 @@ private final class WatchSnapshotStore: NSObject, ObservableObject, WCSessionDel
         guard WCSession.isSupported() else { return }
         WCSession.default.delegate = self
         WCSession.default.activate()
+        WatchTrainingObservationQueue.flushIfPossible()
     }
 
     func requestLatest() {
@@ -406,6 +637,7 @@ private final class WatchSnapshotStore: NSObject, ObservableObject, WCSessionDel
         error: Error?
     ) {
         guard activationState == .activated else { return }
+        WatchTrainingObservationQueue.flushIfPossible()
         Task { @MainActor [weak self] in self?.requestLatest() }
     }
 
@@ -437,6 +669,7 @@ private final class WatchSnapshotStore: NSObject, ObservableObject, WCSessionDel
 
     private func apply(_ data: Data) {
         guard let decoded = try? JSONDecoder().decode(WatchSnapshot.self, from: data) else { return }
+        guard WatchSnapshotContract.isSupported(schemaVersion: decoded.schemaVersion) else { return }
         snapshot = decoded
         UserDefaults.standard.set(data, forKey: cacheKey)
     }
@@ -617,7 +850,7 @@ private struct WatchRootView: View {
                         .tracking(1.8)
                         .foregroundStyle(Color(red: 0.48, green: 0.95, blue: 0.82))
                     Spacer()
-                    freshness(snapshot.generatedAt)
+                    freshness(snapshot)
                 }
 
                 ZStack {
@@ -768,13 +1001,13 @@ private struct WatchRootView: View {
         .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 9))
     }
 
-    private func freshness(_ date: Date) -> some View {
+    private func freshness(_ snapshot: WatchSnapshot) -> some View {
         Group {
-            if snapshotDateIsStale(date) {
+            if snapshotIsStale(snapshot) {
                 Label("需更新", systemImage: "clock.badge.exclamationmark")
                     .foregroundStyle(.orange)
             } else {
-                Text(date, style: .relative)
+                Text(snapshot.generatedAt, style: .relative)
                     .foregroundStyle(.secondary)
             }
         }
@@ -808,11 +1041,19 @@ private struct WatchRootView: View {
     }
 
     private func snapshotIsStale(_ snapshot: WatchSnapshot) -> Bool {
-        snapshotDateIsStale(snapshot.generatedAt)
+        guard let healthDayIdentifier = snapshot.healthDayIdentifier else {
+            // Legacy snapshots had no explicit health-day label. Keep them
+            // renderable while applying the same 04:00 boundary locally.
+            return snapshotDateIsStale(snapshot.generatedAt)
+        }
+        return Date().timeIntervalSince(snapshot.generatedAt) > 12 * 3_600
+            || healthDayIdentifier != WatchSnapshotContract.healthDayIdentifier(for: Date())
     }
 
     private func snapshotDateIsStale(_ date: Date) -> Bool {
-        Date().timeIntervalSince(date) > 12 * 3_600 || !Calendar.current.isDateInToday(date)
+        Date().timeIntervalSince(date) > 12 * 3_600
+            || WatchSnapshotContract.healthDayIdentifier(for: date)
+                != WatchSnapshotContract.healthDayIdentifier(for: Date())
     }
 }
 
@@ -1131,4 +1372,3 @@ struct WatchWorkoutSessionView: View {
         return String(format: "%02d:%02d", m, s)
     }
 }
-

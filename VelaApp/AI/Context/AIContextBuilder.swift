@@ -1339,27 +1339,39 @@ enum AgentFactAdapters {
     static func postWorkoutFacts(
         snapshot: AgentFactSnapshot,
         workoutID: UUID?,
-        isChinese: Bool = AppLanguage.stored.isChinese
+        isChinese: Bool = AppLanguage.stored.isChinese,
+        policy overridePolicy: AgentOutboundConsentPolicy? = nil
     ) -> String {
+        let policy = overridePolicy ?? AgentOutboundConsentPolicy.current
+        guard policy.canSendNetworkAI else {
+            return isChinese
+                ? "练后复盘未发送：尚未授予任何后台联网数据类别授权。"
+                : "Post-workout review was not sent: no background outbound data category is authorized."
+        }
+        // WorkoutAdaptationService is intentionally kept on the local scoring
+        // seam.  Redact here, at its final text adapter boundary, so a future
+        // caller cannot bypass category consent by passing a complete snapshot.
+        let outboundSnapshot = snapshot.redacted(for: policy)
         func scoreText(_ value: MetricValue<Double>) -> String {
             value.value.map { "\(Int($0.rounded()))" } ?? "N/A"
         }
-        let decisionLine = snapshot.dailyOperatingPlan?["summary"]
-            ?? snapshot.trainingDecision.reasons
-        let planLine = snapshot.training.activePlan.map {
+        let decisionLine = outboundSnapshot.dailyOperatingPlan?["summary"]
+            ?? outboundSnapshot.trainingDecision.reasons
+        let planLine = outboundSnapshot.training.activePlan.map {
             "活跃计划：\($0.title)（\($0.totalDays) 天）"
         } ?? "无活跃计划"
+        let safeWorkoutID = policy.training ? (workoutID?.uuidString ?? "-") : "-"
         if isChinese {
             return """
-            刚完成的训练：workout_id=\(workoutID?.uuidString ?? "-")（训练事实以本机记录为准）。
-            当前身体评分：恢复 \(scoreText(snapshot.recovery.score))、睡眠 \(scoreText(snapshot.sleep.score))、负荷 \(scoreText(snapshot.strain.score))、压力 \(scoreText(snapshot.stress.stressIndex))、能量 \(scoreText(snapshot.energyBank.currentEnergy))。
+            刚完成的训练：workout_id=\(safeWorkoutID)（训练事实以本机记录为准）。
+            当前身体评分：恢复 \(scoreText(outboundSnapshot.recovery.score))、睡眠 \(scoreText(outboundSnapshot.sleep.score))、负荷 \(scoreText(outboundSnapshot.strain.score))、压力 \(scoreText(outboundSnapshot.stress.stressIndex))、能量 \(scoreText(outboundSnapshot.energyBank.currentEnergy))。
             本机今日决定：\(decisionLine)
             \(planLine)
             """
         }
         return """
-        Just completed: workout_id=\(workoutID?.uuidString ?? "-") (training facts are authoritative locally).
-        Current scores: Recovery \(scoreText(snapshot.recovery.score)), Sleep \(scoreText(snapshot.sleep.score)), Strain \(scoreText(snapshot.strain.score)), Stress \(scoreText(snapshot.stress.stressIndex)), Energy \(scoreText(snapshot.energyBank.currentEnergy)).
+        Just completed: workout_id=\(safeWorkoutID) (training facts are authoritative locally).
+        Current scores: Recovery \(scoreText(outboundSnapshot.recovery.score)), Sleep \(scoreText(outboundSnapshot.sleep.score)), Strain \(scoreText(outboundSnapshot.strain.score)), Stress \(scoreText(outboundSnapshot.stress.stressIndex)), Energy \(scoreText(outboundSnapshot.energyBank.currentEnergy)).
         Local decision: \(decisionLine)
         \(planLine)
         """

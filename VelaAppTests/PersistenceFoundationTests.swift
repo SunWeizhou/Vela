@@ -1114,6 +1114,104 @@ final class PersistenceFoundationTests: XCTestCase {
         XCTAssertEqual(decoded, snapshot)
     }
 
+    func testWristSnapshotUsesFourAMHealthDayBoundaryAndVersionedEnvelope() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let beforeBoundary = try XCTUnwrap(calendar.date(from: DateComponents(
+            year: 2026, month: 8, day: 1, hour: 3, minute: 59
+        )))
+        let atBoundary = try XCTUnwrap(calendar.date(from: DateComponents(
+            year: 2026, month: 8, day: 1, hour: 4
+        )))
+
+        XCTAssertEqual(
+            WristSnapshotContract.healthDayIdentifier(for: beforeBoundary, calendar: calendar),
+            "2026-07-31"
+        )
+        XCTAssertEqual(
+            WristSnapshotContract.healthDayIdentifier(for: atBoundary, calendar: calendar),
+            "2026-08-01"
+        )
+        XCTAssertFalse(
+            WristSnapshotContract.isCurrentHealthDay(beforeBoundary, now: atBoundary, calendar: calendar)
+        )
+        XCTAssertTrue(
+            WristSnapshotContract.isCurrentHealthDay(atBoundary, now: atBoundary, calendar: calendar)
+        )
+
+        let snapshot = WristSnapshot(
+            generatedAt: beforeBoundary,
+            bodyStateTitle: "恢复稳定",
+            summary: "健康日仍属于前一日。",
+            decision: "按计划训练",
+            decisionConfidence: 0.8,
+            recoveryScore: 80,
+            sleepScore: 78,
+            strainScore: 30,
+            primaryAction: "开始训练",
+            healthDayIdentifier: WristSnapshotContract.healthDayIdentifier(for: beforeBoundary, calendar: calendar)
+        )
+        let decoded = try JSONDecoder().decode(WristSnapshot.self, from: JSONEncoder().encode(snapshot))
+
+        XCTAssertEqual(decoded.schemaVersion, WristSnapshotContract.currentSchemaVersion)
+        XCTAssertEqual(decoded.healthDayIdentifier, "2026-07-31")
+    }
+
+    func testLegacyWristSnapshotDecodesWithCompatibilityDefaults() throws {
+        let snapshot = WristSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 1_783_929_600),
+            bodyStateTitle: "恢复稳定",
+            summary: "旧版本快照",
+            decision: "按计划训练",
+            decisionConfidence: 0.8,
+            recoveryScore: 80,
+            sleepScore: 78,
+            strainScore: 30,
+            primaryAction: "开始训练"
+        )
+        let encoded = try JSONEncoder().encode(snapshot)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        object.removeValue(forKey: "schemaVersion")
+        object.removeValue(forKey: "healthDayIdentifier")
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try JSONDecoder().decode(WristSnapshot.self, from: legacyData)
+        XCTAssertEqual(decoded.schemaVersion, WristSnapshotContract.legacySchemaVersion)
+        XCTAssertNil(decoded.healthDayIdentifier)
+        XCTAssertTrue(WristSnapshotContract.isSupported(schemaVersion: decoded.schemaVersion))
+        XCTAssertFalse(WristSnapshotContract.isSupported(schemaVersion: 99))
+    }
+
+    func testWatchOnlyTrainingObservationIsVersionedAndSnapshotIndependent() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let startedAt = try XCTUnwrap(calendar.date(from: DateComponents(
+            year: 2026, month: 8, day: 1, hour: 2, minute: 30
+        )))
+        let endedAt = startedAt.addingTimeInterval(45 * 60)
+        let observation = WristTrainingObservation(
+            startedAt: startedAt,
+            endedAt: endedAt,
+            workoutKind: "户外跑步",
+            activeCalories: 320,
+            averageHeartRate: 144,
+            completedSets: 0,
+            healthDayIdentifier: WristSnapshotContract.healthDayIdentifier(for: startedAt, calendar: calendar)
+        )
+
+        let decoded = try JSONDecoder().decode(
+            WristTrainingObservation.self,
+            from: JSONEncoder().encode(observation)
+        )
+
+        XCTAssertEqual(decoded, observation)
+        XCTAssertEqual(decoded.schemaVersion, WristTrainingObservation.currentSchemaVersion)
+        XCTAssertTrue(WristTrainingObservation.isSupported(schemaVersion: decoded.schemaVersion))
+        XCTAssertFalse(WristTrainingObservation.isSupported(schemaVersion: 99))
+        XCTAssertEqual(decoded.healthDayIdentifier, "2026-07-31")
+        XCTAssertEqual(decoded.source, "appleWatch")
+    }
+
     @MainActor
     func testDailyAdaptiveProposalIsIdempotentAndDoesNotMutatePlan() throws {
         let container = try VelaModelContainer.make(inMemory: true)

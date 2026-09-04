@@ -1,7 +1,191 @@
 import XCTest
+import SwiftData
 @testable import Vela
 
 final class ContextBuilderTests: XCTestCase {
+    func testAutomatedOutboundConsentRequiresFeatureAndCategoryGrant() {
+        let categories = CoachOutboundDataPolicy(
+            health: false,
+            training: false,
+            nutrition: false,
+            journal: false,
+            wiki: true,
+            reports: false,
+            conversationHistory: false,
+            webSearch: false,
+            files: false
+        )
+        let disabled = AgentOutboundConsentPolicy(
+            backgroundNetworkAIConsent: false,
+            categoryPolicy: categories
+        )
+        XCTAssertFalse(disabled.canSendNetworkAI)
+
+        let enabled = AgentOutboundConsentPolicy(
+            backgroundNetworkAIConsent: true,
+            categoryPolicy: categories
+        )
+        XCTAssertTrue(enabled.canSendNetworkAI)
+        XCTAssertFalse(enabled.allows(.health))
+        XCTAssertTrue(enabled.allows(.wiki))
+    }
+
+    func testFactSnapshotRedactionRemovesDeniedCategoriesAtFinalBoundary() throws {
+        let now = Date()
+        var snapshot = AIContextBuilder().buildFacts(
+            dashboard: .preview(date: now),
+            journalEntries: [JournalContextEntry(tags: ["mood"], text: "felt great")],
+            historicalReports: [GeneratedAIReport(
+                type: .coachPrompt,
+                title: "Private report",
+                markdownContent: "private report content",
+                contextSnapshot: "{}",
+                createdAt: now
+            )],
+            userWiki: ["profile.md": "private profile"],
+            foodLogs: [FoodLogRecord(
+                mealName: "Dinner",
+                foods: [FoodLogItem(name: "private meal", portion: "1 serving", calories: 500)],
+                totalCalories: 500,
+                proteinGrams: 30,
+                carbsGrams: 40,
+                fatGrams: 20,
+                fiberGrams: 5,
+                healthScore: "good",
+                source: .manual,
+                createdAt: now
+            )],
+            generatedAt: now
+        ).snapshot
+        snapshot.bodyState.drivers = [
+            BodyStateDriver(id: "training", kind: .localFatigue, title: "training", detail: "private training", impact: -1, source: "test"),
+            BodyStateDriver(id: "food", kind: .nutrition, title: "nutrition", detail: "private nutrition", impact: 0, source: "test"),
+            BodyStateDriver(id: "journal", kind: .journal, title: "journal", detail: "private journal", impact: 0, source: "test")
+        ]
+        let policy = AgentOutboundConsentPolicy(
+            backgroundNetworkAIConsent: true,
+            health: false,
+            training: true,
+            nutrition: false,
+            journal: false,
+            wiki: false,
+            reports: false,
+            conversationHistory: false,
+            webSearch: false,
+            files: false
+        )
+
+        let redacted = snapshot.redacted(for: policy)
+        XCTAssertNil(redacted.recovery.score.value)
+        XCTAssertNil(redacted.extendedMetrics.age)
+        XCTAssertEqual(redacted.training.workoutCount, snapshot.training.workoutCount)
+        XCTAssertEqual(redacted.trainingDecision.readinessLevel, "unavailable")
+        XCTAssertTrue(redacted.journalEntries.isEmpty)
+        XCTAssertTrue(redacted.historicalReports.isEmpty)
+        XCTAssertTrue(redacted.userWiki.isEmpty)
+        XCTAssertEqual(redacted.nutrition.recentCount, 0)
+
+        let data = try JSONEncoder().encode(redacted)
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+        XCTAssertFalse(json.contains("felt great"))
+        XCTAssertFalse(json.contains("private profile"))
+        XCTAssertFalse(json.contains("private report content"))
+        XCTAssertFalse(json.contains("private meal"))
+
+        let healthOnly = AgentOutboundConsentPolicy(
+            backgroundNetworkAIConsent: true,
+            health: true,
+            training: false,
+            nutrition: false,
+            journal: false,
+            wiki: false,
+            reports: false,
+            conversationHistory: false,
+            webSearch: false,
+            files: false
+        )
+        let healthOnlySnapshot = snapshot.redacted(for: healthOnly)
+        XCTAssertTrue(healthOnlySnapshot.bodyState.drivers.isEmpty)
+        XCTAssertNotNil(healthOnlySnapshot.recovery.score.value)
+    }
+
+    func testPostWorkoutFactAdapterAppliesCategoryConsentAndFeatureGate() {
+        let now = Date()
+        let snapshot = AIContextBuilder().buildFacts(
+            dashboard: .preview(date: now),
+            journalEntries: [],
+            historicalReports: [],
+            userWiki: [:],
+            generatedAt: now
+        ).snapshot
+        let workoutID = UUID()
+        let healthOnly = AgentOutboundConsentPolicy(
+            backgroundNetworkAIConsent: true,
+            health: true,
+            training: false,
+            nutrition: false,
+            journal: false,
+            wiki: false,
+            reports: false,
+            conversationHistory: false,
+            webSearch: false,
+            files: false
+        )
+
+        let healthOnlyFacts = AgentFactAdapters.postWorkoutFacts(
+            snapshot: snapshot,
+            workoutID: workoutID,
+            isChinese: false,
+            policy: healthOnly
+        )
+        XCTAssertFalse(healthOnlyFacts.contains(workoutID.uuidString))
+        XCTAssertTrue(healthOnlyFacts.contains("workout_id=-"))
+
+        let noBackgroundConsent = AgentOutboundConsentPolicy(
+            backgroundNetworkAIConsent: false,
+            health: true,
+            training: true,
+            nutrition: true,
+            journal: true,
+            wiki: true,
+            reports: true,
+            conversationHistory: true,
+            webSearch: true,
+            files: true
+        )
+        let blocked = AgentFactAdapters.postWorkoutFacts(
+            snapshot: snapshot,
+            workoutID: workoutID,
+            isChinese: false,
+            policy: noBackgroundConsent
+        )
+        XCTAssertTrue(blocked.contains("no background outbound data category"))
+    }
+
+    @MainActor
+    func testCoachTraceWriterReappliesFinalResponseRedaction() throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let raw = "Recovery and sleep details: HRV 42"
+        let trace = AgentRunTrace(
+            id: UUID(),
+            startedAt: Date(),
+            endedAt: Date(),
+            inputMessages: [],
+            executedTools: [],
+            finalResponse: raw,
+            contextHash: "hash",
+            contextHashSource: "agent_fact_snapshot",
+            schemaVersion: "agentTrace.v2",
+            providerCallCount: 1
+        )
+
+        try CoachPersistenceWriter().persistAgentTrace(trace, modelContext: container.mainContext)
+        let records = try container.mainContext.fetch(FetchDescriptor<AgentRunRecord>())
+        let summary = try XCTUnwrap(records.first?.outputSummary)
+        XCTAssertFalse(summary.contains(raw))
+        XCTAssertTrue(summary.hasPrefix("[REDACTED: sensitive content]"))
+    }
+
     @MainActor
     func testEveningWikiAgentUsesCanonicalAvailabilityInsteadOfDefaultZeroScores() {
         let snapshot = AIContextBuilder().buildFacts(

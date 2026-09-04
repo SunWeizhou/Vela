@@ -50,7 +50,11 @@ final class CoachPersistenceWriter {
                 .compactMap { $0 }
                 .joined(separator: ":"),
             inputContextHash: trace.contextHash,
-            outputSummary: trace.finalResponse,
+            // CoachChatVM post-processes the display text and replaces the
+            // loop trace's provisional response.  Re-apply the shared trace
+            // privacy boundary here so that raw `finalText` can never be
+            // persisted by accident.
+            outputSummary: AgentTracePrivacy.redactedFinalResponse(trace.finalResponse),
             toolCallsJSON: toolCallsJSON
         ))
         try modelContext.save()

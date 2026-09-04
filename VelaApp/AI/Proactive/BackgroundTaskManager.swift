@@ -28,9 +28,10 @@ enum BackgroundTaskManager {
     /// iOS determines the actual fire time based on app usage patterns and system conditions.
     static func schedule() {
         let config = AutoAgentConfig.shared
-        guard config.canRunBackgroundNetworkAI else {
+        guard config.canRunBackgroundNetworkAI,
+              AgentOutboundConsentPolicy.current.canSendNetworkAI else {
             cancelAll()
-            logger.info("Background network AI is not enabled by the user; no refresh scheduled.")
+            logger.info("Background network AI or category consent is absent; no refresh scheduled.")
             return
         }
 
@@ -79,8 +80,9 @@ enum BackgroundTaskManager {
     private static func handleRefreshTask(task: BGAppRefreshTask) {
         logger.info("Background refresh task fired.")
 
-        guard AutoAgentConfig.shared.canRunBackgroundNetworkAI else {
-            logger.info("Background network AI consent is absent; refresh skipped.")
+        guard AutoAgentConfig.shared.canRunBackgroundNetworkAI,
+              AgentOutboundConsentPolicy.current.canSendNetworkAI else {
+            logger.info("Background network AI or category consent is absent; refresh skipped.")
             task.setTaskCompleted(success: true)
             return
         }

@@ -413,6 +413,105 @@ final class HealthTrendAndBriefTests: XCTestCase {
         XCTAssertEqual(fromProvider.brief, direct.brief)
     }
 
+    func testDailySummaryTrendProviderBoundsHistoryAndPreservesMissingValues() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let selectedDay = calendar.startOfDay(for: Date(timeIntervalSince1970: 1_800_000_000))
+
+        var old = DailyHealthSnapshot(
+            date: calendar.date(byAdding: .day, value: -HealthTrendHorizon.threeYears.windowDays - 1, to: selectedDay)!
+        )
+        old.recoveryScore = 99
+        var edge = DailyHealthSnapshot(
+            date: calendar.date(byAdding: .day, value: -HealthTrendHorizon.threeYears.windowDays, to: selectedDay)!
+        )
+        edge.recoveryScore = nil
+        var current = DailyHealthSnapshot(date: selectedDay)
+        current.recoveryScore = 60
+        var future = DailyHealthSnapshot(
+            date: calendar.date(byAdding: .day, value: 1, to: selectedDay)!
+        )
+        future.recoveryScore = 1
+
+        let provider = DailySummaryHealthTrendHistoryProvider(
+            snapshots: [old, edge, current, future],
+            longTermBaselines: nil
+        )
+        let input = provider.history(endingAt: selectedDay, calendar: calendar)
+
+        XCTAssertEqual(input.snapshots.map(\.date), [edge.date, current.date])
+        XCTAssertNil(input.snapshots.first?.recoveryScore)
+        XCTAssertNil(input.longTermBaselines)
+    }
+
+    func testDailyIntelligenceUsesThreeYearProviderWithoutWideningRecentEvidence() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let selectedDay = calendar.startOfDay(for: Date(timeIntervalSince1970: 1_800_000_000))
+        var longHistory: [DailyHealthSnapshot] = []
+        for index in 0..<400 {
+            let date = calendar.date(byAdding: .day, value: index - 399, to: selectedDay)!
+            var snapshot = DailyHealthSnapshot(date: date)
+            snapshot.recoveryScore = index < 200 ? 82 : 61
+            longHistory.append(snapshot)
+        }
+
+        let dashboard = recoveryDashboard(value: 61, date: selectedDay)
+        let assembly = DailyIntelligenceAssemblyModule.assemble(
+            DailyIntelligenceAssemblyInput(
+                dashboard: dashboard,
+                selectedDay: selectedDay,
+                calendar: calendar,
+                trendHistoryProvider: DailySummaryHealthTrendHistoryProvider(snapshots: longHistory),
+                // The recent scoring evidence is intentionally narrow. The
+                // 3y provider above is the only source for trend findings.
+                snapshots: [longHistory.last!]
+            )
+        )
+
+        let recoveryFinding = assembly.dashboard.healthTrends.first {
+            $0.metric == .recovery && $0.horizon == .threeYears
+        }
+        XCTAssertEqual(recoveryFinding?.sampleCount, 400)
+        XCTAssertTrue(recoveryFinding?.isAvailable == true)
+    }
+
+    func testSecondaryAssemblyPreservesUpstreamThreeYearBrief() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let selectedDay = calendar.startOfDay(for: Date(timeIntervalSince1970: 1_800_000_000))
+        var longHistory: [DailyHealthSnapshot] = []
+        for index in 0..<400 {
+            let date = calendar.date(byAdding: .day, value: index - 399, to: selectedDay)!
+            var snapshot = DailyHealthSnapshot(date: date)
+            snapshot.recoveryScore = index < 200 ? 82 : 61
+            longHistory.append(snapshot)
+        }
+
+        let source = DailyIntelligenceAssemblyModule.assemble(
+            DailyIntelligenceAssemblyInput(
+                dashboard: recoveryDashboard(value: 61, date: selectedDay),
+                selectedDay: selectedDay,
+                calendar: calendar,
+                trendHistoryProvider: DailySummaryHealthTrendHistoryProvider(snapshots: longHistory),
+                snapshots: [longHistory.last!]
+            )
+        )
+        let preserved = DailyIntelligenceAssemblyModule.assemble(
+            DailyIntelligenceAssemblyInput(
+                dashboard: source.dashboard,
+                selectedDay: selectedDay,
+                calendar: calendar,
+                // Simulate the secondary path, which only has a short recent
+                // window and no persistence-backed trend provider.
+                snapshots: [longHistory.last!]
+            )
+        )
+
+        XCTAssertEqual(preserved.dashboard.personalHealthBrief, source.dashboard.personalHealthBrief)
+        XCTAssertEqual(preserved.dashboard.healthTrends, source.dashboard.healthTrends)
+    }
+
     func testThreeYearWindowExcludesOutOfWindowAndMissingSamples() {
         let calendar = Calendar(identifier: .gregorian)
         let today = calendar.startOfDay(for: Date())

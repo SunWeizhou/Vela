@@ -1,5 +1,127 @@
 import Foundation
 
+// MARK: - Network outbound consent
+
+/// Data categories that may appear in an AI request.  Keep this list aligned
+/// with the user-facing Coach consent sheet; a missing category must be
+/// treated as denied (never as an implicit "all" grant).
+enum AgentOutboundDataCategory: String, CaseIterable, Codable, Sendable {
+    case health
+    case training
+    case nutrition
+    case journal
+    case wiki
+    case reports
+    case conversationHistory
+    case webSearch
+    case files
+}
+
+/// A snapshot of the two independent gates required by automated agents:
+/// the feature-level background consent and per-category outbound consent.
+/// This type intentionally copies booleans instead of retaining
+/// `CoachOutboundDataPolicy`, so background payload preparation remains a
+/// value type that is safe to pass across task boundaries.
+struct AgentOutboundConsentPolicy: Equatable, Sendable {
+    var backgroundNetworkAIConsent: Bool
+    var health: Bool
+    var training: Bool
+    var nutrition: Bool
+    var journal: Bool
+    var wiki: Bool
+    var reports: Bool
+    var conversationHistory: Bool
+    var webSearch: Bool
+    var files: Bool
+
+    init(
+        backgroundNetworkAIConsent: Bool,
+        health: Bool,
+        training: Bool,
+        nutrition: Bool,
+        journal: Bool,
+        wiki: Bool,
+        reports: Bool,
+        conversationHistory: Bool,
+        webSearch: Bool,
+        files: Bool
+    ) {
+        self.backgroundNetworkAIConsent = backgroundNetworkAIConsent
+        self.health = health
+        self.training = training
+        self.nutrition = nutrition
+        self.journal = journal
+        self.wiki = wiki
+        self.reports = reports
+        self.conversationHistory = conversationHistory
+        self.webSearch = webSearch
+        self.files = files
+    }
+
+    init(
+        backgroundNetworkAIConsent: Bool,
+        categoryPolicy: CoachOutboundDataPolicy
+    ) {
+        self.init(
+            backgroundNetworkAIConsent: backgroundNetworkAIConsent,
+            health: categoryPolicy.health,
+            training: categoryPolicy.training,
+            nutrition: categoryPolicy.nutrition,
+            journal: categoryPolicy.journal,
+            wiki: categoryPolicy.wiki,
+            reports: categoryPolicy.reports,
+            conversationHistory: categoryPolicy.conversationHistory,
+            webSearch: categoryPolicy.webSearch,
+            files: categoryPolicy.files
+        )
+    }
+
+    /// Resolve the policy once at an outbound boundary.  All automated
+    /// schedulers should capture this value before building their payload.
+    static var current: AgentOutboundConsentPolicy {
+        AgentOutboundConsentPolicy(
+            backgroundNetworkAIConsent: AutoAgentConfig.shared.backgroundNetworkAIConsent,
+            categoryPolicy: CoachOutboundDataPolicy.stored
+        )
+    }
+
+    /// No network request is allowed when the feature gate or every category
+    /// gate is closed.  This is deliberately stricter than
+    /// `hasExplicitConsent`, which only records that the sheet was reviewed.
+    var canSendNetworkAI: Bool {
+        backgroundNetworkAIConsent && hasAnyCategoryConsent
+    }
+
+    var hasAnyCategoryConsent: Bool {
+        health || training || nutrition || journal || wiki || reports
+            || conversationHistory || webSearch || files
+    }
+
+    func allows(_ category: AgentOutboundDataCategory) -> Bool {
+        switch category {
+        case .health: health
+        case .training: training
+        case .nutrition: nutrition
+        case .journal: journal
+        case .wiki: wiki
+        case .reports: reports
+        case .conversationHistory: conversationHistory
+        case .webSearch: webSearch
+        case .files: files
+        }
+    }
+}
+
+extension CoachOutboundDataPolicy {
+    /// A consent sheet can be confirmed with every toggle off.  Callers that
+    /// are about to make an automated network request must require at least
+    /// one explicit category in addition to the consent version.
+    var hasAnyCategoryConsent: Bool {
+        health || training || nutrition || journal || wiki || reports
+            || conversationHistory || webSearch || files
+    }
+}
+
 // MARK: - Typed Metric Value
 
 public enum DataFreshness: String, Codable, Hashable, CaseIterable, Sendable {
@@ -247,4 +369,196 @@ struct AgentFactSnapshot: Codable, Hashable, Sendable {
     /// 规范产品层：统一身体简报与多尺度趋势发现，让 Agent 解释 UI 当前显示的同一份事实
     var personalHealthBrief: PersonalHealthBrief?
     var healthTrends: [HealthTrendFinding]?
+}
+
+extension AgentFactSnapshot {
+    /// Returns a copy safe to place in a network request.  Builders may still
+    /// assemble a complete local snapshot for deterministic calculations, but
+    /// this final boundary guarantees that a future caller cannot accidentally
+    /// re-introduce a denied category by forgetting one input-side guard.
+    func redacted(for policy: AgentOutboundConsentPolicy) -> AgentFactSnapshot {
+        var redacted = self
+        if !policy.health {
+            redacted.redactHealth()
+        }
+        if !policy.training {
+            redacted.training = TrainingContext(
+                activePlan: nil,
+                workoutCount: 0,
+                workoutTypes: [],
+                totalEnergyKcal: 0,
+                totalDurationMin: 0,
+                workoutListJSON: "[]"
+            )
+            redacted.strengthTraining = nil
+        }
+        if !policy.health || !policy.training {
+            // Readiness, volume and intensity are derived from health signals
+            // as well as training history.  Keep them out unless both source
+            // categories are explicitly allowed.
+            redacted.trainingDecision = AgentTrainingDecisionContext(
+                readinessLevel: "unavailable",
+                readinessGuidance: "Health and training data are not both shared.",
+                volumeMultiplier: 0,
+                maxIntensity: "unavailable",
+                recommendedTrainingType: "unavailable",
+                reasons: "",
+                confidence: .unavailable
+            )
+        }
+        if !policy.nutrition {
+            redacted.nutrition = NutritionContext(
+                recentEntries: [],
+                recentCount: 0,
+                totalCalories: 0,
+                totalProtein: 0,
+                totalCarbs: 0,
+                totalFat: 0,
+                totalFiber: 0
+            )
+        }
+        if !policy.journal {
+            redacted.journalEntries = []
+        }
+        if !policy.wiki {
+            redacted.userWiki = [:]
+        }
+        if !policy.reports {
+            redacted.historicalReports = []
+        }
+        if !policy.health || !policy.training {
+            // The daily operating plan is a health-derived training action;
+            // do not preserve it when either source category is denied.
+            redacted.dailyOperatingPlan = nil
+        }
+
+        // Body-state drivers are a compact aggregate but retain their source
+        // category in the typed model.  Filter those source-specific details
+        // even when the aggregate health category itself remains allowed.
+        redacted.bodyState.drivers = redacted.bodyState.drivers.filter { driver in
+            switch driver.kind {
+            case .localFatigue, .trainingResponse, .activePlan, .recentActivity:
+                return policy.training
+            case .nutrition:
+                return policy.nutrition
+            case .journal:
+                return policy.journal
+            default:
+                return true
+            }
+        }
+
+        redacted.contextHash = Self.redactedContentHash(redacted)
+        return redacted
+    }
+
+    private mutating func redactHealth() {
+        func redact<T: Codable & Hashable & Sendable>(_ metric: inout MetricValue<T>) {
+            metric = .missing(unit: metric.unit, note: "Omitted by outbound consent.")
+        }
+
+        redact(&recovery.score)
+        redact(&recovery.hrv)
+        if var rmssd = recovery.hrvRmssd { redact(&rmssd); recovery.hrvRmssd = rmssd }
+        redact(&recovery.restingHeartRate)
+        redact(&recovery.respiratoryRate)
+        redact(&recovery.hrvZScore)
+        redact(&recovery.rhrZScore)
+        recovery.band = "unavailable"
+        recovery.topReason = nil
+
+        redact(&sleep.score)
+        redact(&sleep.totalMinutes)
+        redact(&sleep.efficiency)
+        redact(&sleep.remPercent)
+        redact(&sleep.deepPercent)
+        redact(&sleep.coreMinutes)
+        redact(&sleep.remMinutes)
+        redact(&sleep.deepMinutes)
+        redact(&sleep.awakeMinutes)
+        sleep.bedtime = nil
+        sleep.wakeTime = nil
+        sleep.band = "unavailable"
+        sleep.topReason = nil
+
+        redact(&strain.score)
+        redact(&strain.steps)
+        redact(&strain.activeEnergyKcal)
+        redact(&strain.exerciseMinutes)
+        strain.band = "unavailable"
+        strain.targetStatus = "unavailable"
+        strain.recommendedRangeLower = 0
+        strain.recommendedRangeUpper = 0
+
+        redact(&stress.stressIndex)
+        redact(&stress.rhrStress)
+        redact(&stress.hrvStress)
+        redact(&stress.respStress)
+        redact(&stress.tempStress)
+        redact(&stress.sleepDebtStress)
+        redact(&stress.loadStress)
+        stress.band = "unavailable"
+        stress.confidence = .unavailable
+
+        redact(&energyBank.morningEnergy)
+        redact(&energyBank.currentEnergy)
+        redact(&energyBank.chargeEfficiency)
+        redact(&energyBank.atl7Day)
+        redact(&energyBank.ctl42Day)
+        redact(&energyBank.tsbFreshness)
+        redact(&energyBank.acwrRatio)
+        energyBank.status = "unavailable"
+
+        redact(&extendedMetrics.heightCm)
+        redact(&extendedMetrics.weightKg)
+        redact(&extendedMetrics.bmi)
+        redact(&extendedMetrics.bodyFatPct)
+        redact(&extendedMetrics.vo2Max)
+        redact(&extendedMetrics.walkingSpeed)
+        redact(&extendedMetrics.walkingAsymmetry)
+        redact(&extendedMetrics.doubleSupportPct)
+        redact(&extendedMetrics.spo2)
+        if var value = extendedMetrics.bloodPressureSystolic { redact(&value); extendedMetrics.bloodPressureSystolic = value }
+        if var value = extendedMetrics.bloodPressureDiastolic { redact(&value); extendedMetrics.bloodPressureDiastolic = value }
+        if var value = extendedMetrics.bloodGlucose { redact(&value); extendedMetrics.bloodGlucose = value }
+        if var value = extendedMetrics.waterMl { redact(&value); extendedMetrics.waterMl = value }
+        if var value = extendedMetrics.caffeineMg { redact(&value); extendedMetrics.caffeineMg = value }
+        if var value = extendedMetrics.envNoiseDb { redact(&value); extendedMetrics.envNoiseDb = value }
+        if var value = extendedMetrics.daylightMinutes { redact(&value); extendedMetrics.daylightMinutes = value }
+        if var value = extendedMetrics.wristTempC { redact(&value); extendedMetrics.wristTempC = value }
+        extendedMetrics.age = nil
+        extendedMetrics.biologicalSex = nil
+
+        bodyState = AgentBodyStateContext(
+            readiness: .unknown,
+            confidence: .unavailable,
+            freshness: .missing,
+            source: "redacted",
+            activeStatus: "unknown",
+            contextHash: "",
+            drivers: []
+        )
+        dataCoverage = AgentDataCoverageContext(
+            availableSections: 0,
+            totalSections: 0,
+            missingSections: ["health"],
+            confidence: .unavailable
+        )
+        recentTrends = [:]
+        weeklyTrends = [:]
+        personalHealthBrief = nil
+        healthTrends = nil
+    }
+
+    private static func redactedContentHash(_ snapshot: AgentFactSnapshot) -> String {
+        var semantic = snapshot
+        semantic.contextHash = ""
+        semantic.generatedAt = Date(timeIntervalSince1970: 0)
+        semantic.bodyState.contextHash = ""
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        let data = (try? encoder.encode(semantic)) ?? Data("{}".utf8)
+        return ContentHash.hash(String(data: data, encoding: .utf8) ?? "{}")
+    }
 }

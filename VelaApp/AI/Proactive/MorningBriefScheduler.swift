@@ -24,9 +24,10 @@ final class MorningBriefScheduler: ObservableObject {
         logger.info("runIfNeeded called (force: \(force))")
 
         // 算法打通（深度专项批次 1）：force 只跳过时间窗/去重/新鲜度检查，
-        // 绝不绕过健康数据出网 consent（canSendHealthContextToNetworkAI）。
+        // 绝不绕过后台与逐类别出网 consent。
+        let outboundPolicy = AgentOutboundConsentPolicy.current
         guard AutoAgentConfig.shared.autoMorningBrief,
-              AutoAgentConfig.shared.canSendHealthContextToNetworkAI else {
+              outboundPolicy.canSendNetworkAI else {
             logger.info("Automated morning brief is not enabled by the user. Skipping.")
             return
         }
@@ -115,7 +116,7 @@ final class MorningBriefScheduler: ObservableObject {
 
             // 6. A6：晨报消费 v2 AgentFactSnapshot（与 Coach / 晚间同步同源），
             // 不再走 v1 AgentContextEnvelope 双序列化路径。
-            let (context, contextMeta) = (services?.contextBuilder ?? AIContextBuilder()).buildFacts(
+            let built = (services?.contextBuilder ?? AIContextBuilder()).buildFacts(
                 dashboard: dashboard,
                 journalEntries: input.journalContext,
                 historicalReports: input.reportContext,
@@ -131,6 +132,14 @@ final class MorningBriefScheduler: ObservableObject {
                 activePlan: input.activePlan?.dto,
                 generatedAt: contextAsOf
             )
+            // Build locally from the canonical fact set, then enforce the
+            // outbound boundary immediately before the provider call.  This
+            // keeps local calculations complete while ensuring revoked
+            // categories cannot be serialized into a request or report.
+            let context = built.snapshot.redacted(for: outboundPolicy)
+            var contextMeta = built.metadata
+            contextMeta.hash = context.contextHash
+            contextMeta.redactedFields = Self.redactedFields(for: outboundPolicy)
             
             // 7. Generate Report using ReportGenerator（带指数退避重试）
             let baseProvider = services?.deepSeekProvider(apiKey: apiKey) ?? DeepSeekProvider(apiKey: apiKey)
@@ -159,9 +168,14 @@ final class MorningBriefScheduler: ObservableObject {
             // 决策为锚，落 AIReportRecord(type=daily_ai_insight) 供今日页展示；
             // 失败不影响晨报本身。
             do {
-                let planPayload = input.dailyOperatingPlan?.operatingPlanPayload
-                let decisionText = planPayload?.decision.rawValue ?? "keep"
-                let summaryText = planPayload?.summary ?? ""
+                // The local plan is a health-derived training action.  It is
+                // only eligible for this second provider call when both source
+                // categories are explicitly allowed.
+                let planPayload = outboundPolicy.health && outboundPolicy.training
+                    ? input.dailyOperatingPlan?.operatingPlanPayload
+                    : nil
+                let decisionText = planPayload?.decision.rawValue ?? "unavailable"
+                let summaryText = planPayload?.summary ?? "The daily operating plan is not shared."
                 let insight = try await generator.generateDailyInsight(
                     context: context,
                     localDecision: decisionText,
@@ -204,5 +218,9 @@ final class MorningBriefScheduler: ObservableObject {
             runRecord.errorMessage = error.localizedDescription
             try? modelContext.save()
         }
+    }
+
+    private static func redactedFields(for policy: AgentOutboundConsentPolicy) -> [String] {
+        AgentOutboundDataCategory.allCases.compactMap { policy.allows($0) ? nil : $0.rawValue }
     }
 }

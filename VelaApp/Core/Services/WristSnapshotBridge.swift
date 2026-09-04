@@ -4,6 +4,55 @@ import Foundation
 import WidgetKit
 #endif
 
+/// Versioned contract shared by the iPhone bridge and its persisted payloads.
+///
+/// The watch and the iPhone do not share a Swift module, so the corresponding
+/// watch-side constants live in `VelaWatchApp.swift`. Keep the values and the
+/// boundary algorithm in lockstep when this envelope evolves.
+enum WristSnapshotContract {
+    static let currentSchemaVersion = 2
+    static let legacySchemaVersion = 1
+    static let healthDayBoundaryMinutes = 4 * 60
+
+    static func isSupported(schemaVersion: Int) -> Bool {
+        schemaVersion == legacySchemaVersion || schemaVersion == currentSchemaVersion
+    }
+
+    static func healthDayIdentifier(
+        for date: Date,
+        calendar: Calendar = .current
+    ) -> String {
+        let midnight = calendar.startOfDay(for: date)
+        let boundary = calendar.date(
+            byAdding: .minute,
+            value: healthDayBoundaryMinutes,
+            to: midnight
+        ) ?? midnight
+        let labelDate: Date
+        if date >= boundary {
+            labelDate = midnight
+        } else {
+            labelDate = calendar.date(byAdding: .day, value: -1, to: midnight) ?? midnight
+        }
+        let components = calendar.dateComponents([.year, .month, .day], from: labelDate)
+        return String(
+            format: "%04d-%02d-%02d",
+            components.year ?? 0,
+            components.month ?? 0,
+            components.day ?? 0
+        )
+    }
+
+    static func isCurrentHealthDay(
+        _ date: Date,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Bool {
+        healthDayIdentifier(for: date, calendar: calendar)
+            == healthDayIdentifier(for: now, calendar: calendar)
+    }
+}
+
 // MARK: - WidgetKit Shared Snapshot & Data Provider (P3)
 
 public struct VelaWidgetSnapshot: Codable, Equatable, Sendable {
@@ -26,7 +75,8 @@ public struct VelaWidgetSnapshot: Codable, Equatable, Sendable {
     public var planProgress: String?
 
     public var isStale: Bool {
-        Date().timeIntervalSince(generatedAt) > 12 * 3600 || !Calendar.current.isDateInToday(generatedAt)
+        Date().timeIntervalSince(generatedAt) > 12 * 3600
+            || !WristSnapshotContract.isCurrentHealthDay(generatedAt)
     }
 
     public init(
@@ -140,6 +190,13 @@ public final class VelaWidgetDataProvider: @unchecked Sendable {
 
 struct WristSnapshot: Codable, Equatable, Sendable {
     var generatedAt: Date
+    /// `1` is the pre-health-day/versioned envelope. Decoding it remains
+    /// supported so a watch that has not yet been updated can still render the
+    /// last snapshot; new payloads always publish the current version.
+    var schemaVersion: Int = WristSnapshotContract.currentSchemaVersion
+    /// Calendar-day label using the app's 04:00 health-day boundary. Optional
+    /// for legacy payloads that only carried `generatedAt`.
+    var healthDayIdentifier: String? = nil
     var bodyStateTitle: String
     var summary: String
     var decision: String
@@ -156,6 +213,145 @@ struct WristSnapshot: Codable, Equatable, Sendable {
     var sessionTitle: String?
     var sessionDetail: String?
     var planProgress: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case generatedAt
+        case healthDayIdentifier
+        case bodyStateTitle
+        case summary
+        case decision
+        case decisionConfidence
+        case recoveryScore
+        case sleepScore
+        case strainScore
+        case stressScore
+        case energyScore
+        case hrvMilliseconds
+        case restingHeartRate
+        case primaryAction
+        case planTitle
+        case sessionTitle
+        case sessionDetail
+        case planProgress
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion)
+            ?? WristSnapshotContract.legacySchemaVersion
+        generatedAt = try container.decode(Date.self, forKey: .generatedAt)
+        healthDayIdentifier = try container.decodeIfPresent(String.self, forKey: .healthDayIdentifier)
+        bodyStateTitle = try container.decode(String.self, forKey: .bodyStateTitle)
+        summary = try container.decode(String.self, forKey: .summary)
+        decision = try container.decode(String.self, forKey: .decision)
+        decisionConfidence = try container.decode(Double.self, forKey: .decisionConfidence)
+        recoveryScore = try container.decodeIfPresent(Int.self, forKey: .recoveryScore)
+        sleepScore = try container.decodeIfPresent(Int.self, forKey: .sleepScore)
+        strainScore = try container.decodeIfPresent(Int.self, forKey: .strainScore)
+        stressScore = try container.decodeIfPresent(Int.self, forKey: .stressScore)
+        energyScore = try container.decodeIfPresent(Int.self, forKey: .energyScore)
+        hrvMilliseconds = try container.decodeIfPresent(Int.self, forKey: .hrvMilliseconds)
+        restingHeartRate = try container.decodeIfPresent(Int.self, forKey: .restingHeartRate)
+        primaryAction = try container.decode(String.self, forKey: .primaryAction)
+        planTitle = try container.decodeIfPresent(String.self, forKey: .planTitle)
+        sessionTitle = try container.decodeIfPresent(String.self, forKey: .sessionTitle)
+        sessionDetail = try container.decodeIfPresent(String.self, forKey: .sessionDetail)
+        planProgress = try container.decodeIfPresent(String.self, forKey: .planProgress)
+    }
+
+    /// Explicit memberwise initializer retained because the compatibility
+    /// decoder above suppresses Swift's synthesized memberwise initializer.
+    /// Keep the original parameter order so existing callers remain source
+    /// compatible; new contract fields are appended with defaults.
+    init(
+        generatedAt: Date,
+        bodyStateTitle: String,
+        summary: String,
+        decision: String,
+        decisionConfidence: Double,
+        recoveryScore: Int?,
+        sleepScore: Int?,
+        strainScore: Int?,
+        stressScore: Int? = nil,
+        energyScore: Int? = nil,
+        hrvMilliseconds: Int? = nil,
+        restingHeartRate: Int? = nil,
+        primaryAction: String = "打开 Vela",
+        planTitle: String? = nil,
+        sessionTitle: String? = nil,
+        sessionDetail: String? = nil,
+        planProgress: String? = nil,
+        schemaVersion: Int = WristSnapshotContract.currentSchemaVersion,
+        healthDayIdentifier: String? = nil
+    ) {
+        self.generatedAt = generatedAt
+        self.schemaVersion = schemaVersion
+        self.healthDayIdentifier = healthDayIdentifier
+        self.bodyStateTitle = bodyStateTitle
+        self.summary = summary
+        self.decision = decision
+        self.decisionConfidence = decisionConfidence
+        self.recoveryScore = recoveryScore
+        self.sleepScore = sleepScore
+        self.strainScore = strainScore
+        self.stressScore = stressScore
+        self.energyScore = energyScore
+        self.hrvMilliseconds = hrvMilliseconds
+        self.restingHeartRate = restingHeartRate
+        self.primaryAction = primaryAction
+        self.planTitle = planTitle
+        self.sessionTitle = sessionTitle
+        self.sessionDetail = sessionDetail
+        self.planProgress = planProgress
+    }
+}
+
+/// Minimal, append-only payload emitted by an Apple Watch workout. It is
+/// intentionally independent of `WristSnapshot`: a workout recorded entirely
+/// on the watch must remain valid when the iPhone has no current dashboard
+/// snapshot or is temporarily unreachable.
+struct WristTrainingObservation: Codable, Equatable, Sendable {
+    static let currentSchemaVersion = 1
+
+    static func isSupported(schemaVersion: Int) -> Bool {
+        schemaVersion == currentSchemaVersion
+    }
+
+    var id: UUID
+    var startedAt: Date
+    var endedAt: Date
+    var workoutKind: String
+    var activeCalories: Double
+    var averageHeartRate: Double?
+    var completedSets: Int
+    var healthDayIdentifier: String
+    var schemaVersion: Int = Self.currentSchemaVersion
+    var source: String = "appleWatch"
+
+    init(
+        id: UUID = UUID(),
+        startedAt: Date,
+        endedAt: Date,
+        workoutKind: String,
+        activeCalories: Double = 0,
+        averageHeartRate: Double? = nil,
+        completedSets: Int = 0,
+        healthDayIdentifier: String,
+        schemaVersion: Int = Self.currentSchemaVersion,
+        source: String = "appleWatch"
+    ) {
+        self.id = id
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.workoutKind = workoutKind
+        self.activeCalories = max(0, activeCalories)
+        self.averageHeartRate = averageHeartRate
+        self.completedSets = max(0, completedSets)
+        self.healthDayIdentifier = healthDayIdentifier
+        self.schemaVersion = schemaVersion
+        self.source = source
+    }
 }
 
 struct WristStrengthSet: Codable, Equatable, Identifiable, Sendable {
@@ -199,6 +395,7 @@ final class WristSnapshotBridge: NSObject, WCSessionDelegate, @unchecked Sendabl
     private let cacheKey = "vela.wrist.latest-snapshot"
     private let activeWorkoutCacheKey = "vela.wrist.active-workout"
     private let pendingEditCacheKey = "vela.wrist.pending-strength-edits"
+    private let pendingTrainingObservationCacheKey = "vela.wrist.pending-training-observations"
     private let encoder = JSONEncoder()
     private let lock = NSLock()
     private var latestPayload: Data?
@@ -241,8 +438,9 @@ final class WristSnapshotBridge: NSObject, WCSessionDelegate, @unchecked Sendabl
     ) {
         let completed = plan?.days.filter(\.isCompleted).count ?? 0
         let total = plan?.days.count ?? 0
+        let generatedAt = Date()
         let snapshot = WristSnapshot(
-            generatedAt: Date(),
+            generatedAt: generatedAt,
             bodyStateTitle: command.bodyStateTitle,
             summary: command.summary,
             decision: command.readinessDecision.displayTitle,
@@ -258,7 +456,8 @@ final class WristSnapshotBridge: NSObject, WCSessionDelegate, @unchecked Sendabl
             planTitle: plan?.title,
             sessionTitle: scheduledDay?.title,
             sessionDetail: scheduledDay.map { "\($0.durationMinutes) 分钟 · \(Self.intensityLabel($0.intensity))" },
-            planProgress: total > 0 ? "\(completed)/\(total) 已完成" : nil
+            planProgress: total > 0 ? "\(completed)/\(total) 已完成" : nil,
+            healthDayIdentifier: WristSnapshotContract.healthDayIdentifier(for: generatedAt)
         )
         guard let data = try? encoder.encode(snapshot) else { return }
 
@@ -321,6 +520,20 @@ final class WristSnapshotBridge: NSObject, WCSessionDelegate, @unchecked Sendabl
         return edits
     }
 
+    /// Drains watch-only training observations for the next local training
+    /// response adapter. The queue lives in UserDefaults rather than SwiftData
+    /// so receiving a workout never depends on the iPhone dashboard or schema.
+    func drainPendingTrainingObservations() -> [WristTrainingObservation] {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let data = UserDefaults.standard.data(forKey: pendingTrainingObservationCacheKey),
+              let observations = try? JSONDecoder().decode([WristTrainingObservation].self, from: data) else {
+            return []
+        }
+        UserDefaults.standard.removeObject(forKey: pendingTrainingObservationCacheKey)
+        return observations
+    }
+
     func clearCachedSnapshot() {
         lock.lock()
         latestPayload = nil
@@ -330,6 +543,7 @@ final class WristSnapshotBridge: NSObject, WCSessionDelegate, @unchecked Sendabl
         UserDefaults.standard.removeObject(forKey: cacheKey)
         UserDefaults.standard.removeObject(forKey: activeWorkoutCacheKey)
         UserDefaults.standard.removeObject(forKey: pendingEditCacheKey)
+        UserDefaults.standard.removeObject(forKey: pendingTrainingObservationCacheKey)
         VelaWidgetDataProvider.shared.clearSnapshot()
         updateCombinedApplicationContext()
     }
@@ -364,6 +578,13 @@ final class WristSnapshotBridge: NSObject, WCSessionDelegate, @unchecked Sendabl
             replyHandler(["status": "queued", "mutationID": edit.id.uuidString])
             return
         }
+        if let data = message["trainingObservation"] as? Data,
+           let observation = try? JSONDecoder().decode(WristTrainingObservation.self, from: data),
+           WristTrainingObservation.isSupported(schemaVersion: observation.schemaVersion) {
+            enqueue(observation)
+            replyHandler(["status": "queued", "observationID": observation.id.uuidString])
+            return
+        }
         guard message["command"] as? String == "latestSnapshot" else {
             replyHandler(["status": "unsupported"])
             return
@@ -391,13 +612,25 @@ final class WristSnapshotBridge: NSObject, WCSessionDelegate, @unchecked Sendabl
         if let data = message["strengthSetEdit"] as? Data,
            let edit = try? JSONDecoder().decode(WristStrengthSetEdit.self, from: data) {
             enqueue(edit)
+            return
+        }
+        if let data = message["trainingObservation"] as? Data,
+           let observation = try? JSONDecoder().decode(WristTrainingObservation.self, from: data),
+           WristTrainingObservation.isSupported(schemaVersion: observation.schemaVersion) {
+            enqueue(observation)
         }
     }
 
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
-        guard let data = userInfo["strengthSetEdit"] as? Data,
-              let edit = try? JSONDecoder().decode(WristStrengthSetEdit.self, from: data) else { return }
-        enqueue(edit)
+        if let data = userInfo["strengthSetEdit"] as? Data,
+           let edit = try? JSONDecoder().decode(WristStrengthSetEdit.self, from: data) {
+            enqueue(edit)
+        }
+        if let data = userInfo["trainingObservation"] as? Data,
+           let observation = try? JSONDecoder().decode(WristTrainingObservation.self, from: data),
+           WristTrainingObservation.isSupported(schemaVersion: observation.schemaVersion) {
+            enqueue(observation)
+        }
     }
 
     private func enqueue(_ edit: WristStrengthSetEdit) {
@@ -416,6 +649,19 @@ final class WristSnapshotBridge: NSObject, WCSessionDelegate, @unchecked Sendabl
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: .wristStrengthSetEditQueued, object: nil)
         }
+    }
+
+    private func enqueue(_ observation: WristTrainingObservation) {
+        lock.lock()
+        var observations: [WristTrainingObservation] = []
+        if let data = UserDefaults.standard.data(forKey: pendingTrainingObservationCacheKey) {
+            observations = (try? JSONDecoder().decode([WristTrainingObservation].self, from: data)) ?? []
+        }
+        if !observations.contains(where: { $0.id == observation.id }),
+           let data = try? encoder.encode(Array((observations + [observation]).suffix(100))) {
+            UserDefaults.standard.set(data, forKey: pendingTrainingObservationCacheKey)
+        }
+        lock.unlock()
     }
 
     private func updateCombinedApplicationContext() {

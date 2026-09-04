@@ -564,18 +564,7 @@ struct AgentLoop {
     /// Truncates and hashes sensitive health/diet/journal content for trace storage,
     /// while preserving enough context for debugging.
     private func sanitizeForTrace(_ text: String) -> String {
-        let sensitivePatterns = [
-            "food_analysis", "calories", "protein", "carbohydrates",
-            "fat", "journal", "日记", "饮食", "food_log", "meal_photo",
-            "blood", "血糖", "glucose", "heart_rate", "心率",
-            "HRV", "睡眠", "sleep", "recovery", "恢复"
-        ]
-        let lowercased = text.lowercased()
-        let needsTruncation = sensitivePatterns.contains(where: { lowercased.contains($0.lowercased()) })
-        guard needsTruncation else { return text }
-
-        let hash = ContentHash.hash(text)
-        return "[REDACTED: sensitive content] hash=\(hash.prefix(12)) length=\(text.count)"
+        AgentTracePrivacy.redactedFinalResponse(text)
     }
 
     /// Redacts sensitive tool arguments while preserving non-sensitive ones.
@@ -665,6 +654,28 @@ struct AgentLoop {
         }
     }
 
+}
+
+/// Shared trace redaction boundary.  AgentLoop and persistence must use the
+/// same implementation because CoachChatVM intentionally replaces the loop's
+/// provisional trace response with the post-processed display text before it
+/// reaches the writer.
+enum AgentTracePrivacy {
+    private static let sensitivePatterns = [
+        "food_analysis", "calories", "protein", "carbohydrates",
+        "fat", "journal", "日记", "饮食", "food_log", "meal_photo",
+        "blood", "血糖", "glucose", "heart_rate", "心率",
+        "HRV", "睡眠", "sleep", "recovery", "恢复"
+    ]
+
+    static func redactedFinalResponse(_ text: String) -> String {
+        let lowercased = text.lowercased()
+        let needsTruncation = sensitivePatterns.contains(where: { lowercased.contains($0.lowercased()) })
+        guard needsTruncation else { return text }
+
+        let hash = ContentHash.hash(text)
+        return "[REDACTED: sensitive content] hash=\(hash.prefix(12)) length=\(text.count)"
+    }
 }
 
 struct AgentLoopResult {

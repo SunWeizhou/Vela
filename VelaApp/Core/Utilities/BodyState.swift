@@ -177,6 +177,13 @@ struct DailyIntelligenceAssemblyInput: Sendable {
     var journalEntries: [JournalEntryDTO]
     var activePlan: TrainingPlanDTO?
     var activeStatus: String
+    /// Recent snapshots remain the bounded evidence window used by callers
+    /// that do not have a long-term trend adapter (for example the secondary
+    /// dashboard path). When supplied, this adapter-owned provider is used
+    /// exclusively for Personal Health Brief trend computation so a full
+    /// three-year history cannot accidentally become a short-window scoring
+    /// baseline.
+    var trendHistoryProvider: (any HealthTrendHistoryProvider)?
     var snapshots: [DailyHealthSnapshot]
     var feedbackCalibration: DecisionFeedbackCalibration?
     var trainingPreference: TrainingPreferenceProfile?
@@ -199,6 +206,7 @@ struct DailyIntelligenceAssemblyInput: Sendable {
         journalEntries: [JournalEntryDTO] = [],
         activePlan: TrainingPlanDTO? = nil,
         activeStatus: String = "active",
+        trendHistoryProvider: (any HealthTrendHistoryProvider)? = nil,
         snapshots: [DailyHealthSnapshot] = [],
         feedbackCalibration: DecisionFeedbackCalibration? = nil,
         trainingPreference: TrainingPreferenceProfile? = nil,
@@ -218,6 +226,7 @@ struct DailyIntelligenceAssemblyInput: Sendable {
         self.journalEntries = journalEntries
         self.activePlan = activePlan
         self.activeStatus = activeStatus
+        self.trendHistoryProvider = trendHistoryProvider
         self.snapshots = snapshots
         self.feedbackCalibration = feedbackCalibration
         self.trainingPreference = trainingPreference
@@ -256,13 +265,36 @@ enum DailyIntelligenceAssemblyModule {
 
         var dashboard = input.dashboard
         dashboard.bodyState = bodyState
-        let trendAnalysis = HealthTrendEngine().analyze(
-            dashboard: dashboard,
-            snapshots: input.snapshots,
-            longTermBaselines: dashboard.longTermBaselines,
-            today: input.selectedDay,
-            calendar: input.calendar
-        )
+        // The primary DailySummary adapter can provide a complete three-year
+        // trend history without widening the bounded `snapshots` evidence
+        // window used by secondary callers. If no provider is available and
+        // an upstream canonical brief already exists, preserve it rather than
+        // silently downgrading the brief to the caller's shorter snapshot
+        // window. This keeps cache/secondary assembly from erasing 3y context.
+        let trendAnalysis: (brief: PersonalHealthBrief, findings: [HealthTrendFinding])
+        if let trendHistoryProvider = input.trendHistoryProvider {
+            trendAnalysis = HealthTrendEngine().analyze(
+                dashboard: dashboard,
+                historyProvider: trendHistoryProvider,
+                selectedDay: input.selectedDay,
+                calendar: input.calendar
+            )
+        } else if input.calendar.isDate(dashboard.date, inSameDayAs: input.selectedDay),
+                  let existingBrief = dashboard.personalHealthBrief,
+                  input.calendar.isDate(existingBrief.date, inSameDayAs: input.selectedDay),
+                  !dashboard.healthTrends.isEmpty {
+            trendAnalysis = (existingBrief, dashboard.healthTrends)
+        } else {
+            trendAnalysis = HealthTrendEngine().analyze(
+                dashboard: dashboard,
+                input: HealthTrendInput(
+                    snapshots: input.snapshots,
+                    longTermBaselines: dashboard.longTermBaselines
+                ),
+                selectedDay: input.selectedDay,
+                calendar: input.calendar
+            )
+        }
         dashboard.personalHealthBrief = trendAnalysis.brief
         dashboard.healthTrends = trendAnalysis.findings
 

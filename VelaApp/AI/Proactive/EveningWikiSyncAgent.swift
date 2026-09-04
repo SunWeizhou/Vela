@@ -65,6 +65,11 @@ final class EveningWikiSyncAgent: ObservableObject {
             }
         }
 
+        // Capture the two consent layers once for this run.  Local memory
+        // maintenance may still execute without network consent, but every
+        // provider payload below is redacted from this value before encoding.
+        let outboundPolicy = AgentOutboundConsentPolicy.current
+
         logger.info("Starting evening wiki sync...")
         isRunning = true
         defer { isRunning = false }
@@ -93,7 +98,8 @@ final class EveningWikiSyncAgent: ObservableObject {
             // 深度专项批次 6（管线 B）：每 7 天一次的 AI 阈值审阅提议——
             // consent 门控、20s deadline、失败静默；确认前评分路径零影响（ADR 0008）。
             if ThresholdProposalGenerator.isDue(),
-               AutoAgentConfig.shared.canSendHealthContextToNetworkAI,
+               outboundPolicy.canSendNetworkAI,
+               outboundPolicy.health,
                let thresholdKey = try? keychain.read(account: apiKeyAccount),
                !thresholdKey.isEmpty {
                 do {
@@ -127,7 +133,7 @@ final class EveningWikiSyncAgent: ObservableObject {
             let coverageSummary = DataCoverageSummaryModel.build(
                 groups: await DataCoverageGroupFactory.loadPriorityGroups()
             )
-            let (context, contextMeta) = (services?.contextBuilder ?? AIContextBuilder()).buildFacts(
+            let built = (services?.contextBuilder ?? AIContextBuilder()).buildFacts(
                 dashboard: dashboard,
                 journalEntries: input.journalContext,
                 historicalReports: input.reportContext,
@@ -149,11 +155,15 @@ final class EveningWikiSyncAgent: ObservableObject {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
             encoder.dateEncodingStrategy = .iso8601
-            let contextJSON = (try? encoder.encode(context))
+            let outboundContext = built.snapshot.redacted(for: outboundPolicy)
+            var contextMeta = built.metadata
+            contextMeta.hash = outboundContext.contextHash
+            contextMeta.redactedFields = Self.redactedFields(for: outboundPolicy)
+            let contextJSON = (try? encoder.encode(outboundContext))
                 .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
 
             // 算法打通（深度专项批次 1）：force 不再短路网络 consent。
-            let networkAIAllowed = AutoAgentConfig.shared.canSendHealthContextToNetworkAI
+            let networkAIAllowed = outboundPolicy.canSendNetworkAI
             guard networkAIAllowed,
                   let apiKey = try? keychain.read(account: apiKeyAccount),
                   !apiKey.isEmpty else {
@@ -175,8 +185,8 @@ final class EveningWikiSyncAgent: ObservableObject {
             }
 
             let prompt = buildSyncPrompt(
-                snapshot: context,
-                chatMessages: chatMessages
+                snapshot: outboundContext,
+                chatMessages: outboundPolicy.conversationHistory ? chatMessages : []
             )
 
             let baseProvider = services?.deepSeekProvider(apiKey: apiKey) ?? DeepSeekProvider(apiKey: apiKey)
@@ -312,6 +322,10 @@ final class EveningWikiSyncAgent: ObservableObject {
             return false
         }
         return Calendar.current.isDateInToday(latest.createdAt)
+    }
+
+    private static func redactedFields(for policy: AgentOutboundConsentPolicy) -> [String] {
+        AgentOutboundDataCategory.allCases.compactMap { policy.allows($0) ? nil : $0.rawValue }
     }
 
     private var syncSystemPrompt: String {
