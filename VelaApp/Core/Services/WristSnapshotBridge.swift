@@ -1,5 +1,142 @@
 import Foundation
 @preconcurrency import WatchConnectivity
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
+
+// MARK: - WidgetKit Shared Snapshot & Data Provider (P3)
+
+public struct VelaWidgetSnapshot: Codable, Equatable, Sendable {
+    public var generatedAt: Date
+    public var bodyStateTitle: String
+    public var summary: String
+    public var decision: String
+    public var decisionConfidence: Double
+    public var recoveryScore: Int?
+    public var sleepScore: Int?
+    public var strainScore: Int?
+    public var stressScore: Int?
+    public var energyScore: Int?
+    public var hrvMilliseconds: Int?
+    public var restingHeartRate: Int?
+    public var primaryAction: String
+    public var planTitle: String?
+    public var sessionTitle: String?
+    public var sessionDetail: String?
+    public var planProgress: String?
+
+    public var isStale: Bool {
+        Date().timeIntervalSince(generatedAt) > 12 * 3600 || !Calendar.current.isDateInToday(generatedAt)
+    }
+
+    public init(
+        generatedAt: Date = Date(),
+        bodyStateTitle: String = "恢复状态",
+        summary: String = "准备就绪",
+        decision: String = "按计划训练",
+        decisionConfidence: Double = 0.85,
+        recoveryScore: Int? = 80,
+        sleepScore: Int? = 78,
+        strainScore: Int? = 30,
+        stressScore: Int? = 25,
+        energyScore: Int? = 75,
+        hrvMilliseconds: Int? = 55,
+        restingHeartRate: Int? = 54,
+        primaryAction: String = "开始今日训练",
+        planTitle: String? = nil,
+        sessionTitle: String? = nil,
+        sessionDetail: String? = nil,
+        planProgress: String? = nil
+    ) {
+        self.generatedAt = generatedAt
+        self.bodyStateTitle = bodyStateTitle
+        self.summary = summary
+        self.decision = decision
+        self.decisionConfidence = decisionConfidence
+        self.recoveryScore = recoveryScore
+        self.sleepScore = sleepScore
+        self.strainScore = strainScore
+        self.stressScore = stressScore
+        self.energyScore = energyScore
+        self.hrvMilliseconds = hrvMilliseconds
+        self.restingHeartRate = restingHeartRate
+        self.primaryAction = primaryAction
+        self.planTitle = planTitle
+        self.sessionTitle = sessionTitle
+        self.sessionDetail = sessionDetail
+        self.planProgress = planProgress
+    }
+
+    init(from wristSnapshot: WristSnapshot) {
+        self.generatedAt = wristSnapshot.generatedAt
+        self.bodyStateTitle = wristSnapshot.bodyStateTitle
+        self.summary = wristSnapshot.summary
+        self.decision = wristSnapshot.decision
+        self.decisionConfidence = wristSnapshot.decisionConfidence
+        self.recoveryScore = wristSnapshot.recoveryScore
+        self.sleepScore = wristSnapshot.sleepScore
+        self.strainScore = wristSnapshot.strainScore
+        self.stressScore = wristSnapshot.stressScore
+        self.energyScore = wristSnapshot.energyScore
+        self.hrvMilliseconds = wristSnapshot.hrvMilliseconds
+        self.restingHeartRate = wristSnapshot.restingHeartRate
+        self.primaryAction = wristSnapshot.primaryAction
+        self.planTitle = wristSnapshot.planTitle
+        self.sessionTitle = wristSnapshot.sessionTitle
+        self.sessionDetail = wristSnapshot.sessionDetail
+        self.planProgress = wristSnapshot.planProgress
+    }
+}
+
+public final class VelaWidgetDataProvider: @unchecked Sendable {
+    public static let shared = VelaWidgetDataProvider()
+    public static let appGroupSuiteName = "group.com.sunweizhou.Vela"
+    public static let widgetSnapshotKey = "vela.widget.latest-snapshot"
+
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+
+    public var userDefaults: UserDefaults {
+        UserDefaults(suiteName: Self.appGroupSuiteName) ?? .standard
+    }
+
+    public func saveSnapshot(_ snapshot: VelaWidgetSnapshot) {
+        if let data = try? encoder.encode(snapshot) {
+            userDefaults.set(data, forKey: Self.widgetSnapshotKey)
+            if userDefaults != .standard {
+                UserDefaults.standard.set(data, forKey: Self.widgetSnapshotKey)
+            }
+            #if canImport(WidgetKit)
+            WidgetCenter.shared.reloadAllTimelines()
+            #endif
+        }
+    }
+
+    public func loadSnapshot() -> VelaWidgetSnapshot? {
+        if let data = userDefaults.data(forKey: Self.widgetSnapshotKey),
+           let snapshot = try? decoder.decode(VelaWidgetSnapshot.self, from: data) {
+            return snapshot
+        }
+        if let data = UserDefaults.standard.data(forKey: Self.widgetSnapshotKey),
+           let snapshot = try? decoder.decode(VelaWidgetSnapshot.self, from: data) {
+            return snapshot
+        }
+        return nil
+    }
+
+    func updateSnapshot(from wristSnapshot: WristSnapshot) {
+        let widgetSnapshot = VelaWidgetSnapshot(from: wristSnapshot)
+        saveSnapshot(widgetSnapshot)
+    }
+
+    public func clearSnapshot() {
+        userDefaults.removeObject(forKey: Self.widgetSnapshotKey)
+        UserDefaults.standard.removeObject(forKey: Self.widgetSnapshotKey)
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadAllTimelines()
+        #endif
+    }
+}
 
 struct WristSnapshot: Codable, Equatable, Sendable {
     var generatedAt: Date
@@ -130,6 +267,9 @@ final class WristSnapshotBridge: NSObject, WCSessionDelegate, @unchecked Sendabl
         lock.unlock()
         UserDefaults.standard.set(data, forKey: cacheKey)
 
+        // Automatically sync iOS widgets with ground truth data
+        VelaWidgetDataProvider.shared.updateSnapshot(from: snapshot)
+
         updateCombinedApplicationContext()
     }
 
@@ -186,10 +326,11 @@ final class WristSnapshotBridge: NSObject, WCSessionDelegate, @unchecked Sendabl
         latestPayload = nil
         latestActiveWorkoutPayload = nil
         lock.unlock()
-        // 「清除全部本地数据」必须连同 watch 缓存一起清，否则旧训练态/待应用编辑残留。
+        // 「清除全部本地数据」必须连同 watch 缓存与 widget 缓存一起清。
         UserDefaults.standard.removeObject(forKey: cacheKey)
         UserDefaults.standard.removeObject(forKey: activeWorkoutCacheKey)
         UserDefaults.standard.removeObject(forKey: pendingEditCacheKey)
+        VelaWidgetDataProvider.shared.clearSnapshot()
         updateCombinedApplicationContext()
     }
 

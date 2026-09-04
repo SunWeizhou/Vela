@@ -603,4 +603,116 @@ final class HealthTrendAndBriefTests: XCTestCase {
         XCTAssertEqual(experience.hero.decisionTitle, "身体机能处于良好水平")
         XCTAssertEqual(experience.hero.summary, "恢复得分达 80%，各项核心体征处于基线良好区间。")
     }
+
+    // MARK: - WidgetKit Snapshot & Provider Tests (P3)
+
+    func testVelaWidgetSnapshotCodableAndStaleness() throws {
+        let now = Date()
+        let snapshot = VelaWidgetSnapshot(
+            generatedAt: now,
+            bodyStateTitle: "身体处于充沛状态",
+            summary: "恢复评分 88%，心率平稳",
+            decision: "建议适度冲刺",
+            decisionConfidence: 0.92,
+            recoveryScore: 88,
+            sleepScore: 84,
+            strainScore: 42,
+            stressScore: 18,
+            energyScore: 90,
+            hrvMilliseconds: 68,
+            restingHeartRate: 54,
+            primaryAction: "按原定计划进行专项训练",
+            planTitle: "力量训练 A",
+            sessionTitle: "深蹲与卧推",
+            sessionDetail: "4组 8-10次",
+            planProgress: "第 2/4 阶段"
+        )
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(snapshot)
+        let decoder = JSONDecoder()
+        let decoded = try decoder.decode(VelaWidgetSnapshot.self, from: data)
+
+        XCTAssertEqual(decoded.recoveryScore, 88)
+        XCTAssertEqual(decoded.decision, "建议适度冲刺")
+        XCTAssertEqual(decoded.hrvMilliseconds, 68)
+        XCTAssertFalse(decoded.isStale)
+
+        let staleSnapshot = VelaWidgetSnapshot(
+            generatedAt: Date().addingTimeInterval(-24 * 3600),
+            bodyStateTitle: "旧体征",
+            summary: "昨日的数据",
+            decision: "注意休整",
+            decisionConfidence: 0.8,
+            recoveryScore: 45,
+            primaryAction: "休息"
+        )
+        XCTAssertTrue(staleSnapshot.isStale)
+    }
+
+    func testVelaWidgetDataProviderSaveLoadClear() {
+        let provider = VelaWidgetDataProvider.shared
+        let snapshot = VelaWidgetSnapshot(
+            generatedAt: Date(),
+            bodyStateTitle: "状态良好",
+            summary: "体征平稳",
+            decision: "正常训练",
+            decisionConfidence: 0.85,
+            recoveryScore: 78,
+            sleepScore: 80,
+            strainScore: 35,
+            stressScore: 22,
+            energyScore: 82,
+            hrvMilliseconds: 60,
+            restingHeartRate: 56,
+            primaryAction: "完成今日力量训练"
+        )
+
+        provider.saveSnapshot(snapshot)
+        let loaded = provider.loadSnapshot()
+        XCTAssertNotNil(loaded)
+        XCTAssertEqual(loaded?.recoveryScore, 78)
+        XCTAssertEqual(loaded?.decision, "正常训练")
+
+        provider.clearSnapshot()
+        let cleared = provider.loadSnapshot()
+        XCTAssertNil(cleared)
+    }
+
+    func testWristSnapshotToWidgetSnapshotBridge() {
+        let wrist = WristSnapshot(
+            generatedAt: Date(),
+            bodyStateTitle: "充沛",
+            summary: "恢复评分 85%",
+            decision: "执行计划",
+            decisionConfidence: 0.9,
+            recoveryScore: 85,
+            sleepScore: 82,
+            strainScore: 40,
+            stressScore: 20,
+            energyScore: 88,
+            hrvMilliseconds: 65,
+            restingHeartRate: 55,
+            primaryAction: "力量训练",
+            planTitle: "推拉腿计划",
+            sessionTitle: "上半身推",
+            sessionDetail: "卧推与肩推",
+            planProgress: "第 1 周"
+        )
+
+        let widgetSnapshot = VelaWidgetSnapshot(from: wrist)
+        XCTAssertEqual(widgetSnapshot.recoveryScore, 85)
+        XCTAssertEqual(widgetSnapshot.planTitle, "推拉腿计划")
+        XCTAssertEqual(widgetSnapshot.sessionTitle, "上半身推")
+
+        // Test Provider update from wrist snapshot
+        VelaWidgetDataProvider.shared.updateSnapshot(from: wrist)
+
+        let activeSnapshot = VelaWidgetDataProvider.shared.loadSnapshot()
+        XCTAssertNotNil(activeSnapshot)
+        XCTAssertEqual(activeSnapshot?.recoveryScore, 85)
+        XCTAssertEqual(activeSnapshot?.planTitle, "推拉腿计划")
+        XCTAssertEqual(activeSnapshot?.sessionTitle, "上半身推")
+    }
 }
+

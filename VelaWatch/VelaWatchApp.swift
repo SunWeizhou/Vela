@@ -1,7 +1,13 @@
 import SwiftUI
 @preconcurrency import WatchConnectivity
+import HealthKit
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
 
-private struct WatchSnapshot: Codable, Equatable {
+// MARK: - Watch Snapshot & Models
+
+struct WatchSnapshot: Codable, Equatable {
     var generatedAt: Date
     var bodyStateTitle: String
     var summary: String
@@ -21,7 +27,7 @@ private struct WatchSnapshot: Codable, Equatable {
     var planProgress: String?
 }
 
-private struct WatchStrengthSet: Codable, Equatable, Identifiable {
+struct WatchStrengthSet: Codable, Equatable, Identifiable {
     var id: UUID
     var repetitions: Int
     var weightKilograms: Double
@@ -51,6 +57,280 @@ private struct WatchStrengthSetEdit: Codable {
     var weightKilograms: Double
     var isCompleted: Bool
 }
+
+// MARK: - Watch HealthKit Service (Standalone Wrist Telemetry)
+
+@MainActor
+final class WatchHealthKitService: ObservableObject {
+    @Published private(set) var latestHeartRate: Double? = nil
+    @Published private(set) var restingHeartRate: Double? = nil
+    @Published private(set) var activeEnergyBurned: Double? = nil
+    @Published private(set) var hrvMilliseconds: Double? = nil
+    @Published private(set) var isAuthorized = false
+    @Published private(set) var isQuerying = false
+
+    let healthStore = HKHealthStore()
+
+    init() {
+        requestAuthorization()
+    }
+
+    func requestAuthorization() {
+        guard HKHealthStore.isHealthDataAvailable() else { return }
+        guard let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate),
+              let rhrType = HKQuantityType.quantityType(forIdentifier: .restingHeartRate),
+              let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned),
+              let hrvType = HKQuantityType.quantityType(forIdentifier: .heartRateVariabilitySDNN) else { return }
+
+        let readTypes: Set<HKObjectType> = [
+            hrType,
+            rhrType,
+            energyType,
+            hrvType,
+            HKObjectType.workoutType()
+        ]
+        let shareTypes: Set<HKSampleType> = [
+            HKObjectType.workoutType(),
+            energyType
+        ]
+
+        healthStore.requestAuthorization(toShare: shareTypes, read: readTypes) { [weak self] success, _ in
+            Task { @MainActor in
+                self?.isAuthorized = success
+                if success {
+                    self?.refreshAll()
+                }
+            }
+        }
+    }
+
+    func refreshAll() {
+        guard HKHealthStore.isHealthDataAvailable() else { return }
+        isQuerying = true
+        fetchLatestHeartRate()
+        fetchRestingHeartRate()
+        fetchActiveEnergy()
+        fetchHRV()
+    }
+
+    private func fetchLatestHeartRate() {
+        guard let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate) else { return }
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+        let query = HKSampleQuery(sampleType: hrType, predicate: nil, limit: 1, sortDescriptors: [sort]) { [weak self] _, results, _ in
+            guard let sample = results?.first as? HKQuantitySample else { return }
+            let bpm = sample.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
+            Task { @MainActor in
+                self?.latestHeartRate = bpm
+                self?.isQuerying = false
+            }
+        }
+        healthStore.execute(query)
+    }
+
+    private func fetchRestingHeartRate() {
+        guard let rhrType = HKQuantityType.quantityType(forIdentifier: .restingHeartRate) else { return }
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+        let query = HKSampleQuery(sampleType: rhrType, predicate: nil, limit: 1, sortDescriptors: [sort]) { [weak self] _, results, _ in
+            guard let sample = results?.first as? HKQuantitySample else { return }
+            let bpm = sample.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
+            Task { @MainActor in
+                self?.restingHeartRate = bpm
+            }
+        }
+        healthStore.execute(query)
+    }
+
+    private func fetchActiveEnergy() {
+        guard let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) else { return }
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: Date(), options: .strictStartDate)
+        let query = HKStatisticsQuery(quantityType: energyType, quantitySamplePredicate: predicate, options: .cumulativeSum) { [weak self] _, stats, _ in
+            let kcal = stats?.sumQuantity()?.doubleValue(for: .kilocalorie())
+            Task { @MainActor in
+                self?.activeEnergyBurned = kcal
+            }
+        }
+        healthStore.execute(query)
+    }
+
+    private func fetchHRV() {
+        guard let hrvType = HKQuantityType.quantityType(forIdentifier: .heartRateVariabilitySDNN) else { return }
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+        let query = HKSampleQuery(sampleType: hrvType, predicate: nil, limit: 1, sortDescriptors: [sort]) { [weak self] _, results, _ in
+            guard let sample = results?.first as? HKQuantitySample else { return }
+            let ms = sample.quantity.doubleValue(for: .secondUnit(with: .milli))
+            Task { @MainActor in
+                self?.hrvMilliseconds = ms
+            }
+        }
+        healthStore.execute(query)
+    }
+}
+
+// MARK: - Watch Workout Engine (Standalone Workout Tracking)
+
+@MainActor
+final class WatchWorkoutEngine: NSObject, ObservableObject, HKWorkoutSessionDelegate, HKLiveWorkoutBuilderDelegate {
+    enum WorkoutKind: String, CaseIterable, Identifiable {
+        case strength = "自由力量"
+        case running = "户外跑步"
+        case hiit = "高强度间歇"
+        case recovery = "柔韧与恢复"
+
+        var id: String { rawValue }
+        var icon: String {
+            switch self {
+            case .strength: return "figure.strengthtraining.traditional"
+            case .running: return "figure.run"
+            case .hiit: return "flame.fill"
+            case .recovery: return "figure.flexibility"
+            }
+        }
+        var hkActivityType: HKWorkoutActivityType {
+            switch self {
+            case .strength: return .traditionalStrengthTraining
+            case .running: return .running
+            case .hiit: return .highIntensityIntervalTraining
+            case .recovery: return .flexibility
+            }
+        }
+        var color: Color {
+            switch self {
+            case .strength: return Color(red: 0.98, green: 0.55, blue: 0.24)
+            case .running: return Color(red: 0.22, green: 0.72, blue: 0.62)
+            case .hiit: return Color(red: 0.92, green: 0.34, blue: 0.34)
+            case .recovery: return Color(red: 0.48, green: 0.95, blue: 0.82)
+            }
+        }
+    }
+
+    @Published private(set) var isWorkingOut = false
+    @Published private(set) var currentKind: WorkoutKind = .strength
+    @Published private(set) var elapsedSeconds: Int = 0
+    @Published private(set) var currentHeartRate: Double = 0
+    @Published private(set) var activeCalories: Double = 0
+    @Published private(set) var completedSetsCount: Int = 0
+
+    private var session: HKWorkoutSession?
+    private var builder: HKLiveWorkoutBuilder?
+    private var timer: Timer?
+    private let healthStore = HKHealthStore()
+
+    func startWorkout(kind: WorkoutKind) {
+        currentKind = kind
+        elapsedSeconds = 0
+        currentHeartRate = 0
+        activeCalories = 0
+        completedSetsCount = 0
+        isWorkingOut = true
+
+        let configuration = HKWorkoutConfiguration()
+        configuration.activityType = kind.hkActivityType
+        configuration.locationType = kind == .running ? .outdoor : .indoor
+
+        do {
+            session = try HKWorkoutSession(healthStore: healthStore, configuration: configuration)
+            builder = session?.associatedWorkoutBuilder()
+            session?.delegate = self
+            builder?.delegate = self
+            builder?.dataSource = HKLiveWorkoutDataSource(healthStore: healthStore, workoutConfiguration: configuration)
+
+            let startDate = Date()
+            session?.startActivity(with: startDate)
+            builder?.beginCollection(withStart: startDate) { _, _ in }
+        } catch {
+            // Fallback: timer proceeds without HK session
+        }
+
+        startTimer()
+    }
+
+    func logCompletedSet() {
+        completedSetsCount += 1
+    }
+
+    func finishWorkout() {
+        stopTimer()
+        let finishDate = Date()
+        session?.end()
+        builder?.endCollection(withEnd: finishDate) { [weak self] _, _ in
+            self?.builder?.finishWorkout { workout, _ in
+                Task { @MainActor in
+                    self?.isWorkingOut = false
+                    self?.session = nil
+                    self?.builder = nil
+                }
+            }
+        }
+        if session == nil {
+            isWorkingOut = false
+        }
+
+        // Queue sync payload to iPhone via WCSession
+        if WCSession.default.activationState == .activated {
+            let summary: [String: Any] = [
+                "offlineWorkoutCompleted": true,
+                "kind": currentKind.rawValue,
+                "duration": elapsedSeconds,
+                "calories": activeCalories,
+                "completedAt": finishDate.timeIntervalSince1970,
+                "completedSets": completedSetsCount
+            ]
+            WCSession.default.transferUserInfo(summary)
+        }
+    }
+
+    func cancelWorkout() {
+        stopTimer()
+        session?.end()
+        isWorkingOut = false
+        session = nil
+        builder = nil
+    }
+
+    private func startTimer() {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.elapsedSeconds += 1
+            }
+        }
+    }
+
+    private func stopTimer() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    // MARK: - HKLiveWorkoutBuilderDelegate
+    nonisolated func workoutBuilderDidCollectEvent(_ workoutBuilder: HKLiveWorkoutBuilder) {}
+
+    nonisolated func workoutBuilder(
+        _ workoutBuilder: HKLiveWorkoutBuilder,
+        didCollectDataOf collectedTypes: Set<HKSampleType>
+    ) {
+        for type in collectedTypes {
+            guard let quantityType = type as? HKQuantityType else { continue }
+            if quantityType == HKQuantityType.quantityType(forIdentifier: .heartRate),
+               let stats = workoutBuilder.statistics(for: quantityType),
+               let latest = stats.mostRecentQuantity() {
+                let bpm = latest.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
+                Task { @MainActor in self.currentHeartRate = bpm }
+            } else if quantityType == HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned),
+                      let stats = workoutBuilder.statistics(for: quantityType),
+                      let sum = stats.sumQuantity() {
+                let kcal = sum.doubleValue(for: .kilocalorie())
+                Task { @MainActor in self.activeCalories = kcal }
+            }
+        }
+    }
+
+    // MARK: - HKWorkoutSessionDelegate
+    nonisolated func workoutSession(_ workoutSession: HKWorkoutSession, didChangeTo toState: HKWorkoutSessionState, from fromState: HKWorkoutSessionState, date: Date) {}
+    nonisolated func workoutSession(_ workoutSession: HKWorkoutSession, didFailWithError error: Error) {}
+}
+
+// MARK: - Watch Snapshot Store (WCSession Bridge)
 
 @MainActor
 private final class WatchSnapshotStore: NSObject, ObservableObject, WCSessionDelegate {
@@ -226,20 +506,26 @@ private final class WatchSnapshotStore: NSObject, ObservableObject, WCSessionDel
 @main
 struct VelaWatchApp: App {
     @StateObject private var store = WatchSnapshotStore()
+    @StateObject private var healthService = WatchHealthKitService()
+    @StateObject private var workoutEngine = WatchWorkoutEngine()
 
     var body: some Scene {
         WindowGroup {
-            WatchRootView(store: store)
+            WatchRootView(store: store, healthService: healthService, workoutEngine: workoutEngine)
         }
     }
 }
 
 private struct WatchRootView: View {
     @ObservedObject var store: WatchSnapshotStore
+    @ObservedObject var healthService: WatchHealthKitService
+    @ObservedObject var workoutEngine: WatchWorkoutEngine
 
     var body: some View {
         Group {
-            if let snapshot = store.snapshot {
+            if workoutEngine.isWorkingOut {
+                WatchWorkoutSessionView(workoutEngine: workoutEngine)
+            } else if let snapshot = store.snapshot {
                 TabView {
                     readinessPage(snapshot)
                     if let activeWorkout = store.activeWorkout {
@@ -247,12 +533,17 @@ private struct WatchRootView: View {
                     }
                     trainingPage(snapshot)
                     signalsPage(snapshot)
+                    complicationsPreviewPage(snapshot)
                 }
                 .tabViewStyle(.verticalPage)
             } else if let activeWorkout = store.activeWorkout {
                 activeWorkoutPage(activeWorkout)
             } else {
-                emptyState
+                WatchStandaloneHomeView(
+                    healthService: healthService,
+                    workoutEngine: workoutEngine,
+                    onReconnect: { store.requestLatest() }
+                )
             }
         }
         .containerBackground(
@@ -263,7 +554,10 @@ private struct WatchRootView: View {
             ),
             for: .navigation
         )
-        .onAppear { store.requestLatest() }
+        .onAppear {
+            store.requestLatest()
+            healthService.refreshAll()
+        }
     }
 
     private func activeWorkoutPage(_ workout: WatchActiveWorkout) -> some View {
@@ -422,24 +716,39 @@ private struct WatchRootView: View {
         }
     }
 
-    private var emptyState: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "heart.text.square.fill")
-                .font(.system(size: 34))
-                .foregroundStyle(Color(red: 0.48, green: 0.95, blue: 0.82))
-            Text("等待 Vela 状态")
-                .font(.headline)
-            Text("先在 iPhone 打开 Vela 并完成一次同步。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-            Button("重新连接") { store.requestLatest() }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+    private func complicationsPreviewPage(_ snapshot: WatchSnapshot) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                Label("表盘复杂功能", systemImage: "clock")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color(red: 0.48, green: 0.95, blue: 0.82))
+
+                Text("圆形 (Accessory Circular)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                WatchComplicationCircularView(score: snapshot.recoveryScore)
+                    .frame(width: 50, height: 50)
+                    .padding(4)
+
+                Divider()
+
+                Text("矩形 (Accessory Rectangular)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                WatchComplicationRectangularView(snapshot: snapshot, fallbackHR: healthService.latestHeartRate)
+                    .padding(6)
+                    .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+
+                Divider()
+
+                Text("单行 (Accessory Inline)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                WatchComplicationInlineView(snapshot: snapshot)
+                    .font(.caption2)
+            }
+            .padding(.horizontal, 4)
         }
-        .padding()
     }
 
     private func metricRow(_ title: String, _ value: String, _ symbol: String, _ color: Color) -> some View {
@@ -506,3 +815,320 @@ private struct WatchRootView: View {
         Date().timeIntervalSince(date) > 12 * 3_600 || !Calendar.current.isDateInToday(date)
     }
 }
+
+// MARK: - Watch Complications (P3)
+
+struct WatchComplicationCircularView: View {
+    let score: Int?
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.white.opacity(0.15), lineWidth: 4)
+            Circle()
+                .trim(from: 0, to: ringProgress)
+                .stroke(scoreColor, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+
+            VStack(spacing: 0) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Color(red: 0.48, green: 0.95, blue: 0.82))
+                Text(score.map(String.init) ?? "—")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+            }
+        }
+    }
+
+    private var ringProgress: Double {
+        guard let score = score else { return 0 }
+        return min(1, max(0, Double(score) / 100))
+    }
+
+    private var scoreColor: Color {
+        guard let score = score else { return .gray }
+        if score < 40 { return .orange }
+        if score < 70 { return .yellow }
+        return Color(red: 0.48, green: 0.95, blue: 0.82)
+    }
+}
+
+struct WatchComplicationRectangularView: View {
+    let snapshot: WatchSnapshot?
+    let fallbackHR: Double?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Color(red: 0.48, green: 0.95, blue: 0.82))
+                Text("恢复 \(snapshot?.recoveryScore.map { "\($0)%" } ?? "—") · \(snapshot?.decision ?? "独立模式")")
+                    .font(.system(size: 11, weight: .bold))
+                    .lineLimit(1)
+            }
+            Text(snapshot?.sessionTitle ?? (fallbackHR.map { "当前心率 \(Int($0)) bpm" } ?? "Vela 腕上守护"))
+                .font(.system(size: 12, weight: .semibold))
+                .lineLimit(1)
+            Text(snapshot?.primaryAction ?? "已启用本地体征感知")
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+    }
+}
+
+struct WatchComplicationInlineView: View {
+    let snapshot: WatchSnapshot?
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "heart.fill")
+                .foregroundStyle(.red)
+            Text("恢复 \(snapshot?.recoveryScore.map { "\($0)%" } ?? "—") · \(snapshot?.decision ?? "准备就绪")")
+        }
+    }
+}
+
+// MARK: - Watch Standalone Home View (P3)
+
+struct WatchStandaloneHomeView: View {
+    @ObservedObject var healthService: WatchHealthKitService
+    @ObservedObject var workoutEngine: WatchWorkoutEngine
+    let onReconnect: () -> Void
+
+    @State private var showingLaunchSheet = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                // 顶部独立模式指示
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(Color(red: 0.48, green: 0.95, blue: 0.82))
+                        .frame(width: 6, height: 6)
+                    Text("腕上独立模式")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Color(red: 0.48, green: 0.95, blue: 0.82))
+                    Spacer()
+                    Button {
+                        healthService.refreshAll()
+                        onReconnect()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 10))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                // 实时心率仪表
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.red.opacity(0.15))
+                            .frame(width: 44, height: 44)
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: 20))
+                            .foregroundStyle(.red)
+                    }
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("实时心率")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                        HStack(alignment: .firstTextBaseline, spacing: 2) {
+                            Text(healthService.latestHeartRate.map { "\(Int($0))" } ?? "—")
+                                .font(.system(size: 22, weight: .bold, design: .rounded))
+                            Text("bpm")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                }
+                .padding(8)
+                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+
+                // 今日活动与体征数据
+                VStack(spacing: 6) {
+                    HStack {
+                        Label("活动能量", systemImage: "flame.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.orange)
+                        Spacer()
+                        Text(healthService.activeEnergyBurned.map { "\(Int($0)) kcal" } ?? "—")
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                    }
+                    HStack {
+                        Label("静息心率", systemImage: "waveform.path.ecg")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.mint)
+                        Spacer()
+                        Text(healthService.restingHeartRate.map { "\(Int($0)) bpm" } ?? "—")
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                    }
+                    if let hrv = healthService.hrvMilliseconds {
+                        HStack {
+                            Label("HRV", systemImage: "bolt.heart.fill")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color(red: 0.48, green: 0.95, blue: 0.82))
+                            Spacer()
+                            Text("\(Int(hrv)) ms")
+                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                        }
+                    }
+                }
+                .padding(8)
+                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+
+                // 快速开始独立训练按钮
+                Button {
+                    showingLaunchSheet = true
+                } label: {
+                    Label("开始独立训练", systemImage: "play.circle.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color(red: 0.22, green: 0.72, blue: 0.62))
+
+                Text("手机不在身边时，Vela 在手腕独立感知并记录训练，重新连接后自动同步至 iPhone。")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(2)
+            }
+            .padding(.horizontal, 4)
+        }
+        .sheet(isPresented: $showingLaunchSheet) {
+            WatchWorkoutLaunchSheet(workoutEngine: workoutEngine)
+        }
+    }
+}
+
+// MARK: - Watch Workout Launch Sheet & Active Session View
+
+struct WatchWorkoutLaunchSheet: View {
+    @ObservedObject var workoutEngine: WatchWorkoutEngine
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("快速发起训练")
+                    .font(.headline.weight(.bold))
+                    .padding(.bottom, 2)
+
+                ForEach(WatchWorkoutEngine.WorkoutKind.allCases) { kind in
+                    Button {
+                        workoutEngine.startWorkout(kind: kind)
+                        dismiss()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: kind.icon)
+                                .font(.system(size: 16))
+                                .foregroundStyle(kind.color)
+                                .frame(width: 24)
+                            Text(kind.rawValue)
+                                .font(.system(size: 13, weight: .semibold))
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(10)
+                        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 4)
+        }
+    }
+}
+
+struct WatchWorkoutSessionView: View {
+    @ObservedObject var workoutEngine: WatchWorkoutEngine
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 8) {
+                HStack {
+                    Label(workoutEngine.currentKind.rawValue, systemImage: workoutEngine.currentKind.icon)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(workoutEngine.currentKind.color)
+                    Spacer()
+                    Text(timeString(from: workoutEngine.elapsedSeconds))
+                        .font(.system(size: 13, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.white)
+                }
+
+                // 实时指标行
+                HStack(spacing: 12) {
+                    VStack(spacing: 2) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "heart.fill").foregroundStyle(.red).font(.system(size: 10))
+                            Text(workoutEngine.currentHeartRate > 0 ? "\(Int(workoutEngine.currentHeartRate))" : "—")
+                                .font(.system(size: 18, weight: .bold, design: .rounded))
+                        }
+                        Text("心率 (bpm)").font(.system(size: 9)).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(6)
+                    .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+
+                    VStack(spacing: 2) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "flame.fill").foregroundStyle(.orange).font(.system(size: 10))
+                            Text(workoutEngine.activeCalories > 0 ? "\(Int(workoutEngine.activeCalories))" : "—")
+                                .font(.system(size: 18, weight: .bold, design: .rounded))
+                        }
+                        Text("千卡 (kcal)").font(.system(size: 9)).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(6)
+                    .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                }
+
+                if workoutEngine.currentKind == .strength {
+                    HStack {
+                        Text("已完成组数: \(workoutEngine.completedSetsCount)")
+                            .font(.system(size: 11, weight: .semibold))
+                        Spacer()
+                        Button("+ 完成 1 组") {
+                            workoutEngine.logCompletedSet()
+                        }
+                        .font(.system(size: 10, weight: .bold))
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                    }
+                    .padding(6)
+                    .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                }
+
+                HStack(spacing: 10) {
+                    Button("结束训练") {
+                        workoutEngine.finishWorkout()
+                    }
+                    .font(.system(size: 12, weight: .bold))
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+
+                    Button("取消") {
+                        workoutEngine.cancelWorkout()
+                    }
+                    .font(.system(size: 12))
+                    .buttonStyle(.bordered)
+                }
+                .padding(.top, 4)
+            }
+            .padding(.horizontal, 4)
+        }
+    }
+
+    private func timeString(from seconds: Int) -> String {
+        let m = seconds / 60
+        let s = seconds % 60
+        return String(format: "%02d:%02d", m, s)
+    }
+}
+

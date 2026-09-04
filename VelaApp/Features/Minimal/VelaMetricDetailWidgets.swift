@@ -828,3 +828,506 @@ struct MetricCustomWidgetsSection: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+// MARK: - iOS WidgetKit Glancing Views (P3)
+
+/// 锁屏圆形小组件 (Lock Screen Accessory Circular)
+public struct VelaLockScreenCircularView: View {
+    public let snapshot: VelaWidgetSnapshot
+
+    public init(snapshot: VelaWidgetSnapshot) {
+        self.snapshot = snapshot
+    }
+
+    public var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.primary.opacity(0.2), lineWidth: 4.5)
+            Circle()
+                .trim(from: 0, to: ringProgress)
+                .stroke(Color.primary, style: StrokeStyle(lineWidth: 4.5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+
+            VStack(spacing: 0) {
+                Image(systemName: "waveform.path.ecg")
+                    .font(.system(size: 10, weight: .bold))
+                Text(snapshot.recoveryScore.map { "\($0)" } ?? "—")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+            }
+        }
+    }
+
+    private var ringProgress: Double {
+        guard let score = snapshot.recoveryScore else { return 0 }
+        return min(1, max(0, Double(score) / 100))
+    }
+}
+
+/// 锁屏矩形小组件 (Lock Screen Accessory Rectangular)
+public struct VelaLockScreenRectangularView: View {
+    public let snapshot: VelaWidgetSnapshot
+
+    public init(snapshot: VelaWidgetSnapshot) {
+        self.snapshot = snapshot
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 10, weight: .bold))
+                Text("恢复 \(snapshot.recoveryScore.map { "\($0)%" } ?? "—") · \(snapshot.decision)")
+                    .font(.system(size: 11, weight: .bold))
+                    .lineLimit(1)
+            }
+
+            Text(snapshot.sessionTitle ?? snapshot.primaryAction)
+                .font(.system(size: 12, weight: .semibold))
+                .lineLimit(1)
+
+            Text(snapshot.summary)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+    }
+}
+
+/// 锁屏单行小组件 (Lock Screen Accessory Inline)
+public struct VelaLockScreenInlineView: View {
+    public let snapshot: VelaWidgetSnapshot
+
+    public init(snapshot: VelaWidgetSnapshot) {
+        self.snapshot = snapshot
+    }
+
+    public var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "heart.fill")
+            Text("恢复 \(snapshot.recoveryScore.map { "\($0)%" } ?? "—") · \(snapshot.decision)")
+        }
+    }
+}
+
+/// 桌面小尺寸组件 (System Small Widget)
+public struct VelaSystemSmallWidgetView: View {
+    public let snapshot: VelaWidgetSnapshot
+
+    public init(snapshot: VelaWidgetSnapshot) {
+        self.snapshot = snapshot
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("VELA")
+                    .font(.system(size: 10, weight: .black, design: .rounded))
+                    .tracking(1.4)
+                    .foregroundStyle(VelaTheme.rhythmDeep)
+                Spacer()
+                if let rhr = snapshot.restingHeartRate {
+                    HStack(spacing: 2) {
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: 8))
+                            .foregroundStyle(VelaTheme.stressColor)
+                        Text("\(rhr)")
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    }
+                }
+            }
+
+            Spacer()
+
+            HStack(alignment: .center, spacing: 10) {
+                ZStack {
+                    Circle()
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 6)
+                    Circle()
+                        .trim(from: 0, to: ringProgress)
+                        .stroke(scoreColor, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+
+                    Text(snapshot.recoveryScore.map { "\($0)" } ?? "—")
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                }
+                .frame(width: 54, height: 54)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("恢复指数")
+                        .font(VelaTheme.caption2())
+                        .foregroundStyle(VelaTheme.meta)
+                    Text(snapshot.decision)
+                        .font(VelaTheme.subheadline().weight(.bold))
+                        .foregroundStyle(scoreColor)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer()
+
+            Text(snapshot.primaryAction)
+                .font(VelaTheme.caption2().weight(.medium))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                .lineLimit(1)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(VelaTheme.rhythmCanvasRaised)
+    }
+
+    private var ringProgress: Double {
+        guard let score = snapshot.recoveryScore else { return 0 }
+        return min(1, max(0, Double(score) / 100))
+    }
+
+    private var scoreColor: Color {
+        guard let score = snapshot.recoveryScore else { return VelaTheme.muted }
+        if score < 40 { return VelaTheme.stressColor }
+        if score < 70 { return VelaTheme.tagOrange }
+        return VelaTheme.recoveryColor
+    }
+}
+
+/// 桌面中尺寸组件 (System Medium Widget)
+public struct VelaSystemMediumWidgetView: View {
+    public let snapshot: VelaWidgetSnapshot
+
+    public init(snapshot: VelaWidgetSnapshot) {
+        self.snapshot = snapshot
+    }
+
+    public var body: some View {
+        HStack(spacing: 16) {
+            // 左侧恢复环
+            VStack(spacing: 6) {
+                ZStack {
+                    Circle()
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 7)
+                    Circle()
+                        .trim(from: 0, to: ringProgress)
+                        .stroke(scoreColor, style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+
+                    VStack(spacing: 1) {
+                        Text(snapshot.recoveryScore.map { "\($0)" } ?? "—")
+                            .font(.system(size: 26, weight: .bold, design: .rounded))
+                            .foregroundStyle(VelaTheme.rhythmInk)
+                        Text("恢复")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(VelaTheme.meta)
+                    }
+                }
+                .frame(width: 72, height: 72)
+
+                HStack(spacing: 8) {
+                    if let hrv = snapshot.hrvMilliseconds {
+                        Text("HRV \(hrv)")
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    }
+                    if let rhr = snapshot.restingHeartRate {
+                        Text("静息 \(rhr)")
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    }
+                }
+            }
+            .frame(width: 90)
+
+            Divider()
+                .overlay(VelaTheme.rhythmMist)
+
+            // 右侧决策与训练
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(snapshot.decision)
+                        .font(VelaTheme.headline().weight(.bold))
+                        .foregroundStyle(scoreColor)
+                    Spacer()
+                    Text("VELA")
+                        .font(.system(size: 9, weight: .black, design: .rounded))
+                        .tracking(1.2)
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                }
+
+                Text(snapshot.sessionTitle ?? "今日无排期训练")
+                    .font(VelaTheme.subheadline().weight(.semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                    .lineLimit(1)
+
+                Text(snapshot.summary)
+                    .font(VelaTheme.caption1())
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .lineLimit(2)
+                    .lineSpacing(2)
+
+                if let plan = snapshot.planTitle {
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 9))
+                            .foregroundStyle(VelaTheme.meta)
+                        Text(plan)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(VelaTheme.meta)
+                            .lineLimit(1)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(VelaTheme.rhythmCanvasRaised)
+    }
+
+    private var ringProgress: Double {
+        guard let score = snapshot.recoveryScore else { return 0 }
+        return min(1, max(0, Double(score) / 100))
+    }
+
+    private var scoreColor: Color {
+        guard let score = snapshot.recoveryScore else { return VelaTheme.muted }
+        if score < 40 { return VelaTheme.stressColor }
+        if score < 70 { return VelaTheme.tagOrange }
+        return VelaTheme.recoveryColor
+    }
+}
+
+/// 桌面大尺寸组件 (System Large Widget)
+public struct VelaSystemLargeWidgetView: View {
+    public let snapshot: VelaWidgetSnapshot
+
+    public init(snapshot: VelaWidgetSnapshot) {
+        self.snapshot = snapshot
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("VELA")
+                    .font(.system(size: 11, weight: .black, design: .rounded))
+                    .tracking(1.6)
+                    .foregroundStyle(VelaTheme.rhythmDeep)
+                Spacer()
+                Text(snapshot.generatedAt, style: .date)
+                    .font(VelaTheme.caption2())
+                    .foregroundStyle(VelaTheme.meta)
+            }
+
+            // 头部恢复与决策
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .stroke(VelaTheme.rhythmMist, lineWidth: 8)
+                    Circle()
+                        .trim(from: 0, to: ringProgress)
+                        .stroke(scoreColor, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+
+                    VStack(spacing: 1) {
+                        Text(snapshot.recoveryScore.map { "\($0)" } ?? "—")
+                            .font(.system(size: 32, weight: .bold, design: .rounded))
+                            .foregroundStyle(VelaTheme.rhythmInk)
+                        Text("恢复")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(VelaTheme.meta)
+                    }
+                }
+                .frame(width: 82, height: 82)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(snapshot.decision)
+                        .font(VelaTheme.title3().weight(.bold))
+                        .foregroundStyle(scoreColor)
+                    Text(snapshot.primaryAction)
+                        .font(VelaTheme.subheadline().weight(.medium))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                    Text(snapshot.summary)
+                        .font(VelaTheme.caption1())
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        .lineLimit(2)
+                }
+            }
+
+            Divider()
+                .overlay(VelaTheme.rhythmMist)
+
+            // 四象限生理信号矩阵
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                metricCell("睡眠", snapshot.sleepScore.map { "\($0)" } ?? "—", "moon.fill", VelaTheme.accent)
+                metricCell("负荷", snapshot.strainScore.map { "\($0)" } ?? "—", "flame.fill", VelaTheme.tagOrange)
+                metricCell("压力", snapshot.stressScore.map { "\($0)" } ?? "—", "waveform.path.ecg", VelaTheme.stressColor)
+                metricCell("能量", snapshot.energyScore.map { "\($0)%" } ?? "—", "battery.75percent", VelaTheme.energyColor)
+            }
+
+            Spacer()
+
+            // 底部计划状态
+            if let plan = snapshot.planTitle {
+                HStack(spacing: 6) {
+                    Image(systemName: "figure.run")
+                        .font(.system(size: 12))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                    Text(plan)
+                        .font(VelaTheme.caption1().weight(.semibold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                    Spacer()
+                    if let progress = snapshot.planProgress {
+                        Text(progress)
+                            .font(VelaTheme.caption2())
+                            .foregroundStyle(VelaTheme.meta)
+                    }
+                }
+                .padding(10)
+                .background(VelaTheme.rhythmMist.opacity(0.4), in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(VelaTheme.rhythmCanvasRaised)
+    }
+
+    private func metricCell(_ title: String, _ value: String, _ icon: String, _ color: Color) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundStyle(color)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: 10))
+                    .foregroundStyle(VelaTheme.meta)
+                Text(value)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+            }
+            Spacer()
+        }
+        .padding(8)
+        .background(VelaTheme.rhythmMist.opacity(0.35), in: RoundedRectangle(cornerRadius: VelaTheme.radiusSm, style: .continuous))
+    }
+
+    private var ringProgress: Double {
+        guard let score = snapshot.recoveryScore else { return 0 }
+        return min(1, max(0, Double(score) / 100))
+    }
+
+    private var scoreColor: Color {
+        guard let score = snapshot.recoveryScore else { return VelaTheme.muted }
+        if score < 40 { return VelaTheme.stressColor }
+        if score < 70 { return VelaTheme.tagOrange }
+        return VelaTheme.recoveryColor
+    }
+}
+
+/// 小组件预览画廊 (Widget Preview Gallery)
+public struct VelaWidgetPreviewGalleryView: View {
+    @State private var mockSnapshot = VelaWidgetSnapshot(
+        generatedAt: Date(),
+        bodyStateTitle: "恢复状态良好",
+        summary: "睡眠与 HRV 均在基线正常范围内，适宜安排高质量训练。",
+        decision: "按计划训练",
+        decisionConfidence: 0.88,
+        recoveryScore: 84,
+        sleepScore: 81,
+        strainScore: 42,
+        stressScore: 22,
+        energyScore: 78,
+        hrvMilliseconds: 62,
+        restingHeartRate: 51,
+        primaryAction: "今日排期：下肢力量进阶",
+        planTitle: "四周力量进阶",
+        sessionTitle: "下肢力量 · 深蹲与硬拉",
+        sessionDetail: "50 分钟 · 中高强度",
+        planProgress: "6/16 已完成"
+    )
+
+    public init() {}
+
+    public var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                Text("Vela WidgetKit 小组件预览")
+                    .font(VelaTheme.title2().weight(.bold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                    .padding(.horizontal)
+
+                // 1. 锁屏小组件
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("锁屏小组件 (Lock Screen)")
+                        .font(VelaTheme.subheadline().weight(.bold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                        .padding(.horizontal)
+
+                    HStack(spacing: 16) {
+                        VelaLockScreenCircularView(snapshot: mockSnapshot)
+                            .frame(width: 60, height: 60)
+                            .background(Circle().fill(Color.black.opacity(0.8)))
+
+                        VelaLockScreenRectangularView(snapshot: mockSnapshot)
+                            .frame(width: 155, height: 60)
+                            .padding(8)
+                            .background(RoundedRectangle(cornerRadius: 12).fill(Color.black.opacity(0.8)))
+                    }
+                    .padding(.horizontal)
+
+                    VelaLockScreenInlineView(snapshot: mockSnapshot)
+                        .padding(.horizontal)
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                }
+
+                Divider()
+                    .padding(.horizontal)
+
+                // 2. 主屏小尺寸
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("主屏小尺寸 (System Small)")
+                        .font(VelaTheme.subheadline().weight(.bold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                        .padding(.horizontal)
+
+                    VelaSystemSmallWidgetView(snapshot: mockSnapshot)
+                        .frame(width: 155, height: 155)
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .shadow(color: Color.black.opacity(0.08), radius: 8, y: 4)
+                        .padding(.horizontal)
+                }
+
+                // 3. 主屏中尺寸
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("主屏中尺寸 (System Medium)")
+                        .font(VelaTheme.subheadline().weight(.bold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                        .padding(.horizontal)
+
+                    VelaSystemMediumWidgetView(snapshot: mockSnapshot)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 155)
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .shadow(color: Color.black.opacity(0.08), radius: 8, y: 4)
+                        .padding(.horizontal)
+                }
+
+                // 4. 主屏大尺寸
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("主屏大尺寸 (System Large)")
+                        .font(VelaTheme.subheadline().weight(.bold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                        .padding(.horizontal)
+
+                    VelaSystemLargeWidgetView(snapshot: mockSnapshot)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 330)
+                        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                        .shadow(color: Color.black.opacity(0.08), radius: 8, y: 4)
+                        .padding(.horizontal)
+                }
+            }
+            .padding(.vertical)
+        }
+        .background(VelaTheme.rhythmCanvas)
+    }
+}
+
