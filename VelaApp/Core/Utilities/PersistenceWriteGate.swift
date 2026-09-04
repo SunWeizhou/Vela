@@ -38,13 +38,17 @@ public final class PersistenceWriteGate: PersistenceWriteGateProtocol, @unchecke
     }
 
     public var canPersist: Bool {
+        return !isReadOnlySafetyMode
+    }
+
+    private var isReadOnlySafetyMode: Bool {
         safetyModeLock.lock()
         defer { safetyModeLock.unlock() }
-        return !_isReadOnlySafetyMode
+        return _isReadOnlySafetyMode
     }
 
     public func assertWritable(operation: String, modelContext: ModelContext? = nil) throws {
-        if _isReadOnlySafetyMode {
+        if isReadOnlySafetyMode {
             let error = VelaError.readOnlySafetyMode
             if let modelContext {
                 PipelineDiagnosticsLogger.log(
@@ -65,9 +69,13 @@ public final class PersistenceWriteGate: PersistenceWriteGateProtocol, @unchecke
     /// unique `dayIdentifier` row (which SwiftData then traps on at save time).
     /// If read-only mode is on, throws instead of crashing the caller.
     public func withSerializedWrite<R>(operation: String, modelContext: ModelContext? = nil, _ body: () throws -> R) throws -> R {
-        try assertWritable(operation: operation, modelContext: modelContext)
         writeLock.lock()
         defer { writeLock.unlock() }
+        // Linearize the safety-mode check with other serialized writes. A
+        // transition that arrives after this check cannot cancel an operation
+        // already in flight, but no new operation can pass the gate between
+        // checking and entering the critical section.
+        try assertWritable(operation: operation, modelContext: modelContext)
         return try body()
     }
 }

@@ -21,10 +21,15 @@ final class PersistenceFoundationTests: XCTestCase {
         await withTaskGroup(of: Void.self) { group in
             for index in 0..<256 {
                 group.addTask {
-                    if index.isMultiple(of: 2) {
+                    if index.isMultiple(of: 3) {
                         gate.setReadOnly(true)
-                    } else {
+                    } else if index % 3 == 1 {
                         _ = gate.canPersist
+                    } else {
+                        _ = try? gate.assertWritable(operation: "concurrent safety-mode probe")
+                        _ = try? gate.withSerializedWrite(operation: "concurrent serialized probe") {
+                            _ = gate.canPersist
+                        }
                     }
                 }
             }
