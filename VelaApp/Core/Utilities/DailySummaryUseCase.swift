@@ -157,15 +157,18 @@ final class DailySummaryUseCase {
     nonisolated static let debugDemoConfigVersion = "\(VelaAppMetadata.configVersion).debug-demo"
 
     private let queryService: any HealthQueryService
+    private let authorizationService: any HealthAuthorizationProviding
     private let calendar: Calendar
     private let syncCoordinator: AppSyncCoordinator?
 
     init(
         queryService: any HealthQueryService = HealthKitQueryService(),
+        authorizationService: any HealthAuthorizationProviding = HealthAuthorizationService(),
         calendar: Calendar = .current,
         syncCoordinator: AppSyncCoordinator? = nil
     ) {
         self.queryService = queryService
+        self.authorizationService = authorizationService
         self.calendar = calendar
         self.syncCoordinator = syncCoordinator
     }
@@ -202,7 +205,7 @@ final class DailySummaryUseCase {
         
         // 1. Do not fan out HealthKit reads before the user has seen the initial
         // authorization request. This keeps an empty first launch responsive.
-        let shouldDeferHealthSync = await HealthAuthorizationService().shouldDeferBackgroundSync()
+        let shouldDeferHealthSync = await authorizationService.shouldDeferBackgroundSync()
         if shouldSyncHealthData, let modelContext, !shouldDeferHealthSync {
             let syncEngine = HealthKitSyncEngine(queryService: queryService, modelContext: modelContext, calendar: calendar)
             if let syncCoordinator {

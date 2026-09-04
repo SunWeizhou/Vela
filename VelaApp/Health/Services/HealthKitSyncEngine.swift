@@ -636,7 +636,7 @@ struct HistoricalBackfillProgress: Equatable {
 /// 历史日（create-only，绝不覆盖正常同步生成的记录），游标存 UserDefaults。
 @MainActor
 struct HistoricalBackfillService {
-    let queryService: HealthKitQueryService
+    let queryService: any HealthQueryService
     let modelContext: ModelContext
     let calendar: Calendar
 
@@ -659,7 +659,18 @@ struct HistoricalBackfillService {
         var isComplete: Bool
     }
 
+    private enum BackfillError: Error {
+        /// The legacy historical adapter still needs the concrete HealthKit
+        /// aggregation helpers (`dailyAverages`, `dailySleep`, ...). Keep this
+        /// narrow cast at that adapter boundary while the shared service seam
+        /// remains protocol-typed for previews/tests.
+        case concreteHealthKitProviderRequired
+    }
+
     func runNextChunk() async throws -> ChunkResult {
+        guard let queryService = queryService as? HealthKitQueryService else {
+            throw BackfillError.concreteHealthKitProviderRequired
+        }
         let today = calendar.startOfDay(for: Date())
         guard let chunk = HistoricalBackfillPlanner.nextChunk(
             today: today,
@@ -798,7 +809,7 @@ final class HistoricalBackfillCoordinator: ObservableObject {
         progress = HistoricalBackfillProgress(completedDays: p.completed, totalDays: p.total)
     }
 
-    func start(queryService: HealthKitQueryService, modelContext: ModelContext, calendar: Calendar = .current) {
+    func start(queryService: any HealthQueryService, modelContext: ModelContext, calendar: Calendar = .current) {
         guard !isRunning else { return }
         isRunning = true
         lastError = nil

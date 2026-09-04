@@ -166,9 +166,11 @@ struct AppDependencies {
         calendar: Calendar = .current
     ) -> AppDependencies {
         let queryService = HealthKitQueryService()
+        let authorization = HealthAuthorizationService()
         let syncCoordinator = AppSyncCoordinator()
         let useCase = DailySummaryUseCase(
             queryService: queryService,
+            authorizationService: authorization,
             calendar: calendar,
             syncCoordinator: syncCoordinator
         )
@@ -176,7 +178,7 @@ struct AppDependencies {
             runtime: RuntimeDependencies(clock: clock, calendar: calendar),
             health: HealthDependencies(
                 queryService: queryService,
-                authorization: HealthAuthorizationService(),
+                authorization: authorization,
                 syncCoordinator: syncCoordinator
             ),
             today: TodayDependencies(
@@ -194,9 +196,11 @@ struct AppDependencies {
         calendar: Calendar
     ) -> AppDependencies {
         let queryService = PreviewHealthQueryService()
+        let authorization = PreviewHealthAuthorization()
         let syncCoordinator = AppSyncCoordinator(minimumInterval: 0)
         let useCase = DailySummaryUseCase(
             queryService: queryService,
+            authorizationService: authorization,
             calendar: calendar,
             syncCoordinator: syncCoordinator
         )
@@ -205,7 +209,7 @@ struct AppDependencies {
             runtime: RuntimeDependencies(clock: FixedAppClock(now: now), calendar: calendar),
             health: HealthDependencies(
                 queryService: queryService,
-                authorization: PreviewHealthAuthorization(),
+                authorization: authorization,
                 syncCoordinator: syncCoordinator
             ),
             today: TodayDependencies(
@@ -219,11 +223,14 @@ struct AppDependencies {
         now: Date,
         calendar: Calendar,
         queryService: any HealthQueryService = PreviewHealthQueryService(),
-        snapshot: TodayDashboardSnapshot? = nil
+        snapshot: TodayDashboardSnapshot? = nil,
+        authorizationService: (any HealthAuthorizationProviding)? = nil
     ) -> AppDependencies {
+        let authorization = authorizationService ?? PreviewHealthAuthorization()
         let syncCoordinator = AppSyncCoordinator(minimumInterval: 0)
         let useCase = DailySummaryUseCase(
             queryService: queryService,
+            authorizationService: authorization,
             calendar: calendar,
             syncCoordinator: syncCoordinator
         )
@@ -231,7 +238,7 @@ struct AppDependencies {
             runtime: RuntimeDependencies(clock: FixedAppClock(now: now), calendar: calendar),
             health: HealthDependencies(
                 queryService: queryService,
-                authorization: PreviewHealthAuthorization(),
+                authorization: authorization,
                 syncCoordinator: syncCoordinator
             ),
             today: TodayDependencies(
@@ -375,8 +382,9 @@ final class AppSyncCoordinator: ObservableObject {
 final class VelaServices: ObservableObject {
     private let injectedDependencies: AppDependencies?
 
-    var queryService: HealthKitQueryService {
-        VelaResolver.shared.resolve(HealthQueryService.self) as! HealthKitQueryService
+    var queryService: any HealthQueryService {
+        injectedDependencies?.health.queryService
+            ?? VelaResolver.shared.resolve(HealthQueryService.self)
     }
     var contextBuilder: AIContextBuilder {
         VelaResolver.shared.resolve(AIContextBuilder.self)

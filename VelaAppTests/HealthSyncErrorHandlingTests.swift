@@ -176,6 +176,21 @@ final class HealthSyncErrorHandlingTests: XCTestCase {
 /// they compile in the current test target without editing the Xcode project.
 final class DependencySeamTests: XCTestCase {
     @MainActor
+    private final class RecordingAuthorization: HealthAuthorizationProviding {
+        private(set) var calls = 0
+        let deferSync: Bool
+
+        init(deferSync: Bool) {
+            self.deferSync = deferSync
+        }
+
+        func shouldDeferBackgroundSync() async -> Bool {
+            calls += 1
+            return deferSync
+        }
+    }
+
+    @MainActor
     func testDailyEvidenceInterfaceIsObservableThroughProtocol() async throws {
         let fake = HealthSyncErrorHandlingTests.FakeHealthQueryService()
         var extendedCalls = 0
@@ -204,19 +219,29 @@ final class DependencySeamTests: XCTestCase {
     @MainActor
     func testFactoriesUseInjectedProviderWithoutConstructingHealthKit() async throws {
         let fake = HealthSyncErrorHandlingTests.FakeHealthQueryService()
+        let authorization = RecordingAuthorization(deferSync: true)
         let now = Date(timeIntervalSince1970: 1_725_000_000)
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let dependencies = AppDependencies.test(
             now: now,
             calendar: calendar,
-            queryService: fake
+            queryService: fake,
+            authorizationService: authorization
         )
         let services = VelaServices(dependencies: dependencies)
 
         XCTAssertTrue(services.dailySummaryUseCase === dependencies.today.dailySummaryUseCase)
         XCTAssertTrue(services.syncCoordinator === dependencies.health.syncCoordinator)
         XCTAssertTrue(dependencies.health.queryService as AnyObject === fake)
+        XCTAssertTrue(dependencies.health.authorization as AnyObject === authorization)
+
+        let dashboard = try await dependencies.today.dailySummaryUseCase.loadDashboard(
+            for: now,
+            modelContext: nil
+        )
+        XCTAssertEqual(dashboard.date, now)
+        XCTAssertEqual(authorization.calls, 1)
 
         let snapshot = try await dependencies.today.reader.load(
             for: now,

@@ -21,6 +21,7 @@ protocol HealthQueryService {
     
     // Workout details queries
     func recentWorkouts(limit: Int) async throws -> [WorkoutSummary]
+    func workoutSummaries(in range: DateRangeQuery) async throws -> [WorkoutSummary]
     func heartRateSamples(start: Date, end: Date) async throws -> [HeartRateSample]
     func workoutRoute(workoutId: UUID) async throws -> [RouteCoordinate]
 }
@@ -36,6 +37,10 @@ extension HealthQueryService {
         for signal: HealthSignal,
         in range: DateRangeQuery
     ) async throws -> [IntradaySignalPoint] {
+        []
+    }
+
+    func workoutSummaries(in range: DateRangeQuery) async throws -> [WorkoutSummary] {
         []
     }
 
