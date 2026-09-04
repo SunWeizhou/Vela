@@ -658,19 +658,13 @@ struct VelaTodayView: View {
         .task(id: isActiveSurface) {
             guard isActiveSurface else { return }
             todayLegacyRuntime.bind(reader: legacyTodayReader, dashboardVM: dashboardVM)
+            todayLegacyRuntime.setSelectedDay(todayStore.state.selectedDay)
             todayLegacyRuntime.startLocationUpdates()
             if pendingLocalDataRefresh {
                 pendingLocalDataRefresh = false
                 await todayStore.send(.refresh(force: true))
             } else {
-                if Calendar.current.isDate(
-                    todayStore.state.selectedDay,
-                    inSameDayAs: dashboardVM.selectedDate
-                ) {
-                    await todayStore.send(.appear)
-                } else {
-                    await todayStore.send(.selectDay(dashboardVM.selectedDate))
-                }
+                await todayStore.send(.appear)
             }
             await loadDataCoverageSummary()
             loadTodayLivedStateAlignment()
@@ -702,7 +696,12 @@ struct VelaTodayView: View {
         }
         .onChange(of: dashboardVM.selectedDate) {
             guard isActiveSurface else { return }
-            Task { await todayStore.send(.selectDay(dashboardVM.selectedDate)) }
+            // CalendarOverviewSheetView still mirrors its selection through
+            // DashboardViewModel. Relay that user intent into the Store; no
+            // Today data read uses the VM as its source of truth.
+            let selectedDay = dashboardVM.selectedDate
+            todayLegacyRuntime.setSelectedDay(selectedDay)
+            Task { await todayStore.send(.selectDay(selectedDay)) }
             loadTodayLivedStateAlignment()
             loadDynamicData()
         }
@@ -768,10 +767,11 @@ struct VelaTodayView: View {
                 .velaSheetSurface()
             }
         case .livedState:
-            LivedStateCheckInSheet(selectedDate: todayStore.state.selectedDay) {
-                todayLegacyRuntime.markLocalDataChanged()
-                loadTodayLivedStateAlignment()
-            }
+            LivedStateCheckInSheet(
+                selectedDate: todayStore.state.selectedDay,
+                onSaved: { loadTodayLivedStateAlignment() },
+                onSubmit: { dispatchToday(.saveLivedState($0)) }
+            )
             .presentationDetents([.large])
             .velaSheetSurface()
         }

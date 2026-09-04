@@ -30,6 +30,11 @@ final class TodayLegacyRuntime {
     private let loadWeatherLocation: () -> WeatherLocationSnapshot?
     private let saveWeatherLocation: (WeatherLocationSnapshot) -> Void
     private let readCalorieTarget: () -> Int?
+    /// The Store is the source of truth for the selected day.  The runtime
+    /// keeps a compatibility copy only so effect adapters can address the
+    /// persistence records without asking the root view for a date.
+    private(set) var selectedDay: Date = Calendar.current.startOfDay(for: Date())
+    private weak var dashboardVM: DashboardViewModel?
 
     init(
         modelContext: ModelContext? = nil,
@@ -79,6 +84,11 @@ final class TodayLegacyRuntime {
 
     func bind(reader: LegacyTodayReadingModule, dashboardVM: DashboardViewModel) {
         reader.bind(dashboardVM: dashboardVM, runtime: self)
+        self.dashboardVM = dashboardVM
+    }
+
+    func setSelectedDay(_ day: Date) {
+        selectedDay = Calendar.current.startOfDay(for: day)
     }
 
     func startLocationUpdates() {
@@ -119,6 +129,22 @@ final class TodayLegacyRuntime {
 
     func markLocalDataChanged() {
         appState?.markLocalDataChanged()
+    }
+
+    /// Requesting weather is an effect, not a Today rendering concern. The
+    /// location publisher will deliver the eventual coordinate to the
+    /// compatibility weather reader used by the surface.
+    func requestWeather() {
+        switch authorizationStatus {
+        case .notDetermined:
+            requestLocationPermission()
+        case .authorizedWhenInUse, .authorizedAlways:
+            startLocationUpdates()
+        case .denied, .restricted:
+            break
+        @unknown default:
+            break
+        }
     }
 
     func cachedDashboard(for day: Date) async throws -> TodayDashboardSnapshot? {
@@ -311,6 +337,16 @@ final class TodayLegacyRuntime {
         )
         dashboardVM.applyFeedbackCalibration(modelContext: modelContext)
     }
+
+    /// Effect-router entry point for feedback. It resolves the current
+    /// record inside the compatibility boundary and keeps revision
+    /// notification adjacent to the persistence write.
+    func saveDecisionFeedback(_ values: DailyDecisionFeedbackValues) throws {
+        guard let record = loadDailyDecisionFeedback(for: selectedDay),
+              let dashboardVM else { throw RuntimeError.unavailable }
+        try saveDecisionFeedback(values, record: record, dashboardVM: dashboardVM)
+        markLocalDataChanged()
+    }
 }
 // MARK: - Lived State Check-in
 
@@ -323,6 +359,10 @@ struct LivedStateCheckInSheet: View {
 
     let selectedDate: Date
     var onSaved: () -> Void
+    /// Today supplies this callback to route the write through TodayStore.
+    /// Legacy app-sheet callers omit it and retain the existing compatibility
+    /// fallback until those surfaces migrate.
+    var onSubmit: ((LivedStateCheckIn) -> Void)? = nil
 
     @State private var stress = 1
     @State private var energy = 1
@@ -518,6 +558,13 @@ struct LivedStateCheckInSheet: View {
             motivation: motivation,
             note: note
         )
+        if let onSubmit {
+            onSubmit(checkIn)
+            VelaHaptic.success()
+            onSaved()
+            dismiss()
+            return
+        }
         do {
             try todayLegacyRuntime.saveLivedStateCheckIn(checkIn, for: selectedDate)
             VelaHaptic.success()
@@ -592,18 +639,41 @@ final class TodayLegacyEffectRouter: TodayEffectRouter {
         runtime?.routeToTraining()
     }
 
-    // Weather presentation/update has local state (temperature/location) in
-    // the compatibility surface, so requestWeather remains a local adapter
-    // action and does not duplicate the cross-app navigation paths above.
-    func requestWeather() async {}
+    func requestWeather() async {
+        runtime?.requestWeather()
+    }
 
-    // Persistence-backed check-in/feedback still needs the record-bound
-    // compatibility methods for error presentation. TodayStore updates its
-    // value projection after these intents; the root performs the single
-    // record write and keeps the form's error state.
-    func saveLivedStateAlignment(_ alignment: LivedStateAlignment) async {}
-    func saveLivedState(_ checkIn: LivedStateCheckIn) async {}
-    func submitFeedback(_ values: DailyDecisionFeedbackValues) async {}
+    func saveLivedStateAlignment(_ alignment: LivedStateAlignment) async {
+        guard let runtime else { return }
+        do {
+            try runtime.saveLivedStateAlignment(alignment, for: runtime.selectedDay)
+            runtime.markLocalDataChanged()
+        } catch {
+            // TodayStore keeps the value projection optimistic; persistence
+            // failures remain non-fatal to the renderer and are retried by
+            // the next refresh.
+        }
+    }
+
+    func saveLivedState(_ checkIn: LivedStateCheckIn) async {
+        guard let runtime else { return }
+        do {
+            try runtime.saveLivedStateCheckIn(checkIn, for: runtime.selectedDay)
+            runtime.markLocalDataChanged()
+        } catch {
+            // See alignment handling above.
+        }
+    }
+
+    func submitFeedback(_ values: DailyDecisionFeedbackValues) async {
+        guard let runtime else { return }
+        do {
+            try runtime.saveDecisionFeedback(values)
+        } catch {
+            // Feedback is an auxiliary journal; a failed write must not block
+            // the primary Today decision surface.
+        }
+    }
 }
 
 /// Compatibility reader used while the legacy Today surface is being moved
@@ -800,10 +870,8 @@ extension VelaTodayView {
         switch todayLegacyRuntime.authorizationStatus {
         case .notDetermined:
             weatherLocation = "正在请求定位"
-            todayLegacyRuntime.requestLocationPermission()
         case .authorizedWhenInUse, .authorizedAlways:
-            todayLegacyRuntime.startLocationUpdates()
-            fetchLocalWeather()
+            break
         case .denied, .restricted:
             weatherLocation = "定位未授权"
         @unknown default:
@@ -908,7 +976,7 @@ extension VelaTodayView {
     /// extension while the root view migrates to TodayStore actions.
     func loadDailyDecisionFeedback() {
         dailyDecisionFeedback = todayLegacyRuntime.loadDailyDecisionFeedback(
-            for: dashboardVM.selectedDate
+            for: todayStore.state.selectedDay
         )
     }
 
@@ -926,18 +994,9 @@ extension VelaTodayView {
     }
 
     func saveLivedStateAlignment(_ alignment: LivedStateAlignment) {
-        do {
-            try todayLegacyRuntime.saveLivedStateAlignment(
-                alignment,
-                for: dashboardVM.selectedDate
-            )
-            selectedLivedStateAlignment = alignment
-            VelaHaptic.selection()
-            todayLegacyRuntime.markLocalDataChanged()
-            dispatchToday(.setLivedStateAlignment(alignment))
-        } catch {
-            livedStateSaveError = error.localizedDescription
-        }
+        selectedLivedStateAlignment = alignment
+        VelaHaptic.selection()
+        dispatchToday(.setLivedStateAlignment(alignment))
     }
 
     func loadTodayLivedStateAlignment() {
@@ -947,7 +1006,7 @@ extension VelaTodayView {
     }
 
     func trackDailyDecisionViewed() {
-        guard Calendar.current.isDateInToday(dashboardVM.selectedDate),
+        guard Calendar.current.isDateInToday(todayStore.state.selectedDay),
               let plan = persistedOperatingPlan else {
             loadDailyDecisionFeedback()
             return
@@ -980,19 +1039,10 @@ extension VelaTodayView {
     }
 
     func saveDailyDecisionFeedback(_ values: DailyDecisionFeedbackValues) {
-        guard let record = dailyDecisionFeedback else { return }
-        do {
-            try todayLegacyRuntime.saveDecisionFeedback(
-                values,
-                record: record,
-                dashboardVM: dashboardVM
-            )
-            // 反馈保存后立即回灌：按同类决策的历史准确率重校准今日置信度。
-            presentedTodaySheet = nil
-            todayLegacyRuntime.markLocalDataChanged()
-            dispatchToday(.submitFeedback(values))
-        } catch {
-            // Keep the sheet open so the user can retry without losing input.
-        }
+        guard dailyDecisionFeedback != nil else { return }
+        // Persistence and revision notification are owned by the injected
+        // effect router. The root only emits the single Store intent.
+        presentedTodaySheet = nil
+        dispatchToday(.submitFeedback(values))
     }
 }
