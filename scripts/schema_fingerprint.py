@@ -11,8 +11,14 @@
   python3 scripts/schema_fingerprint.py --emit-frozen # 重新生成 V3 冻结模型文件
 
 规则（见脚本头的 goldens 结构）：
-  goldens["4.0.0"] = 当前模型图指纹（来自生产代码，VelaSchemaV4）
-  goldens["3.0.0"] = V3 冻结模型图指纹（来自 VelaSchemaV3Frozen 文件）
+  goldens["live"] = 当前模型图指纹（当前运行时是 VelaSchemaV3 / 3.0.0）
+  goldens["frozen_v3"] = V3 冻结模型图指纹（来自 VelaSchemaV3Frozen）
+
+注意：V1/V2 的完整历史模型图尚未以独立冻结类落库。它们当前包含
+live 类型引用，不能用 V3Frozen 倒推替换，否则会伪造历史 checksum。
+在真实旧 store fixture 与完整历史图可用前，`--check` 会阻止 live 图与已冻结
+V3 发生分叉，避免将未完整的 V4 升级落入生产。`--update` 可以在迁移提交中
+先更新快照，但不会绕过这个 CI 门禁。
 """
 
 import hashlib
@@ -26,6 +32,9 @@ GOLDENS_PATH = ROOT / "scripts" / "schema_goldens.json"
 FROZEN_PATH = (
     ROOT / "VelaApp" / "Persistence" / "SwiftDataModels" / "VelaSchemaV3Frozen.swift"
 )
+MODEL_CONTAINER_PATH = (
+    ROOT / "VelaApp" / "Persistence" / "SwiftDataModels" / "VelaModelContainer.swift"
+)
 
 # 定义 @Model 的生产源文件（排除冻结文件本身的提取目标）
 MODEL_SOURCE_FILES = [
@@ -34,9 +43,12 @@ MODEL_SOURCE_FILES = [
     "VelaApp/Scoring/Training/AdaptiveTrainingManager.swift",
 ]
 
-# 类名 -> 当前存活版本（更新版本时按下标同步）
-LIVE_VERSION = "4.0.0"
-FROZEN_V3_VERSION = "3.0.0"
+# 当前生产容器实际注册的 live schema。版本提升时必须与
+# VelaModelContainer.swift 同一提交更新，--check 会校验二者一致。
+LIVE_SCHEMA_NAME = "VelaSchemaV3"
+LIVE_VERSION = (3, 0, 0)
+FROZEN_SCHEMA_NAME = "VelaSchemaV3Frozen"
+HISTORICAL_SCHEMA_NAMES = ("VelaSchemaV1", "VelaSchemaV2")
 
 PROP_RE = re.compile(
     r"^(?:@Attribute\([^)]*\)\s+)?(?:public\s+|internal\s+)?"
@@ -111,6 +123,81 @@ def load_frozen_v3_models():
     return parse_models(text, "frozen")
 
 
+def load_runtime_schema_metadata():
+    """读取 ModelContainer 真正注册的 schema 名称和版本。"""
+    text = MODEL_CONTAINER_PATH.read_text(encoding="utf-8")
+    schema_match = re.search(
+        r"static\s+let\s+schema\s*=\s*Schema\((\w+)\.models\)", text
+    )
+    if not schema_match:
+        raise ValueError("无法从 VelaModelContainer.swift 解析运行时 schema")
+    schema_name = schema_match.group(1)
+    version_match = re.search(
+        rf"enum\s+{re.escape(schema_name)}\s*:\s*VersionedSchema\s*\{{.*?"
+        r"versionIdentifier\s*=\s*Schema\.Version\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)",
+        text,
+        re.DOTALL,
+    )
+    if not version_match:
+        raise ValueError(f"无法解析 {schema_name}.versionIdentifier")
+    return schema_name, tuple(int(part) for part in version_match.groups())
+
+
+def _enum_body(text, enum_name):
+    """取顶层 enum 的完整花括号内容，用于静态守卫检查。"""
+    match = re.search(rf"enum\s+{re.escape(enum_name)}\b[^{{]*\{{", text)
+    if not match:
+        return ""
+    start = match.end()
+    depth = 1
+    for index in range(start, len(text)):
+        if text[index] == "{":
+            depth += 1
+        elif text[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:index]
+    return ""
+
+
+def historical_schemas_reference_live_types(live_model_names):
+    """检测 V1/V2 是否仍依赖可变 live 类型。"""
+    text = MODEL_CONTAINER_PATH.read_text(encoding="utf-8")
+    offenders = []
+    for schema_name in HISTORICAL_SCHEMA_NAMES:
+        body = _enum_body(text, schema_name)
+        if not body:
+            offenders.append(f"{schema_name}:missing")
+            continue
+        if "VelaModelContainer.modelTypes" in body:
+            offenders.append(f"{schema_name}:VelaModelContainer.modelTypes")
+            continue
+        for model_name in live_model_names:
+            if model_name == "DailyHealthSummaryRecord":
+                # V1/V2 对这个实体已有各自的嵌套历史类。
+                continue
+            if re.search(rf"(?<![\w.]){re.escape(model_name)}\.self\b", body):
+                offenders.append(f"{schema_name}:{model_name}")
+    return offenders
+
+
+def runtime_metadata_errors():
+    errors = []
+    try:
+        runtime_name, runtime_version = load_runtime_schema_metadata()
+    except ValueError as error:
+        return [str(error)]
+    if runtime_name != LIVE_SCHEMA_NAME:
+        errors.append(
+            f"脚本声明 live={LIVE_SCHEMA_NAME}，但 ModelContainer 注册的是 {runtime_name}"
+        )
+    if runtime_version != LIVE_VERSION:
+        errors.append(
+            f"脚本声明 live 版本={LIVE_VERSION}，但 {runtime_name} 是 {runtime_version}"
+        )
+    return errors
+
+
 def load_goldens():
     if not GOLDENS_PATH.exists():
         return {}
@@ -129,6 +216,10 @@ def check():
         print("schema_goldens.json 不存在，先运行 --update", file=sys.stderr)
         return 1
     ok = True
+
+    for error in runtime_metadata_errors():
+        ok = False
+        print(f"[FAIL] {error}")
 
     live = load_production_models()
     expected_live = goldens.get("live", {})
@@ -154,26 +245,59 @@ def check():
             ok = False
             print(f"[FAIL] frozen V3 model {name} 缺失")
 
+    historical_live_refs = historical_schemas_reference_live_types(live.keys())
+    if historical_live_refs and live_fp != frozen_fp:
+        ok = False
+        print(
+            "[FAIL] V1/V2 仍引用可变 live 类型，且 live 图已与 V3 冻结图分叉："
+        )
+        for ref in historical_live_refs:
+            print(f"       - {ref}")
+        print(
+            "       禁止用 V3Frozen 倒推 V1/V2。请先从真实发布版本/old-store fixture "
+            "重建完整历史图，再在一个专属 migration 提交中升版。"
+        )
+
     if ok:
-        print(f"schema fingerprint OK: {len(live)} live models, {len(frozen)} frozen V3 models")
+        version = ".".join(str(part) for part in LIVE_VERSION)
+        print(
+            f"schema fingerprint OK: {len(live)} live models "
+            f"({LIVE_SCHEMA_NAME} {version}), {len(frozen)} frozen V3 models"
+        )
         return 0
+    next_major = LIVE_VERSION[0] + 1
     print(
         "\n模型图发生了变化。修复流程：\n"
-        f"  1. 将当前模型图冻结为新的 VelaSchemaV{n}（复制 {FROZEN_PATH} 模式）；\n"
-        f"  2. 在 VelaModelContainer.swift 新增 VelaSchemaV{n+1}（live 类型）并 bump 版本；\n"
+        f"  1. 保留已提交的 {FROZEN_SCHEMA_NAME}，不得用新 live 图覆盖；\n"
+        f"  2. 在 VelaModelContainer.swift 新增 VelaSchemaV{next_major}"
+        "（live 类型）并 bump 版本；\n"
         f"  3. VelaMigrationPlan 增加对应 .lightweight stage；\n"
-        f"  4. 运行 python3 scripts/schema_fingerprint.py --update 更新黄金快照。",
+        "  4. 用真实 V1/V2/V3 old-store fixture 跑 upgrade smoke；\n"
+        "  5. 运行 python3 scripts/schema_fingerprint.py --update 更新黄金快照。",
         file=sys.stderr,
     )
     return 1
 
 
 def update():
+    errors = runtime_metadata_errors()
+    if errors:
+        for error in errors:
+            print(f"[REFUSE] {error}", file=sys.stderr)
+        return 1
     live = load_production_models()
     frozen = load_frozen_v3_models()
+    live_fp = fingerprint_set(live)
+    frozen_fp = fingerprint_set(frozen)
+    # Updating the snapshot is an intermediate step in a V3→V4 change.  Do
+    # not block it merely because the repository still has incomplete V1/V2
+    # historical graphs: that would make the documented migration workflow
+    # impossible to complete.  `check()` remains fail-closed while those
+    # references exist and the live graph differs from frozen V3, so this
+    # command never turns an unsafe intermediate state into a passing build.
     goldens = {
-        "live": fingerprint_set(live),
-        "frozen_v3": fingerprint_set(frozen),
+        "live": live_fp,
+        "frozen_v3": frozen_fp,
     }
     write_goldens(goldens)
     print(f"goldens updated: {len(live)} live, {len(frozen)} frozen_v3")
@@ -183,6 +307,15 @@ def update():
 def emit_frozen():
     """从生产模型生成 VelaSchemaV3 冻结文件（含自动生成的 init）。"""
     live = load_production_models()
+    if FROZEN_PATH.exists():
+        frozen = load_frozen_v3_models()
+        if fingerprint_set(live) != fingerprint_set(frozen):
+            print(
+                "[REFUSE] 已提交的 VelaSchemaV3Frozen 是历史记录；"
+                "不能用已分叉的 live 图覆盖它。",
+                file=sys.stderr,
+            )
+            return 1
     src = {}
     for rel in MODEL_SOURCE_FILES:
         text = (ROOT / rel).read_text(encoding="utf-8")

@@ -165,6 +165,14 @@ enum VelaModelContainer {
 enum VelaSchemaV1: VersionedSchema {
     static let versionIdentifier = Schema.Version(1, 0, 0)
 
+    // Historical note: this list is only a partial record of the deployed V1
+    // graph and still names several mutable production model types. Do not
+    // replace those references with VelaSchemaV3Frozen: V1 had a different
+    // entity set and field layout, so doing so would fabricate a checksum.
+    // Until complete V1 fixtures are recovered, schema_fingerprint.py's
+    // --check blocks any live/frozen divergence rather than accepting a
+    // partial migration.
+
     @Model
     final class DailyHealthSummaryRecord {
         @Attribute(.unique) var dayIdentifier: String
@@ -276,6 +284,11 @@ enum VelaSchemaV1: VersionedSchema {
 enum VelaSchemaV2: VersionedSchema {
     static let versionIdentifier = Schema.Version(2, 0, 0)
 
+    // Historical note: V2's modelTypes list still references mutable current
+    // types; it is not a checksum-preserving frozen historical graph. Keep it
+    // only as an explicit compatibility placeholder until a complete V2 graph
+    // is recovered from a real shipped store and can be frozen safely.
+
     /// Frozen representation of the production V2 daily summary. Versioned
     /// schemas must never point at the mutable current model type: doing so
     /// changes the historical checksum whenever a field is added and makes an
@@ -362,9 +375,11 @@ enum VelaSchemaV2: VersionedSchema {
 /// 当前（live）模型图所属的版本化 schema。
 ///
 /// SwiftData 版本演进规则（必须遵守，`scripts/schema_fingerprint.py --check` 会强制）：
-///   1. VersionedSchema 必须引用 live 模型类型（本枚举）；历史版本引用冻结副本。
-///      注意：SwiftData 拒绝在同一迁移计划中出现两个 checksum 相同的 schema
-///      （Duplicate version checksums）——所以不要为「图形未变」的版本号单独建版本。
+///   1. 当前 VersionedSchema 必须引用 live 模型类型（本枚举）；历史版本应引用
+///      冻结副本。V1/V2 尚未完成冻结，`schema_fingerprint.py --check` 会在
+///      它们与 live 图分叉时 fail-closed。注意：SwiftData 拒绝在同一迁移计划中
+///      出现两个 checksum 相同的 schema（Duplicate version checksums）——所以
+///      不要为「图形未变」的版本号单独建版本。
 ///   2. 任何 @Model 字段/注解变更 → 先把变更前的图形冻结为 VelaSchemaV3Frozen
 ///      （`python3 scripts/schema_fingerprint.py --emit-frozen`），再把冻结类升级为
 ///      VersionedSchema、新建 live 的 VelaSchemaV4、补 `.lightweight` stage、

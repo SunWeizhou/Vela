@@ -1,9 +1,11 @@
 # Vela 文档导航与权威层级（Documentation Map）
 
 > Status: Canonical
-> Last verified: 2026-08-21
+> Last verified: 2026-09-04
 > Scope: Vela 仓库文档信息架构、权威层级、阅读顺序与冲突裁决原则
 > Does not define: 产品业务细节、代码实现细节
+
+> Platform status: 当前实现最低版本为 iOS 17 / watchOS 10；ADR 0013 已接受的 Daily Driver 目标为 iOS 26 / watchOS 26。两者之间的 transition 尚未执行，必须通过单独的迁移变更与设备矩阵验证完成。
 
 ---
 
@@ -41,7 +43,7 @@
 | [`docs/VELA_DESIGN_LANGUAGE.md`](VELA_DESIGN_LANGUAGE.md) | **设计系统与交互规范**：Rhythm 视觉语言、色板、排版、组件规范、动效与无障碍原则 | Canonical |
 | [`docs/AI_AGENT_SPEC.md`](AI_AGENT_SPEC.md) | **AI Agent 与上下文规格**：Canonical Fact Snapshot、Prompting、Wiki 记忆体系与安全协议 | Canonical |
 | [`docs/SCORING_SYSTEM_V1_0.md`](SCORING_SYSTEM_V1_0.md) | **健康评分与算法协议**：Recovery, Sleep, Strain, Stress, Energy 算法公式与基线定义 | Canonical |
-| [`docs/adr/README.md`](adr/README.md) | **架构决策记录索引**：ADR 0001–0010 架构演进与决策依据 | Canonical |
+| [`docs/adr/README.md`](adr/README.md) | **架构决策记录索引**：ADR 0001–0013 已接受决策，以及 ADR 0014–0016 的当前提案 | Canonical |
 
 ### 2.2 辅助材料（Supporting Materials）
 为特定工作流、外部参考和测试证据提供支持，不定义产品需求：
@@ -72,5 +74,5 @@
 1. **产品定位与需求冲突**：以 [`docs/PRD.md`](PRD.md) 为最高准则；
 2. **术语与概念冲突**：以 [`CONTEXT.md`](../CONTEXT.md) 为最高准则；
 3. **实现与代码冲突**：以当前代码实际实现与 [`docs/TECH_ARCHITECTURE.md`](TECH_ARCHITECTURE.md) 为准；
-4. **架构决策背书**：以 [`docs/adr/`](adr/) 最新有效 ADR 为准；
+4. **架构决策背书**：以 [`docs/adr/`](adr/) 最新有效 ADR 为准；标记为 `Proposed` 的 ADR 只表达待批准方向，在接受前不得单独改变代码或发布契约；
 5. **归档文档无效原则**：任何位于 `docs/archive/` 下的内容若与当前 Canonical 文档冲突，一律视归档内容为已废弃历史。

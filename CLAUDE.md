@@ -1,9 +1,11 @@
 # CLAUDE.md — Agent & Developer Workspace Handbook
 
 > Status: Canonical
-> Last verified: 2026-08-21
+> Last verified: 2026-09-04
 > Scope: Agent 工作方式、构建/测试/部署命令、工程规则与关键代码入口
 > Does not define: 产品业务需求（见 [docs/PRD.md](docs/PRD.md)）、领域语言定义（见 [CONTEXT.md](CONTEXT.md)）
+
+> 平台状态：当前项目实现 floor 为 iOS 17 / watchOS 10；ADR 0013 已接受的 Daily Driver 目标为 iOS 26 / watchOS 26。transition 尚未执行，Proposed ADR 不会单独改变 deployment target 或发布契约。
 
 ---
 
@@ -13,7 +15,7 @@
 
 1. [`docs/PRD.md`](docs/PRD.md) — 唯一当前产品规格、四大 Tab 与北极星指标
 2. [`CONTEXT.md`](CONTEXT.md) — 唯一领域术语表（Health Signal, Baseline, Brief, Body State, Training Decision 等）
-3. [`docs/adr/README.md`](docs/adr/README.md) — 架构决策记录（ADR 0001–0011）
+3. [`docs/adr/README.md`](docs/adr/README.md) — 架构决策记录（ADR 0001–0013 Accepted；0014–0016 Proposed）
 4. [`docs/TECH_ARCHITECTURE.md`](docs/TECH_ARCHITECTURE.md) — 当前实现的技术架构与数据流
 5. 专项文档：
    - 设计语言：[`docs/VELA_DESIGN_LANGUAGE.md`](docs/VELA_DESIGN_LANGUAGE.md)
@@ -76,14 +78,14 @@ VelaApp/
 │   └── DesignSystem/                   # 通用卡片、地平线、胶囊、动效修饰符
 ├── Features/
 │   ├── Minimal/
-│   │   ├── VelaMinimalShell.swift      # 根导航（Today / Trends / Vela / Training 4-Tab 容器）
+│   │   ├── VelaMinimalShell.swift      # 根导航（Today / Trends / Plan / Coach 4-Tab 容器）
 │   │   ├── VelaMinimalTodayView.swift  # Tab 0: 今日状态与健康地平线
-│   │   ├── VelaMinimalFitnessView.swift# Tab 3: 训练决策、手表同步复盘与局部肌群图谱
-│   │   └── TrainingHeroSection.swift   # 训练 Tab 决策 Hero、三日预测与分析门户
+│   │   ├── VelaMinimalFitnessView.swift# 训练能力的兼容/下游视图（不属于一级 Tab）
+│   │   └── TrainingHeroSection.swift   # Plan/Coach 内训练决策 Hero、三日预测与分析门户
 │   ├── Trends/
-│   │   └── VelaTrendsView.swift        # Tab 1: 多尺度趋势与指标详情
+│   │   └── VelaTrendsView.swift        # Trends: 多尺度趋势与指标详情
 │   ├── Coach/
-│   │   ├── CoachView.swift             # Tab 2: AI 分析工作台、流式对话主场
+│   │   ├── CoachView.swift             # Coach: AI 分析工作台、流式对话主场
 │   │   └── CoachWelcomeWorkspace.swift # 晨间生理问候与情境分析提问气泡
 │   └── Settings/
 │       ├── DataCoverageView.swift      # 数据覆盖与权限状态

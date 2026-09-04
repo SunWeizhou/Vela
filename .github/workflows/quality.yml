@@ -19,20 +19,40 @@ jobs:
     name: iOS build and tests
     runs-on: macos-26
     timeout-minutes: 35
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_26.5.0.app/Contents/Developer
     steps:
       - uses: actions/checkout@v6
 
-      - name: Verify toolchain matches .xcode-version
+      - name: Select and verify Xcode toolchain
         shell: bash
         run: |
           set -euo pipefail
-          xcodebuild -version
-          test -d "/Applications/Xcode_26.5.0.app/Contents/Developer" || {
-            echo "::error::Runner expects Xcode 26.5.0 (see .xcode-version). Update DEVELOPER_DIR when bumping."
+
+          required_version="$(tr -d '[:space:]' < .xcode-version)"
+          test -n "$required_version" || {
+            echo "::error::.xcode-version is empty; declare the required Xcode version before running CI."
             exit 1
           }
+
+          # GitHub-hosted macOS images install side-by-side Xcode bundles using
+          # this naming convention. Resolve the path from the checked-in
+          # version file instead of assuming whichever Xcode happens to be
+          # selected by the runner image.
+          developer_dir="/Applications/Xcode_${required_version}.app/Contents/Developer"
+          if [ ! -d "$developer_dir" ]; then
+            echo "::error::Required Xcode ${required_version} is not installed on this runner."
+            echo "Installed Xcode bundles:"
+            find /Applications -maxdepth 1 -type d -name 'Xcode*.app' -print | sort || true
+            exit 1
+          fi
+
+          actual_version="$(DEVELOPER_DIR="$developer_dir" xcodebuild -version | awk '$1 == "Xcode" { print $2; exit }')"
+          if [ "$actual_version" != "$required_version" ]; then
+            echo "::error::Xcode toolchain mismatch: .xcode-version requests ${required_version}, resolved ${actual_version:-unknown}."
+            exit 1
+          fi
+
+          echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
+          echo "Using Xcode ${actual_version} at ${developer_dir}"
 
       - name: Schema version guard
         shell: bash
@@ -82,6 +102,8 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO \
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
+            GCC_TREAT_WARNINGS_AS_ERRORS=YES \
             clean build
 
       - name: Run iOS tests

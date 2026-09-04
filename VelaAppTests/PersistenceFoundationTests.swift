@@ -218,6 +218,30 @@ final class PersistenceFoundationTests: XCTestCase {
         XCTAssertNotNil(schema)
     }
 
+    /// Keep the runtime container and migration plan pointed at the same
+    /// current schema. This is only a current-graph wiring invariant: it does
+    /// not prove that a real V1/V2 store can upgrade. Historical upgrade
+    /// coverage remains a separate gate until old-store fixtures are recovered.
+    func testMigrationPlanUsesCurrentRuntimeSchema() {
+        let versions = VelaMigrationPlan.schemas.map { $0.versionIdentifier }
+        XCTAssertEqual(
+            versions,
+            [
+                VelaSchemaV1.versionIdentifier,
+                VelaSchemaV2.versionIdentifier,
+                VelaSchemaV3.versionIdentifier
+            ]
+        )
+        XCTAssertEqual(VelaMigrationPlan.stages.count, 2)
+
+        let runtimeNames = Set(VelaModelContainer.schema.entities.map(\.name))
+        let currentSchema = VelaMigrationPlan.schemas.last.map { Schema($0.models) }
+        XCTAssertEqual(
+            runtimeNames,
+            Set(currentSchema?.entities.map(\.name) ?? [])
+        )
+    }
+
     @MainActor
     func testDailyScoreEvidenceRoundTripPreservesAuditableMetricSemantics() throws {
         let now = Date(timeIntervalSince1970: 1_785_446_400)
