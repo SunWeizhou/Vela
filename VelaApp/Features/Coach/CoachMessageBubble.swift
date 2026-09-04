@@ -314,12 +314,17 @@ struct ArtifactRendererView: View {
     
     @Environment(\.modelContext) private var modelContext
     @State private var artifactRecord: CoachArtifactRecord? = nil
+    @State private var localStatusOverride: String? = nil
     
     var body: some View {
         Group {
             if let record = artifactRecord {
-                CoachArtifactCard(artifact: record.artifact, compact: true) { action in
-                    handleArtifactAction(action, artifact: record.artifact)
+                if record.artifact.type == .trainingAdjustment {
+                    trainingAdjustmentDiffCard(for: record)
+                } else {
+                    CoachArtifactCard(artifact: record.artifact, compact: true) { action in
+                        handleArtifactAction(action, artifact: record.artifact)
+                    }
                 }
             } else {
                 HStack(spacing: 8) {
@@ -335,6 +340,71 @@ struct ArtifactRendererView: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func trainingAdjustmentDiffCard(for record: CoachArtifactRecord) -> some View {
+        let activePlan = try? modelContext.fetch(
+            FetchDescriptor<TrainingPlanRecord>(predicate: #Predicate { $0.isActive })
+        ).first
+        let proposals = (try? modelContext.fetch(FetchDescriptor<TrainingPlanAdaptationRecord>())) ?? []
+        let matchingProposal = proposals.first(where: {
+            $0.id.uuidString == key ||
+            $0.agentRunId == record.sourceContextHash ||
+            ($0.status == AdaptationStatus.proposed.rawValue && activePlan != nil && $0.planId == activePlan?.id)
+        })
+
+        let originalTitle = matchingProposal?.originalDayTitle ?? activePlan?.days.first(where: { !$0.isCompleted })?.title ?? record.artifact.title
+        let adjustment = matchingProposal?.adjustment ?? record.artifact.decision ?? "reduce"
+        let reason = matchingProposal?.reason ?? record.artifact.reasons.first?.explanation ?? record.artifact.summary
+        let alternative = matchingProposal?.suggestedAlternative ?? (record.artifact.summary.isEmpty ? nil : record.artifact.summary)
+
+        let resolvedStatus: String = {
+            if let override = localStatusOverride {
+                return override
+            }
+            if let matchingProposal {
+                return matchingProposal.status
+            }
+            if record.status == CoachArtifactStatus.acted.rawValue {
+                return AdaptationStatus.accepted.rawValue
+            }
+            if record.status == CoachArtifactStatus.dismissed.rawValue {
+                return AdaptationStatus.rejected.rawValue
+            }
+            return AdaptationStatus.proposed.rawValue
+        }()
+
+        PlanProposalDiffCard(
+            originalTitle: originalTitle,
+            adjustment: adjustment,
+            reason: reason,
+            suggestedAlternative: alternative,
+            status: resolvedStatus,
+            planTitle: activePlan?.title,
+            onAccept: {
+                TodayTrainingPlanAdaptationDecision.acceptArtifact(
+                    record,
+                    in: activePlan,
+                    proposal: matchingProposal,
+                    modelContext: modelContext
+                )
+                localStatusOverride = AdaptationStatus.accepted.rawValue
+                try? modelContext.save()
+                VelaHaptic.success()
+                VelaAppState.shared.markLocalDataChanged()
+            },
+            onReject: {
+                TodayTrainingPlanAdaptationDecision.rejectArtifact(
+                    record,
+                    proposal: matchingProposal
+                )
+                localStatusOverride = AdaptationStatus.rejected.rawValue
+                try? modelContext.save()
+                VelaHaptic.light()
+                VelaAppState.shared.markLocalDataChanged()
+            }
+        )
     }
     
     private func loadRecord() {
@@ -353,6 +423,39 @@ struct ArtifactRendererView: View {
             VelaAppState.shared.routeToPostWorkoutCheckIn(workoutID: id)
         } else if action.type == "open_recovery_detail" {
             VelaAppState.shared.routeToRecoveryDetail()
+        } else if action.type == "accept_training_adjustment" || action.type == "accept_adaptation" {
+            if let record = artifactRecord {
+                let activePlan = try? modelContext.fetch(FetchDescriptor<TrainingPlanRecord>(predicate: #Predicate { $0.isActive })).first
+                let proposals = (try? modelContext.fetch(FetchDescriptor<TrainingPlanAdaptationRecord>())) ?? []
+                let matchingProposal = proposals.first(where: {
+                    $0.id.uuidString == key ||
+                    $0.agentRunId == record.sourceContextHash ||
+                    ($0.status == AdaptationStatus.proposed.rawValue && activePlan != nil && $0.planId == activePlan?.id)
+                })
+                TodayTrainingPlanAdaptationDecision.acceptArtifact(
+                    record,
+                    in: activePlan,
+                    proposal: matchingProposal,
+                    modelContext: modelContext
+                )
+                localStatusOverride = AdaptationStatus.accepted.rawValue
+                try? modelContext.save()
+                VelaHaptic.success()
+                VelaAppState.shared.markLocalDataChanged()
+            }
+        } else if action.type == "reject_training_adjustment" || action.type == "reject_adaptation" {
+            if let record = artifactRecord {
+                let proposals = (try? modelContext.fetch(FetchDescriptor<TrainingPlanAdaptationRecord>())) ?? []
+                let matchingProposal = proposals.first(where: {
+                    $0.id.uuidString == key ||
+                    $0.agentRunId == record.sourceContextHash
+                })
+                TodayTrainingPlanAdaptationDecision.rejectArtifact(record, proposal: matchingProposal)
+                localStatusOverride = AdaptationStatus.rejected.rawValue
+                try? modelContext.save()
+                VelaHaptic.light()
+                VelaAppState.shared.markLocalDataChanged()
+            }
         } else if action.type.contains("training") || action.type.contains("workout") {
             VelaAppState.shared.routeToTraining()
         } else if action.type.contains("check") || action.type.contains("journal") {

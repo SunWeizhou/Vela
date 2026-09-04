@@ -1008,77 +1008,23 @@ struct VelaTrainingRotationView: View {
     /// 算法打通（批次 B）：今日的 Vela 调整提案（BodyInterpreterEngine 产出）。
     /// 采纳 → 应用到计划；拒绝 → 标记 rejected。ADR 0008：任何计划修改由用户确认。
     private var adaptationProposalsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: "sparkles")
-                    .foregroundStyle(VelaTheme.rhythmDeep)
-                Text("Vela 的调整提案")
-                    .font(.system(.title3, design: .default, weight: .semibold))
-                    .foregroundStyle(VelaTheme.rhythmInk)
-            }
+        VStack(alignment: .leading, spacing: 14) {
             ForEach(planAdaptations) { adaptation in
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 8) {
-                        Text(adaptationLabel(adaptation.adjustment))
-                            .font(.system(.caption, design: .default, weight: .semibold))
-                            .foregroundStyle(VelaTheme.rhythmDeepOn)
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 4)
-                            .background(VelaTheme.rhythmDeep, in: Capsule())
-                        Text(adaptation.originalDayTitle)
-                            .font(.system(.caption, design: .default))
-                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                            .lineLimit(1)
-                    }
-                    Text(adaptation.reason)
-                        .font(.system(.footnote, design: .default))
-                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                        .lineSpacing(3)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if let alternative = adaptation.suggestedAlternative, !alternative.isEmpty {
-                        Text(alternative)
-                            .font(.system(.caption, design: .default))
-                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                            .lineSpacing(3)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    HStack(spacing: 10) {
-                        Button {
-                            acceptAdaptation(adaptation)
-                        } label: {
-                            Label("采纳", systemImage: "checkmark")
-                                .font(.system(.footnote, design: .default, weight: .semibold))
-                                .foregroundStyle(VelaTheme.rhythmDeepOn)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 8)
-                                .background(VelaTheme.rhythmDeep, in: Capsule())
-                        }
-                        .buttonStyle(.cardPress)
-                        Button {
-                            rejectAdaptation(adaptation)
-                        } label: {
-                            Label("拒绝", systemImage: "xmark")
-                                .font(.system(.footnote, design: .default, weight: .medium))
-                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 8)
-                                .background(VelaTheme.rhythmMist, in: Capsule())
-                        }
-                        .buttonStyle(.cardPress)
-                        Spacer()
-                    }
-                }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
-                }
+                PlanProposalDiffCard(
+                    originalTitle: adaptation.originalDayTitle,
+                    adjustment: adaptation.adjustment,
+                    reason: adaptation.reason,
+                    suggestedAlternative: adaptation.suggestedAlternative,
+                    status: adaptation.status,
+                    planTitle: activePlan?.title,
+                    onAccept: { acceptAdaptation(adaptation) },
+                    onReject: { rejectAdaptation(adaptation) }
+                )
             }
             Text("采纳后计划即时更新，今日决策面板将在下次刷新时重算。")
                 .font(.system(.caption2, design: .default))
-                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                .foregroundStyle(VelaTheme.meta)
+                .padding(.leading, 4)
         }
     }
 
