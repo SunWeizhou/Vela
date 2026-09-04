@@ -1,0 +1,101 @@
+{
+  "schema": "bodyseek-golden-inventory.v1",
+  "capturedAt": "2026-09-04",
+  "commit": "0bf536b93ae32082821ba57fa2d65fa07788e759",
+  "priorImplementationCheckpoint": "1620d62a290afbd6fd86743160a330ba9253940a",
+  "purpose": "ARCH-00/PR0 deterministic score and state replay baseline",
+  "rules": {
+    "scoresAreIndependent": true,
+    "aggregateScoreIsForbidden": true,
+    "missingValuesRemainNil": true,
+    "sourceOfNumericAssertions": "existing XCTest fixtures; not production telemetry"
+  },
+  "scoreFixture": {
+    "source": "VelaAppTests/ScoringEngineTests.swift:458-530",
+    "test": "ScoringEngineTests.testDailyHealthComputationGoldenFixtureAndVersionConsistency",
+    "calendar": "gregorian",
+    "timeZone": "UTC",
+    "day": "2026-07-31",
+    "asOf": "2026-07-31T12:00:00Z",
+    "historyDays": 14,
+    "profile": {
+      "sleepTargetMinutes": 450,
+      "maxHeartRate": 190,
+      "biologicalSex": "other"
+    },
+    "snapshot": {
+      "hrvAverage": 54,
+      "restingHeartRate": 57,
+      "respiratoryRate": 14.1,
+      "sleepHours": 7.75,
+      "bedtimeOffsetMinutes": -45,
+      "wakeOffsetHours": 7,
+      "awakeMinutes": 24,
+      "awakeEpisodeCount": 2,
+      "deepSleepMinutes": 92,
+      "remSleepMinutes": 108,
+      "wristTemperature": 36.4,
+      "oxygenSaturation": 0.98,
+      "steps": 8400,
+      "activeCalories": 460,
+      "activeMinutes": 42,
+      "workout": {
+        "activityName": "Strength Training",
+        "durationMinutes": 45,
+        "averageHeartRate": 132,
+        "source": "fixture",
+        "rpe": 7
+      }
+    },
+    "expectedScores": {
+      "sleep": 77.43,
+      "recovery": 60.70,
+      "strain": 63.67,
+      "physiologicalStress": 21.08,
+      "energy": 42.31
+    },
+    "algorithmVersions": {
+      "sleep": "sleep.v2.0.0",
+      "recovery": "recovery.v2.0.0",
+      "strain": "strain.v2.0.0",
+      "physiologicalStress": "physiologicalStress.v2.0.0",
+      "energy": "energy.v2.0.0"
+    },
+    "tolerance": 0.01
+  },
+  "emptyStateFixture": {
+    "source": "VelaAppTests/DataCoverageAndEvidenceTests.swift:56-77",
+    "test": "DataCoverageAndEvidenceTests.testEmptyDashboardProducesUnavailableSignalsAndNoAggregateReadinessScore",
+    "domains": [
+      "recovery",
+      "sleep",
+      "strain",
+      "physiologicalStress",
+      "energy"
+    ],
+    "allValues": null,
+    "allHasData": false,
+    "formattedScoreForRecoverySleepStrain": "--",
+    "dataCoverage": "unavailable",
+    "aggregateReadinessScore": null
+  },
+  "bodyStateFixture": {
+    "source": "VelaAppTests/Milestone1ChallengeTests.swift:322-370",
+    "test": "Milestone1ChallengeTests.testWorseLivedStateAlignmentLowersConfidenceButKeepsObjectiveScores",
+    "livedStateAlignment": "worse",
+    "objectiveScores": {
+      "recovery": 84.0,
+      "sleep": 86.0
+    },
+    "expectedConfidence": "low",
+    "expectedDriver": {
+      "id": "lived-state",
+      "impact": -0.5
+    }
+  },
+  "reproducibleBy": {
+    "fullResultBundle": "/tmp/Vela-Wave4-Release.xcresult",
+    "fullResultSummary": "520 passed, 0 failed, 0 skipped",
+    "focusedGoldenTest": "xcodebuild test -project Vela.xcodeproj -scheme Vela -destination 'platform=iOS Simulator,id=BCAD01D0-CB5A-4277-B622-269479D0E159' -only-testing:VelaTests/ScoringEngineTests/testDailyHealthComputationGoldenFixtureAndVersionConsistency"
+  }
+}
