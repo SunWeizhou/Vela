@@ -13,3 +13,9 @@ protocol HealthQueryService {
     func heartRateSamples(start: Date, end: Date) async throws -> [HeartRateSample]
     func workoutRoute(workoutId: UUID) async throws -> [RouteCoordinate]
 }
+
+extension HealthQueryService {
+    /// Implementations may expose diagnostics collected by nested/ancillary
+    /// queries. The default keeps preview and test providers source-compatible.
+    func consumeDiagnostics() -> [HealthQueryDiagnostic] { [] }
+}

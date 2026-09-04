@@ -1,4 +1,72 @@
 import Foundation
+@preconcurrency import HealthKit
+
+/// Outcome of a HealthKit read. `noData` is intentionally distinct from a
+/// failed read so callers can preserve missing-data semantics without hiding
+/// permission, availability, or transient system failures.
+enum HealthQueryOutcomeKind: String, Codable, Equatable, Sendable {
+    case data
+    case noData
+    case denied
+    case unavailable
+    case transient
+    case failed
+
+    var isFailure: Bool {
+        switch self {
+        case .denied, .unavailable, .transient, .failed:
+            return true
+        case .data, .noData:
+            return false
+        }
+    }
+}
+
+/// Machine-readable diagnostic attached to one HealthKit component/query.
+/// Error text is deliberately omitted: localized descriptions are unstable
+/// and should never drive product behaviour or persistence decisions.
+struct HealthQueryDiagnostic: Codable, Equatable, Hashable, Sendable {
+    var component: String
+    var outcome: HealthQueryOutcomeKind
+    var errorDomain: String?
+    var errorCode: Int?
+
+    init(
+        component: String,
+        outcome: HealthQueryOutcomeKind,
+        error: Error? = nil
+    ) {
+        self.component = component
+        self.outcome = outcome
+        let nsError = error.map { $0 as NSError }
+        self.errorDomain = nsError?.domain
+        self.errorCode = nsError?.code
+    }
+}
+
+/// Classifies HealthKit errors without inspecting localized text.
+enum HealthKitQueryOutcomeClassifier {
+    static func classify(_ error: Error) -> HealthQueryOutcomeKind {
+        let nsError = error as NSError
+        guard nsError.domain == HKErrorDomain,
+              let code = HKError.Code(rawValue: nsError.code) else {
+            return .failed
+        }
+
+        switch code {
+        case .errorNoData:
+            return .noData
+        case .errorAuthorizationDenied, .errorAuthorizationNotDetermined:
+            return .denied
+        case .errorHealthDataUnavailable, .errorHealthDataRestricted:
+            return .unavailable
+        case .errorDatabaseInaccessible:
+            return .transient
+        default:
+            return .failed
+        }
+    }
+}
 
 struct DailyHealthSnapshot: Identifiable, Hashable, Sendable {
     let id = UUID()

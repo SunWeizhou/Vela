@@ -77,6 +77,10 @@ final class HealthSyncErrorHandlingTests: XCTestCase {
             [.sleep, .recovery, .strain, .body],
             "真实查询错误必须记录为组件失败，绝不能当作无数据吞掉"
         )
+        XCTAssertEqual(
+            result.diagnostics.filter { $0.outcome == .failed }.map(\.component),
+            ["sleep", "recovery", "strain", "body"]
+        )
         XCTAssertFalse(
             result.hasCoreData,
             "核心组件全部失败时不得持久化全空快照"
@@ -103,6 +107,7 @@ final class HealthSyncErrorHandlingTests: XCTestCase {
             result.queryFailures.isEmpty,
             "errorNoData 是无样本而不是查询失败，不应记入失败清单"
         )
+        XCTAssertEqual(result.diagnostics.map(\.outcome), [.noData, .noData, .noData, .noData])
         // 注意：无数据 ≠ 没有核心数据依赖——组件全部「无样本」时快照为空，
         // 但这是合法的缺失数据表达（由 Data Coverage 规则承接）。
     }
@@ -125,8 +130,30 @@ final class HealthSyncErrorHandlingTests: XCTestCase {
         )
 
         XCTAssertEqual(result.queryFailures, [.sleep])
+        XCTAssertEqual(result.diagnostics.first?.outcome, .failed)
         XCTAssertTrue(result.hasCoreData, "部分组件失败时应保留其余核心数据")
         XCTAssertEqual(result.snapshot.hrvAverage, 41.0)
         XCTAssertNil(result.snapshot.sleepHours, "失败组件不得产出伪造数据")
+    }
+
+    func testHealthKitErrorClassifierKeepsPermissionAndAvailabilityDistinct() {
+        XCTAssertEqual(
+            HealthKitQueryOutcomeClassifier.classify(
+                NSError(domain: HKErrorDomain, code: HKError.Code.errorAuthorizationDenied.rawValue)
+            ),
+            .denied
+        )
+        XCTAssertEqual(
+            HealthKitQueryOutcomeClassifier.classify(
+                NSError(domain: HKErrorDomain, code: HKError.Code.errorHealthDataUnavailable.rawValue)
+            ),
+            .unavailable
+        )
+        XCTAssertEqual(
+            HealthKitQueryOutcomeClassifier.classify(
+                NSError(domain: HKErrorDomain, code: HKError.Code.errorNoData.rawValue)
+            ),
+            .noData
+        )
     }
 }

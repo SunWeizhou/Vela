@@ -543,6 +543,33 @@ struct VelaTodayView: View {
         }
     }
 
+    /// A surface-level projection for the short cache/load gap. It keeps the
+    /// score grammar conservative (no invented values) while making the
+    /// reason for the empty rings explicit to both people and UI tests.
+    @ViewBuilder
+    private var todayDataStateView: some View {
+        let hasSignal = todayExperience.signalCards.contains { $0.value != "--" }
+        if dashboardVM.isLoading && dashboardVM.lastUpdated == nil {
+            VelaStateCard(
+                state: .loading,
+                title: "正在同步今日数据",
+                message: "先展示保守状态；Apple 健康同步完成后，五项状态会自动更新。"
+            )
+            .accessibilityIdentifier("today-data-state")
+            .padding(.horizontal, VelaTheme.pagePadding)
+            .padding(.bottom, 8)
+        } else if !hasSignal {
+            VelaStateCard(
+                state: .empty,
+                title: "今日数据待同步",
+                message: "连接 Apple 健康并完成同步后，这里会显示恢复、睡眠、负荷、压力和能量。"
+            )
+            .accessibilityIdentifier("today-data-state")
+            .padding(.horizontal, VelaTheme.pagePadding)
+            .padding(.bottom, 8)
+        }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -551,6 +578,8 @@ struct VelaTodayView: View {
                         .padding(.horizontal, VelaTheme.pagePadding)
                         .padding(.bottom, 8)
                 }
+
+                todayDataStateView
 
                 // ─── Block 1: Fixed five-score dashboard + one Agent sentence ───
                 TodaySignalGrid(

@@ -369,6 +369,7 @@ final class DailySnapshotBuilder {
     struct Result: Sendable {
         var snapshot: DailyHealthSnapshot
         var queryFailures: [HealthSnapshotComponent]
+        var diagnostics: [HealthQueryDiagnostic] = []
 
         /// 核心健康组件（sleep/recovery/strain/body）是否至少有一个成功。
         /// 全部失败时没有可信数据，调用方不应持久化「无数据」快照覆盖已有记录。
@@ -391,33 +392,46 @@ final class DailySnapshotBuilder {
         // Query components independently。查询失败（区别于「无数据」）必须显式记录：
         // 授权被拒/参数错误不再被吞成空数据（仅 errorNoData 走空数据分支）。
         var queryFailures: [HealthSnapshotComponent] = []
+        var diagnostics: [HealthQueryDiagnostic] = []
 
-        let (sleepValue, sleepFailed) = await queryComponent(
+        let (sleepValue, sleepDiagnostic) = await queryComponent(
             .sleep, in: range
         ) { try await queryService.sleepSummary(in: range) }
         let sleep: SleepSummary? = sleepValue ?? nil
-        if sleepFailed { queryFailures.append(.sleep) }
+        if let sleepDiagnostic {
+            diagnostics.append(sleepDiagnostic)
+            if sleepDiagnostic.outcome.isFailure { queryFailures.append(.sleep) }
+        }
 
-        let (recoveryValue, recoveryFailed) = await queryComponent(
+        let (recoveryValue, recoveryDiagnostic) = await queryComponent(
             .recovery, in: range
         ) { try await queryService.recoveryMetrics(in: range) }
         let recovery: RecoveryMetricSummary? = recoveryValue
-        if recoveryFailed { queryFailures.append(.recovery) }
+        if let recoveryDiagnostic {
+            diagnostics.append(recoveryDiagnostic)
+            if recoveryDiagnostic.outcome.isFailure { queryFailures.append(.recovery) }
+        }
 
-        let (strainValue, strainFailed) = await queryComponent(
+        let (strainValue, strainDiagnostic) = await queryComponent(
             .strain, in: range
         ) { try await queryService.strainSummary(in: range) }
         let strain: StrainActivitySummary? = strainValue
-        if strainFailed { queryFailures.append(.strain) }
+        if let strainDiagnostic {
+            diagnostics.append(strainDiagnostic)
+            if strainDiagnostic.outcome.isFailure { queryFailures.append(.strain) }
+        }
 
-        let (bodyValue, bodyFailed) = await queryComponent(
+        let (bodyValue, bodyDiagnostic) = await queryComponent(
             .body, in: range
         ) { try await queryService.bodyMetrics(in: range) }
         let body: BodyMetricsSummary? = bodyValue
-        if bodyFailed { queryFailures.append(.body) }
+        if let bodyDiagnostic {
+            diagnostics.append(bodyDiagnostic)
+            if bodyDiagnostic.outcome.isFailure { queryFailures.append(.body) }
+        }
 
         let hkQueryService = queryService as? HealthKitQueryService
-        let (extendedValue, extendedFailed) = await queryComponent(
+        let (extendedValue, extendedDiagnostic) = await queryComponent(
             .extended, in: range
         ) {
             if let hkQueryService {
@@ -426,7 +440,11 @@ final class DailySnapshotBuilder {
             return ExtendedHealthMetrics()
         }
         let extended: ExtendedHealthMetrics = extendedValue ?? ExtendedHealthMetrics()
-        if extendedFailed { queryFailures.append(.extended) }
+        if let extendedDiagnostic {
+            diagnostics.append(extendedDiagnostic)
+            if extendedDiagnostic.outcome.isFailure { queryFailures.append(.extended) }
+        }
+        diagnostics.append(contentsOf: queryService.consumeDiagnostics())
 
         var snapshot = DailyHealthSnapshot(date: dayStart)
         if let modelContext {
@@ -520,7 +538,7 @@ final class DailySnapshotBuilder {
         if let spo2 = extended.oxygenSaturation { snapshot.oxygenSaturation = HealthUnitNormalizer.normalizeOxygenSaturation(spo2) }
         if let temp = extended.bodyTemperature { snapshot.wristTemperature = temp }
 
-        return Result(snapshot: snapshot, queryFailures: queryFailures)
+        return Result(snapshot: snapshot, queryFailures: queryFailures, diagnostics: diagnostics)
     }
 
     /// 执行单个 HealthKit 查询组件：无数据（benign）→ 返回 nil 且不记为失败；
@@ -530,14 +548,19 @@ final class DailySnapshotBuilder {
         _ component: HealthSnapshotComponent,
         in range: DateRangeQuery,
         _ operation: () async throws -> T
-    ) async -> (value: T?, failed: Bool) {
+    ) async -> (value: T?, diagnostic: HealthQueryDiagnostic?) {
         do {
-            return (try await operation(), false)
+            return (try await operation(), nil)
         } catch {
-            if HealthKitQueryService.isBenignHealthKitDataError(error) {
-                return (nil, false)
-            }
-            return (nil, true)
+            let outcome = HealthKitQueryOutcomeClassifier.classify(error)
+            return (
+                nil,
+                HealthQueryDiagnostic(
+                    component: component.rawValue,
+                    outcome: outcome,
+                    error: error
+                )
+            )
         }
     }
 }

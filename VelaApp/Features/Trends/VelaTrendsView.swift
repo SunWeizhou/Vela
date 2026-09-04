@@ -23,6 +23,7 @@ struct VelaTrendsView: View {
     @State private var selectedMetricForDetail: VelaMetricDetailView.MetricType?
     @State private var showAllMetricCatalog = false
     @State private var dailyRecords: [DailyHealthSummaryRecord] = []
+    @State private var dailyRecordsLoadError: String?
     @State private var memoizedScoreHistories: [CoreHealthMetric: [Double]] = [:]
     @State private var memoizedNormalizedHistories: [CoreHealthMetric: [Double]] = [:]
 
@@ -69,7 +70,12 @@ struct VelaTrendsView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: VelaTheme.sectionGap) {
-                horizonPicker
+                VStack(spacing: 0) {
+                    horizonPicker
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("trends-horizon-picker")
+                trendHistoryErrorCard
                 fiveScoreTrendSection
 
                 if !hasAnyScoreHistory && scoreDescriptors.allSatisfy({ finding(for: $0.metric)?.isAvailable != true }) {
@@ -97,6 +103,7 @@ struct VelaTrendsView: View {
             .padding(.bottom, VelaFloatingNavigationMetrics.contentBottomPadding + 20)
         }
         .scrollIndicators(.hidden)
+        .accessibilityIdentifier("trends-content")
         .background(VelaTheme.rhythmCanvas)
         .safeAreaInset(edge: .top, spacing: 0) {
             VelaSurfaceHeader(
@@ -287,6 +294,7 @@ struct VelaTrendsView: View {
         }
         .buttonStyle(.cardPress)
         .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier("trends-score-\(descriptor.metric.rawValue)")
         .accessibilityLabel(scoreAccessibilityLabel(descriptor: descriptor, finding: finding, values: values))
         .accessibilityHint("打开\(descriptor.title)详情")
     }
@@ -485,7 +493,18 @@ struct VelaTrendsView: View {
             predicate: #Predicate { $0.date >= start && $0.date < end },
             sortBy: [SortDescriptor(\.date, order: .forward)]
         )
-        dailyRecords = (try? modelContext.fetch(descriptor)) ?? []
+        do {
+            dailyRecords = try modelContext.fetch(descriptor)
+            dailyRecordsLoadError = nil
+        } catch {
+            // Never turn a read failure into a misleading empty trend. Clear
+            // the previous day's points and expose an explicit retry state.
+            dailyRecords = []
+            dailyRecordsLoadError = L10n.t(
+                "Trend history could not be read. Retry to load it again.",
+                "趋势历史暂时无法读取，请重试后再查看。"
+            )
+        }
         recomputeMemoizedHistories()
     }
 
@@ -556,6 +575,7 @@ struct VelaTrendsView: View {
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
                     )
+                    .accessibilityIdentifier("trends-horizon-picker")
                 }
                 .accessibilityLabel("趋势时间范围")
                 .accessibilityValue(selectedHorizon.detailedTitle)
@@ -566,6 +586,7 @@ struct VelaTrendsView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .accessibilityIdentifier("trends-horizon-picker")
             }
         }
         .accessibilityLabel("趋势时间范围")
@@ -575,6 +596,20 @@ struct VelaTrendsView: View {
     }
 
     // MARK: - Empty State View
+
+    @ViewBuilder
+    private var trendHistoryErrorCard: some View {
+        if let dailyRecordsLoadError {
+            VelaStateCard(
+                state: .error,
+                title: "趋势历史暂时无法读取",
+                message: dailyRecordsLoadError,
+                actionTitle: "重试",
+                action: loadDailyRecords
+            )
+            .accessibilityIdentifier("trends-history-error")
+        }
+    }
 
     private var emptyHorizonStateView: some View {
         VStack(spacing: 16) {
@@ -628,6 +663,7 @@ struct VelaTrendsView: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         )
+        .accessibilityIdentifier("trends-empty-state")
     }
 
     // MARK: - Tier 1: Notable Shifts Section

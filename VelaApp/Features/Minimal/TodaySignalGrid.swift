@@ -166,6 +166,7 @@ struct TodaySignalGrid: View {
             .todayDashboardCard(radius: VelaTheme.radiusCardLarge, depth: .standard)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("today-secondary-stress")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(secondaryAccessibilityLabel(card))
         .accessibilityHint("查看压力的时间变化和依据")
@@ -213,6 +214,7 @@ struct TodaySignalGrid: View {
             .todayDashboardCard(radius: VelaTheme.radiusCardLarge, depth: .standard)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("today-secondary-energy")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(secondaryAccessibilityLabel(card))
         .accessibilityHint("查看能量的充入、消耗和时间变化")
@@ -331,6 +333,7 @@ struct TodaySignalGrid: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("today-guidance")
         .accessibilityLabel("今日指导，\(agentSentence)")
         .accessibilityHint("打开教练继续追问")
     }
@@ -377,6 +380,7 @@ struct TodaySignalGrid: View {
             }
             .buttonStyle(.plain)
             .accessibilityHint("查看\(card.title)的依据和个人趋势")
+            .accessibilityIdentifier("today-score-\(card.id)")
         } else {
             scoreLabel(card, ringSize: ringSize, horizontal: horizontal)
         }
@@ -391,7 +395,10 @@ struct TodaySignalGrid: View {
         let hasDeviation = deviatedScoreIDs.contains(card.id)
         let scoreDescription = card.value == "--" ? "暂无数据" : "\(card.value) 分"
 
-        Group {
+        // A concrete container is intentional here. A `Group` can distribute
+        // accessibility modifiers across its branches, which made the stable
+        // score identifier disappear on the empty-data (non-ring) projection.
+        VStack(spacing: 0) {
             if horizontal {
                 HStack(spacing: 12) {
                     scoreRing(card, size: ringSize, hasDeviation: hasDeviation)
@@ -427,6 +434,7 @@ struct TodaySignalGrid: View {
         .accessibilityLabel(
             "\(card.title)，\(scoreDescription)，\(card.directionLabel)\(hasDeviation ? "，偏离个人基线" : "")"
         )
+        .accessibilityIdentifier("today-score-\(card.id)")
     }
 
     private func scoreRing(

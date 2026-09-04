@@ -33,9 +33,26 @@ enum WorkoutHeartRateRecoveryMatcher {
 
 final class HealthKitQueryService: HealthQueryService {
     private let healthStore: HKHealthStore
+    private(set) var diagnostics: [HealthQueryDiagnostic] = []
 
     init(healthStore: HKHealthStore = HealthStoreProvider.shared) {
         self.healthStore = healthStore
+    }
+
+    func consumeDiagnostics() -> [HealthQueryDiagnostic] {
+        defer { diagnostics.removeAll(keepingCapacity: true) }
+        return diagnostics
+    }
+
+    private func recordDiagnostic(
+        component: String,
+        error: Error
+    ) {
+        diagnostics.append(HealthQueryDiagnostic(
+            component: component,
+            outcome: HealthKitQueryOutcomeClassifier.classify(error),
+            error: error
+        ))
     }
 
     /// HealthKit signals "this range simply has no samples" by throwing, not by
@@ -44,18 +61,7 @@ final class HealthKitQueryService: HealthQueryService {
     /// system language and across iOS releases. Matching on localized text turned
     /// a normal empty day into a thrown sync error on non-English devices.
     nonisolated static func isBenignHealthKitDataError(_ error: Error) -> Bool {
-        let nsError = error as NSError
-        guard nsError.domain == HKErrorDomain,
-              let code = HKError.Code(rawValue: nsError.code) else { return false }
-        // [4] 修复：授权被拒/参数错误不再当「空数据」静默吞掉——
-        // 只有真正没有样本的 errorNoData 走空数据分支，
-        // 其余错误向上抛，让调用方能区分「没数据」与「读不到」。
-        switch code {
-        case .errorNoData:
-            return true
-        default:
-            return false
-        }
+        HealthKitQueryOutcomeClassifier.classify(error) == .noData
     }
 
     func sleepSummary(in range: DateRangeQuery) async throws -> SleepSummary? {
@@ -273,8 +279,20 @@ final class HealthKitQueryService: HealthQueryService {
 
         async let heartRatesTask = averageHeartRates(for: rawWorkouts)
         async let recoveriesTask = heartRateRecoveries(for: rawWorkouts)
-        let heartRates = (try? await heartRatesTask) ?? [:]
-        let recoveries = (try? await recoveriesTask) ?? [:]
+        let heartRates: [UUID: Double]
+        do {
+            heartRates = try await heartRatesTask
+        } catch {
+            recordDiagnostic(component: "workouts.averageHeartRate", error: error)
+            heartRates = [:]
+        }
+        let recoveries: [UUID: Double]
+        do {
+            recoveries = try await recoveriesTask
+        } catch {
+            recordDiagnostic(component: "workouts.heartRateRecovery", error: error)
+            recoveries = [:]
+        }
         var summaries: [WorkoutSummary] = []
         for workout in rawWorkouts {
             summaries.append(WorkoutSummary(
@@ -357,67 +375,65 @@ final class HealthKitQueryService: HealthQueryService {
         async let mindfulMinutesValue = mindfulMinutes(in: range)
         async let sleepBreathingDisturbancesValue = sleepBreathingDisturbancesAverage(in: range)
 
-        m.heightCm = try? await heightCm
-        m.bmi = try? await bmi
-        m.bodyWeightKg = try? await bodyWeightKg
-        m.bodyFatPercent = try? await bodyFatPercent
+        do { m.heightCm = try await heightCm } catch { recordDiagnostic(component: "extended.height", error: error) }
+        do { m.bmi = try await bmi } catch { recordDiagnostic(component: "extended.bmi", error: error) }
+        do { m.bodyWeightKg = try await bodyWeightKg } catch { recordDiagnostic(component: "extended.bodyWeight", error: error) }
+        do { m.bodyFatPercent = try await bodyFatPercent } catch { recordDiagnostic(component: "extended.bodyFat", error: error) }
 
-        m.walkingHeartRateAvg = try? await walkingHeartRateAvg
-        m.oxygenSaturation = try? await oxygenSaturation
-        m.bloodPressureSystolic = try? await bloodPressureSystolic
-        m.bloodPressureDiastolic = try? await bloodPressureDiastolic
+        do { m.walkingHeartRateAvg = try await walkingHeartRateAvg } catch { recordDiagnostic(component: "extended.walkingHeartRate", error: error) }
+        do { m.oxygenSaturation = try await oxygenSaturation } catch { recordDiagnostic(component: "extended.oxygenSaturation", error: error) }
+        do { m.bloodPressureSystolic = try await bloodPressureSystolic } catch { recordDiagnostic(component: "extended.bloodPressureSystolic", error: error) }
+        do { m.bloodPressureDiastolic = try await bloodPressureDiastolic } catch { recordDiagnostic(component: "extended.bloodPressureDiastolic", error: error) }
 
-        m.bloodGlucose = try? await bloodGlucose
+        do { m.bloodGlucose = try await bloodGlucose } catch { recordDiagnostic(component: "extended.bloodGlucose", error: error) }
 
-        m.walkingSpeed = try? await walkingSpeed
-        m.walkingAsymmetry = try? await walkingAsymmetry
-        m.walkingDoubleSupport = try? await walkingDoubleSupport
+        do { m.walkingSpeed = try await walkingSpeed } catch { recordDiagnostic(component: "extended.walkingSpeed", error: error) }
+        do { m.walkingAsymmetry = try await walkingAsymmetry } catch { recordDiagnostic(component: "extended.walkingAsymmetry", error: error) }
+        do { m.walkingDoubleSupport = try await walkingDoubleSupport } catch { recordDiagnostic(component: "extended.doubleSupport", error: error) }
 
-        m.exerciseMinutes = (try? await exerciseMinutes).map { Int($0) }
-        m.flightsClimbed = (try? await flightsClimbed).map { Int($0) }
+        do { m.exerciseMinutes = (try await exerciseMinutes).map { Int($0) } } catch { recordDiagnostic(component: "extended.exerciseMinutes", error: error) }
+        do { m.flightsClimbed = (try await flightsClimbed).map { Int($0) } } catch { recordDiagnostic(component: "extended.flightsClimbed", error: error) }
 
-        m.environmentalNoisedB = try? await environmentalNoisedB
-        m.timeInDaylight = try? await timeInDaylight
+        do { m.environmentalNoisedB = try await environmentalNoisedB } catch { recordDiagnostic(component: "extended.environmentalNoise", error: error) }
+        do { m.timeInDaylight = try await timeInDaylight } catch { recordDiagnostic(component: "extended.daylight", error: error) }
 
-        if let wrist = try? await wristTemperature {
+        do {
+            let wrist = try await wristTemperature
             m.bodyTemperature = wrist
-        } else {
-            m.bodyTemperature = try? await bodyTemperatureFallback
+        } catch {
+            recordDiagnostic(component: "extended.wristTemperature", error: error)
+            do { m.bodyTemperature = try await bodyTemperatureFallback } catch { recordDiagnostic(component: "extended.bodyTemperature", error: error) }
         }
 
-        m.waterMl = try? await waterMl
-        m.caffeineMg = try? await caffeineMg
+        do { m.waterMl = try await waterMl } catch { recordDiagnostic(component: "extended.water", error: error) }
+        do { m.caffeineMg = try await caffeineMg } catch { recordDiagnostic(component: "extended.caffeine", error: error) }
         if VelaFeatureFlags.nutritionEnabled {
-            m.dietaryEnergyKcal = try? await dietaryEnergyKcal
-            m.dietaryProteinG = try? await dietaryProteinG
-            m.dietaryCarbsG = try? await dietaryCarbsG
-            m.dietaryFatG = try? await dietaryFatG
+            do { m.dietaryEnergyKcal = try await dietaryEnergyKcal } catch { recordDiagnostic(component: "extended.dietaryEnergy", error: error) }
+            do { m.dietaryProteinG = try await dietaryProteinG } catch { recordDiagnostic(component: "extended.dietaryProtein", error: error) }
+            do { m.dietaryCarbsG = try await dietaryCarbsG } catch { recordDiagnostic(component: "extended.dietaryCarbohydrates", error: error) }
+            do { m.dietaryFatG = try await dietaryFatG } catch { recordDiagnostic(component: "extended.dietaryFat", error: error) }
         }
 
-        m.mindfulMinutes = await mindfulMinutesValue
-        m.sleepBreathingDisturbances = await sleepBreathingDisturbancesValue
+        do { m.mindfulMinutes = try await mindfulMinutesValue } catch { recordDiagnostic(component: "extended.mindfulMinutes", error: error) }
+        do { m.sleepBreathingDisturbances = try await sleepBreathingDisturbancesValue } catch { recordDiagnostic(component: "extended.sleepBreathingDisturbances", error: error) }
 
         return m
     }
 
     /// 正念分钟（品类样本时长求和；无数据/失败返回 nil）。
-    private func mindfulMinutes(in range: DateRangeQuery) async -> Double? {
+    private func mindfulMinutes(in range: DateRangeQuery) async throws -> Double? {
         guard let mindfulType = HealthSignalCatalog.objectType(for: .mindfulSession) as? HKCategoryType else {
             return nil
         }
-        do {
-            let mindfulSamples = try await categorySamples(type: mindfulType, range: range)
-            let totalMinutes = mindfulSamples.reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) } / 60.0
-            return totalMinutes > 0 ? totalMinutes : nil
-        } catch {
-            return nil
-        }
+        let mindfulSamples = try await categorySamples(type: mindfulType, range: range)
+        let totalMinutes = mindfulSamples.reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) } / 60.0
+        return totalMinutes > 0 ? totalMinutes : nil
     }
 
     /// 睡眠呼吸紊乱均值（iOS 18+；低版本直接 nil，不发起查询）。
-    private func sleepBreathingDisturbancesAverage(in range: DateRangeQuery) async -> Double? {
+    private func sleepBreathingDisturbancesAverage(in range: DateRangeQuery) async throws -> Double? {
         guard #available(iOS 18.0, *) else { return nil }
-        return try? await averageQuantity(
+        return try await averageQuantity(
             .sleepBreathingDisturbances,
             unit: HKUnit.count().unitDivided(by: .hour()),
             range: range
@@ -566,8 +582,20 @@ final class HealthKitQueryService: HealthQueryService {
 
         async let heartRatesTask = averageHeartRates(for: rawWorkouts)
         async let recoveriesTask = heartRateRecoveries(for: rawWorkouts)
-        let heartRates = (try? await heartRatesTask) ?? [:]
-        let recoveries = (try? await recoveriesTask) ?? [:]
+        let heartRates: [UUID: Double]
+        do {
+            heartRates = try await heartRatesTask
+        } catch {
+            recordDiagnostic(component: "recentWorkouts.averageHeartRate", error: error)
+            heartRates = [:]
+        }
+        let recoveries: [UUID: Double]
+        do {
+            recoveries = try await recoveriesTask
+        } catch {
+            recordDiagnostic(component: "recentWorkouts.heartRateRecovery", error: error)
+            recoveries = [:]
+        }
         var summaries: [WorkoutSummary] = []
         for workout in rawWorkouts {
             summaries.append(WorkoutSummary(
@@ -776,8 +804,7 @@ final class HealthKitQueryService: HealthQueryService {
                 sortDescriptors: [sort]
             ) { _, samples, error in
                 if let error {
-                    let nsError = error as NSError
-                    if nsError.domain == HKErrorDomain && (nsError.code == 4 || nsError.code == 3 || nsError.code == 5) {
+                    if Self.isBenignHealthKitDataError(error) {
                         continuation.resume(returning: [])
                     } else {
                         continuation.resume(throwing: error)
@@ -843,6 +870,14 @@ final class HealthKitQueryService: HealthQueryService {
         }
         let workouts: [HKWorkout] = try await withCheckedThrowingContinuation { continuation in
             let query = HKSampleQuery(sampleType: workoutType, predicate: workoutPredicate, limit: 1, sortDescriptors: nil) { _, samples, error in
+                if let error {
+                    if Self.isBenignHealthKitDataError(error) {
+                        continuation.resume(returning: [])
+                    } else {
+                        continuation.resume(throwing: error)
+                    }
+                    return
+                }
                 continuation.resume(returning: (samples as? [HKWorkout]) ?? [])
             }
             healthStore.execute(query)
@@ -856,6 +891,14 @@ final class HealthKitQueryService: HealthQueryService {
         let routePredicate = HKQuery.predicateForObjects(from: workout)
         let routes: [HKWorkoutRoute] = try await withCheckedThrowingContinuation { continuation in
             let query = HKSampleQuery(sampleType: routeType, predicate: routePredicate, limit: 1, sortDescriptors: nil) { _, samples, error in
+                if let error {
+                    if Self.isBenignHealthKitDataError(error) {
+                        continuation.resume(returning: [])
+                    } else {
+                        continuation.resume(throwing: error)
+                    }
+                    return
+                }
                 continuation.resume(returning: (samples as? [HKWorkoutRoute]) ?? [])
             }
             healthStore.execute(query)
@@ -877,7 +920,15 @@ final class HealthKitQueryService: HealthQueryService {
                     )
                 }
                 if done || error != nil, let coordinates = accumulator.finish() {
-                    continuation.resume(returning: error == nil ? coordinates : [])
+                    if let error {
+                        if Self.isBenignHealthKitDataError(error) {
+                            continuation.resume(returning: [])
+                        } else {
+                            continuation.resume(throwing: error)
+                        }
+                    } else {
+                        continuation.resume(returning: coordinates)
+                    }
                 }
             }
             healthStore.execute(query)

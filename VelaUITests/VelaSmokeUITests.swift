@@ -22,6 +22,62 @@ final class VelaSmokeUITests: XCTestCase {
         )
     }
 
+    func testTodayScoreContentAndMetricRouting() {
+        let app = launchApp(initialTab: 0)
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["surface-0"].waitForExistence(timeout: 10),
+            "Today surface did not become visible"
+        )
+        for metric in ["recovery", "sleep", "strain"] {
+            XCTAssertTrue(
+                app.descendants(matching: .any)["today-score-\(metric)"].waitForExistence(timeout: 3),
+                "Today score \(metric) did not expose its stable identifier"
+            )
+        }
+        let recoveryScore = app.descendants(matching: .any)["today-score-recovery"]
+        if recoveryScore.waitForExistence(timeout: 3) {
+            // Preview fixtures expose the score card as a stable, tappable
+            // route. A real no-data launch may intentionally omit that card
+            // while retaining the conservative state projection below.
+            recoveryScore.tap()
+            XCTAssertTrue(
+                app.descendants(matching: .any)["metric-detail-recovery"].waitForExistence(timeout: 8),
+                "Today recovery score did not route to its metric detail"
+            )
+        } else {
+            XCTAssertTrue(
+                app.descendants(matching: .any)["today-data-state"].waitForExistence(timeout: 5),
+                "No-data Today launch should expose its conservative data state"
+            )
+        }
+    }
+
+    func testTrendsScoreContentAndMetricRouting() {
+        let app = launchApp(initialTab: 1)
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["trends-content"].waitForExistence(timeout: 10),
+            "Trends surface did not become visible"
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["trends-horizon-picker"].waitForExistence(timeout: 8),
+            "Trends horizon picker did not expose its stable identifier"
+        )
+        for metric in ["recovery", "sleepScore", "strain", "stress", "energy"] {
+            XCTAssertTrue(
+                app.descendants(matching: .any)["trends-score-\(metric)"].waitForExistence(timeout: 8),
+                "Trends score \(metric) did not expose its stable identifier"
+            )
+        }
+
+        app.descendants(matching: .any)["trends-score-recovery"].tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["metric-detail-recovery"].waitForExistence(timeout: 8),
+            "Trends recovery score did not route to its metric detail"
+        )
+    }
+
     func testSettingsDeepLaunch() {
         let app = launchApp(extraArguments: ["-velaOpenSettings"])
 
