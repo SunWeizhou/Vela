@@ -16,6 +16,9 @@ enum TodayStoreAction: Sendable {
     case askCoach(String)
     case startTraining
     case requestWeather
+    case refreshCoverage
+    case trackDailyDecisionViewed(bodyStateHash: String)
+    case trackDailyDecisionAction(bodyStateHash: String, destination: String)
     case setLivedStateAlignment(LivedStateAlignment)
     case saveLivedState(LivedStateCheckIn)
     case submitFeedback(DailyDecisionFeedbackValues)
@@ -30,7 +33,10 @@ protocol TodayEffectRouter: AnyObject {
     func openSettings() async
     func askCoach(_ question: String) async
     func startTraining() async
-    func requestWeather() async
+    func requestWeather() async -> TodayWeatherProjection?
+    func requestCoverage() async -> DataCoverageSummaryModel?
+    func trackDailyDecisionViewed(bodyStateHash: String) async
+    func trackDailyDecisionAction(bodyStateHash: String, destination: String) async
     func saveLivedStateAlignment(_ alignment: LivedStateAlignment) async
     func saveLivedState(_ checkIn: LivedStateCheckIn) async
     func submitFeedback(_ values: DailyDecisionFeedbackValues) async
@@ -49,7 +55,10 @@ final class NoOpTodayEffectRouter: TodayEffectRouter {
     func openSettings() async {}
     func askCoach(_ question: String) async {}
     func startTraining() async {}
-    func requestWeather() async {}
+    func requestWeather() async -> TodayWeatherProjection? { nil }
+    func requestCoverage() async -> DataCoverageSummaryModel? { nil }
+    func trackDailyDecisionViewed(bodyStateHash: String) async {}
+    func trackDailyDecisionAction(bodyStateHash: String, destination: String) async {}
     func saveLivedStateAlignment(_ alignment: LivedStateAlignment) async {}
     func saveLivedState(_ checkIn: LivedStateCheckIn) async {}
     func submitFeedback(_ values: DailyDecisionFeedbackValues) async {}

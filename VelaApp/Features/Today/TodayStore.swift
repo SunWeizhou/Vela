@@ -77,7 +77,16 @@ final class TodayStore: ObservableObject {
         case .startTraining:
             await effects.startTraining()
         case .requestWeather:
-            await effects.requestWeather()
+            state.weather = await effects.requestWeather() ?? .unavailable
+        case .refreshCoverage:
+            state.coverage = await effects.requestCoverage() ?? state.coverage
+        case .trackDailyDecisionViewed(let bodyStateHash):
+            await effects.trackDailyDecisionViewed(bodyStateHash: bodyStateHash)
+        case .trackDailyDecisionAction(let bodyStateHash, let destination):
+            await effects.trackDailyDecisionAction(
+                bodyStateHash: bodyStateHash,
+                destination: destination
+            )
         case .setLivedStateAlignment(let alignment):
             await effects.saveLivedStateAlignment(alignment)
             state.livedState.alignment = alignment

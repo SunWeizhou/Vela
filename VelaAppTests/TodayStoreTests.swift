@@ -196,6 +196,9 @@ final class TodayStoreTests: XCTestCase {
         var coachQuestions: [String] = []
         var startedTraining = 0
         var requestedWeather = 0
+        var requestedCoverage = 0
+        var viewedHashes: [String] = []
+        var actionEvents: [(String, String)] = []
         var alignments: [LivedStateAlignment] = []
         var checkIns: [LivedStateCheckIn] = []
         var feedbackCount = 0
@@ -207,7 +210,20 @@ final class TodayStoreTests: XCTestCase {
         func openSettings() async { openedSettings += 1 }
         func askCoach(_ question: String) async { coachQuestions.append(question) }
         func startTraining() async { startedTraining += 1 }
-        func requestWeather() async { requestedWeather += 1 }
+        func requestWeather() async -> TodayWeatherProjection? {
+            requestedWeather += 1
+            return nil
+        }
+        func requestCoverage() async -> DataCoverageSummaryModel? {
+            requestedCoverage += 1
+            return nil
+        }
+        func trackDailyDecisionViewed(bodyStateHash: String) async {
+            viewedHashes.append(bodyStateHash)
+        }
+        func trackDailyDecisionAction(bodyStateHash: String, destination: String) async {
+            actionEvents.append((bodyStateHash, destination))
+        }
         func saveLivedStateAlignment(_ alignment: LivedStateAlignment) async { alignments.append(alignment) }
         func saveLivedState(_ checkIn: LivedStateCheckIn) async { checkIns.append(checkIn) }
         func submitFeedback(_ values: DailyDecisionFeedbackValues) async { feedbackCount += 1 }
@@ -433,6 +449,31 @@ final class TodayStoreTests: XCTestCase {
         XCTAssertEqual(effects.checkIns, [checkIn])
         XCTAssertEqual(store.state.livedState.alignment, .worse)
         XCTAssertEqual(store.state.livedState.checkIn, checkIn)
+    }
+
+    @MainActor
+    func testWeatherCoverageAndAnalyticsRemainStoreOwnedEffects() async {
+        let reader = RecordingReader()
+        let effects = RecordingEffects()
+        let store = TodayStore(
+            reader: reader,
+            clock: FixedAppClock(now: now),
+            calendar: calendar,
+            effects: effects
+        )
+
+        await store.send(.requestWeather)
+        await store.send(.refreshCoverage)
+        await store.send(.trackDailyDecisionViewed(bodyStateHash: "body-hash"))
+        await store.send(.trackDailyDecisionViewed(bodyStateHash: "body-hash"))
+        await store.send(.trackDailyDecisionAction(bodyStateHash: "body-hash", destination: "training"))
+
+        XCTAssertEqual(store.state.weather, .unavailable)
+        XCTAssertEqual(store.state.coverage.status, .unknown)
+        XCTAssertEqual(effects.requestedWeather, 1)
+        XCTAssertEqual(effects.requestedCoverage, 1)
+        XCTAssertEqual(effects.viewedHashes, ["body-hash", "body-hash"])
+        XCTAssertEqual(effects.actionEvents.map(\.1), ["training"])
     }
 }
 

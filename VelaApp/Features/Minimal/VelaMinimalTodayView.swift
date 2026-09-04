@@ -420,35 +420,24 @@ struct VelaTodayView: View {
     /// Weather fetching is still a compatibility effect until the reader
     /// publishes a weather projection. Rendering prefers Store state and only
     /// falls back to this adapter's transient display values.
-    @State var legacyWeatherTemp: String = "--"
-    @State var legacyWeatherLocation: String = "天气数据待同步"
-
     private var weatherTemp: String {
         guard let temperature = todayStore.state.weather.temperature else {
-            return legacyWeatherTemp
+            return "--"
         }
         return "\(Int(temperature.rounded()))°C"
     }
 
     private var weatherLocation: String {
-        todayStore.state.weather.locationName ?? legacyWeatherLocation
+        todayStore.state.weather.locationName ?? "天气数据待同步"
     }
 
     var weatherStatusText: String {
-        switch todayLegacyRuntime.authorizationStatus {
-        case .notDetermined:
-            return "点击更新天气"
-        case .denied, .restricted:
-            return "定位未授权"
-        default:
-            return weatherLocation
-        }
+        todayStore.state.weather.status == .available ? weatherLocation : "天气暂不可用"
     }
 
     // A single route prevents mutually exclusive Today sheets from racing.
     @State var presentedTodaySheet: TodaySheet?
     @State var experienceFeedbackTick = 0
-    @State var legacyDataCoverageSummary = DataCoverageSummaryModel.unknown
     /// SwiftData feedback records are retained only as a downstream adapter
     /// for the editing sheet. Dashboard copy and gating use the Store's value
     /// projection instead, so persistence models do not leak into rendering.
@@ -459,40 +448,7 @@ struct VelaTodayView: View {
     // F2 修复：档案修改发生在非 Today 页面时记一笔，回到 Today 立即强制重算。
     @State private var pendingLocalDataRefresh = false
 
-    var decisionDataCoverageSummary: DataCoverageSummaryModel {
-        // The Store projection is canonical when available. Until the
-        // coverage reader is wired into TodayDashboardSnapshot, keep the
-        // existing async factory as a named compatibility fallback.
-        let dataCoverageSummary = todayStore.state.coverage.status == .unknown
-            ? legacyDataCoverageSummary
-            : todayStore.state.coverage
-        guard dataCoverageSummary.status != .unknown,
-              !dashboard.recovery.hasData else { return dataCoverageSummary }
-
-        var adjusted = dataCoverageSummary
-        adjusted.domainSummaries = adjusted.domainSummaries.map { domain in
-            guard domain.id == "recovery" else { return domain }
-            return DataCoverageDomainSummary(
-                id: domain.id,
-                title: domain.title,
-                icon: domain.icon,
-                scorePercent: 0,
-                usableCount: 0,
-                totalCount: domain.totalCount
-            )
-        }
-        let usable = adjusted.domainSummaries.reduce(0) { $0 + $1.usableCount }
-        let total = adjusted.domainSummaries.reduce(0) { $0 + $1.totalCount }
-        adjusted.scorePercent = total > 0
-            ? Int((Double(usable) / Double(total) * 100).rounded())
-            : 0
-        adjusted.status = adjusted.scorePercent >= 50 ? .moderate : .low
-        adjusted.title = "今日恢复数据待同步"
-        adjusted.subtitle = "恢复信号尚未更新；今天的训练建议会按保守窗口处理。"
-        adjusted.topBlockers = Array((["今日恢复"] + adjusted.topBlockers).prefix(3))
-        adjusted.coachContextLine = "Today's recovery signal is unavailable. Keep training guidance conservative until recovery data syncs."
-        return adjusted
-    }
+    var decisionDataCoverageSummary: DataCoverageSummaryModel { todayStore.state.coverage }
 
     @ViewBuilder
     var errorMessageView: some View {
@@ -732,7 +688,7 @@ struct VelaTodayView: View {
             loadDynamicData()
         }
         .onReceive(todayLegacyRuntime.locationUpdates) { _ in
-            fetchLocalWeather()
+            dispatchToday(.requestWeather)
         }
         .sheet(item: $presentedTodaySheet) { sheet in
             todaySheetContent(sheet)

@@ -154,6 +154,67 @@ final class TodayLegacyRuntime {
         }
     }
 
+    /// Fetches a value-only weather projection for the Store. Location and
+    /// weather services stay behind this composition-root adapter; callers do
+    /// not receive a singleton, CLLocation, or persistence record.
+    func loadWeatherProjection() async -> TodayWeatherProjection? {
+        let cached = cachedWeatherLocation()
+        let live: WeatherLocationSnapshot?
+        if let location = currentLocation {
+            let placemark = try? await CLGeocoder()
+                .reverseGeocodeLocation(location)
+                .first
+            let parts = [placemark?.locality, placemark?.administrativeArea]
+                .compactMap { $0 }
+                .filter { !$0.isEmpty }
+            let name = parts.isEmpty
+                ? (cached?.displayName ?? "当前位置")
+                : Array(NSOrderedSet(array: parts)).compactMap { $0 as? String }
+                    .joined(separator: ", ")
+            live = WeatherLocationSnapshot(
+                latitude: location.coordinate.latitude,
+                longitude: location.coordinate.longitude,
+                displayName: name,
+                capturedAt: location.timestamp
+            )
+        } else {
+            live = nil
+        }
+        guard let selected = WeatherLocationPolicy.preferredSnapshot(
+            live: live,
+            cached: cached
+        ) else {
+            return nil
+        }
+        if let live {
+            saveWeatherLocation(live)
+        }
+        do {
+            let weather = try await fetchWeather(
+                latitude: selected.latitude,
+                longitude: selected.longitude
+            )
+            return TodayWeatherProjection(
+                status: .available,
+                temperature: weather.temperature,
+                apparentTemperature: weather.apparentTemperature,
+                humidity: weather.humidity,
+                windSpeed: weather.windSpeed,
+                conditionCode: weather.conditionCode,
+                isDay: weather.isDay,
+                locationName: selected.displayName,
+                capturedAt: selected.capturedAt
+            )
+        } catch {
+            return nil
+        }
+    }
+
+    func loadCoverageSummary() async -> DataCoverageSummaryModel? {
+        let groups = await DataCoverageGroupFactory.loadPriorityGroups()
+        return DataCoverageSummaryModel.build(groups: groups)
+    }
+
     func cachedDashboard(for day: Date) async throws -> TodayDashboardSnapshot? {
         guard let modelContext, let useCase else { return nil }
         return try await useCase
@@ -731,8 +792,38 @@ final class TodayLegacyEffectRouter: TodayEffectRouter {
         runtime?.routeToTraining()
     }
 
-    func requestWeather() async {
-        runtime?.requestWeather()
+    func requestWeather() async -> TodayWeatherProjection? {
+        guard let runtime else { return nil }
+        runtime.requestWeather()
+        return await runtime.loadWeatherProjection()
+    }
+
+    func requestCoverage() async -> DataCoverageSummaryModel? {
+        await runtime?.loadCoverageSummary()
+    }
+
+    func trackDailyDecisionViewed(bodyStateHash: String) async {
+        guard let runtime else { return }
+        do {
+            _ = try runtime.recordDecisionViewed(bodyStateHash: bodyStateHash)
+            runtime.markLocalDataChanged()
+        } catch {
+            // Analytics is non-blocking; the Store action is still observable
+            // and the next refresh can retry the local write.
+        }
+    }
+
+    func trackDailyDecisionAction(bodyStateHash: String, destination: String) async {
+        guard let runtime else { return }
+        do {
+            _ = try runtime.recordDecisionAction(
+                bodyStateHash: bodyStateHash,
+                destination: destination
+            )
+            runtime.markLocalDataChanged()
+        } catch {
+            // Do not block the user's primary action on an auxiliary journal.
+        }
     }
 
     func saveLivedStateAlignment(_ alignment: LivedStateAlignment) async {
@@ -962,96 +1053,6 @@ extension VelaTodayView {
     // MARK: - Weather Sync
     func requestWeatherUpdate() {
         dispatchToday(.requestWeather)
-        switch todayLegacyRuntime.authorizationStatus {
-        case .notDetermined:
-            legacyWeatherLocation = "正在请求定位"
-        case .authorizedWhenInUse, .authorizedAlways:
-            break
-        case .denied, .restricted:
-            legacyWeatherLocation = "定位未授权"
-        @unknown default:
-            legacyWeatherLocation = "天气暂不可用"
-        }
-    }
-
-    func fetchLocalWeather() {
-        Task {
-            let cached = todayLegacyRuntime.cachedWeatherLocation()
-            let live = await weatherLocationSnapshot(
-                for: todayLegacyRuntime.currentLocation,
-                fallbackDisplayName: cached?.displayName
-            )
-
-            guard let location = WeatherLocationPolicy.preferredSnapshot(
-                live: live,
-                cached: cached
-            ) else {
-                return
-            }
-
-            if live != nil {
-                todayLegacyRuntime.saveWeatherLocation(location)
-            }
-
-            do {
-                let weather = try await todayLegacyRuntime.fetchWeather(
-                    latitude: location.latitude,
-                    longitude: location.longitude
-                )
-                guard !Task.isCancelled else {
-                    return
-                }
-
-                legacyWeatherTemp = "\(Int(weather.temperature.rounded()))°C"
-                legacyWeatherLocation = location.displayName
-            } catch {
-                logger.error("Failed to sync weather locally: \(error.localizedDescription, privacy: .public)")
-            }
-        }
-    }
-
-    func weatherLocationSnapshot(
-        for location: CLLocation?,
-        fallbackDisplayName: String?
-    ) async -> WeatherLocationSnapshot? {
-        guard let location else {
-            return nil
-        }
-
-        let placemark = try? await CLGeocoder()
-            .reverseGeocodeLocation(location)
-            .first
-        let locationName = weatherLocationName(
-            locality: placemark?.locality,
-            administrativeArea: placemark?.administrativeArea,
-            fallback: fallbackDisplayName
-        )
-
-        return WeatherLocationSnapshot(
-            latitude: location.coordinate.latitude,
-            longitude: location.coordinate.longitude,
-            displayName: locationName,
-            capturedAt: location.timestamp
-        )
-    }
-
-    func weatherLocationName(
-        locality: String?,
-        administrativeArea: String?,
-        fallback: String?
-    ) -> String {
-        let parts = [locality, administrativeArea]
-            .compactMap { $0 }
-            .filter { !$0.isEmpty }
-        let uniqueParts = parts.reduce(into: [String]()) { result, item in
-            if !result.contains(item) {
-                result.append(item)
-            }
-        }
-
-        return uniqueParts.isEmpty
-            ? fallback ?? "当前位置"
-            : uniqueParts.joined(separator: ", ")
     }
 
     // MARK: - SwiftData nutrition sync
@@ -1077,15 +1078,10 @@ extension VelaTodayView {
 
     func refreshDashboard(force: Bool = false) async {
         await todayLegacyRuntime.refreshDashboard(dashboardVM, force: force)
-        fetchLocalWeather()
     }
 
     func loadDataCoverageSummary() async {
-        let groups = await DataCoverageGroupFactory.loadPriorityGroups()
-        let summary = DataCoverageSummaryModel.build(groups: groups)
-        withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) {
-            legacyDataCoverageSummary = summary
-        }
+        await todayStore.send(.refreshCoverage)
     }
 
     func saveLivedStateAlignment(_ alignment: LivedStateAlignment) {
@@ -1106,26 +1102,20 @@ extension VelaTodayView {
             loadDailyDecisionFeedback()
             return
         }
-        do {
-            feedbackSheetAdapter = TodayFeedbackSheetAdapter(
-                record: try todayLegacyRuntime.recordDecisionViewed(bodyStateHash: bodyState.hash)
-            )
-        } catch {
+        Task { @MainActor in
+            await todayStore.send(.trackDailyDecisionViewed(bodyStateHash: bodyState.hash))
             loadDailyDecisionFeedback()
         }
     }
 
     func trackDailyDecisionAction(destination: String) {
         guard todayStore.state.activePlan != nil else { return }
-        do {
-            feedbackSheetAdapter = TodayFeedbackSheetAdapter(
-                record: try todayLegacyRuntime.recordDecisionAction(
-                    bodyStateHash: bodyState.hash,
-                    destination: destination
-                )
-            )
-        } catch {
-            // The user action must never be blocked by local analytics.
+        Task { @MainActor in
+            await todayStore.send(.trackDailyDecisionAction(
+                bodyStateHash: bodyState.hash,
+                destination: destination
+            ))
+            loadDailyDecisionFeedback()
         }
     }
 
