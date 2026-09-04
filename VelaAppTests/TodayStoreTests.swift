@@ -256,6 +256,8 @@ final class TodayViewStateTests: XCTestCase {
         XCTAssertEqual(state.scores.ordered.count, 5)
         XCTAssertTrue(state.scores.ordered.allSatisfy { $0.metric.value == nil })
         XCTAssertTrue(state.scores.ordered.allSatisfy { $0.metric.formattedScore == "--" })
+        XCTAssertEqual(state.coverage.status, .unknown)
+        XCTAssertEqual(state.coverage.title, "Checking data coverage")
         XCTAssertNil(state.command)
         XCTAssertNil(state.experience)
     }

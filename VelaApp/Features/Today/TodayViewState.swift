@@ -194,6 +194,24 @@ struct TodayViewState: Equatable, Sendable {
     var nonCritical: TodayNonCriticalState
     var error: TodayLoadFailure?
 
+    /// Keep the initial state independent from the app language/preferences
+    /// store.  Coverage is an explicit unknown until a reader/coverage adapter
+    /// supplies a value; it must not consult a global default while rendering
+    /// the first frame.
+    private static var unknownCoverage: DataCoverageSummaryModel {
+        DataCoverageSummaryModel(
+            scorePercent: 0,
+            status: .unknown,
+            title: "Checking data coverage",
+            subtitle: "Key health signals are being checked for freshness and completeness.",
+            actionTitle: "View data",
+            actionSystemImage: "waveform.path.ecg.rectangle",
+            domainSummaries: [],
+            topBlockers: [],
+            coachContextLine: "Data coverage unknown; avoid high-confidence physiological claims until coverage finishes loading."
+        )
+    }
+
     static func initial(day: Date) -> TodayViewState {
         TodayViewState(
             selectedDay: day,
@@ -203,7 +221,7 @@ struct TodayViewState: Equatable, Sendable {
             scores: .empty(for: day),
             command: nil,
             experience: nil,
-            coverage: .unknown,
+            coverage: Self.unknownCoverage,
             livedState: .empty,
             feedback: .empty,
             plan: nil,
@@ -238,7 +256,7 @@ struct TodayViewState: Equatable, Sendable {
             // render the existing legacy projection without a second kernel.
             command: nil,
             experience: nil,
-            coverage: .unknown,
+            coverage: Self.unknownCoverage,
             livedState: .empty,
             feedback: .empty,
             plan: nil,
