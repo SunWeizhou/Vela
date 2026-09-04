@@ -35,6 +35,20 @@
                ReferencedContainer = "container:Vela.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "A11E00050000000000000005"
+               BuildableName = "VelaUITests.xctest"
+               BlueprintName = "VelaUITests"
+               ReferencedContainer = "container:Vela.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -52,6 +66,16 @@
                BlueprintIdentifier = "0B0000170000000000000017"
                BuildableName = "VelaTests.xctest"
                BlueprintName = "VelaTests"
+               ReferencedContainer = "container:Vela.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "A11E00050000000000000005"
+               BuildableName = "VelaUITests.xctest"
+               BlueprintName = "VelaUITests"
                ReferencedContainer = "container:Vela.xcodeproj">
             </BuildableReference>
          </TestableReference>
