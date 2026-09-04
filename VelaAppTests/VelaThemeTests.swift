@@ -2761,7 +2761,11 @@ final class VelaThemeTests: XCTestCase {
             modelContext: context,
             dashboard: dashboard,
             workoutID: UUID(),
-            isChinese: true
+            isChinese: true,
+            policy: AgentOutboundConsentPolicy(
+                backgroundNetworkAIConsent: true,
+                categoryPolicy: .all
+            )
         )
         XCTAssertTrue(text.contains("本机今日决定"), "AI 复盘的事实文本必须携带本机决定锚")
         XCTAssertTrue(text.contains("当前身体评分"))
