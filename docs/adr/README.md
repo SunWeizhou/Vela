@@ -22,7 +22,8 @@
 | [0010](0010-personal-health-brief-as-canonical-product-projection.md) | PersonalHealthBrief as Canonical Product Projection | Accepted | `PersonalHealthBrief` 作为全局权威认知投影对象，训练决策作为下游衍生；一级工作区部分已由 ADR 0012 取代。 |
 | [0011](0011-daily-intelligence-assembly-module.md) | Shared Daily Intelligence Assembly Module | Accepted | 两个日常 Adapter 跨同一 Seam；确定性 Module 统一 Body State → Personal Health Brief → Training Decision，并显式注入时间语义。 |
 | [0012](0012-score-led-today-and-primary-surfaces.md) | Score-led Today and Primary Surfaces | Accepted | Today 采用固定 3+2 五分层级：恢复/睡眠/负荷为圆环，压力为趋势，能量为余量；一级导航收敛为 Today / Trends / Plan / Coach。 |
-| [0013](0013-target-ios-26-and-watchos-26-for-the-rebuild.md) | Target iOS 26 and watchOS 26 | Accepted | Daily Driver 全量更新只维护 iOS 26 / watchOS 26 当前平台体验，不保留旧系统第二套 UI。 |
-| [0014](0014-product-identity-and-primary-surface-labels.md) | Product Identity and Primary Surface Labels | Proposed | 工程身份继续使用 Vela；BodySeek 仅作为工作名；一级表面统一为 Today / Trends / Plan / Coach，不进行本轮工程重命名。 |
-| [0015](0015-platform-floor-and-transition.md) | Platform Floor and Transition | Proposed | ADR 0013 的 iOS 26 / watchOS 26 Daily Driver 目标已接受；当前实现仍为 iOS 17 / watchOS 10，transition 待单独变更，不由本提案直接修改。 |
-| [0016](0016-widget-scope-for-current-release.md) | Widget Scope for Current Release | Proposed | WidgetKit 暂为 internal preview / planned，不作为当前发布验收门槛；公开 entitlement、刷新承诺和打包另行决策。 |
+| [0013](0013-target-ios-26-and-watchos-26-for-the-rebuild.md) | Target iOS 26 and watchOS 26 | Superseded | 被 ADR 0017 取代；现行 shipping floor 保持 iOS 17 / watchOS 10，iOS 26 能力按可用性渐进增强。 |
+| [0014](0014-product-identity-and-primary-surface-labels.md) | Product Identity and Primary Surface Labels | Superseded | 被 ADR 0017 取代；工程身份仍为 Vela，BodySeek 固定为对外产品名。 |
+| [0015](0015-platform-floor-and-transition.md) | Platform Floor and Transition | Superseded | 被 ADR 0017 取代；现行 shipping floor 固定为 iOS 17 / watchOS 10。 |
+| [0016](0016-widget-scope-for-current-release.md) | Widget Scope for Current Release | Superseded | 被 ADR 0017 吸收；Widget 继续是 bounded preview，不进入当前 critical path。 |
+| [0017](0017-bodyseek-architecture-and-product-baseline-v2.md) | BodySeek Architecture and Product Baseline v2 | Accepted | BodySeek/Vela 身份、iOS 17/watchOS 10 floor、纯 Domain Core 与 PR0–PR9 分阶段迁移顺序。 |

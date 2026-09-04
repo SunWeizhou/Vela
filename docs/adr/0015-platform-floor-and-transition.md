@@ -1,7 +1,7 @@
 # 0015. Record the staged transition to the accepted iOS 26 and watchOS 26 floor
 
 ## Status
-Proposed
+Superseded by ADR 0017
 
 ## Context
 

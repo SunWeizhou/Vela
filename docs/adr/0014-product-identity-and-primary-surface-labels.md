@@ -1,7 +1,7 @@
 # 0014. Keep Vela as the engineering identity and canonicalize primary surface labels
 
 ## Status
-Proposed
+Superseded by ADR 0017
 
 ## Context
 

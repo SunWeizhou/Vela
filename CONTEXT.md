@@ -5,12 +5,22 @@
 > Scope: Vela 全局唯一领域术语定义与受控词汇表（Domain Ubiquitous Language）
 > Does not define: 页面结构与 UI 组件（见 [docs/PRD.md](docs/PRD.md)）、代码实现细节（见 [docs/TECH_ARCHITECTURE.md](docs/TECH_ARCHITECTURE.md)）
 
-Vela 是建立在 Apple 健康之上的个人身体状态仪表与 AI 分析助手：用个人长期数据量化当下状态，让用户为真实感受找到客观线索，而不是把疲惫或不适简单归咎于意志力；Agent 负责解释、追问与把理解转化为可调整的日常计划。
+BodySeek（工程身份 Vela）是建立在 Apple 健康之上的个人身体状态仪表与 AI 分析助手：用个人长期数据量化当下状态，让用户为真实感受找到客观线索，而不是把疲惫或不适简单归咎于意志力；Agent 负责解释、追问与把理解转化为可调整的日常计划。
 
 > 核心原则：不做只陈列指标、不能解释个人状态和变化的健康数据面板。
 > 价值层级：1. 看见身体数据 → 2. 理解当前状态与长期趋势 → 3. 由 Agent 解释原因并联系不同信号 → 4. 在需要时给出训练与生活建议。
 
 ## Language
+
+### Product identity
+
+**BodySeek**:
+对外发布的产品名称；指向五项独立身体状态评分、个人基线、趋势和行动解释组成的产品体验。
+_Avoid_: BoySeek, Vela（在对外产品文案中）
+
+**Vela**:
+当前工程、仓库、Xcode 项目、bundle identity 和既有 Swift 类型使用的名称；在未完成独立迁移前不做全局重命名。
+_Avoid_: 把 Vela 与 BodySeek 当成两个产品
 
 ### Product boundary
 

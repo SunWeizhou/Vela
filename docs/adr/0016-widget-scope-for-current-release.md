@@ -1,7 +1,7 @@
 # 0016. Keep WidgetKit as internal preview and planned scope for the current release
 
 ## Status
-Proposed
+Superseded by ADR 0017
 
 ## Context
 

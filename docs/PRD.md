@@ -1,8 +1,9 @@
 # Vela Product Requirements Document (PRD)
 
 > Status: Canonical
-> Last verified: 2026-08-24
+> Last verified: 2026-09-04
 > Scope: Vela 当前阶段唯一正式产品规格、核心主线、信息架构与功能边界
+> External product name: BodySeek; engineering/repository identity: Vela
 > Does not define: 领域术语严格定义（见 [CONTEXT.md](../CONTEXT.md)）、技术代码架构细节（见 [TECH_ARCHITECTURE.md](TECH_ARCHITECTURE.md)）、架构决策背景（见 [adr/](adr/)）
 > Supersedes: `docs/archive/product-eras/PRD-active-coach-os-2026-07-13.md`, `docs/archive/product-eras/VELA_PERSONAL_PRODUCT_DIRECTION.md`
 
@@ -11,7 +12,7 @@
 ## 1. 产品定位与核心理念
 
 ### 1.1 一句话定位
-**Vela 是建立在 Apple 健康之上的个人身体状态仪表与 AI 分析助手：先用五个独立分数和个人基线量化当下状态，再由 Agent 解释变化、支持追问，并把必要的调整组织成用户拥有的日常计划。**
+**BodySeek（工程身份 Vela）是建立在 Apple 健康之上的个人身体状态仪表与 AI 分析助手：先用五个独立分数和个人基线量化当下状态，再由 Agent 解释变化、支持追问，并把必要的调整组织成用户拥有的日常计划。**
 
 ### 1.2 核心原则
 > **核心原则**：让用户看见“这不是意志力问题，而是身体确实发生了可观察的变化”；分数负责建立直觉，Agent 负责解释和行动，不用冗长文案替算法找补。
