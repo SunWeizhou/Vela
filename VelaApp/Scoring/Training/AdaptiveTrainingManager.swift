@@ -239,9 +239,42 @@ struct AdaptiveTrainingManager {
 
 // MARK: - Workout Adaptation Service
 
+/// The post-workout review needs both sides of its factual contract: local
+/// training facts and the health/recovery signals used to interpret them.
+/// Keep this gate separate from the broader network-AI gate so callers cannot
+/// accidentally send a partial, misleading review when only one category is
+/// authorized.
+enum PostWorkoutAIGenerationGate {
+    static func allows(policy: AgentOutboundConsentPolicy) -> Bool {
+        policy.canSendNetworkAI
+            && policy.allows(.health)
+            && policy.allows(.training)
+    }
+}
+
+typealias PostWorkoutAIGeneratorInvocation = @MainActor @Sendable (
+    _ apiKey: String,
+    _ factsText: String
+) async throws -> PostWorkoutAIBoundary
+
+typealias PostWorkoutOutboundPolicyProvider = @MainActor @Sendable () -> AgentOutboundConsentPolicy
+
 @MainActor
 struct WorkoutAdaptationService: Sendable {
-    init() {}
+    private let postWorkoutAIGenerator: PostWorkoutAIGeneratorInvocation
+    private let outboundPolicyProvider: PostWorkoutOutboundPolicyProvider
+
+    init(
+        postWorkoutAIGenerator: @escaping PostWorkoutAIGeneratorInvocation = { apiKey, factsText in
+            try await PostWorkoutAIGenerator.generate(apiKey: apiKey, factsText: factsText)
+        },
+        outboundPolicyProvider: @escaping PostWorkoutOutboundPolicyProvider = {
+            AgentOutboundConsentPolicy.current
+        }
+    ) {
+        self.postWorkoutAIGenerator = postWorkoutAIGenerator
+        self.outboundPolicyProvider = outboundPolicyProvider
+    }
 
     /// Main entry point for closed-loop post-workout training adaptation.
     /// Called when a workout is completed or post-workout check-in sheet is submitted.
@@ -326,88 +359,101 @@ struct WorkoutAdaptationService: Sendable {
 
         // 深度专项批次 4（管线 C）：练后 AI 复盘——异步、失败静默；
         // 本机训练事实与提案已落库，AI 只追加观察 + 待确认边界建议。
-        if AutoAgentConfig.shared.canSendHealthContextToNetworkAI,
-           let aiKey = try? KeychainService.shared.read(account: "deepseek_api_key"),
-           !aiKey.isEmpty {
-            let facts = PostWorkoutAIGenerator.factsText(
-                modelContext: modelContext,
-                dashboard: dashboard,
-                workoutID: workoutID
-            )
-            let ctx = modelContext
-            let plan = activePlan
-            let completedAt = now
-            let completedWorkoutID = workoutID
-            Task { @MainActor in
-                do {
-                    let boundary = try await PostWorkoutAIGenerator.generate(
-                        apiKey: aiKey,
-                        factsText: facts
-                    )
-                    let runID = "ai-post-workout-\(completedWorkoutID?.uuidString ?? "unknown")"
-                    let existingArtifacts = (try? ctx.fetch(FetchDescriptor<CoachArtifactRecord>(
-                        predicate: #Predicate<CoachArtifactRecord> { $0.sourceContextHash == runID }
-                    ))) ?? []
-                    let existingProposals = (try? ctx.fetch(FetchDescriptor<TrainingPlanAdaptationRecord>())) ?? []
-                    let alreadyHasArtifact = existingArtifacts.contains { $0.sourceContextHash == runID }
-                    let alreadyHasProposal = existingProposals.contains { $0.agentRunId == runID }
+        // Resolve consent at the outbound boundary, after local facts and any
+        // local proposal have been persisted.  This deliberately precedes the
+        // Keychain lookup: denied paths must not even prepare a provider call.
+        let outboundPolicy = outboundPolicyProvider()
+        guard PostWorkoutAIGenerationGate.allows(policy: outboundPolicy),
+              let aiKey = try? KeychainService.shared.read(account: "deepseek_api_key"),
+              !aiKey.isEmpty else {
+            return proposal
+        }
 
-                    // ① 观察性复盘 → CoachArtifactRecord（AI 标注）。
-                    if !alreadyHasArtifact {
-                        let artifact = CoachArtifact(
-                            type: .postWorkoutReview,
-                            title: "AI 练后复盘",
-                            summary: boundary.observation,
-                            createdAt: Date(),
-                            relatedDate: completedAt,
-                            decision: nil,
-                            confidence: 0.6,
-                            reasons: [
-                                CoachArtifactReason(
-                                    signal: "ai_review",
-                                    value: boundary.rationale,
-                                    explanation: "AI 复盘基于本机训练事实；训练事实为唯一真值，边界建议需用户确认。"
-                                )
-                            ],
-                            actions: [],
-                            sourceContextHash: runID,
-                            followUpQuestion: nil
-                        )
-                        ctx.insert(CoachArtifactRecord(artifact: artifact))
-                    }
-                    // ② 下次训练边界建议 → 提案状态机（proposed，用户确认才生效）。
-                    // 下一个训练日同样走 TrainingScheduleResolver：跳过今天已完成的计划日，
-                    // 再退回「未完成 + 非休息」的简单兜底。
-                    let events = (try? ctx.fetch(FetchDescriptor<WorkoutEventRecord>())) ?? []
-                    let nextEvaluationDate = Calendar.current.date(byAdding: .day, value: 1, to: completedAt) ?? completedAt
-                    let resolvedNextDay = TrainingScheduleResolver.resolve(
-                        plan: plan.dto,
-                        on: nextEvaluationDate,
-                        events: events.map { $0.dto }
+        let facts = PostWorkoutAIGenerator.factsText(
+            modelContext: modelContext,
+            dashboard: dashboard,
+            workoutID: workoutID,
+            policy: outboundPolicy
+        )
+        let ctx = modelContext
+        let plan = activePlan
+        let completedAt = now
+        let completedWorkoutID = workoutID
+        let generate = postWorkoutAIGenerator
+        let policyProvider = outboundPolicyProvider
+        Task { @MainActor in
+            // Consent can be revoked while the local completion task is
+            // waiting to start. Re-check immediately before invoking the
+            // network provider so revocation wins without affecting local
+            // training facts or confirmation/idempotency semantics.
+            guard PostWorkoutAIGenerationGate.allows(policy: policyProvider()) else {
+                return
+            }
+            do {
+                let boundary = try await generate(aiKey, facts)
+                let runID = "ai-post-workout-\(completedWorkoutID?.uuidString ?? "unknown")"
+                let existingArtifacts = (try? ctx.fetch(FetchDescriptor<CoachArtifactRecord>(
+                    predicate: #Predicate<CoachArtifactRecord> { $0.sourceContextHash == runID }
+                ))) ?? []
+                let existingProposals = (try? ctx.fetch(FetchDescriptor<TrainingPlanAdaptationRecord>())) ?? []
+                let alreadyHasArtifact = existingArtifacts.contains { $0.sourceContextHash == runID }
+                let alreadyHasProposal = existingProposals.contains { $0.agentRunId == runID }
+
+                // ① 观察性复盘 → CoachArtifactRecord（AI 标注）。
+                if !alreadyHasArtifact {
+                    let artifact = CoachArtifact(
+                        type: .postWorkoutReview,
+                        title: "AI 练后复盘",
+                        summary: boundary.observation,
+                        createdAt: Date(),
+                        relatedDate: completedAt,
+                        decision: nil,
+                        confidence: 0.6,
+                        reasons: [
+                            CoachArtifactReason(
+                                signal: "ai_review",
+                                value: boundary.rationale,
+                                explanation: "AI 复盘基于本机训练事实；训练事实为唯一真值，边界建议需用户确认。"
+                            )
+                        ],
+                        actions: [],
+                        sourceContextHash: runID,
+                        followUpQuestion: nil
                     )
-                    let fallbackNextDay = plan.days
-                        .filter({ !$0.isCompleted && $0.focus.lowercased() != "rest" })
-                        .sorted(by: { $0.dayNumber < $1.dayNumber })
-                        .first
-                    if !alreadyHasProposal,
-                       let nextDay = resolvedNextDay ?? fallbackNextDay {
-                        ctx.insert(TrainingPlanAdaptationRecord(
-                            planId: plan.id,
-                            dayId: nextDay.id,
-                            adjustment: .keep,
-                            reason: "AI 建议：容量 \(Int((boundary.nextVolumeMultiplier * 100).rounded()))% · RPE ≤ \(boundary.nextIntensityCap)"
-                                + (boundary.nextSuggestedFocus.map { " · 建议部位 \($0)" } ?? "")
-                                + "。依据：\(boundary.rationale)",
-                            suggestedAlternative: nil,
-                            status: .proposed,
-                            originalDayTitle: nextDay.title,
-                            agentRunId: runID
-                        ))
-                    }
-                    try ctx.save()
-                } catch {
-                    // 静默：本机复盘与提案不受影响。
+                    ctx.insert(CoachArtifactRecord(artifact: artifact))
                 }
+                // ② 下次训练边界建议 → 提案状态机（proposed，用户确认才生效）。
+                // 下一个训练日同样走 TrainingScheduleResolver：跳过今天已完成的计划日，
+                // 再退回「未完成 + 非休息」的简单兜底。
+                let events = (try? ctx.fetch(FetchDescriptor<WorkoutEventRecord>())) ?? []
+                let nextEvaluationDate = Calendar.current.date(byAdding: .day, value: 1, to: completedAt) ?? completedAt
+                let resolvedNextDay = TrainingScheduleResolver.resolve(
+                    plan: plan.dto,
+                    on: nextEvaluationDate,
+                    events: events.map { $0.dto }
+                )
+                let fallbackNextDay = plan.days
+                    .filter({ !$0.isCompleted && $0.focus.lowercased() != "rest" })
+                    .sorted(by: { $0.dayNumber < $1.dayNumber })
+                    .first
+                if !alreadyHasProposal,
+                   let nextDay = resolvedNextDay ?? fallbackNextDay {
+                    ctx.insert(TrainingPlanAdaptationRecord(
+                        planId: plan.id,
+                        dayId: nextDay.id,
+                        adjustment: .keep,
+                        reason: "AI 建议：容量 \(Int((boundary.nextVolumeMultiplier * 100).rounded()))% · RPE ≤ \(boundary.nextIntensityCap)"
+                            + (boundary.nextSuggestedFocus.map { " · 建议部位 \($0)" } ?? "")
+                            + "。依据：\(boundary.rationale)",
+                        suggestedAlternative: nil,
+                        status: .proposed,
+                        originalDayTitle: nextDay.title,
+                        agentRunId: runID
+                    ))
+                }
+                try ctx.save()
+            } catch {
+                // 静默：本机复盘与提案不受影响。
             }
         }
 
@@ -456,7 +502,8 @@ enum PostWorkoutAIGenerator {
         modelContext: ModelContext,
         dashboard: DashboardSummary,
         workoutID: UUID?,
-        isChinese: Bool = AppLanguage.stored.isChinese
+        isChinese: Bool = AppLanguage.stored.isChinese,
+        policy: AgentOutboundConsentPolicy? = nil
     ) -> String {
         let input = AgentFactInputLoader().load(modelContext: modelContext, asOf: Date())
         let bodyState = input.bodyState(dashboard: dashboard)
@@ -482,7 +529,8 @@ enum PostWorkoutAIGenerator {
         return AgentFactAdapters.postWorkoutFacts(
             snapshot: snapshot,
             workoutID: workoutID,
-            isChinese: isChinese
+            isChinese: isChinese,
+            policy: policy
         )
     }
 

@@ -686,6 +686,54 @@ final class ProactiveIntelligenceOrchestratorTests: XCTestCase {
 }
 
 final class WorkoutAdaptationServiceTests: XCTestCase {
+    func testPostWorkoutAIGenerationGateRequiresBackgroundHealthAndTrainingConsent() {
+        let fullyAuthorized = AgentOutboundConsentPolicy(
+            backgroundNetworkAIConsent: true,
+            categoryPolicy: .all
+        )
+        XCTAssertTrue(PostWorkoutAIGenerationGate.allows(policy: fullyAuthorized))
+
+        let noBackgroundConsent = AgentOutboundConsentPolicy(
+            backgroundNetworkAIConsent: false,
+            categoryPolicy: .all
+        )
+        XCTAssertFalse(PostWorkoutAIGenerationGate.allows(policy: noBackgroundConsent))
+
+        let healthOnly = AgentOutboundConsentPolicy(
+            backgroundNetworkAIConsent: true,
+            health: true,
+            training: false,
+            nutrition: false,
+            journal: false,
+            wiki: false,
+            reports: false,
+            conversationHistory: false,
+            webSearch: false,
+            files: false
+        )
+        XCTAssertFalse(PostWorkoutAIGenerationGate.allows(policy: healthOnly))
+
+        let trainingOnly = AgentOutboundConsentPolicy(
+            backgroundNetworkAIConsent: true,
+            health: false,
+            training: true,
+            nutrition: false,
+            journal: false,
+            wiki: false,
+            reports: false,
+            conversationHistory: false,
+            webSearch: false,
+            files: false
+        )
+        XCTAssertFalse(PostWorkoutAIGenerationGate.allows(policy: trainingOnly))
+
+        let noCategoryConsent = AgentOutboundConsentPolicy(
+            backgroundNetworkAIConsent: true,
+            categoryPolicy: .none
+        )
+        XCTAssertFalse(PostWorkoutAIGenerationGate.allows(policy: noCategoryConsent))
+    }
+
     @MainActor
     func testWorkoutAdaptationServiceProcessWorkoutCompletion() async throws {
         let container = try VelaModelContainer.make(inMemory: true)
@@ -715,6 +763,81 @@ final class WorkoutAdaptationServiceTests: XCTestCase {
         
         let events = (try? context.fetch(FetchDescriptor<VelaEventRecord>())) ?? []
         XCTAssertTrue(events.contains(where: { $0.eventType == VelaProductEventType.workoutCompleted }))
+    }
+
+    @MainActor
+    func testWorkoutAdaptationServiceSkipsDeniedPostWorkoutProviderAfterLocalMutation() async throws {
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let plan = TrainingPlanRecord(
+            title: "Consent Gate Plan",
+            goalDescription: "Strength Development",
+            days: [
+                TrainingDay(
+                    weekNumber: 1,
+                    dayNumber: 1,
+                    title: "Full Body",
+                    description: "Squat 3x5",
+                    focus: "strength",
+                    durationMinutes: 30,
+                    intensity: "moderate"
+                )
+            ]
+        )
+        context.insert(plan)
+        try context.save()
+
+        let deniedPolicy = AgentOutboundConsentPolicy(
+            backgroundNetworkAIConsent: true,
+            health: true,
+            training: false,
+            nutrition: false,
+            journal: false,
+            wiki: false,
+            reports: false,
+            conversationHistory: false,
+            webSearch: false,
+            files: false
+        )
+        let probe = PostWorkoutAIGeneratorProbe()
+        let service = WorkoutAdaptationService(
+            postWorkoutAIGenerator: { _, _ in
+                await probe.recordInvocation()
+                return PostWorkoutAIBoundary(
+                    observation: "should not be requested",
+                    nextVolumeMultiplier: 0.7,
+                    nextIntensityCap: 7,
+                    nextSuggestedFocus: nil,
+                    rationale: "should not be requested"
+                )
+            },
+            outboundPolicyProvider: { deniedPolicy }
+        )
+
+        _ = try await service.processWorkoutCompletion(
+            workoutID: UUID(),
+            modelContext: context
+        )
+
+        let invocationCount = await probe.invocationCount()
+        XCTAssertEqual(invocationCount, 0)
+        let events = (try? context.fetch(FetchDescriptor<VelaEventRecord>())) ?? []
+        XCTAssertTrue(
+            events.contains(where: { $0.eventType == VelaProductEventType.workoutCompleted }),
+            "Denied network consent must not discard the local workout completion fact."
+        )
+    }
+}
+
+private actor PostWorkoutAIGeneratorProbe {
+    private var count = 0
+
+    func recordInvocation() {
+        count += 1
+    }
+
+    func invocationCount() -> Int {
+        count
     }
 }
 
