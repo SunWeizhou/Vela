@@ -75,6 +75,7 @@
 		C00300010000000000000001 /* TodayViewState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00310010000000000000001 /* TodayViewState.swift */; };
 		C00300020000000000000002 /* TodayStoreAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00310020000000000000002 /* TodayStoreAction.swift */; };
 		C00300030000000000000003 /* TodayStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00310030000000000000003 /* TodayStore.swift */; };
+		C00300050000000000000005 /* TodayLegacyCompatibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00310050000000000000005 /* TodayLegacyCompatibility.swift */; };
 		0B9900020000000000000002 /* PersonalHealthBrief.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9900010000000000000001 /* PersonalHealthBrief.swift */; };
 		0B9900040000000000000004 /* HealthTrendEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9900030000000000000003 /* HealthTrendEngine.swift */; };
 		0B9900060000000000000006 /* VelaTrendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9900050000000000000005 /* VelaTrendsView.swift */; };
@@ -336,6 +337,7 @@
 		C00310010000000000000001 /* TodayViewState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayViewState.swift; sourceTree = "<group>"; };
 		C00310020000000000000002 /* TodayStoreAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayStoreAction.swift; sourceTree = "<group>"; };
 		C00310030000000000000003 /* TodayStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayStore.swift; sourceTree = "<group>"; };
+		C00310050000000000000005 /* TodayLegacyCompatibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Compatibility/Today/TodayLegacyCompatibility.swift; sourceTree = "<group>"; };
 		0B9900010000000000000001 /* PersonalHealthBrief.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/PersonalHealthBrief.swift; sourceTree = "<group>"; };
 		0B9900030000000000000003 /* HealthTrendEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/HealthTrendEngine.swift; sourceTree = "<group>"; };
 		0B9900050000000000000005 /* VelaTrendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Trends/VelaTrendsView.swift; sourceTree = "<group>"; };
@@ -577,6 +579,7 @@
 				0B25D1720000000000000072 /* DailyOperatingPlan.swift */,
 				0B25D1730000000000000073 /* TodayCommandState.swift */,
 				C00320010000000000000001 /* Today */,
+				C00310050000000000000005 /* TodayLegacyCompatibility.swift */,
 				0B1001440000000000000044 /* DailySummaryUseCase.swift */,
 				0B1001A700000000000000A7 /* PreviewDataFactory.swift */,
 				0B1001B000000000000000B0 /* VelaError.swift */,
@@ -1054,6 +1057,7 @@
 				C00300010000000000000001 /* TodayViewState.swift in Sources */,
 				C00300020000000000000002 /* TodayStoreAction.swift in Sources */,
 				C00300030000000000000003 /* TodayStore.swift in Sources */,
+				C00300050000000000000005 /* TodayLegacyCompatibility.swift in Sources */,
 				0B1000430000000000000043 /* DailySummaryUseCase.swift in Sources */,
 				0B1001A600000000000000A6 /* PreviewDataFactory.swift in Sources */,
 				0B1001B100000000000000B1 /* VelaError.swift in Sources */,
