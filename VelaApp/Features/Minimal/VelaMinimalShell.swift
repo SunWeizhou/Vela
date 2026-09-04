@@ -23,6 +23,11 @@ extension EnvironmentValues {
     @Entry var velaSurfaceIsActive = true
 }
 
+@MainActor
+private final class TodayLegacyRuntimeHolder: ObservableObject {
+    var runtime: TodayLegacyRuntime?
+}
+
 // MARK: - VelaShell — Native iOS 26 Navigation with Legacy Fallback
 //
 // iOS 26 uses the system Liquid Glass tab bar and its native scroll minimization.
@@ -40,6 +45,7 @@ struct VelaShell: View {
     @State private var keyboardVisible = false
     @State private var mountedLegacyTabs: Set<VelaTab> = [.today]
     @State private var lastPresentedAppSheet: VelaAppState.AppSheet?
+    @StateObject private var todayLegacyRuntimeHolder: TodayLegacyRuntimeHolder
 
     @ObservedObject private var appState = VelaAppState.shared
     @Namespace private var tabAnimation
@@ -54,13 +60,21 @@ struct VelaShell: View {
     }
 
     /// Rhythm's four canonical surfaces (Today, Trends, Plan, Coach) define the navigation.
-    init() {}
+    init() {
+        _todayLegacyRuntimeHolder = StateObject(
+            wrappedValue: TodayLegacyRuntimeHolder()
+        )
+    }
 
     /// Today receives its legacy compatibility dependencies from the shell's
     /// composition boundary.  The surface itself stays unaware of SwiftData,
     /// location/weather singletons, and app-state routing objects.
     private var todayLegacyRuntime: TodayLegacyRuntime {
-        TodayLegacyRuntime(
+        if let runtime = todayLegacyRuntimeHolder.runtime {
+            return runtime
+        }
+
+        let runtime = TodayLegacyRuntime(
             modelContext: modelContext,
             useCase: services.dailySummaryUseCase,
             appState: appState,
@@ -82,6 +96,8 @@ struct VelaShell: View {
                 return value > 0 ? value : 2_000
             }
         )
+        todayLegacyRuntimeHolder.runtime = runtime
+        return runtime
     }
 
     // MARK: - Body
