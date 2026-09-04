@@ -523,7 +523,10 @@ private let logger = Logger(subsystem: "com.sunweizhou.Vela", category: "Weather
 @MainActor
 final class LegacyTodayReadingModule: TodayReadingModule {
     private weak var dashboardVM: DashboardViewModel?
-    private weak var runtime: TodayLegacyRuntime?
+    // The shell may recreate the environment facade while SwiftUI reevaluates
+    // its body. Keep the bound runtime alive for the in-flight TodayStore load;
+    // the runtime does not retain this reader, so this is not a cycle.
+    private var runtime: TodayLegacyRuntime?
 
     func bind(
         dashboardVM: DashboardViewModel,
