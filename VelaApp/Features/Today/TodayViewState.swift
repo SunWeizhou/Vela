@@ -79,12 +79,28 @@ struct TodayScoreState: Equatable, Sendable {
         )
     }
 
+    init(
+        recovery: MetricResult,
+        sleep: MetricResult,
+        strain: MetricResult,
+        stress: MetricResult,
+        energy: MetricResult
+    ) {
+        self.recovery = recovery
+        self.sleep = sleep
+        self.strain = strain
+        self.stress = stress
+        self.energy = energy
+    }
+
     init(snapshot: DashboardSummary) {
-        recovery = snapshot.recovery
-        sleep = snapshot.sleepScore
-        strain = snapshot.strain
-        stress = snapshot.stress
-        energy = snapshot.energy
+        self.init(
+            recovery: snapshot.recovery,
+            sleep: snapshot.sleepScore,
+            strain: snapshot.strain,
+            stress: snapshot.stress,
+            energy: snapshot.energy
+        )
     }
 }
 

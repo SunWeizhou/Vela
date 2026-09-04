@@ -72,6 +72,9 @@
 		0B1000400000000000000040 /* EnergyBankEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001410000000000000041 /* EnergyBankEngine.swift */; };
 		0B1000410000000000000041 /* HealthAgeTrendEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001420000000000000042 /* HealthAgeTrendEngine.swift */; };
 		0B1000420000000000000042 /* DashboardSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1001430000000000000043 /* DashboardSummary.swift */; };
+		C00300010000000000000001 /* TodayViewState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00310010000000000000001 /* TodayViewState.swift */; };
+		C00300020000000000000002 /* TodayStoreAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00310020000000000000002 /* TodayStoreAction.swift */; };
+		C00300030000000000000003 /* TodayStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00310030000000000000003 /* TodayStore.swift */; };
 		0B9900020000000000000002 /* PersonalHealthBrief.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9900010000000000000001 /* PersonalHealthBrief.swift */; };
 		0B9900040000000000000004 /* HealthTrendEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9900030000000000000003 /* HealthTrendEngine.swift */; };
 		0B9900060000000000000006 /* VelaTrendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9900050000000000000005 /* VelaTrendsView.swift */; };
@@ -222,6 +225,7 @@
 		A24B8C77AB634C2792754C42 /* DailyLogService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C22C274390C43168652DB74 /* DailyLogService.swift */; };
 		AEB2F547D6A04198821B3E0C /* DataCoverageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63AAF7BE44C44A87855807F0 /* DataCoverageView.swift */; };
 		B886D213B1A540FD7EE4A215 /* WorkoutAggregationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4746CA84311E3C6D12654200 /* WorkoutAggregationTests.swift */; };
+		C00300040000000000000004 /* TodayStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00310040000000000000004 /* TodayStoreTests.swift */; };
 		BB0D33806F6BFB4500B7623E /* HealthSignalCoverageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C294FDB6008E4D8BF26C22C9 /* HealthSignalCoverageService.swift */; };
 		BB4501256E114FAC859D914B /* AgentActionParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D3C95453E2F4CA38EF8BCC8 /* AgentActionParserTests.swift */; };
 		CCE926745D694215843A40D4 /* AdaptiveTrainingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54074915D1CD439596F77AD1 /* AdaptiveTrainingManager.swift */; };
@@ -329,6 +333,9 @@
 		0B1001410000000000000041 /* EnergyBankEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/EnergyBank/EnergyBankEngine.swift; sourceTree = "<group>"; };
 		0B1001420000000000000042 /* HealthAgeTrendEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/HealthAge/HealthAgeTrendEngine.swift; sourceTree = "<group>"; };
 		0B1001430000000000000043 /* DashboardSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/DashboardSummary.swift; sourceTree = "<group>"; };
+		C00310010000000000000001 /* TodayViewState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayViewState.swift; sourceTree = "<group>"; };
+		C00310020000000000000002 /* TodayStoreAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayStoreAction.swift; sourceTree = "<group>"; };
+		C00310030000000000000003 /* TodayStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayStore.swift; sourceTree = "<group>"; };
 		0B9900010000000000000001 /* PersonalHealthBrief.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/PersonalHealthBrief.swift; sourceTree = "<group>"; };
 		0B9900030000000000000003 /* HealthTrendEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/HealthTrendEngine.swift; sourceTree = "<group>"; };
 		0B9900050000000000000005 /* VelaTrendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Trends/VelaTrendsView.swift; sourceTree = "<group>"; };
@@ -487,6 +494,7 @@
 		EBA7A2EC2D864756B06DC78E /* BodyInterpretationTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/BodyInterpreter/BodyInterpretationTypes.swift; sourceTree = "<group>"; };
 		EF997A906CC0C633B881762F /* WorkoutAggregationService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkoutAggregationService.swift; sourceTree = "<group>"; };
 		FC2F3B94AA064B1E83F71978 /* MemoryLedgerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryLedgerTests.swift; sourceTree = "<group>"; };
+		C00310040000000000000004 /* TodayStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayStoreTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -568,6 +576,7 @@
 				0B25D1710000000000000071 /* TrainingDecision.swift */,
 				0B25D1720000000000000072 /* DailyOperatingPlan.swift */,
 				0B25D1730000000000000073 /* TodayCommandState.swift */,
+				C00320010000000000000001 /* Today */,
 				0B1001440000000000000044 /* DailySummaryUseCase.swift */,
 				0B1001A700000000000000A7 /* PreviewDataFactory.swift */,
 				0B1001B000000000000000B0 /* VelaError.swift */,
@@ -744,6 +753,7 @@
 		0B0000120000000000000012 /* VelaAppTests */ = {
 			isa = PBXGroup;
 			children = (
+				C00310040000000000000004 /* TodayStoreTests.swift */,
 				0B0000020000000000000002 /* VelaThemeTests.swift */,
 				0B0000300000000000000030 /* HealthFoundationTests.swift */,
 				0B0000320000000000000032 /* PersistenceFoundationTests.swift */,
@@ -819,6 +829,17 @@
 			);
 			name = Health;
 			path = Health;
+			sourceTree = "<group>";
+		};
+		C00320010000000000000001 /* Today */ = {
+			isa = PBXGroup;
+			children = (
+				C00310010000000000000001 /* TodayViewState.swift */,
+				C00310020000000000000002 /* TodayStoreAction.swift */,
+				C00310030000000000000003 /* TodayStore.swift */,
+			);
+			name = Today;
+			path = Features/Today;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -1030,6 +1051,9 @@
 				0B25D0710000000000000071 /* TrainingDecision.swift in Sources */,
 				0B25D0720000000000000072 /* DailyOperatingPlan.swift in Sources */,
 				0B25D0730000000000000073 /* TodayCommandState.swift in Sources */,
+				C00300010000000000000001 /* TodayViewState.swift in Sources */,
+				C00300020000000000000002 /* TodayStoreAction.swift in Sources */,
+				C00300030000000000000003 /* TodayStore.swift in Sources */,
 				0B1000430000000000000043 /* DailySummaryUseCase.swift in Sources */,
 				0B1001A600000000000000A6 /* PreviewDataFactory.swift in Sources */,
 				0B1001B100000000000000B1 /* VelaError.swift in Sources */,
@@ -1225,6 +1249,7 @@
 				5357016B721440F7AA0D7EFF /* PromptComposerTests.swift in Sources */,
 				DD4356A314314464890D8B2D /* MemoryLedgerTests.swift in Sources */,
 				B886D213B1A540FD7EE4A215 /* WorkoutAggregationTests.swift in Sources */,
+				C00300040000000000000004 /* TodayStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
