@@ -449,7 +449,10 @@ struct VelaTodayView: View {
     @State var presentedTodaySheet: TodaySheet?
     @State var experienceFeedbackTick = 0
     @State var legacyDataCoverageSummary = DataCoverageSummaryModel.unknown
-    @State var dailyDecisionFeedback: DailyDecisionFeedbackRecord?
+    /// SwiftData feedback records are retained only as a downstream adapter
+    /// for the editing sheet. Dashboard copy and gating use the Store's value
+    /// projection instead, so persistence models do not leak into rendering.
+    @State var feedbackSheetAdapter: TodayFeedbackSheetAdapter?
     @State var selectedLivedStateAlignment: LivedStateAlignment?
     @State var livedStateSaveError: String?
     @State private var lastScenePhaseSyncTime: Date?
@@ -635,10 +638,11 @@ struct VelaTodayView: View {
 
                     // ─── Block 5: Feedback + data coverage ───
                     if todayStore.state.activePlan != nil {
-                        DailyDecisionFeedbackCard(
-                            record: dailyDecisionFeedback,
+                        TodayFeedbackProjectionCard(
+                            projection: todayStore.state.feedback,
+                            canOpenSheet: feedbackSheetAdapter != nil,
                             onTap: {
-                                guard dailyDecisionFeedback != nil else { return }
+                                guard feedbackSheetAdapter != nil else { return }
                                 presentedTodaySheet = .feedback
                             }
                         )
@@ -781,8 +785,8 @@ struct VelaTodayView: View {
             .presentationDetents([.medium, .large])
             .velaSheetSurface()
         case .feedback:
-            if let dailyDecisionFeedback {
-                DailyDecisionFeedbackSheet(record: dailyDecisionFeedback) { values in
+            if let feedbackSheetAdapter {
+                DailyDecisionFeedbackSheet(record: feedbackSheetAdapter.record) { values in
                     saveDailyDecisionFeedback(values)
                 }
                 .presentationDetents([.large])
@@ -909,6 +913,46 @@ struct VelaTodayView: View {
         case .energy: return VelaTheme.energyColor
         case .stress: return VelaTheme.stressColor
         }
+    }
+}
+
+/// Root-facing feedback card rendered entirely from the Today value model.
+/// The SwiftData record is intentionally not accepted here; it is only passed
+/// to `DailyDecisionFeedbackSheet` after the user opens the downstream editor.
+private struct TodayFeedbackProjectionCard: View {
+    let projection: TodayFeedbackProjection
+    let canOpenSheet: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                Image(systemName: projection.isSubmitted ? "checkmark.circle.fill" : "scope")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(projection.isSubmitted ? VelaTheme.success : VelaTheme.accent)
+                    .frame(width: 34, height: 34)
+                    .background(Circle().fill(VelaTheme.secondaryGroupedBackground))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(projection.isSubmitted ? "今日反馈已记录" : "这个建议适合你吗？")
+                        .font(VelaTheme.subheadline().weight(.semibold))
+                        .foregroundStyle(VelaTheme.fg)
+                    Text(projection.isSubmitted ? "可随时更新，Vela 会用它校准后续建议" : "记录实际行动与体感，约 20 秒")
+                        .font(VelaTheme.caption2())
+                        .foregroundStyle(VelaTheme.muted)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(VelaTheme.muted)
+            }
+            .padding(14)
+            .background(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).fill(VelaTheme.cardBg))
+            .overlay(RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous).stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+        .disabled(!canOpenSheet)
+        .accessibilityLabel(projection.isSubmitted ? "更新今日建议反馈" : "记录今日建议反馈")
     }
 }
 

@@ -4,6 +4,13 @@ import CoreLocation
 import Combine
 import os.log
 
+/// Named downstream adapter for the legacy feedback editor. The Today root
+/// stores this wrapper only to satisfy the sheet's existing record-based API;
+/// dashboard rendering uses `TodayFeedbackProjection` from TodayStore.
+struct TodayFeedbackSheetAdapter {
+    let record: DailyDecisionFeedbackRecord
+}
+
 /// Explicit composition-root handoff for the parts of the legacy Today
 /// surface that still depend on SwiftData, location, weather, and routing.
 ///
@@ -223,6 +230,10 @@ final class TodayLegacyRuntime {
             predicate: #Predicate { $0.dayIdentifier == dayIdentifier }
         )
         return try? modelContext.fetch(descriptor).first
+    }
+
+    func feedbackSheetAdapter(for date: Date) -> TodayFeedbackSheetAdapter? {
+        loadDailyDecisionFeedback(for: date).map { TodayFeedbackSheetAdapter(record: $0) }
     }
 
     /// Converts the SwiftData journal record into a value-only Today read model
@@ -1059,7 +1070,7 @@ extension VelaTodayView {
     /// Persistence-backed feedback lookup stays in this compatibility
     /// extension while the root view migrates to TodayStore actions.
     func loadDailyDecisionFeedback() {
-        dailyDecisionFeedback = todayLegacyRuntime.loadDailyDecisionFeedback(
+        feedbackSheetAdapter = todayLegacyRuntime.feedbackSheetAdapter(
             for: todayStore.state.selectedDay
         )
     }
@@ -1096,7 +1107,9 @@ extension VelaTodayView {
             return
         }
         do {
-            dailyDecisionFeedback = try todayLegacyRuntime.recordDecisionViewed(bodyStateHash: bodyState.hash)
+            feedbackSheetAdapter = TodayFeedbackSheetAdapter(
+                record: try todayLegacyRuntime.recordDecisionViewed(bodyStateHash: bodyState.hash)
+            )
         } catch {
             loadDailyDecisionFeedback()
         }
@@ -1105,9 +1118,11 @@ extension VelaTodayView {
     func trackDailyDecisionAction(destination: String) {
         guard todayStore.state.activePlan != nil else { return }
         do {
-            dailyDecisionFeedback = try todayLegacyRuntime.recordDecisionAction(
-                bodyStateHash: bodyState.hash,
-                destination: destination
+            feedbackSheetAdapter = TodayFeedbackSheetAdapter(
+                record: try todayLegacyRuntime.recordDecisionAction(
+                    bodyStateHash: bodyState.hash,
+                    destination: destination
+                )
             )
         } catch {
             // The user action must never be blocked by local analytics.
@@ -1115,7 +1130,7 @@ extension VelaTodayView {
     }
 
     func saveDailyDecisionFeedback(_ values: DailyDecisionFeedbackValues) {
-        guard dailyDecisionFeedback != nil else { return }
+        guard feedbackSheetAdapter != nil else { return }
         // Persistence and revision notification are owned by the injected
         // effect router. The root only emits the single Store intent.
         presentedTodaySheet = nil
