@@ -491,6 +491,87 @@ final class TodayViewStateTests: XCTestCase {
         XCTAssertEqual(state.coverage.title, "Checking data coverage")
         XCTAssertNil(state.command)
         XCTAssertNil(state.experience)
+        XCTAssertEqual(state.livedState, .empty)
+        XCTAssertEqual(state.feedback, .empty)
+        XCTAssertNil(state.plan)
+        XCTAssertNil(state.nutrition)
+    }
+
+    @MainActor
+    func testSecondaryReaderValuesSurviveCanonicalStateProjection() {
+        let day = TodayPR0GoldenFixture.day
+        let nutrition = TodayNutritionProjection(
+            calories: 1_420,
+            calorieTarget: 2_000,
+            protein: 118,
+            carbs: 164,
+            fat: 52
+        )
+        let livedState = TodayLivedStateProjection(
+            alignment: .worse,
+            checkIn: LivedStateCheckIn(stress: 2, energy: 0, soreness: 1, motivation: 1)
+        )
+        let feedback = TodayFeedbackProjection(
+            isSubmitted: true,
+            summary: "按计划完成",
+            adoptionStatus: "followed",
+            accuracyRating: "accurate",
+            actualAction: "as_planned",
+            energyRating: 2,
+            fatigueRating: 1,
+            painRating: 0,
+            satisfactionRating: 2,
+            note: "状态不错"
+        )
+        let payload = DailyOperatingPlanPayload(
+            decision: .reduce,
+            volumeMultiplier: 0.6,
+            intensityCap: 7,
+            summary: "今天降低训练容量",
+            targetSessionTitle: "轻量下肢"
+        )
+        let coverage = DataCoverageSummaryModel(
+            scorePercent: 82,
+            status: .high,
+            title: "数据覆盖",
+            subtitle: "关键健康信号可用",
+            actionTitle: "查看数据",
+            actionSystemImage: "checkmark",
+            domainSummaries: [
+                DataCoverageDomainSummary(
+                    id: "sleep",
+                    title: "睡眠",
+                    icon: "bed.double",
+                    scorePercent: 82,
+                    usableCount: 9,
+                    totalCount: 11
+                )
+            ],
+            topBlockers: [],
+            coachContextLine: "数据覆盖 82%"
+        )
+        let snapshot = TodayDashboardSnapshot(
+            dashboard: TodayPR0GoldenFixture.dashboard(),
+            nutrition: nutrition,
+            livedState: livedState,
+            feedback: feedback,
+            coverage: coverage,
+            operatingPlanPayload: payload
+        )
+
+        let state = TodayViewState.projection(
+            snapshot: snapshot,
+            selectedDay: day,
+            now: TodayPR0GoldenFixture.now,
+            calendar: TodayPR0GoldenFixture.calendar
+        )
+
+        XCTAssertEqual(state.nutrition, nutrition)
+        XCTAssertEqual(state.livedState, livedState)
+        XCTAssertEqual(state.feedback, feedback)
+        XCTAssertEqual(state.coverage, coverage)
+        XCTAssertEqual(state.plan, TodayPlanProjection(payload: payload))
+        XCTAssertEqual(state.operatingPlanPayload, payload)
     }
 
     @MainActor

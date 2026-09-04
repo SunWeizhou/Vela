@@ -68,6 +68,9 @@ struct TodayDashboardSnapshot: Hashable, Sendable {
     let experience: TodayExperienceModel?
     let todayAIInsight: DailyAIInsight?
     let nutrition: TodayNutritionProjection?
+    let livedState: TodayLivedStateProjection?
+    let feedback: TodayFeedbackProjection?
+    let coverage: DataCoverageSummaryModel?
     let operatingPlanPayload: DailyOperatingPlanPayload?
     let lastUpdated: Date?
     let vitalTrendSeries: [String: [Double]]
@@ -82,6 +85,9 @@ struct TodayDashboardSnapshot: Hashable, Sendable {
         experience: TodayExperienceModel? = nil,
         todayAIInsight: DailyAIInsight? = nil,
         nutrition: TodayNutritionProjection? = nil,
+        livedState: TodayLivedStateProjection? = nil,
+        feedback: TodayFeedbackProjection? = nil,
+        coverage: DataCoverageSummaryModel? = nil,
         operatingPlanPayload: DailyOperatingPlanPayload? = nil,
         lastUpdated: Date? = nil,
         vitalTrendSeries: [String: [Double]] = [:],
@@ -95,6 +101,9 @@ struct TodayDashboardSnapshot: Hashable, Sendable {
         self.experience = experience
         self.todayAIInsight = todayAIInsight
         self.nutrition = nutrition
+        self.livedState = livedState
+        self.feedback = feedback
+        self.coverage = coverage
         self.operatingPlanPayload = operatingPlanPayload
         self.lastUpdated = lastUpdated
         self.vitalTrendSeries = vitalTrendSeries

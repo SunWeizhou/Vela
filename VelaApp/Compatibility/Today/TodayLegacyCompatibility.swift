@@ -124,7 +124,13 @@ final class TodayLegacyRuntime {
         guard let modelContext, let useCase else { return nil }
         return try await useCase
             .loadCachedDashboard(for: day, modelContext: modelContext)
-            .map(TodayDashboardSnapshot.init(dashboard:))
+            .map { dashboard in
+                TodayDashboardSnapshot(
+                    dashboard: dashboard,
+                    livedState: livedStateProjection(for: day),
+                    feedback: decisionFeedbackProjection(for: day)
+                )
+            }
     }
 
     func loadDashboard(
@@ -148,7 +154,11 @@ final class TodayLegacyRuntime {
             force: policy == .force
         )
         _ = useCase
-        return TodayDashboardSnapshot(dashboard: dashboardVM.dashboard)
+        return TodayDashboardSnapshot(
+            dashboard: dashboardVM.dashboard,
+            livedState: livedStateProjection(for: day),
+            feedback: decisionFeedbackProjection(for: day)
+        )
     }
 
     func loadSecondaryData(for dashboardVM: DashboardViewModel) async {
@@ -180,6 +190,35 @@ final class TodayLegacyRuntime {
             predicate: #Predicate { $0.dayIdentifier == dayIdentifier }
         )
         return try? modelContext.fetch(descriptor).first
+    }
+
+    /// Converts the SwiftData journal record into a value-only Today read model
+    /// before it crosses the compatibility boundary.  TodayStore/ViewState do
+    /// not retain or expose the persistence record.
+    func decisionFeedbackProjection(for date: Date) -> TodayFeedbackProjection? {
+        guard let record = loadDailyDecisionFeedback(for: date) else { return nil }
+        return TodayFeedbackProjection(
+            isSubmitted: record.isCompleted,
+            summary: record.note.isEmpty ? nil : record.note,
+            adoptionStatus: record.adoptionStatus,
+            accuracyRating: record.accuracyRating,
+            actualAction: record.actualAction,
+            energyRating: record.energyRating,
+            fatigueRating: record.fatigueRating,
+            painRating: record.painRating,
+            satisfactionRating: record.satisfactionRating,
+            note: record.note.isEmpty ? nil : record.note
+        )
+    }
+
+    /// The journal adapter already owns decoding and validation.  Return its
+    /// immutable value projection rather than leaking the adapter or model
+    /// context into TodayStore.
+    func livedStateProjection(for date: Date) -> TodayLivedStateProjection {
+        TodayLivedStateProjection(
+            alignment: livedStateAlignment(for: date),
+            checkIn: loadLivedStateCheckIn(for: date)
+        )
     }
 
     func saveLivedStateAlignment(
@@ -568,6 +607,8 @@ final class LegacyTodayReadingModule: TodayReadingModule {
                 carbs: dashboardVM.todayCarbs,
                 fat: dashboardVM.todayFat
             ),
+            livedState: runtime.livedStateProjection(for: day),
+            feedback: runtime.decisionFeedbackProjection(for: day),
             operatingPlanPayload: dashboardVM.persistedOperatingPlanPayload,
             lastUpdated: dashboardVM.lastUpdated,
             vitalTrendSeries: dashboardVM.vitalTrendSeries,

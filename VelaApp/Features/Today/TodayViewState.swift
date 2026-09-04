@@ -8,6 +8,7 @@ extension DashboardSummary.DataSource: @unchecked Sendable {}
 extension TodayExperienceModel: @unchecked Sendable {}
 extension DailyDecisionFeedbackValues: @unchecked Sendable {}
 
+
 enum TodayMetricID: String, CaseIterable, Codable, Hashable, Sendable {
     case recovery
     case sleep
@@ -116,21 +117,57 @@ enum TodayLoadFailure: Equatable, Sendable, LocalizedError {
     }
 }
 
-struct TodayLivedStateProjection: Equatable, Sendable {
+struct TodayLivedStateProjection: Codable, Equatable, Hashable, Sendable {
     var alignment: LivedStateAlignment?
     var checkIn: LivedStateCheckIn?
 
     static let empty = TodayLivedStateProjection(alignment: nil, checkIn: nil)
 }
 
-struct TodayFeedbackProjection: Equatable, Sendable {
+/// Value-only feedback read model.  The SwiftData record remains behind the
+/// compatibility reader; TodayStore/ViewState never carry the record itself.
+/// Optional fields preserve an in-progress feedback form without treating it
+/// as a completed submission.
+struct TodayFeedbackProjection: Codable, Equatable, Hashable, Sendable {
     var isSubmitted: Bool
     var summary: String?
+    var adoptionStatus: String?
+    var accuracyRating: String?
+    var actualAction: String?
+    var energyRating: Int?
+    var fatigueRating: Int?
+    var painRating: Int?
+    var satisfactionRating: Int?
+    var note: String?
+
+    init(
+        isSubmitted: Bool,
+        summary: String?,
+        adoptionStatus: String? = nil,
+        accuracyRating: String? = nil,
+        actualAction: String? = nil,
+        energyRating: Int? = nil,
+        fatigueRating: Int? = nil,
+        painRating: Int? = nil,
+        satisfactionRating: Int? = nil,
+        note: String? = nil
+    ) {
+        self.isSubmitted = isSubmitted
+        self.summary = summary
+        self.adoptionStatus = adoptionStatus
+        self.accuracyRating = accuracyRating
+        self.actualAction = actualAction
+        self.energyRating = energyRating
+        self.fatigueRating = fatigueRating
+        self.painRating = painRating
+        self.satisfactionRating = satisfactionRating
+        self.note = note
+    }
 
     static let empty = TodayFeedbackProjection(isSubmitted: false, summary: nil)
 }
 
-struct TodayPlanProjection: Equatable, Sendable {
+struct TodayPlanProjection: Codable, Equatable, Hashable, Sendable {
     var title: String
     var detail: String?
 
@@ -138,9 +175,18 @@ struct TodayPlanProjection: Equatable, Sendable {
         self.title = title
         self.detail = detail
     }
+
+    init(payload: DailyOperatingPlanPayload) {
+        self.init(
+            title: payload.targetSessionTitle
+                ?? payload.primaryAction?.title
+                ?? "今日计划",
+            detail: payload.summary
+        )
+    }
 }
 
-struct TodayNutritionProjection: Equatable, Hashable, Sendable {
+struct TodayNutritionProjection: Codable, Equatable, Hashable, Sendable {
     var calories: Int?
     var calorieTarget: Int?
     var protein: Int?
@@ -281,11 +327,11 @@ struct TodayViewState: Equatable, Sendable {
             // never invokes either builder while rendering.
             command: snapshot.command,
             experience: snapshot.experience,
-            coverage: Self.unknownCoverage,
-            livedState: .empty,
-            feedback: .empty,
-            plan: nil,
-            nutrition: nil,
+            coverage: snapshot.coverage ?? Self.unknownCoverage,
+            livedState: snapshot.livedState ?? .empty,
+            feedback: snapshot.feedback ?? .empty,
+            plan: snapshot.operatingPlanPayload.map(TodayPlanProjection.init(payload:)),
+            nutrition: snapshot.nutrition,
             operatingPlanPayload: snapshot.operatingPlanPayload,
             todayAIInsight: snapshot.todayAIInsight,
             lastUpdated: snapshot.lastUpdated,
