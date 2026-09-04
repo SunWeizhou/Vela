@@ -175,7 +175,6 @@ public struct SleepScoreEngine: ScoreEngine, Sendable {
         } else {
             finalValue = nil
         }
-        if finalValue == nil { missingInputs.append("scoringComponents") }
         reasons.append("睡眠分析根据 Apple 公开结构建模，非官方指标。")
 
         let detail = calculateLegacyBuysse(from: input)
