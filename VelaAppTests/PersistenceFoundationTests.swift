@@ -1212,6 +1212,103 @@ final class PersistenceFoundationTests: XCTestCase {
         XCTAssertEqual(decoded.source, "appleWatch")
     }
 
+    func testLegacyWatchTrainingObservationDecodesWithV1Defaults() throws {
+        let startedAt = Date(timeIntervalSince1970: 1_783_929_600)
+        let observation = WristTrainingObservation(
+            id: UUID(uuidString: "A7D8E0B2-3D55-4F36-9B7B-3A9B6F734301")!,
+            startedAt: startedAt,
+            endedAt: startedAt.addingTimeInterval(45 * 60),
+            workoutKind: "自由力量",
+            activeCalories: 120,
+            averageHeartRate: 132,
+            completedSets: 4,
+            healthDayIdentifier: "2026-08-01"
+        )
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(observation)
+        ) as? [String: Any])
+        object.removeValue(forKey: "schemaVersion")
+        object.removeValue(forKey: "source")
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try JSONDecoder().decode(WristTrainingObservation.self, from: legacyData)
+        XCTAssertEqual(decoded.id, observation.id)
+        XCTAssertEqual(decoded.schemaVersion, WristTrainingObservation.currentSchemaVersion)
+        XCTAssertEqual(decoded.source, "appleWatch")
+        XCTAssertTrue(WristTrainingObservation.isSupported(schemaVersion: decoded.schemaVersion))
+    }
+
+    func testWatchTrainingObservationAdapterMapsStrengthWithStableKey() throws {
+        let startedAt = Date(timeIntervalSince1970: 1_783_929_600)
+        let observation = WristTrainingObservation(
+            id: UUID(uuidString: "B7D8E0B2-3D55-4F36-9B7B-3A9B6F734302")!,
+            startedAt: startedAt,
+            endedAt: startedAt.addingTimeInterval(45 * 60),
+            workoutKind: "自由力量",
+            activeCalories: 120,
+            averageHeartRate: 132,
+            completedSets: 4,
+            healthDayIdentifier: "2026-08-01"
+        )
+
+        guard case let .ready(draft) = WristTrainingObservationAdapter.map(observation) else {
+            return XCTFail("strength observation should map")
+        }
+        XCTAssertEqual(draft.recordID, observation.id)
+        XCTAssertEqual(draft.idempotencyKey, "watch-training-\(observation.id.uuidString.lowercased())")
+        XCTAssertEqual(draft.durationMinutes, 45)
+        XCTAssertEqual(draft.completedSets, 4)
+        XCTAssertEqual(draft.activeCalories, 120)
+        XCTAssertTrue(draft.notes.contains(draft.idempotencyKey))
+
+        guard case let .ready(replayed) = WristTrainingObservationAdapter.map(observation) else {
+            return XCTFail("replayed strength observation should map")
+        }
+        XCTAssertEqual(replayed, draft)
+    }
+
+    func testWatchTrainingObservationQueueAcknowledgesOnlyMappedIDsAndAuditsRejects() throws {
+        let bridge = WristSnapshotBridge.shared
+        bridge.clearCachedSnapshot()
+        defer { bridge.clearCachedSnapshot() }
+        let startedAt = Date(timeIntervalSince1970: 1_783_929_600)
+        let strength = WristTrainingObservation(
+            id: UUID(uuidString: "C7D8E0B2-3D55-4F36-9B7B-3A9B6F734303")!,
+            startedAt: startedAt,
+            endedAt: startedAt.addingTimeInterval(45 * 60),
+            workoutKind: "自由力量",
+            completedSets: 3,
+            healthDayIdentifier: "2026-08-01"
+        )
+        let running = WristTrainingObservation(
+            id: UUID(uuidString: "D7D8E0B2-3D55-4F36-9B7B-3A9B6F734304")!,
+            startedAt: startedAt,
+            endedAt: startedAt.addingTimeInterval(30 * 60),
+            workoutKind: "户外跑步",
+            healthDayIdentifier: "2026-08-01"
+        )
+        bridge.enqueueTrainingObservation(strength)
+        bridge.enqueueTrainingObservation(strength) // queue dedupe by observation UUID
+        bridge.enqueueTrainingObservation(running)
+
+        let pending = bridge.drainPendingTrainingObservations()
+        XCTAssertEqual(Set(pending.map(\.id)), Set([strength.id, running.id]))
+        guard case .ready = WristTrainingObservationAdapter.map(strength) else {
+            return XCTFail("strength observation should map")
+        }
+        guard case let .rejected(audit) = WristTrainingObservationAdapter.map(running) else {
+            return XCTFail("non-strength observation should remain auditable")
+        }
+        bridge.recordTrainingObservationAudit(audit)
+        bridge.acknowledgePendingTrainingObservations([strength.id])
+
+        XCTAssertEqual(bridge.drainPendingTrainingObservations().map(\.id), [running.id])
+        let audits = bridge.trainingObservationAudit()
+        XCTAssertEqual(audits.last?.observationID, running.id)
+        XCTAssertEqual(audits.last?.outcome, .rejected)
+        XCTAssertEqual(audits.last?.reason, "unsupportedWorkoutKind")
+    }
+
     @MainActor
     func testDailyAdaptiveProposalIsIdempotentAndDoesNotMutatePlan() throws {
         let container = try VelaModelContainer.make(inMemory: true)

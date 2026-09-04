@@ -172,6 +172,38 @@ private struct WatchTrainingObservation: Codable, Equatable {
     var schemaVersion: Int = Self.currentSchemaVersion
     var source: String = "appleWatch"
 
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case startedAt
+        case endedAt
+        case workoutKind
+        case activeCalories
+        case averageHeartRate
+        case completedSets
+        case healthDayIdentifier
+        case schemaVersion
+        case source
+    }
+
+    /// Decode the pre-versioned queue envelope as v1. A watch may be offline
+    /// across an app update, so a missing schema field must not discard the
+    /// locally persisted observation.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        startedAt = try container.decode(Date.self, forKey: .startedAt)
+        endedAt = try container.decode(Date.self, forKey: .endedAt)
+        workoutKind = try container.decode(String.self, forKey: .workoutKind)
+        activeCalories = try container.decodeIfPresent(Double.self, forKey: .activeCalories) ?? 0
+        averageHeartRate = try container.decodeIfPresent(Double.self, forKey: .averageHeartRate)
+        completedSets = try container.decodeIfPresent(Int.self, forKey: .completedSets) ?? 0
+        healthDayIdentifier = try container.decodeIfPresent(String.self, forKey: .healthDayIdentifier)
+            ?? WatchSnapshotContract.healthDayIdentifier(for: startedAt)
+        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion)
+            ?? Self.currentSchemaVersion
+        source = try container.decodeIfPresent(String.self, forKey: .source) ?? "appleWatch"
+    }
+
     init(
         id: UUID = UUID(),
         startedAt: Date,

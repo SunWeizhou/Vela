@@ -329,6 +329,38 @@ struct WristTrainingObservation: Codable, Equatable, Sendable {
     var schemaVersion: Int = Self.currentSchemaVersion
     var source: String = "appleWatch"
 
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case startedAt
+        case endedAt
+        case workoutKind
+        case activeCalories
+        case averageHeartRate
+        case completedSets
+        case healthDayIdentifier
+        case schemaVersion
+        case source
+    }
+
+    /// The first observation envelope shipped without an explicit schema field.
+    /// Decode that payload as v1 so a queued workout survives an app/watch
+    /// upgrade instead of being dropped by synthesized Codable decoding.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        startedAt = try container.decode(Date.self, forKey: .startedAt)
+        endedAt = try container.decode(Date.self, forKey: .endedAt)
+        workoutKind = try container.decode(String.self, forKey: .workoutKind)
+        activeCalories = try container.decodeIfPresent(Double.self, forKey: .activeCalories) ?? 0
+        averageHeartRate = try container.decodeIfPresent(Double.self, forKey: .averageHeartRate)
+        completedSets = try container.decodeIfPresent(Int.self, forKey: .completedSets) ?? 0
+        healthDayIdentifier = try container.decodeIfPresent(String.self, forKey: .healthDayIdentifier)
+            ?? WristSnapshotContract.healthDayIdentifier(for: startedAt)
+        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion)
+            ?? Self.currentSchemaVersion
+        source = try container.decodeIfPresent(String.self, forKey: .source) ?? "appleWatch"
+    }
+
     init(
         id: UUID = UUID(),
         startedAt: Date,
@@ -351,6 +383,159 @@ struct WristTrainingObservation: Codable, Equatable, Sendable {
         self.healthDayIdentifier = healthDayIdentifier
         self.schemaVersion = schemaVersion
         self.source = source
+    }
+}
+
+/// The persistence-neutral shape produced by the Watch observation adapter.
+/// `recordID` is deliberately the Watch observation UUID: it is the stable
+/// idempotency key used by the eventual SwiftData repository to upsert the
+/// StrengthWorkout/TrainingResponse pair.
+struct WristTrainingObservationDraft: Equatable, Sendable {
+    let recordID: UUID
+    let idempotencyKey: String
+    let title: String
+    let startedAt: Date
+    let endedAt: Date
+    let durationMinutes: Int
+    let activeCalories: Double
+    let averageHeartRate: Double?
+    let completedSets: Int
+    let healthDayIdentifier: String
+    let source: String
+    let notes: String
+}
+
+struct WristTrainingObservationAudit: Codable, Equatable, Sendable {
+    enum Outcome: String, Codable, Sendable {
+        case mapped
+        case duplicate
+        case rejected
+    }
+
+    let observationID: UUID
+    let idempotencyKey: String
+    let outcome: Outcome
+    let reason: String
+    let recordedAt: Date
+
+    static func mapped(_ observation: WristTrainingObservation, at date: Date = Date()) -> Self {
+        Self(
+            observationID: observation.id,
+            idempotencyKey: observation.idempotencyKey,
+            outcome: .mapped,
+            reason: "readyForPersistence",
+            recordedAt: date
+        )
+    }
+
+    static func duplicate(_ observation: WristTrainingObservation, at date: Date = Date()) -> Self {
+        Self(
+            observationID: observation.id,
+            idempotencyKey: observation.idempotencyKey,
+            outcome: .duplicate,
+            reason: "existingRecordReused",
+            recordedAt: date
+        )
+    }
+
+    static func rejected(
+        _ observation: WristTrainingObservation,
+        reason: String,
+        at date: Date = Date()
+    ) -> Self {
+        Self(
+            observationID: observation.id,
+            idempotencyKey: observation.idempotencyKey,
+            outcome: .rejected,
+            reason: reason,
+            recordedAt: date
+        )
+    }
+}
+
+enum WristTrainingObservationMapping: Equatable, Sendable {
+    case ready(WristTrainingObservationDraft)
+    case rejected(WristTrainingObservationAudit)
+}
+
+/// Pure, replayable Watch observation adapter. It intentionally has no
+/// HealthKit, SwiftData, or UserDefaults dependency; an iPhone repository can
+/// persist the resulting draft and acknowledge its UUID atomically.
+enum WristTrainingObservationAdapter {
+    static let maxDuration: TimeInterval = 24 * 60 * 60
+    static let maxCompletedSets = 500
+
+    static func map(
+        _ observation: WristTrainingObservation,
+        calendar: Calendar = .current,
+        now: Date = Date()
+    ) -> WristTrainingObservationMapping {
+        guard WristTrainingObservation.isSupported(schemaVersion: observation.schemaVersion) else {
+            return .rejected(.rejected(observation, reason: "unsupportedSchemaVersion", at: now))
+        }
+        guard !observation.workoutKind.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .rejected(.rejected(observation, reason: "emptyWorkoutKind", at: now))
+        }
+        guard observation.endedAt > observation.startedAt,
+              observation.endedAt.timeIntervalSince(observation.startedAt) <= maxDuration else {
+            return .rejected(.rejected(observation, reason: "invalidWorkoutInterval", at: now))
+        }
+        guard observation.activeCalories.isFinite, observation.activeCalories >= 0 else {
+            return .rejected(.rejected(observation, reason: "invalidActiveCalories", at: now))
+        }
+        if let heartRate = observation.averageHeartRate,
+           (!heartRate.isFinite || heartRate < 0 || heartRate > 300) {
+            return .rejected(.rejected(observation, reason: "invalidAverageHeartRate", at: now))
+        }
+        guard (0...maxCompletedSets).contains(observation.completedSets) else {
+            return .rejected(.rejected(observation, reason: "invalidCompletedSets", at: now))
+        }
+        guard !observation.healthDayIdentifier.isEmpty else {
+            return .rejected(.rejected(observation, reason: "emptyHealthDayIdentifier", at: now))
+        }
+
+        // StrengthWorkoutRecord is the current response-bearing local model.
+        // Non-strength Watch activities remain in the queue with an explicit
+        // audit result until a future WorkoutEvent adapter owns that model.
+        guard isStrengthKind(observation.workoutKind) else {
+            return .rejected(.rejected(observation, reason: "unsupportedWorkoutKind", at: now))
+        }
+
+        let durationMinutes = max(
+            1,
+            Int((observation.endedAt.timeIntervalSince(observation.startedAt) / 60).rounded())
+        )
+        let title = "Apple Watch · \(observation.workoutKind.trimmingCharacters(in: .whitespacesAndNewlines))"
+        let idempotencyKey = observation.idempotencyKey
+        let healthDay = observation.healthDayIdentifier.isEmpty
+            ? WristSnapshotContract.healthDayIdentifier(for: observation.startedAt, calendar: calendar)
+            : observation.healthDayIdentifier
+        let notes = "Apple Watch observation \(idempotencyKey) · schema v\(observation.schemaVersion) · health day \(healthDay)"
+        return .ready(WristTrainingObservationDraft(
+            recordID: observation.id,
+            idempotencyKey: idempotencyKey,
+            title: title,
+            startedAt: observation.startedAt,
+            endedAt: observation.endedAt,
+            durationMinutes: durationMinutes,
+            activeCalories: observation.activeCalories,
+            averageHeartRate: observation.averageHeartRate,
+            completedSets: observation.completedSets,
+            healthDayIdentifier: healthDay,
+            source: observation.source.isEmpty ? "appleWatch" : observation.source,
+            notes: notes
+        ))
+    }
+
+    private static func isStrengthKind(_ rawValue: String) -> Bool {
+        let normalized = rawValue.lowercased()
+        return normalized.contains("strength") || rawValue.contains("力量")
+    }
+}
+
+private extension WristTrainingObservation {
+    var idempotencyKey: String {
+        "watch-training-\(id.uuidString.lowercased())"
     }
 }
 
@@ -396,6 +581,7 @@ final class WristSnapshotBridge: NSObject, WCSessionDelegate, @unchecked Sendabl
     private let activeWorkoutCacheKey = "vela.wrist.active-workout"
     private let pendingEditCacheKey = "vela.wrist.pending-strength-edits"
     private let pendingTrainingObservationCacheKey = "vela.wrist.pending-training-observations"
+    private let trainingObservationAuditCacheKey = "vela.wrist.training-observation-audit"
     private let encoder = JSONEncoder()
     private let lock = NSLock()
     private var latestPayload: Data?
@@ -530,8 +716,57 @@ final class WristSnapshotBridge: NSObject, WCSessionDelegate, @unchecked Sendabl
               let observations = try? JSONDecoder().decode([WristTrainingObservation].self, from: data) else {
             return []
         }
-        UserDefaults.standard.removeObject(forKey: pendingTrainingObservationCacheKey)
         return observations
+    }
+
+    /// Acknowledges only observations that the receiving adapter completed (or
+    /// recognized as an existing idempotent record). Rejected/deferred payloads
+    /// remain queued for a later retry while their audit outcome stays visible.
+    func acknowledgePendingTrainingObservations(_ ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        lock.lock()
+        defer { lock.unlock() }
+        guard let data = UserDefaults.standard.data(forKey: pendingTrainingObservationCacheKey),
+              let observations = try? JSONDecoder().decode([WristTrainingObservation].self, from: data) else {
+            return
+        }
+        let remaining = observations.filter { !ids.contains($0.id) }
+        if remaining.isEmpty {
+            UserDefaults.standard.removeObject(forKey: pendingTrainingObservationCacheKey)
+        } else if let encoded = try? encoder.encode(remaining) {
+            UserDefaults.standard.set(encoded, forKey: pendingTrainingObservationCacheKey)
+        }
+    }
+
+    func trainingObservationAudit() -> [WristTrainingObservationAudit] {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let data = UserDefaults.standard.data(forKey: trainingObservationAuditCacheKey) else {
+            return []
+        }
+        return (try? JSONDecoder().decode([WristTrainingObservationAudit].self, from: data)) ?? []
+    }
+
+    /// Persists an adapter outcome outside SwiftData. This keeps rejected
+    /// payloads inspectable without making the observation envelope part of the
+    /// app's migration graph.
+    func recordTrainingObservationAudit(_ audit: WristTrainingObservationAudit) {
+        lock.lock()
+        defer { lock.unlock() }
+        var audits: [WristTrainingObservationAudit] = []
+        if let data = UserDefaults.standard.data(forKey: trainingObservationAuditCacheKey) {
+            audits = (try? JSONDecoder().decode([WristTrainingObservationAudit].self, from: data)) ?? []
+        }
+        audits.append(audit)
+        if let data = try? encoder.encode(Array(audits.suffix(200))) {
+            UserDefaults.standard.set(data, forKey: trainingObservationAuditCacheKey)
+        }
+    }
+
+    /// Test/bridge seam for queueing a typed observation without requiring a
+    /// live WCSession. Production Watch messages still use the delegate paths.
+    func enqueueTrainingObservation(_ observation: WristTrainingObservation) {
+        enqueue(observation)
     }
 
     func clearCachedSnapshot() {
@@ -544,6 +779,7 @@ final class WristSnapshotBridge: NSObject, WCSessionDelegate, @unchecked Sendabl
         UserDefaults.standard.removeObject(forKey: activeWorkoutCacheKey)
         UserDefaults.standard.removeObject(forKey: pendingEditCacheKey)
         UserDefaults.standard.removeObject(forKey: pendingTrainingObservationCacheKey)
+        UserDefaults.standard.removeObject(forKey: trainingObservationAuditCacheKey)
         VelaWidgetDataProvider.shared.clearSnapshot()
         updateCombinedApplicationContext()
     }
@@ -579,8 +815,7 @@ final class WristSnapshotBridge: NSObject, WCSessionDelegate, @unchecked Sendabl
             return
         }
         if let data = message["trainingObservation"] as? Data,
-           let observation = try? JSONDecoder().decode(WristTrainingObservation.self, from: data),
-           WristTrainingObservation.isSupported(schemaVersion: observation.schemaVersion) {
+           let observation = try? JSONDecoder().decode(WristTrainingObservation.self, from: data) {
             enqueue(observation)
             replyHandler(["status": "queued", "observationID": observation.id.uuidString])
             return
@@ -615,8 +850,7 @@ final class WristSnapshotBridge: NSObject, WCSessionDelegate, @unchecked Sendabl
             return
         }
         if let data = message["trainingObservation"] as? Data,
-           let observation = try? JSONDecoder().decode(WristTrainingObservation.self, from: data),
-           WristTrainingObservation.isSupported(schemaVersion: observation.schemaVersion) {
+           let observation = try? JSONDecoder().decode(WristTrainingObservation.self, from: data) {
             enqueue(observation)
         }
     }
@@ -627,8 +861,7 @@ final class WristSnapshotBridge: NSObject, WCSessionDelegate, @unchecked Sendabl
             enqueue(edit)
         }
         if let data = userInfo["trainingObservation"] as? Data,
-           let observation = try? JSONDecoder().decode(WristTrainingObservation.self, from: data),
-           WristTrainingObservation.isSupported(schemaVersion: observation.schemaVersion) {
+           let observation = try? JSONDecoder().decode(WristTrainingObservation.self, from: data) {
             enqueue(observation)
         }
     }
