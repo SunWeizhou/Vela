@@ -12,9 +12,24 @@ final class TodayStore: ObservableObject {
     private let clock: any AppClock
     private let calendar: Calendar
     private let effects: any TodayEffectRouter
-    private struct InFlightLoad {
+    /// A load is shared by all callers for the same health day.  Waiters are
+    /// tracked independently so cancellation of one caller only releases its
+    /// own continuation; the underlying reader task is cancelled only after
+    /// the last waiter leaves (or an explicit date switch invalidates it).
+    @MainActor
+    private final class InFlightLoad {
         let token: UInt64
         let task: Task<TodayDashboardSnapshot, Error>
+        var nextWaiterID: UInt64 = 0
+        var waiterCount = 0
+        var continuations: [UInt64: CheckedContinuation<TodayDashboardSnapshot, Error>] = [:]
+        var cancelledWaiters: Set<UInt64> = []
+        var result: Result<TodayDashboardSnapshot, Error>?
+
+        init(token: UInt64, task: Task<TodayDashboardSnapshot, Error>) {
+            self.token = token
+            self.task = task
+        }
     }
     private var inFlight: [Date: InFlightLoad] = [:]
     private var nextLoadToken: UInt64 = 0
@@ -119,8 +134,9 @@ final class TodayStore: ObservableObject {
         // this selected day.  Cancellation is only an optimisation.
         let staleKeys = inFlight.keys.filter { $0 != day }
         for key in staleKeys {
-            inFlight[key]?.task.cancel()
-            inFlight[key] = nil
+            if let staleLoad = inFlight[key] {
+                cancel(load: staleLoad, day: key)
+            }
         }
         do {
             if let cached = try await reader.cached(for: day) {
@@ -162,17 +178,32 @@ final class TodayStore: ObservableObject {
             nextLoadToken &+= 1
             load = InFlightLoad(token: nextLoadToken, task: task)
             inFlight[day] = load
+            observeCompletion(of: load)
         }
+
+        let waiterID = reserveWaiter(on: load)
+        defer { releaseWaiter(day: day, load: load, waiterID: waiterID) }
 
         do {
             let snapshot = try await withTaskCancellationHandler(operation: {
-                try await load.task.value
+                try await withCheckedThrowingContinuation { continuation in
+                    register(
+                        continuation,
+                        day: day,
+                        load: load,
+                        waiterID: waiterID
+                    )
+                }
             }, onCancel: {
-                // Tie cancellation of the caller to the shared request.  A
-                // date switch also cancels this task explicitly below.
-                load.task.cancel()
+                // Cancellation is scoped to this caller.  The actor hop keeps
+                // continuation removal serialized with completion and date
+                // selection, while the shared reader task remains alive for
+                // any other waiter.
+                Task { @MainActor [weak self] in
+                    self?.cancelWaiter(day: day, load: load, waiterID: waiterID)
+                }
             })
-            defer { removeInFlight(for: day, token: load.token) }
+            try Task.checkCancellation()
             guard generation == requestGeneration, day == state.selectedDay else { return }
             let projected = TodayViewState.projection(
                 snapshot: snapshot,
@@ -182,11 +213,9 @@ final class TodayStore: ObservableObject {
             )
             apply(projected, generation: generation)
         } catch is CancellationError {
-            removeInFlight(for: day, token: load.token)
             guard generation == requestGeneration, day == state.selectedDay else { return }
             state = lastStableState
         } catch {
-            removeInFlight(for: day, token: load.token)
             guard generation == requestGeneration, day == state.selectedDay else { return }
             state.error = .reader(error.localizedDescription)
             state.phase = .failed(state.error!)
@@ -199,8 +228,83 @@ final class TodayStore: ObservableObject {
         lastStableState = projected
     }
 
-    private func removeInFlight(for day: Date, token: UInt64) {
-        guard inFlight[day]?.token == token else { return }
+    private func reserveWaiter(on load: InFlightLoad) -> UInt64 {
+        load.nextWaiterID &+= 1
+        load.waiterCount += 1
+        return load.nextWaiterID
+    }
+
+    private func register(
+        _ continuation: CheckedContinuation<TodayDashboardSnapshot, Error>,
+        day: Date,
+        load: InFlightLoad,
+        waiterID: UInt64
+    ) {
+        if load.cancelledWaiters.remove(waiterID) != nil {
+            continuation.resume(throwing: CancellationError())
+            return
+        }
+        if let result = load.result {
+            continuation.resume(with: result)
+            return
+        }
+        guard inFlight[day]?.token == load.token else {
+            continuation.resume(throwing: CancellationError())
+            return
+        }
+        load.continuations[waiterID] = continuation
+        if Task.isCancelled {
+            cancelWaiter(day: day, load: load, waiterID: waiterID)
+        }
+    }
+
+    private func cancelWaiter(day: Date, load: InFlightLoad, waiterID: UInt64) {
+        guard load.result == nil else { return }
+        load.cancelledWaiters.insert(waiterID)
+        if let continuation = load.continuations.removeValue(forKey: waiterID) {
+            continuation.resume(throwing: CancellationError())
+        }
+    }
+
+    private func releaseWaiter(day: Date, load: InFlightLoad, waiterID: UInt64) {
+        load.continuations.removeValue(forKey: waiterID)
+        load.cancelledWaiters.remove(waiterID)
+        guard load.waiterCount > 0 else { return }
+        load.waiterCount -= 1
+        guard load.waiterCount == 0, load.result == nil else { return }
+        cancel(load: load, day: day)
+    }
+
+    private func cancel(load: InFlightLoad, day: Date) {
+        guard load.result == nil else { return }
+        load.task.cancel()
+        finish(load: load, result: .failure(CancellationError()))
+        guard inFlight[day]?.token == load.token else { return }
         inFlight[day] = nil
+    }
+
+    private func observeCompletion(of load: InFlightLoad) {
+        Task { @MainActor [weak self, load] in
+            let result: Result<TodayDashboardSnapshot, Error>
+            do {
+                result = .success(try await load.task.value)
+            } catch {
+                result = .failure(error)
+            }
+            self?.finish(load: load, result: result)
+        }
+    }
+
+    private func finish(load: InFlightLoad, result: Result<TodayDashboardSnapshot, Error>) {
+        guard load.result == nil else { return }
+        load.result = result
+        let continuations = load.continuations
+        load.continuations.removeAll()
+        for continuation in continuations.values {
+            continuation.resume(with: result)
+        }
+        if let day = inFlight.first(where: { $0.value === load })?.key {
+            inFlight[day] = nil
+        }
     }
 }

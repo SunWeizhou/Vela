@@ -117,6 +117,75 @@ final class TodayStoreTests: XCTestCase {
         }
     }
 
+    /// A reader whose shared request can be released by the test.  The gate
+    /// makes the distinction between cancelling one waiter and cancelling the
+    /// underlying coalesced load observable without touching implementation
+    /// details inside TodayStore.
+    @MainActor
+    private final class GatedReader: TodayReadingModule {
+        let cancellationBox = CancellationBox()
+        var loadCalls = 0
+        var loadContinuation: CheckedContinuation<TodayDashboardSnapshot, Error>?
+        var startedContinuation: CheckedContinuation<Void, Never>?
+
+        func cached(for day: Date) async throws -> TodayDashboardSnapshot? { nil }
+
+        func load(for day: Date, policy: TodayRefreshPolicy) async throws -> TodayDashboardSnapshot {
+            loadCalls += 1
+            startedContinuation?.resume()
+            startedContinuation = nil
+            return try await withTaskCancellationHandler(operation: {
+                try await withCheckedThrowingContinuation { continuation in
+                    loadContinuation = continuation
+                }
+            }, onCancel: {
+                cancellationBox.markCancelled()
+                Task { @MainActor in
+                    loadContinuation?.resume(throwing: CancellationError())
+                    loadContinuation = nil
+                }
+            })
+        }
+
+        func waitUntilStarted() async {
+            guard loadCalls == 0 else { return }
+            await withCheckedContinuation { continuation in
+                startedContinuation = continuation
+            }
+        }
+
+        func resume(with snapshot: TodayDashboardSnapshot) {
+            loadContinuation?.resume(returning: snapshot)
+            loadContinuation = nil
+        }
+    }
+
+    private final class CancellationBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = false
+
+        func markCancelled() {
+            lock.lock()
+            value = true
+            lock.unlock()
+        }
+
+        var isCancelled: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return value
+        }
+    }
+
+    @MainActor
+    private final class CompletionFlag {
+        private(set) var value = false
+
+        func markCompleted() {
+            value = true
+        }
+    }
+
     @MainActor
     private final class RecordingEffects: TodayEffectRouter {
         var openedMetrics: [TodayMetricID] = []
@@ -203,6 +272,55 @@ final class TodayStoreTests: XCTestCase {
 
         XCTAssertEqual(reader.loadCalls, 1)
         XCTAssertEqual(store.state.scores.recovery.value, 81)
+    }
+
+    @MainActor
+    func testCancellingOneCoalescedWaiterDoesNotCancelSharedLoad() async throws {
+        let reader = GatedReader()
+        let day = calendar.startOfDay(for: now)
+        let expected = snapshot(day: day, score: 83, updatedAt: now)
+        let store = TodayStore(reader: reader, clock: FixedAppClock(now: now), calendar: calendar)
+
+        let first = Task { @MainActor in
+            await store.send(.refresh(force: false))
+        }
+        await reader.waitUntilStarted()
+
+        let secondStarted = CompletionFlag()
+        let second = Task { @MainActor in
+            secondStarted.markCompleted()
+            await store.send(.refresh(force: true))
+        }
+        // Let the second MainActor task cross the store's waiter registration
+        // point before cancelling the first.  The bounded yield loop avoids a
+        // scheduler-dependent race while keeping the test independent of
+        // TodayStore internals.
+        for _ in 0..<100 where !secondStarted.value {
+            await Task.yield()
+        }
+        XCTAssertTrue(secondStarted.value)
+        for _ in 0..<100 {
+            await Task.yield()
+        }
+
+        let firstCompletion = CompletionFlag()
+        let firstObserver = Task { @MainActor in
+            await first.value
+            firstCompletion.markCompleted()
+        }
+        first.cancel()
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        XCTAssertTrue(firstCompletion.value, "a cancelled waiter must stop waiting promptly")
+        XCTAssertFalse(reader.cancellationBox.isCancelled, "one waiter cancellation must not cancel the shared reader task")
+        XCTAssertEqual(reader.loadCalls, 1, "same-day waiters must continue to coalesce")
+
+        reader.resume(with: expected)
+        await second.value
+        await firstObserver.value
+
+        XCTAssertEqual(store.state.phase, .ready)
+        XCTAssertEqual(store.state.scores.recovery.value, 83)
     }
 
     @MainActor
