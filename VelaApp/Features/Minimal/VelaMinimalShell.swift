@@ -46,6 +46,10 @@ struct VelaShell: View {
     @State private var mountedLegacyTabs: Set<VelaTab> = [.today]
     @State private var lastPresentedAppSheet: VelaAppState.AppSheet?
     @StateObject private var todayLegacyRuntimeHolder: TodayLegacyRuntimeHolder
+    /// Cross-surface Today effects are composed here, next to the runtime
+    /// bridge. The Today root does not dispatch navigation through both the
+    /// Store and the legacy app state.
+    private let todayEffectRouter: TodayLegacyEffectRouter
     /// TodayStore is a shell-owned dependency.  Keeping its identity at this
     /// composition boundary prevents tab-surface reevaluation from creating a
     /// second reader/load coordinator.
@@ -68,11 +72,14 @@ struct VelaShell: View {
     init() {
         let reader = LegacyTodayReadingModule()
         self.todayReader = reader
+        let effectRouter = TodayLegacyEffectRouter()
+        self.todayEffectRouter = effectRouter
         _todayStore = StateObject(
             wrappedValue: TodayStore(
                 reader: reader,
                 clock: SystemAppClock(),
-                calendar: .current
+                calendar: .current,
+                effects: effectRouter
             )
         )
         _todayLegacyRuntimeHolder = StateObject(
@@ -107,9 +114,10 @@ struct VelaShell: View {
             },
             readCalorieTarget: {
                 let value = UserDefaults.standard.integer(forKey: "vela_daily_calorie_target")
-                return value > 0 ? value : 2_000
+                return value > 0 ? value : nil
             }
         )
+        todayEffectRouter.bind(runtime: runtime)
         todayLegacyRuntimeHolder.runtime = runtime
         return runtime
     }

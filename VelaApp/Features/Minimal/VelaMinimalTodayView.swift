@@ -184,15 +184,6 @@ struct VelaTodayView: View {
     var stressLevel: Double { dashboard.stress.stressIndex }
     var energyScore: Double { dashboard.energy.currentEnergy }
 
-    var todayCalories: Int { todayStore.state.nutrition?.calories ?? 0 }
-    var todayProtein: Int { todayStore.state.nutrition?.protein ?? 0 }
-    var todayCarbs: Int { todayStore.state.nutrition?.carbs ?? 0 }
-    var todayFat: Int { todayStore.state.nutrition?.fat ?? 0 }
-
-    var calorieFraction: CGFloat {
-        CGFloat(min(1.0, Double(todayCalories) / Double(max(todayLegacyRuntime.dailyCalorieTarget, 1))))
-    }
-
     // MARK: - G1 重设计数据
 
     private var vitalCards: [TodayVitalCardModel] {
@@ -560,7 +551,7 @@ struct VelaTodayView: View {
                         model: todayExperience,
                         payload: todayStore.state.operatingPlanPayload,
                         onAction: { performExperienceAction($0) },
-                        onOpenPlan: { todayLegacyRuntime.routeToTraining() }
+                        onOpenPlan: { dispatchToday(.openPlan) }
                     )
                     .equatable()
                     .padding(.horizontal, VelaTheme.pagePadding)
@@ -764,9 +755,6 @@ struct VelaTodayView: View {
                 onAskCoach: { question in
                     presentedTodaySheet = nil
                     dispatchToday(.askCoach(question))
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                        todayLegacyRuntime.routeToCoach(question: question, surface: .home)
-                    }
                 }
             )
             .presentationDetents([.medium, .large])
@@ -795,13 +783,11 @@ struct VelaTodayView: View {
         switch action.destination {
         case "training":
             dispatchToday(.startTraining)
-            todayLegacyRuntime.routeToTraining()
         case "journal":
             dispatchToday(.openEvidence)
             presentedTodaySheet = .livedState
         case "coach":
             dispatchToday(.askCoach(action.detail))
-            todayLegacyRuntime.routeToCoach(question: action.detail, surface: .home)
         case "recovery", "sync", "evidence":
             dispatchToday(.openEvidence)
             presentedTodaySheet = .evidence
@@ -875,7 +861,7 @@ struct VelaTodayView: View {
     }
 
     private func livedStateAlignmentButton(_ alignment: LivedStateAlignment) -> some View {
-        let selected = selectedLivedStateAlignment == alignment
+        let selected = (todayStore.state.livedState.alignment ?? selectedLivedStateAlignment) == alignment
         return Button {
             saveLivedStateAlignment(alignment)
         } label: {

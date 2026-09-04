@@ -29,7 +29,7 @@ final class TodayLegacyRuntime {
     private let fetchWeather: WeatherFetcher
     private let loadWeatherLocation: () -> WeatherLocationSnapshot?
     private let saveWeatherLocation: (WeatherLocationSnapshot) -> Void
-    private let readCalorieTarget: () -> Int
+    private let readCalorieTarget: () -> Int?
 
     init(
         modelContext: ModelContext? = nil,
@@ -39,7 +39,7 @@ final class TodayLegacyRuntime {
         fetchWeather: @escaping WeatherFetcher = { _, _ in throw RuntimeError.unavailable },
         loadWeatherLocation: @escaping () -> WeatherLocationSnapshot? = { nil },
         saveWeatherLocation: @escaping (WeatherLocationSnapshot) -> Void = { _ in },
-        readCalorieTarget: @escaping () -> Int = { 2_000 }
+        readCalorieTarget: @escaping () -> Int? = { nil }
     ) {
         self.modelContext = modelContext
         self.useCase = useCase
@@ -53,8 +53,9 @@ final class TodayLegacyRuntime {
 
     static let preview = TodayLegacyRuntime()
 
-    var dailyCalorieTarget: Int {
-        max(readCalorieTarget(), 1)
+    var dailyCalorieTarget: Int? {
+        guard let value = readCalorieTarget(), value > 0 else { return nil }
+        return value
     }
 
     var localDataRevision: Int {
@@ -556,6 +557,55 @@ extension EnvironmentValues {
 
 private let logger = Logger(subsystem: "com.sunweizhou.Vela", category: "Weather")
 
+/// Composition-root effect adapter for Today actions that leave the Today
+/// surface. Local sheets remain surface-owned; cross-app navigation is routed
+/// exactly once through this adapter instead of being sent both to
+/// `TodayStore` and directly to `VelaAppState` by the root view.
+@MainActor
+final class TodayLegacyEffectRouter: TodayEffectRouter {
+    private weak var runtime: TodayLegacyRuntime?
+
+    func bind(runtime: TodayLegacyRuntime) {
+        self.runtime = runtime
+    }
+
+    // Calendar, metric, and evidence are local Today sheets. Their Store
+    // actions are retained for state/event semantics; presentation is owned by
+    // VelaTodayView so the adapter does not need to retain view state.
+    func openCalendar() async {}
+    func openMetric(_ metric: TodayMetricID) async {}
+    func openEvidence() async {}
+
+    func openPlan() async {
+        runtime?.routeToTraining()
+    }
+
+    func openSettings() async {
+        runtime?.present(.settings)
+    }
+
+    func askCoach(_ question: String) async {
+        runtime?.routeToCoach(question: question, surface: .home)
+    }
+
+    func startTraining() async {
+        runtime?.routeToTraining()
+    }
+
+    // Weather presentation/update has local state (temperature/location) in
+    // the compatibility surface, so requestWeather remains a local adapter
+    // action and does not duplicate the cross-app navigation paths above.
+    func requestWeather() async {}
+
+    // Persistence-backed check-in/feedback still needs the record-bound
+    // compatibility methods for error presentation. TodayStore updates its
+    // value projection after these intents; the root performs the single
+    // record write and keeps the form's error state.
+    func saveLivedStateAlignment(_ alignment: LivedStateAlignment) async {}
+    func saveLivedState(_ checkIn: LivedStateCheckIn) async {}
+    func submitFeedback(_ values: DailyDecisionFeedbackValues) async {}
+}
+
 /// Compatibility reader used while the legacy Today surface is being moved
 /// behind `TodayStore`.  The adapter owns the old view-model/context bridge;
 /// the Store itself still sees only `TodayDashboardSnapshot` values.
@@ -600,13 +650,15 @@ final class LegacyTodayReadingModule: TodayReadingModule {
             command: dashboardVM.todayCommandState,
             experience: dashboardVM.todayExperience,
             todayAIInsight: dashboardVM.todayAIInsight,
-            nutrition: TodayNutritionProjection(
-                calories: dashboardVM.todayCalories,
-                calorieTarget: runtime.dailyCalorieTarget,
-                protein: dashboardVM.todayProtein,
-                carbs: dashboardVM.todayCarbs,
-                fat: dashboardVM.todayFat
-            ),
+            nutrition: VelaFeatureFlags.nutritionEnabled
+                ? TodayNutritionProjection(
+                    calories: dashboardVM.todayCalories,
+                    calorieTarget: runtime.dailyCalorieTarget,
+                    protein: dashboardVM.todayProtein,
+                    carbs: dashboardVM.todayCarbs,
+                    fat: dashboardVM.todayFat
+                )
+                : nil,
             livedState: runtime.livedStateProjection(for: day),
             feedback: runtime.decisionFeedbackProjection(for: day),
             operatingPlanPayload: dashboardVM.persistedOperatingPlanPayload,
@@ -676,7 +728,6 @@ extension VelaTodayView {
         switch action.kind {
         case .training:
             dispatchToday(.startTraining)
-            todayLegacyRuntime.routeToTraining()
         case .recovery, .insight:
             dispatchToday(.openEvidence)
             presentedTodaySheet = .evidence
@@ -685,7 +736,6 @@ extension VelaTodayView {
             todayLegacyRuntime.present(.journal)
         case .coach:
             dispatchToday(.askCoach(action.detail))
-            todayLegacyRuntime.routeToCoach(question: action.detail, surface: .home)
         }
     }
 
@@ -693,7 +743,6 @@ extension VelaTodayView {
         switch action.type {
         case "open_training_summary":
             dispatchToday(.startTraining)
-            todayLegacyRuntime.routeToTraining()
         case "start_check_in":
             dispatchToday(.openEvidence)
             todayLegacyRuntime.routeToPostWorkoutCheckIn(workoutID: workoutID(for: action, artifact: artifact))
@@ -703,7 +752,6 @@ extension VelaTodayView {
         default:
             if action.type.contains("training") || action.type.contains("workout") {
                 dispatchToday(.startTraining)
-                todayLegacyRuntime.routeToTraining()
             } else if action.type.contains("check") || action.type.contains("journal") {
                 dispatchToday(.openEvidence)
                 todayLegacyRuntime.present(.journal)
@@ -712,7 +760,6 @@ extension VelaTodayView {
                 todayLegacyRuntime.routeToRecoveryDetail()
             } else {
                 dispatchToday(.askCoach(action.label))
-                todayLegacyRuntime.routeToCoach(question: action.label, surface: .home)
             }
         }
     }
@@ -894,9 +941,9 @@ extension VelaTodayView {
     }
 
     func loadTodayLivedStateAlignment() {
-        selectedLivedStateAlignment = todayLegacyRuntime.livedStateAlignment(
-            for: dashboardVM.selectedDate
-        )
+        // TodayStore owns the value projection. The persistence lookup stays
+        // behind LegacyTodayReadingModule and is not repeated by the root.
+        selectedLivedStateAlignment = todayStore.state.livedState.alignment
     }
 
     func trackDailyDecisionViewed() {
