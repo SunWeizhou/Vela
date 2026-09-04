@@ -186,6 +186,81 @@ struct TodayPlanProjection: Codable, Equatable, Hashable, Sendable {
     }
 }
 
+/// Value-only projection of a proposed plan adaptation. The persisted
+/// `TrainingPlanAdaptationRecord` stays behind the compatibility reader; this
+/// type deliberately carries only display data needed by Today.
+struct TodayPendingPlanProjection: Codable, Equatable, Hashable, Sendable {
+    let id: UUID
+    let adjustment: String
+    let reason: String
+    let suggestedAlternative: String?
+    let originalDayTitle: String
+    let createdAt: Date
+    let status: String
+
+    init(
+        id: UUID,
+        adjustment: String,
+        reason: String,
+        suggestedAlternative: String? = nil,
+        originalDayTitle: String,
+        createdAt: Date,
+        status: String = "proposed"
+    ) {
+        self.id = id
+        self.adjustment = adjustment
+        self.reason = reason
+        self.suggestedAlternative = suggestedAlternative
+        self.originalDayTitle = originalDayTitle
+        self.createdAt = createdAt
+        self.status = status
+    }
+}
+
+/// Weather is intentionally optional and field-wise optional. A location or
+/// temperature that has not been fetched is not represented as a fabricated
+/// zero; `status == .unavailable` keeps that distinction explicit.
+struct TodayWeatherProjection: Codable, Equatable, Hashable, Sendable {
+    enum Status: String, Codable, Hashable, Sendable {
+        case available
+        case unavailable
+    }
+
+    let status: Status
+    let temperature: Double?
+    let apparentTemperature: Double?
+    let humidity: Double?
+    let windSpeed: Double?
+    let conditionCode: Int?
+    let isDay: Bool?
+    let locationName: String?
+    let capturedAt: Date?
+
+    init(
+        status: Status,
+        temperature: Double? = nil,
+        apparentTemperature: Double? = nil,
+        humidity: Double? = nil,
+        windSpeed: Double? = nil,
+        conditionCode: Int? = nil,
+        isDay: Bool? = nil,
+        locationName: String? = nil,
+        capturedAt: Date? = nil
+    ) {
+        self.status = status
+        self.temperature = temperature
+        self.apparentTemperature = apparentTemperature
+        self.humidity = humidity
+        self.windSpeed = windSpeed
+        self.conditionCode = conditionCode
+        self.isDay = isDay
+        self.locationName = locationName
+        self.capturedAt = capturedAt
+    }
+
+    static let unavailable = TodayWeatherProjection(status: .unavailable)
+}
+
 struct TodayNutritionProjection: Codable, Equatable, Hashable, Sendable {
     var calories: Int?
     var calorieTarget: Int?
@@ -242,7 +317,12 @@ struct TodayViewState: Equatable, Sendable {
     var livedState: TodayLivedStateProjection
     var feedback: TodayFeedbackProjection
     var plan: TodayPlanProjection?
+    /// Active plan and a pending adaptation are separate values so a proposal
+    /// cannot be mistaken for the executable plan.
+    var activePlan: TodayPlanProjection?
+    var pendingPlan: TodayPendingPlanProjection?
     var nutrition: TodayNutritionProjection?
+    var weather: TodayWeatherProjection
     var operatingPlanPayload: DailyOperatingPlanPayload?
     var todayAIInsight: DailyAIInsight?
     var lastUpdated: Date?
@@ -287,7 +367,10 @@ struct TodayViewState: Equatable, Sendable {
             livedState: .empty,
             feedback: .empty,
             plan: nil,
+            activePlan: nil,
+            pendingPlan: nil,
             nutrition: nil,
+            weather: .unavailable,
             operatingPlanPayload: nil,
             todayAIInsight: nil,
             lastUpdated: nil,
@@ -330,8 +413,13 @@ struct TodayViewState: Equatable, Sendable {
             coverage: snapshot.coverage ?? Self.unknownCoverage,
             livedState: snapshot.livedState ?? .empty,
             feedback: snapshot.feedback ?? .empty,
-            plan: snapshot.operatingPlanPayload.map(TodayPlanProjection.init(payload:)),
+            plan: snapshot.activePlan
+                ?? snapshot.operatingPlanPayload.map(TodayPlanProjection.init(payload:)),
+            activePlan: snapshot.activePlan
+                ?? snapshot.operatingPlanPayload.map(TodayPlanProjection.init(payload:)),
+            pendingPlan: snapshot.pendingPlan,
             nutrition: snapshot.nutrition,
+            weather: snapshot.weather ?? .unavailable,
             operatingPlanPayload: snapshot.operatingPlanPayload,
             todayAIInsight: snapshot.todayAIInsight,
             lastUpdated: snapshot.lastUpdated,

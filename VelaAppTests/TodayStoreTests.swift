@@ -494,7 +494,11 @@ final class TodayViewStateTests: XCTestCase {
         XCTAssertEqual(state.livedState, .empty)
         XCTAssertEqual(state.feedback, .empty)
         XCTAssertNil(state.plan)
+        XCTAssertNil(state.activePlan)
+        XCTAssertNil(state.pendingPlan)
         XCTAssertNil(state.nutrition)
+        XCTAssertEqual(state.weather, .unavailable)
+        XCTAssertNil(state.weather.temperature)
     }
 
     @MainActor
@@ -550,12 +554,36 @@ final class TodayViewStateTests: XCTestCase {
             topBlockers: [],
             coachContextLine: "数据覆盖 82%"
         )
+        let activePlan = TodayPlanProjection(payload: payload)
+        let pendingPlan = TodayPendingPlanProjection(
+            id: UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!,
+            adjustment: "reduce",
+            reason: "恢复信号偏低",
+            suggestedAlternative: "轻量下肢",
+            originalDayTitle: "下肢力量",
+            createdAt: day,
+            status: "proposed"
+        )
+        let weather = TodayWeatherProjection(
+            status: .available,
+            temperature: 21.5,
+            apparentTemperature: 20.0,
+            humidity: 0.62,
+            windSpeed: 3.2,
+            conditionCode: 2,
+            isDay: true,
+            locationName: "上海",
+            capturedAt: day
+        )
         let snapshot = TodayDashboardSnapshot(
             dashboard: TodayPR0GoldenFixture.dashboard(),
             nutrition: nutrition,
             livedState: livedState,
             feedback: feedback,
             coverage: coverage,
+            activePlan: activePlan,
+            pendingPlan: pendingPlan,
+            weather: weather,
             operatingPlanPayload: payload
         )
 
@@ -571,6 +599,9 @@ final class TodayViewStateTests: XCTestCase {
         XCTAssertEqual(state.feedback, feedback)
         XCTAssertEqual(state.coverage, coverage)
         XCTAssertEqual(state.plan, TodayPlanProjection(payload: payload))
+        XCTAssertEqual(state.activePlan, activePlan)
+        XCTAssertEqual(state.pendingPlan, pendingPlan)
+        XCTAssertEqual(state.weather, weather)
         XCTAssertEqual(state.operatingPlanPayload, payload)
     }
 

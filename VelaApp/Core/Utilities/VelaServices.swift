@@ -71,6 +71,11 @@ struct TodayDashboardSnapshot: Hashable, Sendable {
     let livedState: TodayLivedStateProjection?
     let feedback: TodayFeedbackProjection?
     let coverage: DataCoverageSummaryModel?
+    /// Active executable plan and pending user-review proposal are distinct
+    /// value projections; neither exposes a SwiftData model.
+    let activePlan: TodayPlanProjection?
+    let pendingPlan: TodayPendingPlanProjection?
+    let weather: TodayWeatherProjection?
     let operatingPlanPayload: DailyOperatingPlanPayload?
     let lastUpdated: Date?
     let vitalTrendSeries: [String: [Double]]
@@ -88,6 +93,9 @@ struct TodayDashboardSnapshot: Hashable, Sendable {
         livedState: TodayLivedStateProjection? = nil,
         feedback: TodayFeedbackProjection? = nil,
         coverage: DataCoverageSummaryModel? = nil,
+        activePlan: TodayPlanProjection? = nil,
+        pendingPlan: TodayPendingPlanProjection? = nil,
+        weather: TodayWeatherProjection? = nil,
         operatingPlanPayload: DailyOperatingPlanPayload? = nil,
         lastUpdated: Date? = nil,
         vitalTrendSeries: [String: [Double]] = [:],
@@ -104,6 +112,9 @@ struct TodayDashboardSnapshot: Hashable, Sendable {
         self.livedState = livedState
         self.feedback = feedback
         self.coverage = coverage
+        self.activePlan = activePlan
+        self.pendingPlan = pendingPlan
+        self.weather = weather
         self.operatingPlanPayload = operatingPlanPayload
         self.lastUpdated = lastUpdated
         self.vitalTrendSeries = vitalTrendSeries
