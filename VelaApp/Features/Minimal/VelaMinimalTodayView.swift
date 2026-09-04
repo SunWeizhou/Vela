@@ -720,17 +720,6 @@ struct VelaTodayView: View {
                 }
             }
         }
-        .onChange(of: dashboardVM.selectedDate) {
-            guard isActiveSurface else { return }
-            // CalendarOverviewSheetView still mirrors its selection through
-            // DashboardViewModel. Relay that user intent into the Store; no
-            // Today data read uses the VM as its source of truth.
-            let selectedDay = dashboardVM.selectedDate
-            todayLegacyRuntime.setSelectedDay(selectedDay)
-            Task { await todayStore.send(.selectDay(selectedDay)) }
-            loadTodayLivedStateAlignment()
-            loadDynamicData()
-        }
         .onChange(of: todayLegacyRuntime.localDataRevision) {
             // F2 修复：档案（年龄/体重/身高/maxHR/性别）修改后必须重算评分，
             // 此前只 hydrateFromCache，15 分钟内分数与建议停留在旧档案口径。
@@ -763,16 +752,15 @@ struct VelaTodayView: View {
     private func todaySheetContent(_ sheet: TodaySheet) -> some View {
         switch sheet {
         case .calendar:
-            CalendarOverviewSheetView()
+            CalendarOverviewSheetView(selectedDay: todayStore.state.selectedDay) { selectedDay in
+                selectTodayDayFromCalendar(selectedDay)
+            }
                 .presentationDetents([.medium, .large])
                 .velaSheetSurface()
         case .metric(let metric):
-            NavigationStack {
-                VelaMetricDetailView(metric: metric)
-            }
-            .environmentObject(dashboardVM)
-            .presentationDetents([.large])
-            .velaSheetSurface()
+            TodayMetricDetailDownstreamAdapter(metric: metric, dashboardVM: dashboardVM)
+                .presentationDetents([.large])
+                .velaSheetSurface()
         case .evidence:
             TodayEvidenceSheet(
                 state: todayCommandState,
@@ -801,6 +789,18 @@ struct VelaTodayView: View {
             .presentationDetents([.large])
             .velaSheetSurface()
         }
+    }
+
+    /// Calendar intent enters Today through the Store action boundary. The
+    /// DashboardViewModel mirror is updated only for legacy downstream
+    /// sheets that still require it; it is no longer observed as a Today
+    /// data-source trigger.
+    private func selectTodayDayFromCalendar(_ day: Date) {
+        dashboardVM.selectDate(day)
+        todayLegacyRuntime.setSelectedDay(day)
+        dispatchToday(.selectDay(day))
+        loadTodayLivedStateAlignment()
+        loadDynamicData()
     }
 
     func performExperienceAction(_ action: TodayExperienceAction) {
@@ -913,6 +913,22 @@ struct VelaTodayView: View {
         case .energy: return VelaTheme.energyColor
         case .stress: return VelaTheme.stressColor
         }
+    }
+}
+
+/// Named boundary for the legacy metric detail surface. Today owns the
+/// presentation intent, while this adapter supplies the DashboardViewModel
+/// required by the downstream implementation without exposing a raw
+/// environment injection in the root renderer.
+private struct TodayMetricDetailDownstreamAdapter: View {
+    let metric: VelaMetricDetailView.MetricType
+    let dashboardVM: DashboardViewModel
+
+    var body: some View {
+        NavigationStack {
+            VelaMetricDetailView(metric: metric)
+        }
+        .environmentObject(dashboardVM)
     }
 }
 

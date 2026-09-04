@@ -241,8 +241,13 @@ private extension String {
 struct CalendarOverviewSheetView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    /// Legacy Calendar queries still use the dashboard model as a downstream
+    /// compatibility bridge (for example, historical score records), but the
+    /// selected day itself is supplied by TodayStore at the composition edge.
     @EnvironmentObject private var dashboardVM: DashboardViewModel
     @ObservedObject private var appState = VelaAppState.shared
+    let selectedDay: Date
+    let onSelectDay: (Date) -> Void
     @State private var healthRecords: [DailyHealthSummaryRecord] = []
 
     @State private var selectedMetric: String = "恢复"
@@ -252,6 +257,14 @@ struct CalendarOverviewSheetView: View {
 
     let metrics = ["耗力", "恢复", "睡眠", "压力", "能量", "营养"]
     let weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
+
+    init(selectedDay: Date, onSelectDay: @escaping (Date) -> Void) {
+        self.selectedDay = selectedDay
+        self.onSelectDay = onSelectDay
+        let calendar = Calendar.current
+        _calendarYear = State(initialValue: calendar.component(.year, from: selectedDay))
+        _calendarMonth = State(initialValue: calendar.component(.month, from: selectedDay))
+    }
 
     var body: some View {
         VStack(spacing: 16) {
@@ -366,12 +379,12 @@ struct CalendarOverviewSheetView: View {
 
                     ForEach(1...daysInDisplayedMonth, id: \.self) { day in
                         let date = makeDate(year: calendarYear, month: calendarMonth, day: day)
-                        let isSelected = Calendar.current.isDate(date, inSameDayAs: dashboardVM.selectedDate)
+                        let isSelected = Calendar.current.isDate(date, inSameDayAs: selectedDay)
                         let isFuture = Calendar.current.startOfDay(for: date) > Calendar.current.startOfDay(for: Date())
                         let scoreInfo = scoreInfo(for: date)
 
                         Button {
-                            dashboardVM.selectDate(date)
+                            onSelectDay(date)
                             dismiss()
                         } label: {
                             VStack(spacing: 2) {
@@ -416,7 +429,7 @@ struct CalendarOverviewSheetView: View {
 
             HStack {
                 Button {
-                    dashboardVM.goToToday()
+                    onSelectDay(Date())
                     dismiss()
                 } label: {
                     Text("今天")
@@ -447,8 +460,8 @@ struct CalendarOverviewSheetView: View {
         }
         .background(VelaTheme.rhythmCanvas.ignoresSafeArea())
         .onAppear {
-            calendarYear = Calendar.current.component(.year, from: dashboardVM.selectedDate)
-            calendarMonth = Calendar.current.component(.month, from: dashboardVM.selectedDate)
+            calendarYear = Calendar.current.component(.year, from: selectedDay)
+            calendarMonth = Calendar.current.component(.month, from: selectedDay)
             loadHealthRecords()
         }
         .onChange(of: calendarYear) {
