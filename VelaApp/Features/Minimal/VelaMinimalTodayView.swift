@@ -57,7 +57,9 @@ struct VelaTodayView: View {
     private var rhrValue: Double { dashboard.recoveryMetrics.restingHeartRate ?? 0 }
 
     var bodyState: BodyState { todayStore.state.bodyState }
-    var persistedOperatingPlan: DailyOperatingPlanRecord? { dashboardVM.persistedOperatingPlan }
+    /// Canonical Today plan read model. SwiftData records remain available
+    /// only to the compatibility sheet/adapters, never as dashboard source.
+    var activePlanProjection: TodayPlanProjection? { todayStore.state.activePlan }
 
     /// Baseline deviation changes emphasis, never score order or display
     /// grammar. The user can therefore build a stable visual memory over time.
@@ -415,8 +417,22 @@ struct VelaTodayView: View {
     }
 
     // Dynamic Weather Sync States
-    @State var weatherTemp: String = "--"
-    @State var weatherLocation: String = "天气数据待同步"
+    /// Weather fetching is still a compatibility effect until the reader
+    /// publishes a weather projection. Rendering prefers Store state and only
+    /// falls back to this adapter's transient display values.
+    @State var legacyWeatherTemp: String = "--"
+    @State var legacyWeatherLocation: String = "天气数据待同步"
+
+    private var weatherTemp: String {
+        guard let temperature = todayStore.state.weather.temperature else {
+            return legacyWeatherTemp
+        }
+        return "\(Int(temperature.rounded()))°C"
+    }
+
+    private var weatherLocation: String {
+        todayStore.state.weather.locationName ?? legacyWeatherLocation
+    }
 
     var weatherStatusText: String {
         switch todayLegacyRuntime.authorizationStatus {
@@ -432,7 +448,7 @@ struct VelaTodayView: View {
     // A single route prevents mutually exclusive Today sheets from racing.
     @State var presentedTodaySheet: TodaySheet?
     @State var experienceFeedbackTick = 0
-    @State var dataCoverageSummary = DataCoverageSummaryModel.unknown
+    @State var legacyDataCoverageSummary = DataCoverageSummaryModel.unknown
     @State var dailyDecisionFeedback: DailyDecisionFeedbackRecord?
     @State var selectedLivedStateAlignment: LivedStateAlignment?
     @State var livedStateSaveError: String?
@@ -441,6 +457,12 @@ struct VelaTodayView: View {
     @State private var pendingLocalDataRefresh = false
 
     var decisionDataCoverageSummary: DataCoverageSummaryModel {
+        // The Store projection is canonical when available. Until the
+        // coverage reader is wired into TodayDashboardSnapshot, keep the
+        // existing async factory as a named compatibility fallback.
+        let dataCoverageSummary = todayStore.state.coverage.status == .unknown
+            ? legacyDataCoverageSummary
+            : todayStore.state.coverage
         guard dataCoverageSummary.status != .unknown,
               !dashboard.recovery.hasData else { return dataCoverageSummary }
 
@@ -557,13 +579,13 @@ struct VelaTodayView: View {
                     .padding(.horizontal, VelaTheme.pagePadding)
                     .padding(.top, 12)
 
-                    if let activePlan = dashboardVM.activeTrainingPlan,
-                       let pendingProposal = dashboardVM.pendingPlanAdaptation {
-                        TodayTrainingPlanAdaptationCard(
+                    if let activePlan = todayStore.state.activePlan,
+                       let pendingProposal = todayStore.state.pendingPlan {
+                        TodayPlanAdaptationProjectionCard(
                             activePlan: activePlan,
-                            pendingProposal: pendingProposal
+                            pendingProposal: pendingProposal,
+                            onOpenPlan: { dispatchToday(.openPlan) }
                         )
-                        .equatable()
                         .padding(.horizontal, VelaTheme.pagePadding)
                         .padding(.top, 12)
                     }
@@ -612,7 +634,7 @@ struct VelaTodayView: View {
                     }
 
                     // ─── Block 5: Feedback + data coverage ───
-                    if persistedOperatingPlan != nil {
+                    if todayStore.state.activePlan != nil {
                         DailyDecisionFeedbackCard(
                             record: dailyDecisionFeedback,
                             onTap: {
@@ -1134,5 +1156,51 @@ struct DataCoverageCompactCard: View {
         if percent >= 80 { return VelaTheme.energyColor }
         if percent >= 50 { return VelaTheme.accent }
         return VelaTheme.strainColor
+    }
+}
+
+/// Value-only rendering of a pending plan proposal. The executable
+/// TrainingPlanRecord/TrainingPlanAdaptationRecord stay behind the Plan
+/// compatibility surface; Today can therefore render the proposal without
+/// importing SwiftData or reading DashboardViewModel records.
+struct TodayPlanAdaptationProjectionCard: View {
+    let activePlan: TodayPlanProjection
+    let pendingProposal: TodayPendingPlanProjection
+    let onOpenPlan: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("训练计划调整建议")
+                .font(VelaTheme.subheadline().weight(.semibold))
+                .foregroundStyle(VelaTheme.rhythmInk)
+            Text(pendingProposal.adjustment)
+                .font(VelaTheme.body())
+                .foregroundStyle(VelaTheme.rhythmInk)
+            Text(pendingProposal.reason)
+                .font(VelaTheme.caption1())
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let alternative = pendingProposal.suggestedAlternative,
+               !alternative.isEmpty {
+                Text("建议替代：\(alternative)")
+                    .font(VelaTheme.caption1())
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            }
+            Text("当前计划：\(activePlan.title)")
+                .font(VelaTheme.caption1().weight(.medium))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            Button("在计划页确认") {
+                onOpenPlan()
+            }
+            .font(VelaTheme.caption1().weight(.semibold))
+            .foregroundStyle(VelaTheme.rhythmDeep)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: VelaTheme.radiusCard, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: VelaTheme.radiusCard, style: .continuous)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+        }
     }
 }

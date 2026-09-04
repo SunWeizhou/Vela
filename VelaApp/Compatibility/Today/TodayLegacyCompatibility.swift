@@ -152,10 +152,13 @@ final class TodayLegacyRuntime {
         return try await useCase
             .loadCachedDashboard(for: day, modelContext: modelContext)
             .map { dashboard in
-                TodayDashboardSnapshot(
+                let plans = planProjections(for: day)
+                return TodayDashboardSnapshot(
                     dashboard: dashboard,
                     livedState: livedStateProjection(for: day),
-                    feedback: decisionFeedbackProjection(for: day)
+                    feedback: decisionFeedbackProjection(for: day),
+                    activePlan: plans.0,
+                    pendingPlan: plans.1
                 )
             }
     }
@@ -181,10 +184,13 @@ final class TodayLegacyRuntime {
             force: policy == .force
         )
         _ = useCase
+        let plans = planProjections(for: day)
         return TodayDashboardSnapshot(
             dashboard: dashboardVM.dashboard,
             livedState: livedStateProjection(for: day),
-            feedback: decisionFeedbackProjection(for: day)
+            feedback: decisionFeedbackProjection(for: day),
+            activePlan: plans.0,
+            pendingPlan: plans.1
         )
     }
 
@@ -236,6 +242,38 @@ final class TodayLegacyRuntime {
             satisfactionRating: record.satisfactionRating,
             note: record.note.isEmpty ? nil : record.note
         )
+    }
+
+    /// Decode plan records into value-only projections before they cross the
+    /// compatibility boundary. Today never renders SwiftData plan objects.
+    func planProjections(for date: Date) -> (TodayPlanProjection?, TodayPendingPlanProjection?) {
+        guard let modelContext else { return (nil, nil) }
+        let active = (try? modelContext.fetch(
+            FetchDescriptor<TrainingPlanRecord>(predicate: #Predicate { $0.isActive })
+        ))?.first
+        guard let active else { return (nil, nil) }
+        let activeProjection = TodayPlanProjection(
+            title: active.title,
+            detail: active.goalDescription.isEmpty ? nil : active.goalDescription
+        )
+        let pending = (try? modelContext.fetch(
+            FetchDescriptor<TrainingPlanAdaptationRecord>()
+        ))?.filter { $0.planId == active.id && $0.status == "proposed" }
+            .sorted { $0.createdAt > $1.createdAt }
+            .first
+        let pendingProjection = pending.map {
+            TodayPendingPlanProjection(
+                id: $0.id,
+                adjustment: $0.adjustment,
+                reason: $0.reason,
+                suggestedAlternative: $0.suggestedAlternative,
+                originalDayTitle: $0.originalDayTitle,
+                createdAt: $0.createdAt,
+                status: $0.status
+            )
+        }
+        _ = date
+        return (activeProjection, pendingProjection)
     }
 
     /// The journal adapter already owns decoding and validation.  Return its
@@ -297,6 +335,22 @@ final class TodayLegacyRuntime {
         )
     }
 
+    /// Analytics adapter used by the Today root. The persistence record is
+    /// resolved entirely inside the compatibility boundary; the renderer only
+    /// supplies the value-only body-state hash and selected-day intent.
+    @discardableResult
+    func recordDecisionViewed(
+        bodyStateHash: String
+    ) throws -> DailyDecisionFeedbackRecord {
+        let plan = try operatingPlan(for: selectedDay)
+        return try recordDecisionViewed(
+            plan: plan,
+            bodyStateHash: bodyStateHash,
+            decisionType: plan.primaryActionType,
+            decisionTitle: plan.title
+        )
+    }
+
     @discardableResult
     func recordDecisionAction(
         plan: DailyOperatingPlanRecord,
@@ -315,6 +369,33 @@ final class TodayLegacyRuntime {
             decisionTitle: decisionTitle,
             destination: destination
         )
+    }
+
+    @discardableResult
+    func recordDecisionAction(
+        bodyStateHash: String,
+        destination: String
+    ) throws -> DailyDecisionFeedbackRecord {
+        let plan = try operatingPlan(for: selectedDay)
+        return try recordDecisionAction(
+            plan: plan,
+            bodyStateHash: bodyStateHash,
+            decisionType: plan.primaryActionType,
+            decisionTitle: plan.title,
+            destination: destination
+        )
+    }
+
+    private func operatingPlan(for date: Date) throws -> DailyOperatingPlanRecord {
+        guard let modelContext else { throw RuntimeError.unavailable }
+        let dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: date)
+        let descriptor = FetchDescriptor<DailyOperatingPlanRecord>(
+            predicate: #Predicate { $0.dayIdentifier == dayIdentifier }
+        )
+        guard let plan = try modelContext.fetch(descriptor).first else {
+            throw RuntimeError.unavailable
+        }
+        return plan
     }
 
     func saveDecisionFeedback(
@@ -713,6 +794,7 @@ final class LegacyTodayReadingModule: TodayReadingModule {
             policy: policy,
             dashboardVM: dashboardVM
         )
+        let plans = runtime.planProjections(for: day)
         return TodayDashboardSnapshot(
             dashboard: dashboard.dashboard,
             bodyState: dashboardVM.dashboard.bodyState,
@@ -731,6 +813,8 @@ final class LegacyTodayReadingModule: TodayReadingModule {
                 : nil,
             livedState: runtime.livedStateProjection(for: day),
             feedback: runtime.decisionFeedbackProjection(for: day),
+            activePlan: plans.0,
+            pendingPlan: plans.1,
             operatingPlanPayload: dashboardVM.persistedOperatingPlanPayload,
             lastUpdated: dashboardVM.lastUpdated,
             vitalTrendSeries: dashboardVM.vitalTrendSeries,
@@ -869,13 +953,13 @@ extension VelaTodayView {
         dispatchToday(.requestWeather)
         switch todayLegacyRuntime.authorizationStatus {
         case .notDetermined:
-            weatherLocation = "正在请求定位"
+            legacyWeatherLocation = "正在请求定位"
         case .authorizedWhenInUse, .authorizedAlways:
             break
         case .denied, .restricted:
-            weatherLocation = "定位未授权"
+            legacyWeatherLocation = "定位未授权"
         @unknown default:
-            weatherLocation = "天气暂不可用"
+            legacyWeatherLocation = "天气暂不可用"
         }
     }
 
@@ -907,8 +991,8 @@ extension VelaTodayView {
                     return
                 }
 
-                weatherTemp = "\(Int(weather.temperature.rounded()))°C"
-                weatherLocation = location.displayName
+                legacyWeatherTemp = "\(Int(weather.temperature.rounded()))°C"
+                legacyWeatherLocation = location.displayName
             } catch {
                 logger.error("Failed to sync weather locally: \(error.localizedDescription, privacy: .public)")
             }
@@ -989,7 +1073,7 @@ extension VelaTodayView {
         let groups = await DataCoverageGroupFactory.loadPriorityGroups()
         let summary = DataCoverageSummaryModel.build(groups: groups)
         withAnimation(VelaTheme.dataAnimation(reduceMotion: reduceMotion)) {
-            dataCoverageSummary = summary
+            legacyDataCoverageSummary = summary
         }
     }
 
@@ -1007,30 +1091,22 @@ extension VelaTodayView {
 
     func trackDailyDecisionViewed() {
         guard Calendar.current.isDateInToday(todayStore.state.selectedDay),
-              let plan = persistedOperatingPlan else {
+              todayStore.state.activePlan != nil else {
             loadDailyDecisionFeedback()
             return
         }
         do {
-            dailyDecisionFeedback = try todayLegacyRuntime.recordDecisionViewed(
-                plan: plan,
-                bodyStateHash: bodyState.hash,
-                decisionType: plan.primaryActionType,
-                decisionTitle: plan.title
-            )
+            dailyDecisionFeedback = try todayLegacyRuntime.recordDecisionViewed(bodyStateHash: bodyState.hash)
         } catch {
             loadDailyDecisionFeedback()
         }
     }
 
     func trackDailyDecisionAction(destination: String) {
-        guard let plan = persistedOperatingPlan else { return }
+        guard todayStore.state.activePlan != nil else { return }
         do {
             dailyDecisionFeedback = try todayLegacyRuntime.recordDecisionAction(
-                plan: plan,
                 bodyStateHash: bodyState.hash,
-                decisionType: plan.primaryActionType,
-                decisionTitle: plan.title,
                 destination: destination
             )
         } catch {
