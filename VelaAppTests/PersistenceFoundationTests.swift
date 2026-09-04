@@ -8,6 +8,36 @@ private final class SyncExecutionCounter {
 }
 
 final class PersistenceFoundationTests: XCTestCase {
+    /// The write gate is shared by foreground and background work. Its
+    /// read-only flag must remain race-free even when a safety-mode transition
+    /// overlaps callers checking whether persistence is currently allowed.
+    /// (Run this test with Thread Sanitizer to exercise the actor-crossing
+    /// access pattern that previously used an unsynchronized Bool.)
+    func testPersistenceWriteGateSafetyModeFlagIsConcurrentSafe() async {
+        let gate = PersistenceWriteGate.shared
+        gate.setReadOnly(false)
+        defer { gate.setReadOnly(false) }
+
+        await withTaskGroup(of: Void.self) { group in
+            for index in 0..<256 {
+                group.addTask {
+                    if index.isMultiple(of: 2) {
+                        gate.setReadOnly(true)
+                    } else {
+                        _ = gate.canPersist
+                    }
+                }
+            }
+        }
+
+        // The final write/read pair is also a semantic guard: locking the
+        // flag must not alter the public safety-mode contract.
+        gate.setReadOnly(false)
+        XCTAssertTrue(gate.canPersist)
+        gate.setReadOnly(true)
+        XCTAssertFalse(gate.canPersist)
+    }
+
     @MainActor
     func testLivedStateJournalAdapterUpsertsTwoDailyFacetsWithoutDuplicates() throws {
         var calendar = Calendar(identifier: .gregorian)

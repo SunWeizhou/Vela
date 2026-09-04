@@ -12,6 +12,13 @@ public final class PersistenceWriteGate: PersistenceWriteGateProtocol, @unchecke
     /// Thread-safe flag indicating read-only safety mode.
     /// Set once at startup from VelaAppState, then readable from any isolation context.
     private var _isReadOnlySafetyMode: Bool = false
+    /// Protects the safety-mode flag independently from the write lock. The gate
+    /// is intentionally `@unchecked Sendable` because callers may check or
+    /// update the flag from different isolation domains (foreground MainActor,
+    /// background refresh, and tests). A plain Bool would race under those
+    /// concurrent reads/writes even though the actual persistence operation is
+    /// serialized below.
+    private let safetyModeLock = NSLock()
 
     /// Serializes read-modify-write sequences against the shared SwiftData store
     /// (which lives on the MainActor but can be mutated by multiple in-flight
@@ -25,10 +32,14 @@ public final class PersistenceWriteGate: PersistenceWriteGateProtocol, @unchecke
 
     /// Update the cached read-only flag. Call from app init or tests.
     public func setReadOnly(_ value: Bool) {
+        safetyModeLock.lock()
+        defer { safetyModeLock.unlock() }
         _isReadOnlySafetyMode = value
     }
 
     public var canPersist: Bool {
+        safetyModeLock.lock()
+        defer { safetyModeLock.unlock() }
         return !_isReadOnlySafetyMode
     }
 
