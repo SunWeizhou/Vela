@@ -56,6 +56,34 @@ struct VelaShell: View {
     /// Rhythm's four canonical surfaces (Today, Trends, Plan, Coach) define the navigation.
     init() {}
 
+    /// Today receives its legacy compatibility dependencies from the shell's
+    /// composition boundary.  The surface itself stays unaware of SwiftData,
+    /// location/weather singletons, and app-state routing objects.
+    private var todayLegacyRuntime: TodayLegacyRuntime {
+        TodayLegacyRuntime(
+            modelContext: modelContext,
+            useCase: services.dailySummaryUseCase,
+            appState: appState,
+            locationManager: LocationManager.shared,
+            fetchWeather: { latitude, longitude in
+                try await WeatherService.shared.fetchWeather(
+                    latitude: latitude,
+                    longitude: longitude
+                )
+            },
+            loadWeatherLocation: {
+                WeatherLocationStore.load()
+            },
+            saveWeatherLocation: { snapshot in
+                WeatherLocationStore.save(snapshot)
+            },
+            readCalorieTarget: {
+                let value = UserDefaults.standard.integer(forKey: "vela_daily_calorie_target")
+                return value > 0 ? value : 2_000
+            }
+        )
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -180,6 +208,7 @@ struct VelaShell: View {
         TabView(selection: $appState.selectedTab) {
             nativeTabSurface(.today) {
                 VelaTodayView(showCoach: $showCoach, showSettings: $appState.showSettings)
+                    .environment(\.todayLegacyRuntime, todayLegacyRuntime)
             }
             .tabItem {
                 Label(label(for: .today), systemImage: iconName(for: .today))
@@ -230,6 +259,7 @@ struct VelaShell: View {
                 if mountedLegacyTabs.contains(.today) {
                     tabSurface(.today) {
                         VelaTodayView(showCoach: $showCoach, showSettings: $appState.showSettings)
+                            .environment(\.todayLegacyRuntime, todayLegacyRuntime)
                     }
                 }
                 if mountedLegacyTabs.contains(.trends) {
