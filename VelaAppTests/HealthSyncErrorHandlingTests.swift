@@ -10,7 +10,7 @@ import HealthKit
 ///   4. 至少一个核心组件成功 → 部分数据合法，hasCoreData == true。
 final class HealthSyncErrorHandlingTests: XCTestCase {
 
-    private final class FakeHealthQueryService: HealthQueryService {
+    fileprivate final class FakeHealthQueryService: HealthQueryService {
         var onSleep: () throws -> SleepSummary? = { nil }
         var onRecovery: () throws -> RecoveryMetricSummary = {
             RecoveryMetricSummary()
@@ -23,6 +23,9 @@ final class HealthSyncErrorHandlingTests: XCTestCase {
         }
         var onExtended: () throws -> ExtendedHealthMetrics = {
             ExtendedHealthMetrics()
+        }
+        var onIntraday: (HealthSignal, DateRangeQuery) throws -> [IntradaySignalPoint] = { _, _ in
+            []
         }
 
         func sleepSummary(in range: DateRangeQuery) async throws -> SleepSummary? {
@@ -41,6 +44,17 @@ final class HealthSyncErrorHandlingTests: XCTestCase {
 
         func bodyMetrics(in range: DateRangeQuery) async throws -> BodyMetricsSummary {
             try onBody()
+        }
+
+        func extendedMetrics(in range: DateRangeQuery) async throws -> ExtendedHealthMetrics {
+            try onExtended()
+        }
+
+        func intradaySamples(
+            for signal: HealthSignal,
+            in range: DateRangeQuery
+        ) async throws -> [IntradaySignalPoint] {
+            try onIntraday(signal, range)
         }
 
         func recentWorkouts(limit: Int) async throws -> [WorkoutSummary] { [] }
@@ -155,5 +169,64 @@ final class HealthSyncErrorHandlingTests: XCTestCase {
             ),
             .noData
         )
+    }
+}
+
+/// ARCH-02 dependency seam checks live beside the existing HealthKit fakes so
+/// they compile in the current test target without editing the Xcode project.
+final class DependencySeamTests: XCTestCase {
+    @MainActor
+    func testDailyEvidenceInterfaceIsObservableThroughProtocol() async throws {
+        let fake = HealthSyncErrorHandlingTests.FakeHealthQueryService()
+        var extendedCalls = 0
+        var intradayCalls = 0
+        fake.onExtended = {
+            extendedCalls += 1
+            return ExtendedHealthMetrics()
+        }
+        fake.onIntraday = { _, _ in
+            intradayCalls += 1
+            return [IntradaySignalPoint(date: Date(timeIntervalSince1970: 1), value: 2)]
+        }
+
+        let service: any HealthQueryService = fake
+        let range = DateRangeQuery(
+            start: Date(timeIntervalSince1970: 0),
+            end: Date(timeIntervalSince1970: 3_600)
+        )
+        _ = try await service.extendedMetrics(in: range)
+        _ = try await service.intradaySamples(for: .stepCount, in: range)
+
+        XCTAssertEqual(extendedCalls, 1)
+        XCTAssertEqual(intradayCalls, 1)
+    }
+
+    @MainActor
+    func testFactoriesUseInjectedProviderWithoutConstructingHealthKit() async throws {
+        let fake = HealthSyncErrorHandlingTests.FakeHealthQueryService()
+        let now = Date(timeIntervalSince1970: 1_725_000_000)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let dependencies = AppDependencies.test(
+            now: now,
+            calendar: calendar,
+            queryService: fake
+        )
+        let services = VelaServices(dependencies: dependencies)
+
+        XCTAssertTrue(services.dailySummaryUseCase === dependencies.today.dailySummaryUseCase)
+        XCTAssertTrue(services.syncCoordinator === dependencies.health.syncCoordinator)
+        XCTAssertTrue(dependencies.health.queryService as AnyObject === fake)
+
+        let snapshot = try await dependencies.today.reader.load(
+            for: now,
+            policy: .automatic
+        )
+        XCTAssertEqual(snapshot.dashboard.date, now)
+
+        // Constructing the legacy host remains source-compatible; resolving
+        // its concrete HealthKit provider is intentionally not performed in a
+        // test that promises no real HKHealthStore startup.
+        _ = VelaServices()
     }
 }

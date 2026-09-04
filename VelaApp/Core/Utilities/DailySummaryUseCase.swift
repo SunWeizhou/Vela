@@ -156,12 +156,12 @@ struct DailySummaryHealthTrendHistoryProvider: HealthTrendHistoryProvider {
 final class DailySummaryUseCase {
     nonisolated static let debugDemoConfigVersion = "\(VelaAppMetadata.configVersion).debug-demo"
 
-    private let queryService: HealthKitQueryService
+    private let queryService: any HealthQueryService
     private let calendar: Calendar
     private let syncCoordinator: AppSyncCoordinator?
 
     init(
-        queryService: HealthKitQueryService = HealthKitQueryService(),
+        queryService: any HealthQueryService = HealthKitQueryService(),
         calendar: Calendar = .current,
         syncCoordinator: AppSyncCoordinator? = nil
     ) {
@@ -1365,7 +1365,7 @@ enum VelaDailyOrchestrator {
     static func refresh(
         for date: Date,
         modelContext: ModelContext,
-        queryService: HealthKitQueryService = HealthKitQueryService(),
+        queryService: any HealthQueryService = HealthKitQueryService(),
         syncDays: Int = 3,
         shouldSyncHealthData: Bool = true,
         calendar: Calendar = .current

@@ -2,6 +2,266 @@ import Foundation
 import HealthKit
 import SwiftData
 
+// MARK: - Explicit composition seams (ARCH-02 / PR2)
+
+/// A clock is deliberately tiny and value-oriented so tests can replay a
+/// selected health day without relying on wall-clock time. `Date()` remains
+/// available to legacy paths; new stores should receive an `AppClock`.
+protocol AppClock: Sendable {
+    var now: Date { get }
+}
+
+struct SystemAppClock: AppClock, Sendable {
+    init() {}
+
+    var now: Date { Date() }
+}
+
+struct FixedAppClock: AppClock, Sendable {
+    let now: Date
+
+    init(now: Date) {
+        self.now = now
+    }
+}
+
+/// Health-day policy is kept in the host layer. The Domain package receives
+/// explicit dates/calendars and never resolves `.current` itself.
+@MainActor
+struct RuntimeDependencies {
+    let clock: any AppClock
+    let calendar: Calendar
+    let healthDayBoundary: HealthDayBoundary
+
+    init(clock: any AppClock, calendar: Calendar) {
+        self.clock = clock
+        self.calendar = calendar
+        self.healthDayBoundary = HealthDayBoundary(calendar: calendar)
+    }
+}
+
+@MainActor
+protocol HealthAuthorizationProviding: AnyObject {
+    func shouldDeferBackgroundSync() async -> Bool
+}
+
+extension HealthAuthorizationService: HealthAuthorizationProviding {}
+
+enum TodayRefreshPolicy: Equatable, Sendable {
+    case cacheOnly
+    case automatic
+    case force
+}
+
+/// App-side value projection used by the pre-PR3 reader seam. PR3 will map
+/// this projection into `TodayViewState`; it is intentionally not a SwiftData
+/// model and does not expose `ModelContext` to callers.
+struct TodayDashboardSnapshot: Hashable, Sendable {
+    let dashboard: DashboardSummary
+
+    init(dashboard: DashboardSummary) {
+        self.dashboard = dashboard
+    }
+}
+
+@MainActor
+protocol TodayReadingModule: AnyObject {
+    func cached(for day: Date) async throws -> TodayDashboardSnapshot?
+    func load(for day: Date, policy: TodayRefreshPolicy) async throws -> TodayDashboardSnapshot
+}
+
+/// A deterministic reader for previews and tests. It never constructs a
+/// HealthKit store and always returns the supplied value projection.
+@MainActor
+final class StaticTodayReadingModule: TodayReadingModule {
+    private let snapshot: TodayDashboardSnapshot?
+
+    init(snapshot: TodayDashboardSnapshot? = nil) {
+        self.snapshot = snapshot
+    }
+
+    func cached(for day: Date) async throws -> TodayDashboardSnapshot? {
+        snapshot
+    }
+
+    func load(for day: Date, policy: TodayRefreshPolicy) async throws -> TodayDashboardSnapshot {
+        snapshot ?? TodayDashboardSnapshot(dashboard: DashboardSummary.empty(date: day))
+    }
+}
+
+/// Existing DailySummary pipeline adapter. It is intentionally not wired into
+/// `AppCoordinator` in PR2: the adapter is available for the later TodayStore
+/// migration while legacy ViewModel/resolver construction remains compatible.
+@MainActor
+final class DailySummaryTodayReadingModule: TodayReadingModule {
+    let useCase: DailySummaryUseCase
+    private let modelContext: ModelContext?
+    private let syncDays: Int
+
+    init(
+        useCase: DailySummaryUseCase,
+        modelContext: ModelContext?,
+        syncDays: Int = 3
+    ) {
+        self.useCase = useCase
+        self.modelContext = modelContext
+        self.syncDays = syncDays
+    }
+
+    func cached(for day: Date) async throws -> TodayDashboardSnapshot? {
+        guard let modelContext else { return nil }
+        return try await useCase
+            .loadCachedDashboard(for: day, modelContext: modelContext)
+            .map(TodayDashboardSnapshot.init(dashboard:))
+    }
+
+    func load(for day: Date, policy: TodayRefreshPolicy) async throws -> TodayDashboardSnapshot {
+        // Preview/test readers have no ModelContext and must not fall through
+        // to the HealthKit singleton. A missing context is therefore an
+        // explicit empty projection until PR3 injects the real store.
+        guard let modelContext else {
+            return TodayDashboardSnapshot(dashboard: DashboardSummary.empty(date: day))
+        }
+        if policy == .cacheOnly, let cached = try await cached(for: day) {
+            return cached
+        }
+        let dashboard = try await useCase.loadDashboard(
+            for: day,
+            modelContext: modelContext,
+            syncDays: syncDays,
+            shouldSyncHealthData: policy != .cacheOnly
+        )
+        return TodayDashboardSnapshot(dashboard: dashboard)
+    }
+}
+
+@MainActor
+struct HealthDependencies {
+    let queryService: any HealthQueryService
+    let authorization: any HealthAuthorizationProviding
+    let syncCoordinator: AppSyncCoordinator
+}
+
+@MainActor
+struct TodayDependencies {
+    let reader: any TodayReadingModule
+    /// Kept for the legacy bridge. New callers should use `reader` and let
+    /// PR3 own state/action orchestration.
+    let dailySummaryUseCase: DailySummaryUseCase
+}
+
+/// Minimal composition-root value for ARCH-02. It is constructable in live,
+/// preview, and test modes without making `ModelContext` or `HKHealthStore`
+/// cross an actor/domain boundary. The app still uses `VelaResolver` until a
+/// later composition-root PR switches its construction site.
+@MainActor
+struct AppDependencies {
+    let runtime: RuntimeDependencies
+    let health: HealthDependencies
+    let today: TodayDependencies
+
+    static func live(
+        modelContainer: ModelContainer,
+        clock: any AppClock = SystemAppClock(),
+        calendar: Calendar = .current
+    ) -> AppDependencies {
+        let queryService = HealthKitQueryService()
+        let syncCoordinator = AppSyncCoordinator()
+        let useCase = DailySummaryUseCase(
+            queryService: queryService,
+            calendar: calendar,
+            syncCoordinator: syncCoordinator
+        )
+        return AppDependencies(
+            runtime: RuntimeDependencies(clock: clock, calendar: calendar),
+            health: HealthDependencies(
+                queryService: queryService,
+                authorization: HealthAuthorizationService(),
+                syncCoordinator: syncCoordinator
+            ),
+            today: TodayDependencies(
+                reader: DailySummaryTodayReadingModule(
+                    useCase: useCase,
+                    modelContext: modelContainer.mainContext
+                ),
+                dailySummaryUseCase: useCase
+            )
+        )
+    }
+
+    static func preview(
+        now: Date,
+        calendar: Calendar
+    ) -> AppDependencies {
+        let queryService = PreviewHealthQueryService()
+        let syncCoordinator = AppSyncCoordinator(minimumInterval: 0)
+        let useCase = DailySummaryUseCase(
+            queryService: queryService,
+            calendar: calendar,
+            syncCoordinator: syncCoordinator
+        )
+        let snapshot = TodayDashboardSnapshot(dashboard: DashboardSummary.preview(date: now))
+        return AppDependencies(
+            runtime: RuntimeDependencies(clock: FixedAppClock(now: now), calendar: calendar),
+            health: HealthDependencies(
+                queryService: queryService,
+                authorization: PreviewHealthAuthorization(),
+                syncCoordinator: syncCoordinator
+            ),
+            today: TodayDependencies(
+                reader: StaticTodayReadingModule(snapshot: snapshot),
+                dailySummaryUseCase: useCase
+            )
+        )
+    }
+
+    static func test(
+        now: Date,
+        calendar: Calendar,
+        queryService: any HealthQueryService = PreviewHealthQueryService(),
+        snapshot: TodayDashboardSnapshot? = nil
+    ) -> AppDependencies {
+        let syncCoordinator = AppSyncCoordinator(minimumInterval: 0)
+        let useCase = DailySummaryUseCase(
+            queryService: queryService,
+            calendar: calendar,
+            syncCoordinator: syncCoordinator
+        )
+        return AppDependencies(
+            runtime: RuntimeDependencies(clock: FixedAppClock(now: now), calendar: calendar),
+            health: HealthDependencies(
+                queryService: queryService,
+                authorization: PreviewHealthAuthorization(),
+                syncCoordinator: syncCoordinator
+            ),
+            today: TodayDependencies(
+                reader: StaticTodayReadingModule(snapshot: snapshot),
+                dailySummaryUseCase: useCase
+            )
+        )
+    }
+}
+
+/// No-op HealthKit-free implementations used only by preview/test factories.
+@MainActor
+private final class PreviewHealthAuthorization: HealthAuthorizationProviding {
+    func shouldDeferBackgroundSync() async -> Bool { true }
+}
+
+@MainActor
+private final class PreviewHealthQueryService: HealthQueryService {
+    func sleepSummary(in range: DateRangeQuery) async throws -> SleepSummary? { nil }
+    func sleepEpisodes(in range: DateRangeQuery) async throws -> [SleepSummary] { [] }
+    func recoveryMetrics(in range: DateRangeQuery) async throws -> RecoveryMetricSummary { RecoveryMetricSummary() }
+    func strainSummary(in range: DateRangeQuery) async throws -> StrainActivitySummary {
+        StrainActivitySummary(workouts: [])
+    }
+    func bodyMetrics(in range: DateRangeQuery) async throws -> BodyMetricsSummary { BodyMetricsSummary() }
+    func recentWorkouts(limit: Int) async throws -> [WorkoutSummary] { [] }
+    func heartRateSamples(start: Date, end: Date) async throws -> [HeartRateSample] { [] }
+    func workoutRoute(workoutId: UUID) async throws -> [RouteCoordinate] { [] }
+}
+
 @MainActor
 final class AppSyncCoordinator: ObservableObject {
     /// 算法打通（深度专项批次 1）：全 App 共享一个去重/节流实例——
@@ -113,6 +373,8 @@ final class AppSyncCoordinator: ObservableObject {
 
 @MainActor
 final class VelaServices: ObservableObject {
+    private let injectedDependencies: AppDependencies?
+
     var queryService: HealthKitQueryService {
         VelaResolver.shared.resolve(HealthQueryService.self) as! HealthKitQueryService
     }
@@ -120,10 +382,12 @@ final class VelaServices: ObservableObject {
         VelaResolver.shared.resolve(AIContextBuilder.self)
     }
     var dailySummaryUseCase: DailySummaryUseCase {
-        VelaResolver.shared.resolve(DailySummaryUseCase.self)
+        injectedDependencies?.today.dailySummaryUseCase
+            ?? VelaResolver.shared.resolve(DailySummaryUseCase.self)
     }
     var syncCoordinator: AppSyncCoordinator {
-        VelaResolver.shared.resolve(AppSyncCoordinator.self)
+        injectedDependencies?.health.syncCoordinator
+            ?? VelaResolver.shared.resolve(AppSyncCoordinator.self)
     }
     var coachChat: CoachChatVM {
         VelaResolver.shared.resolve(CoachChatVM.self)
@@ -143,7 +407,9 @@ final class VelaServices: ObservableObject {
 
     private var providerCache: [String: DeepSeekProvider] = [:]
 
-    init() {}
+    init(dependencies: AppDependencies? = nil) {
+        self.injectedDependencies = dependencies
+    }
 
     func deepSeekProvider(apiKey: String, model: String? = nil) -> DeepSeekProvider {
         let model = model ?? DeepSeekTextModel.stored.apiIdentifier
@@ -171,7 +437,7 @@ final class VelaResolver {
         register(AppSyncCoordinator.self) { AppSyncCoordinator.shared }
         register(DailySummaryUseCase.self) {
             DailySummaryUseCase(
-                queryService: self.resolve(HealthQueryService.self) as! HealthKitQueryService,
+                queryService: self.resolve(HealthQueryService.self),
                 syncCoordinator: self.resolve(AppSyncCoordinator.self)
             )
         }
