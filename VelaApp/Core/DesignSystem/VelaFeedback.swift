@@ -88,7 +88,7 @@ struct VelaStateCard: View {
             RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
                 .stroke(state.tint.opacity(0.18), lineWidth: 0.75)
         )
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: action == nil ? .combine : .contain)
         .accessibilityLabel("\(title ?? state.defaultTitle)。\(message)")
     }
 

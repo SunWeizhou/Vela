@@ -38,7 +38,9 @@ struct VelaMetricScoreRing: View {
             ZStack {
                 Circle()
                     .stroke(
-                        VelaTheme.rhythmMist,
+                        score == nil
+                            ? VelaTheme.rhythmMist
+                            : effectiveColor.opacity(0.13),
                         style: StrokeStyle(
                             lineWidth: ringWidth,
                             lineCap: .round,
@@ -84,10 +86,12 @@ struct VelaMetricScoreRing: View {
                 }
 
                 Text(valueText)
-                    .font(.system(size: size * 0.28, weight: .bold, design: .rounded))
+                    .font(valueFont)
                     .foregroundStyle(VelaTheme.rhythmInk)
                     .monospacedDigit()
                     .minimumScaleFactor(0.7)
+                    .lineLimit(1)
+                    .padding(.horizontal, ringWidth + 2)
             }
             .frame(width: size, height: size)
             .accessibilityHidden(true)
@@ -107,6 +111,19 @@ struct VelaMetricScoreRing: View {
 
     private var ringWidth: CGFloat {
         max(5, size * 0.082)
+    }
+
+    /// Semantic text styles keep score numerals responsive to Dynamic Type.
+    /// The ring's fixed geometry remains the final constraint, with a small
+    /// minimum scale factor preventing the value from colliding with its arc.
+    private var valueFont: Font {
+        if size <= VelaTheme.ringSm + 10 {
+            return .system(.footnote, design: .rounded, weight: .bold)
+        }
+        if size <= VelaTheme.ringMd + 10 {
+            return .system(.title3, design: .rounded, weight: .bold)
+        }
+        return .system(.title2, design: .rounded, weight: .bold)
     }
 
     private var effectiveColor: Color {

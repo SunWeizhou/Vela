@@ -51,7 +51,9 @@ Tab 0: Today            Tab 1: Trends           Tab 2: Plan             Tab 3: C
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **`DailyHealthSnapshot`** | `HealthKitSyncEngine` / `HealthQueryService` | `DailyHealthComputation` | 标记缺失字段，不伪造默认值 | SwiftData `DailyHealthSummaryRecord` | **Implemented** |
 | **`WorkoutEvent`** | HealthKit / Apple Watch | `WorkoutAggregationService` / 训练页 | 无运动记录时为空数组 | SwiftData `WorkoutEventRecord` | **Implemented** |
-| **`LivedState` / Check-in** | 用户每日主观自评 | `BodyStateKernel` / `CoachContext` | 可选跳过；未填不代表无压力/无酸痛 | 当前由 `JournalEntryRecord` / 行为标签推断；`DailyCheckInRecord` 尚未实现 | **Partial / Planned** |
+| **`LivedState` / Check-in** | 用户每日主观自评 | `BodyStateKernel` / `CoachContext` | 可选跳过；未填不代表无压力/无酸痛 | `LivedStateJournalAdapter` 以 `JournalEntryRecord` 承载日级对齐判断与结构化体感；每类每日 upsert，不重复计数 | **Implemented (V3 adapter-backed)** |
+
+`LivedStateJournalAdapter` 是 V3 发布候选的正式持久化边界。它将“分数是否符合感受”与详细体感作为同一天的两个独立事实保存、回读和更新；`BodyStateKernel` 合并同一日两类事实并采用更保守的影响，任何一类都不会因记录时间较晚而遮蔽另一类。只有当未来语义无法由该适配器稳定表达时，才新增 `DailyCheckInRecord` 并启动显式 schema migration，避免为了类型命名在发布前引入无价值的数据迁移风险。
 
 ### 3.2 每日评分与趋势计算层（Computation Layer）
 

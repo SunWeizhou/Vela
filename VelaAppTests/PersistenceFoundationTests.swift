@@ -9,6 +9,58 @@ private final class SyncExecutionCounter {
 
 final class PersistenceFoundationTests: XCTestCase {
     @MainActor
+    func testLivedStateJournalAdapterUpsertsTwoDailyFacetsWithoutDuplicates() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let day = Date(timeIntervalSince1970: 1_800_057_600)
+        let container = try VelaModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let adapter = LivedStateJournalAdapter(modelContext: context, calendar: calendar)
+
+        try adapter.saveAlignment(
+            .worse,
+            for: day,
+            recordedAt: day.addingTimeInterval(3_600)
+        )
+        try adapter.saveAlignment(
+            .better,
+            for: day,
+            recordedAt: day.addingTimeInterval(7_200)
+        )
+        try adapter.saveCheckIn(
+            LivedStateCheckIn(
+                stress: 2,
+                energy: 0,
+                soreness: 1,
+                motivation: 0,
+                note: "上午会议后很疲惫"
+            ),
+            for: day,
+            recordedAt: day.addingTimeInterval(10_800)
+        )
+        try adapter.saveCheckIn(
+            LivedStateCheckIn(
+                stress: 1,
+                energy: 1,
+                soreness: 2,
+                motivation: 1,
+                note: "下午左肩明显酸痛"
+            ),
+            for: day,
+            recordedAt: day.addingTimeInterval(14_400)
+        )
+
+        let entries = try context.fetch(FetchDescriptor<JournalEntryRecord>())
+        let snapshot = try adapter.snapshot(for: day)
+
+        XCTAssertEqual(entries.count, 2)
+        XCTAssertEqual(snapshot.alignment, .better)
+        XCTAssertEqual(snapshot.checkIn?.stress, 1)
+        XCTAssertEqual(snapshot.checkIn?.soreness, 2)
+        XCTAssertEqual(snapshot.checkIn?.note, "下午左肩明显酸痛")
+    }
+
+    @MainActor
     func testDemoDataSeedRequiresExplicitLaunchArgument() {
         XCTAssertFalse(DailySummaryUseCase.isDemoDataSeedingEnabled(arguments: []))
         XCTAssertFalse(DailySummaryUseCase.isDemoDataSeedingEnabled(arguments: ["-velaInitialTab", "0"]))
@@ -20,6 +72,17 @@ final class PersistenceFoundationTests: XCTestCase {
         XCTAssertFalse(DailySummaryUseCase.isPreviewDashboardEnabled(arguments: []))
         XCTAssertFalse(DailySummaryUseCase.isPreviewDashboardEnabled(arguments: ["-velaSeedDemoData"]))
         XCTAssertTrue(DailySummaryUseCase.isPreviewDashboardEnabled(arguments: ["-velaPreviewDashboard"]))
+    }
+
+    func testPersistedDemoProvenanceCannotMasqueradeAsAppleHealthCache() {
+        XCTAssertEqual(
+            DailySummaryUseCase.cachedSource(configVersion: DailySummaryUseCase.debugDemoConfigVersion),
+            .preview
+        )
+        XCTAssertEqual(
+            DailySummaryUseCase.cachedSource(configVersion: VelaAppMetadata.configVersion),
+            .cache
+        )
     }
 
     func testActiveStatusDefaultsToActiveWhenNoValueExists() {
@@ -1010,6 +1073,8 @@ final class PersistenceFoundationTests: XCTestCase {
             recoveryScore: 82,
             sleepScore: 79,
             strainScore: 31,
+            stressScore: 27,
+            energyScore: 73,
             hrvMilliseconds: 48,
             restingHeartRate: 58,
             primaryAction: "开始上肢训练",

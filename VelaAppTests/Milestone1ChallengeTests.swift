@@ -299,6 +299,9 @@ final class Milestone1ChallengeTests: XCTestCase {
         XCTAssertEqual(decoded?.energy, 0)
         XCTAssertEqual(decoded?.soreness, 2)
         XCTAssertEqual(decoded?.motivation, 0)
+
+        let persisted = LivedStateCheckIn(tags: checkIn.journalTags, note: checkIn.journalNote)
+        XCTAssertEqual(persisted?.note, "左肩今天明显不适")
     }
 
     func testLivedStateAlignmentRoundTripsWithoutRewritingScores() {
@@ -395,6 +398,44 @@ final class Milestone1ChallengeTests: XCTestCase {
         XCTAssertNotNil(driver)
         XCTAssertEqual(driver?.impact ?? 0, -0.65, accuracy: 0.001)
         XCTAssertTrue(driver?.detail.contains("压力高") == true)
+    }
+
+    func testLaterAlignmentDoesNotHideStructuredLivedState() {
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        let checkIn = LivedStateCheckIn(
+            stress: 2,
+            energy: 0,
+            soreness: 1,
+            motivation: 1,
+            note: "今天工作压力很高"
+        )
+        let alignment = LivedStateAlignment.aligned
+
+        let assembly = DailyIntelligenceAssemblyModule.assemble(
+            DailyIntelligenceAssemblyInput(
+                dashboard: .empty(date: date),
+                selectedDay: date,
+                calendar: .current,
+                journalEntries: [
+                    JournalEntryDTO(
+                        createdAt: date,
+                        note: checkIn.journalNote,
+                        tags: checkIn.journalTags,
+                        value: 1 - checkIn.conservativeSeverity
+                    ),
+                    JournalEntryDTO(
+                        createdAt: date.addingTimeInterval(60),
+                        note: alignment.journalNote,
+                        tags: alignment.journalTags,
+                        value: 1
+                    )
+                ]
+            )
+        )
+
+        let driver = assembly.bodyState.drivers.first(where: { $0.id == "lived-state" })
+        XCTAssertEqual(driver?.impact ?? 0, -0.65, accuracy: 0.001)
+        XCTAssertTrue(driver?.detail.contains("今天工作压力很高") == true)
     }
 
     func testSecondaryAssemblerRejectsPersistedRotationTitleDrift() {

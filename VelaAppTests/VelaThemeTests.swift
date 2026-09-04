@@ -879,6 +879,17 @@ final class VelaThemeTests: XCTestCase {
         XCTAssertEqual(model.compactDisplayTitle, "数据覆盖 · 不足 · 0%")
     }
 
+    func testSecondaryDashboardFailureKeepsAnExplicitLocalizedState() {
+        XCTAssertEqual(
+            DashboardViewModel.secondaryDataFailureMessage(isChinese: true),
+            "部分本地记录暂时无法读取，已保留上次成功状态。请稍后重试。"
+        )
+        XCTAssertEqual(
+            DashboardViewModel.secondaryDataFailureMessage(isChinese: false),
+            "Some local records are temporarily unavailable. Your last successful state is still shown. Please try again."
+        )
+    }
+
     func testDebugInitialTabLaunchArgumentDefaultsToTodayAndClampsInvalidValues() {
         XCTAssertEqual(VelaAppState.initialTab(from: ["Vela"]), 0)
         XCTAssertEqual(VelaAppState.initialTab(from: ["Vela", "-velaInitialTab", "3"]), 3)
@@ -890,7 +901,13 @@ final class VelaThemeTests: XCTestCase {
     @MainActor
     func testDebugRecoveryDetailLaunchArgumentPresentsDetailSheet() {
         let appState = VelaAppState(arguments: ["Vela", "-velaOpenRecoveryDetail"])
-        XCTAssertTrue(appState.triggerRecoveryDetail)
+        XCTAssertEqual(appState.presentedSheet, .recoveryDetail)
+    }
+
+    @MainActor
+    func testDebugSettingsLaunchArgumentPresentsSettingsSheet() {
+        let appState = VelaAppState(arguments: ["Vela", "-velaOpenSettings"])
+        XCTAssertEqual(appState.presentedSheet, .settings)
     }
 
     func testDebugForceOnboardingLaunchArgument() {
@@ -1048,11 +1065,27 @@ final class VelaThemeTests: XCTestCase {
     func testRecoveryDetailPreservesTheCurrentTabAndPresentsItsSheet() {
         let appState = VelaAppState.shared
         appState.selectedTab = 0
+        appState.presentedSheet = nil
 
         appState.routeToRecoveryDetail()
 
         XCTAssertEqual(appState.selectedTab, 0)
-        XCTAssertTrue(appState.triggerRecoveryDetail)
+        XCTAssertEqual(appState.presentedSheet, .recoveryDetail)
+    }
+
+    @MainActor
+    func testPresentingAnAppSheetReplacesThePreviousDestination() {
+        let appState = VelaAppState.shared
+        appState.presentedSheet = nil
+
+        appState.present(.weightLog)
+        appState.present(.recoveryDetail)
+
+        XCTAssertEqual(appState.presentedSheet, .recoveryDetail)
+        XCTAssertTrue(VelaAppState.AppSheet.weightLog.refreshesLocalDataOnDismiss)
+        XCTAssertFalse(VelaAppState.AppSheet.recoveryDetail.refreshesLocalDataOnDismiss)
+
+        appState.presentedSheet = nil
     }
 
     @MainActor

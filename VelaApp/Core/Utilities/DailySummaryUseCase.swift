@@ -110,6 +110,8 @@ enum ActiveStatusSettings {
 
 @MainActor
 final class DailySummaryUseCase {
+    nonisolated static let debugDemoConfigVersion = "\(VelaAppMetadata.configVersion).debug-demo"
+
     private let queryService: HealthKitQueryService
     private let calendar: Calendar
     private let syncCoordinator: AppSyncCoordinator?
@@ -132,6 +134,10 @@ final class DailySummaryUseCase {
     /// demo seeding, this does not mutate SwiftData or depend on an empty store.
     static func isPreviewDashboardEnabled(arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
         arguments.contains("-velaPreviewDashboard")
+    }
+
+    nonisolated static func cachedSource(configVersion: String) -> DashboardSummary.DataSource {
+        configVersion == debugDemoConfigVersion ? .preview : .cache
     }
 
     func loadDashboard(
@@ -963,6 +969,9 @@ final class DailySummaryUseCase {
             )
             
             let record = DailyHealthSummaryRecord(snapshot: snapshot, calendar: calendar)
+            // Persist provenance so a later normal Debug launch never presents
+            // simulator fixtures as an Apple Health snapshot.
+            record.configVersion = Self.debugDemoConfigVersion
             modelContext.insert(record)
         }
         try? modelContext.save()
@@ -978,7 +987,8 @@ final class DailySummaryUseCase {
         let records = try SwiftDataDailyHealthSummaryRepository(modelContext: modelContext)
             .fetch(in: DateRangeQuery(start: dayStart, end: dayEnd))
         guard let record = records.last else { return nil }
-        var dashboard = makeDashboardFromRecord(record)
+        let source = Self.cachedSource(configVersion: record.configVersion)
+        var dashboard = makeDashboardFromRecord(record, source: source)
         // 缓存启动路径同样挂载三年长线基准：否则重启后长线修正/证据/身体模型
         // 会静默退化为空（直到一次完整刷新）。
         let allRecords = (try? modelContext.fetch(FetchDescriptor<DailyHealthSummaryRecord>())) ?? []
@@ -1141,10 +1151,15 @@ final class DailySummaryUseCase {
                 bodyTemperature: record.wristTemperature
             ),
             workouts: snapshot.workouts,
-            dailyInsight: L10n.t(
-                "Showing your latest saved Apple Health snapshot while Vela checks for updates.",
-                "正在显示最近一次 Apple 健康快照，Vela 会在后台检查更新。"
-            ),
+            dailyInsight: source == .preview
+                ? L10n.t(
+                    "Showing opt-in simulator demo data.",
+                    "正在显示主动启用的模拟器演示数据。"
+                )
+                : L10n.t(
+                    "Showing your latest saved Apple Health snapshot while Vela checks for updates.",
+                    "正在显示最近一次 Apple 健康快照，Vela 会在后台检查更新。"
+                ),
             source: source
         )
     }

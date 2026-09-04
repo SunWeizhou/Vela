@@ -75,13 +75,7 @@ struct LivedStateCheckIn: Codable, Hashable, Sendable {
     }
 
     var journalNote: String {
-        let summary = [
-            "压力\(Self.stressLabels[stress])",
-            "精力\(Self.energyLabels[energy])",
-            "酸痛\(Self.sorenessLabels[soreness])",
-            "动力\(Self.motivationLabels[motivation])"
-        ].joined(separator: " · ")
-        return note.isEmpty ? summary : "\(summary)\n\(note)"
+        note.isEmpty ? generatedSummary : "\(generatedSummary)\n\(note)"
     }
 
     /// Only conservative signals lower readiness; positive self-report never
@@ -98,13 +92,50 @@ struct LivedStateCheckIn: Codable, Hashable, Sendable {
     init?(tags: [String], note: String) {
         let values = Set(tags.map { $0.lowercased() })
         guard values.contains("lived_state") else { return nil }
-        self.init(
-            stress: Self.index(in: values, prefix: "stress_", tokens: ["low", "balanced", "high"], fallback: 1),
-            energy: Self.index(in: values, prefix: "energy_", tokens: ["low", "steady", "high"], fallback: 1),
-            soreness: Self.index(in: values, prefix: "soreness_", tokens: ["none", "mild", "marked"], fallback: 0),
-            motivation: Self.index(in: values, prefix: "motivation_", tokens: ["low", "steady", "high"], fallback: 1),
-            note: note
+        let stress = Self.index(in: values, prefix: "stress_", tokens: ["low", "balanced", "high"], fallback: 1)
+        let energy = Self.index(in: values, prefix: "energy_", tokens: ["low", "steady", "high"], fallback: 1)
+        let soreness = Self.index(in: values, prefix: "soreness_", tokens: ["none", "mild", "marked"], fallback: 0)
+        let motivation = Self.index(in: values, prefix: "motivation_", tokens: ["low", "steady", "high"], fallback: 1)
+        let summary = Self.summary(
+            stress: stress,
+            energy: energy,
+            soreness: soreness,
+            motivation: motivation
         )
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let detail: String
+        if trimmed == summary {
+            detail = ""
+        } else if trimmed.hasPrefix("\(summary)\n") {
+            detail = String(trimmed.dropFirst(summary.count + 1))
+        } else {
+            detail = trimmed
+        }
+        self.init(
+            stress: stress,
+            energy: energy,
+            soreness: soreness,
+            motivation: motivation,
+            note: detail
+        )
+    }
+
+    private var generatedSummary: String {
+        Self.summary(
+            stress: stress,
+            energy: energy,
+            soreness: soreness,
+            motivation: motivation
+        )
+    }
+
+    private static func summary(stress: Int, energy: Int, soreness: Int, motivation: Int) -> String {
+        [
+            "压力\(stressLabels[stress])",
+            "精力\(energyLabels[energy])",
+            "酸痛\(sorenessLabels[soreness])",
+            "动力\(motivationLabels[motivation])"
+        ].joined(separator: " · ")
     }
 
     private static func clamp(_ value: Int) -> Int { min(2, max(0, value)) }
@@ -431,7 +462,8 @@ struct BodyStateKernel: Sendable {
         let lived = Self.livedStateSignal(
             entries: input.journalEntries.filter {
                 $0.createdAt >= input.generatedAt.addingTimeInterval(-36 * 3_600)
-            }
+            },
+            calendar: input.calendar
         )
         if lived.hasEntry {
             drivers.append(BodyStateDriver(
@@ -653,24 +685,60 @@ struct BodyStateKernel: Sendable {
 
     /// 当日自评（Lived State）信号：note + 标签的中英关键词 → 保守严重度 0...1。
     /// 不区分真伪，只按「负面自评」的保守方向使用；中性/积极自评不改判定。
-    private static func livedStateSignal(entries: [JournalEntryDTO]) -> (hasEntry: Bool, severity: Double, evidence: String) {
-        // Prefer the latest explicit calibration. A later food or habit note
-        // must not silently hide the user's answer to the Today prompt.
-        let explicitEntries = entries.filter { entry in
-            LivedStateAlignment(tags: entry.tags) != nil
-                || entry.tags.contains(where: { $0.lowercased() == "lived_state" })
+    private static func livedStateSignal(
+        entries: [JournalEntryDTO],
+        calendar: Calendar
+    ) -> (hasEntry: Bool, severity: Double, evidence: String) {
+        // Alignment and the detailed check-in are separate facets. Consider the
+        // latest of each so a later quick tap cannot erase a structured report
+        // (or vice versa), then take the conservative maximum.
+        let explicitEntries = entries.filter {
+            LivedStateAlignment(tags: $0.tags) != nil
+                || LivedStateCheckIn(tags: $0.tags, note: $0.note) != nil
         }
-        guard let latest = (explicitEntries.isEmpty ? entries : explicitEntries)
-            .max(by: { $0.createdAt < $1.createdAt }) else {
+        let latestExplicitDay = explicitEntries
+            .max(by: { $0.createdAt < $1.createdAt })
+            .map { calendar.startOfDay(for: $0.createdAt) }
+        let dailyExplicitEntries = latestExplicitDay.map { dayStart in
+            explicitEntries.filter { calendar.isDate($0.createdAt, inSameDayAs: dayStart) }
+        } ?? []
+        var explicitSignals: [(date: Date, severity: Double, evidence: String)] = []
+        if let latestAlignment = dailyExplicitEntries
+            .filter({ LivedStateAlignment(tags: $0.tags) != nil })
+            .max(by: { $0.createdAt < $1.createdAt }),
+           let alignment = LivedStateAlignment(tags: latestAlignment.tags) {
+            explicitSignals.append((
+                latestAlignment.createdAt,
+                alignment.conservativeSeverity,
+                latestAlignment.note.isEmpty ? alignment.journalNote : latestAlignment.note
+            ))
+        }
+        if let latestCheckIn = dailyExplicitEntries
+            .filter({ LivedStateCheckIn(tags: $0.tags, note: $0.note) != nil })
+            .max(by: { $0.createdAt < $1.createdAt }),
+           let checkIn = LivedStateCheckIn(tags: latestCheckIn.tags, note: latestCheckIn.note) {
+            explicitSignals.append((
+                latestCheckIn.createdAt,
+                checkIn.conservativeSeverity,
+                latestCheckIn.note.isEmpty ? checkIn.journalNote : latestCheckIn.note
+            ))
+        }
+        if !explicitSignals.isEmpty {
+            let ordered = explicitSignals.sorted {
+                $0.severity == $1.severity ? $0.date > $1.date : $0.severity > $1.severity
+            }
+            let evidence = ordered.map(\.evidence).reduce(into: [String]()) { result, item in
+                if !item.isEmpty && !result.contains(item) { result.append(item) }
+            }.joined(separator: "；")
+            return (
+                true,
+                explicitSignals.map(\.severity).max() ?? 0,
+                evidence.isEmpty ? "已记录主观状态" : evidence
+            )
+        }
+
+        guard let latest = entries.max(by: { $0.createdAt < $1.createdAt }) else {
             return (false, 0, "")
-        }
-        if let alignment = LivedStateAlignment(tags: latest.tags) {
-            let evidence = latest.note.isEmpty ? alignment.journalNote : latest.note
-            return (true, alignment.conservativeSeverity, evidence)
-        }
-        if let structured = LivedStateCheckIn(tags: latest.tags, note: latest.note) {
-            let evidence = latest.note.isEmpty ? structured.journalNote : latest.note
-            return (true, structured.conservativeSeverity, evidence)
         }
         let text = (latest.note + " " + latest.tags.joined(separator: " ")).lowercased()
         let strong = ["疼痛", "剧痛", "受伤", "生病", "pain", "injur", "sick"]

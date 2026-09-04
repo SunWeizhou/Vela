@@ -28,32 +28,63 @@ final class VelaAppState: ObservableObject {
         case foodScanner(String)
         case foodSearch
         case workoutLog
+        case weightLog
+        case bloodLog
         case journal
+    }
+
+    enum AppSheet: Identifiable, Equatable {
+        case settings
+        case weightLog
+        case bloodLog
+        case workoutLog
+        case journal
+        case livedState
+        case recoveryDetail
+        case postWorkoutCheckIn(UUID?)
+        case postWorkoutImpact(UUID?)
+
+        var id: String {
+            switch self {
+            case .settings: "settings"
+            case .weightLog: "weight-log"
+            case .bloodLog: "blood-log"
+            case .workoutLog: "workout-log"
+            case .journal: "journal"
+            case .livedState: "lived-state"
+            case .recoveryDetail: "recovery-detail"
+            case let .postWorkoutCheckIn(id): "post-workout-check-in-\(id?.uuidString ?? "latest")"
+            case let .postWorkoutImpact(id): "post-workout-impact-\(id?.uuidString ?? "latest")"
+            }
+        }
+
+        var refreshesLocalDataOnDismiss: Bool {
+            switch self {
+            case .weightLog, .bloodLog, .workoutLog, .journal, .livedState, .postWorkoutCheckIn:
+                true
+            case .settings, .recoveryDetail, .postWorkoutImpact:
+                false
+            }
+        }
     }
 
     @Published var isFallbackStore = false
     @Published var isReadOnlySafetyMode = false
     @Published var selectedTab = VelaAppState.todayTabIndex
     @Published var showCoachHub = false
+    /// Compatibility binding used by existing Today subviews. VelaShell consumes it
+    /// into `presentedSheet` immediately so only one app sheet can be active.
     @Published var showSettings = false
+    @Published var presentedSheet: AppSheet?
     @Published var prefilledCoachQuestion: String? = nil
     @Published var homeNavigationStackId = UUID()
     
     // Quick Actions Triggers
     @Published var triggerFoodCamera = false
     @Published var triggerFoodLibrary = false
-    @Published var triggerBloodLog = false
-    @Published var triggerWeightLog = false
-    @Published var triggerWorkoutLog = false
     @Published var triggerFoodSearch = false
     @Published var triggerFoodScanner = false
-    @Published var triggerJournal = false
-    @Published var triggerRecoveryDetail = false
-    @Published var triggerPostWorkoutCheckIn = false
-    @Published var triggerPostWorkoutImpact = false
     @Published var scannerType = "camera"
-    @Published var postWorkoutCheckInWorkoutID: UUID?
-    @Published var postWorkoutImpactWorkoutID: UUID?
     @Published var forceNewCoachSession = false
     @Published private(set) var coachRouteDestination: CoachRouteDestination?
     @Published private(set) var coachRouteSurface: CoachScreenSurface = .coach
@@ -67,7 +98,13 @@ final class VelaAppState: ObservableObject {
     init(arguments: [String] = ProcessInfo.processInfo.arguments) {
         #if DEBUG
         selectedTab = Self.initialTab(from: arguments)
-        triggerRecoveryDetail = arguments.contains("-velaOpenRecoveryDetail")
+        if arguments.contains("-velaOpenRecoveryDetail") {
+            presentedSheet = .recoveryDetail
+        } else if arguments.contains("-velaOpenSettings") {
+            presentedSheet = .settings
+        } else if arguments.contains("-velaOpenLivedStateCheckIn") {
+            presentedSheet = .livedState
+        }
         #endif
     }
 
@@ -145,7 +182,7 @@ final class VelaAppState: ObservableObject {
     }
 
     func routeToMe() {
-        showSettings = true
+        present(.settings)
     }
 
     func routeToAdaptiveTrainingStart() {
@@ -161,20 +198,15 @@ final class VelaAppState: ObservableObject {
     }
 
     func routeToRecoveryDetail() {
-        resetQuickActionSheetTriggers()
-        triggerRecoveryDetail = true
+        present(.recoveryDetail)
     }
 
     func routeToPostWorkoutCheckIn(workoutID: UUID?) {
-        resetQuickActionSheetTriggers()
-        postWorkoutCheckInWorkoutID = workoutID
-        triggerPostWorkoutCheckIn = true
+        present(.postWorkoutCheckIn(workoutID))
     }
 
     func routeToPostWorkoutImpact(workoutID: UUID?) {
-        resetQuickActionSheetTriggers()
-        postWorkoutImpactWorkoutID = workoutID
-        triggerPostWorkoutImpact = true
+        present(.postWorkoutImpact(workoutID))
     }
 
     func deferQuickActionUntilSheetDismisses(_ action: DeferredQuickAction) {
@@ -194,22 +226,28 @@ final class VelaAppState: ObservableObject {
         case .foodSearch:
             triggerFoodSearch = true
         case .workoutLog:
-            triggerWorkoutLog = true
+            present(.workoutLog)
+        case .weightLog:
+            present(.weightLog)
+        case .bloodLog:
+            present(.bloodLog)
         case .journal:
-            triggerJournal = true
+            present(.journal)
         }
     }
 
     private func resetQuickActionSheetTriggers() {
-        triggerWeightLog = false
-        triggerBloodLog = false
-        triggerWorkoutLog = false
         triggerFoodSearch = false
         triggerFoodScanner = false
-        triggerJournal = false
-        triggerRecoveryDetail = false
-        triggerPostWorkoutCheckIn = false
-        triggerPostWorkoutImpact = false
+    }
+
+    func present(_ sheet: AppSheet) {
+        resetQuickActionSheetTriggers()
+        presentedSheet = sheet
+    }
+
+    func dismissPresentedSheet() {
+        presentedSheet = nil
     }
 
     func markLocalDataChanged() {

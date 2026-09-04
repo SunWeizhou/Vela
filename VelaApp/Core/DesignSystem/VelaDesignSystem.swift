@@ -530,6 +530,8 @@ extension View {
 /// Shared chrome for the four canonical primary surfaces. It owns title
 /// hierarchy, Dynamic Type reflow, spacing, and optional trailing actions.
 struct VelaSurfaceHeader<Trailing: View>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let title: String
     let subtitle: String?
     @ViewBuilder let trailing: () -> Trailing
@@ -562,6 +564,12 @@ struct VelaSurfaceHeader<Trailing: View>: View {
         }
         .padding(.horizontal, VelaTheme.pagePadding)
         .padding(.vertical, 8)
+        // The header is persistent navigation chrome. Cap only this compact
+        // region so accessibility text does not leave too little room for the
+        // scrollable content; body content keeps the user's full type size.
+        .dynamicTypeSize(
+            dynamicTypeSize.isAccessibilitySize ? .accessibility1 : dynamicTypeSize
+        )
     }
 
     private var labels: some View {

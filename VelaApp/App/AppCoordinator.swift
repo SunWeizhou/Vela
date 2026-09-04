@@ -57,6 +57,20 @@ struct AppCoordinator: View {
             VelaTheme.interfaceAnimation(reduceMotion: reduceMotion),
             value: appState.isFallbackStore || appState.isReadOnlySafetyMode
         )
+        .task(id: dashboardBootstrapID) {
+            guard onboardingCompleted,
+                  !forceOnboarding,
+                  !forceTrustCenter,
+                  !appState.isReadOnlySafetyMode else { return }
+
+            // DashboardViewModel is shared by all four primary surfaces, so its
+            // first hydration belongs to the app coordinator rather than Today.
+            // This keeps restored/deep-linked Trends, Plan, and Coach launches
+            // from briefly presenting persisted history beside an empty current
+            // state. DashboardViewModel coalesces a concurrent Today refresh.
+            await dashboardVM.hydrateFromCache(modelContext: modelContext)
+            await dashboardVM.refresh(modelContext: modelContext)
+        }
         .task {
             UserProfileSettings.migrateLegacyHydratedValuesIfNeeded()
             // 已有用户一次性迁移：把建档资料写进 wiki（此前只存 SwiftData）。
@@ -68,6 +82,10 @@ struct AppCoordinator: View {
             try? await Task.sleep(for: .seconds(2))
             _ = try? RetentionPolicyService().prune(modelContext: modelContext)
         }
+    }
+
+    private var dashboardBootstrapID: String {
+        "\(onboardingCompleted)-\(forceOnboarding)-\(forceTrustCenter)-\(appState.isReadOnlySafetyMode)"
     }
 
     private var language: AppLanguage {
@@ -147,5 +165,4 @@ struct AppCoordinator: View {
         #endif
     }
 }
-
 
