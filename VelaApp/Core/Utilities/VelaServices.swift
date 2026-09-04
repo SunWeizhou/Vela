@@ -58,9 +58,54 @@ enum TodayRefreshPolicy: Equatable, Sendable {
 /// model and does not expose `ModelContext` to callers.
 struct TodayDashboardSnapshot: Hashable, Sendable {
     let dashboard: DashboardSummary
+    /// Secondary Today values are captured once by the reader at the same
+    /// boundary as the dashboard.  The root surface must consume these
+    /// projections from `TodayViewState` instead of reading the shared
+    /// DashboardViewModel or rebuilding command/experience models in getters.
+    let bodyState: BodyState?
+    let trainingDecision: DailyTrainingDecision?
+    let command: TodayCommandState?
+    let experience: TodayExperienceModel?
+    let todayAIInsight: DailyAIInsight?
+    let nutrition: TodayNutritionProjection?
+    let operatingPlanPayload: DailyOperatingPlanPayload?
+    let lastUpdated: Date?
+    let vitalTrendSeries: [String: [Double]]
+    let errorMessage: String?
+    let secondaryDataErrorMessage: String?
 
-    init(dashboard: DashboardSummary) {
+    init(
+        dashboard: DashboardSummary,
+        bodyState: BodyState? = nil,
+        trainingDecision: DailyTrainingDecision? = nil,
+        command: TodayCommandState? = nil,
+        experience: TodayExperienceModel? = nil,
+        todayAIInsight: DailyAIInsight? = nil,
+        nutrition: TodayNutritionProjection? = nil,
+        operatingPlanPayload: DailyOperatingPlanPayload? = nil,
+        lastUpdated: Date? = nil,
+        vitalTrendSeries: [String: [Double]] = [:],
+        errorMessage: String? = nil,
+        secondaryDataErrorMessage: String? = nil
+    ) {
         self.dashboard = dashboard
+        self.bodyState = bodyState
+        self.trainingDecision = trainingDecision
+        self.command = command
+        self.experience = experience
+        self.todayAIInsight = todayAIInsight
+        self.nutrition = nutrition
+        self.operatingPlanPayload = operatingPlanPayload
+        self.lastUpdated = lastUpdated
+        self.vitalTrendSeries = vitalTrendSeries
+        self.errorMessage = errorMessage
+        self.secondaryDataErrorMessage = secondaryDataErrorMessage
+    }
+
+    /// Source-compatible convenience used by cache-only adapters that only
+    /// have the primary dashboard projection available.
+    init(dashboard: DashboardSummary) {
+        self.init(dashboard: dashboard, bodyState: nil)
     }
 }
 

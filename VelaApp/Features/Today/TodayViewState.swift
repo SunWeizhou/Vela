@@ -140,7 +140,7 @@ struct TodayPlanProjection: Equatable, Sendable {
     }
 }
 
-struct TodayNutritionProjection: Equatable, Sendable {
+struct TodayNutritionProjection: Equatable, Hashable, Sendable {
     var calories: Int?
     var calorieTarget: Int?
     var protein: Int?
@@ -180,6 +180,12 @@ struct TodayViewState: Equatable, Sendable {
     }
 
     let selectedDay: Date
+    /// The complete value read-model for the currently selected day.  It is
+    /// captured by the reader and is the only dashboard source the Today root
+    /// renders; `DashboardViewModel` remains an adapter concern.
+    var dashboard: DashboardSummary
+    var bodyState: BodyState
+    var trainingDecision: DailyTrainingDecision?
     var phase: Phase
     var source: DashboardSummary.DataSource
     var freshness: DataFreshness
@@ -191,6 +197,12 @@ struct TodayViewState: Equatable, Sendable {
     var feedback: TodayFeedbackProjection
     var plan: TodayPlanProjection?
     var nutrition: TodayNutritionProjection?
+    var operatingPlanPayload: DailyOperatingPlanPayload?
+    var todayAIInsight: DailyAIInsight?
+    var lastUpdated: Date?
+    var vitalTrendSeries: [String: [Double]]
+    var errorMessage: String?
+    var secondaryDataErrorMessage: String?
     var nonCritical: TodayNonCriticalState
     var error: TodayLoadFailure?
 
@@ -213,8 +225,12 @@ struct TodayViewState: Equatable, Sendable {
     }
 
     static func initial(day: Date) -> TodayViewState {
-        TodayViewState(
+        let dashboard = DashboardSummary.empty(date: day)
+        return TodayViewState(
             selectedDay: day,
+            dashboard: dashboard,
+            bodyState: dashboard.bodyState,
+            trainingDecision: nil,
             phase: .idle,
             source: .empty,
             freshness: .missing,
@@ -226,6 +242,12 @@ struct TodayViewState: Equatable, Sendable {
             feedback: .empty,
             plan: nil,
             nutrition: nil,
+            operatingPlanPayload: nil,
+            todayAIInsight: nil,
+            lastUpdated: nil,
+            vitalTrendSeries: [:],
+            errorMessage: nil,
+            secondaryDataErrorMessage: nil,
             nonCritical: .empty,
             error: nil
         )
@@ -242,6 +264,9 @@ struct TodayViewState: Equatable, Sendable {
         let hasEvidence = scores.ordered.contains { $0.metric.value != nil }
         return TodayViewState(
             selectedDay: selectedDay,
+            dashboard: dashboard,
+            bodyState: snapshot.bodyState ?? dashboard.bodyState,
+            trainingDecision: snapshot.trainingDecision,
             phase: hasEvidence ? .ready : .empty,
             source: dashboard.source,
             freshness: Self.freshness(
@@ -251,18 +276,88 @@ struct TodayViewState: Equatable, Sendable {
                 calendar: calendar
             ),
             scores: scores,
-            // Command and experience are intentionally not rebuilt here.  The
-            // reader may provide them in a future DTO; until then the root can
-            // render the existing legacy projection without a second kernel.
-            command: nil,
-            experience: nil,
+            // These are produced once by the reader's secondary-data
+            // assembler.  The Store only carries the value projection; it
+            // never invokes either builder while rendering.
+            command: snapshot.command,
+            experience: snapshot.experience,
             coverage: Self.unknownCoverage,
             livedState: .empty,
             feedback: .empty,
             plan: nil,
             nutrition: nil,
+            operatingPlanPayload: snapshot.operatingPlanPayload,
+            todayAIInsight: snapshot.todayAIInsight,
+            lastUpdated: snapshot.lastUpdated,
+            vitalTrendSeries: snapshot.vitalTrendSeries,
+            errorMessage: snapshot.errorMessage,
+            secondaryDataErrorMessage: snapshot.secondaryDataErrorMessage,
             nonCritical: .empty,
             error: nil
+        )
+    }
+
+    /// Explicit no-data command projection for the first frame.  This is a
+    /// value-only placeholder, not a compatibility call into
+    /// `TodayCommandBuilder`.
+    static func unavailableCommand(for day: Date) -> TodayCommandState {
+        TodayCommandState(
+            date: day,
+            bodyStateTitle: "今日状态待同步",
+            summary: "连接 Apple 健康并完成同步后，这里会显示今日建议。",
+            readinessDecision: ReadinessDecision(
+                decision: .recover,
+                confidence: 0,
+                reasons: ["今日健康数据尚未同步。"],
+                supportingSignals: [],
+                userOverrideAvailable: false
+            ),
+            keySignals: [],
+            actions: [],
+            coachArtifact: nil,
+            dataConfidence: .unavailable
+        )
+    }
+
+    /// Conservative first-frame experience.  It keeps the five-card grammar
+    /// visible with explicit `--` values until the reader provides a complete
+    /// projection, without rebuilding the experience model in a View getter.
+    static func unavailableExperience(for day: Date) -> TodayExperienceModel {
+        let cards: [TodayExperienceSignalCard] = [
+            ("recovery", "恢复", .recovery),
+            ("sleep", "睡眠", .sleep),
+            ("strain", "负荷", .strain),
+            ("stress", "压力", .stress),
+            ("energy", "能量", .energy)
+        ].map { id, title, accent in
+            TodayExperienceSignalCard(
+                id: id,
+                title: title,
+                value: "--",
+                directionLabel: "待同步",
+                confidenceLabel: "数据不足",
+                coverageLabel: "未同步",
+                subtitle: "等待健康数据",
+                trend: [],
+                accent: accent,
+                state: .moderate
+            )
+        }
+        return TodayExperienceModel(
+            generatedAt: day,
+            hero: TodayExperienceHero(
+                scoreTitle: "今日状态",
+                decisionTitle: "今日状态待同步",
+                summary: "连接 Apple 健康并完成同步后，这里会显示今日建议。",
+                confidenceLabel: "数据不足",
+                primaryActionTitle: "查看证据"
+            ),
+            signalCards: cards,
+            baselineFormation: .waiting,
+            evidenceChips: [],
+            actions: [],
+            nutrition: .empty,
+            coachPreview: "连接 Apple 健康后开始形成个人基线。"
         )
     }
 

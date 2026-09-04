@@ -163,6 +163,22 @@ Nutrition 或 Plan 不得覆盖主健康 evidence 的 phase。
 而不是让 Store 重新访问 SwiftData。旧 `TodayDashboardSnapshot` API 可暂留兼容桥，
 但不能把 `DashboardSummary` 继续作为 View 的万能依赖。
 
+### 2.2.1 PR3 小型 DTO delta（ARCH-03 follow-up）
+
+当前实现先采用兼容性最小增量，而不改动 `DashboardSummary`、评分 kernel 或
+composition root：`TodayDashboardSnapshot` 在一次 reader load 中额外携带已经装配好的
+`bodyState`、`trainingDecision`、`command`、`experience`、AI insight、nutrition、
+operating-plan payload、last-updated、vital trend，以及主/secondary error 文案。
+`TodayViewState` 对应保存这些值，并同时保存当前 `dashboard` read-model；根 View 只能从
+`todayStore.state` 读取它们。命令与体验缺失时使用状态层的显式、值语义
+`unavailable` projection，不得调用 `TodayCommandBuilder` 或
+`TodayExperienceModel.build`。
+
+本 delta 刻意不把 `TrainingPlanRecord`、`TrainingPlanAdaptationRecord`、
+`DailyDecisionFeedbackRecord` 或 `ModelContext` 放进 Sendable state；这些 SwiftData
+对象仍是兼容 effect 的 P1 边界。完成它们的迁移需要另一个值 DTO/写入 adapter 设计，
+不是本次 root 接线的隐式扩张。
+
 ### 2.3 Store Action 是意图，不是副作用
 
 当前代码已经有一个名为 `TodayAction` 的结构体（`TodayCommandState.swift:17–32`），
