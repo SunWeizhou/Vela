@@ -61,7 +61,6 @@ struct VelaTodayView: View {
 
     var bodyState: BodyState { todayStore.state.bodyState }
     var persistedOperatingPlan: DailyOperatingPlanRecord? { dashboardVM.persistedOperatingPlan }
-    var latestTodayArtifact: CoachArtifact? { dashboardVM.latestTodayArtifact }
 
     /// Baseline deviation changes emphasis, never score order or display
     /// grammar. The user can therefore build a stable visual memory over time.
