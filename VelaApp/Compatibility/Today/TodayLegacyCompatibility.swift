@@ -501,7 +501,7 @@ struct LivedStateCheckInSheet: View {
 }
 
 private struct TodayLegacyRuntimeKey: EnvironmentKey {
-    static let defaultValue = TodayLegacyRuntime.preview
+    nonisolated(unsafe) static let defaultValue = TodayLegacyRuntime.preview
 }
 
 extension EnvironmentValues {

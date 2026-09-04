@@ -455,8 +455,8 @@ struct VelaTodayView: View {
     @State var experienceFeedbackTick = 0
     @State var dataCoverageSummary = DataCoverageSummaryModel.unknown
     @State var dailyDecisionFeedback: DailyDecisionFeedbackRecord?
-    @State private var selectedLivedStateAlignment: LivedStateAlignment?
-    @State private var livedStateSaveError: String?
+    @State var selectedLivedStateAlignment: LivedStateAlignment?
+    @State var livedStateSaveError: String?
     @State private var lastScenePhaseSyncTime: Date?
     // F2 修复：档案修改发生在非 Today 页面时记一笔，回到 Today 立即强制重算。
     @State private var pendingLocalDataRefresh = false
