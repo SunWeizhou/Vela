@@ -1,10 +1,118 @@
 import Foundation
 
+/// Pure value input for `HealthTrendEngine`.
+///
+/// Adapters own loading and persistence. They should pass the widest history
+/// available (up to `HealthTrendHorizon.threeYears.windowDays`) when a three-
+/// year finding is desired. Missing values remain `nil`; the engine never
+/// coerces them to zero or silently substitutes a shorter horizon.
+struct HealthTrendInput: Sendable {
+    var snapshots: [DailyHealthSnapshot]
+    var longTermBaselines: LongTermBaselineReport?
+
+    init(
+        snapshots: [DailyHealthSnapshot] = [],
+        longTermBaselines: LongTermBaselineReport? = nil
+    ) {
+        self.snapshots = snapshots
+        self.longTermBaselines = longTermBaselines
+    }
+}
+
+/// Adapter-owned seam for supplying historical trend evidence.
+///
+/// This protocol intentionally has no persistence or HealthKit requirements:
+/// a caller can implement it over SwiftData, a test fixture, or a remote
+/// cache, then hand the resulting value to the pure scoring engine.
+protocol HealthTrendHistoryProvider: Sendable {
+    func history(
+        endingAt selectedDay: Date,
+        calendar: Calendar
+    ) -> HealthTrendInput
+}
+
+/// Small convenience provider for previews and deterministic tests.
+struct StaticHealthTrendHistoryProvider: HealthTrendHistoryProvider {
+    let input: HealthTrendInput
+
+    init(input: HealthTrendInput) {
+        self.input = input
+    }
+
+    func history(
+        endingAt selectedDay: Date,
+        calendar: Calendar
+    ) -> HealthTrendInput {
+        input
+    }
+}
+
+/// Compatibility spelling for adapters that model the seam as a history
+/// input rather than a generic trend input.
+typealias HealthTrendHistoryInput = HealthTrendInput
+
 // MARK: - Health Trend Engine
 
 struct HealthTrendEngine: Sendable {
 
     init() {}
+
+    /// Analyze a caller-provided history value.
+    ///
+    /// The scoring module deliberately accepts value-typed history rather
+    /// than fetching persistence itself. Adapters can therefore provide a
+    /// full three-year snapshot window (or a pre-computed long-term report)
+    /// without coupling this engine to SwiftData or HealthKit.
+    func analyze(
+        dashboard: DashboardSummary,
+        input: HealthTrendInput,
+        selectedDay: Date = Date(),
+        calendar: Calendar = .current
+    ) -> (brief: PersonalHealthBrief, findings: [HealthTrendFinding]) {
+        analyze(
+            dashboard: dashboard,
+            snapshots: input.snapshots,
+            longTermBaselines: input.longTermBaselines,
+            today: selectedDay,
+            calendar: calendar
+        )
+    }
+
+    /// Analyze history obtained through an adapter-owned provider seam.
+    ///
+    /// `history(endingAt:calendar:)` is synchronous and pure from the
+    /// engine's perspective; a persistence adapter may load and construct its
+    /// `HealthTrendInput` before calling this method.
+    func analyze(
+        dashboard: DashboardSummary,
+        historyProvider: any HealthTrendHistoryProvider,
+        selectedDay: Date = Date(),
+        calendar: Calendar = .current
+    ) -> (brief: PersonalHealthBrief, findings: [HealthTrendFinding]) {
+        let input = historyProvider.history(endingAt: selectedDay, calendar: calendar)
+        return analyze(
+            dashboard: dashboard,
+            input: input,
+            selectedDay: selectedDay,
+            calendar: calendar
+        )
+    }
+
+    /// Short label alias for call sites that already use `provider` as their
+    /// dependency name. Both entry points share the same deterministic core.
+    func analyze(
+        dashboard: DashboardSummary,
+        provider: any HealthTrendHistoryProvider,
+        selectedDay: Date = Date(),
+        calendar: Calendar = .current
+    ) -> (brief: PersonalHealthBrief, findings: [HealthTrendFinding]) {
+        analyze(
+            dashboard: dashboard,
+            historyProvider: provider,
+            selectedDay: selectedDay,
+            calendar: calendar
+        )
+    }
 
     func analyze(
         dashboard: DashboardSummary,
@@ -19,7 +127,7 @@ struct HealthTrendEngine: Sendable {
             return (emptyBrief, [])
         }
 
-        let sortedSnapshots = snapshots.sorted { $0.date < $1.date }
+        let sortedSnapshots = Self.deterministicallySortedSnapshots(snapshots)
 
         // Perf: build the four horizon windows in one linear pass so metric
         // computation never re-scans the full snapshot array. Windows preserve
@@ -107,6 +215,47 @@ struct HealthTrendEngine: Sendable {
     }
 
     // MARK: - Metric Findings Computation
+
+    /// Swift's `sorted(by:)` is not stable. Snapshot dates are normally
+    /// unique, but import/reconciliation can temporarily expose duplicate
+    /// dates. Tie-break on creation time and metric payload so the temporal
+    /// half-window calculation is independent of fetch order.
+    private static func deterministicallySortedSnapshots(
+        _ snapshots: [DailyHealthSnapshot]
+    ) -> [DailyHealthSnapshot] {
+        snapshots.sorted { lhs, rhs in
+            if lhs.date != rhs.date { return lhs.date < rhs.date }
+            if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
+            let lhsValues = Self.snapshotTieBreakKey(lhs)
+            let rhsValues = Self.snapshotTieBreakKey(rhs)
+            if lhsValues != rhsValues { return lhsValues < rhsValues }
+            return lhs.id.uuidString < rhs.id.uuidString
+        }
+    }
+
+    /// Compare duplicate-date snapshots by their metric payload before using
+    /// UUID as a final tie-break. This keeps semantically equivalent fixture
+    /// arrays deterministic even when each fixture is reconstructed afresh.
+    private static func snapshotTieBreakKey(_ snapshot: DailyHealthSnapshot) -> String {
+        [
+            snapshot.hrvAverage,
+            snapshot.restingHeartRate,
+            snapshot.sleepHours,
+            snapshot.sleepScore,
+            snapshot.recoveryScore,
+            snapshot.strainScore,
+            snapshot.stressIndex,
+            snapshot.currentEnergy ?? snapshot.energyBank,
+            snapshot.respiratoryRate,
+            snapshot.oxygenSaturation,
+            snapshot.bodyWeight,
+            snapshot.bodyFatPercent,
+            snapshot.steps,
+            snapshot.activeCalories
+        ]
+        .map { value in value.map { String($0.bitPattern) } ?? "_" }
+        .joined(separator: "|")
+    }
 
     /// Builds the four horizon windows (7d / 30d / 180d / 1095d) from the
     /// already-sorted snapshot array in a single linear pass.

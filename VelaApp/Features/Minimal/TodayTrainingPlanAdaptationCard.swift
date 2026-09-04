@@ -351,7 +351,7 @@ enum TodayTrainingPlanAdaptationDecision {
         at date: Date = Date()
     ) -> Bool {
         guard proposal.status == AdaptationStatus.proposed.rawValue,
-              AdaptiveTrainingManager().applyAdaptation(proposal, to: plan) else {
+              AdaptiveTrainingManager().applyAdaptation(proposal, to: plan, at: date) else {
             return false
         }
         proposal.status = AdaptationStatus.accepted.rawValue

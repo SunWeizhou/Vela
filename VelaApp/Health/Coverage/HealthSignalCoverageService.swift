@@ -1,6 +1,123 @@
 import Foundation
 import HealthKit
 
+/// The smallest seam needed to exercise coverage behaviour without a live
+/// HealthKit database.  The production adapter below keeps all HKQuery
+/// details behind this protocol, while tests can provide deterministic sample
+/// counts and typed failures.
+@MainActor
+protocol HealthCoverageStore: AnyObject {
+    var isHealthDataAvailable: Bool { get }
+
+    func authorizationStatus(for objectType: HKObjectType) -> HKAuthorizationStatus
+    func authorizationRequestStatus(for objectType: HKObjectType) async throws -> HKAuthorizationRequestStatus
+    func sampleStats(
+        for sampleType: HKSampleType,
+        start7d: Date,
+        start30d: Date,
+        now: Date
+    ) async throws -> HealthCoverageSampleStats
+}
+
+struct HealthCoverageSampleStats: Equatable, Sendable {
+    let sampleCount7d: Int
+    let sampleCount30d: Int
+    let latestSampleAt: Date?
+
+    init(sampleCount7d: Int, sampleCount30d: Int, latestSampleAt: Date?) {
+        self.sampleCount7d = max(0, sampleCount7d)
+        self.sampleCount30d = max(0, sampleCount30d)
+        self.latestSampleAt = latestSampleAt
+    }
+}
+
+/// Production implementation of the injectable coverage store.
+@MainActor
+final class HealthKitCoverageStore: HealthCoverageStore {
+    private let healthStore: HKHealthStore
+
+    init(healthStore: HKHealthStore = HealthStoreProvider.shared) {
+        self.healthStore = healthStore
+    }
+
+    var isHealthDataAvailable: Bool {
+        HKHealthStore.isHealthDataAvailable()
+    }
+
+    func authorizationStatus(for objectType: HKObjectType) -> HKAuthorizationStatus {
+        healthStore.authorizationStatus(for: objectType)
+    }
+
+    func authorizationRequestStatus(for objectType: HKObjectType) async throws -> HKAuthorizationRequestStatus {
+        try await withCheckedThrowingContinuation { continuation in
+            healthStore.getRequestStatusForAuthorization(toShare: [], read: [objectType]) { status, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: status)
+                }
+            }
+        }
+    }
+
+    func sampleStats(
+        for sampleType: HKSampleType,
+        start7d: Date,
+        start30d: Date,
+        now: Date
+    ) async throws -> HealthCoverageSampleStats {
+        try await withCheckedThrowingContinuation { continuation in
+            let latestPredicate = HKQuery.predicateForSamples(
+                withStart: start30d,
+                end: now,
+                options: .strictStartDate
+            )
+            let sortDescriptor = NSSortDescriptor(
+                key: HKSampleSortIdentifierStartDate,
+                ascending: false
+            )
+            let latestQuery = HKSampleQuery(
+                sampleType: sampleType,
+                predicate: latestPredicate,
+                limit: 1,
+                sortDescriptors: [sortDescriptor]
+            ) { _, samples, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+
+                let latestDate = samples?.first?.startDate
+                let countPredicate = HKQuery.predicateForSamples(
+                    withStart: start30d,
+                    end: now,
+                    options: .strictStartDate
+                )
+                let allQuery = HKSampleQuery(
+                    sampleType: sampleType,
+                    predicate: countPredicate,
+                    limit: HKObjectQueryNoLimit,
+                    sortDescriptors: nil
+                ) { _, allSamples, allError in
+                    if let allError {
+                        continuation.resume(throwing: allError)
+                        return
+                    }
+
+                    let samples = allSamples ?? []
+                    continuation.resume(returning: HealthCoverageSampleStats(
+                        sampleCount7d: samples.filter { $0.startDate >= start7d }.count,
+                        sampleCount30d: samples.count,
+                        latestSampleAt: latestDate
+                    ))
+                }
+                self.healthStore.execute(allQuery)
+            }
+            healthStore.execute(latestQuery)
+        }
+    }
+}
+
 public enum HealthSignal: String, Codable, CaseIterable, Sendable {
     case hrvSDNN = "hrv_sdnn"
     case heartRateVariabilityRMSSD = "hrv_rmssd"
@@ -331,6 +448,32 @@ public struct HealthSignalCoverage: Identifiable, Codable, Hashable, Sendable {
     public let latestSampleAt: Date?
     public let freshness: DataFreshness
     public let quality: SignalQuality
+
+    /// Typed query outcome is kept alongside authorization/sample coverage.
+    /// A missing sample (`noData`) is deliberately distinct from a denied,
+    /// unavailable, transient, or failed read; score kernels continue to use
+    /// nil for missing values and never infer a zero from this field.
+    let queryOutcome: HealthQueryOutcomeKind?
+
+    init(
+        signal: HealthSignal,
+        authorizationState: HealthSignalAuthorizationState,
+        sampleCount7d: Int,
+        sampleCount30d: Int,
+        latestSampleAt: Date?,
+        freshness: DataFreshness,
+        quality: SignalQuality,
+        queryOutcome: HealthQueryOutcomeKind? = nil
+    ) {
+        self.signal = signal
+        self.authorizationState = authorizationState
+        self.sampleCount7d = sampleCount7d
+        self.sampleCount30d = sampleCount30d
+        self.latestSampleAt = latestSampleAt
+        self.freshness = freshness
+        self.quality = quality
+        self.queryOutcome = queryOutcome
+    }
     
     public var isAvailable: Bool {
         sampleCount30d > 0
@@ -396,14 +539,32 @@ enum HealthReadStateResolver {
 
 @MainActor
 public final class HealthSignalCoverageService {
-    private let store: HKHealthStore
+    private let store: HealthCoverageStore
+    private(set) var diagnostics: [HealthQueryDiagnostic] = []
 
     public init(store: HKHealthStore = HKHealthStore()) {
-        self.store = store
+        self.store = HealthKitCoverageStore(healthStore: store)
+    }
+
+    /// Injectable initializer for deterministic coverage tests and preview
+    /// providers.  The public HKHealthStore initializer above remains source
+    /// compatible for production callers.
+    init(coverageStore: HealthCoverageStore) {
+        self.store = coverageStore
+    }
+
+    func consumeDiagnostics() -> [HealthQueryDiagnostic] {
+        defer { diagnostics.removeAll(keepingCapacity: true) }
+        return diagnostics
     }
 
     public func fetchCoverage(for signal: HealthSignal) async -> HealthSignalCoverage {
         guard let objectType = signal.objectType else {
+            recordDiagnostic(
+                component: signal.rawValue,
+                outcome: .unavailable,
+                error: nil
+            )
             return HealthSignalCoverage(
                 signal: signal,
                 authorizationState: .unavailable,
@@ -411,7 +572,26 @@ public final class HealthSignalCoverageService {
                 sampleCount30d: 0,
                 latestSampleAt: nil,
                 freshness: .missing,
-                quality: .insufficient
+                quality: .insufficient,
+                queryOutcome: .unavailable
+            )
+        }
+
+        guard store.isHealthDataAvailable else {
+            recordDiagnostic(
+                component: signal.rawValue,
+                outcome: .unavailable,
+                error: nil
+            )
+            return HealthSignalCoverage(
+                signal: signal,
+                authorizationState: .unavailable,
+                sampleCount7d: 0,
+                sampleCount30d: 0,
+                latestSampleAt: nil,
+                freshness: .missing,
+                quality: .insufficient,
+                queryOutcome: .unavailable
             )
         }
 
@@ -421,9 +601,109 @@ public final class HealthSignalCoverageService {
         let d7 = cal.date(byAdding: .day, value: -7, to: now) ?? now
         let d30 = cal.date(byAdding: .day, value: -30, to: now) ?? now
 
-        let (count7d, count30d, latestSampleDate) = await fetchSampleStats(for: objectType, start7d: d7, start30d: d30)
-        let requestStatus = await authorizationRequestStatus(for: objectType)
+        let stats: HealthCoverageSampleStats
+        do {
+            guard let sampleType = objectType as? HKSampleType else {
+                // Series types (for example workout routes) do not support
+                // HKSampleQuery counts. Treat that as a clean no-data read,
+                // preserving missing-data semantics without a fabricated 0.
+                stats = HealthCoverageSampleStats(
+                    sampleCount7d: 0,
+                    sampleCount30d: 0,
+                    latestSampleAt: nil
+                )
+                let requestStatus = try await store.authorizationRequestStatus(for: objectType)
+                let sharingStatus = store.authorizationStatus(for: objectType)
+                let outcome: HealthQueryOutcomeKind = sharingStatus == .sharingDenied ? .denied : .noData
+                recordDiagnostic(component: signal.rawValue, outcome: outcome, error: nil)
+                return makeCoverage(
+                    signal: signal,
+                    requestStatus: requestStatus,
+                    sharingStatus: sharingStatus,
+                    stats: stats,
+                    now: now,
+                    calendar: cal,
+                    queryOutcome: outcome
+                )
+            }
+            stats = try await store.sampleStats(
+                for: sampleType,
+                start7d: d7,
+                start30d: d30,
+                now: now
+            )
+        } catch {
+            let outcome = HealthKitQueryOutcomeClassifier.classify(error)
+            recordDiagnostic(component: signal.rawValue, outcome: outcome, error: error)
+            return makeUnavailableCoverage(signal: signal, outcome: outcome)
+        }
+
+        let requestStatus: HKAuthorizationRequestStatus
+        do {
+            requestStatus = try await store.authorizationRequestStatus(for: objectType)
+        } catch {
+            let outcome = HealthKitQueryOutcomeClassifier.classify(error)
+            recordDiagnostic(component: signal.rawValue, outcome: outcome, error: error)
+            return makeUnavailableCoverage(signal: signal, outcome: outcome)
+        }
         let sharingStatus = store.authorizationStatus(for: objectType)
+        let outcome: HealthQueryOutcomeKind = sharingStatus == .sharingDenied
+            ? .denied
+            : stats.sampleCount30d > 0 ? .data : .noData
+        if outcome != .data {
+            recordDiagnostic(component: signal.rawValue, outcome: outcome, error: nil)
+        }
+        return makeCoverage(
+            signal: signal,
+            requestStatus: requestStatus,
+            sharingStatus: sharingStatus,
+            stats: stats,
+            now: now,
+            calendar: cal,
+            queryOutcome: outcome
+        )
+    }
+
+    private func recordDiagnostic(
+        component: String,
+        outcome: HealthQueryOutcomeKind,
+        error: Error?
+    ) {
+        diagnostics.append(HealthQueryDiagnostic(
+            component: component,
+            outcome: outcome,
+            error: error
+        ))
+    }
+
+    private func makeUnavailableCoverage(
+        signal: HealthSignal,
+        outcome: HealthQueryOutcomeKind
+    ) -> HealthSignalCoverage {
+        HealthSignalCoverage(
+            signal: signal,
+            authorizationState: outcome == .denied ? .denied : outcome == .unavailable ? .unavailable : .noReadableSamples,
+            sampleCount7d: 0,
+            sampleCount30d: 0,
+            latestSampleAt: nil,
+            freshness: .missing,
+            quality: .insufficient,
+            queryOutcome: outcome
+        )
+    }
+
+    private func makeCoverage(
+        signal: HealthSignal,
+        requestStatus: HKAuthorizationRequestStatus,
+        sharingStatus: HKAuthorizationStatus,
+        stats: HealthCoverageSampleStats,
+        now: Date,
+        calendar: Calendar,
+        queryOutcome: HealthQueryOutcomeKind
+    ) -> HealthSignalCoverage {
+        let count7d = stats.sampleCount7d
+        let count30d = stats.sampleCount30d
+        let latestSampleDate = stats.latestSampleAt
         let authState = HealthReadStateResolver.resolve(
             requestStatus: requestStatus,
             sharingStatus: sharingStatus,
@@ -441,7 +721,7 @@ public final class HealthSignalCoverageService {
                 let diffHours = now.timeIntervalSince(latest) / 3600.0
                 if diffHours <= 2.0 {
                     freshness = .live
-                } else if cal.isDateInToday(latest) {
+                } else if calendar.isDateInToday(latest) {
                     freshness = .today
                 } else if diffHours <= 168.0 { // 7 days
                     freshness = .recent
@@ -471,62 +751,9 @@ public final class HealthSignalCoverageService {
             sampleCount30d: count30d,
             latestSampleAt: latestSampleDate,
             freshness: freshness,
-            quality: quality
+            quality: quality,
+            queryOutcome: queryOutcome
         )
-    }
-
-    private func authorizationRequestStatus(for objectType: HKObjectType) async -> HKAuthorizationRequestStatus {
-        await withCheckedContinuation { continuation in
-            store.getRequestStatusForAuthorization(toShare: [], read: [objectType]) { status, _ in
-                continuation.resume(returning: status)
-            }
-        }
-    }
-
-    private func fetchSampleStats(for type: HKObjectType, start7d: Date, start30d: Date) async -> (Int, Int, Date?) {
-        guard let sampleType = type as? HKSampleType else { return (0, 0, nil) }
-
-        return await withCheckedContinuation { continuation in
-            let now = Date()
-            let pred30d = HKQuery.predicateForSamples(withStart: start30d, end: now, options: .strictStartDate)
-            
-            // Query the most recent sample first to get the latest date
-            let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
-            let query = HKSampleQuery(
-                sampleType: sampleType,
-                predicate: pred30d,
-                limit: 1,
-                sortDescriptors: [sortDescriptor]
-            ) { _, samples, error in
-                guard error == nil, let samples = samples else {
-                    continuation.resume(returning: (0, 0, nil))
-                    return
-                }
-                
-                let latestDate = samples.first?.startDate
-                
-                // Now run a query to count all samples in 30d and 7d
-                let countPredicate = HKQuery.predicateForSamples(withStart: start30d, end: now, options: .strictStartDate)
-                let allQuery = HKSampleQuery(
-                    sampleType: sampleType,
-                    predicate: countPredicate,
-                    limit: HKObjectQueryNoLimit,
-                    sortDescriptors: nil
-                ) { _, allSamples, allErr in
-                    guard allErr == nil, let allSamples = allSamples else {
-                        continuation.resume(returning: (0, 0, latestDate))
-                        return
-                    }
-                    
-                    let c30d = allSamples.count
-                    let c7d = allSamples.filter { $0.startDate >= start7d }.count
-                    
-                    continuation.resume(returning: (c7d, c30d, latestDate))
-                }
-                self.store.execute(allQuery)
-            }
-            self.store.execute(query)
-        }
     }
 }
 

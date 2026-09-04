@@ -120,11 +120,44 @@ struct AdaptiveTrainingManager {
         return proposal
     }
 
-    /// Applies an accepted adaptation to the training plan.
+    /// Applies a user-confirmed adaptation to the training plan.
+    ///
+    /// The proposal state is intentionally not promoted here. Callers that
+    /// have an explicit user confirmation (for example, the Today decision
+    /// helper) mark the record as accepted only after this method succeeds.
+    /// Replaying an already-accepted record is a no-op so a duplicated UI
+    /// event cannot append another suffix or halve a duration a second time.
+    /// A proposed record older than one calendar day is no longer actionable;
+    /// the attempted acceptance closes it as rejected instead of applying a
+    /// stale recommendation to the current plan.
     func applyAdaptation(
         _ record: TrainingPlanAdaptationRecord,
-        to plan: TrainingPlanRecord
+        to plan: TrainingPlanRecord,
+        at date: Date = Date()
     ) -> Bool {
+        guard record.planId == plan.id else { return false }
+
+        switch record.status {
+        case AdaptationStatus.accepted.rawValue:
+            // The first acceptance already applied the plan mutation. Treat
+            // retries as successful no-ops to make the state transition
+            // idempotent without changing timestamps or rich day metadata.
+            return true
+        case AdaptationStatus.proposed.rawValue:
+            break
+        default:
+            // Rejected and unknown states require a fresh proposal and must
+            // never mutate the plan implicitly.
+            return false
+        }
+
+        if date >= record.createdAt,
+           date.timeIntervalSince(record.createdAt) >= Self.proposalExpirationInterval {
+            record.status = AdaptationStatus.rejected.rawValue
+            record.rejectedAt = date
+            return false
+        }
+
         guard let dayIndex = plan.days.firstIndex(where: { $0.id == record.dayId }) else { return false }
 
         switch record.adjustment {
@@ -134,36 +167,29 @@ struct AdaptiveTrainingManager {
             // 否则 keep 提案永远停在待确认列表。
             return true
         case "rest":
-            plan.days[dayIndex] = TrainingDay(
-                id: plan.days[dayIndex].id,
-                weekNumber: plan.days[dayIndex].weekNumber,
-                dayNumber: plan.days[dayIndex].dayNumber,
-                title: AppLanguage.stored.isChinese ? "休息日（调整后）" : "Rest Day (Adjusted)",
-                description: record.reason,
-                focus: "rest", durationMinutes: 0, intensity: "low",
-                isCompleted: false
-            )
+            var updated = plan.days[dayIndex]
+            updated.title = AppLanguage.stored.isChinese ? "休息日（调整后）" : "Rest Day (Adjusted)"
+            updated.description = record.reason
+            updated.focus = "rest"
+            updated.durationMinutes = 0
+            updated.intensity = "low"
+            plan.days[dayIndex] = updated
         case "reduce":
             let halfDuration = max(15, plan.days[dayIndex].durationMinutes / 2)
             var modified = plan.days[dayIndex]
-            modified = TrainingDay(
-                id: modified.id, weekNumber: modified.weekNumber, dayNumber: modified.dayNumber,
-                title: modified.title + (AppLanguage.stored.isChinese ? "（减量）" : " (Reduced)"),
-                description: record.suggestedAlternative ?? modified.description,
-                focus: modified.focus, durationMinutes: halfDuration, intensity: "moderate",
-                isCompleted: false
-            )
+            modified.title += AppLanguage.stored.isChinese ? "（减量）" : " (Reduced)"
+            modified.description = record.suggestedAlternative ?? modified.description
+            modified.durationMinutes = halfDuration
+            modified.intensity = "moderate"
             plan.days[dayIndex] = modified
         case "swap":
-            plan.days[dayIndex] = TrainingDay(
-                id: plan.days[dayIndex].id,
-                weekNumber: plan.days[dayIndex].weekNumber,
-                dayNumber: plan.days[dayIndex].dayNumber,
-                title: AppLanguage.stored.isChinese ? "主动恢复（调整后）" : "Active Recovery (Adjusted)",
-                description: record.suggestedAlternative ?? plan.days[dayIndex].description,
-                focus: "flexibility", durationMinutes: 30, intensity: "low",
-                isCompleted: false
-            )
+            var updated = plan.days[dayIndex]
+            updated.title = AppLanguage.stored.isChinese ? "主动恢复（调整后）" : "Active Recovery (Adjusted)"
+            updated.description = record.suggestedAlternative ?? updated.description
+            updated.focus = "flexibility"
+            updated.durationMinutes = 30
+            updated.intensity = "low"
+            plan.days[dayIndex] = updated
         case "reschedule":
             // Move the training day to the next available rest day
             var moved = plan.days[dayIndex]
@@ -171,45 +197,44 @@ struct AdaptiveTrainingManager {
                 .first(where: { $0 > dayIndex && (plan.days[$0].focus == "rest" || plan.days[$0].focus == "flexibility") }) else {
                 return false
             }
-            moved = TrainingDay(
-                id: moved.id, weekNumber: plan.days[nextRestIndex].weekNumber,
-                dayNumber: plan.days[nextRestIndex].dayNumber,
-                title: moved.title + (AppLanguage.stored.isChinese ? "（改期）" : " (Rescheduled)"),
-                description: moved.description, focus: moved.focus,
-                durationMinutes: moved.durationMinutes, intensity: moved.intensity,
-                isCompleted: false
-            )
+            moved.weekNumber = plan.days[nextRestIndex].weekNumber
+            moved.dayNumber = plan.days[nextRestIndex].dayNumber
+            moved.title += AppLanguage.stored.isChinese ? "（改期）" : " (Rescheduled)"
             // Mark original day as rest
-            plan.days[dayIndex] = TrainingDay(
-                id: plan.days[dayIndex].id,
-                weekNumber: plan.days[dayIndex].weekNumber,
-                dayNumber: plan.days[dayIndex].dayNumber,
-                title: AppLanguage.stored.isChinese ? "休息日" : "Rest Day",
-                description: AppLanguage.stored.isChinese ? "训练已改期" : "Training rescheduled",
-                focus: "rest", durationMinutes: 0, intensity: "low",
-                isCompleted: false
-            )
+            var restDay = plan.days[dayIndex]
+            restDay.title = AppLanguage.stored.isChinese ? "休息日" : "Rest Day"
+            restDay.description = AppLanguage.stored.isChinese ? "训练已改期" : "Training rescheduled"
+            restDay.focus = "rest"
+            restDay.durationMinutes = 0
+            restDay.intensity = "low"
+            plan.days[dayIndex] = restDay
             plan.days[nextRestIndex] = moved
         case "deloadWeek":
             // Convert all remaining days this week to light recovery
             let currentWeek = plan.days[dayIndex].weekNumber
             for i in plan.days.indices where plan.days[i].weekNumber == currentWeek && plan.days[i].focus != "rest" {
-                plan.days[i] = TrainingDay(
-                    id: plan.days[i].id,
-                    weekNumber: plan.days[i].weekNumber,
-                    dayNumber: plan.days[i].dayNumber,
-                    title: AppLanguage.stored.isChinese ? "减载周（调整后）" : "Deload Week (Adjusted)",
-                    description: record.reason,
-                    focus: "flexibility", durationMinutes: 20, intensity: "low",
-                    isCompleted: false
-                )
+                var updated = plan.days[i]
+                updated.title = AppLanguage.stored.isChinese ? "减载周（调整后）" : "Deload Week (Adjusted)"
+                updated.description = record.reason
+                updated.focus = "flexibility"
+                updated.durationMinutes = 20
+                updated.intensity = "low"
+                plan.days[i] = updated
             }
         default:
             return false
         }
 
+        // Keep the plan's revision timestamp aligned with the explicit
+        // mutation while leaving it untouched for a keep/no-op proposal.
+        plan.updatedAt = date
         return true
     }
+
+    /// Daily proposals are based on a point-in-time readiness snapshot. Once
+    /// they are more than one day old, accepting them would apply stale
+    /// guidance to a different training day.
+    static let proposalExpirationInterval: TimeInterval = 24 * 60 * 60
 }
 
 // MARK: - Workout Adaptation Service

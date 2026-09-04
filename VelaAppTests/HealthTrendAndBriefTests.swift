@@ -371,6 +371,129 @@ final class HealthTrendAndBriefTests: XCTestCase {
         XCTAssertEqual(finding?.sampleCount, 400)
     }
 
+    func testHistoryProviderInputPublishesThreeYearSeriesWithoutPersistenceCoupling() {
+        let calendar = Calendar(identifier: .gregorian)
+        let today = calendar.startOfDay(for: Date())
+        var snapshots: [DailyHealthSnapshot] = []
+
+        // A provider can supply a full long window even when the daily brief
+        // adapter normally keeps a shorter recent window in memory.
+        for day in 0..<400 {
+            let date = calendar.date(byAdding: .day, value: day - 399, to: today)!
+            var snapshot = DailyHealthSnapshot(date: date)
+            snapshot.recoveryScore = day < 200 ? 82 : 61
+            snapshots.append(snapshot)
+        }
+
+        let dashboard = recoveryDashboard(value: 61, date: today)
+        let input = HealthTrendInput(snapshots: snapshots)
+        let provider = StaticHealthTrendHistoryProvider(input: input)
+        let engine = HealthTrendEngine()
+
+        let fromProvider = engine.analyze(
+            dashboard: dashboard,
+            historyProvider: provider,
+            selectedDay: today,
+            calendar: calendar
+        )
+        let direct = engine.analyze(
+            dashboard: dashboard,
+            input: input,
+            selectedDay: today,
+            calendar: calendar
+        )
+
+        let providerFinding = fromProvider.findings.first {
+            $0.metric == .recovery && $0.horizon == .threeYears
+        }
+        XCTAssertTrue(providerFinding?.isAvailable == true)
+        XCTAssertEqual(providerFinding?.sampleCount, 400)
+        XCTAssertEqual(providerFinding?.valueDirection, .falling)
+        XCTAssertEqual(fromProvider.findings, direct.findings)
+        XCTAssertEqual(fromProvider.brief, direct.brief)
+    }
+
+    func testThreeYearWindowExcludesOutOfWindowAndMissingSamples() {
+        let calendar = Calendar(identifier: .gregorian)
+        let today = calendar.startOfDay(for: Date())
+        var completeSnapshots: [DailyHealthSnapshot] = []
+
+        // Exactly 60 valid samples spanning more than one year.
+        for index in 0..<60 {
+            let date = calendar.date(byAdding: .day, value: -600 + index * 10, to: today)!
+            var snapshot = DailyHealthSnapshot(date: date)
+            snapshot.recoveryScore = 70
+            completeSnapshots.append(snapshot)
+        }
+
+        var old = DailyHealthSnapshot(date: calendar.date(byAdding: .day, value: -1_100, to: today)!)
+        old.recoveryScore = 90
+        var future = DailyHealthSnapshot(date: calendar.date(byAdding: .day, value: 1, to: today)!)
+        future.recoveryScore = 90
+        completeSnapshots += [old, future]
+
+        let dashboard = recoveryDashboard(value: 70, date: today)
+        let complete = HealthTrendEngine().analyze(
+            dashboard: dashboard,
+            input: HealthTrendInput(snapshots: completeSnapshots),
+            selectedDay: today,
+            calendar: calendar
+        )
+        let completeFinding = complete.findings.first {
+            $0.metric == .recovery && $0.horizon == .threeYears
+        }
+        XCTAssertTrue(completeFinding?.isAvailable == true)
+        XCTAssertEqual(completeFinding?.sampleCount, 60)
+
+        // A missing value is not a zero: it reduces evidence and keeps the
+        // three-year horizon explicitly unavailable below its sample gate.
+        var missingSnapshots = completeSnapshots
+        missingSnapshots[10].recoveryScore = nil
+        let missing = HealthTrendEngine().analyze(
+            dashboard: dashboard,
+            input: HealthTrendInput(snapshots: missingSnapshots),
+            selectedDay: today,
+            calendar: calendar
+        )
+        let missingFinding = missing.findings.first {
+            $0.metric == .recovery && $0.horizon == .threeYears
+        }
+        XCTAssertFalse(missingFinding?.isAvailable == true)
+        XCTAssertEqual(missingFinding?.sampleCount, 59)
+        XCTAssertEqual(missingFinding?.direction, .insufficientData)
+    }
+
+    func testHistoryInputResultsAreDeterministicAcrossFetchOrder() {
+        let calendar = Calendar(identifier: .gregorian)
+        let today = calendar.startOfDay(for: Date())
+        var snapshots: [DailyHealthSnapshot] = []
+
+        for day in 0..<30 {
+            let date = calendar.date(byAdding: .day, value: day - 29, to: today)!
+            var snapshot = DailyHealthSnapshot(date: date)
+            snapshot.recoveryScore = day < 15 ? 80 : 50
+            snapshots.append(snapshot)
+        }
+
+        let dashboard = recoveryDashboard(value: 50, date: today)
+        let engine = HealthTrendEngine()
+        let forward = engine.analyze(
+            dashboard: dashboard,
+            input: HealthTrendInput(snapshots: snapshots),
+            selectedDay: today,
+            calendar: calendar
+        )
+        let reversed = engine.analyze(
+            dashboard: dashboard,
+            input: HealthTrendInput(snapshots: Array(snapshots.reversed())),
+            selectedDay: today,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(forward.findings, reversed.findings)
+        XCTAssertEqual(forward.brief, reversed.brief)
+    }
+
     func testMetricPolaritiesAreCorrectlyDefined() {
         XCTAssertEqual(CoreHealthMetric.bodyWeight.polarity, .contextual)
         XCTAssertEqual(CoreHealthMetric.bodyFat.polarity, .contextual)
@@ -714,5 +837,24 @@ final class HealthTrendAndBriefTests: XCTestCase {
         XCTAssertEqual(activeSnapshot?.planTitle, "推拉腿计划")
         XCTAssertEqual(activeSnapshot?.sessionTitle, "上半身推")
     }
-}
 
+    private func recoveryDashboard(value: Double, date: Date) -> DashboardSummary {
+        var dashboard = DashboardSummary.empty(date: date)
+        dashboard.recovery = MetricResult(
+            domain: .recovery,
+            name: "Recovery",
+            value: value,
+            band: .normal,
+            confidence: .high,
+            components: [:],
+            componentWeights: [:],
+            reasons: [],
+            missingInputs: [],
+            dataWindow: DateInterval(start: date, duration: 86_400),
+            source: .healthKit,
+            algorithmVersion: "1.0",
+            lastUpdated: date
+        )
+        return dashboard
+    }
+}

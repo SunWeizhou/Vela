@@ -170,6 +170,85 @@ final class HealthFoundationTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testCoverageStoreSeamPreservesTypedOutcomesAndDiagnostics() async {
+        let fake = FakeHealthCoverageStore()
+        fake.isHealthDataAvailable = false
+        let unavailableService = HealthSignalCoverageService(coverageStore: fake)
+        let unavailable = await unavailableService.fetchCoverage(for: .hrvSDNN)
+        XCTAssertEqual(unavailable.queryOutcome, .unavailable)
+        XCTAssertEqual(unavailable.authorizationState, .unavailable)
+
+        fake.isHealthDataAvailable = true
+        fake.errorsByIdentifier[HealthSignal.restingHR.objectType!.identifier] = NSError(
+            domain: HKErrorDomain,
+            code: HKError.Code.errorAuthorizationDenied.rawValue
+        )
+        fake.errorsByIdentifier[HealthSignal.respiratoryRate.objectType!.identifier] = NSError(
+            domain: HKErrorDomain,
+            code: HKError.Code.errorDatabaseInaccessible.rawValue
+        )
+        fake.errorsByIdentifier[HealthSignal.sleepAnalysis.objectType!.identifier] = NSError(
+            domain: "CoverageTest",
+            code: 42
+        )
+
+        let stats = HealthCoverageSampleStats(sampleCount7d: 0, sampleCount30d: 0, latestSampleAt: nil)
+        fake.statsByIdentifier[HealthSignal.activeEnergy.objectType!.identifier] = stats
+        let service = HealthSignalCoverageService(coverageStore: fake)
+
+        let denied = await service.fetchCoverage(for: .restingHR)
+        let transient = await service.fetchCoverage(for: .respiratoryRate)
+        let failed = await service.fetchCoverage(for: .sleepAnalysis)
+        let noData = await service.fetchCoverage(for: .activeEnergy)
+
+        XCTAssertEqual(denied.queryOutcome, .denied)
+        XCTAssertEqual(denied.authorizationState, .denied)
+        XCTAssertEqual(transient.queryOutcome, .transient)
+        XCTAssertEqual(failed.queryOutcome, .failed)
+        XCTAssertEqual(noData.queryOutcome, .noData)
+        XCTAssertEqual(noData.authorizationState, .noReadableSamples)
+        XCTAssertFalse(noData.analyticallyUsable)
+        XCTAssertNil(noData.latestSampleAt)
+
+        // HealthKit may return an empty sample set instead of throwing when
+        // read access is denied; authorization state must still win over the
+        // no-data inference.
+        fake.sharingStatus = .sharingDenied
+        let deniedWithoutSamples = await service.fetchCoverage(for: .activeEnergy)
+        XCTAssertEqual(deniedWithoutSamples.queryOutcome, .denied)
+        XCTAssertEqual(deniedWithoutSamples.authorizationState, .denied)
+
+        let diagnostics = service.consumeDiagnostics()
+        let outcomeCounts = Dictionary(grouping: diagnostics, by: \.outcome)
+            .mapValues(\.count)
+        XCTAssertEqual(outcomeCounts[.denied], 2)
+        XCTAssertEqual(outcomeCounts[.transient], 1)
+        XCTAssertEqual(outcomeCounts[.failed], 1)
+        XCTAssertEqual(outcomeCounts[.noData], 1)
+        XCTAssertTrue(service.consumeDiagnostics().isEmpty)
+    }
+
+    @MainActor
+    func testCoverageStoreSeamComputesFreshUsableCoverageWithoutInventingZero() async {
+        let fake = FakeHealthCoverageStore()
+        fake.statsByIdentifier[HealthSignal.hrvSDNN.objectType!.identifier] = HealthCoverageSampleStats(
+            sampleCount7d: 7,
+            sampleCount30d: 14,
+            latestSampleAt: Date()
+        )
+        let service = HealthSignalCoverageService(coverageStore: fake)
+
+        let coverage = await service.fetchCoverage(for: .hrvSDNN)
+
+        XCTAssertEqual(coverage.queryOutcome, .data)
+        XCTAssertEqual(coverage.authorizationState, .readableSamples)
+        XCTAssertEqual(coverage.sampleCount7d, 7)
+        XCTAssertEqual(coverage.sampleCount30d, 14)
+        XCTAssertTrue(coverage.analyticallyUsable)
+        XCTAssertNotEqual(coverage.sampleCount30d, 0)
+    }
+
     func testHealthSignalCatalogCoversEveryQueriedSignalAndSeparatesAudioSources() {
         XCTAssertTrue(HealthSignal.allCases.allSatisfy { $0.objectType != nil })
         XCTAssertNotEqual(
@@ -465,6 +544,36 @@ private final class FakeHealthStore: HealthStoreProviding {
 
     func authorizationStatus(for type: HKObjectType) -> HKAuthorizationStatus {
         .notDetermined
+    }
+}
+
+@MainActor
+private final class FakeHealthCoverageStore: HealthCoverageStore {
+    var isHealthDataAvailable = true
+    var requestStatus: HKAuthorizationRequestStatus = .unnecessary
+    var sharingStatus: HKAuthorizationStatus = .sharingAuthorized
+    var statsByIdentifier: [String: HealthCoverageSampleStats] = [:]
+    var errorsByIdentifier: [String: Error] = [:]
+
+    func authorizationStatus(for objectType: HKObjectType) -> HKAuthorizationStatus {
+        sharingStatus
+    }
+
+    func authorizationRequestStatus(for objectType: HKObjectType) async throws -> HKAuthorizationRequestStatus {
+        requestStatus
+    }
+
+    func sampleStats(
+        for sampleType: HKSampleType,
+        start7d: Date,
+        start30d: Date,
+        now: Date
+    ) async throws -> HealthCoverageSampleStats {
+        if let error = errorsByIdentifier[sampleType.identifier] {
+            throw error
+        }
+        return statsByIdentifier[sampleType.identifier]
+            ?? HealthCoverageSampleStats(sampleCount7d: 0, sampleCount30d: 0, latestSampleAt: nil)
     }
 }
 
@@ -863,5 +972,3 @@ final class WorkoutHeartRateRecoveryMatcherTests: XCTestCase {
         XCTAssertTrue(WorkoutHeartRateRecoveryMatcher.match(samples: samples, workouts: [workout]).isEmpty)
     }
 }
-
-
