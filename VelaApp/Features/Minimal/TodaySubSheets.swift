@@ -1411,35 +1411,14 @@ struct WorkoutLogSheetView: View {
     let sports = ["跑步", "力量训练", "骑行", "游泳", "瑜伽", "HIIT", "步行"]
     
     var body: some View {
-        VStack(spacing: 20) {
-            Capsule()
-                .fill(VelaTheme.borderSoft)
-                .frame(width: 36, height: 5)
-                .padding(.top, 8)
-            
-            HStack {
-                Text("记录运动活动")
-                    .font(.system(.title3, design: .default, weight: .bold))
-                    .foregroundStyle(VelaTheme.fg)
-                Spacer()
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundStyle(VelaTheme.meta)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 20)
-            
+        NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
                     // Sport Type Picker
                     VStack(alignment: .leading, spacing: 10) {
                         Text("运动类型")
                             .font(.system(.footnote, design: .default, weight: .bold))
-                            .foregroundStyle(VelaTheme.muted)
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                         
                         Picker("运动类型", selection: $selectedSport) {
                             ForEach(sports, id: \.self) { sport in
@@ -1448,14 +1427,13 @@ struct WorkoutLogSheetView: View {
                         }
                         .pickerStyle(.segmented)
                     }
-                    .padding(.horizontal, 20)
                     
                     // Duration Slider
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
                             Text("时长")
                                 .font(.system(.footnote, design: .default, weight: .bold))
-                                .foregroundStyle(VelaTheme.muted)
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             Spacer()
                             Text("\(Int(durationMinutes)) 分钟")
                                 .font(.system(.footnote, design: .default, weight: .bold))
@@ -1465,14 +1443,16 @@ struct WorkoutLogSheetView: View {
                         Slider(value: $durationMinutes, in: 5...120, step: 5)
                             .tint(VelaTheme.accent)
                     }
-                    .padding(.horizontal, 20)
+                    .padding(14)
+                    .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
                     
                     // Active Calories
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
                             Text("活跃热量消耗")
                                 .font(.system(.footnote, design: .default, weight: .bold))
-                                .foregroundStyle(VelaTheme.muted)
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             Spacer()
                             Text("\(Int(caloriesBurned)) kcal")
                                 .font(.system(.footnote, design: .default, weight: .bold))
@@ -1482,14 +1462,16 @@ struct WorkoutLogSheetView: View {
                         Slider(value: $caloriesBurned, in: 50...1000, step: 25)
                             .tint(VelaTheme.accent)
                     }
-                    .padding(.horizontal, 20)
+                    .padding(14)
+                    .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
                     
                     // Exertion Score
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
                             Text("耗力感官评分 (RPE)")
                                 .font(.system(.footnote, design: .default, weight: .bold))
-                                .foregroundStyle(VelaTheme.muted)
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             Spacer()
                             Text("\(Int(exertionScore)) / 10")
                                 .font(.system(.footnote, design: .default, weight: .bold))
@@ -1499,36 +1481,51 @@ struct WorkoutLogSheetView: View {
                         Slider(value: $exertionScore, in: 1...10, step: 1)
                             .tint(VelaTheme.accent)
                     }
-                    .padding(.horizontal, 20)
+                    .padding(14)
+                    .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
                     
                     // Save Button
                     Button {
                         if saveWorkoutToSwiftData() {
+                            VelaHaptic.success()
                             dismiss()
                         }
                     } label: {
                         Text("保存活动")
                             .font(.system(.callout, design: .default, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(VelaTheme.rhythmDeepOn)
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
-                            .background(RoundedRectangle(cornerRadius: 25, style: .continuous).fill(VelaTheme.accent))
-                            .shadow(color: VelaTheme.accent.opacity(0.2), radius: 6, y: 3)
-                            .padding(.horizontal, 20)
-                            .padding(.top, 10)
+                            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(VelaTheme.accent))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.cardPress)
+                    .padding(.top, 10)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+                .padding(.bottom, 24)
+            }
+            .background(VelaTheme.rhythmCanvas.ignoresSafeArea())
+            .navigationTitle("记录运动")
+            .navigationBarTitleDisplayMode(.inline)
+            .velaRhythmDetailChrome()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") {
+                        dismiss()
+                    }
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
             }
-        }
-        .background(VelaTheme.rhythmCanvas.ignoresSafeArea())
-        .alert("无法保存活动", isPresented: Binding(
-            get: { saveError != nil },
-            set: { if !$0 { saveError = nil } }
-        )) {
-            Button("好", role: .cancel) { saveError = nil }
-        } message: {
-            Text(saveError ?? "")
+            .alert("无法保存活动", isPresented: Binding(
+                get: { saveError != nil },
+                set: { if !$0 { saveError = nil } }
+            )) {
+                Button("好", role: .cancel) { saveError = nil }
+            } message: {
+                Text(saveError ?? "")
+            }
         }
     }
     

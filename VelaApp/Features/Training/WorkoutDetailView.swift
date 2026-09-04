@@ -57,55 +57,21 @@ struct WorkoutDetailView: View {
             }
             .scrollIndicators(.hidden)
         }
-        .navigationTitle("")
+        .navigationTitle(workout.activityName)
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .top) {
-            VStack(spacing: 0) {
-                HStack {
-                    Button(action: dismiss.callAsFunction) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(VelaTheme.rhythmDeep)
-                            .frame(width: 38, height: 38)
-                            .background(Circle().fill(VelaTheme.rhythmCanvasRaised))
-                            .overlay(Circle().stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
-                    }
-                    .buttonStyle(.cardPress)
-                    .accessibilityLabel("返回")
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(workout.activityName)
-                            .font(.system(.title3, design: .default, weight: .bold))
-                            .foregroundStyle(VelaTheme.rhythmInk)
-                            .lineLimit(1)
-                        Text(workout.start.formatted(date: .abbreviated, time: .shortened))
-                            .font(.system(.caption, design: .default, weight: .medium))
-                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                    }
-                    Spacer()
-                    Image(systemName: iconForWorkout(workout.activityName))
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(workoutAccentColor)
-                        .frame(width: 36, height: 36)
-                        .background(Circle().fill(workoutAccentColor.opacity(0.14)))
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(VelaTheme.rhythmCanvas.opacity(0.97))
-                Divider().foregroundStyle(VelaTheme.rhythmMist)
-            }
-        }
+        .velaRhythmDetailChrome()
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
+            ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: 12) {
                     Button {
                         showHeartRateInsight = true
                     } label: {
                         Image(systemName: "heart.text.square")
                             .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(heartRates.isEmpty ? VelaTheme.rhythmInkSecondary : VelaTheme.rhythmDeep)
+                            .foregroundStyle(heartRates.isEmpty ? VelaTheme.rhythmInkSecondary.opacity(0.4) : VelaTheme.rhythmDeep)
                     }
                     .disabled(heartRates.isEmpty)
+                    .accessibilityLabel("心率区间洞察")
                     
                     Button(role: .destructive) {
                         showDeleteConfirmation = true
@@ -114,6 +80,7 @@ struct WorkoutDetailView: View {
                             .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(VelaTheme.systemRed)
                     }
+                    .accessibilityLabel("删除记录")
                 }
             }
         }
@@ -198,7 +165,25 @@ struct WorkoutDetailView: View {
     }
 
     private var hero: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Image(systemName: iconForWorkout(workout.activityName))
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(workoutAccentColor)
+                    .frame(width: 38, height: 38)
+                    .background(Circle().fill(workoutAccentColor.opacity(0.14)))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(workout.activityName)
+                        .font(.system(.headline, design: .default, weight: .bold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                    Text(workout.start.formatted(date: .abbreviated, time: .shortened))
+                        .font(.system(.caption, design: .default, weight: .medium))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                }
+                Spacer()
+            }
+
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
                 heroMetric("时长", "\(Int((workout.end.timeIntervalSince(workout.start) / 60).rounded()))", "分钟")
                 heroMetric("活动消耗", workout.energyKilocalories.map { "\(Int($0))" } ?? "--", "kcal")

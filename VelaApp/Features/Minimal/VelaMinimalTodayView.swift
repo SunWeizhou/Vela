@@ -5,12 +5,31 @@ import CoreLocation
 // MARK: - VelaTodayView — evidence-first daily decision surface
 
 struct VelaTodayView: View {
+    enum TodaySheet: Identifiable {
+        case calendar
+        case metric(VelaMetricDetailView.MetricType)
+        case evidence
+        case feedback
+        case livedState
+
+        var id: String {
+            switch self {
+            case .calendar: return "calendar"
+            case .metric(let metric): return "metric-\(metric.id)"
+            case .evidence: return "evidence"
+            case .feedback: return "feedback"
+            case .livedState: return "lived-state"
+            }
+        }
+    }
+
     @Environment(\.velaSurfaceIsActive) private var isActiveSurface
     @Binding var showCoach: Bool
     @Binding var showSettings: Bool
     @Environment(\.colorScheme) var cs
     @Environment(\.modelContext) var modelContext
     @Environment(\.accessibilityReduceMotion) var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var dashboardVM: DashboardViewModel
     @ObservedObject var appState = VelaAppState.shared
@@ -457,17 +476,11 @@ struct VelaTodayView: View {
         }
     }
 
-    // Sheets trigger states
-    @State var showCalendarOverview = false
-    @State var selectedInsightIndex = 0
-    @State var selectedInsight: ProactiveInsight?
-    @State var showTodayEvidence = false
-    @State var showLivedStateCheckIn = false
-    @State var showMetricDetail: VelaMetricDetailView.MetricType?
+    // A single route prevents mutually exclusive Today sheets from racing.
+    @State var presentedTodaySheet: TodaySheet?
     @State var experienceFeedbackTick = 0
     @State var dataCoverageSummary = DataCoverageSummaryModel.unknown
     @State var dailyDecisionFeedback: DailyDecisionFeedbackRecord?
-    @State var showDailyDecisionFeedback = false
     @State private var selectedLivedStateAlignment: LivedStateAlignment?
     @State private var livedStateSaveError: String?
     @State private var lastScenePhaseSyncTime: Date?
@@ -505,7 +518,7 @@ struct VelaTodayView: View {
 
     @ViewBuilder
     var errorMessageView: some View {
-        if let errorMessage = dashboardVM.errorMessage {
+        if let errorMessage = dashboardVM.errorMessage ?? dashboardVM.secondaryDataErrorMessage {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -533,7 +546,7 @@ struct VelaTodayView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                if dashboardVM.errorMessage != nil {
+                if dashboardVM.errorMessage != nil || dashboardVM.secondaryDataErrorMessage != nil {
                     errorMessageView
                         .padding(.horizontal, VelaTheme.pagePadding)
                         .padding(.bottom, 8)
@@ -589,10 +602,10 @@ struct VelaTodayView: View {
                         .foregroundStyle(VelaTheme.rhythmInk)
                     TodayVitalsGrid(cards: vitalCards) { kind in
                         switch kind {
-                        case .hrv:   showMetricDetail = .hrv
-                        case .rhr:   showMetricDetail = .rhr
-                        case .spo2:  showMetricDetail = .bloodOxygen
-                        case .sleep: showMetricDetail = .sleep
+                        case .hrv:   presentedTodaySheet = .metric(.hrv)
+                        case .rhr:   presentedTodaySheet = .metric(.rhr)
+                        case .spo2:  presentedTodaySheet = .metric(.bloodOxygen)
+                        case .sleep: presentedTodaySheet = .metric(.sleep)
                         }
                     }
                     .equatable()
@@ -606,7 +619,7 @@ struct VelaTodayView: View {
                         VelaRhythmActionSequence(
                             actions: todayExperience.actions,
                             onAction: { performExperienceAction($0) },
-                            onEvidence: { showTodayEvidence = true }
+                            onEvidence: { presentedTodaySheet = .evidence }
                         )
                     }
 
@@ -614,7 +627,10 @@ struct VelaTodayView: View {
                     if persistedOperatingPlan != nil {
                         DailyDecisionFeedbackCard(
                             record: dailyDecisionFeedback,
-                            onTap: { showDailyDecisionFeedback = true }
+                            onTap: {
+                                guard dailyDecisionFeedback != nil else { return }
+                                presentedTodaySheet = .feedback
+                            }
                         )
                     }
 
@@ -637,7 +653,7 @@ struct VelaTodayView: View {
                     weatherTemp: weatherTemp,
                     weatherStatusText: weatherStatusText,
                     showSimulationLabel: dashboard.source == .preview,
-                    showCalendarOverview: $showCalendarOverview,
+                    onOpenCalendar: { presentedTodaySheet = .calendar },
                     showSettings: $showSettings,
                     requestWeatherUpdate: { requestWeatherUpdate() },
                     settingsSynced: dashboardVM.lastUpdated != nil
@@ -709,56 +725,8 @@ struct VelaTodayView: View {
         .onChange(of: locationManager.location) {
             fetchLocalWeather()
         }
-        .sheet(isPresented: $showCalendarOverview) {
-            CalendarOverviewSheetView()
-                .presentationDetents([.medium, .large])
-                .velaSheetSurface()
-        }
-        .sheet(item: $showMetricDetail) { metric in
-            NavigationStack {
-                VelaMetricDetailView(metric: metric)
-            }
-            .environmentObject(dashboardVM)
-            .presentationDetents([.large])
-            .velaSheetSurface()
-        }
-        .sheet(item: $selectedInsight) { insight in
-            ProactiveInsightDetailSheet(insight: insight) { question in
-                selectedInsight = nil
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                    VelaAppState.shared.routeToCoach(question: question, surface: .home)
-                }
-            }
-            .presentationDetents([.medium, .large])
-            .velaSheetSurface()
-        }
-        .sheet(isPresented: $showTodayEvidence) {
-            TodayEvidenceSheet(
-                state: todayCommandState,
-                dashboard: dashboard,
-                onAskCoach: { question in
-                    VelaAppState.shared.routeToCoach(question: question, surface: .home)
-                }
-            )
-            .presentationDetents([.medium, .large])
-            .velaSheetSurface()
-        }
-        .sheet(isPresented: $showDailyDecisionFeedback) {
-            if let dailyDecisionFeedback {
-                DailyDecisionFeedbackSheet(record: dailyDecisionFeedback) { values in
-                    saveDailyDecisionFeedback(values)
-                }
-                .presentationDetents([.large])
-                .velaSheetSurface()
-            }
-        }
-        .sheet(isPresented: $showLivedStateCheckIn) {
-            LivedStateCheckInSheet {
-                appState.markLocalDataChanged()
-                loadTodayLivedStateAlignment()
-            }
-            .presentationDetents([.large])
-            .velaSheetSurface()
+        .sheet(item: $presentedTodaySheet) { sheet in
+            todaySheetContent(sheet)
         }
         .alert("暂时无法记录", isPresented: Binding(
             get: { livedStateSaveError != nil },
@@ -771,6 +739,51 @@ struct VelaTodayView: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 
+    @ViewBuilder
+    private func todaySheetContent(_ sheet: TodaySheet) -> some View {
+        switch sheet {
+        case .calendar:
+            CalendarOverviewSheetView()
+                .presentationDetents([.medium, .large])
+                .velaSheetSurface()
+        case .metric(let metric):
+            NavigationStack {
+                VelaMetricDetailView(metric: metric)
+            }
+            .environmentObject(dashboardVM)
+            .presentationDetents([.large])
+            .velaSheetSurface()
+        case .evidence:
+            TodayEvidenceSheet(
+                state: todayCommandState,
+                dashboard: dashboard,
+                onAskCoach: { question in
+                    presentedTodaySheet = nil
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                        VelaAppState.shared.routeToCoach(question: question, surface: .home)
+                    }
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .velaSheetSurface()
+        case .feedback:
+            if let dailyDecisionFeedback {
+                DailyDecisionFeedbackSheet(record: dailyDecisionFeedback) { values in
+                    saveDailyDecisionFeedback(values)
+                }
+                .presentationDetents([.large])
+                .velaSheetSurface()
+            }
+        case .livedState:
+            LivedStateCheckInSheet(selectedDate: dashboardVM.selectedDate) {
+                appState.markLocalDataChanged()
+                loadTodayLivedStateAlignment()
+            }
+            .presentationDetents([.large])
+            .velaSheetSurface()
+        }
+    }
+
     func performExperienceAction(_ action: TodayExperienceAction) {
         experienceFeedbackTick += 1
         trackDailyDecisionAction(destination: action.destination)
@@ -778,13 +791,13 @@ struct VelaTodayView: View {
         case "training":
             appState.routeToTraining()
         case "journal":
-            showLivedStateCheckIn = true
+            presentedTodaySheet = .livedState
         case "coach":
             VelaAppState.shared.routeToCoach(question: action.detail, surface: .home)
         case "recovery", "sync", "evidence":
-            showTodayEvidence = true
+            presentedTodaySheet = .evidence
         default:
-            showTodayEvidence = true
+            presentedTodaySheet = .evidence
         }
     }
 
@@ -799,30 +812,26 @@ struct VelaTodayView: View {
 
                 Button("补充细节") {
                     VelaHaptic.selection()
-                    showLivedStateCheckIn = true
+                    presentedTodaySheet = .livedState
                 }
                 .font(VelaTheme.caption1().weight(.semibold))
                 .foregroundStyle(VelaTheme.rhythmDeep)
             }
 
-            HStack(spacing: 8) {
-                ForEach(LivedStateAlignment.allCases, id: \.self) { alignment in
-                    let selected = selectedLivedStateAlignment == alignment
-                    Button {
-                        saveLivedStateAlignment(alignment)
-                    } label: {
-                        Text(livedStateLabel(alignment))
-                            .font(VelaTheme.caption1().weight(.semibold))
-                            .foregroundStyle(selected ? VelaTheme.rhythmDeepOn : VelaTheme.rhythmInk)
-                            .frame(maxWidth: .infinity, minHeight: VelaTheme.minimumHitTarget)
-                            .background(
-                                selected ? VelaTheme.rhythmDeep : VelaTheme.rhythmMist.opacity(0.48),
-                                in: Capsule(style: .continuous)
-                            )
+            if dynamicTypeSize.isAccessibilitySize {
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2),
+                    spacing: 8
+                ) {
+                    ForEach(LivedStateAlignment.allCases, id: \.self) { alignment in
+                        livedStateAlignmentButton(alignment)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("身体感受\(livedStateAccessibilityLabel(alignment))")
-                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            } else {
+                HStack(spacing: 8) {
+                    ForEach(LivedStateAlignment.allCases, id: \.self) { alignment in
+                        livedStateAlignmentButton(alignment)
+                    }
                 }
             }
         }
@@ -855,43 +864,43 @@ struct VelaTodayView: View {
         }
     }
 
+    private func livedStateAlignmentButton(_ alignment: LivedStateAlignment) -> some View {
+        let selected = selectedLivedStateAlignment == alignment
+        return Button {
+            saveLivedStateAlignment(alignment)
+        } label: {
+            Text(livedStateLabel(alignment))
+                .font(VelaTheme.caption1().weight(.semibold))
+                .foregroundStyle(selected ? VelaTheme.rhythmDeepOn : VelaTheme.rhythmInk)
+                .frame(maxWidth: .infinity, minHeight: VelaTheme.minimumHitTarget)
+                .background(
+                    selected ? VelaTheme.rhythmDeep : VelaTheme.rhythmMist.opacity(0.48),
+                    in: Capsule(style: .continuous)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("身体感受\(livedStateAccessibilityLabel(alignment))")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
     private func saveLivedStateAlignment(_ alignment: LivedStateAlignment) {
-        let entry = JournalEntryRecord(
-            createdAt: Date(),
-            tags: alignment.journalTags,
-            note: alignment.journalNote,
-            value: 1 - alignment.conservativeSeverity,
-            unit: "lived_state_alignment_0_1"
-        )
-        modelContext.insert(entry)
         do {
-            try modelContext.save()
+            try LivedStateJournalAdapter(modelContext: modelContext).saveAlignment(
+                alignment,
+                for: dashboardVM.selectedDate
+            )
             selectedLivedStateAlignment = alignment
             VelaHaptic.selection()
             appState.markLocalDataChanged()
         } catch {
-            modelContext.delete(entry)
             livedStateSaveError = error.localizedDescription
         }
     }
 
     private func loadTodayLivedStateAlignment() {
-        let calendar = Calendar.current
-        let start = calendar.startOfDay(for: dashboardVM.selectedDate)
-        guard let end = calendar.date(byAdding: .day, value: 1, to: start) else {
-            selectedLivedStateAlignment = nil
-            return
-        }
-        let descriptor = FetchDescriptor<JournalEntryRecord>(
-            predicate: #Predicate { entry in
-                entry.createdAt >= start && entry.createdAt < end
-            },
-            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-        )
-        let records = (try? modelContext.fetch(descriptor)) ?? []
-        selectedLivedStateAlignment = records.lazy.compactMap {
-            LivedStateAlignment(tags: $0.tags)
-        }.first
+        selectedLivedStateAlignment = try? LivedStateJournalAdapter(
+            modelContext: modelContext
+        ).snapshot(for: dashboardVM.selectedDate).alignment
     }
 
     func trackDailyDecisionViewed() {
@@ -956,7 +965,7 @@ struct VelaTodayView: View {
             )
             // 反馈保存后立即回灌：按同类决策的历史准确率重校准今日置信度。
             dashboardVM.applyFeedbackCalibration(modelContext: modelContext)
-            showDailyDecisionFeedback = false
+            presentedTodaySheet = nil
             VelaAppState.shared.markLocalDataChanged()
         } catch {
             // Keep the sheet open so the user can retry without losing input.
@@ -976,79 +985,36 @@ struct VelaTodayView: View {
 
 // MARK: - TodayDateAndStatusHeader
 struct TodayDateAndStatusHeader: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let selectedDate: Date
     let todayShareText: String
     let weatherTemp: String
     let weatherStatusText: String
     let showSimulationLabel: Bool
 
-    @Binding var showCalendarOverview: Bool
+    let onOpenCalendar: () -> Void
     @Binding var showSettings: Bool
     var requestWeatherUpdate: () -> Void
     let settingsSynced: Bool
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 8) {
-                Button {
-                    showCalendarOverview = true
-                } label: {
-                    HStack(spacing: 5) {
-                        Text(dateHeaderString(for: selectedDate))
-                            .font(.system(.body, design: .default, weight: .semibold))
-                            .foregroundStyle(VelaTheme.rhythmInk)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                        
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                    }
-                    .frame(minHeight: VelaTheme.minimumHitTarget)
+            if dynamicTypeSize.isAccessibilitySize {
+                HStack(alignment: .center, spacing: 8) {
+                    dateButton
+                    Spacer(minLength: 8)
+                    headerActions
                 }
-                .buttonStyle(.cardPress)
-                .accessibilityLabel("选择日期")
-                .accessibilityValue(dateHeaderString(for: selectedDate))
 
-                TodayWeatherBar(
-                    weatherTemp: weatherTemp,
-                    weatherStatusText: weatherStatusText,
-                    requestWeatherUpdate: requestWeatherUpdate
-                )
-
-                Spacer()
-
-                HStack(spacing: 2) {
-                    ShareLink(item: todayShareText) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                            .frame(width: 44, height: 44)
-                    }
-                    .buttonStyle(.cardPress)
-                    .accessibilityLabel("分享今日摘要")
-
-                    Button {
-                        showSettings = true
-                    } label: {
-                        ZStack(alignment: .bottomTrailing) {
-                            Circle()
-                                .fill(VelaTheme.rhythmMist)
-                                .frame(width: 30, height: 30)
-                                .overlay {
-                                    Image(systemName: "person.fill")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(VelaTheme.rhythmDeep)
-                                }
-                            Circle()
-                                .fill(VelaTheme.rhythmGlow)
-                                .frame(width: 8, height: 8)
-                                .overlay(Circle().stroke(VelaTheme.rhythmCanvas, lineWidth: 2))
-                        }
-                        .frame(width: 44, height: 44)
-                    }
-                    .buttonStyle(.cardPress)
-                    .accessibilityLabel(settingsSynced ? "个人设置,数据已同步" : "个人设置,数据待同步")
+                weatherBar
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(alignment: .center, spacing: 8) {
+                    dateButton
+                    weatherBar
+                    Spacer()
+                    headerActions
                 }
             }
 
@@ -1060,6 +1026,80 @@ struct TodayDateAndStatusHeader: View {
                     Spacer()
                 }
             }
+        }
+        // This is navigation chrome, not reading content. Keep it useful at the
+        // largest accessibility settings without allowing the custom header to
+        // consume most of the viewport; the scroll content below still receives
+        // the user's full Dynamic Type size.
+        .dynamicTypeSize(headerDynamicTypeSize)
+    }
+
+    private var headerDynamicTypeSize: DynamicTypeSize {
+        dynamicTypeSize.isAccessibilitySize ? .accessibility1 : dynamicTypeSize
+    }
+
+    private var dateButton: some View {
+        Button {
+            onOpenCalendar()
+        } label: {
+            HStack(spacing: 5) {
+                Text(dateHeaderString(for: selectedDate))
+                    .font(.system(.body, design: .default, weight: .semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                    .lineLimit(1)
+
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            }
+            .frame(minHeight: VelaTheme.minimumHitTarget)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.cardPress)
+        .accessibilityLabel("选择日期")
+        .accessibilityValue(dateHeaderString(for: selectedDate))
+    }
+
+    private var weatherBar: some View {
+        TodayWeatherBar(
+            weatherTemp: weatherTemp,
+            weatherStatusText: weatherStatusText,
+            requestWeatherUpdate: requestWeatherUpdate
+        )
+    }
+
+    private var headerActions: some View {
+        HStack(spacing: 2) {
+            ShareLink(item: todayShareText) {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .frame(width: VelaTheme.circularControlSize, height: VelaTheme.circularControlSize)
+            }
+            .buttonStyle(.cardPress)
+            .accessibilityLabel("分享今日摘要")
+
+            Button {
+                showSettings = true
+            } label: {
+                ZStack(alignment: .bottomTrailing) {
+                    Circle()
+                        .fill(VelaTheme.rhythmMist)
+                        .frame(width: 30, height: 30)
+                        .overlay {
+                            Image(systemName: "person.fill")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(VelaTheme.rhythmDeep)
+                        }
+                    Circle()
+                        .fill(VelaTheme.rhythmGlow)
+                        .frame(width: 8, height: 8)
+                        .overlay(Circle().stroke(VelaTheme.rhythmCanvas, lineWidth: 2))
+                }
+                .frame(width: VelaTheme.circularControlSize, height: VelaTheme.circularControlSize)
+            }
+            .buttonStyle(.cardPress)
+            .accessibilityLabel(settingsSynced ? "个人设置,数据已同步" : "个人设置,数据待同步")
         }
     }
 
@@ -1197,7 +1237,9 @@ struct DataCoverageCompactCard: View {
 struct LivedStateCheckInSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    let selectedDate: Date
     var onSaved: () -> Void
 
     @State private var stress = 1
@@ -1206,16 +1248,17 @@ struct LivedStateCheckInSheet: View {
     @State private var motivation = 1
     @State private var note = ""
     @State private var saveError: String?
+    @State private var didLoadExisting = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("让客观数据听见你的感受")
+                        Text("补充你的身体感受")
                             .font(.title2.weight(.semibold))
                             .foregroundStyle(VelaTheme.rhythmInk)
-                        Text("主观状态只会让建议更保守，不会覆盖 Apple 健康数据。保存后会立即刷新今日 Brief 与训练边界。")
+                        Text("它会参与建议，但不会改写五项分数。")
                             .font(.body)
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -1296,6 +1339,9 @@ struct LivedStateCheckInSheet: View {
                         )
                 }
                 .buttonStyle(.cardPress)
+                .dynamicTypeSize(
+                    dynamicTypeSize.isAccessibilitySize ? .accessibility1 : dynamicTypeSize
+                )
                 .padding(.horizontal, VelaTheme.pagePadding)
                 .padding(.vertical, 10)
                 .background(.ultraThinMaterial)
@@ -1309,6 +1355,10 @@ struct LivedStateCheckInSheet: View {
         } message: {
             Text(saveError ?? "请稍后重试。")
         }
+        .task {
+            loadExistingCheckIn()
+        }
+        .accessibilityIdentifier("lived-state-check-in")
     }
 
     private func ratingRow(
@@ -1327,14 +1377,55 @@ struct LivedStateCheckInSheet: View {
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
 
-            Picker(title, selection: selection) {
-                ForEach(labels.indices, id: \.self) { index in
-                    Text(labels[index]).tag(index)
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 8) {
+                    ForEach(labels.indices, id: \.self) { index in
+                        ratingButton(
+                            title: title,
+                            label: labels[index],
+                            index: index,
+                            selection: selection
+                        )
+                    }
+                }
+            } else {
+                HStack(spacing: 8) {
+                    ForEach(labels.indices, id: \.self) { index in
+                        ratingButton(
+                            title: title,
+                            label: labels[index],
+                            index: index,
+                            selection: selection
+                        )
+                    }
                 }
             }
-            .pickerStyle(.segmented)
-            .accessibilityLabel(title)
         }
+    }
+
+    private func ratingButton(
+        title: String,
+        label: String,
+        index: Int,
+        selection: Binding<Int>
+    ) -> some View {
+        let isSelected = selection.wrappedValue == index
+        return Button {
+            selection.wrappedValue = index
+            VelaHaptic.selection()
+        } label: {
+            Text(label)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(isSelected ? VelaTheme.rhythmDeepOn : VelaTheme.rhythmInk)
+                .frame(maxWidth: .infinity, minHeight: VelaTheme.minimumHitTarget)
+                .background(
+                    isSelected ? VelaTheme.rhythmDeep : VelaTheme.rhythmMist.opacity(0.48),
+                    in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(title)，\(label)")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private func save() {
@@ -1345,20 +1436,29 @@ struct LivedStateCheckInSheet: View {
             motivation: motivation,
             note: note
         )
-        modelContext.insert(JournalEntryRecord(
-            createdAt: Date(),
-            tags: checkIn.journalTags,
-            note: checkIn.journalNote,
-            value: 1 - checkIn.conservativeSeverity,
-            unit: "lived_state_0_1"
-        ))
         do {
-            try modelContext.save()
+            try LivedStateJournalAdapter(modelContext: modelContext).saveCheckIn(
+                checkIn,
+                for: selectedDate
+            )
             VelaHaptic.success()
             onSaved()
             dismiss()
         } catch {
             saveError = error.localizedDescription
         }
+    }
+
+    private func loadExistingCheckIn() {
+        guard !didLoadExisting else { return }
+        didLoadExisting = true
+        guard let existing = try? LivedStateJournalAdapter(
+            modelContext: modelContext
+        ).snapshot(for: selectedDate).checkIn else { return }
+        stress = existing.stress
+        energy = existing.energy
+        soreness = existing.soreness
+        motivation = existing.motivation
+        note = existing.note
     }
 }

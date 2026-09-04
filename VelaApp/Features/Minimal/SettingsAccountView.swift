@@ -42,6 +42,7 @@ struct AccountSettingsView: View {
                 HStack {
                     TextField("年龄", text: $ageDraft)
                         .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
                     Text("岁")
                     profileSourceBadge(
                         manual: UserProfileSettings.age() != nil,
@@ -73,6 +74,7 @@ struct AccountSettingsView: View {
                 HStack {
                     TextField("最大心率（可选）", text: $maxHeartRateDraft)
                         .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
                     Text("bpm")
                     profileSourceBadge(
                         manual: UserProfileSettings.maxHeartRate() != nil,
@@ -190,6 +192,7 @@ struct AccountSettingsView: View {
         userHeight = parsedHeight ?? 0
         userMaxHR = parsedMaxHeartRate ?? 0
         VelaAppState.shared.markLocalDataChanged()
+        VelaHaptic.success()
         // M3 修复：设置页改档案必须与 Coach 工具路径对称——同步回写 wiki 档案
         // 与 SwiftData 记录，避免「账户与特征基准」和「健康档案」两处互相矛盾。
         WikiProfileMaterializer.refreshPhysiologicalProfile(modelContext: modelContext)
@@ -305,17 +308,6 @@ struct UserWikiArchiveView: View {
         .background(VelaTheme.rhythmCanvas)
         .navigationTitle("健康档案")
         .velaRhythmDetailChrome()
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    dismiss()
-                } label: {
-                    Label("返回", systemImage: "chevron.left")
-                        .labelStyle(.titleAndIcon)
-                }
-                .font(.system(.subheadline, design: .default, weight: .semibold))
-            }
-        }
         .task {
             WikiSyncManager.sync(modelContext: modelContext)
         }

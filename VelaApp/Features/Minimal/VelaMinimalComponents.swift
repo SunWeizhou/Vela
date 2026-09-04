@@ -108,6 +108,7 @@ extension View {
 
 struct VelaMetricDetailView: View {
     let metric: MetricType
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var cs
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var dashboardVM: DashboardViewModel
@@ -119,6 +120,7 @@ struct VelaMetricDetailView: View {
     @State var showMetricInfo = false
     @State var heartRateZoneSummary: HeartRateZoneSummary?
     @State var isLoadingHeartRateZones = false
+    @State private var dailyRecordsLoadError: String?
     
     // Default to 7 days (.week) for immediate momentum and responsive trend viewing
     @State var selectedRange: DetailTimeRange = .week
@@ -152,8 +154,22 @@ struct VelaMetricDetailView: View {
             .scrollIndicators(.hidden)
         }
         .navigationTitle(navTitle)
+        .accessibilityIdentifier("metric-detail-\(metric.rawValue)")
         .velaRhythmDetailChrome()
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(action: dismiss.callAsFunction) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(VelaTheme.rhythmDeep)
+                        .frame(width: 32, height: 32)
+                        .background(Circle().fill(VelaTheme.rhythmCanvasRaised))
+                        .overlay(Circle().stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("关闭")
+            }
+
             ToolbarItemGroup(placement: .topBarTrailing) {
                 ShareLink(item: metricShareText) {
                     Image(systemName: "square.and.arrow.up")
@@ -202,8 +218,16 @@ struct VelaMetricDetailView: View {
             predicate: #Predicate<DailyHealthSummaryRecord> { $0.date >= start && $0.date <= end },
             sortBy: [SortDescriptor(\.date, order: .forward)]
         )
-        if let fetched = try? modelContext.fetch(descriptor) {
-            self.dailyRecords = fetched
+        do {
+            dailyRecords = try modelContext.fetch(descriptor)
+            dailyRecordsLoadError = nil
+        } catch {
+            // Never keep another date's points on screen after a failed fetch.
+            dailyRecords = []
+            dailyRecordsLoadError = L10n.t(
+                "The history could not be read. No trend is shown until a retry succeeds.",
+                "历史记录暂时无法读取。重试成功前不会展示趋势。"
+            )
         }
     }
 
@@ -234,7 +258,10 @@ struct VelaMetricDetailView: View {
             dynamicValueText: dynamicValueText,
             metricSubtitle: metricSubtitle,
             baselineValue: chartBaselineValue,
-            targetRange: chartTargetRange
+            targetRange: chartTargetRange,
+            isSimulated: dailyRecords.contains {
+                $0.configVersion == DailySummaryUseCase.debugDemoConfigVersion
+            }
         )
     }
 
@@ -287,6 +314,7 @@ struct VelaMetricDetailView: View {
         )
         .padding(.top, 8)
 
+        metricHistoryErrorCard
         chartHeaderSection(isSleep: isSleep)
         customWidgetsSection(isSleep: isSleep)
         coreMetricEvidenceDisclosure(isSleep: isSleep)
@@ -294,6 +322,7 @@ struct VelaMetricDetailView: View {
 
     @ViewBuilder
     private func rawMetricContent(isSleep: Bool) -> some View {
+        metricHistoryErrorCard
         chartHeaderSection(isSleep: isSleep)
             .padding(.top, 8)
         doubleHighlightsSection(isSleep: isSleep)
@@ -303,6 +332,18 @@ struct VelaMetricDetailView: View {
         coreMetricCoachCard
         trustSection
         supportingEvidenceSection(isSleep: isSleep)
+    }
+
+    @ViewBuilder
+    private var metricHistoryErrorCard: some View {
+        if let dailyRecordsLoadError {
+            VelaStateCard(
+                state: .error,
+                message: dailyRecordsLoadError,
+                actionTitle: L10n.t("Retry", "重试"),
+                action: loadDailyRecords
+            )
+        }
     }
 
     private var coreMetricHeroFacts: [CoreMetricHeroFact] {
@@ -1001,6 +1042,8 @@ struct LongTermHealthTrendView: View {
     @State private var values: [Double] = []
     @State private var dates: [Date] = []
     @State private var comparison: (thisYear: Double?, lastYear: Double?) = (nil, nil)
+    @State private var cachedRecords: [DailyHealthSummaryRecord] = []
+    @State private var loadError: String?
 
     var body: some View {
         ScrollView {
@@ -1017,6 +1060,15 @@ struct LongTermHealthTrendView: View {
                 .padding(.bottom, 4)
 
                 metricPicker
+
+                if let loadError {
+                    VelaStateCard(
+                        state: .error,
+                        message: loadError,
+                        actionTitle: "重试",
+                        action: { Task { await load() } }
+                    )
+                }
 
                 chartCard
 
@@ -1043,7 +1095,7 @@ struct LongTermHealthTrendView: View {
         .navigationTitle("长期趋势")
         .velaRhythmDetailChrome()
         .task { await load() }
-        .onChange(of: metric) { _, _ in rebuild() }
+        .onChange(of: metric) { _, _ in rebuild(from: cachedRecords) }
     }
 
     private var metricPicker: some View {
@@ -1190,29 +1242,26 @@ struct LongTermHealthTrendView: View {
     }
 
     private func load() async {
-        let all = (try? modelContext.fetch(
-            FetchDescriptor<DailyHealthSummaryRecord>(
-                sortBy: [SortDescriptor(\.date, order: .forward)]
-            )
-        )) ?? []
-        rebuild(from: all)
-    }
-
-    private func rebuild(from records: [DailyHealthSummaryRecord]? = nil) {
-        let calendar = Calendar.current
-        let cutoff = calendar.date(byAdding: .year, value: -3, to: Date()) ?? Date()
-        let source: [DailyHealthSummaryRecord]
-        if let records {
-            source = records
-        } else {
-            source = (try? modelContext.fetch(
+        do {
+            let all = try modelContext.fetch(
                 FetchDescriptor<DailyHealthSummaryRecord>(
                     sortBy: [SortDescriptor(\.date, order: .forward)]
                 )
-            )) ?? []
+            )
+            cachedRecords = all
+            loadError = nil
+            rebuild(from: all)
+        } catch {
+            loadError = AppLanguage.stored.isChinese
+                ? "长期健康记录暂时无法读取，已保留上次结果。"
+                : "Long-term health records are temporarily unavailable. The last result is still shown."
         }
+    }
 
-        let pairs = source
+    private func rebuild(from records: [DailyHealthSummaryRecord]) {
+        let calendar = Calendar.current
+        let cutoff = calendar.date(byAdding: .year, value: -3, to: Date()) ?? Date()
+        let pairs = records
             .filter { $0.date >= cutoff }
             .compactMap { record -> (date: Date, value: Double)? in
                 guard let value = metric.value(from: record), value > 0 else { return nil }

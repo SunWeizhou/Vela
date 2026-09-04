@@ -38,6 +38,11 @@ struct ChartPoint: Identifiable {
     var id: Date { date }
 }
 
+private struct MetricChartSegment: Identifiable {
+    let points: [ChartPoint]
+    var id: Date { points[0].id }
+}
+
 enum VelaChartSegmentation {
     static func segments(points: [ChartPoint], maximumGap: TimeInterval) -> [[ChartPoint]] {
         let sorted = points.sorted { $0.date < $1.date }
@@ -71,6 +76,7 @@ struct MetricChartSection: View {
     let metricSubtitle: String
     var baselineValue: Double? = nil
     var targetRange: ClosedRange<Double>? = nil
+    var isSimulated = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -91,6 +97,16 @@ struct MetricChartSection: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(Capsule().fill(metricColor.opacity(0.12)))
+                }
+
+                if isSimulated {
+                    Text("模拟数据")
+                        .font(VelaTheme.caption2().weight(.semibold))
+                        .foregroundStyle(VelaTheme.rhythmWarm)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(VelaTheme.rhythmWarm.opacity(0.12), in: Capsule())
+                        .accessibilityLabel("模拟数据，不是 Apple 健康记录")
                 }
             }
             .padding(.horizontal, 14)
@@ -164,8 +180,8 @@ struct MetricChartSection: View {
                             }
                     }
 
-                    ForEach(Array(chartSegments.enumerated()), id: \.offset) { segmentIndex, segment in
-                        ForEach(segment) { pt in
+                    ForEach(chartSegments) { segment in
+                        ForEach(segment.points) { pt in
                             if isBarChart {
                                 BarMark(
                                     x: .value("Date", pt.date, unit: unit),
@@ -177,7 +193,7 @@ struct MetricChartSection: View {
                                 LineMark(
                                     x: .value("Date", pt.date, unit: unit),
                                     y: .value("Value", pt.value),
-                                    series: .value("Segment", segmentIndex)
+                                    series: .value("Segment", segment.id)
                                 )
                                 .foregroundStyle(metricColor)
                                 .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
@@ -186,7 +202,7 @@ struct MetricChartSection: View {
                                 AreaMark(
                                     x: .value("Date", pt.date, unit: unit),
                                     y: .value("Value", pt.value),
-                                    series: .value("Area segment", segmentIndex)
+                                    series: .value("Area segment", segment.id)
                                 )
                                 .foregroundStyle(
                                     LinearGradient(
@@ -317,10 +333,12 @@ struct MetricChartSection: View {
         baselineValue
     }
 
-    private var chartSegments: [[ChartPoint]] {
+    private var chartSegments: [MetricChartSegment] {
         let maximumGap: TimeInterval = selectedRange == .threeYears
             ? 46 * 24 * 60 * 60
             : 36 * 60 * 60
         return VelaChartSegmentation.segments(points: points, maximumGap: maximumGap)
+            .filter { !$0.isEmpty }
+            .map(MetricChartSegment.init(points:))
     }
 }

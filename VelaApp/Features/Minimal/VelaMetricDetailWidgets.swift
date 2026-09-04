@@ -661,7 +661,7 @@ struct MetricCustomWidgetsSection: View {
             VelaStateCard(state: .empty, message: "本晚没有可用的睡眠阶段记录。")
         } else {
             VStack(spacing: 11) {
-                ForEach(Array(stages.enumerated()), id: \.offset) { _, item in
+                ForEach(stages, id: \.stage) { item in
                     HStack(spacing: 10) {
                         Text(sleepStageLabel(item.stage))
                             .font(VelaTheme.caption1().weight(.semibold))

@@ -7,8 +7,6 @@ import SwiftUI
 /// always secondary. Baseline deviation adds emphasis without reordering.
 struct TodaySignalGrid: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     let model: TodayExperienceModel
     let freshness: DataFreshness
     let deviatedScoreIDs: Set<String>
@@ -401,9 +399,11 @@ struct TodaySignalGrid: View {
                         Text(card.title)
                             .font(VelaTheme.body().weight(.semibold))
                             .foregroundStyle(VelaTheme.rhythmInk)
-                        Text(card.directionLabel)
-                            .font(VelaTheme.caption1())
-                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        if !dynamicTypeSize.isAccessibilitySize {
+                            Text(card.directionLabel)
+                                .font(VelaTheme.caption1())
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        }
                     }
                     Spacer()
                     Image(systemName: "chevron.right")
@@ -436,56 +436,26 @@ struct TodaySignalGrid: View {
     ) -> some View {
         let accent = accentColor(card.accent)
         let score = Double(card.value)
-        let progress = score.map { min(1, max(0, $0 / 100)) } ?? 0
 
-        return ZStack {
-            Circle()
-                .fill(VelaTheme.rhythmCanvasRaised)
-
-            Circle()
-                .stroke(
-                    accent.opacity(0.12),
-                    style: StrokeStyle(lineWidth: max(6, size * 0.075))
-                )
-
-            if score != nil {
-                Circle()
-                    .trim(from: 0, to: progress)
-                    .stroke(
-                        AngularGradient(
-                            colors: [accent.opacity(0.72), accent],
-                            center: .center
-                        ),
-                        style: StrokeStyle(
-                            lineWidth: max(6, size * 0.075),
-                            lineCap: .round
-                        )
-                    )
-                    .rotationEffect(.degrees(-90))
-                    .animation(VelaTheme.dataAnimation(reduceMotion: reduceMotion), value: progress)
-            } else {
-                Circle()
-                    .stroke(
-                        VelaTheme.rhythmInkSecondary.opacity(0.35),
-                        style: StrokeStyle(lineWidth: 2, dash: [3, 5])
-                    )
-            }
-
-            Text(card.value)
-                .font(.system(size: size * 0.27, weight: .bold, design: .rounded))
-                .foregroundStyle(VelaTheme.rhythmInk)
-                .monospacedDigit()
-
+        return VelaMetricScoreRing(
+            score: score,
+            label: card.title,
+            domain: metricDomain(for: card.id),
+            size: size,
+            accent: accent,
+            showsLabel: false,
+            direction: card.directionLabel,
+            dataState: hasDeviation ? "偏离个人基线" : nil
+        )
+        .overlay(alignment: .topTrailing) {
             if hasDeviation {
                 Circle()
                     .fill(VelaTheme.stressColor)
                     .frame(width: max(7, size * 0.09), height: max(7, size * 0.09))
                     .overlay(Circle().stroke(VelaTheme.rhythmCanvasRaised, lineWidth: 2))
-                    .offset(x: size * 0.34, y: -size * 0.34)
                     .accessibilityHidden(true)
             }
         }
-        .frame(width: size, height: size)
     }
 
     private func cards(for ids: [String]) -> [TodayExperienceSignalCard] {
@@ -500,6 +470,17 @@ struct TodaySignalGrid: View {
         case "stress": return .stress
         case "energy": return .energy
         default: return nil
+        }
+    }
+
+    private func metricDomain(for cardID: String) -> VelaMetricDomain {
+        switch cardID {
+        case "recovery": return .recovery
+        case "sleep": return .sleep
+        case "strain": return .strain
+        case "stress": return .stress
+        case "energy": return .energy
+        default: return .neutral
         }
     }
 }
@@ -696,6 +677,7 @@ private struct TodayDashboardCardModifier: ViewModifier {
 
         content
             .background(VelaTheme.rhythmCanvasRaised)
+            .compositingGroup()
             .clipShape(shape)
             .overlay {
                 shape.stroke(

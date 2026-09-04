@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct TodayWeatherBar: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let weatherTemp: String
     let weatherStatusText: String
     let requestWeatherUpdate: () -> Void
@@ -21,15 +23,24 @@ struct TodayWeatherBar: View {
                 Text(weatherStatusText)
                     .font(.system(.caption2, design: .default))
                     .foregroundStyle(VelaTheme.muted)
-                    .lineLimit(1)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(Capsule().fill(VelaTheme.cardBg))
-            .overlay(Capsule().stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+            .background(VelaTheme.cardBg, in: weatherShape)
+            .overlay(weatherShape.stroke(VelaTheme.borderSoft, lineWidth: 0.5))
+            .contentShape(weatherShape)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("天气：\(weatherStatusText)")
         .accessibilityHint("点按更新本地天气")
+    }
+
+    private var weatherShape: RoundedRectangle {
+        RoundedRectangle(
+            cornerRadius: dynamicTypeSize.isAccessibilitySize ? 16 : VelaTheme.radiusPill,
+            style: .continuous
+        )
     }
 }

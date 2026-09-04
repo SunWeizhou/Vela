@@ -206,28 +206,7 @@ struct VelaTrainingView: View {
                         )
 
                         NavigationLink {
-                            TrainingDeepAnalysisView(
-                                selectedAnalyticsTab: $selectedAnalyticsTab,
-                                targetComparison: targetComparison,
-                                dynamicExertionWorkload: dynamicExertionWorkload,
-                                exertionValues: exertionValues,
-                                exertionDates: exertionDates,
-                                totalWorkoutDurationText: totalWorkoutDurationText,
-                                summaryWorkPathPoints: summaryWorkPathPoints,
-                                summaryWorkValues: summaryWorkValues,
-                                summaryWorkDates: summaryWorkDates,
-                                summaryPeakStrainText: summaryPeakStrainText,
-                                selectedDate: dashboardVM.selectedDate,
-                                previousMonthActiveTiers: previousMonthActiveTiers,
-                                currentMonthActiveTiers: currentMonthActiveTiers,
-                                cardioSnapshot: cardioSnapshot,
-                                recentWorkouts: recentWorkouts,
-                                strengthSummary: strengthSummary,
-                                exerciseProgressLines: exerciseProgressLines,
-                                personalRecords: personalRecords,
-                                metricRecords: recentMetricRecords,
-                                strengthWorkout: { workout in self.strengthWorkout(for: workout) }
-                            )
+                            deepAnalysisDestination(strengthSummary: strengthSummary, cardioSnapshot: cardioSnapshot)
                         } label: {
                             TrainingAnalysisPortal(
                                 sessions: strengthSummary.sessions,
@@ -283,17 +262,61 @@ struct VelaTrainingView: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 
+    private func deepAnalysisDestination(
+        strengthSummary: RecentTrainingSummary,
+        cardioSnapshot: CardioTrainingSnapshot
+    ) -> some View {
+        TrainingDeepAnalysisView(
+            selectedAnalyticsTab: $selectedAnalyticsTab,
+            targetComparison: targetComparison,
+            dynamicExertionWorkload: dynamicExertionWorkload,
+            exertionValues: exertionValues,
+            exertionDates: exertionDates,
+            totalWorkoutDurationText: totalWorkoutDurationText,
+            summaryWorkPathPoints: summaryWorkPathPoints,
+            summaryWorkValues: summaryWorkValues,
+            summaryWorkDates: summaryWorkDates,
+            summaryPeakStrainText: summaryPeakStrainText,
+            selectedDate: dashboardVM.selectedDate,
+            previousMonthActiveTiers: previousMonthActiveTiers,
+            currentMonthActiveTiers: currentMonthActiveTiers,
+            cardioSnapshot: cardioSnapshot,
+            recentWorkouts: recentWorkouts,
+            strengthSummary: strengthSummary,
+            exerciseProgressLines: exerciseProgressLines,
+            personalRecords: personalRecords,
+            metricRecords: recentMetricRecords,
+            strengthWorkout: { workout in self.strengthWorkout(for: workout) }
+        )
+    }
+
     // MARK: - Synced Workouts Section
     private var syncedWorkoutsSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VelaRhythmSectionHeader(
-                eyebrow: "",
-                title: "运动记录与复盘",
-                actionTitle: recentWorkouts.isEmpty ? nil : "全部记录",
-                action: {
-                    // Handled by history navigation
+        let strengthSummary = recentStrengthSummary
+        let cardioSnapshot = memoCardioSnapshot ?? CardioTrainingAnalyzer.analyze(
+            workouts: recentWorkouts,
+            endingAt: dashboardVM.selectedDate
+        )
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("运动记录与复盘")
+                    .font(VelaTheme.headline())
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                Spacer()
+                if !recentWorkouts.isEmpty {
+                    NavigationLink {
+                        deepAnalysisDestination(strengthSummary: strengthSummary, cardioSnapshot: cardioSnapshot)
+                    } label: {
+                        HStack(spacing: 2) {
+                            Text("全部记录")
+                            Image(systemName: "chevron.right")
+                        }
+                        .font(VelaTheme.caption1().weight(.semibold))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    }
+                    .buttonStyle(.plain)
                 }
-            )
+            }
 
             if recentWorkouts.isEmpty {
                 HStack(spacing: 14) {
@@ -331,7 +354,7 @@ struct VelaTrainingView: View {
                             if let strength = strengthWorkout(for: workout) {
                                 StrengthWorkoutDetailView(workout: strength)
                             } else {
-                                FitnessActivitySummaryDetailView()
+                                WorkoutDetailView(workout: workout)
                             }
                         } label: {
                             workoutRow(workout)

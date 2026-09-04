@@ -3,6 +3,7 @@ import SwiftData
 
 struct VelaSettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     
     // Settings toggles
     @AppStorage("vela_dark_mode") private var darkModeRaw = "system"
@@ -154,6 +155,7 @@ struct VelaSettingsView: View {
         .scrollIndicators(.hidden)
         .background(VelaTheme.rhythmCanvas)
         .navigationTitle("设置")
+        .accessibilityIdentifier("settings-surface")
         .velaRhythmDetailChrome()
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -205,17 +207,34 @@ struct VelaSettingsView: View {
                     .foregroundStyle(VelaTheme.rhythmDeep)
             }
             
-            Text(title)
-                .font(.system(.body, design: .default, weight: .medium))
-                .foregroundStyle(VelaTheme.rhythmInk)
-            
-            Spacer()
-            
-            if let val = value {
-                Text(val)
-                    .font(.system(.subheadline, design: .default, weight: .regular))
-                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                    .lineLimit(1)
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(.body, design: .default, weight: .medium))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let value {
+                        Text(value)
+                            .font(.system(.subheadline, design: .default, weight: .regular))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Text(title)
+                    .font(.system(.body, design: .default, weight: .medium))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+
+                Spacer()
+
+                if let value {
+                    Text(value)
+                        .font(.system(.subheadline, design: .default, weight: .regular))
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        .lineLimit(1)
+                }
             }
             
             Image(systemName: "chevron.right")
@@ -223,6 +242,7 @@ struct VelaSettingsView: View {
                 .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.58))
         }
         .padding(.horizontal, 14)
+        .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 12 : 0)
         .frame(minHeight: 54)
         .contentShape(Rectangle())
     }

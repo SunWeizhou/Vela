@@ -218,7 +218,10 @@ struct XunjiHistoryBackfillView: View {
 
     @MainActor
     private func startOrStop() async {
-        if service.isRunning { return }
+        if service.isRunning {
+            service.cancel()
+            return
+        }
         guard !apiKey.isEmpty else {
             loadKeyFailed = true
             return

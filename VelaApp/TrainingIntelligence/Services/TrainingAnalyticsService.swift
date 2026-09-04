@@ -1466,6 +1466,7 @@ final class XunjiHistoryBackfillService: ObservableObject {
     @Published var totalDays: Int {
         didSet { UserDefaults.standard.set(totalDays, forKey: Self.totalDaysKey) }
     }
+    private var isCancelled = false
 
     private init() {
         let stored = UserDefaults.standard.integer(forKey: Self.totalDaysKey)
@@ -1481,6 +1482,11 @@ final class XunjiHistoryBackfillService: ObservableObject {
         return formatter.string(from: date)
     }
 
+    func cancel() {
+        isCancelled = true
+        isRunning = false
+    }
+
     /// 从游标处继续：逐日导入，单日失败不中断；连续 5 天失败暂停并报错。
     func run(
         modelContext: ModelContext,
@@ -1489,12 +1495,14 @@ final class XunjiHistoryBackfillService: ObservableObject {
     ) async {
         guard !isRunning else { return }
         isRunning = true
+        isCancelled = false
         errorMessage = nil
         defer { isRunning = false }
 
         let start = UserDefaults.standard.integer(forKey: Self.cursorKey)
         var consecutiveFailures = 0
         for offset in start..<totalDays {
+            guard !isCancelled else { break }
             guard let date = calendar.date(byAdding: .day, value: -offset, to: Date()) else { break }
             let datestr = Self.dateString(date)
             do {
@@ -1531,5 +1539,6 @@ final class XunjiHistoryBackfillService: ObservableObject {
         completedDays = 0
         importedCount = 0
         errorMessage = nil
+        isCancelled = false
     }
 }

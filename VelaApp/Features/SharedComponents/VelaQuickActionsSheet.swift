@@ -24,8 +24,8 @@ struct PlusActionSheet: View {
                 ],
                 spacing: 16
             ) {
-                // Row 1 — Nutrition quick actions (hidden while VelaFeatureFlags.nutritionEnabled == false)
                 if VelaFeatureFlags.nutritionEnabled {
+                    // Row 1 — Nutrition quick actions
                     circleActionButton(icon: "square.and.pencil", label: "描述食物") {
                         deferAction(.coach("描述我今天吃的中餐..."))
                     }
@@ -42,28 +42,55 @@ struct PlusActionSheet: View {
                     circleActionButton(icon: "barcode.viewfinder", label: "扫描食物") {
                         deferAction(.foodScanner("barcode"))
                     }
-                }
 
-                // Center: Vela AI Mascot (Indigo Sparkles Gradient Circle) - now Coach
-                mascotCenterButton(label: "Coach") {
-                    deferAction(.coach(nil))
-                }
-                
-                circleActionButton(icon: "book.pages.fill", label: "手记") {
-                    deferAction(.journal)
-                }
-                
-                // Row 3
-                circleActionButton(icon: "wand.and.stars", label: "智能处方") {
-                    deferAction(.coach("帮我根据今日状态生成一份运动健康处方模板"))
-                }
-                
-                circleActionButton(icon: "list.bullet.clipboard.fill", label: "查看模板") {
-                    deferAction(.coach("我有哪些已保存的运动与习惯处方模版？"))
-                }
-                
-                circleActionButton(icon: "figure.run", label: "记录活动") {
-                    deferAction(.workoutLog)
+                    // Center: Vela AI Mascot
+                    mascotCenterButton(label: "Coach") {
+                        deferAction(.coach(nil))
+                    }
+
+                    circleActionButton(icon: "book.pages.fill", label: "手记") {
+                        deferAction(.journal)
+                    }
+
+                    // Row 3
+                    circleActionButton(icon: "wand.and.stars", label: "智能处方") {
+                        deferAction(.coach("帮我根据今日状态生成一份运动健康处方模板"))
+                    }
+
+                    circleActionButton(icon: "list.bullet.clipboard.fill", label: "查看模板") {
+                        deferAction(.coach("我有哪些已保存的运动与习惯处方模版？"))
+                    }
+
+                    circleActionButton(icon: "figure.run", label: "记录活动") {
+                        deferAction(.workoutLog)
+                    }
+                } else {
+                    // 2×3 Balanced Quick Actions Grid (without nutrition)
+                    // Row 1: Core Logging Actions
+                    circleActionButton(icon: "figure.run", label: "记录活动") {
+                        deferAction(.workoutLog)
+                    }
+
+                    circleActionButton(icon: "scalemass", label: "记录体重") {
+                        deferAction(.weightLog)
+                    }
+
+                    circleActionButton(icon: "book.pages.fill", label: "手记") {
+                        deferAction(.journal)
+                    }
+
+                    // Row 2: Intelligence & Coach Actions (Coach in Center)
+                    circleActionButton(icon: "wand.and.stars", label: "智能处方") {
+                        deferAction(.coach("帮我根据今日状态生成一份运动健康处方模板"))
+                    }
+
+                    mascotCenterButton(label: "Coach") {
+                        deferAction(.coach(nil))
+                    }
+
+                    circleActionButton(icon: "list.bullet.clipboard.fill", label: "查看模板") {
+                        deferAction(.coach("我有哪些已保存的运动与习惯处方模版？"))
+                    }
                 }
             }
             .padding(.horizontal, 24)

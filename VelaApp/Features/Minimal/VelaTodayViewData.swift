@@ -39,9 +39,9 @@ extension VelaTodayView {
         case .training:
             appState.routeToTraining()
         case .recovery, .insight:
-            showTodayEvidence = true
+            presentedTodaySheet = .evidence
         case .checkIn:
-            appState.triggerJournal = true
+            appState.present(.journal)
         case .coach:
             appState.routeToCoach(question: action.detail, surface: .home)
         }
@@ -59,7 +59,7 @@ extension VelaTodayView {
             if action.type.contains("training") || action.type.contains("workout") {
                 appState.routeToTraining()
             } else if action.type.contains("check") || action.type.contains("journal") {
-                appState.triggerJournal = true
+                appState.present(.journal)
             } else if action.type.contains("recovery") {
                 appState.routeToRecoveryDetail()
             } else {

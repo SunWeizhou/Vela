@@ -10,6 +10,8 @@ private struct WatchSnapshot: Codable, Equatable {
     var recoveryScore: Int?
     var sleepScore: Int?
     var strainScore: Int?
+    var stressScore: Int? = nil
+    var energyScore: Int? = nil
     var hrvMilliseconds: Int?
     var restingHeartRate: Int?
     var primaryAction: String
@@ -62,18 +64,24 @@ private final class WatchSnapshotStore: NSObject, ObservableObject, WCSessionDel
     override init() {
         super.init()
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-velaWatchPreview") {
+        let arguments = ProcessInfo.processInfo.arguments
+        let isStalePreview = arguments.contains("-velaWatchPreviewStale")
+        let isMissingPreview = arguments.contains("-velaWatchPreviewMissing")
+        let isPreview = arguments.contains("-velaWatchPreview") || isStalePreview || isMissingPreview
+        if isPreview {
             snapshot = WatchSnapshot(
-                generatedAt: Date(),
+                generatedAt: isStalePreview ? Date().addingTimeInterval(-30 * 3_600) : Date(),
                 bodyStateTitle: "恢复状态良好",
                 summary: "睡眠与 HRV 位于个人基线范围内，今天可以按计划训练。",
                 decision: "按计划训练",
                 decisionConfidence: 0.86,
-                recoveryScore: 82,
-                sleepScore: 79,
-                strainScore: 34,
-                hrvMilliseconds: 58,
-                restingHeartRate: 52,
+                recoveryScore: isMissingPreview ? nil : 82,
+                sleepScore: isMissingPreview ? nil : 79,
+                strainScore: isMissingPreview ? nil : 34,
+                stressScore: isMissingPreview ? nil : 27,
+                energyScore: isMissingPreview ? nil : 73,
+                hrvMilliseconds: isMissingPreview ? nil : 58,
+                restingHeartRate: isMissingPreview ? nil : 52,
                 primaryAction: "开始今日下肢力量训练",
                 planTitle: "四周力量进阶",
                 sessionTitle: "下肢力量 · Week 2",
@@ -81,10 +89,14 @@ private final class WatchSnapshotStore: NSObject, ObservableObject, WCSessionDel
                 planProgress: "5/12 已完成"
             )
         }
-        #endif
+        if !isPreview, let data = UserDefaults.standard.data(forKey: cacheKey) {
+            snapshot = try? JSONDecoder().decode(WatchSnapshot.self, from: data)
+        }
+        #else
         if let data = UserDefaults.standard.data(forKey: cacheKey) {
             snapshot = try? JSONDecoder().decode(WatchSnapshot.self, from: data)
         }
+        #endif
         if let data = UserDefaults.standard.data(forKey: activeWorkoutCacheKey) {
             activeWorkout = try? JSONDecoder().decode(WatchActiveWorkout.self, from: data)
         }
@@ -302,7 +314,8 @@ private struct WatchRootView: View {
     }
 
     private func readinessPage(_ snapshot: WatchSnapshot) -> some View {
-        ScrollView {
+        let isStale = snapshotIsStale(snapshot)
+        return ScrollView {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text("VELA")
@@ -317,8 +330,8 @@ private struct WatchRootView: View {
                     Circle()
                         .stroke(Color.white.opacity(0.10), lineWidth: 8)
                     Circle()
-                        .trim(from: 0, to: max(0.02, snapshot.decisionConfidence))
-                        .stroke(decisionColor(snapshot.decision), style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                        .trim(from: 0, to: ringProgress(snapshot.recoveryScore))
+                        .stroke(recoveryColor(snapshot.recoveryScore), style: StrokeStyle(lineWidth: 8, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                     VStack(spacing: 2) {
                         Text(snapshot.recoveryScore.map(String.init) ?? "—")
@@ -330,12 +343,13 @@ private struct WatchRootView: View {
                 }
                 .frame(width: 100, height: 100)
                 .frame(maxWidth: .infinity)
+                .opacity(isStale ? 0.55 : 1)
 
-                Text(snapshot.decision)
+                Text(isStale ? "状态需要更新" : snapshot.decision)
                     .font(.headline.weight(.bold))
-                Text(snapshot.primaryAction)
+                Text(isStale ? "请在 iPhone 打开 Vela 更新今日状态。" : snapshot.primaryAction)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(isStale ? .orange : .secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, 4)
@@ -348,6 +362,11 @@ private struct WatchRootView: View {
                 Label("今日训练", systemImage: "figure.run")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(Color(red: 0.48, green: 0.95, blue: 0.82))
+                if snapshotIsStale(snapshot) {
+                    Label("以下计划可能已变化", systemImage: "exclamationmark.arrow.triangle.2.circlepath")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.orange)
+                }
                 Text(snapshot.sessionTitle ?? "今天没有待执行训练")
                     .font(.headline.weight(.bold))
                     .fixedSize(horizontal: false, vertical: true)
@@ -382,10 +401,17 @@ private struct WatchRootView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("关键身体信号")
                     .font(.headline.weight(.bold))
-                metricRow("睡眠", snapshot.sleepScore.map(String.init) ?? "—", "moon.fill", .indigo)
+                if snapshotIsStale(snapshot) {
+                    Label("历史快照", systemImage: "clock.badge.exclamationmark")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.orange)
+                }
+                metricRow("睡眠", snapshot.sleepScore.map(String.init) ?? "—", "moon.fill", recoveryColor(snapshot.sleepScore))
                 metricRow("负荷", snapshot.strainScore.map(String.init) ?? "—", "flame.fill", .orange)
+                metricRow("压力", snapshot.stressScore.map(String.init) ?? "—", "waveform.path.ecg", stressColor(snapshot.stressScore))
+                metricRow("能量", snapshot.energyScore.map { "\($0)%" } ?? "—", "battery.75percent", energyColor(snapshot.energyScore))
                 metricRow("HRV", snapshot.hrvMilliseconds.map { "\($0) ms" } ?? "—", "waveform.path.ecg", .mint)
-                metricRow("静息心率", snapshot.restingHeartRate.map { "\($0)" } ?? "—", "heart.fill", .red)
+                metricRow("静息心率", snapshot.restingHeartRate.map { "\($0) bpm" } ?? "—", "heart.fill", .red)
                 Text(snapshot.summary)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -434,14 +460,49 @@ private struct WatchRootView: View {
     }
 
     private func freshness(_ date: Date) -> some View {
-        Text(date, style: .relative)
-            .font(.system(size: 9))
-            .foregroundStyle(.secondary)
+        Group {
+            if snapshotDateIsStale(date) {
+                Label("需更新", systemImage: "clock.badge.exclamationmark")
+                    .foregroundStyle(.orange)
+            } else {
+                Text(date, style: .relative)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.system(size: 9, weight: .semibold))
     }
 
-    private func decisionColor(_ decision: String) -> Color {
-        if decision.contains("恢复") { return .orange }
-        if decision.contains("降低") || decision.contains("替换") { return .yellow }
+    private func ringProgress(_ score: Int?) -> Double {
+        guard let score else { return 0 }
+        return min(1, max(0, Double(score) / 100))
+    }
+
+    private func recoveryColor(_ score: Int?) -> Color {
+        guard let score else { return .secondary }
+        if score < 40 { return .orange }
+        if score < 70 { return .yellow }
         return Color(red: 0.48, green: 0.95, blue: 0.82)
+    }
+
+    private func stressColor(_ score: Int?) -> Color {
+        guard let score else { return .secondary }
+        if score >= 70 { return .orange }
+        if score >= 40 { return .yellow }
+        return Color(red: 0.48, green: 0.95, blue: 0.82)
+    }
+
+    private func energyColor(_ score: Int?) -> Color {
+        guard let score else { return .secondary }
+        if score < 40 { return .orange }
+        if score < 70 { return .yellow }
+        return Color(red: 0.48, green: 0.95, blue: 0.82)
+    }
+
+    private func snapshotIsStale(_ snapshot: WatchSnapshot) -> Bool {
+        snapshotDateIsStale(snapshot.generatedAt)
+    }
+
+    private func snapshotDateIsStale(_ date: Date) -> Bool {
+        Date().timeIntervalSince(date) > 12 * 3_600 || !Calendar.current.isDateInToday(date)
     }
 }

@@ -18,12 +18,10 @@ struct StrengthWorkoutLogSheetView: View {
     @State private var showExercisePicker = false
     @State private var showDiscardConfirmation = false
     @State private var restTimer: RestTimerState?
-    @State private var restSecondsRemaining = 0
     @State private var saveError: String?
     @State private var completedSummary: StrengthWorkoutAnalysis?
     @State private var completedWorkout: StrengthWorkoutRecord?
     @State private var closeAfterSummary = false
-    @State private var now = Date()
     @State private var isLoaded = false
     /// Guards against a fast double-tap on "完成" creating a duplicate workout.
     @State private var isSaving = false
@@ -37,7 +35,6 @@ struct StrengthWorkoutLogSheetView: View {
     private let initialDraft: TrainingSessionDraft?
     private let editingWorkout: StrengthWorkoutRecord?
     private let equipmentOptions = ["杠铃", "哑铃", "固定器械", "绳索", "壶铃", "自重", "其他"]
-    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     init(
         startingTemplateID: UUID? = nil,
@@ -49,7 +46,7 @@ struct StrengthWorkoutLogSheetView: View {
         self.editingWorkout = editingWorkout
     }
 
-    private var durationMinutes: Int {
+    private func durationMinutes(at date: Date = Date()) -> Int {
         // Editing an already-logged workout: its duration is a historical fact and
         // `now` is meaningless here — `startedAt` was set to the original PAST date,
         // so `now - startedAt` would inflate the duration to days and corrupt it.
@@ -59,7 +56,7 @@ struct StrengthWorkoutLogSheetView: View {
         }
         // 草稿跨天续录时 now - startedAt 可膨胀到数百上千分钟，污染时长/负荷/热量；
         // 单次训练时长封顶 4 小时（超过时按 startedAt 重算最近一次活跃的保守值）。
-        return min(max(1, Int(now.timeIntervalSince(startedAt) / 60)), 240)
+        return min(max(1, Int(date.timeIntervalSince(startedAt) / 60)), 240)
     }
 
     private var completedSetCount: Int {
@@ -90,7 +87,10 @@ struct StrengthWorkoutLogSheetView: View {
                     sessionCard
 
                     if let restTimer {
-                        restTimerCard(restTimer)
+                        StrengthRestTimerCard(
+                            timer: restTimer,
+                            onFinish: { self.restTimer = nil }
+                        )
                     }
 
                     ForEach($exercises) { $exercise in
@@ -125,13 +125,6 @@ struct StrengthWorkoutLogSheetView: View {
                     Button("完成") { requestSave() }
                         .disabled(validExercises.isEmpty || isSaving)
                 }
-            }
-        }
-        .onReceive(timer) { date in
-            now = date
-            if let restTimer {
-                restSecondsRemaining = max(0, Int(restTimer.endsAt.timeIntervalSince(date).rounded(.up)))
-                if restSecondsRemaining == 0 { self.restTimer = nil }
             }
         }
         .task {
@@ -200,7 +193,10 @@ struct StrengthWorkoutLogSheetView: View {
     private var sessionCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                Label("\(durationMinutes) 分钟", systemImage: "timer")
+                WorkoutElapsedTimeLabel(
+                    startedAt: startedAt,
+                    fixedDurationMinutes: editingWorkout?.durationMinutes
+                )
                 Label(setProgressText, systemImage: "checkmark.circle")
                 Spacer()
             }
@@ -514,6 +510,7 @@ struct StrengthWorkoutLogSheetView: View {
         guard !isSaving else { return }
         isSaving = true
         defer { isSaving = false }
+        let savedDurationMinutes = durationMinutes()
         let validation = StrengthWorkoutSaveValidator.exercisesToSave(
             from: exercises,
             ignoringUncompletedSets: ignoringUncompletedSets
@@ -531,10 +528,10 @@ struct StrengthWorkoutLogSheetView: View {
             let previousStartDate = editingWorkout.startedAt
             editingWorkout.title = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "力量训练" : title
             editingWorkout.startedAt = startedAt
-            editingWorkout.durationMinutes = durationMinutes
+            editingWorkout.durationMinutes = savedDurationMinutes
             editingWorkout.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
             editingWorkout.exercises = exercisesToSave
-            editingWorkout.completedAt = startedAt.addingTimeInterval(TimeInterval(durationMinutes * 60))
+            editingWorkout.completedAt = startedAt.addingTimeInterval(TimeInterval(savedDurationMinutes * 60))
             
             do {
                 // PR 历史只取早于本次训练的记录，避免编辑旧训练时与未来记录比较产生伪 PR。
@@ -568,7 +565,7 @@ struct StrengthWorkoutLogSheetView: View {
             let record = StrengthWorkoutRecord(
                 title: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "力量训练" : title,
                 startedAt: startedAt,
-                durationMinutes: durationMinutes,
+                durationMinutes: savedDurationMinutes,
                 notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
                 exercises: exercisesToSave
             )
@@ -788,29 +785,12 @@ struct StrengthWorkoutLogSheetView: View {
         }
         
         restTimer = RestTimerState(endsAt: Date().addingTimeInterval(TimeInterval(restDuration)), exerciseName: exercise.wrappedValue.name, setNumber: index + 1)
-        restSecondsRemaining = restDuration
     }
 
     private func quickAdjust(_ label: String, action: @escaping () -> Void) -> some View {
         Button(label, action: action)
             .buttonStyle(.bordered)
             .controlSize(.mini)
-    }
-
-    private func restTimerCard(_ timer: RestTimerState) -> some View {
-        HStack {
-            Image(systemName: "timer")
-            Text("\(timer.exerciseName) 第 \(timer.setNumber) 组休息")
-            Spacer()
-            Text("\(restSecondsRemaining)s").monospacedDigit()
-            Button("跳过") { restTimer = nil }
-                .buttonStyle(.cardPress)
-        }
-        .font(.system(.footnote, design: .default, weight: .bold))
-        .foregroundStyle(VelaTheme.accent)
-        .padding(14)
-        .velaNativeCard(radius: 16)
-        .appleIntelligenceGlow(isHighlighted: true, radius: 16)
     }
 
     private func saveCompletedWorkoutAsTemplate() -> Bool {
@@ -979,6 +959,67 @@ enum BarbellPlateCalculator {
 
     static func achievableKilograms(targetKilograms: Double, barKilograms: Double) -> Double {
         barKilograms + platesPerSide(targetKilograms: targetKilograms, barKilograms: barKilograms).reduce(0, +) * 2
+    }
+}
+
+private struct WorkoutElapsedTimeLabel: View {
+    let startedAt: Date
+    let fixedDurationMinutes: Int?
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            Label("\(duration(at: context.date)) 分钟", systemImage: "timer")
+                .monospacedDigit()
+                .accessibilityLabel("训练时长")
+                .accessibilityValue("\(duration(at: context.date)) 分钟")
+        }
+    }
+
+    private func duration(at date: Date) -> Int {
+        if let fixedDurationMinutes {
+            return max(1, fixedDurationMinutes)
+        }
+        return min(max(1, Int(date.timeIntervalSince(startedAt) / 60)), 240)
+    }
+}
+
+private struct StrengthRestTimerCard: View {
+    let timer: RestTimerState
+    let onFinish: () -> Void
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            HStack {
+                Image(systemName: "timer")
+                Text("\(timer.exerciseName) 第 \(timer.setNumber) 组休息")
+                Spacer()
+                Text("\(remainingSeconds(at: context.date))s")
+                    .monospacedDigit()
+                    .accessibilityLabel("剩余休息时间")
+                    .accessibilityValue("\(remainingSeconds(at: context.date)) 秒")
+                Button("跳过", action: onFinish)
+                    .buttonStyle(.cardPress)
+            }
+        }
+        .font(.system(.footnote, design: .default, weight: .bold))
+        .foregroundStyle(VelaTheme.accent)
+        .padding(14)
+        .velaNativeCard(radius: 16)
+        .appleIntelligenceGlow(isHighlighted: true, radius: 16)
+        .task(id: timer.endsAt) {
+            let delay = max(0, timer.endsAt.timeIntervalSinceNow)
+            do {
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            onFinish()
+        }
+    }
+
+    private func remainingSeconds(at date: Date) -> Int {
+        max(0, Int(timer.endsAt.timeIntervalSince(date).rounded(.up)))
     }
 }
 

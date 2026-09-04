@@ -45,7 +45,7 @@ struct VelaVitalsView: View {
             Spacer()
             
             Button {
-                VelaAppState.shared.triggerBloodLog = true
+                VelaAppState.shared.present(.bloodLog)
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 20, weight: .medium))
@@ -194,7 +194,7 @@ struct VelaVitalsView: View {
                         }
                         Spacer()
                         Button {
-                            VelaAppState.shared.triggerBloodLog = true
+                            VelaAppState.shared.present(.bloodLog)
                         } label: {
                             Image(systemName: "plus")
                                 .font(.system(size: 14, weight: .bold))
@@ -290,7 +290,7 @@ struct VelaVitalsView: View {
                 Spacer()
 
                 Button("编辑记录") {
-                    VelaAppState.shared.triggerBloodLog = true
+                    VelaAppState.shared.present(.bloodLog)
                 }
                 .font(.system(.footnote, design: .default, weight: .semibold))
                 .foregroundStyle(VelaTheme.rhythmDeep)

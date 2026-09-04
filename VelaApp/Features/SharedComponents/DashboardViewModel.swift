@@ -86,6 +86,9 @@ final class DashboardViewModel: ObservableObject {
     @Published private(set) var dashboard = DashboardSummary.empty()
     @Published private(set) var isLoading = false
     @Published private(set) var errorMessage: String?
+    /// Secondary persistence failures are distinct from genuinely missing health data.
+    /// Keeping this separate prevents a failed fetch from being presented as an empty day.
+    @Published private(set) var secondaryDataErrorMessage: String?
     @Published var currentError: VelaError?
     @Published private(set) var sleepTrend: [TrendPoint] = []
     @Published private(set) var recoveryTrend: [RecoveryTrendPoint] = []
@@ -159,7 +162,7 @@ final class DashboardViewModel: ObservableObject {
     private let services: VelaServices?
     private var refreshTask: Task<Void, Never>?
     private var refreshTaskDate: Date?
-    private var secondaryDataLoadTask: Task<Void, Never>?
+    private var secondaryDataLoadTask: Task<Bool, Never>?
     private var secondaryDataLoadDate: Date?
     private var secondaryDataLastCompletedAt: Date?
     private var secondaryDataLastCompletedDate: Date?
@@ -191,6 +194,7 @@ final class DashboardViewModel: ObservableObject {
             await loadSecondaryData(modelContext: modelContext, force: true)
             return true
         } catch {
+            recordSecondaryDataLoadFailure(error)
             return false
         }
     }
@@ -198,8 +202,8 @@ final class DashboardViewModel: ObservableObject {
     /// 已确认的个人反应规律（observation 类 MemoryEventRecord）摘要，
     /// 供今日计划文案引用（C2：个人反应规律接入 Daily Operating Plan）。
     @MainActor
-    private func confirmedObservationSummaries(modelContext: ModelContext) -> [String] {
-        let records = (try? modelContext.fetch(FetchDescriptor<MemoryEventRecord>())) ?? []
+    private func confirmedObservationSummaries(modelContext: ModelContext) throws -> [String] {
+        let records = try modelContext.fetch(FetchDescriptor<MemoryEventRecord>())
         return records
             .filter { $0.memoryTypeRaw == "observation" && $0.status == MemoryProposalStatus.accepted.rawValue }
             .compactMap { record -> String? in
@@ -219,7 +223,21 @@ final class DashboardViewModel: ObservableObject {
     @MainActor
     func applyFeedbackCalibration(modelContext: ModelContext) {
         guard var state = todayCommandState else { return }
-        let records = (try? modelContext.fetch(FetchDescriptor<DailyDecisionFeedbackRecord>())) ?? []
+        let records: [DailyDecisionFeedbackRecord]
+        do {
+            records = try modelContext.fetch(FetchDescriptor<DailyDecisionFeedbackRecord>())
+        } catch {
+            recordSecondaryDataLoadFailure(error)
+            return
+        }
+        applyFeedbackCalibration(records: records, state: &state)
+        todayCommandState = state
+    }
+
+    private func applyFeedbackCalibration(
+        records: [DailyDecisionFeedbackRecord],
+        state: inout TodayCommandState
+    ) {
         let calibrated = DecisionFeedbackCalibrator.calibratedConfidence(
             base: baseReadinessConfidence,
             decision: state.readinessDecision.decision,
@@ -230,7 +248,6 @@ final class DashboardViewModel: ObservableObject {
         decision.confidence = calibrated
         decision.reasons.append("置信度已按你过去的反馈校准。")
         state.readinessDecision = decision
-        todayCommandState = state
     }
 
     func refresh(modelContext: ModelContext? = nil, force: Bool = false) async {
@@ -537,23 +554,33 @@ final class DashboardViewModel: ObservableObject {
         if let runningTask = secondaryDataLoadTask,
            let runningDate = secondaryDataLoadDate,
            Calendar.current.isDate(runningDate, inSameDayAs: refDate) {
-            await runningTask.value
+            _ = await runningTask.value
             return
         }
 
-        let loadTask = Task<Void, Never> { [weak self] in
-            _ = await self?.performLoadSecondaryData(modelContext: modelContext)
+        let loadTask = Task<Bool, Never> { [weak self] in
+            guard let self else { return false }
+            do {
+                try await self.performLoadSecondaryData(modelContext: modelContext)
+                return true
+            } catch {
+                self.recordSecondaryDataLoadFailure(error)
+                return false
+            }
         }
         secondaryDataLoadTask = loadTask
         secondaryDataLoadDate = refDate
-        await loadTask.value
+        let succeeded = await loadTask.value
         secondaryDataLoadTask = nil
         secondaryDataLoadDate = nil
-        secondaryDataLastCompletedAt = Date()
-        secondaryDataLastCompletedDate = refDate
+        if succeeded {
+            secondaryDataErrorMessage = nil
+            secondaryDataLastCompletedAt = Date()
+            secondaryDataLastCompletedDate = refDate
+        }
     }
 
-    private func performLoadSecondaryData(modelContext: ModelContext) async {
+    private func performLoadSecondaryData(modelContext: ModelContext) async throws {
         let calendar = Calendar.current
         let refDate = selectedDate
         let startOfDayRef = calendar.startOfDay(for: refDate)
@@ -573,22 +600,22 @@ final class DashboardViewModel: ObservableObject {
             predicate: #Predicate<CoachArtifactRecord> { $0.createdAt >= trainingStartLimit && $0.createdAt <= endLimit },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
-        let coachArtifacts = (try? modelContext.fetch(artifactsDesc)) ?? []
+        let coachArtifacts = try modelContext.fetch(artifactsDesc)
 
         // 活跃计划必须用 isActive 谓词直取，不能从「最近更新 10 条」里猜；
         // 否则较早更新的活跃计划会让今日决策/手表推送/提案生成全部漏计划。
-        let activePlan = (try? modelContext.fetch(FetchDescriptor<TrainingPlanRecord>(
+        let activePlan = try modelContext.fetch(FetchDescriptor<TrainingPlanRecord>(
             predicate: #Predicate<TrainingPlanRecord> { $0.isActive },
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-        )))?.first
-        let trainingPreference = (try? modelContext.fetch(FetchDescriptor<OnboardingState>()))?
+        )).first
+        let trainingPreference = try modelContext.fetch(FetchDescriptor<OnboardingState>())
             .first?.trainingPreference
 
         let strengthDesc = FetchDescriptor<StrengthWorkoutRecord>(
             predicate: #Predicate<StrengthWorkoutRecord> { $0.startedAt >= trainingStartLimit && $0.startedAt <= endLimit },
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
         )
-        let strengthWorkouts = (try? modelContext.fetch(strengthDesc)) ?? []
+        let strengthWorkouts = try modelContext.fetch(strengthDesc)
 
         // 训练事件窗口覆盖完整活跃计划；TrainingScheduleResolver 依赖历史完成事件，
         // 不能被 30 天训练窗口截断。
@@ -600,31 +627,32 @@ final class DashboardViewModel: ObservableObject {
             predicate: #Predicate<WorkoutEventRecord> { $0.startedAt >= eventStartLimit && $0.startedAt <= endLimit },
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
         )
-        let workoutEvents = (try? modelContext.fetch(eventsDesc)) ?? []
+        let workoutEvents = try modelContext.fetch(eventsDesc)
 
         let responsesDesc = FetchDescriptor<TrainingResponseRecord>(
             predicate: #Predicate<TrainingResponseRecord> { $0.date >= evidenceStartLimit && $0.date <= endLimit },
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
-        let trainingResponses = (try? modelContext.fetch(responsesDesc)) ?? []
+        let trainingResponses = try modelContext.fetch(responsesDesc)
 
         let foodDesc = FetchDescriptor<FoodLogRecord>(
             predicate: #Predicate<FoodLogRecord> { $0.createdAt >= evidenceStartLimit && $0.createdAt <= endLimit },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
-        let foodLogs = (try? modelContext.fetch(foodDesc)) ?? []
+        let foodLogs = try modelContext.fetch(foodDesc)
 
         let journalDesc = FetchDescriptor<JournalEntryRecord>(
             predicate: #Predicate<JournalEntryRecord> { $0.createdAt >= evidenceStartLimit && $0.createdAt <= endLimit },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
-        let journalEntries = (try? modelContext.fetch(journalDesc)) ?? []
+        let journalEntries = try modelContext.fetch(journalDesc)
 
         let summaryDesc = FetchDescriptor<DailyHealthSummaryRecord>(
             predicate: #Predicate<DailyHealthSummaryRecord> { $0.date >= healthHistoryStartLimit && $0.date <= endLimit },
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
-        let dailySummaries = (try? modelContext.fetch(summaryDesc)) ?? []
+        let dailySummaries = try modelContext.fetch(summaryDesc)
+        let decisionFeedback = try modelContext.fetch(FetchDescriptor<DailyDecisionFeedbackRecord>())
 
         let dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: refDate, calendar: calendar)
         var opPlansDesc = FetchDescriptor<DailyOperatingPlanRecord>(
@@ -632,40 +660,35 @@ final class DashboardViewModel: ObservableObject {
             sortBy: [SortDescriptor(\.generatedAt, order: .reverse)]
         )
         opPlansDesc.fetchLimit = 1
-        let operatingPlans = (try? modelContext.fetch(opPlansDesc)) ?? []
+        let operatingPlans = try modelContext.fetch(opPlansDesc)
 
         let persistedPlan = operatingPlans.first
-        self.persistedOperatingPlan = persistedPlan
-        // Perf: decode once here instead of per body evaluation. The Today
-        // view reads this payload in its render path; JSONDecoder per frame is
-        // measurably expensive in DEBUG builds.
-        self.persistedOperatingPlanPayload = persistedPlan?.operatingPlanPayload
-
-        self.activeTrainingPlan = activePlan
         let adaptationsDesc = FetchDescriptor<TrainingPlanAdaptationRecord>(
             predicate: #Predicate<TrainingPlanAdaptationRecord> { $0.status == "proposed" },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
-        let proposedAdaptations = (try? modelContext.fetch(adaptationsDesc)) ?? []
+        let proposedAdaptations = try modelContext.fetch(adaptationsDesc)
+        let pendingPlanAdaptation: TrainingPlanAdaptationRecord?
         if let activePlan {
             let upcomingDayIDs = Set(activePlan.days.filter { !$0.isCompleted }.map(\.id))
-            self.pendingPlanAdaptation = proposedAdaptations.first {
+            pendingPlanAdaptation = proposedAdaptations.first {
                 $0.planId == activePlan.id && upcomingDayIDs.contains($0.dayId)
             }
         } else {
-            self.pendingPlanAdaptation = nil
+            pendingPlanAdaptation = nil
         }
 
         let aiInsightDesc = FetchDescriptor<AIReportRecord>(
             predicate: #Predicate<AIReportRecord> { $0.type == "daily_ai_insight" },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
-        let aiInsights = (try? modelContext.fetch(aiInsightDesc)) ?? []
+        let aiInsights = try modelContext.fetch(aiInsightDesc)
+        let decodedTodayAIInsight: DailyAIInsight?
         if let record = aiInsights.first(where: { calendar.isDateInToday($0.createdAt) }),
            let data = record.serializedContextSnapshot.data(using: .utf8) {
-            self.todayAIInsight = try? JSONDecoder().decode(DailyAIInsight.self, from: data)
+            decodedTodayAIInsight = try JSONDecoder().decode(DailyAIInsight.self, from: data)
         } else {
-            self.todayAIInsight = nil
+            decodedTodayAIInsight = nil
         }
 
         // Domain assembly (pure computation, no DB writes / Watch I/O) is extracted
@@ -686,7 +709,7 @@ final class DashboardViewModel: ObservableObject {
         let persistedOperatingPlanPayload = persistedPlan?.operatingPlanPayload
         let persistedTargetSessionTitle = persistedOperatingPlanPayload?.targetSessionTitle
         let dashboardSnapshot = dashboard
-        let observationSummaries = confirmedObservationSummaries(modelContext: modelContext)
+        let observationSummaries = try confirmedObservationSummaries(modelContext: modelContext)
         let evaluationNow = Date()
         let activeStatus = ActiveStatusSettings.resolveStatus(
             at: refDate,
@@ -694,7 +717,7 @@ final class DashboardViewModel: ObservableObject {
             calendar: calendar
         )
         let snapshotValues = dailySummaries.map { $0.toSnapshot() }
-        vitalTrendSeries = Self.vitalSeries(from: snapshotValues, calendar: calendar)
+        let nextVitalTrendSeries = Self.vitalSeries(from: snapshotValues, calendar: calendar)
 
         let assembly = await Task.detached {
             SecondaryDataAssembler.assemble(
@@ -724,6 +747,15 @@ final class DashboardViewModel: ObservableObject {
         // while it was in flight. Apply the result only if selection is unchanged.
         guard Calendar.current.isDate(selectedDate, inSameDayAs: refDate) else { return }
 
+        // Publish one coherent snapshot only after every required fetch and decode
+        // succeeded. A persistence failure therefore leaves the last known-good state
+        // visible alongside an explicit error instead of manufacturing empty evidence.
+        self.persistedOperatingPlan = persistedPlan
+        self.persistedOperatingPlanPayload = persistedOperatingPlanPayload
+        self.activeTrainingPlan = activePlan
+        self.pendingPlanAdaptation = pendingPlanAdaptation
+        self.todayAIInsight = decodedTodayAIInsight
+        self.vitalTrendSeries = nextVitalTrendSeries
         self.dashboard = assembly.updatedDashboard
         self.todayCalories = assembly.todayCalories
         self.todayProtein = assembly.todayProtein
@@ -732,9 +764,10 @@ final class DashboardViewModel: ObservableObject {
         self.dailyTrainingDecision = assembly.dailyTrainingDecision
         self.todayExperience = assembly.todayExperience
         self.latestTodayArtifact = assembly.latestTodayArtifact
-        self.todayCommandState = assembly.todayCommandState
+        var calibratedCommandState = assembly.todayCommandState
         baseReadinessConfidence = assembly.todayCommandState.readinessDecision.confidence
-        applyFeedbackCalibration(modelContext: modelContext)
+        applyFeedbackCalibration(records: decisionFeedback, state: &calibratedCommandState)
+        self.todayCommandState = calibratedCommandState
 
         // Side effects stay in the VM (coordination, not pure assembly). They run on the
         // main actor using the real SwiftData records fetched above.
@@ -758,6 +791,17 @@ final class DashboardViewModel: ObservableObject {
                 scheduledDay: assembly.scheduledDay
             )
         }
+    }
+
+    private func recordSecondaryDataLoadFailure(_ error: Error) {
+        secondaryDataErrorMessage = Self.secondaryDataFailureMessage(isChinese: AppLanguage.stored.isChinese)
+        currentError = (error as? VelaError) ?? .unknown(underlying: error)
+    }
+
+    nonisolated static func secondaryDataFailureMessage(isChinese: Bool) -> String {
+        isChinese
+            ? "部分本地记录暂时无法读取，已保留上次成功状态。请稍后重试。"
+            : "Some local records are temporarily unavailable. Your last successful state is still shown. Please try again."
     }
 }
 

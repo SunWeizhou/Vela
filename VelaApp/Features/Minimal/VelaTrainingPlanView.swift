@@ -474,6 +474,8 @@ struct VelaPlanView: View {
 }
 
 private struct PlanActionRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let action: DailyOperatingPlanAction
     let isPrimary: Bool
     let onToggle: () -> Void
@@ -485,85 +487,122 @@ private struct PlanActionRow: View {
     private var style: PlanDomainStyle { PlanDomainStyle(action.domain) }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Button(action: onToggle) {
-                ZStack {
-                    Circle()
-                        .stroke(action.completedAt == nil ? style.color.opacity(0.62) : style.color, lineWidth: 1.8)
-                    if action.completedAt != nil {
-                        Circle().fill(style.color)
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(Color.white)
-                    } else {
-                        Image(systemName: style.icon)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(style.color)
-                    }
-                }
-                .frame(width: 40, height: 40)
-                .contentShape(Circle())
-            }
-            .buttonStyle(.cardPress)
-            .accessibilityLabel(action.completedAt == nil ? "完成 \(action.title)" : "取消完成 \(action.title)")
-
-            Button(action: onEdit) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 7) {
-                        Text(action.title)
-                            .font(.system(.subheadline, design: .default, weight: isPrimary ? .semibold : .medium))
-                            .foregroundStyle(VelaTheme.rhythmInk)
-                            .strikethrough(action.completedAt != nil, color: VelaTheme.rhythmInkSecondary)
-                            .lineLimit(2)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 12) {
+                        completionButton
                         if isPrimary {
-                            Text("重点")
-                                .font(.system(.caption2, design: .default, weight: .semibold))
-                                .foregroundStyle(VelaTheme.rhythmDeep)
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3)
-                                .background(VelaTheme.rhythmDeep.opacity(0.10), in: Capsule())
+                            primaryBadge
                         }
+                        Spacer(minLength: 8)
+                        managementMenu
                     }
-                    if let scheduledAt = action.scheduledAt {
-                        Label(scheduledAt.formatted(date: .omitted, time: .shortened), systemImage: "clock")
-                            .font(.caption2)
-                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                    } else if !action.detail.isEmpty {
-                        Text(action.detail)
-                            .font(.caption)
-                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                            .lineLimit(2)
-                    }
+                    actionButton(showsPrimaryBadgeInline: false)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
+            } else {
+                HStack(alignment: .center, spacing: 12) {
+                    completionButton
+                    actionButton(showsPrimaryBadgeInline: true)
+                    managementMenu
+                }
             }
-            .buttonStyle(.plain)
-            .opacity(action.completedAt == nil ? 1 : 0.62)
-
-            Menu {
-                Button("编辑", systemImage: "pencil", action: onEdit)
-                Button("改期", systemImage: "clock", action: onReschedule)
-                Button("替换", systemImage: "arrow.triangle.2.circlepath", action: onReplace)
-                Divider()
-                Button("删除", systemImage: "trash", role: .destructive, action: onDelete)
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                    .frame(width: 40, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .accessibilityLabel("管理 \(action.title)")
         }
         .padding(.vertical, 12)
+    }
+
+    private var completionButton: some View {
+        Button(action: onToggle) {
+            ZStack {
+                Circle()
+                    .stroke(action.completedAt == nil ? style.color.opacity(0.62) : style.color, lineWidth: 1.8)
+                if action.completedAt != nil {
+                    Circle().fill(style.color)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Color.white)
+                } else {
+                    Image(systemName: style.icon)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(style.color)
+                }
+            }
+            .frame(width: 40, height: 40)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.cardPress)
+        .accessibilityLabel(action.completedAt == nil ? "完成 \(action.title)" : "取消完成 \(action.title)")
+    }
+
+    private func actionButton(showsPrimaryBadgeInline: Bool) -> some View {
+        Button(action: onEdit) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 7) {
+                    Text(action.title)
+                        .font(.system(.subheadline, design: .default, weight: isPrimary ? .semibold : .medium))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                        .strikethrough(action.completedAt != nil, color: VelaTheme.rhythmInkSecondary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if isPrimary && showsPrimaryBadgeInline {
+                        primaryBadge
+                    }
+                }
+                if let scheduledAt = action.scheduledAt {
+                    Label(scheduledAt.formatted(date: .omitted, time: .shortened), systemImage: "clock")
+                        .font(.caption2)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                } else if !action.detail.isEmpty {
+                    Text(action.detail)
+                        .font(.caption)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .opacity(action.completedAt == nil ? 1 : 0.62)
+    }
+
+    private var primaryBadge: some View {
+        Text("重点")
+            .font(.system(.caption2, design: .default, weight: .semibold))
+            .foregroundStyle(VelaTheme.rhythmDeep)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(VelaTheme.rhythmDeep.opacity(0.10), in: Capsule())
+    }
+
+    private var managementMenu: some View {
+        Menu {
+            Button("编辑", systemImage: "pencil", action: onEdit)
+            Button("改期", systemImage: "clock", action: onReschedule)
+            Button("替换", systemImage: "arrow.triangle.2.circlepath", action: onReplace)
+            Divider()
+            Button("删除", systemImage: "trash", role: .destructive, action: onDelete)
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                .frame(width: 40, height: 44)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("管理 \(action.title)")
     }
 }
 
 private struct PlanActionEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @State var draft: PlanActionDraft
+    @State private var draft: PlanActionDraft
     let onSave: (PlanActionDraft) -> Void
+
+    init(draft: PlanActionDraft, onSave: @escaping (PlanActionDraft) -> Void) {
+        _draft = State(initialValue: draft)
+        self.onSave = onSave
+    }
 
     var body: some View {
         NavigationStack {

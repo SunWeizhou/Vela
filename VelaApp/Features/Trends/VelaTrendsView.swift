@@ -124,14 +124,27 @@ struct VelaTrendsView: View {
 
     private var fiveScoreTrendSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("身体状态")
-                    .font(VelaTheme.headline())
-                    .foregroundStyle(VelaTheme.rhythmInk)
-                Spacer()
-                Text(selectedHorizon.detailedTitle)
-                    .font(VelaTheme.caption1().weight(.semibold))
-                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("身体状态")
+                            .font(VelaTheme.headline())
+                            .foregroundStyle(VelaTheme.rhythmInk)
+                        Text(selectedHorizon.detailedTitle)
+                            .font(VelaTheme.caption1().weight(.semibold))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    }
+                } else {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("身体状态")
+                            .font(VelaTheme.headline())
+                            .foregroundStyle(VelaTheme.rhythmInk)
+                        Spacer()
+                        Text(selectedHorizon.detailedTitle)
+                            .font(VelaTheme.caption1().weight(.semibold))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    }
+                }
             }
 
             VStack(spacing: 0) {
@@ -166,58 +179,106 @@ struct VelaTrendsView: View {
         return Button {
             selectedMetricForDetail = descriptor.detail
         } label: {
-            HStack(spacing: 12) {
-                Image(systemName: descriptor.icon)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(color)
-                    .frame(width: 34, height: 34)
-                    .background(color.opacity(0.10), in: Circle())
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 12) {
+                            scoreTrendIcon(descriptor, color: color)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Text(descriptor.title)
-                            .font(VelaTheme.subheadline().weight(.semibold))
-                            .foregroundStyle(VelaTheme.rhythmInk)
-                        if finding?.isNotable == true {
-                            Circle()
-                                .fill(VelaTheme.stressColor)
-                                .frame(width: 7, height: 7)
+                            Text(descriptor.title)
+                                .font(VelaTheme.subheadline().weight(.semibold))
+                                .foregroundStyle(VelaTheme.rhythmInk)
+                            if finding?.isNotable == true {
+                                Circle()
+                                    .fill(VelaTheme.stressColor)
+                                    .frame(width: 7, height: 7)
+                                    .accessibilityHidden(true)
+                            }
+
+                            Spacer(minLength: 8)
+
+                            Text(valueText)
+                                .font(.system(.headline, design: .rounded, weight: .bold))
+                                .monospacedDigit()
+                                .foregroundStyle(valueText == "--" ? VelaTheme.muted : VelaTheme.rhythmInk)
+
+                            Image(systemName: "chevron.right")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.55))
+                        }
+
+                        Text(scoreTrendCaption(finding: finding, sampleCount: values.count))
+                            .font(VelaTheme.caption2())
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        if normalized.count >= 2 {
+                            SparklineLineGraph(
+                                data: normalized,
+                                color: color,
+                                height: 42,
+                                width: 220
+                            )
+                            .accessibilityHidden(true)
+                        } else {
+                            Capsule()
+                                .fill(VelaTheme.rhythmMist)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 2)
                                 .accessibilityHidden(true)
                         }
                     }
-
-                    Text(scoreTrendCaption(finding: finding, sampleCount: values.count))
-                        .font(VelaTheme.caption2())
-                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 4)
-
-                if normalized.count >= 2 {
-                    SparklineLineGraph(
-                        data: normalized,
-                        color: color,
-                        height: 34,
-                        width: 88
-                    )
-                    .accessibilityHidden(true)
                 } else {
-                    Capsule()
-                        .fill(VelaTheme.rhythmMist)
-                        .frame(width: 88, height: 2)
-                        .accessibilityHidden(true)
+                    HStack(spacing: 12) {
+                        scoreTrendIcon(descriptor, color: color)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 6) {
+                                Text(descriptor.title)
+                                    .font(VelaTheme.subheadline().weight(.semibold))
+                                    .foregroundStyle(VelaTheme.rhythmInk)
+                                if finding?.isNotable == true {
+                                    Circle()
+                                        .fill(VelaTheme.stressColor)
+                                        .frame(width: 7, height: 7)
+                                        .accessibilityHidden(true)
+                                }
+                            }
+
+                            Text(scoreTrendCaption(finding: finding, sampleCount: values.count))
+                                .font(VelaTheme.caption2())
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                                .lineLimit(1)
+                        }
+
+                        Spacer(minLength: 4)
+
+                        if normalized.count >= 2 {
+                            SparklineLineGraph(
+                                data: normalized,
+                                color: color,
+                                height: 34,
+                                width: 88
+                            )
+                            .accessibilityHidden(true)
+                        } else {
+                            Capsule()
+                                .fill(VelaTheme.rhythmMist)
+                                .frame(width: 88, height: 2)
+                                .accessibilityHidden(true)
+                        }
+
+                        Text(valueText)
+                            .font(.system(.headline, design: .rounded, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundStyle(valueText == "--" ? VelaTheme.muted : VelaTheme.rhythmInk)
+                            .frame(minWidth: 38, alignment: .trailing)
+
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.55))
+                    }
                 }
-
-                Text(valueText)
-                    .font(.system(.headline, design: .rounded, weight: .bold))
-                    .monospacedDigit()
-                    .foregroundStyle(valueText == "--" ? VelaTheme.muted : VelaTheme.rhythmInk)
-                    .frame(minWidth: 38, alignment: .trailing)
-
-                Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(VelaTheme.rhythmInkSecondary.opacity(0.55))
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 12)
@@ -228,6 +289,17 @@ struct VelaTrendsView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(scoreAccessibilityLabel(descriptor: descriptor, finding: finding, values: values))
         .accessibilityHint("打开\(descriptor.title)详情")
+    }
+
+    private func scoreTrendIcon(
+        _ descriptor: ScoreTrendDescriptor,
+        color: Color
+    ) -> some View {
+        Image(systemName: descriptor.icon)
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(color)
+            .frame(width: 34, height: 34)
+            .background(color.opacity(0.10), in: Circle())
     }
 
     private var compactCalibrationCard: some View {
@@ -464,14 +536,16 @@ struct VelaTrendsView: View {
                         }
                     }
                 } label: {
-                    HStack(spacing: 8) {
-                        Text("趋势时间范围")
-                            .font(VelaTheme.subheadline().weight(.semibold))
-                        Spacer(minLength: 8)
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            Text("趋势时间范围")
+                                .font(VelaTheme.subheadline().weight(.semibold))
+                            Spacer(minLength: 8)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(VelaTheme.caption1().weight(.semibold))
+                        }
                         Text(selectedHorizon.detailedTitle)
                             .font(VelaTheme.subheadline())
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(VelaTheme.caption1().weight(.semibold))
                     }
                     .foregroundStyle(VelaTheme.rhythmInk)
                     .padding(.horizontal, 14)
@@ -804,45 +878,77 @@ struct VelaTrendsView: View {
         return Button {
             selectedMetricForDetail = metricType
         } label: {
-            HStack(alignment: .center, spacing: 12) {
-                Image(systemName: metric.icon)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(accentColor(for: metric))
-                    .frame(width: 32, height: 32)
-                    .background(VelaTheme.rhythmMist.opacity(0.72), in: Circle())
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 12) {
+                            browserMetricIcon(metric)
+                            Text(metric.title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(VelaTheme.rhythmInk)
+                            Spacer(minLength: 8)
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        }
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(metric.title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(VelaTheme.rhythmInk)
-                        .fixedSize(horizontal: false, vertical: true)
+                        Text(finding?.isAvailable == true
+                             ? (finding?.summary ?? "")
+                             : "需至少 \(selectedHorizon.requiredSampleCount) 天，当前 \(finding?.sampleCount ?? 0) 天")
+                            .font(VelaTheme.footnote())
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
 
-                    Text(finding?.isAvailable == true
-                         ? (finding?.summary ?? "")
-                         : "需至少 \(selectedHorizon.requiredSampleCount) 天，当前 \(finding?.sampleCount ?? 0) 天")
-                        .font(VelaTheme.footnote())
-                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(finding?.isAvailable == true ? (finding?.currentValueFormatted ?? "--") : "--")
+                                .font(.headline.monospacedDigit())
+                                .foregroundStyle(finding?.isAvailable == true ? VelaTheme.rhythmInk : VelaTheme.muted)
+                            if let finding, finding.isAvailable {
+                                Image(systemName: finding.valueDirection.icon)
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(assessmentColor(for: finding.assessment))
+                                    .accessibilityLabel(finding.assessment.label)
+                            }
+                        }
+                    }
+                } else {
+                    HStack(alignment: .center, spacing: 12) {
+                        browserMetricIcon(metric)
 
-                Spacer(minLength: 8)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(metric.title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(VelaTheme.rhythmInk)
+                                .fixedSize(horizontal: false, vertical: true)
 
-                VStack(alignment: .trailing, spacing: 3) {
-                    Text(finding?.isAvailable == true ? (finding?.currentValueFormatted ?? "--") : "--")
-                        .font(.headline.monospacedDigit())
-                        .foregroundStyle(finding?.isAvailable == true ? VelaTheme.rhythmInk : VelaTheme.muted)
-                    if let finding, finding.isAvailable {
-                        Image(systemName: finding.valueDirection.icon)
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(assessmentColor(for: finding.assessment))
-                            .accessibilityLabel(finding.assessment.label)
+                            Text(finding?.isAvailable == true
+                                 ? (finding?.summary ?? "")
+                                 : "需至少 \(selectedHorizon.requiredSampleCount) 天，当前 \(finding?.sampleCount ?? 0) 天")
+                                .font(VelaTheme.footnote())
+                                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer(minLength: 8)
+
+                        VStack(alignment: .trailing, spacing: 3) {
+                            Text(finding?.isAvailable == true ? (finding?.currentValueFormatted ?? "--") : "--")
+                                .font(.headline.monospacedDigit())
+                                .foregroundStyle(finding?.isAvailable == true ? VelaTheme.rhythmInk : VelaTheme.muted)
+                            if let finding, finding.isAvailable {
+                                Image(systemName: finding.valueDirection.icon)
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(assessmentColor(for: finding.assessment))
+                                    .accessibilityLabel(finding.assessment.label)
+                            }
+                        }
+
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     }
                 }
-
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
             }
             .padding(12)
             .frame(maxWidth: .infinity, minHeight: VelaTheme.minimumHitTarget, alignment: .leading)
@@ -851,6 +957,14 @@ struct VelaTrendsView: View {
         .buttonStyle(.cardPress)
         .accessibilityElement(children: .combine)
         .accessibilityHint("打开指标详情")
+    }
+
+    private func browserMetricIcon(_ metric: CoreHealthMetric) -> some View {
+        Image(systemName: metric.icon)
+            .font(.body.weight(.semibold))
+            .foregroundStyle(accentColor(for: metric))
+            .frame(width: 32, height: 32)
+            .background(VelaTheme.rhythmMist.opacity(0.72), in: Circle())
     }
 
     // MARK: - Three-Year Trajectory Card
