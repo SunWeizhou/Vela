@@ -1,5 +1,4 @@
 import SwiftUI
-import SwiftData
 import CoreLocation
 
 // MARK: - VelaTodayView — evidence-first daily decision surface
@@ -32,8 +31,30 @@ struct VelaTodayView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var dashboardVM: DashboardViewModel
+    @EnvironmentObject private var services: VelaServices
     @ObservedObject var appState = VelaAppState.shared
     @ObservedObject var locationManager = LocationManager.shared
+
+    /// The reader is bound to the composition-root objects when the surface
+    /// becomes active. Keeping the reader stable lets TodayStore coalesce
+    /// lifecycle-triggered loads while the legacy VM remains the renderer's
+    /// compatibility projection.
+    private let legacyTodayReader: LegacyTodayReadingModule
+    @StateObject var todayStore: TodayStore
+
+    init(showCoach: Binding<Bool>, showSettings: Binding<Bool>) {
+        self._showCoach = showCoach
+        self._showSettings = showSettings
+        let reader = LegacyTodayReadingModule()
+        self.legacyTodayReader = reader
+        self._todayStore = StateObject(
+            wrappedValue: TodayStore(
+                reader: reader,
+                clock: SystemAppClock(),
+                calendar: .current
+            )
+        )
+    }
     
     var dashboard: DashboardSummary { dashboardVM.dashboard }
     private var hrvValue: Double { dashboard.recoveryMetrics.hrvMilliseconds ?? 0 }
@@ -631,10 +652,18 @@ struct VelaTodayView: View {
                         .foregroundStyle(VelaTheme.rhythmInk)
                     TodayVitalsGrid(cards: vitalCards) { kind in
                         switch kind {
-                        case .hrv:   presentedTodaySheet = .metric(.hrv)
-                        case .rhr:   presentedTodaySheet = .metric(.rhr)
-                        case .spo2:  presentedTodaySheet = .metric(.bloodOxygen)
-                        case .sleep: presentedTodaySheet = .metric(.sleep)
+                        case .hrv:
+                            dispatchToday(.openMetric(.recovery))
+                            presentedTodaySheet = .metric(.hrv)
+                        case .rhr:
+                            dispatchToday(.openMetric(.recovery))
+                            presentedTodaySheet = .metric(.rhr)
+                        case .spo2:
+                            dispatchToday(.openMetric(.recovery))
+                            presentedTodaySheet = .metric(.bloodOxygen)
+                        case .sleep:
+                            dispatchToday(.openMetric(.sleep))
+                            presentedTodaySheet = .metric(.sleep)
                         }
                     }
                     .equatable()
@@ -648,7 +677,10 @@ struct VelaTodayView: View {
                         VelaRhythmActionSequence(
                             actions: todayExperience.actions,
                             onAction: { performExperienceAction($0) },
-                            onEvidence: { presentedTodaySheet = .evidence }
+                            onEvidence: {
+                                dispatchToday(.openEvidence)
+                                presentedTodaySheet = .evidence
+                            }
                         )
                     }
 
@@ -682,7 +714,10 @@ struct VelaTodayView: View {
                     weatherTemp: weatherTemp,
                     weatherStatusText: weatherStatusText,
                     showSimulationLabel: dashboard.source == .preview,
-                    onOpenCalendar: { presentedTodaySheet = .calendar },
+                    onOpenCalendar: {
+                        dispatchToday(.openCalendar)
+                        presentedTodaySheet = .calendar
+                    },
                     showSettings: $showSettings,
                     requestWeatherUpdate: { requestWeatherUpdate() },
                     settingsSynced: dashboardVM.lastUpdated != nil
@@ -695,13 +730,24 @@ struct VelaTodayView: View {
         .background(VelaTheme.rhythmCanvas)
         .task(id: isActiveSurface) {
             guard isActiveSurface else { return }
-            await dashboardVM.hydrateFromCache(modelContext: modelContext)
+            legacyTodayReader.bind(
+                dashboardVM: dashboardVM,
+                modelContext: modelContext,
+                useCase: services.dailySummaryUseCase
+            )
             locationManager.startUpdating()
             if pendingLocalDataRefresh {
                 pendingLocalDataRefresh = false
-                await refreshDashboard(force: true)
+                await todayStore.send(.refresh(force: true))
             } else {
-                await refreshDashboard()
+                if Calendar.current.isDate(
+                    todayStore.state.selectedDay,
+                    inSameDayAs: dashboardVM.selectedDate
+                ) {
+                    await todayStore.send(.appear)
+                } else {
+                    await todayStore.send(.selectDay(dashboardVM.selectedDate))
+                }
             }
             await loadDataCoverageSummary()
             loadTodayLivedStateAlignment()
@@ -709,7 +755,7 @@ struct VelaTodayView: View {
         }
         .refreshable {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            await refreshDashboard(force: true)
+            await todayStore.send(.refresh(force: true))
             await loadDataCoverageSummary()
         }
         .onChange(of: scenePhase) {
@@ -726,25 +772,22 @@ struct VelaTodayView: View {
                 }
                 lastScenePhaseSyncTime = now
                 Task {
-                    await refreshDashboard(force: false)
+                    await todayStore.send(.refresh(force: false))
                     await loadDataCoverageSummary()
                 }
             }
         }
         .onChange(of: dashboardVM.selectedDate) {
             guard isActiveSurface else { return }
-            Task { await dashboardVM.hydrateFromCache(modelContext: modelContext) }
+            Task { await todayStore.send(.selectDay(dashboardVM.selectedDate)) }
             loadTodayLivedStateAlignment()
             loadDynamicData()
-            Task {
-                await refreshDashboard()
-            }
         }
         .onChange(of: appState.localDataRevision) {
             // F2 修复：档案（年龄/体重/身高/maxHR/性别）修改后必须重算评分，
             // 此前只 hydrateFromCache，15 分钟内分数与建议停留在旧档案口径。
             if isActiveSurface {
-                Task { await refreshDashboard(force: true) }
+                Task { await todayStore.send(.refresh(force: true)) }
             } else {
                 pendingLocalDataRefresh = true
             }
@@ -788,6 +831,7 @@ struct VelaTodayView: View {
                 dashboard: dashboard,
                 onAskCoach: { question in
                     presentedTodaySheet = nil
+                    dispatchToday(.askCoach(question))
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                         VelaAppState.shared.routeToCoach(question: question, surface: .home)
                     }
@@ -818,14 +862,19 @@ struct VelaTodayView: View {
         trackDailyDecisionAction(destination: action.destination)
         switch action.destination {
         case "training":
+            dispatchToday(.startTraining)
             appState.routeToTraining()
         case "journal":
+            dispatchToday(.openEvidence)
             presentedTodaySheet = .livedState
         case "coach":
+            dispatchToday(.askCoach(action.detail))
             VelaAppState.shared.routeToCoach(question: action.detail, surface: .home)
         case "recovery", "sync", "evidence":
+            dispatchToday(.openEvidence)
             presentedTodaySheet = .evidence
         default:
+            dispatchToday(.openEvidence)
             presentedTodaySheet = .evidence
         }
     }
@@ -921,6 +970,7 @@ struct VelaTodayView: View {
             selectedLivedStateAlignment = alignment
             VelaHaptic.selection()
             appState.markLocalDataChanged()
+            dispatchToday(.setLivedStateAlignment(alignment))
         } catch {
             livedStateSaveError = error.localizedDescription
         }
@@ -969,14 +1019,6 @@ struct VelaTodayView: View {
         }
     }
 
-    func loadDailyDecisionFeedback() {
-        let dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: dashboardVM.selectedDate)
-        let descriptor = FetchDescriptor<DailyDecisionFeedbackRecord>(
-            predicate: #Predicate { $0.dayIdentifier == dayIdentifier }
-        )
-        dailyDecisionFeedback = try? modelContext.fetch(descriptor).first
-    }
-
     func saveDailyDecisionFeedback(_ values: DailyDecisionFeedbackValues) {
         guard let record = dailyDecisionFeedback else { return }
         do {
@@ -996,6 +1038,7 @@ struct VelaTodayView: View {
             dashboardVM.applyFeedbackCalibration(modelContext: modelContext)
             presentedTodaySheet = nil
             VelaAppState.shared.markLocalDataChanged()
+            dispatchToday(.submitFeedback(values))
         } catch {
             // Keep the sheet open so the user can retry without losing input.
         }

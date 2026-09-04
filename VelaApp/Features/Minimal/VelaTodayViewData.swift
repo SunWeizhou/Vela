@@ -5,8 +5,74 @@ import os.log
 
 
 private let logger = Logger(subsystem: "com.sunweizhou.Vela", category: "Weather")
+
+/// Compatibility reader used while the legacy Today surface is being moved
+/// behind `TodayStore`.  The adapter owns the old view-model/context bridge;
+/// the Store itself still sees only `TodayDashboardSnapshot` values.
+///
+/// This is intentionally a transitional seam.  The root view can bind the
+/// existing composition-root objects at task time without constructing a
+/// second DashboardViewModel or changing any scoring code.
+@MainActor
+final class LegacyTodayReadingModule: TodayReadingModule {
+    private weak var dashboardVM: DashboardViewModel?
+    private var modelContext: ModelContext?
+    private var useCase: DailySummaryUseCase?
+
+    func bind(
+        dashboardVM: DashboardViewModel,
+        modelContext: ModelContext,
+        useCase: DailySummaryUseCase
+    ) {
+        self.dashboardVM = dashboardVM
+        self.modelContext = modelContext
+        self.useCase = useCase
+    }
+
+    func cached(for day: Date) async throws -> TodayDashboardSnapshot? {
+        guard let modelContext, let useCase else { return nil }
+        return try await useCase
+            .loadCachedDashboard(for: day, modelContext: modelContext)
+            .map(TodayDashboardSnapshot.init(dashboard:))
+    }
+
+    func load(for day: Date, policy: TodayRefreshPolicy) async throws -> TodayDashboardSnapshot {
+        guard let dashboardVM, let modelContext, let useCase else {
+            return TodayDashboardSnapshot(dashboard: DashboardSummary.empty(date: day))
+        }
+
+        if policy == .cacheOnly, let cached = try await cached(for: day) {
+            return cached
+        }
+
+        // The legacy VM remains the single owner of secondary projections and
+        // scoring. TodayStore coordinates when this bridge is called; it does
+        // not rebuild a competing decision tree.
+        if !Calendar.current.isDate(dashboardVM.selectedDate, inSameDayAs: day) {
+            dashboardVM.selectedDate = day
+        }
+        await dashboardVM.refresh(
+            modelContext: modelContext,
+            force: policy == .force
+        )
+        // Keep the use case strongly referenced for the duration of the
+        // adapter's lifetime. This also makes an unbound/preview path explicit
+        // above rather than falling through to a resolver or HealthKit global.
+        _ = useCase
+        return TodayDashboardSnapshot(dashboard: dashboardVM.dashboard)
+    }
+}
+
 // MARK: - VelaTodayView Extension for Data Operations
 extension VelaTodayView {
+
+    /// Forward UI intent to the Store while preserving the existing route and
+    /// sheet behavior during this incremental migration.
+    func dispatchToday(_ action: TodayStoreAction) {
+        Task { @MainActor in
+            await todayStore.send(action)
+        }
+    }
 
     func readinessColor(_ decision: ReadinessDecisionKind) -> Color {
         switch decision {
@@ -37,12 +103,16 @@ extension VelaTodayView {
     func handleTodayAction(_ action: TodayAction) {
         switch action.kind {
         case .training:
+            dispatchToday(.startTraining)
             appState.routeToTraining()
         case .recovery, .insight:
+            dispatchToday(.openEvidence)
             presentedTodaySheet = .evidence
         case .checkIn:
+            dispatchToday(.openEvidence)
             appState.present(.journal)
         case .coach:
+            dispatchToday(.askCoach(action.detail))
             appState.routeToCoach(question: action.detail, surface: .home)
         }
     }
@@ -50,19 +120,26 @@ extension VelaTodayView {
     func handleCoachArtifactAction(_ action: CoachArtifactAction, artifact: CoachArtifact) {
         switch action.type {
         case "open_training_summary":
+            dispatchToday(.startTraining)
             appState.routeToTraining()
         case "start_check_in":
+            dispatchToday(.openEvidence)
             appState.routeToPostWorkoutCheckIn(workoutID: workoutID(for: action, artifact: artifact))
         case "open_recovery_detail":
+            dispatchToday(.openMetric(.recovery))
             appState.routeToPostWorkoutImpact(workoutID: workoutID(for: action, artifact: artifact))
         default:
             if action.type.contains("training") || action.type.contains("workout") {
+                dispatchToday(.startTraining)
                 appState.routeToTraining()
             } else if action.type.contains("check") || action.type.contains("journal") {
+                dispatchToday(.openEvidence)
                 appState.present(.journal)
             } else if action.type.contains("recovery") {
+                dispatchToday(.openMetric(.recovery))
                 appState.routeToRecoveryDetail()
             } else {
+                dispatchToday(.askCoach(action.label))
                 appState.routeToCoach(question: action.label, surface: .home)
             }
         }
@@ -100,6 +177,7 @@ extension VelaTodayView {
 
     // MARK: - Weather Sync
     func requestWeatherUpdate() {
+        dispatchToday(.requestWeather)
         switch locationManager.authorizationStatus {
         case .notDetermined:
             weatherLocation = "正在请求定位"
@@ -205,6 +283,16 @@ extension VelaTodayView {
         Task { @MainActor in
             await dashboardVM.loadSecondaryData(modelContext: modelContext)
         }
+    }
+
+    /// Persistence-backed feedback lookup stays in this compatibility
+    /// extension while the root view migrates to TodayStore actions.
+    func loadDailyDecisionFeedback() {
+        let dayIdentifier = DailyHealthSummaryRecord.dayIdentifier(for: dashboardVM.selectedDate)
+        let descriptor = FetchDescriptor<DailyDecisionFeedbackRecord>(
+            predicate: #Predicate { $0.dayIdentifier == dayIdentifier }
+        )
+        dailyDecisionFeedback = try? modelContext.fetch(descriptor).first
     }
 
     func refreshDashboard(force: Bool = false) async {
