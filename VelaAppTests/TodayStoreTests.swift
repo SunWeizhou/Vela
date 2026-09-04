@@ -1,6 +1,87 @@
 import XCTest
 @testable import Vela
 
+/// ARCH-00/PR0's deterministic fixture, kept in one Today-focused helper so
+/// the Store projection is checked against the same five values as the
+/// scoring gate (rather than a synthetic all-equal dashboard).
+private enum TodayPR0GoldenFixture {
+    static var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
+    }
+
+    static var day: Date {
+        calendar.date(from: DateComponents(year: 2026, month: 7, day: 31))!
+    }
+
+    static var now: Date { day.addingTimeInterval(12 * 3_600) }
+
+    static func evidence() -> ScoredHealthEvidence {
+        let history = (1...14).map { offset -> DailyHealthSnapshot in
+            var item = DailyHealthSnapshot(
+                date: calendar.date(byAdding: .day, value: -offset, to: day)!
+            )
+            item.hrvAverage = 48 + Double(offset % 5)
+            item.restingHeartRate = 58 + Double(offset % 3)
+            item.respiratoryRate = 14 + Double(offset % 2) * 0.2
+            item.sleepHours = 7.2 + Double(offset % 4) * 0.1
+            item.wristTemperature = 36.35 + Double(offset % 3) * 0.02
+            item.dailyLoad = 44 + Double(offset % 6) * 3
+            item.strainScore = 52 + Double(offset % 5)
+            return item
+        }
+        var snapshot = DailyHealthSnapshot(date: day)
+        snapshot.hrvAverage = 54
+        snapshot.restingHeartRate = 57
+        snapshot.respiratoryRate = 14.1
+        snapshot.sleepHours = 7.75
+        snapshot.bedtime = day.addingTimeInterval(-45 * 60)
+        snapshot.wakeTime = day.addingTimeInterval(7 * 3_600)
+        snapshot.awakeMinutes = 24
+        snapshot.awakeEpisodeCount = 2
+        snapshot.deepSleepMinutes = 92
+        snapshot.remSleepMinutes = 108
+        snapshot.wristTemperature = 36.4
+        snapshot.oxygenSaturation = 0.98
+        snapshot.steps = 8_400
+        snapshot.activeCalories = 460
+        snapshot.activeMinutes = 42
+        snapshot.workouts = [
+            WorkoutSummary(
+                start: day.addingTimeInterval(9 * 3_600),
+                end: day.addingTimeInterval(9.75 * 3_600),
+                activityName: "Strength Training",
+                averageHeartRate: 132,
+                source: "fixture",
+                rpe: 7
+            )
+        ]
+
+        return DailyHealthComputation(
+            calendar: calendar,
+            now: now,
+            profile: DailyHealthComputationProfile(
+                sleepTargetMinutes: 450,
+                maxHeartRate: 190,
+                biologicalSex: "other"
+            )
+        ).compute(for: snapshot, history: history)
+    }
+
+    static func dashboard() -> DashboardSummary {
+        let scores = evidence()
+        var dashboard = DashboardSummary.empty(date: day)
+        dashboard.source = .healthKit
+        dashboard.sleepScore = scores.sleep
+        dashboard.recovery = scores.recovery
+        dashboard.strain = scores.strain
+        dashboard.stress = scores.physiologicalStress
+        dashboard.energy = scores.energy
+        return dashboard
+    }
+}
+
 final class TodayStoreTests: XCTestCase {
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
@@ -238,6 +319,38 @@ final class TodayStoreTests: XCTestCase {
 }
 
 final class TodayViewStateTests: XCTestCase {
+    @MainActor
+    func testPR0GoldenProjectsExactFiveScoresVersionsSourceAndCompleteness() {
+        let day = TodayPR0GoldenFixture.day
+        let state = TodayViewState.projection(
+            snapshot: TodayDashboardSnapshot(dashboard: TodayPR0GoldenFixture.dashboard()),
+            selectedDay: day,
+            now: TodayPR0GoldenFixture.now,
+            calendar: TodayPR0GoldenFixture.calendar
+        )
+
+        let expected: [(TodayMetricID, Double, String, MetricSource, [String])] = [
+            (.recovery, 60.70, ScoringAlgorithmVersions.recovery, .healthKit, []),
+            // The fixture intentionally has no historical bedtime values;
+            // preserve the engine's explicit consistency-data gap.
+            (.sleep, 77.43, ScoringAlgorithmVersions.sleep, .healthKit, ["recentBedtimesHistory"]),
+            (.strain, 63.67, ScoringAlgorithmVersions.strain, .healthKit, []),
+            (.stress, 21.08, ScoringAlgorithmVersions.physiologicalStress, .derived, []),
+            (.energy, 42.31, ScoringAlgorithmVersions.energy, .derived, [])
+        ]
+        XCTAssertEqual(state.phase, .ready)
+        XCTAssertEqual(state.source, .healthKit)
+        XCTAssertEqual(state.freshness, .live)
+        XCTAssertEqual(state.scores.ordered.map(\.id), expected.map(\.0))
+        for (id, score, version, source, missingInputs) in expected {
+            let metric = state.scores.metric(for: id)
+            XCTAssertEqual(metric.value ?? -1, score, accuracy: 0.01, "PR0 score changed for \(id.rawValue)")
+            XCTAssertEqual(metric.algorithmVersion, version, "algorithm version changed for \(id.rawValue)")
+            XCTAssertEqual(metric.source, source, "score source changed for \(id.rawValue)")
+            XCTAssertEqual(metric.missingInputs, missingInputs, "PR0 missing inputs for \(id.rawValue)")
+        }
+    }
+
     @MainActor
     func testMissingProjectionKeepsAllScoresUnavailableAndNoAggregate() {
         var calendar = Calendar(identifier: .gregorian)
