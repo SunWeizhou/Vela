@@ -52,12 +52,14 @@ struct VelaTodayView: View {
         )
     }
     
-    var dashboard: DashboardSummary { dashboardVM.dashboard }
+    /// Today renders the value snapshot published by the Store.  The shared
+    /// DashboardViewModel is retained only as a composition/compatibility
+    /// bridge for legacy navigation and date selection below.
+    var dashboard: DashboardSummary { todayStore.state.dashboard }
     private var hrvValue: Double { dashboard.recoveryMetrics.hrvMilliseconds ?? 0 }
     private var rhrValue: Double { dashboard.recoveryMetrics.restingHeartRate ?? 0 }
 
-    var bodyState: BodyState { dashboard.bodyState }
-    var trainingDecision: TrainingDecision { dashboard.trainingDecision }
+    var bodyState: BodyState { todayStore.state.bodyState }
     var persistedOperatingPlan: DailyOperatingPlanRecord? { dashboardVM.persistedOperatingPlan }
     var latestTodayArtifact: CoachArtifact? { dashboardVM.latestTodayArtifact }
 
@@ -100,17 +102,10 @@ struct VelaTodayView: View {
         return compactAgentSentence(candidate)
     }
 
-    private var todayScoreFreshness: DataFreshness {
-        guard todayExperience.signalCards.contains(where: { $0.value != "--" }) else {
-            return .missing
-        }
-        guard dashboardVM.isToday else { return .recent }
-        guard let lastUpdated = dashboardVM.lastUpdated else { return .today }
-        let age = Date().timeIntervalSince(lastUpdated)
-        if age <= 2 * 3_600 { return .live }
-        if Calendar.current.isDateInToday(lastUpdated) { return .today }
-        if age <= 3 * 86_400 { return .recent }
-        return .stale
+    private var todayScoreFreshness: DataFreshness { todayStore.state.freshness }
+
+    private func calendarIsToday(_ date: Date) -> Bool {
+        Calendar.current.isDateInToday(date)
     }
 
     private func compactAgentSentence(_ input: String) -> String {
@@ -193,10 +188,10 @@ struct VelaTodayView: View {
     var stressLevel: Double { dashboard.stress.stressIndex }
     var energyScore: Double { dashboard.energy.currentEnergy }
 
-    var todayCalories: Int { dashboardVM.todayCalories }
-    var todayProtein: Int { dashboardVM.todayProtein }
-    var todayCarbs: Int { dashboardVM.todayCarbs }
-    var todayFat: Int { dashboardVM.todayFat }
+    var todayCalories: Int { todayStore.state.nutrition?.calories ?? 0 }
+    var todayProtein: Int { todayStore.state.nutrition?.protein ?? 0 }
+    var todayCarbs: Int { todayStore.state.nutrition?.carbs ?? 0 }
+    var todayFat: Int { todayStore.state.nutrition?.fat ?? 0 }
 
     var calorieFraction: CGFloat {
         CGFloat(min(1.0, Double(todayCalories) / Double(max(todayLegacyRuntime.dailyCalorieTarget, 1))))
@@ -212,32 +207,33 @@ struct VelaTodayView: View {
         let sleepMin = dashboard.sleepSummary.stageMinutes
             .filter { $0.key != .awake }
             .reduce(0) { $0 + $1.value }
-        let updatedDate = dashboardVM.lastUpdated
+        let updatedDate = todayStore.state.lastUpdated
+        let trends = todayStore.state.vitalTrendSeries
 
         return [
             TodayVitalCardModel(
                 kind: .hrv, label: "心率变异性",
                 value: hrv.map { "\(Int($0.rounded()))" } ?? "--", unit: "ms",
                 status: vitalStatusText(hasData: hrv != nil, lastUpdated: updatedDate),
-                isGood: vitalAssessment("hrv"), trend: dashboardVM.vitalTrendSeries["hrv"] ?? []
+                isGood: vitalAssessment("hrv"), trend: trends["hrv"] ?? []
             ),
             TodayVitalCardModel(
                 kind: .rhr, label: "静息心率",
                 value: rhr.map { "\(Int($0.rounded()))" } ?? "--", unit: "bpm",
                 status: vitalStatusText(hasData: rhr != nil, lastUpdated: updatedDate),
-                isGood: vitalAssessment("rhr"), trend: dashboardVM.vitalTrendSeries["rhr"] ?? []
+                isGood: vitalAssessment("rhr"), trend: trends["rhr"] ?? []
             ),
             TodayVitalCardModel(
                 kind: .spo2, label: "血氧",
                 value: spo2.map { "\(Int($0.rounded()))" } ?? "--", unit: "%",
                 status: vitalStatusText(hasData: spo2 != nil, lastUpdated: updatedDate),
-                isGood: vitalAssessment("spo2"), trend: dashboardVM.vitalTrendSeries["spo2"] ?? []
+                isGood: vitalAssessment("spo2"), trend: trends["spo2"] ?? []
             ),
             TodayVitalCardModel(
                 kind: .sleep, label: "睡眠",
                 value: sleepMin > 0 ? "\(sleepMin / 60):\(String(format: "%02d", sleepMin % 60))" : "--", unit: "时",
                 status: vitalStatusText(hasData: sleepMin > 0, lastUpdated: updatedDate),
-                isGood: vitalAssessment("sleep"), trend: dashboardVM.vitalTrendSeries["sleep"] ?? []
+                isGood: vitalAssessment("sleep"), trend: trends["sleep"] ?? []
             )
         ]
     }
@@ -286,10 +282,6 @@ struct VelaTodayView: View {
         }
     }
 
-    private var weeklyLoads: [Double] {
-        Array(dashboardVM.strainTrend.suffix(7).map { $0.value })
-    }
-
     private var acwrText: String {
         if let acwr = dashboard.energy.components["acwr"] {
             return String(format: "ACWR %.2f", acwr)
@@ -307,7 +299,7 @@ struct VelaTodayView: View {
         let recoveryText = dashboard.recovery.hasData ? "\(Int(dashboard.recovery.score.rounded()))" : "--"
         let sleepText = dashboard.sleepScore.hasData ? "\(Int(dashboard.sleepScore.score.rounded()))" : "--"
         let strainText = dashboard.strain.hasData ? "\(Int(dashboard.strain.score.rounded()))" : "--"
-        return "\(dateHeaderString(for: dashboardVM.selectedDate))\n恢复 \(recoveryText) · 睡眠 \(sleepText) · 负荷 \(strainText)\n\(coachMessage)"
+        return "\(dateHeaderString(for: todayStore.state.selectedDay))\n恢复 \(recoveryText) · 睡眠 \(sleepText) · 负荷 \(strainText)\n\(coachMessage)"
     }
 
     private func signalAccentColor(_ accent: DailyPlanAccent) -> Color {
@@ -408,7 +400,7 @@ struct VelaTodayView: View {
 
     @ViewBuilder
     private var personalResponseInsightView: some View {
-        if dashboardVM.isToday, let insightLine = dashboard.bodyModelState?.insightLine() {
+        if calendarIsToday(todayStore.state.selectedDay), let insightLine = dashboard.bodyModelState?.insightLine() {
             NavigationLink(destination: BodyModelDetailView()) {
                 HStack(spacing: 8) {
                     Image(systemName: "waveform.path.ecg")
@@ -492,7 +484,7 @@ struct VelaTodayView: View {
 
     @ViewBuilder
     var errorMessageView: some View {
-        if let errorMessage = dashboardVM.errorMessage ?? dashboardVM.secondaryDataErrorMessage {
+        if let errorMessage = todayStore.state.errorMessage ?? todayStore.state.secondaryDataErrorMessage {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -500,11 +492,6 @@ struct VelaTodayView: View {
                     Text(errorMessage)
                         .font(.system(.footnote, design: .default, weight: .semibold))
                         .foregroundStyle(VelaTheme.rhythmInk)
-                }
-                if let suggestion = dashboardVM.currentError?.recoverySuggestion {
-                    Text(suggestion)
-                        .font(.system(.caption, design: .default))
-                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
             }
             .padding(14)
@@ -523,7 +510,7 @@ struct VelaTodayView: View {
     @ViewBuilder
     private var todayDataStateView: some View {
         let hasSignal = todayExperience.signalCards.contains { $0.value != "--" }
-        if dashboardVM.isLoading && dashboardVM.lastUpdated == nil {
+        if case .loading = todayStore.state.phase {
             VelaStateCard(
                 state: .loading,
                 title: "正在同步今日数据",
@@ -547,7 +534,7 @@ struct VelaTodayView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                if dashboardVM.errorMessage != nil || dashboardVM.secondaryDataErrorMessage != nil {
+                if todayStore.state.errorMessage != nil || todayStore.state.secondaryDataErrorMessage != nil {
                     errorMessageView
                         .padding(.horizontal, VelaTheme.pagePadding)
                         .padding(.bottom, 8)
@@ -568,14 +555,14 @@ struct VelaTodayView: View {
                 .padding(.horizontal, VelaTheme.pagePadding)
                 .padding(.top, 4)
 
-                if dashboardVM.isToday {
+                if calendarIsToday(todayStore.state.selectedDay) {
                     livedStatePrompt
                         .padding(.horizontal, VelaTheme.pagePadding)
                         .padding(.top, 12)
 
                     TodayDailyPlanCard(
                         model: todayExperience,
-                        payload: dashboardVM.persistedOperatingPlanPayload,
+                        payload: todayStore.state.operatingPlanPayload,
                         onAction: { performExperienceAction($0) },
                         onOpenPlan: { todayLegacyRuntime.routeToTraining() }
                     )
@@ -662,7 +649,7 @@ struct VelaTodayView: View {
         .safeAreaInset(edge: .top) {
             VStack(spacing: 0) {
                 TodayDateAndStatusHeader(
-                    selectedDate: dashboardVM.selectedDate,
+                    selectedDate: todayStore.state.selectedDay,
                     todayShareText: todayShareText,
                     weatherTemp: weatherTemp,
                     weatherStatusText: weatherStatusText,
@@ -673,7 +660,7 @@ struct VelaTodayView: View {
                     },
                     showSettings: $showSettings,
                     requestWeatherUpdate: { requestWeatherUpdate() },
-                    settingsSynced: dashboardVM.lastUpdated != nil
+                    settingsSynced: todayStore.state.lastUpdated != nil
                 )
                 .padding(.horizontal, VelaTheme.pagePadding)
                 .padding(.bottom, 6)
@@ -797,7 +784,7 @@ struct VelaTodayView: View {
                 .velaSheetSurface()
             }
         case .livedState:
-            LivedStateCheckInSheet(selectedDate: dashboardVM.selectedDate) {
+            LivedStateCheckInSheet(selectedDate: todayStore.state.selectedDay) {
                 todayLegacyRuntime.markLocalDataChanged()
                 loadTodayLivedStateAlignment()
             }

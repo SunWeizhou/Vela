@@ -549,10 +549,30 @@ final class LegacyTodayReadingModule: TodayReadingModule {
         guard let dashboardVM, let runtime else {
             return TodayDashboardSnapshot(dashboard: DashboardSummary.empty(date: day))
         }
-        return try await runtime.loadDashboard(
+        let dashboard = try await runtime.loadDashboard(
             for: day,
             policy: policy,
             dashboardVM: dashboardVM
+        )
+        return TodayDashboardSnapshot(
+            dashboard: dashboard.dashboard,
+            bodyState: dashboardVM.dashboard.bodyState,
+            trainingDecision: dashboardVM.dailyTrainingDecision,
+            command: dashboardVM.todayCommandState,
+            experience: dashboardVM.todayExperience,
+            todayAIInsight: dashboardVM.todayAIInsight,
+            nutrition: TodayNutritionProjection(
+                calories: dashboardVM.todayCalories,
+                calorieTarget: runtime.dailyCalorieTarget,
+                protein: dashboardVM.todayProtein,
+                carbs: dashboardVM.todayCarbs,
+                fat: dashboardVM.todayFat
+            ),
+            operatingPlanPayload: dashboardVM.persistedOperatingPlanPayload,
+            lastUpdated: dashboardVM.lastUpdated,
+            vitalTrendSeries: dashboardVM.vitalTrendSeries,
+            errorMessage: dashboardVM.errorMessage,
+            secondaryDataErrorMessage: dashboardVM.secondaryDataErrorMessage
         )
     }
 }
@@ -563,42 +583,18 @@ extension VelaTodayView {
     /// Legacy renderer projections stay behind this compatibility boundary;
     /// the root view consumes already-built values instead of invoking kernels
     /// from computed properties or body expressions.
-    var canonicalTrainingDecision: DailyTrainingDecision {
-        dashboardVM.dailyTrainingDecision
-            ?? TrainingDecisionFallback.conservative(targetSessionTitle: nil)
-    }
-
     var todayCommandState: TodayCommandState {
-        dashboardVM.todayCommandState ?? TodayCommandBuilder.build(
-            from: dashboard,
-            generatedAt: dashboardVM.selectedDate,
-            trainingDecision: canonicalTrainingDecision
-        )
+        todayStore.state.command
+            ?? TodayViewState.unavailableCommand(for: todayStore.state.selectedDay)
     }
 
     var todayAIInsight: DailyAIInsight? {
-        dashboardVM.todayAIInsight
+        todayStore.state.todayAIInsight
     }
 
     var todayExperience: TodayExperienceModel {
-        dashboardVM.todayExperience ?? makeTodayExperience()
-    }
-
-    func makeTodayExperience() -> TodayExperienceModel {
-        TodayExperienceModel.build(
-            dashboard: dashboard,
-            bodyState: bodyState,
-            trainingDecision: canonicalTrainingDecision,
-            generatedAt: dashboardVM.selectedDate,
-            nutrition: TodayExperienceNutrition(
-                calories: todayCalories,
-                calorieTarget: todayLegacyRuntime.dailyCalorieTarget,
-                protein: todayProtein,
-                carbs: todayCarbs,
-                fat: todayFat
-            ),
-            operatingPlan: dashboardVM.persistedOperatingPlanPayload
-        )
+        todayStore.state.experience
+            ?? TodayViewState.unavailableExperience(for: todayStore.state.selectedDay)
     }
 
     /// Forward UI intent to the Store while preserving the existing route and
