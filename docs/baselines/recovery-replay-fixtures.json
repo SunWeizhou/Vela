@@ -1,0 +1,30 @@
+{
+  "schema": "bodyseek-recovery-replay.v1",
+  "target": "VelaApp",
+  "algorithmVersion": "recovery.v2.0.0",
+  "formulaChange": false,
+  "calendar": "gregorian",
+  "timeZone": "UTC",
+  "asOf": "2026-07-31T12:00:00Z",
+  "baseline": {
+    "inputFingerprint": "recovery-v2|2026-07-31T12:00:00Z|hrv=54.00|hrvBaseline=50.00|hrvHistory=14|rhr=57.00|rhrBaseline=60.00|rhrHistory=14|sleep=77.43|strain=52.00|resp=14.10|respBaseline=14.00|respHistory=14|temp=0.00|spo2=98.00",
+    "value": 68.8497077483,
+    "confidence": "high",
+    "missingInputs": [],
+    "components": {"hrv": 75.0223758440, "rhr": 64.1375048114, "sleep": 77.43, "prior_strain": 48.0, "body_temp_delta": 0.0, "spo2": 98.0}
+  },
+  "sensitivity": [
+    {"id": "short-sleep-360", "change": "sleepScoreLastNight=53.62", "value": 62.8972077483, "confidence": "high", "missingInputs": []},
+    {"id": "high-strain-90", "change": "strainScoreYesterday=90", "value": 59.6418762029, "confidence": "high", "missingInputs": []},
+    {"id": "high-temperature", "change": "bodyTempDelta=1.0", "value": 60.8497077483, "confidence": "high", "missingInputs": []},
+    {"id": "low-spo2", "change": "SpO2=93", "value": 60.8497077483, "confidence": "high", "missingInputs": []}
+  ],
+  "missingInput": {
+    "change": "hrvToday=nil,restingHeartRateToday=nil",
+    "value": null,
+    "coverage": "unavailable",
+    "formattedScore": "--",
+    "requiredMissingInputs": ["hrvToday", "restingHeartRateToday"]
+  },
+  "packageParity": "blocked: RecoveryScoreEngine and RecoveryScoreInput remain VelaApp-only"
+}
