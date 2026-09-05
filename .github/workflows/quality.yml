@@ -33,26 +33,49 @@ jobs:
             exit 1
           }
 
+          normalize_version() {
+            echo "$1" | sed -E 's/(\.[0-9]+)\.0$/\1/'
+          }
+
+          norm_required="$(normalize_version "$required_version")"
+
           # GitHub-hosted macOS images install side-by-side Xcode bundles using
-          # this naming convention. Resolve the path from the checked-in
-          # version file instead of assuming whichever Xcode happens to be
-          # selected by the runner image.
-          developer_dir="/Applications/Xcode_${required_version}.app/Contents/Developer"
-          if [ ! -d "$developer_dir" ]; then
-            echo "::error::Required Xcode ${required_version} is not installed on this runner."
+          # naming conventions like Xcode_26.5.0.app or Xcode_26.5.app.
+          developer_dir=""
+          for candidate in \
+            "/Applications/Xcode_${required_version}.app/Contents/Developer" \
+            "/Applications/Xcode_${norm_required}.app/Contents/Developer" \
+            "/Applications/Xcode.app/Contents/Developer"
+          do
+            if [ -d "$candidate" ]; then
+              developer_dir="$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$developer_dir" ]; then
+            echo "::error::Required Xcode ${required_version} (or ${norm_required}) is not installed on this runner."
             echo "Installed Xcode bundles:"
             find /Applications -maxdepth 1 -type d -name 'Xcode*.app' -print | sort || true
             exit 1
           fi
 
-          actual_version="$(DEVELOPER_DIR="$developer_dir" xcodebuild -version | awk '$1 == "Xcode" { print $2; exit }')"
-          if [ "$actual_version" != "$required_version" ]; then
-            echo "::error::Xcode toolchain mismatch: .xcode-version requests ${required_version}, resolved ${actual_version:-unknown}."
+          actual_raw="$(DEVELOPER_DIR="$developer_dir" xcodebuild -version | awk '$1 == "Xcode" { print $2; exit }')"
+          norm_actual="$(normalize_version "$actual_raw")"
+
+          if [ "$norm_actual" != "$norm_required" ]; then
+            echo "::error::Xcode toolchain mismatch: .xcode-version requests ${required_version} (normalized ${norm_required}), resolved ${actual_raw:-unknown} (normalized ${norm_actual})."
             exit 1
           fi
 
           echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
-          echo "Using Xcode ${actual_version} at ${developer_dir}"
+          echo "=== Xcode Toolchain & Runtime Information ==="
+          echo "Xcode: ${actual_raw} at ${developer_dir}"
+          DEVELOPER_DIR="$developer_dir" xcodebuild -version
+          DEVELOPER_DIR="$developer_dir" swift --version
+          DEVELOPER_DIR="$developer_dir" xcodebuild -showsdks || true
+          xcrun simctl list runtimes || true
+          echo "============================================="
 
       - name: Schema version guard
         shell: bash
