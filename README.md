@@ -6,7 +6,7 @@
 
 ## 技术栈
 
-- **当前实现 floor：iOS 17+ / watchOS 10+** · SwiftUI + SwiftData + HealthKit · Swift 6；ADR 0013 已接受的 Daily Driver 目标为 **iOS 26 / watchOS 26**，迁移仍待单独完成
+- **平台与部署基准**：**iOS 17+ / watchOS 10+** · SwiftUI + SwiftData + HealthKit · Swift 6；根据 [ADR 0017](docs/adr/0017-bodyseek-architecture-and-product-baseline-v2.md) 确立，对外产品名为 **BodySeek**（工程内部与 bundle 保持 Vela），较高系统能力渐进增强，不作为发布门槛。
 - 本地确定性评分（`VelaApp/Scoring`）→ 多尺度趋势（`HealthTrendEngine`）→ 权威简报（`PersonalHealthBrief`）→ 四个 canonical surface（Today / Trends / Plan / Coach）
 - AI Coach 直连 DeepSeek API（Keychain 存 Key）；原始健康采样永不上传，仅发送裁剪的 `AgentFactSnapshot`
 
@@ -17,12 +17,12 @@
 xcodebuild -project Vela.xcodeproj -scheme Vela -configuration Debug \
   -destination 'generic/platform=iOS Simulator' -derivedDataPath ~/Developer/Vela-DerivedData build
 
-# 单测（约 470 个）
+# 全量单测（546 项）
 xcodebuild -project Vela.xcodeproj -scheme Vela -configuration Debug \
-  -destination 'platform=iOS Simulator,name=iPhone 16' -derivedDataPath ~/Developer/Vela-DerivedData test
+  -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath ~/Developer/Vela-DerivedData test
 ```
 
-CI（GitHub Actions `.github/workflows/quality.yml`）包含：schema 版本守卫（`scripts/schema_fingerprint.py`）、显式警告即错误构建、iOS 全量单测、SwiftLint（report-only）、后端测试、xcresult 失败上报。
+CI（GitHub Actions `.github/workflows/quality.yml`）包含：schema 版本守卫（`scripts/schema_fingerprint.py`）、显式警告即错误构建、iOS 全量单测（546 项）与 UI 冒烟测试（6 项）、SwiftLint（report-only）、后端测试、xcresult 失败上报。
 
 ## 常用脚本
 
@@ -37,6 +37,6 @@ CI（GitHub Actions `.github/workflows/quality.yml`）包含：schema 版本守�
 - `docs/PRD.md` — 产品规格（四大 Tab、北极星 Trusted Health Brief Day）
 - `CONTEXT.md` — 领域术语表（唯一权威）
 - `docs/TECH_ARCHITECTURE.md` — 技术架构与数据流
-- `docs/adr/` — 架构决策记录（0001–0013 Accepted；0014–0016 Proposed）
+- `docs/adr/` — 架构决策记录（0001–0013, 0017 Accepted；0014–0016 由 0017 取代）
 - `docs/AI_AGENT_SPEC.md` — Coach Agent 协议与上下文规格
 - `docs/validation/` — 验证与审计证据（含 2026-08-23 工程标准审计报告）

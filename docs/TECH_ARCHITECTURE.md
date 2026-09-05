@@ -9,7 +9,8 @@
 
 ## 1. 架构总览与技术栈
 
-- **平台**: iOS 26+ / watchOS 26+ (SwiftUI + SwiftData + HealthKit)
+- **平台**: iOS 17+ / watchOS 10+（SwiftUI + SwiftData + HealthKit · Swift 6 · ADR 0017 权威基线；更高系统能力渐进增强）
+- **对外产品名**: BodySeek（工程代码、Bundle ID 与数据库身份保持 Vela）
 - **UI 风格**: Apple Native Design System + Rhythm 视觉 Tokens（`VelaTheme`）
 - **数据流**: 单向数据流（Unidirectional Data Flow），本地确定性计算优先，AI 作为解释与提案增强
 - **运行时 AI 连接**: iOS 端直连 DeepSeek API (`api.deepseek.com`，Keychain 存储 Key)，可选 Kimi Vision 识别食物照片；`VelaBackend` (Vapor 4) 仅作为保留的实验服务，当前未启用。
