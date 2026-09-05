@@ -551,7 +551,10 @@ struct VelaTodayView: View {
                     deviatedScoreIDs: deviatedScoreIDs,
                     agentSentence: todayAgentSentence,
                     accentColor: signalAccentColor,
-                    onAskCoach: { dispatchToday(.openQuickCoach) }
+                    onInspectGuidance: {
+                        dispatchToday(.openEvidence)
+                        presentedTodaySheet = .evidence
+                    }
                 )
                 .equatable()
                 .padding(.horizontal, VelaTheme.pagePadding)

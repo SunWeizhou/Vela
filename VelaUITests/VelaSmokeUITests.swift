@@ -35,6 +35,26 @@ final class VelaSmokeUITests: XCTestCase {
                 "Today score \(metric) did not expose its stable identifier"
             )
         }
+        XCTAssertTrue(
+            app.descendants(matching: .any)["today-secondary-stress"].waitForExistence(timeout: 3),
+            "Today secondary stress card did not expose its stable identifier"
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["today-secondary-energy"].waitForExistence(timeout: 3),
+            "Today secondary energy card did not expose its stable identifier"
+        )
+        let guidanceCard = app.descendants(matching: .any)["today-guidance"]
+        if guidanceCard.waitForExistence(timeout: 3) {
+            guidanceCard.tap()
+            XCTAssertTrue(
+                app.descendants(matching: .any)["today-evidence-sheet"].waitForExistence(timeout: 8),
+                "Tapping today guidance should open local evidence sheet"
+            )
+            let closeButton = app.buttons["关闭"]
+            if closeButton.waitForExistence(timeout: 3) {
+                closeButton.tap()
+            }
+        }
         let recoveryScore = app.descendants(matching: .any)["today-score-recovery"]
         if recoveryScore.waitForExistence(timeout: 3) {
             // Preview fixtures expose the score card as a stable, tappable

@@ -45,6 +45,7 @@ struct TodayEvidenceSheet: View {
             }
         }
         .tint(VelaTheme.rhythmDeep)
+        .accessibilityIdentifier("today-evidence-sheet")
     }
 
     private var decisionSummary: some View {

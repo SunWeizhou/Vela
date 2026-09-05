@@ -12,7 +12,7 @@ struct TodaySignalGrid: View {
     let deviatedScoreIDs: Set<String>
     let agentSentence: String
     let accentColor: (DailyPlanAccent) -> Color
-    let onAskCoach: () -> Void
+    let onInspectGuidance: () -> Void
 
     /// The Today contract has five independent metrics. Keep the descriptor
     /// list at the rendering boundary so a partial/legacy payload cannot make
@@ -137,13 +137,17 @@ struct TodaySignalGrid: View {
         .todayDashboardCard(radius: VelaTheme.radiusHero, depth: .featured)
     }
 
+    private var shouldUseStackedSecondaryLayout: Bool {
+        dynamicTypeSize.isAccessibilitySize || dynamicTypeSize >= .xxLarge
+    }
+
     private var secondaryScores: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("压力与能量")
                 .font(VelaTheme.headline())
                 .foregroundStyle(VelaTheme.rhythmInk)
 
-            if dynamicTypeSize.isAccessibilitySize {
+            if shouldUseStackedSecondaryLayout {
                 VStack(spacing: 12) {
                     stressPanel(stressCard)
                     energyPanel(energyCard)
@@ -182,16 +186,17 @@ struct TodaySignalGrid: View {
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    TodaySecondaryTrendLine(
-                        values: card.trend,
-                        color: accentColor(card.accent),
-                        isMissing: card.value == "--"
+                    TodayStressGauge(
+                        value: Double(card.value),
+                        color: accentColor(card.accent)
                     )
-                    .frame(height: 24)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 20)
 
-                    Text(card.value == "--" ? "等待压力数据" : "近 7 日趋势")
+                    Text(card.value == "--" ? "等待压力数据" : "当前生理压力")
                         .font(VelaTheme.caption2())
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        .lineLimit(1)
                 }
             }
             .padding(16)
@@ -211,10 +216,17 @@ struct TodaySignalGrid: View {
             Text(card.value)
                 .font(VelaTheme.title3().weight(.bold).monospacedDigit())
                 .foregroundStyle(VelaTheme.rhythmInk)
+                .lineLimit(1)
             if card.value != "--" {
                 Text(stressStateLabel(for: card.state))
                     .font(VelaTheme.caption2().weight(.semibold))
                     .foregroundStyle(VelaTheme.textColor(for: card.state))
+                    .lineLimit(1)
+            } else {
+                Text("待同步")
+                    .font(VelaTheme.caption2().weight(.semibold))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .lineLimit(1)
             }
         }
     }
@@ -257,11 +269,12 @@ struct TodaySignalGrid: View {
                         color: accentColor(card.accent)
                     )
                     .frame(maxWidth: .infinity)
-                    .frame(height: 24)
+                    .frame(height: 20)
 
                     Text(card.value == "--" ? "等待能量模型" : "当前电量储备")
                         .font(VelaTheme.caption2())
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        .lineLimit(1)
                 }
             }
             .padding(16)
@@ -277,15 +290,33 @@ struct TodaySignalGrid: View {
     }
 
     private func energyValue(_ card: TodayExperienceSignalCard) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 1) {
+        HStack(alignment: .firstTextBaseline, spacing: 2) {
             Text(card.value)
                 .font(VelaTheme.title3().weight(.bold).monospacedDigit())
                 .foregroundStyle(VelaTheme.rhythmInk)
+                .lineLimit(1)
             if card.value != "--" {
                 Text("%")
                     .font(VelaTheme.caption1().weight(.semibold))
                     .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                Text(energyStateLabel(for: card.state))
+                    .font(VelaTheme.caption2().weight(.semibold))
+                    .foregroundStyle(VelaTheme.textColor(for: card.state))
+                    .lineLimit(1)
+            } else {
+                Text("待同步")
+                    .font(VelaTheme.caption2().weight(.semibold))
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .lineLimit(1)
             }
+        }
+    }
+
+    private func energyStateLabel(for state: MetricState) -> String {
+        switch state {
+        case .good: return "充沛"
+        case .moderate: return "适中"
+        case .poor: return "偏低"
         }
     }
 
@@ -296,19 +327,25 @@ struct TodaySignalGrid: View {
     }
 
     private func secondaryAccessibilityLabel(_ card: TodayExperienceSignalCard) -> String {
-        let value = card.value == "--" ? "暂无数据" : "\(card.value) 分"
+        let stateText: String
+        if card.id == "stress" {
+            stateText = card.value == "--" ? "待同步" : stressStateLabel(for: card.state)
+        } else {
+            stateText = card.value == "--" ? "待同步" : energyStateLabel(for: card.state)
+        }
+        let value = card.value == "--" ? "暂无数据" : "\(card.value)\(card.id == "energy" ? "%" : "分")"
         let deviation = deviatedScoreIDs.contains(card.id) ? "，偏离个人基线" : ""
-        return "\(card.title)，\(value)，\(card.directionLabel)\(deviation)"
+        return "\(card.title)，\(value)，\(stateText)\(deviation)"
     }
 
     private var agentGuidance: some View {
         Button {
             VelaHaptic.selection()
-            onAskCoach()
+            onInspectGuidance()
         } label: {
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 6) {
-                    Text("指导")
+                    Text("指导依据")
                         .font(VelaTheme.caption1().weight(.semibold))
                         .foregroundStyle(VelaTheme.rhythmInkSecondary)
                     Image(systemName: "sparkles")
@@ -335,8 +372,8 @@ struct TodaySignalGrid: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("today-guidance")
-        .accessibilityLabel("今日指导，\(agentSentence)")
-        .accessibilityHint("打开教练继续追问")
+        .accessibilityLabel("今日指导依据，\(agentSentence)")
+        .accessibilityHint("查看判断依据并可追问教练")
     }
 
     @ViewBuilder
@@ -512,59 +549,46 @@ struct TodaySignalGrid: View {
     }
 }
 
-private struct TodaySecondaryTrendLine: View {
-    let values: [Double]
+private struct TodayStressGauge: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let value: Double?
     let color: Color
-    let isMissing: Bool
+
+    private var progress: CGFloat {
+        guard let value else { return 0 }
+        return CGFloat(min(1, max(0, value / 100)))
+    }
+
+    private let segmentCount = 14
+
+    private var filledSegments: Int {
+        guard value != nil else { return 0 }
+        return Int((progress * CGFloat(segmentCount)).rounded(.up))
+    }
 
     var body: some View {
         Canvas { context, size in
-            guard !isMissing, values.count > 1 else {
-                var placeholder = Path()
-                placeholder.move(to: CGPoint(x: 0, y: size.height * 0.5))
-                placeholder.addLine(to: CGPoint(x: size.width, y: size.height * 0.5))
-                context.stroke(
-                    placeholder,
-                    with: .color(VelaTheme.rhythmInkSecondary.opacity(0.32)),
-                    style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [4, 6])
+            let spacing: CGFloat = 3
+            let count = segmentCount
+            let segmentWidth = (size.width - spacing * CGFloat(count - 1)) / CGFloat(count)
+            let segmentHeight: CGFloat = 20
+            let top = (size.height - segmentHeight) / 2
+            for index in 0..<count {
+                let rect = CGRect(
+                    x: CGFloat(index) * (segmentWidth + spacing),
+                    y: top,
+                    width: segmentWidth,
+                    height: segmentHeight
                 )
-                return
-            }
-
-            let low = values.min() ?? 0
-            let high = values.max() ?? 100
-            let span = max(20, high - low)
-            let step = size.width / CGFloat(values.count - 1)
-            let points = values.enumerated().map { index, value in
-                CGPoint(
-                    x: CGFloat(index) * step,
-                    y: size.height * (0.85 - 0.70 * CGFloat((value - low) / span))
+                let path = Path(roundedRect: rect, cornerRadius: min(segmentWidth, segmentHeight) / 2)
+                context.fill(
+                    path,
+                    with: .color(index < filledSegments ? color : VelaTheme.rhythmMist)
                 )
             }
-
-            var area = Path()
-            area.move(to: CGPoint(x: 0, y: size.height))
-            for point in points { area.addLine(to: point) }
-            area.addLine(to: CGPoint(x: size.width, y: size.height))
-            area.closeSubpath()
-            context.fill(
-                area,
-                with: .linearGradient(
-                    Gradient(colors: [color.opacity(0.18), color.opacity(0.01)]),
-                    startPoint: .zero,
-                    endPoint: CGPoint(x: 0, y: size.height)
-                )
-            )
-
-            var line = Path()
-            line.move(to: points[0])
-            for point in points.dropFirst() { line.addLine(to: point) }
-            context.stroke(
-                line,
-                with: .color(color),
-                style: StrokeStyle(lineWidth: 2.0, lineCap: .round, lineJoin: .round)
-            )
         }
+        .animation(VelaTheme.dataAnimation(reduceMotion: reduceMotion), value: filledSegments)
         .accessibilityHidden(true)
     }
 }
@@ -733,7 +757,7 @@ struct TodayDailyPlanCard: View {
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 8) {
                         Text(primaryAction.title)
-                            .font(VelaTheme.title3().weight(.bold))
+                            .font(VelaTheme.headline().weight(.semibold))
                             .foregroundStyle(VelaTheme.rhythmInk)
                             .multilineTextAlignment(.leading)
 
