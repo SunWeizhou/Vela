@@ -1,0 +1,25 @@
+# 执行进度｜初始状态
+
+所有任务目前均未由本包执行。填写时区分 IMPLEMENTED、VERIFIED、BLOCKED，不把文件存在视为验证。
+
+| 卡号 | 任务 | 前置 | 状态 | 实际 SHA | 证据 |
+|---|---|---|---|---|---|
+| Q0 | 恢复当前 iOS 可验证基线 | 无；先核对 HEAD 和工作区未提交改动 | VERIFIED | 7f23f61b | docs/validation/Q0_HANDOFF.md |
+| U1 | 建立真实 UI 基线并完成一套组件精修 | Q0 实际通过 | NOT_STARTED | — | — |
+| U2 | Today 三加二精修到正式可用 | U1；保留评分数据不变 | NOT_STARTED | — | — |
+| U3 | 恢复详情标杆页与正确返回 | U2 | NOT_STARTED | — | — |
+| U4 | 睡眠详情精修与真实时间轴 | U3；睡眠算法保持不变 | NOT_STARTED | — | — |
+| U5 | Trends 与首页小趋势的统一数据图形 | U3；如缺日期合同需先 S1 的最小投影 | NOT_STARTED | — | — |
+| U6 | 其余详情与交互收尾 | U3/U4/U5 | NOT_STARTED | — | — |
+| S1 | 真实观测窗口与质量合同 | Q0；与 UI 公共投影变更串行 | NOT_STARTED | — | — |
+| S2 | 长期 as-of 生产链回归 | Q0；保留已实现日期过滤 | NOT_STARTED | — | — |
+| S3 | HRV 方法分离与附加 PSTI 约束 | S1；S2 推荐完成 | NOT_STARTED | — | — |
+| S4 | 睡眠事实与充分性政策分离 | S1；UI与公式改动分提交 | NOT_STARTED | — | — |
+| S5 | 负荷测量方法、单位与活动重叠 | S1 | NOT_STARTED | — | — |
+| S6 | 日负荷时间轴与 EWMA 缺失 | S5 的单位/方法政策已明确 | NOT_STARTED | — | — |
+| S7 | 生理压力的真实时间尺度 | S1；相关负荷方法明确 | NOT_STARTED | — | — |
+| S8 | 能量估计与上游质量传播 | S1/S7；与共享合同修改串行 | NOT_STARTED | — | — |
+| V1 | 建立可复跑的算法比较与模型卡 | S1–S8 中相关修复已验收；可分指标先做 | NOT_STARTED | — | — |
+| R1 | 真机发布与用户体验验收 | 本轮选定 U/S/V 卡均完成，不强迫未授权研究候选上线 | NOT_STARTED | — | — |
+
+每次只将有实际证据的卡标为 VERIFIED。若最新HEAD已经完成某卡，先补真实证据再标记，不重复实施。
