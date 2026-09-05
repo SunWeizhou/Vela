@@ -82,6 +82,7 @@
 		C5A500040000000000000004 /* TrendsOneMetricChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A510040000000000000004 /* TrendsOneMetricChart.swift */; };
 		C5A500060000000000000006 /* TrendsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A530010000000000000001 /* TrendsStoreTests.swift */; };
 		C5A500070000000000000007 /* RecoveryReplaySensitivityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A530020000000000000002 /* RecoveryReplaySensitivityTests.swift */; };
+		C5A500080000000000000008 /* StrainReplaySensitivityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A530030000000000000003 /* StrainReplaySensitivityTests.swift */; };
 		0B9900020000000000000002 /* PersonalHealthBrief.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9900010000000000000001 /* PersonalHealthBrief.swift */; };
 		0B9900040000000000000004 /* HealthTrendEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9900030000000000000003 /* HealthTrendEngine.swift */; };
 		0B9900060000000000000006 /* VelaTrendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9900050000000000000005 /* VelaTrendsView.swift */; };
@@ -350,6 +351,7 @@
 		C5A510040000000000000004 /* TrendsOneMetricChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrendsOneMetricChart.swift; sourceTree = "<group>"; };
 		C5A530010000000000000001 /* TrendsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrendsStoreTests.swift; sourceTree = "<group>"; };
 		C5A530020000000000000002 /* RecoveryReplaySensitivityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryReplaySensitivityTests.swift; sourceTree = "<group>"; };
+		C5A530030000000000000003 /* StrainReplaySensitivityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrainReplaySensitivityTests.swift; sourceTree = "<group>"; };
 		0B9900010000000000000001 /* PersonalHealthBrief.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Utilities/PersonalHealthBrief.swift; sourceTree = "<group>"; };
 		0B9900030000000000000003 /* HealthTrendEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scoring/HealthTrendEngine.swift; sourceTree = "<group>"; };
 		0B9900050000000000000005 /* VelaTrendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Trends/VelaTrendsView.swift; sourceTree = "<group>"; };
@@ -790,6 +792,7 @@
 				4746CA84311E3C6D12654200 /* WorkoutAggregationTests.swift */,
 				C5A530010000000000000001 /* TrendsStoreTests.swift */,
 				C5A530020000000000000002 /* RecoveryReplaySensitivityTests.swift */,
+				C5A530030000000000000003 /* StrainReplaySensitivityTests.swift */,
 			);
 			path = VelaAppTests;
 			sourceTree = "<group>";
@@ -1287,6 +1290,7 @@
 				C00300040000000000000004 /* TodayStoreTests.swift in Sources */,
 				C5A500060000000000000006 /* TrendsStoreTests.swift in Sources */,
 				C5A500070000000000000007 /* RecoveryReplaySensitivityTests.swift in Sources */,
+				C5A500080000000000000008 /* StrainReplaySensitivityTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

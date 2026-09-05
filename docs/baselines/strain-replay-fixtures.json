@@ -1,0 +1,36 @@
+{
+  "schema": "bodyseek-strain-replay.v1",
+  "target": "VelaApp",
+  "algorithmVersion": "strain.v2.0.0",
+  "formulaChange": false,
+  "calendar": "gregorian",
+  "timeZone": "UTC",
+  "asOf": "2026-07-31T12:00:00Z",
+  "baseline": {
+    "inputFingerprint": "strain-v2|2026-07-31T12:00:00Z|workouts=1|duration=45.00|avgHR=145.00|samples=|rpe=6.00|energy=500.00|exercise=45.00|steps=8000.00|rhr=60.00|maxHR=190.00|sex=male|history=28",
+    "value": 65.5297799653,
+    "confidence": "high",
+    "missingInputs": [],
+    "components": {
+      "workout_load": 66.0807056951,
+      "activity_load": 15.575,
+      "raw_activity_load": 44.5,
+      "activity_multiplier": 0.35,
+      "daily_load": 81.6557056951
+    }
+  },
+  "sensitivity": [
+    {"id": "short-workout-20", "change": "workout.durationMinutes=20", "value": 44.3578249751, "confidence": "high", "missingInputs": []},
+    {"id": "high-energy-900", "change": "activeEnergyToday=900", "value": 66.7659808416, "confidence": "high", "missingInputs": []},
+    {"id": "high-rpe-9", "change": "averageHeartRate=nil,rpe=9", "value": 83.2694664989, "confidence": "high", "missingInputs": []}
+  ],
+  "missingInput": {
+    "change": "workouts=[],activeEnergyToday=nil,exerciseMinutesToday=nil,stepCount=nil",
+    "value": null,
+    "coverage": "unavailable",
+    "confidence": "low",
+    "formattedScore": "--",
+    "requiredMissingInputs": ["workouts", "activeEnergyToday", "exerciseMinutesToday", "stepCount"]
+  },
+  "packageParity": "blocked: StrainScoreEngine and StrainScoreInput remain VelaApp-only"
+}
