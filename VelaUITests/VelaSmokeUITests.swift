@@ -71,6 +71,11 @@ final class VelaSmokeUITests: XCTestCase {
             )
         }
 
+        XCTAssertTrue(
+            app.descendants(matching: .any)["trends-recovery-store-chart"].waitForExistence(timeout: 8),
+            "Recovery trend should expose the Store-owned one-metric chart when preview history is available"
+        )
+
         app.descendants(matching: .any)["trends-score-recovery"].tap()
         XCTAssertTrue(
             app.descendants(matching: .any)["metric-detail-recovery"].waitForExistence(timeout: 8),

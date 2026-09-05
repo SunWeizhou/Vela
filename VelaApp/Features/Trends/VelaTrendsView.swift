@@ -10,6 +10,26 @@ private struct ScoreTrendDescriptor: Identifiable {
     var id: String { metric.rawValue }
 }
 
+/// Compatibility adapter for the first host migration. It snapshots the
+/// already-loaded summary records into value-only inputs for TrendsStore;
+/// persistence and the existing dashboard formulas remain unchanged.
+private struct SummaryTrendsHistoryProvider: TrendsHistoryProviding {
+    let snapshots: [DailyHealthSnapshot]
+    let finding: HealthTrendFinding?
+
+    func history(
+        metric: CoreHealthMetric,
+        horizon: HealthTrendHorizon,
+        endingAt selectedDay: Date,
+        calendar: Calendar
+    ) async throws -> TrendsHistoryPayload {
+        TrendsHistoryPayload(
+            snapshots: snapshots,
+            finding: finding
+        )
+    }
+}
+
 // MARK: - VelaTrendsView — five scored time series first, raw vitals second
 
 struct VelaTrendsView: View {
@@ -26,6 +46,8 @@ struct VelaTrendsView: View {
     @State private var dailyRecordsLoadError: String?
     @State private var memoizedScoreHistories: [CoreHealthMetric: [Double]] = [:]
     @State private var memoizedNormalizedHistories: [CoreHealthMetric: [Double]] = [:]
+    @State private var recoveryTrendState: TrendsViewState?
+    @State private var selectedRecoveryTrendDate: Date?
 
     private var dashboard: DashboardSummary { dashboardVM.dashboard }
     private var healthBrief: PersonalHealthBrief? { dashboard.personalHealthBrief }
@@ -77,6 +99,7 @@ struct VelaTrendsView: View {
                 .accessibilityIdentifier("trends-horizon-picker")
                 trendHistoryErrorCard
                 fiveScoreTrendSection
+                recoveryTrendChart
 
                 if !hasAnyScoreHistory && scoreDescriptors.allSatisfy({ finding(for: $0.metric)?.isAvailable != true }) {
                     compactCalibrationCard
@@ -116,7 +139,10 @@ struct VelaTrendsView: View {
         .onAppear(perform: loadDailyRecords)
         .onChange(of: dashboardVM.selectedDate) { _, _ in loadDailyRecords() }
         .onChange(of: appState.localDataRevision) { _, _ in loadDailyRecords() }
-        .onChange(of: selectedHorizon) { _, _ in recomputeMemoizedHistories() }
+        .onChange(of: selectedHorizon) { _, _ in
+            recomputeMemoizedHistories()
+            reloadRecoveryTrendStore()
+        }
         .sheet(item: $selectedMetricForDetail) { metric in
             NavigationStack {
                 VelaMetricDetailView(metric: metric)
@@ -173,6 +199,39 @@ struct VelaTrendsView: View {
                     .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
             }
             .shadow(color: VelaTheme.cardShadow(colorScheme), radius: 14, x: 0, y: 6)
+        }
+    }
+
+    /// First host migration slice: the existing recovery path now renders the
+    /// Store-owned series while the legacy rows remain unchanged.
+    @ViewBuilder
+    private var recoveryTrendChart: some View {
+        if let series = recoveryTrendState?.series,
+           recoveryTrendState?.phase == .ready {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("恢复趋势")
+                        .font(VelaTheme.callout().weight(.bold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                    Spacer()
+                    Text("真实读数 · 缺失日期保留空档")
+                        .font(VelaTheme.caption2())
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                }
+
+                TrendsOneMetricChart(
+                    series: series,
+                    selectedDate: $selectedRecoveryTrendDate,
+                    tint: VelaTheme.recoveryColor
+                )
+                .accessibilityIdentifier("trends-recovery-store-chart")
+            }
+            .padding(14)
+            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: VelaTheme.radiusLg, style: .continuous)
+                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+            }
         }
     }
 
@@ -506,6 +565,45 @@ struct VelaTrendsView: View {
             )
         }
         recomputeMemoizedHistories()
+        reloadRecoveryTrendStore()
+    }
+
+    private func reloadRecoveryTrendStore() {
+        let snapshots = dailyRecords.map { record in
+            var snapshot = DailyHealthSnapshot(date: record.date, createdAt: record.updatedAt)
+            snapshot.sleepScore = record.sleepScore
+            snapshot.recoveryScore = record.recoveryScore
+            snapshot.strainScore = record.strainScore
+            snapshot.stressIndex = record.stressIndex
+            snapshot.morningEnergy = record.morningEnergy
+            snapshot.currentEnergy = record.currentEnergy
+            snapshot.energyBank = record.energyBank
+            snapshot.hrvAverage = record.hrvAverage
+            snapshot.restingHeartRate = record.restingHeartRate
+            snapshot.sleepHours = record.sleepHours
+            snapshot.steps = record.steps
+            snapshot.activeCalories = record.activeCalories
+            snapshot.bodyWeight = record.bodyWeight
+            snapshot.bodyFatPercent = record.bodyFatPercent
+            snapshot.oxygenSaturation = record.oxygenSaturation
+            snapshot.respiratoryRate = record.respiratoryRate
+            return snapshot
+        }
+        let provider = SummaryTrendsHistoryProvider(
+            snapshots: snapshots,
+            finding: finding(for: .recovery)
+        )
+        let store = TrendsStore(
+            provider: provider,
+            selectedDay: dashboardVM.selectedDate,
+            horizon: selectedHorizon,
+            metric: .recovery
+        )
+        Task {
+            await store.send(.appear)
+            guard !Task.isCancelled else { return }
+            recoveryTrendState = store.state
+        }
     }
 
     private func recomputeMemoizedHistories() {
