@@ -5,7 +5,7 @@
 | 卡号 | 任务 | 前置 | 状态 | 实际 SHA | 证据 |
 |---|---|---|---|---|---|
 | Q0 | 恢复当前 iOS 可验证基线 | 无；先核对 HEAD 和工作区未提交改动 | VERIFIED | 7f23f61b | docs/validation/Q0_HANDOFF.md |
-| U1 | 建立真实 UI 基线并完成一套组件精修 | Q0 实际通过 | NOT_STARTED | — | — |
+| U1 | 建立真实 UI 基线并完成一套组件精修 | Q0 实际通过 | VERIFIED | 6c8d5d13 | docs/validation/U1_HANDOFF.md |
 | U2 | Today 三加二精修到正式可用 | U1；保留评分数据不变 | NOT_STARTED | — | — |
 | U3 | 恢复详情标杆页与正确返回 | U2 | NOT_STARTED | — | — |
 | U4 | 睡眠详情精修与真实时间轴 | U3；睡眠算法保持不变 | NOT_STARTED | — | — |
