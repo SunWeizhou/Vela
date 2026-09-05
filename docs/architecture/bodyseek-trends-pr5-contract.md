@@ -1,6 +1,6 @@
 # BodySeek Trends PR5 bounded contract
 
-Status: implementation slice, pending host wiring and challenge review.
+Status: integrated seam at `21d9e7d7`; legacy host migration remains a follow-up.
 
 ## Scope
 
@@ -33,8 +33,8 @@ actions. `TrendsHistoryProviding` is the only input seam.
 
 ## Integration boundary
 
-The new files are intentionally not registered in `Vela.xcodeproj` in this
-bounded worker slice because the project file is shared by ARCH-04 and ARCH-06.
-The orchestrator must register the source and test files in one integration
-commit, then run the target focused tests and full suite. Until that happens,
-the standalone source parse and diff checks below are the available evidence.
+The source and test files are registered in `Vela.xcodeproj` by
+`21d9e7d7`. The slice intentionally does not replace the legacy
+`VelaTrendsView`; wiring that host to `TrendsStore` and `TrendsOneMetricChart`
+is a separate migration task so this seam can remain behavior-preserving and
+non-overlapping with dashboard work.
