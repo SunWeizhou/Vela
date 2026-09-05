@@ -84,15 +84,73 @@ enum TodayVitalKind: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum TodayVitalAssessment: String, Equatable, Sendable {
+    case favorable
+    case neutral
+    case unfavorable
+    case unknown
+
+    var stateColor: Color {
+        switch self {
+        case .favorable:
+            return VelaTheme.textColor(for: .good)
+        case .neutral:
+            return VelaTheme.rhythmInkSecondary
+        case .unfavorable:
+            return VelaTheme.textColor(for: .moderate)
+        case .unknown:
+            return VelaTheme.meta
+        }
+    }
+}
+
 struct TodayVitalCardModel: Identifiable, Equatable {
     let kind: TodayVitalKind
     let label: String
     let value: String          // "68" / "--"
     let unit: String           // "ms" / "bpm" / "%" / "时"
     let status: String
-    let isGood: Bool
+    let assessment: TodayVitalAssessment
     let trend: [Double]
     var id: String { kind.rawValue }
+
+    var isGood: Bool { assessment == .favorable }
+
+    init(
+        kind: TodayVitalKind,
+        label: String,
+        value: String,
+        unit: String,
+        status: String,
+        assessment: TodayVitalAssessment,
+        trend: [Double]
+    ) {
+        self.kind = kind
+        self.label = label
+        self.value = value
+        self.unit = unit
+        self.status = status
+        self.assessment = assessment
+        self.trend = trend
+    }
+
+    init(
+        kind: TodayVitalKind,
+        label: String,
+        value: String,
+        unit: String,
+        status: String,
+        isGood: Bool,
+        trend: [Double]
+    ) {
+        self.kind = kind
+        self.label = label
+        self.value = value
+        self.unit = unit
+        self.status = status
+        self.assessment = isGood ? .favorable : .unfavorable
+        self.trend = trend
+    }
 }
 
 struct TodayVitalsGrid: View {
@@ -225,7 +283,7 @@ struct TodayVitalCard: View {
     private var statusText: some View {
         Text(card.status)
             .font(VelaTheme.caption2().weight(.bold))
-            .foregroundStyle(VelaTheme.textColor(for: card.isGood ? .good : .moderate))
+            .foregroundStyle(card.assessment.stateColor)
             .fixedSize(horizontal: false, vertical: true)
     }
 

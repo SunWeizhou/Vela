@@ -143,9 +143,22 @@ struct TodaySignalGrid: View {
                 .font(VelaTheme.headline())
                 .foregroundStyle(VelaTheme.rhythmInk)
 
-            VStack(spacing: 12) {
-                stressPanel(stressCard)
-                energyPanel(energyCard)
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 12) {
+                    stressPanel(stressCard)
+                    energyPanel(energyCard)
+                }
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 12) {
+                        stressPanel(stressCard)
+                        energyPanel(energyCard)
+                    }
+                    VStack(spacing: 12) {
+                        stressPanel(stressCard)
+                        energyPanel(energyCard)
+                    }
+                }
             }
         }
     }
@@ -166,22 +179,22 @@ struct TodaySignalGrid: View {
                         .frame(maxWidth: .infinity)
                     }
                 } else {
-                    HStack(spacing: 18) {
-                        VStack(alignment: .leading, spacing: 14) {
-                            metricPanelHeader(card, icon: "waveform.path.ecg", title: "今日压力")
+                    VStack(alignment: .leading, spacing: 12) {
+                        metricPanelHeader(card, icon: "waveform.path.ecg", title: "今日压力")
+                        HStack(alignment: .center, spacing: 8) {
                             stressTrend(card)
+                            Spacer(minLength: 4)
+                            TodayStressDial(
+                                value: Double(card.value),
+                                state: card.state
+                            )
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                        TodayStressDial(
-                            value: Double(card.value),
-                            state: card.state
-                        )
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .padding(16)
-            .frame(maxWidth: .infinity, minHeight: 124, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 110, alignment: .leading)
             .contentShape(Rectangle())
             .todayDashboardCard(radius: VelaTheme.radiusCardLarge, depth: .standard)
         }
@@ -212,8 +225,13 @@ struct TodaySignalGrid: View {
                         .frame(height: 28)
                     }
                 } else {
-                    HStack(spacing: 12) {
-                        energyLabel(card)
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 6) {
+                            energyLabel(card)
+                            Spacer(minLength: 4)
+                            energyValue(card)
+                            metricChevron
+                        }
 
                         TodayEnergyGauge(
                             value: Double(card.value),
@@ -221,15 +239,12 @@ struct TodaySignalGrid: View {
                         )
                         .frame(maxWidth: .infinity)
                         .frame(height: 28)
-
-                        energyValue(card)
-                        metricChevron
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
+            .padding(16)
+            .frame(maxWidth: .infinity, minHeight: 110, alignment: .leading)
             .contentShape(Rectangle())
             .todayDashboardCard(radius: VelaTheme.radiusCardLarge, depth: .standard)
         }

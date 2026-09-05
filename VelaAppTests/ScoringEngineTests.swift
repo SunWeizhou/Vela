@@ -227,6 +227,69 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertLessThanOrEqual(result.value ?? 0, 100)
     }
 
+    func testSleepScoreEngineAwakeCountDistinguishesMeasuredFactFromEstimate() {
+        let engine = SleepScoreEngine()
+
+        // 1. Measured awakeEpisodeCount should report as detected fact (no "估算")
+        let measuredInput = SleepScoreInput(
+            asOf: Date(timeIntervalSince1970: 1_700_000_000),
+            totalSleepMinutes: 420,
+            sleepTargetMinutes: 480,
+            awakeMinutes: 20,
+            awakeEpisodeCount: 3
+        )
+        let measuredResult = engine.calculate(from: measuredInput)
+        let measuredInterruptionReason = measuredResult.reasons.first { $0.contains("睡眠中断") } ?? ""
+        XCTAssertTrue(measuredInterruptionReason.contains("醒来频率 3次"))
+        XCTAssertFalse(measuredInterruptionReason.contains("估算"))
+
+        // 2. Missing awakeEpisodeCount with awakeMinutes > 0 must explicitly declare "估算"
+        let estimatedInput = SleepScoreInput(
+            asOf: Date(timeIntervalSince1970: 1_700_000_000),
+            totalSleepMinutes: 420,
+            sleepTargetMinutes: 480,
+            awakeMinutes: 24,
+            awakeEpisodeCount: nil
+        )
+        let estimatedResult = engine.calculate(from: estimatedInput)
+        let estimatedInterruptionReason = estimatedResult.reasons.first { $0.contains("睡眠中断") } ?? ""
+        XCTAssertTrue(estimatedInterruptionReason.contains("醒来频率约 3次 · 估算"))
+    }
+
+    func testTodayVitalCardModelAndAssessmentFourStates() {
+        // Test favorable
+        let favCard = TodayVitalCardModel(
+            kind: .hrv, label: "HRV", value: "65", unit: "ms",
+            status: "正常", assessment: .favorable, trend: [60, 65]
+        )
+        XCTAssertTrue(favCard.isGood)
+        XCTAssertEqual(favCard.assessment, .favorable)
+
+        // Test neutral
+        let neutralCard = TodayVitalCardModel(
+            kind: .rhr, label: "RHR", value: "60", unit: "bpm",
+            status: "基线附近", assessment: .neutral, trend: [60, 60]
+        )
+        XCTAssertFalse(neutralCard.isGood)
+        XCTAssertEqual(neutralCard.assessment, .neutral)
+
+        // Test unfavorable
+        let unfavCard = TodayVitalCardModel(
+            kind: .spo2, label: "SpO2", value: "93", unit: "%",
+            status: "偏低", assessment: .unfavorable, trend: [95, 93]
+        )
+        XCTAssertFalse(unfavCard.isGood)
+        XCTAssertEqual(unfavCard.assessment, .unfavorable)
+
+        // Test unknown
+        let unknownCard = TodayVitalCardModel(
+            kind: .sleep, label: "Sleep", value: "--", unit: "时",
+            status: "待同步", assessment: .unknown, trend: []
+        )
+        XCTAssertFalse(unknownCard.isGood)
+        XCTAssertEqual(unknownCard.assessment, .unknown)
+    }
+
     func testRecoveryScoreEngineHandlesEmptyHistory() {
         let engine = RecoveryScoreEngine()
         let input = RecoveryScoreInput(

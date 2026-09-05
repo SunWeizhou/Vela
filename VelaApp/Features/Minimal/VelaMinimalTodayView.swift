@@ -203,41 +203,42 @@ struct VelaTodayView: View {
             TodayVitalCardModel(
                 kind: .hrv, label: "心率变异性",
                 value: hrv.map { "\(Int($0.rounded()))" } ?? "--", unit: "ms",
-                status: vitalStatusText(hasData: hrv != nil, lastUpdated: updatedDate),
-                isGood: vitalAssessment("hrv"), trend: trends["hrv"] ?? []
+                status: vitalStatusText(kind: .hrv, hasData: hrv != nil, observedAt: dashboard.recovery.dataWindow.end, syncedAt: updatedDate),
+                assessment: vitalAssessment("hrv"), trend: trends["hrv"] ?? []
             ),
             TodayVitalCardModel(
                 kind: .rhr, label: "静息心率",
                 value: rhr.map { "\(Int($0.rounded()))" } ?? "--", unit: "bpm",
-                status: vitalStatusText(hasData: rhr != nil, lastUpdated: updatedDate),
-                isGood: vitalAssessment("rhr"), trend: trends["rhr"] ?? []
+                status: vitalStatusText(kind: .rhr, hasData: rhr != nil, observedAt: dashboard.recovery.dataWindow.end, syncedAt: updatedDate),
+                assessment: vitalAssessment("rhr"), trend: trends["rhr"] ?? []
             ),
             TodayVitalCardModel(
                 kind: .spo2, label: "血氧",
                 value: spo2.map { "\(Int($0.rounded()))" } ?? "--", unit: "%",
-                status: vitalStatusText(hasData: spo2 != nil, lastUpdated: updatedDate),
-                isGood: vitalAssessment("spo2"), trend: trends["spo2"] ?? []
+                status: vitalStatusText(kind: .spo2, hasData: spo2 != nil, observedAt: nil, syncedAt: updatedDate),
+                assessment: vitalAssessment("spo2"), trend: trends["spo2"] ?? []
             ),
             TodayVitalCardModel(
                 kind: .sleep, label: "睡眠",
                 value: sleepMin > 0 ? "\(sleepMin / 60):\(String(format: "%02d", sleepMin % 60))" : "--", unit: "时",
-                status: vitalStatusText(hasData: sleepMin > 0, lastUpdated: updatedDate),
-                isGood: vitalAssessment("sleep"), trend: trends["sleep"] ?? []
+                status: vitalStatusText(kind: .sleep, hasData: sleepMin > 0, observedAt: dashboard.sleepSummary.wakeTime, syncedAt: updatedDate),
+                assessment: vitalAssessment("sleep"), trend: trends["sleep"] ?? []
             )
         ]
     }
 
     /// 体征卡评估：来自 canonical HealthTrendFinding（7d）的 assessment，
-    /// 替代此前固定 isGood: true（P0-D）。
-    private func vitalAssessment(_ metricRaw: String) -> Bool {
+    /// 区分 favorable / neutral / unfavorable / unknown，避免未知或中性压成好。
+    private func vitalAssessment(_ metricRaw: String) -> TodayVitalAssessment {
         let finding = dashboard.healthTrends.first {
             $0.metric.rawValue == metricRaw && $0.horizon == .sevenDays
         }
-        guard let finding else { return true }
+        guard let finding else { return .unknown }
         switch finding.assessment {
-        case .favorable: return true
-        case .unfavorable: return false
-        case .neutral, .insufficientData: return true
+        case .favorable: return .favorable
+        case .unfavorable: return .unfavorable
+        case .neutral: return .neutral
+        case .insufficientData: return .unknown
         }
     }
 
@@ -248,9 +249,42 @@ struct VelaTodayView: View {
         return formatter
     }()
 
-    private func vitalStatusText(hasData: Bool, lastUpdated: Date?) -> String {
+    private func vitalStatusText(
+        kind: TodayVitalKind,
+        hasData: Bool,
+        observedAt: Date?,
+        syncedAt: Date?
+    ) -> String {
         guard hasData else { return "待同步" }
-        guard let lastUpdated else { return "已同步" }
+
+        switch kind {
+        case .sleep:
+            if let wake = observedAt {
+                return "醒于 \(Self.vitalTimeFormatter.string(from: wake))"
+            }
+            return "昨夜睡眠"
+        case .hrv, .rhr:
+            if let obs = observedAt, obs != .distantPast, obs != .distantFuture {
+                let calendar = Calendar.current
+                if calendar.isDateInToday(obs) {
+                    return "\(Self.vitalTimeFormatter.string(from: obs)) 观测"
+                } else if calendar.isDateInYesterday(obs) {
+                    return "昨夜观测"
+                }
+            }
+            if let syncedAt {
+                return syncRelativeText(syncedAt)
+            }
+            return "已同步"
+        case .spo2:
+            if let syncedAt {
+                return syncRelativeText(syncedAt)
+            }
+            return "已同步"
+        }
+    }
+
+    private func syncRelativeText(_ lastUpdated: Date) -> String {
         let now = Date()
         let interval = now.timeIntervalSince(lastUpdated)
 
