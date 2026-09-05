@@ -189,14 +189,11 @@ final class HealthKitSyncEngine {
             }
         }
 
-        // 三年长线基准（与前台 loadDashboard 同源）：后台同步评分同样携带，
-        // 保证两条评分路径的 Layer 3 修正语义一致。
-        let longTermReport = LongTermBaselineEngine.compute(
-            points: ((try? modelContext.fetch(FetchDescriptor<DailyHealthSummaryRecord>())) ?? [])
-                .map(\.longTermBaselinePoint),
-            today: endDate,
-            calendar: calendar
-        )
+        // 三年长线基准点（预拉取全量点集，在日循环中按各历史日 strict cutoff 过滤）：
+        // 保证历史评分仅使用截至当天的已知数据，消除前视偏差（Lookahead bias），
+        // 且两条评分路径的 Layer 3 修正语义一致。
+        let allBaselinePoints = ((try? modelContext.fetch(FetchDescriptor<DailyHealthSummaryRecord>())) ?? [])
+            .map(\.longTermBaselinePoint)
 
         // Pass 2: Calculate scores day-by-day, pulling correct rolling raw baselines
         for dayStart in plan.scoreRecomputeDays {
@@ -235,11 +232,22 @@ final class HealthKitSyncEngine {
             }
             let historicalSnapshots = pastSnapshots.filter { !calendar.isDate($0.date, inSameDayAs: dayStart) }
             
-            // Run computation pipeline
+            // 历史日的观测 cutoff：严格截止到该日末（或整体同步结束点 endDate），防止未来生理样本改变历史评分
+            let dayEndOfDay = calendar.date(byAdding: .day, value: 1, to: dayStart)?.addingTimeInterval(-1) ?? dayStart
+            let dayCutoff = min(endDate, dayEndOfDay)
+
+            let historicalBaselinePoints = allBaselinePoints.filter { $0.date <= dayCutoff }
+            let dayLongTermReport = LongTermBaselineEngine.compute(
+                points: historicalBaselinePoints,
+                today: dayCutoff,
+                calendar: calendar
+            )
+
+            // Run computation pipeline with dayCutoff
             let hkCharacteristics = (queryService as? HealthKitQueryService)?.queryCharacteristics()
             let pipeline = DailyHealthComputation(
                 calendar: calendar,
-                now: endDate,
+                now: dayCutoff,
                 profile: .current(
                     ageFallback: hkCharacteristics?.age,
                     biologicalSexFallback: hkCharacteristics?.biologicalSex
@@ -248,7 +256,7 @@ final class HealthKitSyncEngine {
             let metrics = pipeline.compute(
                 for: snapshot,
                 history: historicalSnapshots,
-                longTermBaselines: longTermReport
+                longTermBaselines: dayLongTermReport
             )
 
             snapshot = metrics.applying(to: snapshot)

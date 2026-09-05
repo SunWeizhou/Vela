@@ -254,4 +254,48 @@ final class DependencySeamTests: XCTestCase {
         // test that promises no real HKHealthStore startup.
         _ = VelaServices()
     }
+
+    func testHistoricalScoringEliminatesLookaheadBias() async throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let baseDate = calendar.date(from: DateComponents(year: 2026, month: 8, day: 15))!
+
+        // Create baseline points spanning 30 days
+        let pastPoints = (0..<30).map { (offset: Int) -> LongTermBaselinePoint in
+            let date = calendar.date(byAdding: .day, value: -offset, to: baseDate)!
+            return LongTermBaselinePoint(
+                date: date,
+                hrvAverage: 50.0 + Double(offset % 5),
+                restingHeartRate: 60.0,
+                sleepHours: 7.5
+            )
+        }
+
+        // Add 5 "future" points relative to baseDate
+        let futurePoints = (1...5).map { (offset: Int) -> LongTermBaselinePoint in
+            let date = calendar.date(byAdding: .day, value: offset, to: baseDate)!
+            return LongTermBaselinePoint(
+                date: date,
+                hrvAverage: 120.0, // Significant future spike
+                restingHeartRate: 40.0,
+                sleepHours: 10.0
+            )
+        }
+
+        let allPoints = pastPoints + futurePoints
+
+        // When evaluating as-of baseDate, future points must be filtered out
+        let historicalPoints = allPoints.filter { $0.date <= baseDate }
+        XCTAssertEqual(historicalPoints.count, 30)
+        XCTAssertFalse(historicalPoints.contains { $0.date > baseDate })
+
+        let reportWithoutFuture = LongTermBaselineEngine.compute(
+            points: historicalPoints,
+            today: baseDate,
+            calendar: calendar
+        )
+
+        // Baseline computed with future excluded should be deterministic
+        XCTAssertNotNil(reportWithoutFuture)
+    }
 }

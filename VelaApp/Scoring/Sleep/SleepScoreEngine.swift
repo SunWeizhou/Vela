@@ -185,7 +185,13 @@ public struct SleepScoreEngine: ScoreEngine {
             components["interruption"] = interruptionScore!
             componentWeights["interruption"] = 20.0
             
-            reasons.append("睡眠中断 \(Int(awakeMinutes))分钟（醒来频率 \(awakeCount)次）")
+            if input.awakeEpisodeCount != nil {
+                reasons.append("睡眠中断 \(Int(awakeMinutes))分钟（醒来频率 \(awakeCount)次）")
+            } else if awakeMinutes > 0 {
+                reasons.append("睡眠中断 \(Int(awakeMinutes))分钟（醒来频率约 \(awakeCount)次 · 估算）")
+            } else {
+                reasons.append("睡眠中断 0分钟")
+            }
         } else {
             missingInputs.append("awakeMinutes")
             reasons.append("缺少睡眠阶段中断数据")
