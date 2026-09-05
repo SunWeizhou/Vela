@@ -118,6 +118,9 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
+          # SWIFT_TREAT_WARNINGS_AS_ERRORS and GCC_TREAT_WARNINGS_AS_ERRORS are codified
+          # in Vela.xcodeproj on all first-party targets. Do not pass them via CLI overrides
+          # to avoid conflicting with SPM package dependencies (e.g. SentryCppHelper -suppress-warnings).
           xcodebuild \
             -project Vela.xcodeproj \
             -scheme Vela \
@@ -125,8 +128,6 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO \
-            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
-            GCC_TREAT_WARNINGS_AS_ERRORS=YES \
             clean build
 
       - name: Run iOS tests

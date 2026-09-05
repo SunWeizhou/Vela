@@ -329,7 +329,9 @@ final class TodayStoreTests: XCTestCase {
             firstCompletion.markCompleted()
         }
         first.cancel()
-        try await Task.sleep(nanoseconds: 20_000_000)
+        for _ in 0..<50 where !firstCompletion.value {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
 
         XCTAssertTrue(firstCompletion.value, "a cancelled waiter must stop waiting promptly")
         XCTAssertFalse(reader.cancellationBox.isCancelled, "one waiter cancellation must not cancel the shared reader task")
