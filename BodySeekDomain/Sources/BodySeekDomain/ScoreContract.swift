@@ -135,10 +135,12 @@ public enum ScoreEvidenceAdapter {
             status = .unavailable
         } else if metric.missingInputs.isEmpty {
             status = .complete
-        } else if metric.confidence == .low {
-            status = .partial
         } else {
-            status = .substantial
+            // Coverage is an evidence fact, not a confidence alias. The
+            // first adapter has no freshness/lineage inputs, so any explicit
+            // missing signal is conservatively represented as partial,
+            // regardless of the engine's confidence assessment.
+            status = .partial
         }
 
         return ScoreEvidence(

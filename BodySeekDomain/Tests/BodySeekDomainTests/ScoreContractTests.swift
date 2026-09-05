@@ -33,7 +33,7 @@ final class ScoreContractTests: XCTestCase {
         XCTAssertEqual(evidence.estimate.components["duration"], 50)
         XCTAssertEqual(evidence.confidence.level, .medium)
         XCTAssertEqual(evidence.confidence.limitingInputs, ["recentBedtimesHistory"])
-        XCTAssertEqual(evidence.coverage.status, .substantial)
+        XCTAssertEqual(evidence.coverage.status, .partial)
         XCTAssertEqual(evidence.coverage.requiredSignals.map(\.signalID), ["recentBedtimesHistory"])
         XCTAssertEqual(evidence.provenance.algorithmVersion, ScoringAlgorithmVersions.sleep)
         XCTAssertEqual(evidence.provenance.inputFingerprint, "sleep-fixture")
@@ -76,6 +76,29 @@ final class ScoreContractTests: XCTestCase {
             lastUpdated: window.end
         )
         XCTAssertNil(SleepScoreEvidenceAdapter.makeEvidence(from: metric))
+    }
+
+    func testCoverageDoesNotAliasConfidence() throws {
+        let common: (MetricConfidence) -> MetricResult = { confidence in
+            MetricResult(
+                domain: .sleep,
+                name: "Sleep Score",
+                value: 77,
+                band: .high,
+                confidence: confidence,
+                reasons: [],
+                missingInputs: ["awakeMinutes"],
+                dataWindow: self.window,
+                source: .healthKit,
+                algorithmVersion: ScoringAlgorithmVersions.sleep,
+                lastUpdated: self.window.end
+            )
+        }
+        let high = try XCTUnwrap(SleepScoreEvidenceAdapter.makeEvidence(from: common(.high)))
+        let low = try XCTUnwrap(SleepScoreEvidenceAdapter.makeEvidence(from: common(.low)))
+        XCTAssertEqual(high.coverage.status, .partial)
+        XCTAssertEqual(low.coverage.status, .partial)
+        XCTAssertEqual(high.coverage.requiredSignals, low.coverage.requiredSignals)
     }
 
     func testScoreEvidenceCodableRoundTripIncludesNilEstimateAndUnavailableSignal() throws {
