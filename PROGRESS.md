@@ -7,7 +7,7 @@
 | Q0 | 恢复当前 iOS 可验证基线 | 无；先核对 HEAD 和工作区未提交改动 | VERIFIED | 7f23f61b | docs/validation/Q0_HANDOFF.md |
 | U1 | 建立真实 UI 基线并完成一套组件精修 | Q0 实际通过 | VERIFIED | 6c8d5d13 | docs/validation/U1_HANDOFF.md |
 | U2 | Today 三加二精修到正式可用 | U1；保留评分数据不变 | VERIFIED | 358033f9 | docs/validation/U2_HANDOFF.md |
-| U3 | 恢复详情标杆页与正确返回 | U2 | NOT_STARTED | — | — |
+| U3 | 恢复详情标杆页与正确返回 | U2 | VERIFIED | 2bffa05b | docs/validation/U3_HANDOFF.md |
 | U4 | 睡眠详情精修与真实时间轴 | U3；睡眠算法保持不变 | NOT_STARTED | — | — |
 | U5 | Trends 与首页小趋势的统一数据图形 | U3；如缺日期合同需先 S1 的最小投影 | NOT_STARTED | — | — |
 | U6 | 其余详情与交互收尾 | U3/U4/U5 | NOT_STARTED | — | — |
