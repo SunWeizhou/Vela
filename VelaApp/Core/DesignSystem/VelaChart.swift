@@ -40,11 +40,11 @@ struct VelaMetricScoreRing: View {
                     .stroke(
                         score == nil
                             ? VelaTheme.rhythmMist
-                            : effectiveColor.opacity(0.13),
+                            : effectiveColor.opacity(0.14),
                         style: StrokeStyle(
                             lineWidth: ringWidth,
                             lineCap: .round,
-                            dash: score == nil ? [2, 5] : []
+                            dash: score == nil ? [4, 6] : []
                         )
                     )
 
@@ -91,7 +91,7 @@ struct VelaMetricScoreRing: View {
                     .monospacedDigit()
                     .minimumScaleFactor(0.7)
                     .lineLimit(1)
-                    .padding(.horizontal, ringWidth + 2)
+                    .padding(.horizontal, ringWidth + 3)
             }
             .frame(width: size, height: size)
             .accessibilityHidden(true)
@@ -110,7 +110,7 @@ struct VelaMetricScoreRing: View {
     }
 
     private var ringWidth: CGFloat {
-        max(5, size * 0.082)
+        max(6, (size * 0.088).rounded())
     }
 
     /// Semantic text styles keep score numerals responsive to Dynamic Type.
@@ -120,10 +120,10 @@ struct VelaMetricScoreRing: View {
         if size <= VelaTheme.ringSm + 10 {
             return .system(.footnote, design: .rounded, weight: .bold)
         }
-        if size <= VelaTheme.ringMd + 10 {
+        if size <= VelaTheme.ringMd + 6 {
             return .system(.title3, design: .rounded, weight: .bold)
         }
-        return .system(.title2, design: .rounded, weight: .bold)
+        return .system(.title, design: .rounded, weight: .bold)
     }
 
     private var effectiveColor: Color {

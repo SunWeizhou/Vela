@@ -133,8 +133,8 @@ struct TodaySignalGrid: View {
                 baselineContext
             }
         }
-        .padding(18)
-        .todayDashboardCard(radius: VelaTheme.radiusFeature, depth: .featured)
+        .padding(VelaTheme.space5)
+        .todayDashboardCard(radius: VelaTheme.radiusHero, depth: .featured)
     }
 
     private var secondaryScores: some View {
@@ -149,15 +149,9 @@ struct TodaySignalGrid: View {
                     energyPanel(energyCard)
                 }
             } else {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: 12) {
-                        stressPanel(stressCard)
-                        energyPanel(energyCard)
-                    }
-                    VStack(spacing: 12) {
-                        stressPanel(stressCard)
-                        energyPanel(energyCard)
-                    }
+                HStack(alignment: .top, spacing: 12) {
+                    stressPanel(stressCard)
+                    energyPanel(energyCard)
                 }
             }
         }
@@ -167,36 +161,43 @@ struct TodaySignalGrid: View {
         NavigationLink {
             VelaMetricDetailView(metric: .stress)
         } label: {
-            Group {
-                if dynamicTypeSize.isAccessibilitySize {
-                    VStack(alignment: .leading, spacing: 14) {
-                        metricPanelHeader(card, icon: "waveform.path.ecg", title: "今日压力")
-                        stressTrend(card)
-                        TodayStressDial(
-                            value: Double(card.value),
-                            state: card.state
-                        )
-                        .frame(maxWidth: .infinity)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Image(systemName: "waveform.path.ecg")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(accentColor(card.accent))
+                    Text(card.title)
+                        .font(VelaTheme.subheadline().weight(.semibold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                        .lineLimit(1)
+                    if deviatedScoreIDs.contains(card.id) {
+                        Circle()
+                            .fill(VelaTheme.stressColor)
+                            .frame(width: 6, height: 6)
+                            .accessibilityHidden(true)
                     }
-                } else {
-                    VStack(alignment: .leading, spacing: 12) {
-                        metricPanelHeader(card, icon: "waveform.path.ecg", title: "今日压力")
-                        HStack(alignment: .center, spacing: 8) {
-                            stressTrend(card)
-                            Spacer(minLength: 4)
-                            TodayStressDial(
-                                value: Double(card.value),
-                                state: card.state
-                            )
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Spacer(minLength: 2)
+                    stressValue(card)
+                    metricChevron
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    TodaySecondaryTrendLine(
+                        values: card.trend,
+                        color: accentColor(card.accent),
+                        isMissing: card.value == "--"
+                    )
+                    .frame(height: 24)
+
+                    Text(card.value == "--" ? "等待压力数据" : "近 7 日趋势")
+                        .font(VelaTheme.caption2())
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
             }
             .padding(16)
-            .frame(maxWidth: .infinity, minHeight: 110, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 96, alignment: .leading)
             .contentShape(Rectangle())
-            .todayDashboardCard(radius: VelaTheme.radiusCardLarge, depth: .standard)
+            .todayDashboardCard(radius: VelaTheme.radiusCardStandard, depth: .standard)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("today-secondary-stress")
@@ -205,109 +206,74 @@ struct TodaySignalGrid: View {
         .accessibilityHint("查看压力的时间变化和依据")
     }
 
+    private func stressValue(_ card: TodayExperienceSignalCard) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 3) {
+            Text(card.value)
+                .font(VelaTheme.title3().weight(.bold).monospacedDigit())
+                .foregroundStyle(VelaTheme.rhythmInk)
+            if card.value != "--" {
+                Text(stressStateLabel(for: card.state))
+                    .font(VelaTheme.caption2().weight(.semibold))
+                    .foregroundStyle(VelaTheme.textColor(for: card.state))
+            }
+        }
+    }
+
+    private func stressStateLabel(for state: MetricState) -> String {
+        switch state {
+        case .good: return "低"
+        case .moderate: return "适中"
+        case .poor: return "高"
+        }
+    }
+
     private func energyPanel(_ card: TodayExperienceSignalCard) -> some View {
         NavigationLink {
             VelaMetricDetailView(metric: .energy)
         } label: {
-            Group {
-                if dynamicTypeSize.isAccessibilitySize {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(spacing: 8) {
-                            energyLabel(card)
-                            Spacer(minLength: 8)
-                            energyValue(card)
-                            metricChevron
-                        }
-                        TodayEnergyGauge(
-                            value: Double(card.value),
-                            color: accentColor(card.accent)
-                        )
-                        .frame(height: 28)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Image(systemName: "bolt.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(accentColor(card.accent))
+                    Text(card.title)
+                        .font(VelaTheme.subheadline().weight(.semibold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                        .lineLimit(1)
+                    if deviatedScoreIDs.contains(card.id) {
+                        Circle()
+                            .fill(VelaTheme.stressColor)
+                            .frame(width: 6, height: 6)
+                            .accessibilityHidden(true)
                     }
-                } else {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(spacing: 6) {
-                            energyLabel(card)
-                            Spacer(minLength: 4)
-                            energyValue(card)
-                            metricChevron
-                        }
+                    Spacer(minLength: 2)
+                    energyValue(card)
+                    metricChevron
+                }
 
-                        TodayEnergyGauge(
-                            value: Double(card.value),
-                            color: accentColor(card.accent)
-                        )
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 28)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 4) {
+                    TodayEnergyGauge(
+                        value: Double(card.value),
+                        color: accentColor(card.accent)
+                    )
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 24)
+
+                    Text(card.value == "--" ? "等待能量模型" : "当前电量储备")
+                        .font(VelaTheme.caption2())
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
                 }
             }
             .padding(16)
-            .frame(maxWidth: .infinity, minHeight: 110, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 96, alignment: .leading)
             .contentShape(Rectangle())
-            .todayDashboardCard(radius: VelaTheme.radiusCardLarge, depth: .standard)
+            .todayDashboardCard(radius: VelaTheme.radiusCardStandard, depth: .standard)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("today-secondary-energy")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(secondaryAccessibilityLabel(card))
         .accessibilityHint("查看能量的充入、消耗和时间变化")
-    }
-
-    private func metricPanelHeader(
-        _ card: TodayExperienceSignalCard,
-        icon: String,
-        title: String? = nil
-    ) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(accentColor(card.accent))
-            Text(title ?? card.title)
-                .font(VelaTheme.subheadline().weight(.semibold))
-                .foregroundStyle(VelaTheme.rhythmInk)
-            if deviatedScoreIDs.contains(card.id) {
-                Circle()
-                    .fill(VelaTheme.stressColor)
-                    .frame(width: 7, height: 7)
-                    .accessibilityHidden(true)
-            }
-            Spacer(minLength: 2)
-            metricChevron
-        }
-    }
-
-    private func stressTrend(_ card: TodayExperienceSignalCard) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("近 7 日")
-                .font(VelaTheme.caption2().weight(.medium))
-                .foregroundStyle(VelaTheme.rhythmInkSecondary)
-
-            TodaySecondaryTrendLine(
-                values: card.trend,
-                color: accentColor(card.accent),
-                isMissing: card.value == "--"
-            )
-            .frame(height: 36)
-        }
-    }
-
-    private func energyLabel(_ card: TodayExperienceSignalCard) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "bolt.fill")
-                .font(.body.weight(.bold))
-                .foregroundStyle(accentColor(card.accent))
-            Text(card.title)
-                .font(VelaTheme.subheadline().weight(.semibold))
-                .foregroundStyle(VelaTheme.rhythmInk)
-            if deviatedScoreIDs.contains(card.id) {
-                Circle()
-                    .fill(VelaTheme.stressColor)
-                    .frame(width: 7, height: 7)
-                    .accessibilityHidden(true)
-            }
-        }
     }
 
     private func energyValue(_ card: TodayExperienceSignalCard) -> some View {
@@ -392,9 +358,9 @@ struct TodaySignalGrid: View {
 
                     if index < cards.count - 1 {
                         Divider()
-                            .overlay(VelaTheme.rhythmMist)
-                            .frame(height: ringSize + 24)
-                            .padding(.horizontal, 5)
+                            .overlay(VelaTheme.rhythmMist.opacity(0.8))
+                            .frame(height: ringSize + 16)
+                            .padding(.horizontal, 4)
                     }
                 }
             }
@@ -436,11 +402,19 @@ struct TodaySignalGrid: View {
         VStack(spacing: 0) {
             if horizontal {
                 HStack(spacing: 12) {
-                    scoreRing(card, size: ringSize, hasDeviation: hasDeviation)
+                    scoreRing(card, size: ringSize)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(card.title)
-                            .font(VelaTheme.body().weight(.semibold))
-                            .foregroundStyle(VelaTheme.rhythmInk)
+                        HStack(spacing: 4) {
+                            Text(card.title)
+                                .font(VelaTheme.body().weight(.semibold))
+                                .foregroundStyle(VelaTheme.rhythmInk)
+                            if hasDeviation {
+                                Circle()
+                                    .fill(VelaTheme.stressColor)
+                                    .frame(width: 6, height: 6)
+                                    .accessibilityHidden(true)
+                            }
+                        }
                         if !dynamicTypeSize.isAccessibilitySize {
                             Text(card.directionLabel)
                                 .font(VelaTheme.caption1())
@@ -456,11 +430,19 @@ struct TodaySignalGrid: View {
                 .contentShape(Rectangle())
             } else {
                 VStack(spacing: 8) {
-                    scoreRing(card, size: ringSize, hasDeviation: hasDeviation)
-                    Text(card.title)
-                        .font(VelaTheme.caption1().weight(.semibold))
-                        .foregroundStyle(VelaTheme.rhythmInk)
-                        .lineLimit(1)
+                    scoreRing(card, size: ringSize)
+                    HStack(spacing: 3) {
+                        Text(card.title)
+                            .font(VelaTheme.subheadline().weight(.semibold))
+                            .foregroundStyle(VelaTheme.rhythmInk)
+                            .lineLimit(1)
+                        if hasDeviation {
+                            Circle()
+                                .fill(VelaTheme.stressColor)
+                                .frame(width: 6, height: 6)
+                                .accessibilityHidden(true)
+                        }
+                    }
                 }
                 .contentShape(Rectangle())
             }
@@ -474,8 +456,7 @@ struct TodaySignalGrid: View {
 
     private func scoreRing(
         _ card: TodayExperienceSignalCard,
-        size: CGFloat,
-        hasDeviation: Bool
+        size: CGFloat
     ) -> some View {
         let accent = accentColor(card.accent)
         let score = Double(card.value)
@@ -488,17 +469,8 @@ struct TodaySignalGrid: View {
             accent: accent,
             showsLabel: false,
             direction: card.directionLabel,
-            dataState: hasDeviation ? "偏离个人基线" : nil
+            dataState: deviatedScoreIDs.contains(card.id) ? "偏离个人基线" : nil
         )
-        .overlay(alignment: .topTrailing) {
-            if hasDeviation {
-                Circle()
-                    .fill(VelaTheme.stressColor)
-                    .frame(width: max(7, size * 0.09), height: max(7, size * 0.09))
-                    .overlay(Circle().stroke(VelaTheme.rhythmCanvasRaised, lineWidth: 2))
-                    .accessibilityHidden(true)
-            }
-        }
     }
 
     private func card(for descriptor: SignalDescriptor) -> TodayExperienceSignalCard {
@@ -554,19 +526,19 @@ private struct TodaySecondaryTrendLine: View {
                 context.stroke(
                     placeholder,
                     with: .color(VelaTheme.rhythmInkSecondary.opacity(0.32)),
-                    style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [3, 5])
+                    style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [4, 6])
                 )
                 return
             }
 
             let low = values.min() ?? 0
             let high = values.max() ?? 100
-            let span = max(1, high - low)
+            let span = max(20, high - low)
             let step = size.width / CGFloat(values.count - 1)
             let points = values.enumerated().map { index, value in
                 CGPoint(
                     x: CGFloat(index) * step,
-                    y: size.height * (0.82 - 0.64 * CGFloat((value - low) / span))
+                    y: size.height * (0.85 - 0.70 * CGFloat((value - low) / span))
                 )
             }
 
@@ -590,7 +562,7 @@ private struct TodaySecondaryTrendLine: View {
             context.stroke(
                 line,
                 with: .color(color),
-                style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round)
+                style: StrokeStyle(lineWidth: 2.0, lineCap: .round, lineJoin: .round)
             )
         }
         .accessibilityHidden(true)
@@ -608,7 +580,7 @@ private struct TodayEnergyGauge: View {
         return CGFloat(min(1, max(0, value / 100)))
     }
 
-    private let segmentCount = 22
+    private let segmentCount = 14
 
     private var filledSegments: Int {
         guard value != nil else { return 0 }
@@ -616,13 +588,12 @@ private struct TodayEnergyGauge: View {
     }
 
     var body: some View {
-        // One Canvas node renders all segments (previously 22 individual
-        // Capsule views) to keep the SwiftUI layout tree small.
+        // One Canvas node renders all segments to keep the SwiftUI layout tree small.
         Canvas { context, size in
             let spacing: CGFloat = 3
             let count = segmentCount
             let segmentWidth = (size.width - spacing * CGFloat(count - 1)) / CGFloat(count)
-            let segmentHeight: CGFloat = 22
+            let segmentHeight: CGFloat = 20
             let top = (size.height - segmentHeight) / 2
             for index in 0..<count {
                 let rect = CGRect(
@@ -639,74 +610,6 @@ private struct TodayEnergyGauge: View {
             }
         }
         .animation(VelaTheme.dataAnimation(reduceMotion: reduceMotion), value: filledSegments)
-        .accessibilityHidden(true)
-    }
-}
-
-private struct TodayStressDial: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    let value: Double?
-    let state: MetricState
-
-    private let tickCount = 32
-
-    private var progress: CGFloat {
-        guard let value else { return 0 }
-        return CGFloat(min(1, max(0, value / 100)))
-    }
-
-    private var filledTicks: Int {
-        guard value != nil else { return 0 }
-        return Int((progress * CGFloat(tickCount)).rounded(.up))
-    }
-
-    private var stateLabel: String {
-        guard value != nil else { return "等待数据" }
-        switch state {
-        case .good: return "低"
-        case .moderate: return "适中"
-        case .poor: return "高"
-        }
-    }
-
-    var body: some View {
-        ZStack {
-            // One Canvas node draws all 32 ticks (previously 32 individual
-            // Capsule views) around the dial.
-            Canvas { context, size in
-                let center = CGPoint(x: size.width / 2, y: size.height / 2)
-                for index in 0..<tickCount {
-                    let angle = Angle.degrees(-126 + Double(index) * 252 / Double(tickCount - 1))
-                    context.drawLayer { layer in
-                        layer.translateBy(x: center.x, y: center.y)
-                        layer.rotate(by: angle)
-                        let rect = CGRect(x: -1.25, y: -43, width: 2.5, height: 8)
-                        let path = Path(roundedRect: rect, cornerRadius: 1.25)
-                        layer.fill(
-                            path,
-                            with: .color(index < filledTicks ? VelaTheme.color(for: state) : VelaTheme.rhythmMist)
-                        )
-                    }
-                }
-            }
-
-            VStack(spacing: 1) {
-                Text(value.map { String(Int($0.rounded())) } ?? "--")
-                    .font(VelaTheme.title2().weight(.semibold).monospacedDigit())
-                    .foregroundStyle(VelaTheme.rhythmInk)
-                Text(stateLabel)
-                    .font(VelaTheme.caption2().weight(.semibold))
-                    .foregroundStyle(
-                        value == nil
-                            ? VelaTheme.rhythmInkSecondary
-                            : VelaTheme.textColor(for: state)
-                    )
-            }
-            .offset(y: 3)
-        }
-        .frame(width: 94, height: 94)
-        .animation(VelaTheme.dataAnimation(reduceMotion: reduceMotion), value: filledTicks)
         .accessibilityHidden(true)
     }
 }
@@ -886,10 +789,10 @@ struct TodayDailyPlanCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             VelaTheme.rhythmCanvasRaised,
-            in: RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
+            in: RoundedRectangle(cornerRadius: VelaTheme.radiusCardStandard, style: .continuous)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: VelaTheme.radiusCardLarge, style: .continuous)
+            RoundedRectangle(cornerRadius: VelaTheme.radiusCardStandard, style: .continuous)
                 .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
         }
         .accessibilityElement(children: .contain)
