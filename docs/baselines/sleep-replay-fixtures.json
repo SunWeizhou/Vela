@@ -6,7 +6,7 @@
   "timeZone": "UTC",
   "asOf": "2026-07-31T12:00:00Z",
   "baseline": {
-    "inputFingerprint": "sleep-v2|2026-07-31T12:00:00Z|465|450|awake=24|episodes=2|bedtime=nil|history=0",
+    "inputFingerprint": "sleep-v2|2026-07-31T12:00:00Z|465.0|450.0|awake=24.0|episodes=2|bedtime=nil|history=0",
     "input": {"totalSleepMinutes": 465, "sleepTargetMinutes": 450, "awakeMinutes": 24, "awakeEpisodeCount": 2},
     "value": 77.43,
     "confidence": "medium",
