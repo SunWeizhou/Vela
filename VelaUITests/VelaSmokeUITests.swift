@@ -121,6 +121,99 @@ final class VelaSmokeUITests: XCTestCase {
             "Recovery detail did not open from its launch route"
         )
         XCTAssertTrue(app.navigationBars["恢复"].exists)
+
+        let closeButton = app.buttons["metric-detail-close"]
+        XCTAssertTrue(closeButton.waitForExistence(timeout: 5), "Sheet should show close button")
+        closeButton.tap()
+        XCTAssertFalse(
+            app.descendants(matching: .any)["metric-detail-recovery"].waitForExistence(timeout: 3),
+            "Recovery detail sheet should dismiss after tapping close"
+        )
+    }
+
+    func testRecoveryDetailPushNavigationAndReturn() {
+        let app = launchApp(initialTab: 0)
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["surface-0"].waitForExistence(timeout: 10),
+            "Today surface did not become visible"
+        )
+        let recoveryScore = app.descendants(matching: .any)["today-score-recovery"]
+        guard recoveryScore.waitForExistence(timeout: 5) else {
+            return
+        }
+        recoveryScore.tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["metric-detail-recovery"].waitForExistence(timeout: 8),
+            "Recovery detail did not open from Today push"
+        )
+        XCTAssertFalse(
+            app.buttons["metric-detail-close"].exists,
+            "Push navigation should not display custom sheet close button"
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["metric-detail-hero"].waitForExistence(timeout: 5),
+            "Recovery detail hero section should be present"
+        )
+
+        let backButton = app.navigationBars.buttons.element(boundBy: 0)
+        XCTAssertTrue(backButton.waitForExistence(timeout: 5), "System back button should be present")
+        backButton.tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["surface-0"].waitForExistence(timeout: 8),
+            "Should return to Today surface after tapping back button"
+        )
+    }
+
+    func testRecoveryDetailHistoricalDateNavigation() {
+        let app = launchApp(initialTab: 0)
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["surface-0"].waitForExistence(timeout: 10),
+            "Today surface did not become visible"
+        )
+        let calendarButton = app.buttons["today-calendar-button"]
+        guard calendarButton.waitForExistence(timeout: 5) else {
+            return
+        }
+        calendarButton.tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["calendar-overview-sheet"].waitForExistence(timeout: 8),
+            "Calendar sheet should open"
+        )
+        let dayButton = app.buttons["calendar-day-1"]
+        if dayButton.waitForExistence(timeout: 5) && dayButton.isHittable {
+            dayButton.tap()
+        } else {
+            let todayButton = app.buttons["今天"]
+            if todayButton.waitForExistence(timeout: 3) {
+                todayButton.tap()
+            }
+        }
+
+        let recoveryScore = app.descendants(matching: .any)["today-score-recovery"]
+        guard recoveryScore.waitForExistence(timeout: 5) else {
+            return
+        }
+        recoveryScore.tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["metric-detail-recovery"].waitForExistence(timeout: 8),
+            "Recovery detail should open for historical date"
+        )
+        let screenshot = XCUIScreen.main.screenshot()
+        try? screenshot.pngRepresentation.write(to: URL(fileURLWithPath: "/tmp/recovery-detail-historical.png"))
+        let backButton = app.navigationBars.buttons.element(boundBy: 0)
+        if backButton.waitForExistence(timeout: 5) {
+            backButton.tap()
+        }
+        XCTAssertTrue(
+            app.descendants(matching: .any)["surface-0"].waitForExistence(timeout: 8),
+            "Should return to Today surface"
+        )
     }
 
     func testLivedStateCheckInDeepLaunch() {

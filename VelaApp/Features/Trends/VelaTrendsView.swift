@@ -145,7 +145,12 @@ struct VelaTrendsView: View {
         }
         .sheet(item: $selectedMetricForDetail) { metric in
             NavigationStack {
-                VelaMetricDetailView(metric: metric)
+                VelaMetricDetailView(
+                    metric: metric,
+                    selectedDate: dashboardVM.selectedDate,
+                    dashboardSnapshot: dashboardVM.dashboard,
+                    isPresentedInSheet: true
+                )
             }
             .environmentObject(dashboardVM)
             .presentationDetents([.large])

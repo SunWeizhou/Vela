@@ -421,6 +421,7 @@ struct CalendarOverviewSheetView: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(isFuture)
+                        .accessibilityIdentifier("calendar-day-\(day)")
                     }
                 }
                 .padding(.horizontal, 10)
@@ -459,6 +460,7 @@ struct CalendarOverviewSheetView: View {
             .padding(.bottom, 16)
         }
         .background(VelaTheme.rhythmCanvas.ignoresSafeArea())
+        .accessibilityIdentifier("calendar-overview-sheet")
         .onAppear {
             calendarYear = Calendar.current.component(.year, from: selectedDay)
             calendarMonth = Calendar.current.component(.month, from: selectedDay)

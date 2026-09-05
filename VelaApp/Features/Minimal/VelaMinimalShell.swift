@@ -217,7 +217,14 @@ struct VelaShell: View {
                 .presentationDetents([.large])
                 .velaSheetSurface()
         case .recoveryDetail:
-            NavigationStack { VelaMetricDetailView(metric: .recovery) }
+            NavigationStack {
+                VelaMetricDetailView(
+                    metric: .recovery,
+                    selectedDate: todayStore.state.selectedDay,
+                    dashboardSnapshot: todayStore.state.dashboard,
+                    isPresentedInSheet: true
+                )
+            }
                 .presentationDetents([.large])
                 .velaSheetSurface()
         case let .postWorkoutCheckIn(workoutID):

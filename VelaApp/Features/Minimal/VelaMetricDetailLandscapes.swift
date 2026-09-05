@@ -182,22 +182,26 @@ struct CoastalLandscape: View {
 
 struct ForestLandscape: View {
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: VelaTheme.Landscape.forestSky,
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            // Green forest silhouette
-            Path { path in
-                path.move(to: CGPoint(x: 0, y: 200))
-                path.addQuadCurve(to: CGPoint(x: 200, y: 180), control: CGPoint(x: 100, y: 210))
-                path.addQuadCurve(to: CGPoint(x: 400, y: 190), control: CGPoint(x: 300, y: 170))
-                path.addLine(to: CGPoint(x: 400, y: 240))
-                path.addLine(to: CGPoint(x: 0, y: 240))
-                path.closeSubpath()
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            ZStack {
+                LinearGradient(
+                    colors: VelaTheme.Landscape.forestSky,
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                // Green forest silhouette
+                Path { path in
+                    path.move(to: CGPoint(x: 0, y: h * 0.78))
+                    path.addQuadCurve(to: CGPoint(x: w * 0.5, y: h * 0.70), control: CGPoint(x: w * 0.25, y: h * 0.82))
+                    path.addQuadCurve(to: CGPoint(x: w, y: h * 0.74), control: CGPoint(x: w * 0.75, y: h * 0.65))
+                    path.addLine(to: CGPoint(x: w, y: h))
+                    path.addLine(to: CGPoint(x: 0, y: h))
+                    path.closeSubpath()
+                }
+                .fill(LinearGradient(colors: VelaTheme.Landscape.forestSilhouette, startPoint: .top, endPoint: .bottom))
             }
-            .fill(LinearGradient(colors: VelaTheme.Landscape.forestSilhouette, startPoint: .top, endPoint: .bottom))
         }
     }
 }

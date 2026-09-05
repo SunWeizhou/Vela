@@ -440,7 +440,12 @@ struct VelaRhythmHorizonHero: View {
                 Group {
                     if let metricType {
                         NavigationLink {
-                            VelaMetricDetailView(metric: metricType)
+                            VelaMetricDetailView(
+                                metric: metricType,
+                                selectedDate: selectedDate,
+                                dashboardSnapshot: nil,
+                                isPresentedInSheet: false
+                            )
                         } label: {
                             heroDialTile(card: card, color: color, domain: domain)
                         }

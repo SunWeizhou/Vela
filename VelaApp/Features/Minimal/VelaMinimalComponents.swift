@@ -108,6 +108,10 @@ extension View {
 
 struct VelaMetricDetailView: View {
     let metric: MetricType
+    var selectedDate: Date? = nil
+    var dashboardSnapshot: DashboardSummary? = nil
+    var isPresentedInSheet: Bool = false
+
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var cs
     @Environment(\.modelContext) private var modelContext
@@ -126,7 +130,13 @@ struct VelaMetricDetailView: View {
     @State var selectedRange: DetailTimeRange = .week
     @State var rawSelectedDate: Date? = nil
 
-    var dashboard: DashboardSummary { dashboardVM.dashboard }
+    var effectiveDate: Date {
+        selectedDate ?? dashboardVM.selectedDate
+    }
+
+    var dashboard: DashboardSummary {
+        dashboardSnapshot ?? dashboardVM.dashboard
+    }
 
     enum MetricType: String, CaseIterable, Identifiable {
         case strain, recovery, sleep, stress, energy, hrv, rhr
@@ -157,17 +167,20 @@ struct VelaMetricDetailView: View {
         .accessibilityIdentifier("metric-detail-\(metric.rawValue)")
         .velaRhythmDetailChrome()
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(action: dismiss.callAsFunction) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(VelaTheme.rhythmDeep)
-                        .frame(width: 32, height: 32)
-                        .background(Circle().fill(VelaTheme.rhythmCanvasRaised))
-                        .overlay(Circle().stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
+            if isPresentedInSheet {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: dismiss.callAsFunction) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(VelaTheme.rhythmDeep)
+                            .frame(width: 32, height: 32)
+                            .background(Circle().fill(VelaTheme.rhythmCanvasRaised))
+                            .overlay(Circle().stroke(VelaTheme.rhythmMist, lineWidth: 0.75))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("关闭")
+                    .accessibilityIdentifier("metric-detail-close")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("关闭")
             }
 
             ToolbarItemGroup(placement: .topBarTrailing) {
@@ -197,7 +210,9 @@ struct VelaMetricDetailView: View {
             loadDailyRecords()
         }
         .onChange(of: dashboardVM.selectedDate) {
-            loadDailyRecords()
+            if selectedDate == nil {
+                loadDailyRecords()
+            }
         }
         .onChange(of: appState.localDataRevision) {
             loadDailyRecords()
@@ -206,7 +221,7 @@ struct VelaMetricDetailView: View {
 
     private func loadDailyRecords() {
         let calendar = Calendar.current
-        let endDate = calendar.startOfDay(for: dashboardVM.selectedDate)
+        let endDate = calendar.startOfDay(for: effectiveDate)
         let end = calendar.date(byAdding: .day, value: 1, to: endDate) ?? endDate
         let start = calendar.date(
             byAdding: .day,
@@ -300,6 +315,7 @@ struct VelaMetricDetailView: View {
 
     @ViewBuilder
     private func coreMetricContent(isSleep: Bool) -> some View {
+        // 1. 主值 + 数据质量
         CoreMetricDetailHero(
             metric: metric,
             valueText: dynamicValueText,
@@ -315,9 +331,23 @@ struct VelaMetricDetailView: View {
         .padding(.top, 8)
 
         metricHistoryErrorCard
-        chartHeaderSection(isSleep: isSleep)
+
+        trustSection
+
+        // 2. 个人比较 / 趋势
         customWidgetsSection(isSleep: isSleep)
-        coreMetricEvidenceDisclosure(isSleep: isSleep)
+        chartHeaderSection(isSleep: isSleep)
+
+        // 3. HRV/RHR 等依据
+        supportingEvidenceSection(isSleep: isSleep)
+
+        // 4. 方法 / 来源 / 限制
+        guidanceSection(isSleep: isSleep)
+        metricMethodologySection
+    }
+
+    private var metricMethodologySection: some View {
+        MetricMethodologyCard(metric: metric)
     }
 
     @ViewBuilder
@@ -394,33 +424,6 @@ struct VelaMetricDetailView: View {
     private func openMetricCoach() {
         let context = CoreMetricCoachContext.make(for: metric)
         appState.routeToCoach(question: context.suggestedQuestion, surface: .metricDetail)
-    }
-
-    @ViewBuilder
-    private func coreMetricEvidenceDisclosure(isSleep: Bool) -> some View {
-        DisclosureGroup {
-            VStack(spacing: 16) {
-                trustSection
-                supportingEvidenceSection(isSleep: isSleep)
-            }
-            .padding(.top, 12)
-        } label: {
-            Label("更多数据与依据", systemImage: "list.bullet.rectangle")
-                .font(VelaTheme.subheadline().weight(.semibold))
-                .foregroundStyle(VelaTheme.rhythmInk)
-                .frame(minHeight: VelaTheme.minimumHitTarget)
-        }
-        .tint(VelaTheme.rhythmDeep)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(
-            VelaTheme.rhythmCanvasRaised,
-            in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
-        }
     }
 
 

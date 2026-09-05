@@ -80,7 +80,25 @@ struct CoreMetricDetailHero: View {
             .accessibilityHint("打开 Coach 继续追问")
         }
         .padding(18)
-        .background(VelaTheme.rhythmCanvasRaised)
+        .background {
+            if metric == .recovery {
+                ZStack(alignment: .top) {
+                    VelaTheme.rhythmCanvasRaised
+                    ForestLandscape()
+                        .frame(height: 124)
+                        .opacity(colorScheme == .dark ? 0.35 : 0.45)
+                        .mask(
+                            LinearGradient(
+                                colors: [.black, .black.opacity(0.6), .clear],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                }
+            } else {
+                VelaTheme.rhythmCanvasRaised
+            }
+        }
         .clipShape(RoundedRectangle(cornerRadius: VelaTheme.radiusFeature, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: VelaTheme.radiusFeature, style: .continuous)
@@ -91,6 +109,7 @@ struct CoreMetricDetailHero: View {
                     lineWidth: colorSchemeContrast == .increased ? 1 : 0.6
                 )
         }
+        .accessibilityIdentifier("metric-detail-hero")
     }
 
     @ViewBuilder
@@ -1328,6 +1347,87 @@ public struct VelaWidgetPreviewGalleryView: View {
             .padding(.vertical)
         }
         .background(VelaTheme.rhythmCanvas)
+    }
+}
+
+// MARK: - MetricMethodologyCard (Methodology, Data Sources & Limitations)
+
+struct MetricMethodologyCard: View {
+    let metric: VelaMetricDetailView.MetricType
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("方法与限制")
+                .font(VelaTheme.footnote().weight(.bold))
+                .foregroundStyle(VelaTheme.rhythmInk)
+                .padding(.leading, 4)
+
+            VStack(alignment: .leading, spacing: 12) {
+                methodologyRow(
+                    icon: "function",
+                    title: "计算方法",
+                    detail: methodologyDescription
+                )
+                Divider()
+                    .overlay(VelaTheme.rhythmMist)
+                methodologyRow(
+                    icon: "lock.shield",
+                    title: "数据来源",
+                    detail: "直接读取 Apple 健康本机样本，无云端数据上传，离线可用。"
+                )
+                Divider()
+                    .overlay(VelaTheme.rhythmMist)
+                methodologyRow(
+                    icon: "exclamationmark.triangle",
+                    title: "使用限制",
+                    detail: "仅作为日常运动与恢复建议参考，不作为医疗诊断依据；基线形成需连续佩戴 Apple Watch。"
+                )
+            }
+            .padding(16)
+            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+            )
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("metric-detail-methodology")
+    }
+
+    private var methodologyDescription: String {
+        switch metric {
+        case .recovery:
+            return "采用夜间 HRV (RMSSD) 与静息心率相对 14–28 天滚动基线的 Z 分数加权，综合评估自主神经平衡状态。"
+        case .sleep:
+            return "根据实际睡眠时长、阶段分布（深睡/REM）与睡眠规律性评分。"
+        case .strain:
+            return "基于心率区间与耗力模型累积全天训练与日常负荷，无量纲 0–21。"
+        case .stress:
+            return "根据心率、HRV 及呼吸率在当前时段的生理偏离估算压力指数。"
+        case .energy:
+            return "基于急性负荷 (ATL) 与慢性负荷 (CTL) 平衡度估算能量储备。"
+        default:
+            return "结合历史均值与个人基线分析长期偏离趋势。"
+        }
+    }
+
+    private func methodologyRow(icon: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                .frame(width: 20, height: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(VelaTheme.caption1().weight(.semibold))
+                    .foregroundStyle(VelaTheme.rhythmInk)
+                Text(detail)
+                    .font(VelaTheme.caption2())
+                    .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 

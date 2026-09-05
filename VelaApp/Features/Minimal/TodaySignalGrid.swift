@@ -13,6 +13,8 @@ struct TodaySignalGrid: View {
     let agentSentence: String
     let accentColor: (DailyPlanAccent) -> Color
     let onInspectGuidance: () -> Void
+    var selectedDate: Date? = nil
+    var dashboardSnapshot: DashboardSummary? = nil
 
     /// The Today contract has five independent metrics. Keep the descriptor
     /// list at the rendering boundary so a partial/legacy payload cannot make
@@ -163,7 +165,12 @@ struct TodaySignalGrid: View {
 
     private func stressPanel(_ card: TodayExperienceSignalCard) -> some View {
         NavigationLink {
-            VelaMetricDetailView(metric: .stress)
+            VelaMetricDetailView(
+                metric: .stress,
+                selectedDate: selectedDate,
+                dashboardSnapshot: dashboardSnapshot,
+                isPresentedInSheet: false
+            )
         } label: {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -241,7 +248,12 @@ struct TodaySignalGrid: View {
 
     private func energyPanel(_ card: TodayExperienceSignalCard) -> some View {
         NavigationLink {
-            VelaMetricDetailView(metric: .energy)
+            VelaMetricDetailView(
+                metric: .energy,
+                selectedDate: selectedDate,
+                dashboardSnapshot: dashboardSnapshot,
+                isPresentedInSheet: false
+            )
         } label: {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -412,7 +424,12 @@ struct TodaySignalGrid: View {
     ) -> some View {
         if let metric = detailMetric(for: card.id) {
             NavigationLink {
-                VelaMetricDetailView(metric: metric)
+                VelaMetricDetailView(
+                    metric: metric,
+                    selectedDate: selectedDate,
+                    dashboardSnapshot: dashboardSnapshot,
+                    isPresentedInSheet: false
+                )
             } label: {
                 scoreLabel(card, ringSize: ringSize, horizontal: horizontal)
             }

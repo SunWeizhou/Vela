@@ -38,5 +38,6 @@ struct MetricEvidenceSection: View {
                     .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
             )
         }
+        .accessibilityIdentifier("metric-detail-evidence")
     }
 }

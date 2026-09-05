@@ -554,7 +554,9 @@ struct VelaTodayView: View {
                     onInspectGuidance: {
                         dispatchToday(.openEvidence)
                         presentedTodaySheet = .evidence
-                    }
+                    },
+                    selectedDate: todayStore.state.selectedDay,
+                    dashboardSnapshot: todayStore.state.dashboard
                 )
                 .equatable()
                 .padding(.horizontal, VelaTheme.pagePadding)
@@ -752,7 +754,12 @@ struct VelaTodayView: View {
                 .presentationDetents([.medium, .large])
                 .velaSheetSurface()
         case .metric(let metric):
-            TodayMetricDetailDownstreamAdapter(metric: metric, dashboardVM: dashboardVM)
+            TodayMetricDetailDownstreamAdapter(
+                metric: metric,
+                selectedDate: todayStore.state.selectedDay,
+                dashboardSnapshot: todayStore.state.dashboard,
+                dashboardVM: dashboardVM
+            )
                 .presentationDetents([.large])
                 .velaSheetSurface()
         case .evidence:
@@ -923,11 +930,18 @@ struct VelaTodayView: View {
 /// environment injection in the root renderer.
 private struct TodayMetricDetailDownstreamAdapter: View {
     let metric: VelaMetricDetailView.MetricType
+    let selectedDate: Date?
+    let dashboardSnapshot: DashboardSummary?
     let dashboardVM: DashboardViewModel
 
     var body: some View {
         NavigationStack {
-            VelaMetricDetailView(metric: metric)
+            VelaMetricDetailView(
+                metric: metric,
+                selectedDate: selectedDate,
+                dashboardSnapshot: dashboardSnapshot,
+                isPresentedInSheet: true
+            )
         }
         .environmentObject(dashboardVM)
     }
@@ -1048,6 +1062,7 @@ struct TodayDateAndStatusHeader: View {
         .buttonStyle(.cardPress)
         .accessibilityLabel("选择日期")
         .accessibilityValue(dateHeaderString(for: selectedDate))
+        .accessibilityIdentifier("today-calendar-button")
     }
 
     private var weatherBar: some View {

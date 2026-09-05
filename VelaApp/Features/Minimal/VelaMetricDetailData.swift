@@ -184,7 +184,7 @@ extension VelaMetricDetailView {
     }
 
     var metricUpdatedAtLabel: String {
-        let date = currentMetricResult?.lastUpdated ?? dashboardVM.selectedDate
+        let date = currentMetricResult?.lastUpdated ?? effectiveDate
         let timestamp = date.formatted(
             Date.FormatStyle(date: .abbreviated, time: .shortened, locale: Locale(identifier: "zh_CN"))
         )
@@ -215,7 +215,7 @@ extension VelaMetricDetailView {
     }
 
     var displayDateText: String {
-        let dateToUse = selectedPoint?.date ?? dashboardVM.selectedDate
+        let dateToUse = selectedPoint?.date ?? effectiveDate
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_Hans_CN")
         if selectedRange == .threeYears {
@@ -229,7 +229,7 @@ extension VelaMetricDetailView {
     var chartPoints: [ChartPoint] {
         let snapshots = dailyRecords.map { $0.toSnapshot() }
         let calendar = Calendar.current
-        let endDate = calendar.startOfDay(for: dashboardVM.selectedDate)
+        let endDate = calendar.startOfDay(for: effectiveDate)
         let end = calendar.date(byAdding: .day, value: 1, to: endDate) ?? endDate
         let start = calendar.date(byAdding: .day, value: -selectedRange.days, to: end) ?? end
         
@@ -327,15 +327,15 @@ extension VelaMetricDetailView {
     var selectedDateText: String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_Hans_CN")
-        formatter.dateFormat = Calendar.current.isDateInToday(dashboardVM.selectedDate) ? "今天，M月d日" : "M月d日"
-        return formatter.string(from: dashboardVM.selectedDate)
+        formatter.dateFormat = Calendar.current.isDateInToday(effectiveDate) ? "今天，M月d日" : "M月d日"
+        return formatter.string(from: effectiveDate)
     }
 
     var selectedFullDateText: String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_Hans_CN")
         formatter.dateFormat = "yyyy年M月d日"
-        return formatter.string(from: dashboardVM.selectedDate)
+        return formatter.string(from: effectiveDate)
     }
 
     var metricShareText: String {
@@ -737,9 +737,9 @@ extension VelaMetricDetailView {
     var trendItems: [TrendItem] {
         CoreMetricTrendMapper.seriesList(
             for: metric,
-            findings: dashboardVM.dashboard.healthTrends,
+            findings: dashboard.healthTrends,
             snapshots: dailyRecords.map { $0.toSnapshot() },
-            endingAt: dashboardVM.selectedDate
+            endingAt: effectiveDate
         )
     }
 
