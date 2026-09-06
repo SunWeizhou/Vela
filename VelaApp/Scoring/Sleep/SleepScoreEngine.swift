@@ -133,7 +133,11 @@ public struct SleepScoreEngine: ScoreEngine {
             
             let hrs = Int(totalSleep) / 60
             let mins = Int(totalSleep) % 60
-            reasons.append("睡眠时长 \(hrs)小时\(mins)分钟（目标 \(Int(target) / 60)小时）")
+            if target < 420 {
+                reasons.append("睡眠时长 \(hrs)小时\(mins)分钟（达成个人作息目标 \(Int(target) / 60)小时；注：依据 AASM 成人共识，成人健康睡眠建议为 7–9 小时，达成个人作息目标不代表生理充分满足）")
+            } else {
+                reasons.append("睡眠时长 \(hrs)小时\(mins)分钟（目标 \(Int(target) / 60)小时）")
+            }
         } else {
             missingInputs.append("totalSleepMinutes")
             reasons.append("缺少睡眠时长数据")

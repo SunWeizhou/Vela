@@ -109,6 +109,9 @@ public struct MetricResult: Codable, Hashable, Sendable {
     public var source: MetricSource
     public var algorithmVersion: String
     public var lastUpdated: Date
+    public var observedWindow: DateInterval?
+    public var observedAt: Date?
+    public var computedAt: Date?
 
     public init(
         domain: ScoredHealthDomain? = nil,
@@ -123,7 +126,10 @@ public struct MetricResult: Codable, Hashable, Sendable {
         dataWindow: DateInterval,
         source: MetricSource,
         algorithmVersion: String,
-        lastUpdated: Date
+        lastUpdated: Date,
+        observedWindow: DateInterval? = nil,
+        observedAt: Date? = nil,
+        computedAt: Date? = nil
     ) {
         self.domain = domain ?? ScoredHealthDomain.infer(from: name)
         self.name = name
@@ -138,6 +144,9 @@ public struct MetricResult: Codable, Hashable, Sendable {
         self.source = source
         self.algorithmVersion = algorithmVersion
         self.lastUpdated = lastUpdated
+        self.observedWindow = observedWindow
+        self.observedAt = observedAt
+        self.computedAt = computedAt ?? lastUpdated
     }
 
     /// Optional compatibility projection. `nil` stays `nil`; callers must not

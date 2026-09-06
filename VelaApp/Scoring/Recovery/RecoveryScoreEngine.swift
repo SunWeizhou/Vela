@@ -53,6 +53,8 @@ public struct RecoveryScoreInput: Hashable {
 
     /// 三年 HRV 长线分布（Layer 3 修正；nil = 不启用，保持原行为）。
     public var longTermContext: RecoveryLongTermContext? = nil
+    public var observedAt: Date? = nil
+    public var observedWindow: DateInterval? = nil
 
     public init(
         asOf: Date,
@@ -72,7 +74,9 @@ public struct RecoveryScoreInput: Hashable {
         respiratoryRateHistory: [Double] = [],
         bodyTempDelta: Double? = nil,
         SpO2: Double? = nil,
-        longTermContext: RecoveryLongTermContext? = nil
+        longTermContext: RecoveryLongTermContext? = nil,
+        observedAt: Date? = nil,
+        observedWindow: DateInterval? = nil
     ) {
         self.asOf = asOf
         self.hrvToday = hrvToday
@@ -92,6 +96,8 @@ public struct RecoveryScoreInput: Hashable {
         self.bodyTempDelta = bodyTempDelta
         self.SpO2 = SpO2
         self.longTermContext = longTermContext
+        self.observedAt = observedAt
+        self.observedWindow = observedWindow
     }
 }
 
@@ -263,37 +269,40 @@ public struct RecoveryScoreEngine: ScoreEngine {
             components["hrv_z_score"] = hrvZ
         }
 
-        // Parasympathetic Tone Index (PSTI) based on normalized log-transformed RMSSD values
-        let rmssdToday = input.hrvRmssdToday ?? input.hrvToday
-        if let rmssdToday {
-            let lnToday = log(max(rmssdToday, 1.0))
+        // Parasympathetic Tone Index (PSTI) based on normalized log-transformed RMSSD values.
+        // S3 约束：严格使用 RMSSD 真实测量值与同方法基线，禁止以 SDNN 隐式替代 RMSSD。
+        if let rmssdToday = input.hrvRmssdToday, rmssdToday.isFinite, rmssdToday > 0 {
+            let validRmssdHistory = input.hrvRmssdHistory.filter { $0.isFinite && $0 > 0 }
             let rmssdHistoryToUse: [Double]
-            if !input.hrvRmssdHistory.isEmpty {
-                rmssdHistoryToUse = input.hrvRmssdHistory
-            } else if let rmssdBaseline = input.hrvRmssdBaseline {
+            if !validRmssdHistory.isEmpty {
+                rmssdHistoryToUse = validRmssdHistory
+            } else if let rmssdBaseline = input.hrvRmssdBaseline, rmssdBaseline.isFinite, rmssdBaseline > 0 {
                 rmssdHistoryToUse = [rmssdBaseline]
-            } else if input.hrvHistory.count >= 5 {
-                rmssdHistoryToUse = input.hrvHistory
             } else {
-                rmssdHistoryToUse = [input.hrvBaseline ?? rmssdToday]
+                // 无同方法 RMSSD 历史或基线，不可比，不伪造 PSTI
+                rmssdHistoryToUse = []
             }
-            let lnHistory = rmssdHistoryToUse.map { log(max($0, 1.0)) }
 
-            if let lnBaseline = PersonalBaselineEngine.median(lnHistory) {
-                var lnSD = PersonalBaselineEngine.robustStandardDeviation(
-                    lnHistory,
-                    around: lnBaseline
-                ) ?? 0
-                let fallbackSD = lnBaseline * 0.12
-                if lnSD < 0.01 {
-                    lnSD = fallbackSD > 0.01 ? fallbackSD : 0.05
+            if !rmssdHistoryToUse.isEmpty {
+                let lnToday = log(rmssdToday)
+                let lnHistory = rmssdHistoryToUse.map { log($0) }
+
+                if let lnBaseline = PersonalBaselineEngine.median(lnHistory) {
+                    var lnSD = PersonalBaselineEngine.robustStandardDeviation(
+                        lnHistory,
+                        around: lnBaseline
+                    ) ?? 0
+                    let fallbackSD = lnBaseline * 0.12
+                    if lnSD < 0.01 {
+                        lnSD = fallbackSD > 0.01 ? fallbackSD : 0.05
+                    }
+
+                    let pstiZ = (lnToday - lnBaseline) / lnSD
+                    let pstiScore = ScoringMath.clamp(50.0 + 25.0 * pstiZ, min: 0, max: 100)
+
+                    components["parasympathetic_tone_index"] = pstiScore
+                    components["psti_z_score"] = pstiZ
                 }
-
-                let pstiZ = (lnToday - lnBaseline) / lnSD
-                let pstiScore = ScoringMath.clamp(50.0 + 25.0 * pstiZ, min: 0, max: 100)
-
-                components["parasympathetic_tone_index"] = pstiScore
-                components["psti_z_score"] = pstiZ
             }
         }
 
@@ -386,7 +395,10 @@ public struct RecoveryScoreEngine: ScoreEngine {
             dataWindow: dataWindow,
             source: .healthKit,
             algorithmVersion: ScoringAlgorithmVersions.recovery,
-            lastUpdated: input.asOf
+            lastUpdated: input.asOf,
+            observedWindow: input.observedWindow,
+            observedAt: input.observedAt,
+            computedAt: input.asOf
         )
     }
 }

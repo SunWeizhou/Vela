@@ -117,7 +117,7 @@ final class Milestone1ChallengeTests: XCTestCase {
     func testPSTIFallbackWhenRMSSDIsNilButHRVIsPresent() {
         let engine = RecoveryScoreEngine()
 
-        // When hrvRmssdToday is nil, fallback uses hrvToday
+        // Card S3: When hrvRmssdToday is nil, PSTI must NOT fall back to hrvToday (SDNN)
         let input = RecoveryScoreInput(
             asOf: Date(),
             hrvToday: 65,
@@ -132,7 +132,7 @@ final class Milestone1ChallengeTests: XCTestCase {
             strainScoreYesterday: 40
         )
         let result = engine.calculate(from: input)
-        XCTAssertNotNil(result.components["parasympathetic_tone_index"], "Should fallback to hrvToday when hrvRmssdToday is nil")
+        XCTAssertNil(result.components["parasympathetic_tone_index"], "PSTI must NOT fallback to hrvToday when hrvRmssdToday is nil")
     }
 
     // MARK: - 2. FoodLogRecord & Nutrition Aggregation Edge Cases

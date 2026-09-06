@@ -116,6 +116,10 @@ struct DailyHealthSnapshot: Identifiable, Hashable, Sendable {
     var deepSleepMinutes: Double?
     var remSleepMinutes: Double?
     var workouts: [WorkoutSummary] = []
+    var hrvObservedAt: Date?
+    var rhrObservedAt: Date?
+    var spo2ObservedAt: Date?
+    var hrvObservedWindow: DateInterval?
 }
 
 enum SleepStage: String, Codable, Hashable, CaseIterable {

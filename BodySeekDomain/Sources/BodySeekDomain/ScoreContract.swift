@@ -78,19 +78,25 @@ public struct ScoreProvenance: Codable, Hashable, Sendable {
     public let evaluatedAt: Date
     public let algorithmVersion: String
     public let inputFingerprint: String?
+    public let observedWindow: DateInterval?
+    public let observedAt: Date?
 
     public init(
         source: MetricSource,
         dataWindow: DateInterval,
         evaluatedAt: Date,
         algorithmVersion: String,
-        inputFingerprint: String? = nil
+        inputFingerprint: String? = nil,
+        observedWindow: DateInterval? = nil,
+        observedAt: Date? = nil
     ) {
         self.source = source
         self.dataWindow = dataWindow
         self.evaluatedAt = evaluatedAt
         self.algorithmVersion = algorithmVersion
         self.inputFingerprint = inputFingerprint
+        self.observedWindow = observedWindow
+        self.observedAt = observedAt
     }
 }
 
@@ -165,7 +171,9 @@ public enum ScoreEvidenceAdapter {
                 dataWindow: metric.dataWindow,
                 evaluatedAt: metric.lastUpdated,
                 algorithmVersion: metric.algorithmVersion,
-                inputFingerprint: inputFingerprint
+                inputFingerprint: inputFingerprint,
+                observedWindow: metric.observedWindow,
+                observedAt: metric.observedAt
             ),
             reasons: metric.reasons
         )

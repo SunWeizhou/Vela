@@ -203,13 +203,13 @@ struct VelaTodayView: View {
             TodayVitalCardModel(
                 kind: .hrv, label: "心率变异性",
                 value: hrv.map { "\(Int($0.rounded()))" } ?? "--", unit: "ms",
-                status: vitalStatusText(kind: .hrv, hasData: hrv != nil, observedAt: dashboard.recovery.dataWindow.end, syncedAt: updatedDate),
+                status: vitalStatusText(kind: .hrv, hasData: hrv != nil, observedAt: dashboard.recovery.observedAt, syncedAt: updatedDate),
                 assessment: vitalAssessment("hrv"), trend: trends["hrv"] ?? []
             ),
             TodayVitalCardModel(
                 kind: .rhr, label: "静息心率",
                 value: rhr.map { "\(Int($0.rounded()))" } ?? "--", unit: "bpm",
-                status: vitalStatusText(kind: .rhr, hasData: rhr != nil, observedAt: dashboard.recovery.dataWindow.end, syncedAt: updatedDate),
+                status: vitalStatusText(kind: .rhr, hasData: rhr != nil, observedAt: dashboard.recovery.observedAt, syncedAt: updatedDate),
                 assessment: vitalAssessment("rhr"), trend: trends["rhr"] ?? []
             ),
             TodayVitalCardModel(
@@ -263,7 +263,7 @@ struct VelaTodayView: View {
                 return "醒于 \(Self.vitalTimeFormatter.string(from: wake))"
             }
             return "昨夜睡眠"
-        case .hrv, .rhr:
+        case .hrv, .rhr, .spo2:
             if let obs = observedAt, obs != .distantPast, obs != .distantFuture {
                 let calendar = Calendar.current
                 if calendar.isDateInToday(obs) {
@@ -273,14 +273,9 @@ struct VelaTodayView: View {
                 }
             }
             if let syncedAt {
-                return syncRelativeText(syncedAt)
+                return "观测时间未知 · " + syncRelativeText(syncedAt)
             }
-            return "已同步"
-        case .spo2:
-            if let syncedAt {
-                return syncRelativeText(syncedAt)
-            }
-            return "已同步"
+            return "观测时间未知"
         }
     }
 

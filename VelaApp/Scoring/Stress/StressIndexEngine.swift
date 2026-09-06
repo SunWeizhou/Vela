@@ -109,7 +109,7 @@ public struct StressIndexEngine: ScoreEngine {
 
         // Check if inside workout/post-workout window (exercise exclusion rule)
         if input.isWithinWorkoutWindow {
-            reasons.append("静息生理压力指标已自动排除运动窗口及运动后 90 分钟的自主神经恢复期。")
+            reasons.append("运动窗口及运动后 90 分钟的自主神经恢复期内，生理压力处于不可估计状态（已排除，非零压力）。")
             let dataWindow = DateInterval(
                 start: Calendar.current.date(byAdding: .hour, value: -2, to: input.asOf) ?? input.asOf,
                 end: input.asOf
@@ -257,7 +257,7 @@ public struct StressIndexEngine: ScoreEngine {
             componentWeights["sleep_debt_stress"] = weights["sleep_debt_stress"] ?? 0
             
             if debtStress > 40 {
-                reasons.append("昨晚睡眠评分偏低，已提高生理压力代理值")
+                reasons.append("昨晚睡眠评分偏低（单夜睡眠亏欠，非多日累积睡眠债），已提高生理压力代理估算。")
             }
         }
 
@@ -297,17 +297,19 @@ public struct StressIndexEngine: ScoreEngine {
             band = .low
         }
 
-        // Confidence
+        // Confidence: core quiet vitals (quietHR, HRV) must be present for high confidence
         let confidence: MetricConfidence
-        if components.count >= 5 {
+        let hasCoreVitals = (input.mode == .rawVitals ? (input.quietHRToday != nil && input.hrvToday != nil) : (input.heartRateElevationScore != nil && input.hrvSuppressionScore != nil))
+        let hasAnyCoreVital = (input.mode == .rawVitals ? (input.quietHRToday != nil || input.hrvToday != nil) : (input.heartRateElevationScore != nil || input.hrvSuppressionScore != nil))
+        if hasCoreVitals && components.count >= 5 {
             confidence = .high
-        } else if components.count >= 3 {
+        } else if hasAnyCoreVital && components.count >= 3 {
             confidence = .medium
         } else {
             confidence = .low
         }
 
-        reasons.append("这是基于可用心率、HRV、呼吸、体温、睡眠与负荷信号的代理指标，不是心理或医疗诊断。")
+        reasons.append("生理压力·估计：基于可用日级静息心率、HRV、呼吸、体温与昨夜睡眠的代理指标，不是心理或医疗诊断。")
 
         let dataWindow = DateInterval(
             start: Calendar.current.date(byAdding: .hour, value: -24, to: input.asOf) ?? input.asOf,

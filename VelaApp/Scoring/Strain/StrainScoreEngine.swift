@@ -122,6 +122,7 @@ public struct StrainScoreInput: Hashable {
     public var biologicalSex: String? // "male" / "female" / "other"
     
     public var last28DaysDailyLoads: [Double] = [] // historical daily loads
+    public var validObservedDaysCount: Int? = nil
     
     // Legacy support fields
     public var activeEnergyBaseline: Double?
@@ -139,6 +140,7 @@ public struct StrainScoreInput: Hashable {
         maxHR: Double = 0,
         biologicalSex: String? = nil,
         last28DaysDailyLoads: [Double] = [],
+        validObservedDaysCount: Int? = nil,
         activeEnergyBaseline: Double? = nil,
         exerciseMinutesBaseline: Double? = nil,
         workoutIntensityLoad: Double? = nil,
@@ -153,6 +155,7 @@ public struct StrainScoreInput: Hashable {
         self.maxHR = maxHR
         self.biologicalSex = biologicalSex
         self.last28DaysDailyLoads = last28DaysDailyLoads
+        self.validObservedDaysCount = validObservedDaysCount
         self.activeEnergyBaseline = activeEnergyBaseline
         self.exerciseMinutesBaseline = exerciseMinutesBaseline
         self.workoutIntensityLoad = workoutIntensityLoad
@@ -204,12 +207,23 @@ public struct StrainScoreEngine: ScoreEngine {
         let maxHR = input.maxHR
         let hrRange = maxHR - restingHR
 
-        // 1. Calculate Workout Loads
+        // 1. Calculate Workout Loads (with UUID deduplication)
+        var seenWorkoutIDs = Set<UUID>()
+        var deduplicatedWorkouts: [WorkoutInput] = []
+        for w in input.workouts {
+            if !seenWorkoutIDs.contains(w.id) {
+                seenWorkoutIDs.insert(w.id)
+                deduplicatedWorkouts.append(w)
+            }
+        }
+
         var totalWorkoutLoad = 0.0
-        for workout in input.workouts {
+        var methodCode = 0.0
+        for workout in deduplicatedWorkouts {
             var workoutLoad = 0.0
             if hasHeartRateReserve && !workout.heartRateSamples.isEmpty {
                 // Method A: Continuous Banister TRIMP exponential sample integration
+                methodCode = max(methodCode, 1.0)
                 let sampleWeight = workout.durationMinutes / Double(workout.heartRateSamples.count)
                 let (alpha, beta) = Self.banisterConstants(sex: input.biologicalSex)
                 for hr in workout.heartRateSamples {
@@ -219,6 +233,7 @@ public struct StrainScoreEngine: ScoreEngine {
                 }
             } else if hasHeartRateReserve, let avgHR = workout.averageHeartRate {
                 // Method B: Banister TRIMP using average heart rate fallback
+                methodCode = max(methodCode, 2.0)
                 let hrr = (avgHR - restingHR) / hrRange
                 let clampedHRR = ScoringMath.clamp(hrr, min: 0.01, max: 1.0)
                 // gender-neutral fallback: 0.75 / 1.80 为未经验证的插值（仅 other/未设置）。
@@ -226,9 +241,11 @@ public struct StrainScoreEngine: ScoreEngine {
                 workoutLoad = workout.durationMinutes * clampedHRR * alpha * exp(beta * clampedHRR)
             } else if let rpe = workout.rpe {
                 // Method C: Foster's session RPE scaled to TRIMP units (duration * rpe * 0.3)
+                methodCode = max(methodCode, 3.0)
                 workoutLoad = workout.durationMinutes * rpe * 0.3
             } else {
                 // Method D: duration fallback
+                methodCode = max(methodCode, 4.0)
                 workoutLoad = workout.durationMinutes * 1.5
             }
             totalWorkoutLoad += workoutLoad
@@ -240,7 +257,7 @@ public struct StrainScoreEngine: ScoreEngine {
         let exerciseMin = input.exerciseMinutesToday ?? 0.0
         
         let rawActivityLoad = 0.02 * activeEnergy + 0.0015 * steps + 0.5 * exerciseMin
-        let activityMultiplier = input.workouts.isEmpty ? 1.0 : 0.35
+        let activityMultiplier = deduplicatedWorkouts.isEmpty ? 1.0 : 0.35
         let activityLoad = rawActivityLoad * activityMultiplier
 
         // Total daily load
@@ -260,6 +277,7 @@ public struct StrainScoreEngine: ScoreEngine {
             : nil
         
         components["workout_load"] = totalWorkoutLoad
+        components["workout_load_method_code"] = methodCode
         components["activity_load"] = activityLoad
         components["raw_activity_load"] = rawActivityLoad
         components["activity_multiplier"] = activityMultiplier
@@ -272,10 +290,10 @@ public struct StrainScoreEngine: ScoreEngine {
         componentWeights["activity_load"] = 0.40
 
         // Reasons
-        if !input.workouts.isEmpty {
-            reasons.append("今日完成了 \(input.workouts.count) 次运动训练，贡献了主要身体负荷")
+        if !deduplicatedWorkouts.isEmpty {
+            reasons.append("今日完成了 \(deduplicatedWorkouts.count) 次运动训练，贡献了主要身体负荷")
         }
-        reasons.append("非运动日常活动负荷为 \(Int(activityLoad)) (步数: \(Int(steps)), 活动能量: \(Int(activeEnergy)) kcal)")
+        reasons.append("非运动日常活动负荷为 \(Int(activityLoad)) (步数: \(Int(steps)), 活动能量: \(Int(activeEnergy)) kcal；已应用 \(activityMultiplier) 启发式系数降低双重计算风险)")
 
         // 4. Training Load Status (ATL / CTL)
         // `last28DaysDailyLoads` is newest-first (see personalBaselineHistory).
@@ -288,12 +306,13 @@ public struct StrainScoreEngine: ScoreEngine {
 
         var baseConfidence: MetricConfidence = input.activeEnergyToday != nil ? .high : .medium
 
-        if !hasHeartRateReserve && input.workouts.contains(where: { !$0.heartRateSamples.isEmpty || $0.averageHeartRate != nil }) {
+        if !hasHeartRateReserve && deduplicatedWorkouts.contains(where: { !$0.heartRateSamples.isEmpty || $0.averageHeartRate != nil }) {
             baseConfidence = .low
             reasons.append("缺少个人静息心率或最大心率，心率数据未用于个体化负荷计算。")
         }
         
-        if historyToUse.count < 7 {
+        let observedDays = input.validObservedDaysCount ?? historyToUse.count
+        if observedDays < 7 {
             // Insufficient history for ATL/CTL
             baseConfidence = .low
             reasons.append(hasPersonalLoadBaseline

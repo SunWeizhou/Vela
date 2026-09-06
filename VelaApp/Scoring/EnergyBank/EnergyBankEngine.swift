@@ -25,6 +25,8 @@ public struct EnergyBankInput: Hashable {
     public var mindfulMinutes: Double?
     public var napMinutes: Double?
     public var trainingLoadStatus: TrainingLoadStatus?
+    public var recoveryConfidence: MetricConfidence?
+    public var sleepConfidence: MetricConfidence?
 
     public init(
         asOf: Date,
@@ -45,7 +47,9 @@ public struct EnergyBankInput: Hashable {
         SpO2: Double? = nil,
         mindfulMinutes: Double? = nil,
         napMinutes: Double? = nil,
-        trainingLoadStatus: TrainingLoadStatus? = nil
+        trainingLoadStatus: TrainingLoadStatus? = nil,
+        recoveryConfidence: MetricConfidence? = nil,
+        sleepConfidence: MetricConfidence? = nil
     ) {
         self.asOf = asOf
         self.recoveryScore = recoveryScore
@@ -66,6 +70,8 @@ public struct EnergyBankInput: Hashable {
         self.mindfulMinutes = mindfulMinutes
         self.napMinutes = napMinutes
         self.trainingLoadStatus = trainingLoadStatus
+        self.recoveryConfidence = recoveryConfidence
+        self.sleepConfidence = sleepConfidence
     }
 }
 
@@ -80,17 +86,27 @@ public struct EnergyBankEngine: ScoreEngine {
         var reasons: [String] = []
         var missingInputs: [String] = []
 
-        // 1. Overnight Stability (100 base)
-        var overnightStability = 100.0
-        if let bodyTempDelta = input.bodyTempDelta, bodyTempDelta > 1.0 {
-            overnightStability -= 15.0
-            reasons.append("夜间体温明显升高，扣除稳定性基准分")
-        }
-        if let rrZ = input.respiratoryRateZ, rrZ > 1.5 {
-            overnightStability -= 10.0
-        }
-        if let spO2 = input.SpO2, spO2 < 94 {
-            overnightStability -= 10.0
+        // 1. Overnight Stability
+        let hasOvernightSignals = input.bodyTempDelta != nil || input.respiratoryRateZ != nil || input.SpO2 != nil
+        let overnightStability: Double
+        if hasOvernightSignals {
+            var stab = 100.0
+            if let bodyTempDelta = input.bodyTempDelta, bodyTempDelta > 1.0 {
+                stab -= 15.0
+                reasons.append("夜间体温明显升高，扣除稳定性基准分")
+            }
+            if let rrZ = input.respiratoryRateZ, rrZ > 1.5 {
+                stab -= 10.0
+            }
+            if let spO2 = input.SpO2, spO2 < 94 {
+                stab -= 10.0
+            }
+            overnightStability = stab
+        } else {
+            // 未测稳定性不作为已测 100 分；缺失也不扣为 0，采用中性基准 50 并明确标明
+            overnightStability = 50.0
+            missingInputs.append("overnightStabilitySignals")
+            reasons.append("缺少夜间体温、呼吸率与血氧信号，夜间稳定性按基准中值 50 估计。")
         }
         components["overnight_stability"] = overnightStability
 
@@ -145,10 +161,21 @@ public struct EnergyBankEngine: ScoreEngine {
 
         // 3. Day Drain Calculations
         let strainScore = input.strainScore ?? 0.0
-        let stressIndex = input.stressIndex ?? 0.0
-        
         let strainDrain = 0.35 * strainScore
-        let stressDrain = 0.25 * stressIndex
+
+        let stressDrain: Double
+        if let stress = input.stressIndex {
+            stressDrain = 0.25 * stress
+        } else if let strain = input.strainScore, strain > 0 {
+            // 运动及恢复期内，生理压力处于排除状态（nil），消耗已由训练负荷承担，避免误判为能量回升
+            stressDrain = 0.0
+            reasons.append("生理压力处于运动排除窗口，未计入额外静息压力消耗（消耗由训练负荷承担）。")
+        } else {
+            // 未知消耗：压力缺失且无活动负荷
+            stressDrain = 0.0
+            missingInputs.append("stressIndex")
+            reasons.append("生理压力数据缺失，未计入日间压力消耗。")
+        }
         
         let timeDrain: Double
         if let hoursSinceWake = input.hoursSinceWake {
@@ -208,19 +235,38 @@ public struct EnergyBankEngine: ScoreEngine {
             band = .low
         }
 
-        reasons.append("能量电池是全天体能代理估算值，主要用于规划今日运动与恢复，非医学诊断。")
+        reasons.append("能量估计：全天体能代理估算值，主要用于规划今日运动与恢复，非医学诊断。")
 
         let dataWindow = DateInterval(
             start: Calendar.current.date(byAdding: .hour, value: -12, to: input.asOf) ?? input.asOf,
             end: input.asOf
         )
 
+        let confidence: MetricConfidence
+        if currentEnergy == nil {
+            confidence = .low
+        } else if rec != nil && slp != nil {
+            let upstreamHigh = (input.recoveryConfidence == nil || input.recoveryConfidence == .high)
+                && (input.sleepConfidence == nil || input.sleepConfidence == .high)
+            let upstreamLow = (input.recoveryConfidence == .low || input.sleepConfidence == .low)
+
+            if upstreamLow {
+                confidence = .low
+            } else if upstreamHigh && hasOvernightSignals && input.stressIndex != nil {
+                confidence = .high
+            } else {
+                confidence = .medium
+            }
+        } else {
+            confidence = .low
+        }
+
         return MetricResult(
             domain: .energy,
             name: "Energy Bank",
             value: currentEnergy,
             band: band,
-            confidence: rec != nil && slp != nil ? .high : (currentEnergy == nil ? .low : .medium),
+            confidence: confidence,
             components: components,
             componentWeights: [:],
             reasons: reasons,

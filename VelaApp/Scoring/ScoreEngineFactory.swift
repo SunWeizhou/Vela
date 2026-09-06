@@ -223,11 +223,12 @@ final class DailyHealthComputation {
     ) -> ScoredHealthEvidence {
         let asOf = evaluationDate(for: snapshot)
         let baselineHistory = personalBaselineHistory(for: snapshot, from: history)
+        let (dailyLoadGrid, validDailyLoadDays) = continuousDailyLoadGrid(for: snapshot, from: history, maxDays: 42)
         let hrvHistory = baselineHistory.compactMap(\.hrvAverage)
         let hrvRmssdHistory = baselineHistory.compactMap(\.hrvRmssdMilliseconds)
         let rhrHistory = baselineHistory.compactMap(\.restingHeartRate)
         let respiratoryHistory = baselineHistory.compactMap(\.respiratoryRate)
-        let dailyLoadHistory = baselineHistory.compactMap(\.dailyLoad)
+        let dailyLoadHistory = dailyLoadGrid
         let temperatureDelta = wristTemperatureDelta(
             current: snapshot.wristTemperature,
             history: baselineHistory
@@ -267,7 +268,9 @@ final class DailyHealthComputation {
             respiratoryRateHistory: respiratoryHistory,
             bodyTempDelta: temperatureDelta,
             SpO2: snapshot.oxygenSaturation,
-            longTermContext: recoveryLongTermContext(from: longTermBaselines, asOf: asOf)
+            longTermContext: recoveryLongTermContext(from: longTermBaselines, asOf: asOf),
+            observedAt: snapshot.hrvObservedAt ?? snapshot.rhrObservedAt,
+            observedWindow: snapshot.hrvObservedWindow
         ))
 
         let strain = StrainScoreEngine().calculate(from: StrainScoreInput(
@@ -287,6 +290,7 @@ final class DailyHealthComputation {
             maxHR: profile.maxHeartRate ?? 0,
             biologicalSex: profile.biologicalSex,
             last28DaysDailyLoads: Array(dailyLoadHistory.prefix(28)),
+            validObservedDaysCount: min(28, validDailyLoadDays),
             recoveryScore: recovery.value
         ))
 
@@ -337,7 +341,9 @@ final class DailyHealthComputation {
             SpO2: snapshot.oxygenSaturation,
             mindfulMinutes: nil,
             napMinutes: nil,
-            trainingLoadStatus: strain.trainingLoadStatus
+            trainingLoadStatus: strain.trainingLoadStatus,
+            recoveryConfidence: recovery.confidence,
+            sleepConfidence: sleep.confidence
         ))
 
         return ScoredHealthEvidence(
@@ -378,6 +384,53 @@ final class DailyHealthComputation {
             hrvSampleCount: hrvBaseline.sampleCount,
             hrvMonthlyGateThreshold: gate
         )
+    }
+
+    private func continuousDailyLoadGrid(
+        for snapshot: DailyHealthSnapshot,
+        from history: [DailyHealthSnapshot],
+        maxDays: Int = 42
+    ) -> (grid: [Double], validDays: Int) {
+        let dayStart = calendar.startOfDay(for: snapshot.date)
+        var loadsByDay: [Date: Double] = [:]
+        var earliestDate: Date?
+
+        for item in history {
+            let itemDay = calendar.startOfDay(for: item.date)
+            if itemDay < dayStart {
+                if earliestDate == nil || itemDay < earliestDate! {
+                    earliestDate = itemDay
+                }
+                if let load = item.dailyLoad {
+                    loadsByDay[itemDay] = max(loadsByDay[itemDay] ?? 0.0, load)
+                }
+            }
+        }
+
+        guard let earliest = earliestDate else {
+            return ([], 0)
+        }
+
+        let totalDays = min(maxDays, max(1, calendar.dateComponents([.day], from: earliest, to: dayStart).day ?? 1))
+
+        var grid: [Double] = []
+        var validDays = 0
+        grid.reserveCapacity(totalDays)
+
+        for offset in 1...totalDays {
+            guard let targetDate = calendar.date(byAdding: .day, value: -offset, to: dayStart) else { break }
+            if let load = loadsByDay[targetDate] {
+                grid.append(load)
+                if offset <= 28 {
+                    validDays += 1
+                }
+            } else {
+                // Gap day within tracked period: decays EWMA
+                grid.append(0.0)
+            }
+        }
+
+        return (grid, validDays)
     }
 
     private func personalBaselineHistory(

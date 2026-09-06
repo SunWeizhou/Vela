@@ -56,6 +56,10 @@ public struct DailyHealthSnapshot: Identifiable, Codable, Hashable, Sendable {
     public var deepSleepMinutes: Double?
     public var remSleepMinutes: Double?
     public var workouts: [WorkoutSummary]
+    public var hrvObservedAt: Date?
+    public var rhrObservedAt: Date?
+    public var spo2ObservedAt: Date?
+    public var hrvObservedWindow: DateInterval?
 
     public init(
         id: UUID = UUID(),
@@ -103,7 +107,11 @@ public struct DailyHealthSnapshot: Identifiable, Codable, Hashable, Sendable {
         awakeEpisodeCount: Int? = nil,
         deepSleepMinutes: Double? = nil,
         remSleepMinutes: Double? = nil,
-        workouts: [WorkoutSummary] = []
+        workouts: [WorkoutSummary] = [],
+        hrvObservedAt: Date? = nil,
+        rhrObservedAt: Date? = nil,
+        spo2ObservedAt: Date? = nil,
+        hrvObservedWindow: DateInterval? = nil
     ) {
         self.id = id
         self.date = date
@@ -151,6 +159,10 @@ public struct DailyHealthSnapshot: Identifiable, Codable, Hashable, Sendable {
         self.deepSleepMinutes = deepSleepMinutes
         self.remSleepMinutes = remSleepMinutes
         self.workouts = workouts
+        self.hrvObservedAt = hrvObservedAt
+        self.rhrObservedAt = rhrObservedAt
+        self.spo2ObservedAt = spo2ObservedAt
+        self.hrvObservedWindow = hrvObservedWindow
     }
 }
 

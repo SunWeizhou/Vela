@@ -110,6 +110,9 @@ public struct MetricResult: Codable, Hashable, Sendable {
     public var source: MetricSource         // healthKit / userInput / derived / mixed
     public var algorithmVersion: String
     public var lastUpdated: Date
+    public var observedWindow: DateInterval?
+    public var observedAt: Date?
+    public var computedAt: Date?
 
     public init(
         domain: ScoredHealthDomain? = nil,
@@ -124,7 +127,10 @@ public struct MetricResult: Codable, Hashable, Sendable {
         dataWindow: DateInterval,
         source: MetricSource,
         algorithmVersion: String,
-        lastUpdated: Date
+        lastUpdated: Date,
+        observedWindow: DateInterval? = nil,
+        observedAt: Date? = nil,
+        computedAt: Date? = nil
     ) {
         self.domain = domain ?? ScoredHealthDomain.infer(from: name)
         self.name = name
@@ -139,6 +145,9 @@ public struct MetricResult: Codable, Hashable, Sendable {
         self.source = source
         self.algorithmVersion = algorithmVersion
         self.lastUpdated = lastUpdated
+        self.observedWindow = observedWindow
+        self.observedAt = observedAt
+        self.computedAt = computedAt ?? lastUpdated
     }
 
     // Backward compatibility for SwiftUI views
@@ -259,6 +268,9 @@ public struct MetricResult: Codable, Hashable, Sendable {
         case source
         case algorithmVersion
         case lastUpdated
+        case observedWindow
+        case observedAt
+        case computedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -277,6 +289,9 @@ public struct MetricResult: Codable, Hashable, Sendable {
         source = try container.decode(MetricSource.self, forKey: .source)
         algorithmVersion = try container.decode(String.self, forKey: .algorithmVersion)
         lastUpdated = try container.decode(Date.self, forKey: .lastUpdated)
+        observedWindow = try container.decodeIfPresent(DateInterval.self, forKey: .observedWindow)
+        observedAt = try container.decodeIfPresent(Date.self, forKey: .observedAt)
+        computedAt = try container.decodeIfPresent(Date.self, forKey: .computedAt) ?? lastUpdated
     }
 }
 
