@@ -3,8 +3,8 @@
 任务：Card V1 建立可复跑的算法比较与模型卡 (Replayable Algorithm Comparison & Model Cards)
 状态：VERIFIED
 审阅起始 SHA：67827bc0255bf3721389cf7895f5bf1fa3b3e2a0
-交付 SHA：待提交后回填
-工作区未提交改动与处理：已将可复跑的 10 大场景测试集成于 `VelaAppTests/DataCoverageAndEvidenceTests.swift`，测试实际运行通过并生成产物。
+交付 SHA：0b7d8adf (待与 PROGRESS.md 联动提交)
+工作区未提交改动与处理：工作区干净，所有产物与模型卡已受版本控制。
 
 ## 本卡改变的用户行为
 - 本卡为算法规范、回归防线与研究基础建设卡，不直接改动用户端当前线上界面。
