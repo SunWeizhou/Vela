@@ -22,16 +22,30 @@
 
 ## 2. 真机状态与部署探测 (Physical Device Readiness Probe)
 
-- **探测命令**：`xcrun devicectl device info details --device B1B2A1DB-2B5C-5C02-A222-B051240A22EA`
-- **目标设备**：`Weizhou的iPhone` (iPhone 16 Pro, `iPhone17,1`, arm64e)
-- **实测探测输出**：
-  - `pairingState`: `paired`
-  - `tunnelState`: `unavailable`
-  - `ddiServicesAvailable`: `false`
-  - `lastConnectionDate`: `2026-09-01 11:46:00 +0000`
-- **真机状态判定**：**BLOCKED (Hardware Unavailable)**
-  - **事实说明**：目标真机当前未处于活跃的 CoreDevice 无线或有线隧道连接中（上次握手时间为 2026-09-01，DDI 调试通道未就绪）。依据任务守则，严禁伪造真机部署通过记录，明确标记为 **BLOCKED (硬件离线)**。
-  - **替代验证**：在与真机架构对齐的 iPhone 17 (iOS 26.5 Simulator, `FF06E397-5F59-48FA-A657-8C7852040598`) 上完成了完整的编译、安装、全套单元测试与端到端 UI 自动化测试。
+- **探测命令**：`xcrun devicectl list devices`
+- **目标设备**：`Weizhou的iPhone` (iPhone 16 Pro, `iPhone17,1`, arm64e, UUID: `B1B2A1DB-2B5C-5C02-A222-B051240A22EA`)
+- **连接通道**：个人热点无线 CoreDevice 加密隧道
+- **实测状态输出**：`available (paired)`
+- **安装产物**：`/Users/sunweizhou/Developer/Vela-DerivedData/Build/Products/Debug-iphoneos/Vela.app`
+- **安装命令及输出**：
+  ```
+  xcrun devicectl device install app --device B1B2A1DB-2B5C-5C02-A222-B051240A22EA ...
+  10:49:13 Acquired tunnel connection to device.
+  10:49:13 Enabling developer disk image services.
+  App installed:
+  • bundleID: com.sunweizhou.Vela4
+  • installationURL: file:///private/var/containers/Bundle/Application/B8AE4C40-CA0E-40FE-BDB1-630183DE77D9/Vela.app/
+  • databaseUUID: 09243394-C54C-4A35-9CA3-480D1EB20D5F
+  • databaseSequenceNumber: 1832
+  ```
+- **启动命令及输出**：
+  ```
+  xcrun devicectl device process launch --device B1B2A1DB-2B5C-5C02-A222-B051240A22EA com.sunweizhou.Vela4
+  10:49:20 Acquired tunnel connection to device.
+  10:49:20 Enabling developer disk image services.
+  Launched application with com.sunweizhou.Vela4 bundle identifier.
+  ```
+- **真机状态判定**：**VERIFIED** (已成功安装并在真机上启动前台进程)
 
 ---
 
