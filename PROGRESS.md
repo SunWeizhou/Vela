@@ -11,14 +11,14 @@
 | U4 | 睡眠详情精修与真实时间轴 | U3；睡眠算法保持不变 | VERIFIED | cc67be11 | docs/validation/U4_HANDOFF.md |
 | U5 | Trends 与首页小趋势的统一数据图形 | U3；如缺日期合同需先 S1 的最小投影 | VERIFIED | cc67be11 | docs/validation/U5_HANDOFF.md |
 | U6 | 其余详情与交互收尾 | U3/U4/U5 | VERIFIED | cc67be11 | docs/validation/U6_HANDOFF.md |
-| S1 | 真实观测窗口与质量合同 | Q0；与 UI 公共投影变更串行 | NOT_STARTED | — | — |
-| S2 | 长期 as-of 生产链回归 | Q0；保留已实现日期过滤 | NOT_STARTED | — | — |
-| S3 | HRV 方法分离与附加 PSTI 约束 | S1；S2 推荐完成 | NOT_STARTED | — | — |
-| S4 | 睡眠事实与充分性政策分离 | S1；UI与公式改动分提交 | NOT_STARTED | — | — |
-| S5 | 负荷测量方法、单位与活动重叠 | S1 | NOT_STARTED | — | — |
-| S6 | 日负荷时间轴与 EWMA 缺失 | S5 的单位/方法政策已明确 | NOT_STARTED | — | — |
-| S7 | 生理压力的真实时间尺度 | S1；相关负荷方法明确 | NOT_STARTED | — | — |
-| S8 | 能量估计与上游质量传播 | S1/S7；与共享合同修改串行 | NOT_STARTED | — | — |
+| S1 | 真实观测窗口与质量合同 | Q0；与 UI 公共投影变更串行 | VERIFIED | 72c0f91a | docs/validation/S1_S8_HANDOFF.md |
+| S2 | 长期 as-of 生产链回归 | Q0；保留已实现日期过滤 | VERIFIED | 72c0f91a | docs/validation/S1_S8_HANDOFF.md |
+| S3 | HRV 方法分离与附加 PSTI 约束 | S1；S2 推荐完成 | VERIFIED | 72c0f91a | docs/validation/S1_S8_HANDOFF.md |
+| S4 | 睡眠事实与充分性政策分离 | S1；UI与公式改动分提交 | VERIFIED | 72c0f91a | docs/validation/S1_S8_HANDOFF.md |
+| S5 | 负荷测量方法、单位与活动重叠 | S1 | VERIFIED | 72c0f91a | docs/validation/S1_S8_HANDOFF.md |
+| S6 | 日负荷时间轴与 EWMA 缺失 | S5 的单位/方法政策已明确 | VERIFIED | 72c0f91a | docs/validation/S1_S8_HANDOFF.md |
+| S7 | 生理压力的真实时间尺度 | S1；相关负荷方法明确 | VERIFIED | 72c0f91a | docs/validation/S1_S8_HANDOFF.md |
+| S8 | 能量估计与上游质量传播 | S1/S7；与共享合同修改串行 | VERIFIED | 72c0f91a | docs/validation/S1_S8_HANDOFF.md |
 | V1 | 建立可复跑的算法比较与模型卡 | S1–S8 中相关修复已验收；可分指标先做 | NOT_STARTED | — | — |
 | R1 | 真机发布与用户体验验收 | 本轮选定 U/S/V 卡均完成，不强迫未授权研究候选上线 | NOT_STARTED | — | — |
 
