@@ -30,7 +30,34 @@ enum PreviewHealthDataProvider {
     }
 
     static func sleepSummary(for date: Date = Date(), calendar: Calendar = .current) -> SleepSummary {
+        let args = ProcessInfo.processInfo.arguments
         let start = calendar.date(bySettingHour: 23, minute: 42, second: 0, of: date.addingTimeInterval(-86_400)) ?? date
+
+        if args.contains("-velaSleepFixtureUnsegmented") {
+            let end = start.addingTimeInterval(390 * 60)
+            return SleepSampleNormalizer.summary(
+                for: date,
+                segments: [
+                    .init(stage: .asleep, start: start, end: end)
+                ],
+                sleepScore: 72
+            )
+        }
+
+        if args.contains("-velaSleepFixtureGap") {
+            let firstWakeEnd = start.addingTimeInterval(120 * 60)
+            let secondSleepStart = firstWakeEnd.addingTimeInterval(50 * 60) // 50m interruption gap
+            let secondSleepEnd = secondSleepStart.addingTimeInterval(210 * 60)
+            return SleepSampleNormalizer.summary(
+                for: date,
+                segments: [
+                    .init(stage: .deep, start: start, end: firstWakeEnd),
+                    .init(stage: .core, start: secondSleepStart, end: secondSleepEnd)
+                ],
+                sleepScore: 65
+            )
+        }
+
         let deepEnd = start.addingTimeInterval(84 * 60)
         let coreEnd = deepEnd.addingTimeInterval(210 * 60)
         let remEnd = coreEnd.addingTimeInterval(92 * 60)

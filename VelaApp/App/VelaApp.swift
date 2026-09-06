@@ -41,6 +41,10 @@ final class VelaAppState: ObservableObject {
         case journal
         case livedState
         case recoveryDetail
+        case sleepDetail
+        case strainDetail
+        case stressDetail
+        case energyDetail
         case postWorkoutCheckIn(UUID?)
         case postWorkoutImpact(UUID?)
 
@@ -53,6 +57,10 @@ final class VelaAppState: ObservableObject {
             case .journal: "journal"
             case .livedState: "lived-state"
             case .recoveryDetail: "recovery-detail"
+            case .sleepDetail: "sleep-detail"
+            case .strainDetail: "strain-detail"
+            case .stressDetail: "stress-detail"
+            case .energyDetail: "energy-detail"
             case let .postWorkoutCheckIn(id): "post-workout-check-in-\(id?.uuidString ?? "latest")"
             case let .postWorkoutImpact(id): "post-workout-impact-\(id?.uuidString ?? "latest")"
             }
@@ -62,7 +70,7 @@ final class VelaAppState: ObservableObject {
             switch self {
             case .weightLog, .bloodLog, .workoutLog, .journal, .livedState, .postWorkoutCheckIn:
                 true
-            case .settings, .recoveryDetail, .postWorkoutImpact:
+            case .settings, .recoveryDetail, .sleepDetail, .strainDetail, .stressDetail, .energyDetail, .postWorkoutImpact:
                 false
             }
         }
@@ -100,6 +108,14 @@ final class VelaAppState: ObservableObject {
         selectedTab = Self.initialTab(from: arguments)
         if arguments.contains("-velaOpenRecoveryDetail") {
             presentedSheet = .recoveryDetail
+        } else if arguments.contains("-velaOpenSleepDetail") {
+            presentedSheet = .sleepDetail
+        } else if arguments.contains("-velaOpenStrainDetail") {
+            presentedSheet = .strainDetail
+        } else if arguments.contains("-velaOpenStressDetail") {
+            presentedSheet = .stressDetail
+        } else if arguments.contains("-velaOpenEnergyDetail") {
+            presentedSheet = .energyDetail
         } else if arguments.contains("-velaOpenSettings") {
             presentedSheet = .settings
         } else if arguments.contains("-velaOpenLivedStateCheckIn") {

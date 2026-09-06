@@ -95,6 +95,62 @@ struct CoreMetricDetailHero: View {
                             )
                         )
                 }
+            } else if metric == .sleep {
+                ZStack(alignment: .top) {
+                    VelaTheme.rhythmCanvasRaised
+                    NightLandscape()
+                        .frame(height: 124)
+                        .opacity(colorScheme == .dark ? 0.40 : 0.50)
+                        .mask(
+                            LinearGradient(
+                                colors: [.black, .black.opacity(0.6), .clear],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                }
+            } else if metric == .strain {
+                ZStack(alignment: .top) {
+                    VelaTheme.rhythmCanvasRaised
+                    DesertLandscape()
+                        .frame(height: 124)
+                        .opacity(colorScheme == .dark ? 0.35 : 0.45)
+                        .mask(
+                            LinearGradient(
+                                colors: [.black, .black.opacity(0.6), .clear],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                }
+            } else if metric == .stress {
+                ZStack(alignment: .top) {
+                    VelaTheme.rhythmCanvasRaised
+                    CoastalLandscape()
+                        .frame(height: 124)
+                        .opacity(colorScheme == .dark ? 0.35 : 0.45)
+                        .mask(
+                            LinearGradient(
+                                colors: [.black, .black.opacity(0.6), .clear],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                }
+            } else if metric == .energy {
+                ZStack(alignment: .top) {
+                    VelaTheme.rhythmCanvasRaised
+                    MeadowLandscape()
+                        .frame(height: 124)
+                        .opacity(colorScheme == .dark ? 0.35 : 0.45)
+                        .mask(
+                            LinearGradient(
+                                colors: [.black, .black.opacity(0.6), .clear],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                }
             } else {
                 VelaTheme.rhythmCanvasRaised
             }
@@ -458,32 +514,7 @@ struct MetricCustomWidgetsSection: View {
             }
 
         case .sleep:
-            VStack(alignment: .leading, spacing: VelaTheme.cardGap) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("睡眠节律")
-                        .font(VelaTheme.footnote().weight(.bold))
-                        .foregroundStyle(VelaTheme.rhythmInk)
-
-                    sleepRhythmSummary
-                    .padding(16)
-                    .background(
-                        RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                            .fill(VelaTheme.rhythmCanvasRaised)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                            .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
-                    )
-                }
-
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("睡眠阶段")
-                        .font(VelaTheme.footnote().weight(.bold))
-                        .foregroundStyle(VelaTheme.rhythmInk)
-
-                    sleepStageSummary
-                }
-            }
+            sleepTimelineContent
 
         case .stress:
             VStack(alignment: .leading, spacing: VelaTheme.cardGap) {
@@ -626,117 +657,15 @@ struct MetricCustomWidgetsSection: View {
         )
     }
 
-    private var sleepRhythmSummary: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 12) {
-                sleepTimeFact("入睡", value: hasCompleteSleepTimes ? bedtimeText : "--", symbol: "moon.fill")
-
-                HStack(spacing: 4) {
-                    Circle().fill(VelaTheme.sleepColor).frame(width: 6, height: 6)
-                    Rectangle().fill(VelaTheme.sleepColor.opacity(0.22)).frame(height: 2)
-                    Image(systemName: "arrow.right")
-                        .font(VelaTheme.caption2().weight(.bold))
-                        .foregroundStyle(VelaTheme.sleepColor)
-                }
-                .accessibilityHidden(true)
-
-                sleepTimeFact("起床", value: hasCompleteSleepTimes ? wakeTimeText : "--", symbol: "sun.max.fill")
-            }
-
-            Divider().overlay(VelaTheme.rhythmMist)
-
-            ViewThatFits(in: .horizontal) {
-                HStack {
-                    Label("计划就寝 \(targetBedtimeText)", systemImage: "calendar")
-                    Spacer()
-                    Text("目标 \(VelaMinimalFormatting.duration(minutes: sleepTargetMinutes))")
-                }
-                VStack(alignment: .leading, spacing: 6) {
-                    Label("计划就寝 \(targetBedtimeText)", systemImage: "calendar")
-                    Text("目标 \(VelaMinimalFormatting.duration(minutes: sleepTargetMinutes))")
-                }
-            }
-            .font(VelaTheme.caption1())
-            .foregroundStyle(VelaTheme.rhythmInkSecondary)
-        }
-    }
-
-    private func sleepTimeFact(_ title: String, value: String, symbol: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label(title, systemImage: symbol)
-                .font(VelaTheme.caption2().weight(.semibold))
-                .foregroundStyle(VelaTheme.rhythmInkSecondary)
-            Text(value)
-                .font(VelaTheme.title3().monospacedDigit())
-                .foregroundStyle(VelaTheme.rhythmInk)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    @ViewBuilder
-    private var sleepStageSummary: some View {
-        let stages = displayedSleepStages
-        if stages.isEmpty {
-            VelaStateCard(state: .empty, message: "本晚没有可用的睡眠阶段记录。")
-        } else {
-            VStack(spacing: 11) {
-                ForEach(stages, id: \.stage) { item in
-                    HStack(spacing: 10) {
-                        Text(sleepStageLabel(item.stage))
-                            .font(VelaTheme.caption1().weight(.semibold))
-                            .foregroundStyle(VelaTheme.rhythmInk)
-                            .frame(width: 46, alignment: .leading)
-                        ProgressView(value: Double(item.minutes), total: Double(max(displayedSleepStageTotal, 1)))
-                            .tint(sleepStageColor(item.stage))
-                            .accessibilityHidden(true)
-                        Text("\(item.minutes) 分钟")
-                            .font(VelaTheme.caption1().monospacedDigit())
-                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
-                            .frame(width: 58, alignment: .trailing)
-                    }
-                    .accessibilityElement(children: .combine)
-                }
-            }
-            .padding(14)
-            .background(VelaTheme.rhythmCanvasRaised, in: RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
-                    .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
-            }
-        }
-    }
-
-    private var displayedSleepStages: [(stage: SleepStage, minutes: Int)] {
-        let orderedStages: [SleepStage] = [.awake, .rem, .core, .deep]
-        return orderedStages.compactMap { stage -> (stage: SleepStage, minutes: Int)? in
-            guard let minutes = dashboard.sleepSummary.stageMinutes[stage], minutes > 0 else { return nil }
-            return (stage, minutes)
-        }
-    }
-
-    private var displayedSleepStageTotal: Int {
-        displayedSleepStages.reduce(0) { $0 + $1.minutes }
-    }
-
-    private func sleepStageLabel(_ stage: SleepStage) -> String {
-        switch stage {
-        case .awake: return "清醒"
-        case .rem: return "REM"
-        case .core: return "核心"
-        case .deep: return "深睡"
-        case .asleep: return "睡眠"
-        case .inBed: return "卧床"
-        }
-    }
-
-    private func sleepStageColor(_ stage: SleepStage) -> Color {
-        switch stage {
-        case .awake: return VelaTheme.energyColor
-        case .rem: return VelaTheme.sleepColor.opacity(0.72)
-        case .core: return VelaTheme.sleepColor
-        case .deep: return VelaTheme.rhythmDeep
-        case .asleep, .inBed: return VelaTheme.rhythmInkSecondary
-        }
+    private var sleepTimelineContent: some View {
+        SleepTimelineCard(
+            summary: dashboard.sleepSummary,
+            bedtimeText: bedtimeText,
+            wakeTimeText: wakeTimeText,
+            targetBedtimeText: targetBedtimeText,
+            sleepTargetMinutes: sleepTargetMinutes,
+            hasCompleteSleepTimes: hasCompleteSleepTimes
+        )
     }
 
     private var strainLoadContext: some View {
@@ -1399,13 +1328,13 @@ struct MetricMethodologyCard: View {
         case .recovery:
             return "采用夜间 HRV (RMSSD) 与静息心率相对 14–28 天滚动基线的 Z 分数加权，综合评估自主神经平衡状态。"
         case .sleep:
-            return "根据实际睡眠时长、阶段分布（深睡/REM）与睡眠规律性评分。"
+            return "基于 Apple Watch 本机检测的实际睡眠时长（加权 50%）、阶段分布（深睡与 REM 占比加权 30%）以及就寝规律性（加权 20%）综合评分；完全离线计算，仅供日常作息参考，非医疗设备诊断。"
         case .strain:
-            return "基于心率区间与耗力模型累积全天训练与日常负荷，无量纲 0–21。"
+            return "基于全天心率负荷与运动耗力模型综合累积（0–21 分），评估日间训练与身体消耗水平；支持查看急性与慢性负荷比率。"
         case .stress:
-            return "根据心率、HRV 及呼吸率在当前时段的生理偏离估算压力指数。"
+            return "结合静息心率、HRV（RMSSD）以及日间生理指标相对滚动个人基线的瞬时偏离度估算压力水平；日内连续采样取决于 Apple Watch 佩戴测量。"
         case .energy:
-            return "基于急性负荷 (ATL) 与慢性负荷 (CTL) 平衡度估算能量储备。"
+            return "基于急性训练负荷 (ATL) 与慢性训练负荷 (CTL) 平衡度估算身体能量储备（0–100 分）；明确标注为计算模型预测值，非直接测量电量事实。"
         default:
             return "结合历史均值与个人基线分析长期偏离趋势。"
         }
@@ -1430,4 +1359,379 @@ struct MetricMethodologyCard: View {
         }
     }
 }
+
+// MARK: - SleepTimelineCard (U4: Real segments hypnogram, gap preservation, and clear time scale)
+
+struct SleepTimelineCard: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    let summary: SleepSummary
+    let bedtimeText: String
+    let wakeTimeText: String
+    let targetBedtimeText: String
+    let sleepTargetMinutes: Int
+    let hasCompleteSleepTimes: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // 1. 就寝与起止时间
+            rhythmHeader
+
+            Divider().overlay(VelaTheme.rhythmMist)
+
+            // 2. 真实睡眠时间轴（Hypnogram）
+            timelineSection
+
+            Divider().overlay(VelaTheme.rhythmMist)
+
+            // 3. 阶段分布与明细
+            stageBreakdownSection
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
+                .fill(VelaTheme.rhythmCanvasRaised)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: VelaTheme.radiusMd, style: .continuous)
+                .stroke(VelaTheme.rhythmMist, lineWidth: 0.75)
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("sleep-timeline-card")
+    }
+
+    // MARK: - Rhythm Header
+    private var rhythmHeader: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                sleepTimeFact("入睡", value: hasCompleteSleepTimes ? bedtimeText : "--", symbol: "moon.fill")
+
+                HStack(spacing: 4) {
+                    Circle().fill(VelaTheme.sleepColor).frame(width: 6, height: 6)
+                    Rectangle().fill(VelaTheme.sleepColor.opacity(0.22)).frame(height: 2)
+                    Image(systemName: "arrow.right")
+                        .font(VelaTheme.caption2().weight(.bold))
+                        .foregroundStyle(VelaTheme.sleepColor)
+                }
+                .accessibilityHidden(true)
+
+                sleepTimeFact("起床", value: hasCompleteSleepTimes ? wakeTimeText : "--", symbol: "sun.max.fill")
+            }
+
+            HStack(spacing: 16) {
+                HStack(spacing: 6) {
+                    Image(systemName: "bed.double.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(VelaTheme.sleepColor)
+                    Text("实际睡眠 \(summary.totalSleepMinutes > 0 ? VelaMinimalFormatting.duration(minutes: summary.totalSleepMinutes) : "--")")
+                        .font(VelaTheme.caption1().weight(.semibold).monospacedDigit())
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                }
+
+                Spacer()
+
+                HStack(spacing: 6) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.caption)
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                    Text("在床 \(inBedDurationText)")
+                        .font(VelaTheme.caption1().monospacedDigit())
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                }
+            }
+
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    Label("计划就寝 \(targetBedtimeText)", systemImage: "calendar")
+                    Spacer()
+                    Text("目标 \(VelaMinimalFormatting.duration(minutes: sleepTargetMinutes))")
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("计划就寝 \(targetBedtimeText)", systemImage: "calendar")
+                    Text("目标 \(VelaMinimalFormatting.duration(minutes: sleepTargetMinutes))")
+                }
+            }
+            .font(VelaTheme.caption2())
+            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+        }
+    }
+
+    private var inBedDurationText: String {
+        guard let bed = summary.bedtime, let wake = summary.wakeTime else { return "--" }
+        var diffMin = Int(wake.timeIntervalSince(bed) / 60)
+        if diffMin < 0 { diffMin += 24 * 60 }
+        return VelaMinimalFormatting.duration(minutes: diffMin)
+    }
+
+    private func sleepTimeFact(_ title: String, value: String, symbol: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(title, systemImage: symbol)
+                .font(VelaTheme.caption2().weight(.semibold))
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+            Text(value)
+                .font(VelaTheme.title3().monospacedDigit())
+                .foregroundStyle(VelaTheme.rhythmInk)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Timeline Section (Hypnogram)
+    @ViewBuilder
+    private var timelineSection: some View {
+        let validSegments = summary.segments.filter { $0.end > $0.start }.sorted { $0.start < $1.start }
+
+        if validSegments.isEmpty {
+            VelaStateCard(state: .empty, message: "本晚没有可用的睡眠阶段记录。")
+        } else {
+            let windowStart = validSegments.first?.start ?? (summary.bedtime ?? Date())
+            let windowEnd = validSegments.last?.end ?? (summary.wakeTime ?? Date())
+            let totalSpan = max(windowEnd.timeIntervalSince(windowStart), 60)
+            let hasStaging = validSegments.contains { $0.stage == .rem || $0.stage == .deep || $0.stage == .core }
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(hasStaging ? "睡眠阶段时间轴" : "睡眠时间段")
+                        .font(VelaTheme.caption1().weight(.bold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                    Spacer()
+                    Text(hasStaging ? "真实阶段采样 · 缺口如实留空" : "未分期 · 仅记录睡眠总段")
+                        .font(VelaTheme.caption2())
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                }
+
+                if hasStaging {
+                    // 4-track hypnogram
+                    GeometryReader { geo in
+                        let w = geo.size.width
+                        let h = geo.size.height
+                        let trackH = h / 4.0
+
+                        ZStack(alignment: .topLeading) {
+                            // Track background lines
+                            VStack(spacing: 0) {
+                                ForEach(0..<4) { i in
+                                    Rectangle()
+                                        .fill(VelaTheme.rhythmMist.opacity(i % 2 == 0 ? 0.28 : 0.12))
+                                        .frame(height: trackH)
+                                }
+                            }
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+                            // Draw each segment precisely
+                            ForEach(validSegments) { segment in
+                                let trackIndex: Int = {
+                                    switch segment.stage {
+                                    case .awake: return 0
+                                    case .rem: return 1
+                                    case .core: return 2
+                                    case .deep: return 3
+                                    case .asleep, .inBed: return 2
+                                    }
+                                }()
+                                let startOffset = max(0, segment.start.timeIntervalSince(windowStart))
+                                let endOffset = min(totalSpan, segment.end.timeIntervalSince(windowStart))
+                                let startX = CGFloat(startOffset / totalSpan) * w
+                                let endX = CGFloat(endOffset / totalSpan) * w
+                                let barWidth = max(endX - startX, 2.5)
+
+                                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                    .fill(sleepStageColor(segment.stage))
+                                    .frame(width: barWidth, height: trackH - 3)
+                                    .offset(x: startX, y: CGFloat(trackIndex) * trackH + 1.5)
+                            }
+                        }
+                    }
+                    .frame(height: 64)
+                    .accessibilityHidden(true)
+                } else {
+                    // Unsegmented single track
+                    GeometryReader { geo in
+                        let w = geo.size.width
+                        let h = geo.size.height
+
+                        ZStack(alignment: .topLeading) {
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(VelaTheme.rhythmMist.opacity(0.3))
+                                .frame(height: h)
+
+                            ForEach(validSegments) { segment in
+                                if segment.stage.countsTowardSleepDuration {
+                                    let startOffset = max(0, segment.start.timeIntervalSince(windowStart))
+                                    let endOffset = min(totalSpan, segment.end.timeIntervalSince(windowStart))
+                                    let startX = CGFloat(startOffset / totalSpan) * w
+                                    let endX = CGFloat(endOffset / totalSpan) * w
+                                    let barWidth = max(endX - startX, 3)
+
+                                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                        .fill(VelaTheme.sleepColor)
+                                        .frame(width: barWidth, height: h - 4)
+                                        .offset(x: startX, y: 2)
+                                }
+                            }
+                        }
+                    }
+                    .frame(height: 28)
+                    .accessibilityHidden(true)
+                }
+
+                // Time axis with cross-midnight labels
+                HStack {
+                    Text(formatTime(windowStart))
+                    Spacer()
+                    if totalSpan > 3 * 3600 {
+                        Text(formatTime(windowStart.addingTimeInterval(totalSpan * 0.33)))
+                        Spacer()
+                        Text(formatTime(windowStart.addingTimeInterval(totalSpan * 0.66)))
+                        Spacer()
+                    }
+                    Text(formatTime(windowEnd))
+                }
+                .font(VelaTheme.caption2().monospacedDigit())
+                .foregroundStyle(VelaTheme.rhythmInkSecondary)
+
+                if !hasStaging {
+                    Label("此设备记录了睡眠总时间，未记录 REM / 深睡等阶段估计", systemImage: "info.circle")
+                        .font(VelaTheme.caption2())
+                        .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                        .padding(.top, 2)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(hypnogramAccessibilityLabel(segments: validSegments, start: windowStart, end: windowEnd, hasStaging: hasStaging))
+        }
+    }
+
+    // MARK: - Stage Breakdown Section
+    @ViewBuilder
+    private var stageBreakdownSection: some View {
+        let validSegments = summary.segments.filter { $0.end > $0.start }
+        let hasStaging = validSegments.contains { $0.stage == .rem || $0.stage == .deep || $0.stage == .core }
+
+        if hasStaging {
+            VStack(spacing: 8) {
+                let orderedStages: [SleepStage] = [.deep, .core, .rem, .awake]
+                let total = max(displayedSleepStageTotal, 1)
+
+                ForEach(orderedStages, id: \.self) { stage in
+                    let mins = summary.stageMinutes[stage] ?? 0
+                    let pct = Int((Double(mins) / Double(total) * 100).rounded())
+
+                    HStack(spacing: 10) {
+                        Circle()
+                            .fill(sleepStageColor(stage))
+                            .frame(width: 8, height: 8)
+
+                        Text(sleepStageLabel(stage))
+                            .font(VelaTheme.caption1().weight(.semibold))
+                            .foregroundStyle(VelaTheme.rhythmInk)
+                            .frame(width: 44, alignment: .leading)
+
+                        Text(stageDescription(stage))
+                            .font(VelaTheme.caption2())
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                            .lineLimit(1)
+
+                        Spacer()
+
+                        Text("\(mins) 分钟")
+                            .font(VelaTheme.caption1().weight(.medium).monospacedDigit())
+                            .foregroundStyle(VelaTheme.rhythmInk)
+
+                        Text("(\(pct)%)")
+                            .font(VelaTheme.caption2().monospacedDigit())
+                            .foregroundStyle(VelaTheme.rhythmInkSecondary)
+                            .frame(width: 42, alignment: .trailing)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+            }
+        } else {
+            VStack(spacing: 8) {
+                HStack(spacing: 10) {
+                    Circle().fill(VelaTheme.sleepColor).frame(width: 8, height: 8)
+                    Text("睡眠时长")
+                        .font(VelaTheme.caption1().weight(.semibold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                    Spacer()
+                    Text("\(summary.totalSleepMinutes) 分钟")
+                        .font(VelaTheme.caption1().monospacedDigit())
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                }
+                HStack(spacing: 10) {
+                    Circle().fill(VelaTheme.rhythmInkSecondary).frame(width: 8, height: 8)
+                    Text("卧床时长")
+                        .font(VelaTheme.caption1().weight(.semibold))
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                    Spacer()
+                    Text(inBedDurationText)
+                        .font(VelaTheme.caption1().monospacedDigit())
+                        .foregroundStyle(VelaTheme.rhythmInk)
+                }
+            }
+        }
+    }
+
+    private var displayedSleepStageTotal: Int {
+        let orderedStages: [SleepStage] = [.awake, .rem, .core, .deep]
+        return orderedStages.reduce(0) { $0 + (summary.stageMinutes[$1] ?? 0) }
+    }
+
+    private func stageDescription(_ stage: SleepStage) -> String {
+        switch stage {
+        case .deep: return "身体与免疫恢复"
+        case .core: return "日常维持与肌肉放松"
+        case .rem: return "大脑与记忆整理"
+        case .awake: return "夜间清醒或中断"
+        case .asleep: return "睡眠状态"
+        case .inBed: return "卧床未眠"
+        }
+    }
+
+    private func sleepStageLabel(_ stage: SleepStage) -> String {
+        switch stage {
+        case .awake: return "清醒"
+        case .rem: return "REM"
+        case .core: return "核心"
+        case .deep: return "深睡"
+        case .asleep: return "睡眠"
+        case .inBed: return "卧床"
+        }
+    }
+
+    private func sleepStageColor(_ stage: SleepStage) -> Color {
+        switch stage {
+        case .awake: return VelaTheme.energyColor
+        case .rem: return VelaTheme.sleepColor.opacity(0.72)
+        case .core: return VelaTheme.sleepColor
+        case .deep: return VelaTheme.rhythmDeep
+        case .asleep, .inBed: return VelaTheme.rhythmInkSecondary
+        }
+    }
+
+    private func formatTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+
+    private func hypnogramAccessibilityLabel(
+        segments: [SleepStageSegment],
+        start: Date,
+        end: Date,
+        hasStaging: Bool
+    ) -> String {
+        if hasStaging {
+            let deep = summary.stageMinutes[.deep] ?? 0
+            let core = summary.stageMinutes[.core] ?? 0
+            let rem = summary.stageMinutes[.rem] ?? 0
+            let awake = summary.stageMinutes[.awake] ?? 0
+            return "睡眠阶段时间轴：入睡 \(formatTime(start))，起床 \(formatTime(end))。实际睡眠 \(VelaMinimalFormatting.duration(minutes: summary.totalSleepMinutes))，在床 \(inBedDurationText)。深睡 \(deep)分钟，核心 \(core)分钟，REM \(rem)分钟，清醒 \(awake)分钟。"
+        } else {
+            return "睡眠时间轴：入睡 \(formatTime(start))，起床 \(formatTime(end))。实际睡眠 \(VelaMinimalFormatting.duration(minutes: summary.totalSleepMinutes))，在床 \(inBedDurationText)，未分期。"
+        }
+    }
+}
+
 

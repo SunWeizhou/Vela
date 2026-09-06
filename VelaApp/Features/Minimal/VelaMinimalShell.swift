@@ -227,6 +227,50 @@ struct VelaShell: View {
             }
                 .presentationDetents([.large])
                 .velaSheetSurface()
+        case .sleepDetail:
+            NavigationStack {
+                VelaMetricDetailView(
+                    metric: .sleep,
+                    selectedDate: todayStore.state.selectedDay,
+                    dashboardSnapshot: todayStore.state.dashboard,
+                    isPresentedInSheet: true
+                )
+            }
+                .presentationDetents([.large])
+                .velaSheetSurface()
+        case .strainDetail:
+            NavigationStack {
+                VelaMetricDetailView(
+                    metric: .strain,
+                    selectedDate: todayStore.state.selectedDay,
+                    dashboardSnapshot: todayStore.state.dashboard,
+                    isPresentedInSheet: true
+                )
+            }
+                .presentationDetents([.large])
+                .velaSheetSurface()
+        case .stressDetail:
+            NavigationStack {
+                VelaMetricDetailView(
+                    metric: .stress,
+                    selectedDate: todayStore.state.selectedDay,
+                    dashboardSnapshot: todayStore.state.dashboard,
+                    isPresentedInSheet: true
+                )
+            }
+                .presentationDetents([.large])
+                .velaSheetSurface()
+        case .energyDetail:
+            NavigationStack {
+                VelaMetricDetailView(
+                    metric: .energy,
+                    selectedDate: todayStore.state.selectedDay,
+                    dashboardSnapshot: todayStore.state.dashboard,
+                    isPresentedInSheet: true
+                )
+            }
+                .presentationDetents([.large])
+                .velaSheetSurface()
         case let .postWorkoutCheckIn(workoutID):
             NavigationStack { PostWorkoutCheckInSheet(workoutID: workoutID) }
                 .presentationDetents([.medium, .large])

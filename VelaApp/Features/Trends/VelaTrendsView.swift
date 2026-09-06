@@ -242,8 +242,8 @@ struct VelaTrendsView: View {
 
     private func scoreTrendRow(_ descriptor: ScoreTrendDescriptor) -> some View {
         let finding = finding(for: descriptor.metric)
-        let values = memoizedScoreHistories[descriptor.metric] ?? scoreHistory(for: descriptor.metric)
-        let normalized = memoizedNormalizedHistories[descriptor.metric] ?? normalizedHistory(values)
+        let trendPoints = scoreTrendPoints(for: descriptor.metric)
+        let values = trendPoints.compactMap(\.value)
         let color = scoreColor(for: descriptor.metric)
         let valueText = scoreValueText(descriptor: descriptor, finding: finding, values: values)
 
@@ -283,21 +283,13 @@ struct VelaTrendsView: View {
                             .foregroundStyle(VelaTheme.rhythmInkSecondary)
                             .fixedSize(horizontal: false, vertical: true)
 
-                        if normalized.count >= 2 {
-                            SparklineLineGraph(
-                                data: normalized,
-                                color: color,
-                                height: 42,
-                                width: 220
-                            )
-                            .accessibilityHidden(true)
-                        } else {
-                            Capsule()
-                                .fill(VelaTheme.rhythmMist)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 2)
-                                .accessibilityHidden(true)
-                        }
+                        DateAwareSparkline(
+                            points: trendPoints,
+                            color: color,
+                            height: 42,
+                            width: 220
+                        )
+                        .accessibilityHidden(true)
                     }
                 } else {
                     HStack(spacing: 12) {
@@ -324,20 +316,13 @@ struct VelaTrendsView: View {
 
                         Spacer(minLength: 4)
 
-                        if normalized.count >= 2 {
-                            SparklineLineGraph(
-                                data: normalized,
-                                color: color,
-                                height: 34,
-                                width: 88
-                            )
-                            .accessibilityHidden(true)
-                        } else {
-                            Capsule()
-                                .fill(VelaTheme.rhythmMist)
-                                .frame(width: 88, height: 2)
-                                .accessibilityHidden(true)
-                        }
+                        DateAwareSparkline(
+                            points: trendPoints,
+                            color: color,
+                            height: 34,
+                            width: 88
+                        )
+                        .accessibilityHidden(true)
 
                         Text(valueText)
                             .font(.system(.headline, design: .rounded, weight: .bold))
@@ -445,6 +430,32 @@ struct VelaTrendsView: View {
 
     private func finding(for metric: CoreHealthMetric) -> HealthTrendFinding? {
         allTrends.first { $0.metric == metric && $0.horizon == selectedHorizon }
+    }
+
+    private func scoreTrendPoints(for metric: CoreHealthMetric) -> [TrendsChartPoint] {
+        let calendar = Calendar.current
+        let endDay = calendar.startOfDay(for: dashboardVM.selectedDate)
+        let days = selectedHorizon.windowDays
+        var points: [TrendsChartPoint] = []
+        points.reserveCapacity(days)
+
+        for dayOffset in (0..<days).reversed() {
+            guard let day = calendar.date(byAdding: .day, value: -dayOffset, to: endDay) else { continue }
+            let record = dailyRecords.first { calendar.isDate($0.date, inSameDayAs: day) }
+            let val: Double? = {
+                guard let record else { return nil }
+                switch metric {
+                case .recovery: return record.recoveryScore
+                case .sleepScore: return record.sleepScore
+                case .strain: return record.strainScore
+                case .stress: return record.stressIndex
+                case .energy: return record.currentEnergy ?? record.energyBank ?? record.morningEnergy
+                default: return nil
+                }
+            }()
+            points.append(TrendsChartPoint(date: day, value: val, provenance: nil))
+        }
+        return points
     }
 
     private func scoreHistory(for metric: CoreHealthMetric) -> [Double] {

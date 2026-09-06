@@ -473,6 +473,123 @@ struct SparklineLineGraph: View {
     }
 }
 
+// MARK: - DateAwareSparkline (U5: Truthful date-spaced sparkline preserving missing day gaps)
+
+struct DateAwareSparkline: View {
+    let points: [TrendsChartPoint]
+    let color: Color
+    var height: CGFloat = 36
+    var width: CGFloat = 80
+
+    var body: some View {
+        let nonNilPoints = points.filter { $0.value != nil }
+        if nonNilPoints.isEmpty {
+            Capsule()
+                .fill(VelaTheme.rhythmMist)
+                .frame(width: width, height: 2)
+        } else if nonNilPoints.count == 1, let single = nonNilPoints.first, let _ = single.value {
+            // Single point: render a single distinct dot at normalized date position
+            let xRatio: CGFloat = {
+                guard let first = points.first?.date, let last = points.last?.date, last > first else { return 0.5 }
+                return CGFloat(single.date.timeIntervalSince(first) / last.timeIntervalSince(first))
+            }()
+            let y = height * 0.5
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+                .position(x: max(3, min(width - 3, xRatio * width)), y: y)
+                .frame(width: width, height: height)
+        } else {
+            let values = nonNilPoints.compactMap(\.value)
+            let minVal = values.min() ?? 0
+            let maxVal = values.max() ?? 100
+            let range = max(maxVal - minVal, 1.0)
+
+            let firstDate = points.first?.date ?? Date()
+            let lastDate = points.last?.date ?? Date()
+            let totalSpan = max(lastDate.timeIntervalSince(firstDate), 1.0)
+
+            let segments: [[TrendsChartPoint]] = {
+                var segs: [[TrendsChartPoint]] = []
+                var cur: [TrendsChartPoint] = []
+                for pt in points {
+                    if pt.value != nil {
+                        cur.append(pt)
+                    } else if !cur.isEmpty {
+                        segs.append(cur)
+                        cur = []
+                    }
+                }
+                if !cur.isEmpty { segs.append(cur) }
+                return segs
+            }()
+
+            ZStack {
+                ForEach(Array(segments.enumerated()), id: \.offset) { _, seg in
+                    if seg.count == 1, let pt = seg.first, let v = pt.value {
+                        let x = CGFloat(pt.date.timeIntervalSince(firstDate) / totalSpan) * width
+                        let norm = (v - minVal) / range
+                        let y = height - (CGFloat(norm) * (height - 8) + 4)
+                        Circle()
+                            .fill(color)
+                            .frame(width: 5, height: 5)
+                            .position(x: max(3, min(width - 3, x)), y: y)
+                    } else if seg.count > 1 {
+                        // Shaded area under this segment
+                        Path { path in
+                            guard let firstPt = seg.first, let firstV = firstPt.value else { return }
+                            let firstX = CGFloat(firstPt.date.timeIntervalSince(firstDate) / totalSpan) * width
+                            let firstNorm = (firstV - minVal) / range
+                            let firstY = height - (CGFloat(firstNorm) * (height - 8) + 4)
+
+                            path.move(to: CGPoint(x: firstX, y: height))
+                            path.addLine(to: CGPoint(x: firstX, y: firstY))
+
+                            for pt in seg.dropFirst() {
+                                guard let v = pt.value else { continue }
+                                let x = CGFloat(pt.date.timeIntervalSince(firstDate) / totalSpan) * width
+                                let norm = (v - minVal) / range
+                                let y = height - (CGFloat(norm) * (height - 8) + 4)
+                                path.addLine(to: CGPoint(x: x, y: y))
+                            }
+
+                            if let lastPt = seg.last {
+                                let lastX = CGFloat(lastPt.date.timeIntervalSince(firstDate) / totalSpan) * width
+                                path.addLine(to: CGPoint(x: lastX, y: height))
+                            }
+                            path.closeSubpath()
+                        }
+                        .fill(
+                            LinearGradient(
+                                colors: [color.opacity(0.14), color.opacity(0.0)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+
+                        // Line
+                        Path { path in
+                            for (idx, pt) in seg.enumerated() {
+                                guard let v = pt.value else { continue }
+                                let x = CGFloat(pt.date.timeIntervalSince(firstDate) / totalSpan) * width
+                                let norm = (v - minVal) / range
+                                let y = height - (CGFloat(norm) * (height - 8) + 4)
+                                if idx == 0 {
+                                    path.move(to: CGPoint(x: x, y: y))
+                                } else {
+                                    path.addLine(to: CGPoint(x: x, y: y))
+                                }
+                            }
+                        }
+                        .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                    }
+                }
+            }
+            .frame(width: width, height: height)
+        }
+    }
+}
+
 // MARK: - TripleConcentricScoreRing (Concentric Recovery/Sleep/Strain activity-style rings)
 
 struct TripleConcentricScoreRing: View {

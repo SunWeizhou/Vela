@@ -44,138 +44,150 @@ struct MetricLandscapeHeader: View {
 
 struct DesertLandscape: View {
     var body: some View {
-        ZStack {
-            // Sky gradient
-            LinearGradient(
-                colors: VelaTheme.Landscape.desertSky,
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            
-            // Distant soft orange sun
-            Circle()
-                .fill(VelaTheme.Landscape.desertSun.opacity(0.8))
-                .frame(width: 60, height: 60)
-                .blur(radius: 6)
-                .offset(x: -40, y: -20)
-            
-            // Sand dunes
-            Path { path in
-                path.move(to: CGPoint(x: 0, y: 160))
-                path.addQuadCurve(to: CGPoint(x: 180, y: 170), control: CGPoint(x: 90, y: 140))
-                path.addQuadCurve(to: CGPoint(x: 400, y: 190), control: CGPoint(x: 290, y: 200))
-                path.addLine(to: CGPoint(x: 400, y: 240))
-                path.addLine(to: CGPoint(x: 0, y: 240))
-                path.closeSubpath()
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            ZStack {
+                // Sky gradient
+                LinearGradient(
+                    colors: VelaTheme.Landscape.desertSky,
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                
+                // Distant soft orange sun
+                Circle()
+                    .fill(VelaTheme.Landscape.desertSun.opacity(0.8))
+                    .frame(width: min(w * 0.15, 60), height: min(w * 0.15, 60))
+                    .blur(radius: 6)
+                    .position(x: w * 0.40, y: h * 0.35)
+                
+                // Sand dunes
+                Path { path in
+                    path.move(to: CGPoint(x: 0, y: h * 0.67))
+                    path.addQuadCurve(to: CGPoint(x: w * 0.45, y: h * 0.71), control: CGPoint(x: w * 0.22, y: h * 0.58))
+                    path.addQuadCurve(to: CGPoint(x: w, y: h * 0.79), control: CGPoint(x: w * 0.72, y: h * 0.83))
+                    path.addLine(to: CGPoint(x: w, y: h))
+                    path.addLine(to: CGPoint(x: 0, y: h))
+                    path.closeSubpath()
+                }
+                .fill(LinearGradient(colors: VelaTheme.Landscape.desertDuneFront, startPoint: .top, endPoint: .bottom))
+                
+                Path { path in
+                    path.move(to: CGPoint(x: w * 0.40, y: h * 0.79))
+                    path.addQuadCurve(to: CGPoint(x: w, y: h * 0.71), control: CGPoint(x: w * 0.70, y: h * 0.87))
+                    path.addLine(to: CGPoint(x: w, y: h))
+                    path.addLine(to: CGPoint(x: w * 0.40, y: h))
+                    path.closeSubpath()
+                }
+                .fill(LinearGradient(colors: VelaTheme.Landscape.desertDuneBack, startPoint: .top, endPoint: .bottom))
+                
+                // Joshua Trees Vector Outline on the right
+                MinimalistJoshuaTree(xOffset: min(w * 0.30, 120), scale: 0.85)
+                MinimalistJoshuaTree(xOffset: min(w * 0.36, 145), scale: 0.65)
             }
-            .fill(LinearGradient(colors: VelaTheme.Landscape.desertDuneFront, startPoint: .top, endPoint: .bottom))
-            
-            Path { path in
-                path.move(to: CGPoint(x: 160, y: 190))
-                path.addQuadCurve(to: CGPoint(x: 400, y: 170), control: CGPoint(x: 280, y: 210))
-                path.addLine(to: CGPoint(x: 400, y: 240))
-                path.addLine(to: CGPoint(x: 160, y: 240))
-                path.closeSubpath()
-            }
-            .fill(LinearGradient(colors: VelaTheme.Landscape.desertDuneBack, startPoint: .top, endPoint: .bottom))
-            
-            // Joshua Trees Vector Outline on the right
-            MinimalistJoshuaTree(xOffset: 120, scale: 0.85)
-            MinimalistJoshuaTree(xOffset: 145, scale: 0.65)
         }
     }
 }
 
 struct NightLandscape: View {
     var body: some View {
-        ZStack {
-            // Midnight sky gradient
-            LinearGradient(
-                colors: VelaTheme.Landscape.nightSky,
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            
-            // Stars
-            RandomStar(x: 30, y: 40, size: 2, opacity: 0.8)
-            RandomStar(x: 80, y: 60, size: 3, opacity: 0.5)
-            RandomStar(x: 120, y: 30, size: 1.5, opacity: 0.9)
-            RandomStar(x: 240, y: 50, size: 2.5, opacity: 0.6)
-            RandomStar(x: 290, y: 80, size: 2, opacity: 0.4)
-            RandomStar(x: 340, y: 35, size: 3, opacity: 0.8)
-            
-            // Soft moon
-            Circle()
-                .fill(VelaTheme.Landscape.nightMoon.opacity(0.12))
-                .frame(width: 80, height: 80)
-                .blur(radius: 4)
-                .offset(x: -120, y: -40)
-            
-            // Mountain Peak Silhouettes at bottom
-            Path { path in
-                path.move(to: CGPoint(x: 0, y: 170))
-                path.addLine(to: CGPoint(x: 120, y: 120))
-                path.addLine(to: CGPoint(x: 260, y: 190))
-                path.addLine(to: CGPoint(x: 340, y: 150))
-                path.addLine(to: CGPoint(x: 400, y: 190))
-                path.addLine(to: CGPoint(x: 400, y: 240))
-                path.addLine(to: CGPoint(x: 0, y: 240))
-                path.closeSubpath()
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            ZStack {
+                // Midnight sky gradient
+                LinearGradient(
+                    colors: VelaTheme.Landscape.nightSky,
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                
+                // Stars
+                RandomStar(x: w * 0.08, y: h * 0.17, size: 2, opacity: 0.8)
+                RandomStar(x: w * 0.20, y: h * 0.25, size: 3, opacity: 0.5)
+                RandomStar(x: w * 0.30, y: h * 0.13, size: 1.5, opacity: 0.9)
+                RandomStar(x: w * 0.60, y: h * 0.21, size: 2.5, opacity: 0.6)
+                RandomStar(x: w * 0.72, y: h * 0.33, size: 2, opacity: 0.4)
+                RandomStar(x: w * 0.85, y: h * 0.15, size: 3, opacity: 0.8)
+                
+                // Soft moon
+                Circle()
+                    .fill(VelaTheme.Landscape.nightMoon.opacity(0.18))
+                    .frame(width: min(w * 0.20, 75), height: min(w * 0.20, 75))
+                    .blur(radius: 4)
+                    .position(x: w * 0.20, y: h * 0.28)
+                
+                // Mountain Peak Silhouettes at bottom
+                Path { path in
+                    path.move(to: CGPoint(x: 0, y: h * 0.71))
+                    path.addLine(to: CGPoint(x: w * 0.30, y: h * 0.50))
+                    path.addLine(to: CGPoint(x: w * 0.65, y: h * 0.79))
+                    path.addLine(to: CGPoint(x: w * 0.85, y: h * 0.62))
+                    path.addLine(to: CGPoint(x: w, y: h * 0.79))
+                    path.addLine(to: CGPoint(x: w, y: h))
+                    path.addLine(to: CGPoint(x: 0, y: h))
+                    path.closeSubpath()
+                }
+                .fill(LinearGradient(colors: VelaTheme.Landscape.nightMountainFront, startPoint: .top, endPoint: .bottom))
+                
+                Path { path in
+                    path.move(to: CGPoint(x: w * 0.20, y: h * 0.77))
+                    path.addLine(to: CGPoint(x: w * 0.52, y: h * 0.58))
+                    path.addLine(to: CGPoint(x: w * 0.80, y: h * 0.83))
+                    path.addLine(to: CGPoint(x: w, y: h))
+                    path.addLine(to: CGPoint(x: w * 0.20, y: h))
+                    path.closeSubpath()
+                }
+                .fill(LinearGradient(colors: VelaTheme.Landscape.nightMountainBack, startPoint: .top, endPoint: .bottom))
             }
-            .fill(LinearGradient(colors: VelaTheme.Landscape.nightMountainFront, startPoint: .top, endPoint: .bottom))
-            
-            Path { path in
-                path.move(to: CGPoint(x: 80, y: 185))
-                path.addLine(to: CGPoint(x: 210, y: 140))
-                path.addLine(to: CGPoint(x: 320, y: 200))
-                path.addLine(to: CGPoint(x: 400, y: 240))
-                path.addLine(to: CGPoint(x: 80, y: 240))
-                path.closeSubpath()
-            }
-            .fill(LinearGradient(colors: VelaTheme.Landscape.nightMountainBack, startPoint: .top, endPoint: .bottom))
         }
     }
 }
 
 struct CoastalLandscape: View {
     var body: some View {
-        ZStack {
-            // Calm Sky
-            LinearGradient(
-                colors: VelaTheme.Landscape.coastalSky,
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            
-            // Soft white setting sun
-            Circle()
-                .fill(Color.white.opacity(0.65))
-                .frame(width: 50, height: 50)
-                .blur(radius: 5)
-                .offset(x: -80, y: 0)
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            ZStack {
+                // Calm Sky
+                LinearGradient(
+                    colors: VelaTheme.Landscape.coastalSky,
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                
+                // Soft white setting sun
+                Circle()
+                    .fill(Color.white.opacity(0.65))
+                    .frame(width: min(w * 0.13, 50), height: min(w * 0.13, 50))
+                    .blur(radius: 5)
+                    .position(x: w * 0.30, y: h * 0.40)
 
-            // Rocky sea cliffs on the right
-            Path { path in
-                path.move(to: CGPoint(x: 220, y: 240))
-                path.addLine(to: CGPoint(x: 270, y: 140))
-                path.addLine(to: CGPoint(x: 300, y: 160))
-                path.addLine(to: CGPoint(x: 350, y: 80))
-                path.addLine(to: CGPoint(x: 400, y: 100))
-                path.addLine(to: CGPoint(x: 400, y: 240))
-                path.closeSubpath()
+                // Rocky sea cliffs on the right
+                Path { path in
+                    path.move(to: CGPoint(x: w * 0.55, y: h))
+                    path.addLine(to: CGPoint(x: w * 0.68, y: h * 0.58))
+                    path.addLine(to: CGPoint(x: w * 0.75, y: h * 0.67))
+                    path.addLine(to: CGPoint(x: w * 0.88, y: h * 0.33))
+                    path.addLine(to: CGPoint(x: w, y: h * 0.42))
+                    path.addLine(to: CGPoint(x: w, y: h))
+                    path.closeSubpath()
+                }
+                .fill(LinearGradient(colors: VelaTheme.Landscape.coastalCliff, startPoint: .top, endPoint: .bottom))
+                
+                // Coastal waves at bottom
+                Path { path in
+                    path.move(to: CGPoint(x: 0, y: h * 0.79))
+                    path.addQuadCurve(to: CGPoint(x: w * 0.45, y: h * 0.83), control: CGPoint(x: w * 0.22, y: h * 0.90))
+                    path.addQuadCurve(to: CGPoint(x: w, y: h * 0.73), control: CGPoint(x: w * 0.72, y: h * 0.75))
+                    path.addLine(to: CGPoint(x: w, y: h))
+                    path.addLine(to: CGPoint(x: 0, y: h))
+                    path.closeSubpath()
+                }
+                .fill(LinearGradient(colors: VelaTheme.Landscape.coastalWaves, startPoint: .top, endPoint: .bottom))
             }
-            .fill(LinearGradient(colors: VelaTheme.Landscape.coastalCliff, startPoint: .top, endPoint: .bottom))
-            
-            // Coastal waves at bottom
-            Path { path in
-                path.move(to: CGPoint(x: 0, y: 190))
-                path.addQuadCurve(to: CGPoint(x: 180, y: 200), control: CGPoint(x: 90, y: 215))
-                path.addQuadCurve(to: CGPoint(x: 400, y: 175), control: CGPoint(x: 290, y: 180))
-                path.addLine(to: CGPoint(x: 400, y: 240))
-                path.addLine(to: CGPoint(x: 0, y: 240))
-                path.closeSubpath()
-            }
-            .fill(LinearGradient(colors: VelaTheme.Landscape.coastalWaves, startPoint: .top, endPoint: .bottom))
         }
     }
 }
@@ -208,21 +220,25 @@ struct ForestLandscape: View {
 
 struct MeadowLandscape: View {
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: VelaTheme.Landscape.meadowSky,
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            // Sunny spring meadows
-            Path { path in
-                path.move(to: CGPoint(x: 0, y: 180))
-                path.addQuadCurve(to: CGPoint(x: 400, y: 170), control: CGPoint(x: 200, y: 210))
-                path.addLine(to: CGPoint(x: 400, y: 240))
-                path.addLine(to: CGPoint(x: 0, y: 240))
-                path.closeSubpath()
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            ZStack {
+                LinearGradient(
+                    colors: VelaTheme.Landscape.meadowSky,
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                // Sunny spring meadows
+                Path { path in
+                    path.move(to: CGPoint(x: 0, y: h * 0.75))
+                    path.addQuadCurve(to: CGPoint(x: w, y: h * 0.71), control: CGPoint(x: w * 0.5, y: h * 0.87))
+                    path.addLine(to: CGPoint(x: w, y: h))
+                    path.addLine(to: CGPoint(x: 0, y: h))
+                    path.closeSubpath()
+                }
+                .fill(LinearGradient(colors: VelaTheme.Landscape.meadowHills, startPoint: .top, endPoint: .bottom))
             }
-            .fill(LinearGradient(colors: VelaTheme.Landscape.meadowHills, startPoint: .top, endPoint: .bottom))
         }
     }
 }

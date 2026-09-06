@@ -226,6 +226,162 @@ final class VelaSmokeUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["校准今日状态"].exists)
     }
 
+    func testSleepDetailDeepLaunch() {
+        let app = launchApp(extraArguments: ["-velaOpenSleepDetail"])
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["metric-detail-sleep"].waitForExistence(timeout: 10),
+            "Sleep detail did not open from its launch route"
+        )
+        XCTAssertTrue(app.navigationBars["睡眠"].exists)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["sleep-timeline-card"].waitForExistence(timeout: 5),
+            "Sleep timeline card should be present in sleep detail"
+        )
+
+        let closeButton = app.buttons["metric-detail-close"]
+        XCTAssertTrue(closeButton.waitForExistence(timeout: 5), "Sheet should show close button")
+        closeButton.tap()
+        XCTAssertFalse(
+            app.descendants(matching: .any)["metric-detail-sleep"].waitForExistence(timeout: 3),
+            "Sleep detail sheet should dismiss after tapping close"
+        )
+    }
+
+    func testSleepDetailPushNavigationAndReturn() {
+        let app = launchApp(initialTab: 0)
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["surface-0"].waitForExistence(timeout: 10),
+            "Today surface did not become visible"
+        )
+        let sleepScore = app.descendants(matching: .any)["today-score-sleep"]
+        guard sleepScore.waitForExistence(timeout: 5) else {
+            return
+        }
+        sleepScore.tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["metric-detail-sleep"].waitForExistence(timeout: 8),
+            "Sleep detail did not open from Today push"
+        )
+        XCTAssertFalse(
+            app.buttons["metric-detail-close"].exists,
+            "Push navigation should not display custom sheet close button"
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["sleep-timeline-card"].waitForExistence(timeout: 5),
+            "Sleep timeline card should be present in sleep detail push"
+        )
+
+        let screenshot = XCUIScreen.main.screenshot()
+        try? screenshot.pngRepresentation.write(to: URL(fileURLWithPath: "/Users/sunweizhou/Developer/Vela/docs/validation/u4/after/sleep-detail-push.png"))
+
+        let backButton = app.navigationBars.buttons.element(boundBy: 0)
+        XCTAssertTrue(backButton.waitForExistence(timeout: 5), "System back button should be present")
+        backButton.tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["surface-0"].waitForExistence(timeout: 8),
+            "Should return to Today surface after tapping back button"
+        )
+    }
+
+    func testComprehensiveFullInteractionFlow() {
+        let app = launchApp(initialTab: 0)
+        XCTAssertTrue(app.descendants(matching: .any)["surface-0"].waitForExistence(timeout: 10))
+
+        // 1. Switch to historical date
+        let calendarButton = app.buttons["today-calendar-button"]
+        if calendarButton.waitForExistence(timeout: 5) {
+            calendarButton.tap()
+            XCTAssertTrue(app.descendants(matching: .any)["calendar-overview-sheet"].waitForExistence(timeout: 8))
+            let dayButton = app.buttons["calendar-day-1"]
+            if dayButton.waitForExistence(timeout: 5) && dayButton.isHittable {
+                dayButton.tap()
+            } else {
+                let todayButton = app.buttons["今天"]
+                if todayButton.waitForExistence(timeout: 3) {
+                    todayButton.tap()
+                }
+            }
+        }
+
+        // 2. Open detail (e.g. sleep)
+        let sleepScore = app.descendants(matching: .any)["today-score-sleep"]
+        if sleepScore.waitForExistence(timeout: 5) {
+            sleepScore.tap()
+            XCTAssertTrue(app.descendants(matching: .any)["metric-detail-sleep"].waitForExistence(timeout: 8))
+            let backButton = app.navigationBars.buttons.element(boundBy: 0)
+            if backButton.waitForExistence(timeout: 5) {
+                backButton.tap()
+            }
+            XCTAssertTrue(app.descendants(matching: .any)["surface-0"].waitForExistence(timeout: 8))
+        }
+
+        // 3. Switch to Trends tab
+        selectTab(index: 1, label: "趋势", in: app)
+        XCTAssertTrue(app.descendants(matching: .any)["surface-1"].waitForExistence(timeout: 8))
+
+        // 4. Switch back to Today tab
+        selectTab(index: 0, label: "今日", in: app)
+        XCTAssertTrue(app.descendants(matching: .any)["surface-0"].waitForExistence(timeout: 8))
+
+        // 5. Background and foreground app
+        XCUIDevice.shared.press(.home)
+        Thread.sleep(forTimeInterval: 1.0)
+        app.activate()
+        XCTAssertTrue(app.descendants(matching: .any)["surface-0"].waitForExistence(timeout: 8))
+    }
+
+    func testStrainDetailDeepLaunch() {
+        let app = launchApp(extraArguments: ["-velaOpenStrainDetail"])
+        XCTAssertTrue(
+            app.descendants(matching: .any)["metric-detail-strain"].waitForExistence(timeout: 10),
+            "Strain detail did not open from its launch route"
+        )
+        XCTAssertTrue(app.navigationBars["耗力"].waitForExistence(timeout: 5))
+        let closeButton = app.buttons["metric-detail-close"]
+        XCTAssertTrue(closeButton.waitForExistence(timeout: 5), "Strain sheet should show close button")
+        closeButton.tap()
+        XCTAssertFalse(
+            app.descendants(matching: .any)["metric-detail-strain"].waitForExistence(timeout: 3),
+            "Strain detail sheet should dismiss after tapping close"
+        )
+    }
+
+    func testStressDetailDeepLaunch() {
+        let app = launchApp(extraArguments: ["-velaOpenStressDetail"])
+        XCTAssertTrue(
+            app.descendants(matching: .any)["metric-detail-stress"].waitForExistence(timeout: 10),
+            "Stress detail did not open from its launch route"
+        )
+        XCTAssertTrue(app.navigationBars["压力"].waitForExistence(timeout: 5))
+        let closeButton = app.buttons["metric-detail-close"]
+        XCTAssertTrue(closeButton.waitForExistence(timeout: 5), "Stress sheet should show close button")
+        closeButton.tap()
+        XCTAssertFalse(
+            app.descendants(matching: .any)["metric-detail-stress"].waitForExistence(timeout: 3),
+            "Stress detail sheet should dismiss after tapping close"
+        )
+    }
+
+    func testEnergyDetailDeepLaunch() {
+        let app = launchApp(extraArguments: ["-velaOpenEnergyDetail"])
+        XCTAssertTrue(
+            app.descendants(matching: .any)["metric-detail-energy"].waitForExistence(timeout: 10),
+            "Energy detail did not open from its launch route"
+        )
+        XCTAssertTrue(app.navigationBars["能量"].waitForExistence(timeout: 5))
+        let closeButton = app.buttons["metric-detail-close"]
+        XCTAssertTrue(closeButton.waitForExistence(timeout: 5), "Energy sheet should show close button")
+        closeButton.tap()
+        XCTAssertFalse(
+            app.descendants(matching: .any)["metric-detail-energy"].waitForExistence(timeout: 3),
+            "Energy detail sheet should dismiss after tapping close"
+        )
+    }
+
     private func launchApp(
         initialTab: Int = 0,
         extraArguments: [String] = []

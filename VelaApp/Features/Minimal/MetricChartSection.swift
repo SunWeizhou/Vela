@@ -145,18 +145,12 @@ struct MetricChartSection: View {
                 )
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-            } else if points.count < 3 {
-                VelaStateCard(
-                    state: .calibrating,
-                    message: "目前已有 \(points.count) 个读数，累计 3 个后展示个人基线与区间。"
-                )
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
             } else {
                 Chart {
                     let unit: Calendar.Component = selectedRange == .threeYears ? .month : .day
 
-                    if let targetRange,
+                    if points.count >= 3,
+                       let targetRange,
                        let firstDate = points.first?.date,
                        let lastDate = points.last?.date {
                         RectangleMark(
@@ -181,37 +175,46 @@ struct MetricChartSection: View {
                     }
 
                     ForEach(chartSegments) { segment in
-                        ForEach(segment.points) { pt in
-                            if isBarChart {
-                                BarMark(
-                                    x: .value("Date", pt.date, unit: unit),
-                                    y: .value("Value", pt.value)
-                                )
-                                .foregroundStyle(metricColor.gradient)
-                                .cornerRadius(4)
-                            } else {
-                                LineMark(
-                                    x: .value("Date", pt.date, unit: unit),
-                                    y: .value("Value", pt.value),
-                                    series: .value("Segment", segment.id)
-                                )
-                                .foregroundStyle(metricColor)
-                                .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
-                                .interpolationMethod(.linear)
-
-                                AreaMark(
-                                    x: .value("Date", pt.date, unit: unit),
-                                    y: .value("Value", pt.value),
-                                    series: .value("Area segment", segment.id)
-                                )
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        colors: [metricColor.opacity(0.24), metricColor.opacity(0.01)],
-                                        startPoint: .top,
-                                        endPoint: .bottom
+                        if segment.points.count == 1, let pt = segment.points.first {
+                            PointMark(
+                                x: .value("Date", pt.date, unit: unit),
+                                y: .value("Value", pt.value)
+                            )
+                            .foregroundStyle(metricColor)
+                            .symbolSize(42)
+                        } else {
+                            ForEach(segment.points) { pt in
+                                if isBarChart {
+                                    BarMark(
+                                        x: .value("Date", pt.date, unit: unit),
+                                        y: .value("Value", pt.value)
                                     )
-                                )
-                                .interpolationMethod(.linear)
+                                    .foregroundStyle(metricColor.gradient)
+                                    .cornerRadius(4)
+                                } else {
+                                    LineMark(
+                                        x: .value("Date", pt.date, unit: unit),
+                                        y: .value("Value", pt.value),
+                                        series: .value("Segment", segment.id)
+                                    )
+                                    .foregroundStyle(metricColor)
+                                    .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                                    .interpolationMethod(.linear)
+
+                                    AreaMark(
+                                        x: .value("Date", pt.date, unit: unit),
+                                        y: .value("Value", pt.value),
+                                        series: .value("Area segment", segment.id)
+                                    )
+                                    .foregroundStyle(
+                                        LinearGradient(
+                                            colors: [metricColor.opacity(0.24), metricColor.opacity(0.01)],
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        )
+                                    )
+                                    .interpolationMethod(.linear)
+                                }
                             }
                         }
                     }
@@ -330,7 +333,8 @@ struct MetricChartSection: View {
     }
 
     private var effectiveBaseline: Double? {
-        baselineValue
+        guard points.count >= 3 else { return nil }
+        return baselineValue
     }
 
     private var chartSegments: [MetricChartSegment] {
