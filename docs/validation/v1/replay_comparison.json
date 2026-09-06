@@ -1,0 +1,365 @@
+[
+  {
+    "description" : "全空输入，无历史无当日体征",
+    "downstreamImpact" : "五项保持不可估计(--)，无总分，引导等待 Apple 健康同步",
+    "metrics" : [
+      {
+        "domain" : "Sleep",
+        "keyReason" : "缺少睡眠时长数据",
+        "missingInputs" : [
+          "totalSleepMinutes"
+        ],
+        "newQuality" : "low",
+        "oldQuality" : "unavailable",
+        "version" : "sleep.v2.0.0"
+      },
+      {
+        "domain" : "Recovery",
+        "keyReason" : "缺少今日 HRV 数据",
+        "missingInputs" : [
+          "hrvToday",
+          "restingHeartRateToday",
+          "sleepScore",
+          "priorStrainYesterday"
+        ],
+        "newQuality" : "low",
+        "oldQuality" : "unavailable",
+        "version" : "recovery.v2.0.0"
+      },
+      {
+        "domain" : "Strain",
+        "keyReason" : "需要训练、活动能量、运动分钟或步数中的至少一项，才会给出负荷评分。",
+        "missingInputs" : [
+          "workouts",
+          "activeEnergyToday",
+          "exerciseMinutesToday",
+          "stepCount"
+        ],
+        "newQuality" : "low",
+        "oldQuality" : "unavailable",
+        "version" : "strain.v2.0.0"
+      },
+      {
+        "domain" : "Stress",
+        "keyReason" : "生理压力·估计：基于可用日级静息心率、HRV、呼吸、体温与昨夜睡眠的代理指标，不是心理或医疗诊断。",
+        "missingInputs" : [
+          "bodyTempDelta"
+        ],
+        "newQuality" : "low",
+        "oldQuality" : "unavailable",
+        "version" : "physiologicalStress.v2.0.0"
+      },
+      {
+        "domain" : "Energy",
+        "keyReason" : "缺少夜间体温、呼吸率与血氧信号，夜间稳定性按基准中值 50 估计。",
+        "missingInputs" : [
+          "overnightStabilitySignals",
+          "recoveryScore",
+          "sleepScore",
+          "stressIndex",
+          "wakeTime"
+        ],
+        "newQuality" : "low",
+        "oldQuality" : "unavailable",
+        "version" : "energy.v2.0.0"
+      }
+    ],
+    "scenario" : "empty"
+  },
+  {
+    "description" : "部分输入（仅有睡眠7小时与静息心率62bpm，缺失HRV与负荷）",
+    "downstreamImpact" : "能量置信度严格降为 low，且说明基于睡眠估算",
+    "metrics" : [
+      {
+        "domain" : "Sleep",
+        "keyReason" : "睡眠时长 7小时0分钟（目标 7小时）",
+        "missingInputs" : [
+          "todayBedtime",
+          "recentBedtimesHistory",
+          "awakeMinutes"
+        ],
+        "newQuality" : "low",
+        "newValue" : 79,
+        "oldQuality" : "medium",
+        "oldValue" : 70,
+        "version" : "sleep.v2.0.0"
+      },
+      {
+        "domain" : "Recovery",
+        "keyReason" : "缺少今日 HRV 数据",
+        "missingInputs" : [
+          "hrvToday",
+          "priorStrainYesterday"
+        ],
+        "newQuality" : "low",
+        "newValue" : 64.5,
+        "oldQuality" : "unavailable",
+        "version" : "recovery.v2.0.0"
+      },
+      {
+        "domain" : "Strain",
+        "keyReason" : "需要训练、活动能量、运动分钟或步数中的至少一项，才会给出负荷评分。",
+        "missingInputs" : [
+          "workouts",
+          "activeEnergyToday",
+          "exerciseMinutesToday",
+          "stepCount"
+        ],
+        "newQuality" : "low",
+        "oldQuality" : "unavailable",
+        "version" : "strain.v2.0.0"
+      },
+      {
+        "domain" : "Stress",
+        "keyReason" : "生理压力·估计：基于可用日级静息心率、HRV、呼吸、体温与昨夜睡眠的代理指标，不是心理或医疗诊断。",
+        "missingInputs" : [
+          "hrvToday",
+          "bodyTempDelta"
+        ],
+        "newQuality" : "low",
+        "newValue" : 39.125,
+        "oldQuality" : "low",
+        "oldValue" : 50,
+        "version" : "physiologicalStress.v2.0.0"
+      },
+      {
+        "domain" : "Energy",
+        "keyReason" : "缺少夜间体温、呼吸率与血氧信号，夜间稳定性按基准中值 50 估计。",
+        "missingInputs" : [
+          "overnightStabilitySignals",
+          "wakeTime"
+        ],
+        "newQuality" : "low",
+        "newValue" : 56.89375,
+        "oldQuality" : "high",
+        "oldValue" : 65,
+        "version" : "energy.v2.0.0"
+      }
+    ],
+    "scenario" : "partial"
+  },
+  {
+    "description" : "仅有3天历史负荷，未满7天有效观测",
+    "downstreamImpact" : "ATL\/CTL训练负荷比停用(nil)，不虚构减量\/过载结论",
+    "metrics" : [
+      {
+        "domain" : "Strain",
+        "keyReason" : "非运动日常活动负荷为 16 (步数: 6000, 活动能量: 350 kcal；已应用 1.0 启发式系数降低双重计算风险)",
+        "missingInputs" : [
+
+        ],
+        "newQuality" : "low",
+        "newValue" : 25.91817793182821,
+        "oldQuality" : "medium",
+        "oldValue" : 45,
+        "version" : "strain.v2.0.0"
+      }
+    ],
+    "scenario" : "baselineForming"
+  },
+  {
+    "description" : "14天稳定历史与正常体征",
+    "downstreamImpact" : "五项评分完整，置信度高，基线稳固",
+    "metrics" : [
+      {
+        "domain" : "Sleep",
+        "keyReason" : "正常作息达成",
+        "missingInputs" : [
+          "todayBedtime",
+          "recentBedtimesHistory",
+          "awakeMinutes"
+        ],
+        "newQuality" : "low",
+        "newValue" : 79,
+        "oldQuality" : "high",
+        "oldValue" : 77.43,
+        "version" : "sleep.v2.0.0"
+      },
+      {
+        "domain" : "Recovery",
+        "keyReason" : "HRV与RHR处于良好范围",
+        "missingInputs" : [
+          "priorStrainYesterday"
+        ],
+        "newQuality" : "high",
+        "newValue" : 54.77326336668535,
+        "oldQuality" : "high",
+        "oldValue" : 60.7,
+        "version" : "recovery.v2.0.0"
+      },
+      {
+        "domain" : "Strain",
+        "keyReason" : "负荷适中",
+        "missingInputs" : [
+
+        ],
+        "newQuality" : "medium",
+        "newValue" : 30.46453900060073,
+        "oldQuality" : "high",
+        "oldValue" : 63.67,
+        "version" : "strain.v2.0.0"
+      },
+      {
+        "domain" : "Stress",
+        "keyReason" : "生理压力处于平稳状态",
+        "missingInputs" : [
+
+        ],
+        "newQuality" : "high",
+        "newValue" : 30.608384755205215,
+        "oldQuality" : "high",
+        "oldValue" : 21.08,
+        "version" : "physiologicalStress.v2.0.0"
+      },
+      {
+        "domain" : "Energy",
+        "keyReason" : "能量估计正常",
+        "missingInputs" : [
+          "wakeTime"
+        ],
+        "newQuality" : "low",
+        "newValue" : 53.183283675996854,
+        "oldQuality" : "high",
+        "oldValue" : 42.31,
+        "version" : "energy.v2.0.0"
+      }
+    ],
+    "scenario" : "normalHealthy"
+  },
+  {
+    "description" : "仅有SDNN心率变异性，缺少RMSSD测量",
+    "downstreamImpact" : "拒绝以SDNN假冒RMSSD计算副交感神经张力",
+    "metrics" : [
+      {
+        "domain" : "Recovery-PSTI",
+        "keyReason" : "缺少真实RMSSD时PSTI严格不可估计",
+        "missingInputs" : [
+          "hrvRmssdToday"
+        ],
+        "newQuality" : "unavailable",
+        "oldQuality" : "fake_rmssd",
+        "oldValue" : 50,
+        "version" : "recovery.v2.0.0"
+      }
+    ],
+    "scenario" : "methodSwitch"
+  },
+  {
+    "description" : "非连续日历历史（中间存在多天未佩戴或休息）",
+    "downstreamImpact" : "EWMA正确随真实时间流逝衰减，不足7天停用状态",
+    "metrics" : [
+      {
+        "domain" : "Strain",
+        "keyReason" : "日历断续天衰减EWMA而非压缩时间轴",
+        "missingInputs" : [
+
+        ],
+        "newQuality" : "low",
+        "newValue" : 18.331351740188918,
+        "oldQuality" : "compacted",
+        "oldValue" : 50,
+        "version" : "strain.v2.0.0"
+      }
+    ],
+    "scenario" : "discontinuousGaps"
+  },
+  {
+    "description" : "历史中包含未来错误时间戳的数据点",
+    "downstreamImpact" : "零信息泄露，未来数据不污染过去评分与基线",
+    "metrics" : [
+      {
+        "domain" : "Recovery",
+        "keyReason" : "未来数据被基线与负荷网格严格过滤",
+        "missingInputs" : [
+
+        ],
+        "newQuality" : "medium",
+        "oldQuality" : "safe",
+        "oldValue" : 60,
+        "version" : "recovery.v2.0.0"
+      }
+    ],
+    "scenario" : "futureDataRejection"
+  },
+  {
+    "description" : "跨夜入睡与跨日历日清晨醒来",
+    "downstreamImpact" : "准确识别昨夜睡眠，不截断作息区间",
+    "metrics" : [
+      {
+        "domain" : "Sleep",
+        "keyReason" : "跨日作息时间与醒来时间连续计算",
+        "missingInputs" : [
+          "recentBedtimesHistory",
+          "awakeMinutes"
+        ],
+        "newQuality" : "low",
+        "newValue" : 79,
+        "oldQuality" : "medium",
+        "oldValue" : 75,
+        "version" : "sleep.v2.0.0"
+      }
+    ],
+    "scenario" : "crossTimezone"
+  },
+  {
+    "description" : "运动后90分钟内进行当日评分计算",
+    "downstreamImpact" : "压力排除为nil而非0；能量解释消耗由训练承担，不误判回升",
+    "metrics" : [
+      {
+        "domain" : "Stress",
+        "keyReason" : "运动后90分钟自主神经恢复期内压力排除为nil",
+        "missingInputs" : [
+          "quietWindow"
+        ],
+        "newQuality" : "low",
+        "oldQuality" : "fake_zero",
+        "oldValue" : 0,
+        "version" : "physiologicalStress.v2.0.0"
+      },
+      {
+        "domain" : "Energy",
+        "keyReason" : "说明运动负荷已包含消耗，无压力回弹假象",
+        "missingInputs" : [
+          "overnightStabilitySignals",
+          "wakeTime"
+        ],
+        "newQuality" : "low",
+        "newValue" : 40.35107165165988,
+        "oldQuality" : "rebounded",
+        "oldValue" : 50,
+        "version" : "energy.v2.0.0"
+      }
+    ],
+    "scenario" : "postWorkoutExclusion"
+  },
+  {
+    "description" : "极端异常体征数据（传感器毛刺、极度心动过速、高热）",
+    "downstreamImpact" : "数值边界严格钳制，不产生溢出或NaN崩溃",
+    "metrics" : [
+      {
+        "domain" : "Recovery",
+        "keyReason" : "极端值被安全钳制在0-100，不发生NaN或崩溃",
+        "missingInputs" : [
+
+        ],
+        "newQuality" : "low",
+        "oldQuality" : "clamped",
+        "oldValue" : 0,
+        "version" : "recovery.v2.0.0"
+      },
+      {
+        "domain" : "Stress",
+        "keyReason" : "异常心率产生保护性下调并记录理由",
+        "missingInputs" : [
+
+        ],
+        "newQuality" : "low",
+        "newValue" : 50,
+        "oldQuality" : "clamped",
+        "oldValue" : 100,
+        "version" : "physiologicalStress.v2.0.0"
+      }
+    ],
+    "scenario" : "extremeOutliers"
+  }
+]

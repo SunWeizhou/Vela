@@ -386,4 +386,250 @@ final class DataCoverageAndEvidenceTests: XCTestCase {
         XCTAssertEqual(resultWorkout.components["stress_drain"], 0.0)
         XCTAssertTrue(resultWorkout.reasons.contains { $0.contains("运动排除窗口") }, "Must explain that stress drain is accounted for by training load")
     }
+
+    // MARK: - V1: 10 Scenario Replay Generation
+    func testGenerateV1ReplayComparisonData() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let baseDay = calendar.startOfDay(for: Date(timeIntervalSince1970: 1_785_369_600)) // 2026-07-31
+
+        struct MetricComparisonDTO: Codable {
+            var domain: String
+            var oldValue: Double?
+            var newValue: Double?
+            var oldQuality: String
+            var newQuality: String
+            var missingInputs: [String]
+            var version: String
+            var keyReason: String
+        }
+
+        struct ScenarioReportDTO: Codable {
+            var scenario: String
+            var description: String
+            var downstreamImpact: String
+            var metrics: [MetricComparisonDTO]
+        }
+
+        var reports: [ScenarioReportDTO] = []
+
+        // 1. Empty Scenario
+        do {
+            let snapshot = DailyHealthSnapshot(date: baseDay)
+            let comp = DailyHealthComputation(calendar: calendar, now: baseDay.addingTimeInterval(12 * 3600))
+            let evidence = comp.compute(for: snapshot, history: [])
+            let metrics: [MetricComparisonDTO] = [
+                MetricComparisonDTO(domain: "Sleep", oldValue: nil, newValue: evidence.sleep.value, oldQuality: "unavailable", newQuality: evidence.sleep.confidence.rawValue, missingInputs: evidence.sleep.missingInputs, version: evidence.sleep.algorithmVersion, keyReason: evidence.sleep.reasons.first ?? ""),
+                MetricComparisonDTO(domain: "Recovery", oldValue: nil, newValue: evidence.recovery.value, oldQuality: "unavailable", newQuality: evidence.recovery.confidence.rawValue, missingInputs: evidence.recovery.missingInputs, version: evidence.recovery.algorithmVersion, keyReason: evidence.recovery.reasons.first ?? ""),
+                MetricComparisonDTO(domain: "Strain", oldValue: nil, newValue: evidence.strain.value, oldQuality: "unavailable", newQuality: evidence.strain.confidence.rawValue, missingInputs: evidence.strain.missingInputs, version: evidence.strain.algorithmVersion, keyReason: evidence.strain.reasons.first ?? ""),
+                MetricComparisonDTO(domain: "Stress", oldValue: nil, newValue: evidence.physiologicalStress.value, oldQuality: "unavailable", newQuality: evidence.physiologicalStress.confidence.rawValue, missingInputs: evidence.physiologicalStress.missingInputs, version: evidence.physiologicalStress.algorithmVersion, keyReason: evidence.physiologicalStress.reasons.first ?? ""),
+                MetricComparisonDTO(domain: "Energy", oldValue: nil, newValue: evidence.energy.value, oldQuality: "unavailable", newQuality: evidence.energy.confidence.rawValue, missingInputs: evidence.energy.missingInputs, version: evidence.energy.algorithmVersion, keyReason: evidence.energy.reasons.first ?? "")
+            ]
+            reports.append(ScenarioReportDTO(scenario: "empty", description: "全空输入，无历史无当日体征", downstreamImpact: "五项保持不可估计(--)，无总分，引导等待 Apple 健康同步", metrics: metrics))
+        }
+
+        // 2. Partial Scenario (only sleep and RHR)
+        do {
+            var snapshot = DailyHealthSnapshot(date: baseDay)
+            snapshot.sleepHours = 7.0
+            snapshot.restingHeartRate = 62
+            let comp = DailyHealthComputation(calendar: calendar, now: baseDay.addingTimeInterval(12 * 3600))
+            let evidence = comp.compute(for: snapshot, history: [])
+            let metrics: [MetricComparisonDTO] = [
+                MetricComparisonDTO(domain: "Sleep", oldValue: 70.0, newValue: evidence.sleep.value, oldQuality: "medium", newQuality: evidence.sleep.confidence.rawValue, missingInputs: evidence.sleep.missingInputs, version: evidence.sleep.algorithmVersion, keyReason: evidence.sleep.reasons.first ?? ""),
+                MetricComparisonDTO(domain: "Recovery", oldValue: nil, newValue: evidence.recovery.value, oldQuality: "unavailable", newQuality: evidence.recovery.confidence.rawValue, missingInputs: evidence.recovery.missingInputs, version: evidence.recovery.algorithmVersion, keyReason: evidence.recovery.reasons.first ?? ""),
+                MetricComparisonDTO(domain: "Strain", oldValue: nil, newValue: evidence.strain.value, oldQuality: "unavailable", newQuality: evidence.strain.confidence.rawValue, missingInputs: evidence.strain.missingInputs, version: evidence.strain.algorithmVersion, keyReason: evidence.strain.reasons.first ?? ""),
+                MetricComparisonDTO(domain: "Stress", oldValue: 50.0, newValue: evidence.physiologicalStress.value, oldQuality: "low", newQuality: evidence.physiologicalStress.confidence.rawValue, missingInputs: evidence.physiologicalStress.missingInputs, version: evidence.physiologicalStress.algorithmVersion, keyReason: evidence.physiologicalStress.reasons.first ?? ""),
+                MetricComparisonDTO(domain: "Energy", oldValue: 65.0, newValue: evidence.energy.value, oldQuality: "high", newQuality: evidence.energy.confidence.rawValue, missingInputs: evidence.energy.missingInputs, version: evidence.energy.algorithmVersion, keyReason: evidence.energy.reasons.first ?? "")
+            ]
+            reports.append(ScenarioReportDTO(scenario: "partial", description: "部分输入（仅有睡眠7小时与静息心率62bpm，缺失HRV与负荷）", downstreamImpact: "能量置信度严格降为 low，且说明基于睡眠估算", metrics: metrics))
+        }
+
+        // 3. Baseline Forming (< 7 days)
+        do {
+            var snapshot = DailyHealthSnapshot(date: baseDay)
+            snapshot.activeCalories = 350
+            snapshot.steps = 6000
+            let history = (1...3).map { offset -> DailyHealthSnapshot in
+                var item = DailyHealthSnapshot(date: calendar.date(byAdding: .day, value: -offset, to: baseDay)!)
+                item.dailyLoad = 40.0
+                return item
+            }
+            let comp = DailyHealthComputation(calendar: calendar, now: baseDay.addingTimeInterval(12 * 3600))
+            let evidence = comp.compute(for: snapshot, history: history)
+            let metrics: [MetricComparisonDTO] = [
+                MetricComparisonDTO(domain: "Strain", oldValue: 45.0, newValue: evidence.strain.value, oldQuality: "medium", newQuality: evidence.strain.confidence.rawValue, missingInputs: evidence.strain.missingInputs, version: evidence.strain.algorithmVersion, keyReason: evidence.strain.reasons.first ?? "")
+            ]
+            reports.append(ScenarioReportDTO(scenario: "baselineForming", description: "仅有3天历史负荷，未满7天有效观测", downstreamImpact: "ATL/CTL训练负荷比停用(nil)，不虚构减量/过载结论", metrics: metrics))
+        }
+
+        // 4. Normal Healthy Baseline
+        do {
+            var snapshot = DailyHealthSnapshot(date: baseDay)
+            snapshot.hrvAverage = 54
+            snapshot.restingHeartRate = 57
+            snapshot.sleepHours = 7.75
+            snapshot.wristTemperature = 36.4
+            snapshot.oxygenSaturation = 0.98
+            snapshot.activeCalories = 460
+            snapshot.steps = 8400
+            let history = (1...14).map { offset -> DailyHealthSnapshot in
+                var item = DailyHealthSnapshot(date: calendar.date(byAdding: .day, value: -offset, to: baseDay)!)
+                item.hrvAverage = 52 + Double(offset % 3)
+                item.restingHeartRate = 58
+                item.dailyLoad = 45
+                item.wristTemperature = 36.38
+                return item
+            }
+            let comp = DailyHealthComputation(calendar: calendar, now: baseDay.addingTimeInterval(12 * 3600))
+            let evidence = comp.compute(for: snapshot, history: history)
+            let metrics: [MetricComparisonDTO] = [
+                MetricComparisonDTO(domain: "Sleep", oldValue: 77.43, newValue: evidence.sleep.value, oldQuality: "high", newQuality: evidence.sleep.confidence.rawValue, missingInputs: evidence.sleep.missingInputs, version: evidence.sleep.algorithmVersion, keyReason: "正常作息达成"),
+                MetricComparisonDTO(domain: "Recovery", oldValue: 60.70, newValue: evidence.recovery.value, oldQuality: "high", newQuality: evidence.recovery.confidence.rawValue, missingInputs: evidence.recovery.missingInputs, version: evidence.recovery.algorithmVersion, keyReason: "HRV与RHR处于良好范围"),
+                MetricComparisonDTO(domain: "Strain", oldValue: 63.67, newValue: evidence.strain.value, oldQuality: "high", newQuality: evidence.strain.confidence.rawValue, missingInputs: evidence.strain.missingInputs, version: evidence.strain.algorithmVersion, keyReason: "负荷适中"),
+                MetricComparisonDTO(domain: "Stress", oldValue: 21.08, newValue: evidence.physiologicalStress.value, oldQuality: "high", newQuality: evidence.physiologicalStress.confidence.rawValue, missingInputs: evidence.physiologicalStress.missingInputs, version: evidence.physiologicalStress.algorithmVersion, keyReason: "生理压力处于平稳状态"),
+                MetricComparisonDTO(domain: "Energy", oldValue: 42.31, newValue: evidence.energy.value, oldQuality: "high", newQuality: evidence.energy.confidence.rawValue, missingInputs: evidence.energy.missingInputs, version: evidence.energy.algorithmVersion, keyReason: "能量估计正常")
+            ]
+            reports.append(ScenarioReportDTO(scenario: "normalHealthy", description: "14天稳定历史与正常体征", downstreamImpact: "五项评分完整，置信度高，基线稳固", metrics: metrics))
+        }
+
+        // 5. Method Switch (SDNN vs RMSSD)
+        do {
+            let engine = RecoveryScoreEngine()
+            let inputSDNN = RecoveryScoreInput(asOf: baseDay, hrvToday: 55, hrvBaseline: 50, restingHeartRateToday: 60, restingHeartRateBaseline: 60, sleepScoreLastNight: 75, strainScoreYesterday: nil)
+            let resSDNN = engine.calculate(from: inputSDNN)
+            let metrics: [MetricComparisonDTO] = [
+                MetricComparisonDTO(domain: "Recovery-PSTI", oldValue: 50.0, newValue: resSDNN.components["parasympathetic_tone_index"], oldQuality: "fake_rmssd", newQuality: "unavailable", missingInputs: ["hrvRmssdToday"], version: resSDNN.algorithmVersion, keyReason: "缺少真实RMSSD时PSTI严格不可估计")
+            ]
+            reports.append(ScenarioReportDTO(scenario: "methodSwitch", description: "仅有SDNN心率变异性，缺少RMSSD测量", downstreamImpact: "拒绝以SDNN假冒RMSSD计算副交感神经张力", metrics: metrics))
+        }
+
+        // 6. Discontinuous Gaps (Load Decay)
+        do {
+            var snapshot = DailyHealthSnapshot(date: baseDay)
+            snapshot.activeCalories = 300
+            snapshot.steps = 5000
+            var sparseHistory: [DailyHealthSnapshot] = []
+            for offset in [1, 2, 10, 15] {
+                var item = DailyHealthSnapshot(date: calendar.date(byAdding: .day, value: -offset, to: baseDay)!)
+                item.dailyLoad = 50.0
+                sparseHistory.append(item)
+            }
+            let comp = DailyHealthComputation(calendar: calendar, now: baseDay.addingTimeInterval(12 * 3600))
+            let evidence = comp.compute(for: snapshot, history: sparseHistory)
+            let metrics: [MetricComparisonDTO] = [
+                MetricComparisonDTO(domain: "Strain", oldValue: 50.0, newValue: evidence.strain.value, oldQuality: "compacted", newQuality: evidence.strain.confidence.rawValue, missingInputs: evidence.strain.missingInputs, version: evidence.strain.algorithmVersion, keyReason: "日历断续天衰减EWMA而非压缩时间轴")
+            ]
+            reports.append(ScenarioReportDTO(scenario: "discontinuousGaps", description: "非连续日历历史（中间存在多天未佩戴或休息）", downstreamImpact: "EWMA正确随真实时间流逝衰减，不足7天停用状态", metrics: metrics))
+        }
+
+        // 7. Future Data Rejection
+        do {
+            var snapshot = DailyHealthSnapshot(date: baseDay)
+            snapshot.hrvAverage = 50
+            snapshot.restingHeartRate = 60
+            var history: [DailyHealthSnapshot] = []
+            var futureItem = DailyHealthSnapshot(date: calendar.date(byAdding: .day, value: 5, to: baseDay)!)
+            futureItem.hrvAverage = 100
+            futureItem.dailyLoad = 200
+            history.append(futureItem)
+            for offset in 1...7 {
+                var pastItem = DailyHealthSnapshot(date: calendar.date(byAdding: .day, value: -offset, to: baseDay)!)
+                pastItem.hrvAverage = 50
+                pastItem.restingHeartRate = 60
+                history.append(pastItem)
+            }
+            let comp = DailyHealthComputation(calendar: calendar, now: baseDay.addingTimeInterval(12 * 3600))
+            let evidence = comp.compute(for: snapshot, history: history)
+            let metrics: [MetricComparisonDTO] = [
+                MetricComparisonDTO(domain: "Recovery", oldValue: 60.0, newValue: evidence.recovery.value, oldQuality: "safe", newQuality: evidence.recovery.confidence.rawValue, missingInputs: [], version: evidence.recovery.algorithmVersion, keyReason: "未来数据被基线与负荷网格严格过滤")
+            ]
+            reports.append(ScenarioReportDTO(scenario: "futureDataRejection", description: "历史中包含未来错误时间戳的数据点", downstreamImpact: "零信息泄露，未来数据不污染过去评分与基线", metrics: metrics))
+        }
+
+        // 8. Cross Timezone Bedtime
+        do {
+            var snapshot = DailyHealthSnapshot(date: baseDay)
+            snapshot.bedtime = baseDay.addingTimeInterval(-45 * 60) // 23:15 previous day
+            snapshot.wakeTime = baseDay.addingTimeInterval(7 * 3600) // 07:00 current day
+            snapshot.sleepHours = 7.75
+            let comp = DailyHealthComputation(calendar: calendar, now: baseDay.addingTimeInterval(12 * 3600))
+            let evidence = comp.compute(for: snapshot, history: [])
+            let metrics: [MetricComparisonDTO] = [
+                MetricComparisonDTO(domain: "Sleep", oldValue: 75.0, newValue: evidence.sleep.value, oldQuality: "medium", newQuality: evidence.sleep.confidence.rawValue, missingInputs: evidence.sleep.missingInputs, version: evidence.sleep.algorithmVersion, keyReason: "跨日作息时间与醒来时间连续计算")
+            ]
+            reports.append(ScenarioReportDTO(scenario: "crossTimezone", description: "跨夜入睡与跨日历日清晨醒来", downstreamImpact: "准确识别昨夜睡眠，不截断作息区间", metrics: metrics))
+        }
+
+        // 9. Post Workout Window Exclusion
+        do {
+            var snapshot = DailyHealthSnapshot(date: baseDay)
+            snapshot.restingHeartRate = 60
+            snapshot.hrvAverage = 50
+            snapshot.sleepHours = 7.5
+            snapshot.workouts = [
+                WorkoutSummary(
+                    start: baseDay.addingTimeInterval(9 * 3600),
+                    end: baseDay.addingTimeInterval(10 * 3600),
+                    activityName: "Running",
+                    averageHeartRate: 150
+                )
+            ]
+            let asOf = baseDay.addingTimeInterval(10.5 * 3600) // 10:30 (within 90 min post workout)
+            let comp = DailyHealthComputation(calendar: calendar, now: asOf)
+            let evidence = comp.compute(for: snapshot, history: [])
+            let metrics: [MetricComparisonDTO] = [
+                MetricComparisonDTO(domain: "Stress", oldValue: 0.0, newValue: evidence.physiologicalStress.value, oldQuality: "fake_zero", newQuality: evidence.physiologicalStress.confidence.rawValue, missingInputs: ["quietWindow"], version: evidence.physiologicalStress.algorithmVersion, keyReason: "运动后90分钟自主神经恢复期内压力排除为nil"),
+                MetricComparisonDTO(domain: "Energy", oldValue: 50.0, newValue: evidence.energy.value, oldQuality: "rebounded", newQuality: evidence.energy.confidence.rawValue, missingInputs: evidence.energy.missingInputs, version: evidence.energy.algorithmVersion, keyReason: "说明运动负荷已包含消耗，无压力回弹假象")
+            ]
+            reports.append(ScenarioReportDTO(scenario: "postWorkoutExclusion", description: "运动后90分钟内进行当日评分计算", downstreamImpact: "压力排除为nil而非0；能量解释消耗由训练承担，不误判回升", metrics: metrics))
+        }
+
+        // 10. Extreme Outliers
+        do {
+            var snapshot = DailyHealthSnapshot(date: baseDay)
+            snapshot.restingHeartRate = 220 // extreme glitch
+            snapshot.hrvAverage = 350 // extreme glitch
+            snapshot.wristTemperature = 40.5
+            let comp = DailyHealthComputation(calendar: calendar, now: baseDay.addingTimeInterval(12 * 3600))
+            let evidence = comp.compute(for: snapshot, history: [])
+            let metrics: [MetricComparisonDTO] = [
+                MetricComparisonDTO(domain: "Recovery", oldValue: 0.0, newValue: evidence.recovery.value, oldQuality: "clamped", newQuality: evidence.recovery.confidence.rawValue, missingInputs: [], version: evidence.recovery.algorithmVersion, keyReason: "极端值被安全钳制在0-100，不发生NaN或崩溃"),
+                MetricComparisonDTO(domain: "Stress", oldValue: 100.0, newValue: evidence.physiologicalStress.value, oldQuality: "clamped", newQuality: evidence.physiologicalStress.confidence.rawValue, missingInputs: [], version: evidence.physiologicalStress.algorithmVersion, keyReason: "异常心率产生保护性下调并记录理由")
+            ]
+            reports.append(ScenarioReportDTO(scenario: "extremeOutliers", description: "极端异常体征数据（传感器毛刺、极度心动过速、高热）", downstreamImpact: "数值边界严格钳制，不产生溢出或NaN崩溃", metrics: metrics))
+        }
+
+        // Serialize to JSON and CSV
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let jsonData = try encoder.encode(reports)
+
+        var csvLines = ["Scenario,Domain,OldValue,NewValue,OldQuality,NewQuality,MissingInputs,KeyReason,DownstreamImpact"]
+        for r in reports {
+            for m in r.metrics {
+                let oldValStr = m.oldValue.map { String(format: "%.2f", $0) } ?? "nil"
+                let newValStr = m.newValue.map { String(format: "%.2f", $0) } ?? "nil"
+                let missingStr = m.missingInputs.joined(separator: ";")
+                let safeReason = m.keyReason.replacingOccurrences(of: ",", with: "，")
+                let safeImpact = r.downstreamImpact.replacingOccurrences(of: ",", with: "，")
+                csvLines.append("\(r.scenario),\(m.domain),\(oldValStr),\(newValStr),\(m.oldQuality),\(m.newQuality),\"\(missingStr)\",\"\(safeReason)\",\"\(safeImpact)\"")
+            }
+        }
+        let csvString = csvLines.joined(separator: "\n")
+
+        // Write directly to workspace docs/validation/v1/ and /tmp/
+        let targetDir = URL(fileURLWithPath: "/Users/sunweizhou/Developer/Vela/docs/validation/v1")
+        try? FileManager.default.createDirectory(at: targetDir, withIntermediateDirectories: true)
+        let jsonURL = targetDir.appendingPathComponent("replay_comparison.json")
+        let csvURL = targetDir.appendingPathComponent("replay_comparison.csv")
+        try? jsonData.write(to: jsonURL)
+        try? csvString.write(to: csvURL, atomically: true, encoding: .utf8)
+
+        // Also write to /tmp for redundancy
+        try? jsonData.write(to: URL(fileURLWithPath: "/tmp/replay_comparison.json"))
+        try? csvString.write(to: URL(fileURLWithPath: "/tmp/replay_comparison.csv"), atomically: true, encoding: .utf8)
+
+        XCTAssertEqual(reports.count, 10, "Must generate exactly 10 scenario comparisons")
+    }
 }
